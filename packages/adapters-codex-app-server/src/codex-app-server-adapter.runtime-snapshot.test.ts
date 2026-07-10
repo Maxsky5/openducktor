@@ -1105,6 +1105,11 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         params: expect.objectContaining({ threadId: "child-thread" }),
       }),
     );
+
+    const history = await adapter.loadSessionHistory(codexSessionRuntimeRef("child-thread"));
+    expect(transport.calls.map((call) => call.method)).toContain("thread/read");
+    expect(history.map((message) => message.messageId)).toContain("msg-1");
+
     unsubscribe();
     unsubscribeParent();
   });

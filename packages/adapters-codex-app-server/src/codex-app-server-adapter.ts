@@ -389,13 +389,6 @@ export class CodexAppServerAdapter
       session,
       runtime,
       threadInventory: this.threadInventory,
-      ...(session
-        ? {
-            threadResumePolicy: codexTransportPolicy(
-              requireCodexRuntimePolicy(input.runtimePolicy, "load Codex session history"),
-            ),
-          }
-        : {}),
       rememberTodos: (externalSessionId, todos) =>
         this.runtimeEvents.rememberTodos(externalSessionId, todos),
       ...this.runtimeEvents.historyLoadContext(),

@@ -21,7 +21,6 @@ import {
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
-import type { CodexTransportPolicy } from "./codex-session-policy";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
 
@@ -34,10 +33,7 @@ type CodexSessionHistoryInput = {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
   runtime: CodexSessionHistoryRuntime;
-  threadInventory: Pick<
-    CodexThreadInventoryReader,
-    "ensureThreadReadable" | "readThreadHistory" | "readThreadWithTurns" | "readThreadTurnIds"
-  >;
+  threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   modelByTurnKey: ReadonlyMap<string, AgentModelSelection>;
   tokenUsageByTurnKey: ReadonlyMap<string, CodexTokenUsageTotals>;
@@ -46,7 +42,6 @@ type CodexSessionHistoryInput = {
     threadId: string,
   ) => Promise<Map<string, CodexTokenUsageTotals>>;
   rememberTodos: (externalSessionId: string, todos: AgentSessionTodoItem[]) => void;
-  threadResumePolicy?: CodexTransportPolicy;
 };
 
 const codexSystemPromptHistoryMessage = ({
@@ -195,28 +190,9 @@ export const loadCodexSessionHistory = async ({
   tokenUsageByTurnKey,
   collectThreadReadTokenUsage,
   rememberTodos,
-  threadResumePolicy,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
-  let response: unknown | null;
-  if (session) {
-    if (!threadResumePolicy) {
-      throw new Error(
-        `Cannot resume Codex thread '${input.externalSessionId}' without runtime policy.`,
-      );
-    }
-    const isThreadReadable = await threadInventory.ensureThreadReadable(
-      client,
-      runtimeId,
-      input,
-      threadResumePolicy,
-    );
-    response = isThreadReadable
-      ? await threadInventory.readThreadWithTurns(client, input.externalSessionId)
-      : null;
-  } else {
-    response = await threadInventory.readThreadHistory(client, input);
-  }
+  const response = await threadInventory.readThreadHistory(client, input);
   if (!response) {
     return [];
   }
