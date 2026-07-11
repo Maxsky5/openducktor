@@ -600,7 +600,11 @@ describe("CodexAppServerAdapter streaming", () => {
     });
   });
 
-  test("rejects final live Codex turns without runtime duration", async () => {
+  test.each([
+    ["missing", undefined, "is missing durationMs."],
+    ["fractional", 1.5, "has invalid durationMs."],
+    ["out-of-range", Number.MAX_SAFE_INTEGER, "has invalid durationMs."],
+  ])("rejects %s final live Codex turn duration", async (_case, durationMs, expectedError) => {
     const takeBufferedEvents = mock(async (_runtimeId: string) => []);
     const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
 
@@ -622,7 +626,12 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread/start-runtime-live",
-            turn: { id: "turn-1", status: "completed", completedAt: 1_777_766_403 },
+            turn: {
+              id: "turn-1",
+              status: "completed",
+              completedAt: 1_777_766_403,
+              ...(durationMs === undefined ? {} : { durationMs }),
+            },
           },
         },
       ]);
@@ -636,7 +645,7 @@ describe("CodexAppServerAdapter streaming", () => {
           model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
         }),
       ),
-    ).rejects.toThrow("Completed Codex turn with a final assistant message is missing durationMs.");
+    ).rejects.toThrow(`Completed Codex turn with a final assistant message ${expectedError}`);
   });
 
   test("uses active turn model for completed user messages without turn id", async () => {

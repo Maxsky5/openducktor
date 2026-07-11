@@ -519,8 +519,11 @@ const emitCodexCompletedTurnTiming = (
   turn: Record<string, unknown>,
 ): void => {
   const durationMs = extractNumberField(turn, ["durationMs", "duration_ms"]);
-  if (durationMs === null || durationMs < 0) {
+  if (durationMs === null) {
     throw new Error("Completed Codex turn with a final assistant message is missing durationMs.");
+  }
+  if (!Number.isSafeInteger(durationMs) || durationMs < 0) {
+    throw new Error("Completed Codex turn with a final assistant message has invalid durationMs.");
   }
 
   const completedAtMs = Date.parse(completedAgentMessage.timestamp);
@@ -528,7 +531,11 @@ const emitCodexCompletedTurnTiming = (
     throw new Error("Completed Codex assistant message has an invalid timestamp.");
   }
 
-  const activityStartedAt = new Date(completedAtMs - durationMs).toISOString();
+  const activityStartedAtDate = new Date(completedAtMs - durationMs);
+  if (Number.isNaN(activityStartedAtDate.getTime())) {
+    throw new Error("Completed Codex turn with a final assistant message has invalid durationMs.");
+  }
+  const activityStartedAt = activityStartedAtDate.toISOString();
   emitCodexSessionEvent(context, session.threadId, {
     type: "session_status",
     externalSessionId: session.threadId,
