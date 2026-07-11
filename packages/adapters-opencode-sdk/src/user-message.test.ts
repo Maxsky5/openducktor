@@ -62,6 +62,58 @@ describe("OpencodeSdkAdapter user message", () => {
     expect(mock.tool.idsCalls).toEqual([]);
   });
 
+  test("rejected manual compaction preserves an active assistant turn", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.session, {
+      summarize: async () => {
+        throw new Error("Session is busy");
+      },
+    });
+    const session = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          {
+            activeAssistantMessageId: string | null;
+            streamTurnStatus: "active" | "idle";
+          }
+        >;
+      }
+    ).sessions.get("session-opencode-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+    session.activeAssistantMessageId = "assistant-active";
+    session.streamTurnStatus = "active";
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
+    );
+
+    try {
+      await expect(
+        adapter.sendUserMessage({
+          ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+          parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+          model: { providerId: "openai", modelId: "gpt-5" },
+        }),
+      ).rejects.toThrow("Session is busy");
+    } finally {
+      unsubscribe();
+    }
+
+    expect(session.activeAssistantMessageId).toBe("assistant-active");
+    expect(session.streamTurnStatus).toBe("active");
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
   test("invalid compaction shape fails before workflow-tool discovery", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

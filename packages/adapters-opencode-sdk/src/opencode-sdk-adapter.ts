@@ -647,6 +647,9 @@ export class OpencodeSdkAdapter
       );
     }
     applyRuntimeContextToSession(session, input);
+    const preserveActiveTurnOnFailure =
+      systemInvocation.kind === "manual_session_compaction" &&
+      session.streamTurnStatus === "active";
     startUserMessageSend(session, {
       expectRuntimeTurnStart:
         session.activeAssistantMessageId === null && usesPromptAsyncTransport(input.parts),
@@ -682,12 +685,14 @@ export class OpencodeSdkAdapter
       }
       return event;
     } catch (error) {
-      markStreamTurnIdle(session);
-      this.emit(input.externalSessionId, {
-        type: "session_idle",
-        externalSessionId: input.externalSessionId,
-        timestamp: this.now(),
-      });
+      if (!preserveActiveTurnOnFailure) {
+        markStreamTurnIdle(session);
+        this.emit(input.externalSessionId, {
+          type: "session_idle",
+          externalSessionId: input.externalSessionId,
+          timestamp: this.now(),
+        });
+      }
       throw error;
     } finally {
       finishUserMessageSend(session);
