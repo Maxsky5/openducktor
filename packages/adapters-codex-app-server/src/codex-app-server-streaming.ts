@@ -13,6 +13,7 @@ import {
 } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
+  extractNumberField,
   extractStringField,
   isPlainObject,
   MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
@@ -511,6 +512,38 @@ const flushBufferedFinalAgentMessage = (
   );
 };
 
+const emitCodexCompletedTurnTiming = (
+  context: CodexStreamingContext,
+  session: CodexSessionState,
+  completedAgentMessage: CompletedAgentMessage,
+  turn: Record<string, unknown>,
+): void => {
+  const durationMs = extractNumberField(turn, ["durationMs", "duration_ms"]);
+  if (durationMs === null) {
+    throw new Error("Completed Codex turn with a final assistant message is missing durationMs.");
+  }
+  if (!Number.isSafeInteger(durationMs) || durationMs < 0) {
+    throw new Error("Completed Codex turn with a final assistant message has invalid durationMs.");
+  }
+
+  const completedAtMs = Date.parse(completedAgentMessage.timestamp);
+  if (Number.isNaN(completedAtMs)) {
+    throw new Error("Completed Codex assistant message has an invalid timestamp.");
+  }
+
+  const activityStartedAtDate = new Date(completedAtMs - durationMs);
+  if (Number.isNaN(activityStartedAtDate.getTime())) {
+    throw new Error("Completed Codex turn with a final assistant message has invalid durationMs.");
+  }
+  const activityStartedAt = activityStartedAtDate.toISOString();
+  emitCodexSessionEvent(context, session.threadId, {
+    type: "session_status",
+    externalSessionId: session.threadId,
+    timestamp: activityStartedAt,
+    status: { type: "busy", message: null },
+  });
+};
+
 export const handleCodexPendingNotifications = async (
   context: CodexStreamingContext,
   session: CodexSessionState,
@@ -582,15 +615,18 @@ export const handleCodexPendingNotifications = async (
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
         context.setSessionLiveStatus(session, liveStatus);
         if (activeTurn && isIdleStatus) {
-          if (activeTurn.turnId) {
-            flushBufferedFinalAgentMessage(context, session, activeTurn.turnId);
-            clearTurnScopedStreamingState(context, session.threadId, activeTurn.turnId);
+          const hasBufferedFinalAgentMessage =
+            activeTurn.turnId !== undefined &&
+            context.completedAgentMessagesByTurnKey.has(
+              codexTurnKey(session.threadId, activeTurn.turnId),
+            );
+          if (!hasBufferedFinalAgentMessage) {
+            emitCodexSessionEvent(context, session.threadId, {
+              type: "session_idle",
+              externalSessionId: session.threadId,
+              timestamp: notification.receivedAt,
+            });
           }
-          emitCodexSessionEvent(context, session.threadId, {
-            type: "session_idle",
-            externalSessionId: session.threadId,
-            timestamp: notification.receivedAt,
-          });
           activeTurn.markTurnSettled();
         }
       }
@@ -683,6 +719,12 @@ export const handleCodexPendingNotifications = async (
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
       if (turnId && isPlainObject(turn) && turn.status === "completed") {
+        const completedAgentMessage = context.completedAgentMessagesByTurnKey.get(
+          codexTurnKey(session.threadId, turnId),
+        );
+        if (completedAgentMessage) {
+          emitCodexCompletedTurnTiming(context, session, completedAgentMessage, turn);
+        }
         flushBufferedFinalAgentMessage(context, session, turnId);
         clearTurnScopedStreamingState(context, session.threadId, turnId);
       } else if (turnId) {

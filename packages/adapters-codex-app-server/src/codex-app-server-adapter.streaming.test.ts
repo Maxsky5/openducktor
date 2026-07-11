@@ -187,7 +187,13 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread/start-runtime-live",
-            turn: { id: "turn-1", status: "completed", completedAt: 1_777_766_403 },
+            turn: {
+              id: "turn-1",
+              status: "completed",
+              startedAt: 1_777_766_401.8,
+              completedAt: 1_777_766_403,
+              durationMs: 1_200,
+            },
           },
         },
       ]);
@@ -215,6 +221,13 @@ describe("CodexAppServerAdapter streaming", () => {
         messageId: "agent-1",
         delta: "Hi",
         timestamp: new Date(1_777_766_401_500).toISOString(),
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_status",
+        timestamp: "2026-05-03T00:00:01.800Z",
+        status: { type: "busy", message: null },
       }),
     );
     expect(events).toContainEqual(
@@ -558,6 +571,7 @@ describe("CodexAppServerAdapter streaming", () => {
               id: "turn-notification-first",
               status: "completed",
               completedAt: 1_777_766_421,
+              durationMs: 1_000,
             },
           },
         },
@@ -584,6 +598,54 @@ describe("CodexAppServerAdapter streaming", () => {
       message: "Done with low reasoning.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
+  });
+
+  test.each([
+    ["missing", undefined, "is missing durationMs."],
+    ["fractional", 1.5, "has invalid durationMs."],
+    ["out-of-range", Number.MAX_SAFE_INTEGER, "has invalid durationMs."],
+  ])("rejects %s final live Codex turn duration", async (_case, durationMs, expectedError) => {
+    const takeBufferedEvents = mock(async (_runtimeId: string) => []);
+    const { adapter, transports } = createHarness({ takeBufferedEvents }, { deferTurnStart: true });
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), () => {});
+    takeBufferedEvents.mockImplementationOnce(async () => {
+      transports.get("runtime-live")?.turnStartDeferred.resolve({ turn: { id: "turn-1" } });
+      return bufferedNotifications([
+        {
+          method: "item/completed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turnId: "turn-1",
+            completedAtMs: 1_777_766_403_000,
+            item: { type: "agentMessage", id: "agent-1", text: "Hi there" },
+          },
+        },
+        {
+          method: "turn/completed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turn: {
+              id: "turn-1",
+              status: "completed",
+              completedAt: 1_777_766_403,
+              ...(durationMs === undefined ? {} : { durationMs }),
+            },
+          },
+        },
+      ]);
+    });
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Hello Codex" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ),
+    ).rejects.toThrow(`Completed Codex turn with a final assistant message ${expectedError}`);
   });
 
   test("uses active turn model for completed user messages without turn id", async () => {
@@ -983,7 +1045,7 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
-  test("flushes the buffered final assistant message before settling from idle status", async () => {
+  test("waits for turn completion timing before flushing a final assistant message", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
@@ -1012,7 +1074,7 @@ describe("CodexAppServerAdapter streaming", () => {
       params: {
         threadId: "thread/start-runtime-live",
         turnId: "turn-live",
-        completedAtMs: 1_777_766_420_000,
+        completedAtMs: 1_777_766_419_650,
         item: {
           type: "agentMessage",
           id: "agent-idle-final",
@@ -1042,6 +1104,30 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
+    expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
+
+    emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turn: {
+          id: "turn-live",
+          status: "completed",
+          completedAt: 1_777_766_420,
+          durationMs: 1_200,
+        },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_status",
+        timestamp: "2026-05-03T00:00:18.450Z",
+        status: { type: "busy", message: null },
+      }),
+    );
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_message",
@@ -1050,7 +1136,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     const assistantMessageIndex = events.findIndex((event) => event.type === "assistant_message");
-    const sessionIdleIndex = events.findIndex((event) => event.type === "session_idle");
+    const sessionIdleIndex = events.findLastIndex((event) => event.type === "session_idle");
     expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
     expect(sessionIdleIndex).toBeGreaterThan(assistantMessageIndex);
     unsubscribe();
