@@ -65,7 +65,11 @@ export function useRuntimeTranscriptLiveOverlay({
   const [liveState, setLiveState] = useState<RuntimeTranscriptLiveState | null>(null);
   const liveStateRef = useRef<RuntimeTranscriptLiveState | null>(null);
   const baseSessionRef = useRef(baseSession);
+  const replyAgentApprovalRef = useRef(replyAgentApproval);
+  const subscribeSessionEventsRef = useRef(subscribeSessionEvents);
   baseSessionRef.current = baseSession;
+  replyAgentApprovalRef.current = replyAgentApproval;
+  subscribeSessionEventsRef.current = subscribeSessionEvents;
 
   useEffect(() => {
     liveStateRef.current = liveState;
@@ -105,8 +109,8 @@ export function useRuntimeTranscriptLiveOverlay({
     });
 
     void observeTransientAgentSessionEvents({
-      subscribeEvents: subscribeSessionEvents,
-      replyApproval: replyAgentApproval,
+      subscribeEvents: (input, listener) => subscribeSessionEventsRef.current(input, listener),
+      replyApproval: (...args) => replyAgentApprovalRef.current(...args),
       sessionRef,
       readSession: () => liveStateRef.current?.session ?? null,
       applySessionEvent: (updater) => {
@@ -141,7 +145,7 @@ export function useRuntimeTranscriptLiveOverlay({
       isCancelled = true;
       unsubscribe?.();
     };
-  }, [repoPath, replyAgentApproval, sessionRef, shouldObserve, subscribeSessionEvents, target]);
+  }, [repoPath, sessionRef, shouldObserve, target]);
 
   useEffect(() => {
     if (!shouldMergeHistory || target === null || !history) {

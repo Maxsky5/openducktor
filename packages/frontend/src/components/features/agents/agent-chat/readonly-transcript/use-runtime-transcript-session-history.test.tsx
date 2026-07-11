@@ -397,6 +397,39 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("keeps the first hydrated child subscription when operation callbacks refresh", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    const firstUnsubscribe = mock(() => undefined);
+    const firstSubscribe = mock(async (_sessionRef: PolicyBoundSessionRef, listener) => {
+      subscribed.listener = listener;
+      return firstUnsubscribe;
+    });
+    const secondSubscribe = mock(async () => () => undefined);
+    readSessionHistoryRef.current = async () => [];
+    subscribeSessionEventsRef.current = firstSubscribe;
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => firstSubscribe.mock.calls.length === 1);
+
+      subscribeSessionEventsRef.current = secondSubscribe;
+      await harness.update(createBaseArgs());
+
+      expect(firstUnsubscribe).not.toHaveBeenCalled();
+      expect(secondSubscribe).not.toHaveBeenCalled();
+
+      await harness.run(async () => {
+        subscribed.listener?.(createLiveUserMessageEvent());
+      });
+      await harness.waitFor(
+        (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 1,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("loads history when a same-id live session belongs to another source", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     readSessionHistoryRef.current = readSessionHistory;
