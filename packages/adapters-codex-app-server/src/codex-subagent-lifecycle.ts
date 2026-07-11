@@ -14,7 +14,8 @@ const lifecycleTimestampMs = (
   turn: Record<string, unknown>,
   field: "startedAt" | "completedAt",
 ): number => {
-  const value = turn[field];
+  const snakeCaseField = field === "startedAt" ? "started_at" : "completed_at";
+  const value = turn[field] ?? turn[snakeCaseField];
   if (value !== null && value !== undefined) {
     if (typeof value !== "number" || !Number.isFinite(value)) {
       throw new Error(`Codex ${notification.method} turn has an invalid ${field} timestamp.`);

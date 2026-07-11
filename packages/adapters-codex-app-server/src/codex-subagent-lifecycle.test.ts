@@ -58,6 +58,27 @@ describe("codexSubagentLifecycleUpdateFromNotification", () => {
     });
   });
 
+  test("uses snake-case Codex lifecycle timestamps when present", () => {
+    expect(
+      codexSubagentLifecycleUpdateFromNotification(
+        notification("turn/started", {
+          id: "turn-1",
+          status: "inProgress",
+          started_at: 1_783_684_799,
+        }),
+      ),
+    ).toMatchObject({ timestampMs: 1_783_684_799_000 });
+    expect(
+      codexSubagentLifecycleUpdateFromNotification(
+        notification("turn/completed", {
+          id: "turn-1",
+          status: "completed",
+          completed_at: 1_783_684_800,
+        }),
+      ),
+    ).toMatchObject({ timestampMs: 1_783_684_800_000 });
+  });
+
   test("keeps interrupted child threads resumable and ignores idle status notifications", () => {
     expect(
       codexSubagentLifecycleUpdateFromNotification(
