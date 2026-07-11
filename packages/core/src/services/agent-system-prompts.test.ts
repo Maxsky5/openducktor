@@ -519,7 +519,7 @@ describe("kickoff and permission prompts", () => {
     );
   });
 
-  test("builds a concise git conflict resolution message while requiring live context", () => {
+  test("builds a concise git conflict resolution message with useful conflict context", () => {
     const prompt = buildAgentMessagePrompt({
       role: "build",
       templateId: "message.build_rebase_conflict_resolution",
@@ -536,71 +536,58 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(prompt, [
-      "Resolve the interrupted git operation in this worktree.",
-      "inspect the live git state, relevant history, and task context",
+      "Resolve these git conflicts and complete the interrupted operation.",
+      "Git context:",
+      "- Operation: direct merge (rebase)",
+      "- Current branch: feature/task-1",
+      "- Target branch: origin/main",
+      "- Conflicted files:",
+      "- src/main.ts",
+      "- src/lib.ts",
+      "inspect the live git state and relevant history",
       "Understand why both sides changed",
       "preserve compatible intent",
       "do not invent unrelated behavior",
-      "Resolve only what is necessary and finish the interrupted operation",
+      "Resolve only what is necessary, finish the interrupted operation, and run the relevant repository checks",
       "If completion is unsafe or blocked, surface the blocker",
-      "do not abort or hide it with a fallback",
-      "Run the relevant repository checks",
+      "instead of aborting or hiding it with a fallback",
       "concise, evidence-based summary of the resolution and verification",
       "Use taskId task-1 for any odt_* tool calls.",
     ]);
+    expect(prompt).not.toContain("CONFLICT (content)");
   });
 
-  test("keeps the built-in git conflict message bounded as conflict context grows", () => {
-    const buildPrompt = (git: {
-      operationLabel: string;
-      currentBranch: string;
-      targetBranch: string;
-      conflictedFiles: string[];
-      conflictOutput: string;
-    }) =>
+  test("omits raw git output while retaining conflict metadata", () => {
+    const buildPrompt = (conflictOutput: string) =>
       buildAgentMessagePrompt({
         role: "build",
         templateId: "message.build_rebase_conflict_resolution",
         task: {
           taskId: "task-bounded",
         },
-        git,
+        git: {
+          operationLabel: "rebase",
+          currentBranch: "feature/task-bounded",
+          targetBranch: "origin/main",
+          conflictedFiles: ["src/conflict-a.ts", "src/conflict-b.ts"],
+          conflictOutput,
+        },
       });
-    const smallPrompt = buildPrompt({
-      operationLabel: "SMALL_OPERATION_SENTINEL",
-      currentBranch: "SMALL_CURRENT_BRANCH_SENTINEL",
-      targetBranch: "SMALL_TARGET_BRANCH_SENTINEL",
-      conflictedFiles: ["SMALL_FILE_SENTINEL.ts"],
-      conflictOutput: "SMALL_OUTPUT_SENTINEL",
-    });
-    const largePrompt = buildPrompt({
-      operationLabel: `LARGE_OPERATION_SENTINEL_${"x".repeat(1_000)}`,
-      currentBranch: `LARGE_CURRENT_BRANCH_SENTINEL_${"x".repeat(1_000)}`,
-      targetBranch: `LARGE_TARGET_BRANCH_SENTINEL_${"x".repeat(1_000)}`,
-      conflictedFiles: Array.from(
-        { length: 100 },
-        (_, index) => `LARGE_FILE_SENTINEL_${index}_${"x".repeat(200)}.ts`,
-      ),
-      conflictOutput: `LARGE_OUTPUT_SENTINEL_${"x".repeat(10_000)}`,
-    });
+    const smallPrompt = buildPrompt("SMALL_OUTPUT_SENTINEL");
+    const largePrompt = buildPrompt(`LARGE_OUTPUT_SENTINEL_${"x".repeat(10_000)}`);
 
     expect(largePrompt).toBe(smallPrompt);
-    expect(smallPrompt.trim().split(/\s+/)).toHaveLength(87);
-    expect(smallPrompt.trim().split(/\s+/).length).toBeLessThanOrEqual(100);
-    expectPromptToContainAll(smallPrompt, ["task-bounded", "odt_*"]);
+    expectPromptToContainAll(smallPrompt, [
+      "Operation: rebase",
+      "Current branch: feature/task-bounded",
+      "Target branch: origin/main",
+      "src/conflict-a.ts",
+      "src/conflict-b.ts",
+      "task-bounded",
+      "odt_*",
+    ]);
 
-    for (const sentinel of [
-      "SMALL_OPERATION_SENTINEL",
-      "SMALL_CURRENT_BRANCH_SENTINEL",
-      "SMALL_TARGET_BRANCH_SENTINEL",
-      "SMALL_FILE_SENTINEL",
-      "SMALL_OUTPUT_SENTINEL",
-      "LARGE_OPERATION_SENTINEL",
-      "LARGE_CURRENT_BRANCH_SENTINEL",
-      "LARGE_TARGET_BRANCH_SENTINEL",
-      "LARGE_FILE_SENTINEL",
-      "LARGE_OUTPUT_SENTINEL",
-    ]) {
+    for (const sentinel of ["SMALL_OUTPUT_SENTINEL", "LARGE_OUTPUT_SENTINEL"]) {
       expect(smallPrompt).not.toContain(sentinel);
       expect(largePrompt).not.toContain(sentinel);
     }
