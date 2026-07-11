@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   SystemCommandPort,
   SystemCommandRunOptions,
@@ -108,7 +108,7 @@ describe("createOpenInToolsAdapter", () => {
     ]);
     expect(launches.some((launch) => launch.command === "sips")).toBe(false);
   });
-  test("keeps catalog discovery available when Spotlight lookup fails", async () => {
+  test("propagates Spotlight lookup failures", async () => {
     const { systemCommands } = createSystemCommands({
       resolvedCommands: {},
       runCommand: ({ command }) => {
@@ -128,9 +128,33 @@ describe("createOpenInToolsAdapter", () => {
       pathExists: (inputPath) => Effect.succeed(inputPath === "/Applications/Finder.app"),
       pathIsDirectory: (inputPath) => Effect.succeed(inputPath.endsWith(".app")),
     });
-    await expect(Effect.runPromise(port.discoverOpenInTools())).resolves.toEqual([
-      { toolId: "finder", iconDataUrl: null },
-    ]);
+    const result = await Effect.runPromise(Effect.either(port.discoverOpenInTools()));
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+    expect(result.left).toBeInstanceOf(HostOperationError);
+    expect(result.left).toHaveProperty("operation", "openInTools.runCommand");
+    expect(result.left.message).toContain("Command mdfind exited unsuccessfully");
+    expect(result.left.details).toMatchObject({
+      args: ["-name", expect.stringMatching(/\.app$/)],
+      program: "mdfind",
+      stderr: "Spotlight unavailable",
+    });
+  });
+  test("treats successful empty Spotlight output as an application-not-found result", async () => {
+    const { launches, systemCommands } = createSystemCommands({ resolvedCommands: {} });
+    const port = createOpenInToolsAdapter({
+      platform: "darwin",
+      systemCommands,
+      homeDirectory: () => "/Users/dev",
+      pathExists: () => Effect.succeed(false),
+      pathIsDirectory: () => Effect.succeed(false),
+    });
+
+    await expect(Effect.runPromise(port.discoverOpenInTools())).resolves.toEqual([]);
+    expect(launches.some((launch) => launch.command === "mdfind")).toBe(true);
   });
   test("launches a directory with the selected app", async () => {
     const { launches, systemCommands } = createSystemCommands({

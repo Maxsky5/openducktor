@@ -230,12 +230,7 @@ export const createOpenInToolsAdapter = ({
       }
 
       const bundleName = bundleNameForApp(appName);
-      const output = yield* runRequiredOpenInCommand("mdfind", ["-name", bundleName]).pipe(
-        Effect.catchAll(() => Effect.succeed(null)),
-      );
-      if (!output) {
-        return null;
-      }
+      const output = yield* runRequiredOpenInCommand("mdfind", ["-name", bundleName]);
 
       for (const line of output.stdout.split(/\r?\n/)) {
         const candidate = line.trim();
