@@ -154,7 +154,8 @@ const installScrollMetrics = (element: HTMLDivElement): void => {
 };
 
 const transcriptScrollRegion = (): HTMLDivElement => {
-  const region = globalThis.document.querySelector(".agent-chat-scroll-region");
+  const regions = globalThis.document.querySelectorAll(".agent-chat-scroll-region");
+  const region = regions.item(regions.length - 1);
   if (!(region instanceof globalThis.HTMLDivElement)) {
     throw new Error("Expected the transcript dialog to render its chat scroll region.");
   }
@@ -235,6 +236,9 @@ describe("AgentSessionTranscriptDialog", () => {
     const deferredRefresh = createDeferred<AgentSessionHistoryMessage[]>();
     host.workspaceGetSettingsSnapshot = async () => deferredSettings.promise;
     readSessionHistory.mockResolvedValueOnce(history);
+    const unrelatedScrollRegion = globalThis.document.createElement("div");
+    unrelatedScrollRegion.className = "agent-chat-scroll-region";
+    globalThis.document.body.append(unrelatedScrollRegion);
     const rendered = render(dialog(true), { wrapper });
 
     try {
@@ -243,14 +247,9 @@ describe("AgentSessionTranscriptDialog", () => {
         await deferredSettings.promise;
       });
       await waitFor(() => expect(rendered.getByText("Assistant response 39")).toBeTruthy());
+      const initialScrollRegion = transcriptScrollRegion();
       rendered.rerender(dialog(false));
-      await waitFor(
-        () =>
-          expect(globalThis.document.querySelector(".agent-chat-scroll-region") === null).toBe(
-            true,
-          ),
-        { timeout: 3_000 },
-      );
+      await waitFor(() => expect(initialScrollRegion.isConnected).toBe(false), { timeout: 3_000 });
       readSessionHistory.mockImplementationOnce(async () => deferredRefresh.promise);
 
       rerenderWithScrollMetrics(() => rendered.rerender(dialog(true)));
@@ -265,6 +264,7 @@ describe("AgentSessionTranscriptDialog", () => {
         await deferredRefresh.promise;
       });
       rendered.unmount();
+      unrelatedScrollRegion.remove();
     }
   }, 10_000);
 });

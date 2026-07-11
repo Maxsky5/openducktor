@@ -166,16 +166,20 @@ describe("AgentSessionTranscriptDialogHost", () => {
     );
 
     const rendered = render(<DialogControls />, { wrapper });
+    const unrelatedIndicator = globalThis.document.createElement("output");
+    unrelatedIndicator.textContent = "Opening conversation…";
     try {
       fireEvent.click(screen.getByRole("button", { name: "Open" }));
-      expect(screen.getByText("Opening conversation…")).toBeTruthy();
+      const openingIndicator = screen.getByText("Opening conversation…");
+      expect(openingIndicator).toBeTruthy();
+      globalThis.document.body.append(unrelatedIndicator);
 
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-      await waitFor(() => expect(screen.queryByText("Opening conversation…") === null).toBe(true), {
-        timeout: 3_000,
-      });
+      await waitFor(() => expect(openingIndicator.isConnected).toBe(false), { timeout: 3_000 });
+      expect(unrelatedIndicator.isConnected).toBe(true);
     } finally {
+      unrelatedIndicator.remove();
       rendered.unmount();
     }
   }, 10_000);
