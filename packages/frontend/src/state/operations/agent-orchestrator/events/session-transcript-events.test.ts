@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createSessionTurnTiming } from "../support/session-turn-timing";
 import {
   buildSession,
   createRecordingSessionTodosUpdater,
@@ -138,6 +139,69 @@ describe("agent-orchestrator session transcript events", () => {
     });
 
     expect(getSession(sessionsRef).historyLoadState).toBe("loaded");
+  });
+
+  test("keeps consecutive live Codex turn durations scoped to their current turn", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_sessionRef, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ runtimeKind: "codex", status: "running" }),
+    ]);
+    const turnTiming = createSessionTurnTiming();
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      recordTurnActivityTimestamp: turnTiming.recordTurnActivityTimestamp,
+      resolveTurnDurationMs: turnTiming.resolveTurnDurationMs,
+      clearTurnDuration: turnTiming.clearTurnDuration,
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "session_status",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.800Z",
+      status: { type: "busy", message: null },
+    });
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "assistant-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      message: "First answer",
+    });
+    handleEvent({
+      type: "session_status",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:14.700Z",
+      status: { type: "busy", message: null },
+    });
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "assistant-2",
+      timestamp: "2026-02-22T08:00:17.000Z",
+      message: "Second answer",
+    });
+
+    const durations = getSessionMessages(sessionsRef)
+      .filter((message) => message.meta?.kind === "assistant")
+      .map((message) => (message.meta?.kind === "assistant" ? message.meta.durationMs : undefined));
+    expect(durations).toEqual([1_200, 2_300]);
   });
 
   test("ignores observed session events after the mounted identity changes", async () => {
