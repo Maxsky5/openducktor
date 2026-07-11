@@ -94,6 +94,18 @@ const isPreviousRunTerminalUpdate = (
   typeof input.endedAtMs === "number" &&
   input.endedAtMs < existing.startedAtMs;
 
+const isExplicitRunningRestart = (
+  existing: CodexStoredSubagentLink | undefined,
+  input: CodexSubagentLinkInput,
+): boolean =>
+  input.allowStatusRestart === true &&
+  input.status === "running" &&
+  existing !== undefined &&
+  isTerminalStatus(existing.status) &&
+  typeof existing.endedAtMs === "number" &&
+  typeof input.startedAtMs === "number" &&
+  input.startedAtMs > existing.endedAtMs;
+
 const resolveStatus = (
   existing: CodexStoredSubagentLink | undefined,
   input: CodexSubagentLinkInput,
@@ -101,7 +113,7 @@ const resolveStatus = (
   if (!existing) {
     return input.status;
   }
-  if (input.allowStatusRestart === true && input.status === "running") {
+  if (isExplicitRunningRestart(existing, input)) {
     return "running";
   }
   if (isPreviousRunTerminalUpdate(existing, input)) {
@@ -247,8 +259,7 @@ export class CodexSubagentLinkState {
       existingLinked ??
       existingProvisional ??
       this.linksByCorrelationKey.get(scopedKey(input.runtimeId, correlationKey));
-    const isExplicitRunningTransition =
-      input.allowStatusRestart === true && input.status === "running";
+    const isExplicitRunningTransition = isExplicitRunningRestart(existing, input);
     const isPreviousRunUpdate = isPreviousRunTerminalUpdate(existing, input);
     const status = resolveStatus(existing, input);
     const childThreadId = input.childThreadId ?? existing?.childThreadId;
@@ -401,7 +412,10 @@ export class CodexSubagentLinkState {
       this.linksByChildThreadId.delete(childThreadKey(link.runtimeId, link.childThreadId));
     }
     for (const [key, provisional] of this.provisionalByParentItemKey) {
-      if (provisional.correlationKey === link.correlationKey) {
+      if (
+        provisional.runtimeId === link.runtimeId &&
+        provisional.correlationKey === link.correlationKey
+      ) {
         this.provisionalByParentItemKey.delete(key);
       }
     }

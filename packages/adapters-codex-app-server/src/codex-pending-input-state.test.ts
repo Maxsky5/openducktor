@@ -128,6 +128,28 @@ describe("CodexPendingInputState", () => {
     expect(pendingInput.approval("0", "runtime-2")?.runtimeId).toBe("runtime-2");
   });
 
+  test("binds active turns only to pending input from the same runtime", () => {
+    const pendingInput = new CodexPendingInputState();
+    pendingInput.addApproval({
+      runtimeId: "runtime-1",
+      threadId: "shared-thread",
+      request: approvalRequest("approval-1"),
+    });
+    pendingInput.addApproval({
+      runtimeId: "runtime-2",
+      threadId: "shared-thread",
+      request: approvalRequest("approval-2"),
+    });
+    const activeTurn = {
+      session: { threadId: "shared-thread", runtimeId: "runtime-1" },
+    } as unknown as ActiveCodexTurn;
+
+    pendingInput.bindActiveTurn("shared-thread", activeTurn);
+
+    expect(pendingInput.resolveApproval("approval-1", "runtime-1")).toBe(activeTurn);
+    expect(pendingInput.resolveApproval("approval-2", "runtime-2")).toBeUndefined();
+  });
+
   test("clears pending input only for the released runtime session", () => {
     const pendingInput = new CodexPendingInputState();
     pendingInput.addApproval({
@@ -272,7 +294,7 @@ describe("CodexPendingInputState", () => {
       subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
     };
     const activeTurn = {
-      session: { threadId: "parent-thread" },
+      session: { threadId: "parent-thread", runtimeId: "runtime-1" },
     } as unknown as ActiveCodexTurn;
 
     pendingInput.addQuestion({
@@ -297,7 +319,7 @@ describe("CodexPendingInputState", () => {
       subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
     };
     const activeTurn = {
-      session: { threadId: "child-thread" },
+      session: { threadId: "child-thread", runtimeId: "runtime-1" },
     } as unknown as ActiveCodexTurn;
 
     pendingInput.addQuestion({
@@ -323,7 +345,7 @@ describe("CodexPendingInputState", () => {
       subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
     };
     const activeParentTurn = {
-      session: { threadId: "parent-thread" },
+      session: { threadId: "parent-thread", runtimeId: "runtime-1" },
     } as unknown as ActiveCodexTurn;
 
     pendingInput.addApproval({

@@ -215,7 +215,10 @@ export const loadCodexSessionHistory = async ({
   rememberTodos,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
-  const response = await threadInventory.readThreadHistory(client, input);
+  const response = await threadInventory.readThreadHistory(client, {
+    ...input,
+    allowUnmaterialized: session !== undefined,
+  });
   if (!response) {
     return [];
   }

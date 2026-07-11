@@ -99,6 +99,20 @@ const createLiveUserMessageEvent = (
     ...overrides,
   }) satisfies Extract<AgentEvent, { type: "user_message" }>;
 
+const createLiveApprovalEvent = (): Extract<AgentEvent, { type: "approval_required" }> => ({
+  type: "approval_required",
+  externalSessionId: "session-1",
+  requestId: "approval-live",
+  requestType: "permission_grant",
+  title: "Approve read",
+  summary: "Approval request for read.",
+  affectedPaths: ["src/**"],
+  action: { name: "read" },
+  mutation: "read_only",
+  supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+  timestamp: "2026-02-22T12:01:00.000Z",
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isOpen: true,
   repoPath: "/repo-a",
@@ -365,6 +379,31 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.waitFor(
         (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 1,
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses overlay pending input when rendering over a matching projected session", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a/worktree",
+    });
+    const harness = createHookHarness(createBaseArgs({ liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(createLiveApprovalEvent()));
+      await harness.waitFor((state) => state.interactionSession?.pendingApprovals.length === 1);
     } finally {
       await harness.unmount();
     }

@@ -165,6 +165,7 @@ describe("CodexSubagentLifecycleProjector", () => {
       itemId: "spawn-1",
       status: "error",
       error: "First child turn failed",
+      endedAtMs: 1_783_683_601_000,
     });
 
     projector.projectNotification(

@@ -6,6 +6,7 @@ import {
   createHarness,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
+  RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
@@ -561,6 +562,49 @@ describe("CodexAppServerAdapter history loading", () => {
       parts: [],
     });
     unsubscribe();
+  });
+
+  test("keeps the runtime-owned system prompt before the local thread is materialized", async () => {
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async <Response>(request: CodexJsonRpcRequest): Promise<Response> => {
+        if (request.method === "thread/read") {
+          throw new Error(
+            "thread is not materialized yet: includeTurns is unavailable before first user message",
+          );
+        }
+        return baseTransport.request<Response>(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread/start-runtime-live",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+    expect(history).toEqual([
+      {
+        messageId: "codex-system-prompt:thread/start-runtime-live",
+        role: "system",
+        timestamp: "2026-05-07T00:00:00.000Z",
+        text: "System prompt:\n\nUse the repo rules.",
+        parts: [],
+      },
+    ]);
   });
 
   test("projects supplied prompt context for cold persisted history reads", async () => {

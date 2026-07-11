@@ -241,7 +241,9 @@ export class CodexPendingInputState {
     ).concat(
       this.pendingApprovalEntriesForIndex(this.mirroredApprovalIdsBySessionId, externalSessionId),
     );
-    for (const approval of approvalEntries) {
+    for (const approval of approvalEntries.filter(
+      (entry) => entry.runtimeId === activeTurn.session.runtimeId,
+    )) {
       this.activeTurnsByApprovalRequestKey.set(
         pendingRequestKey(approval.runtimeId, approval.request.requestId),
         activeTurn,
@@ -254,7 +256,9 @@ export class CodexPendingInputState {
     ).concat(
       this.pendingQuestionEntriesForIndex(this.mirroredQuestionIdsBySessionId, externalSessionId),
     );
-    for (const question of questionEntries) {
+    for (const question of questionEntries.filter(
+      (entry) => entry.runtimeId === activeTurn.session.runtimeId,
+    )) {
       this.activeTurnsByQuestionRequestKey.set(
         pendingRequestKey(question.runtimeId, question.request.requestId),
         activeTurn,

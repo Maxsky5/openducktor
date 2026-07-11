@@ -176,11 +176,19 @@ export class CodexThreadInventoryReader {
 
   async readThreadHistory(
     client: CodexAppServerClient,
-    input: { externalSessionId: string; workingDirectory: string },
+    input: {
+      externalSessionId: string;
+      workingDirectory: string;
+      allowUnmaterialized?: boolean;
+    },
   ): Promise<unknown | null> {
     let response: unknown;
     try {
-      response = await this.readThreadWithTurns(client, input.externalSessionId);
+      response = await this.readThreadWithTurns(
+        client,
+        input.externalSessionId,
+        input.allowUnmaterialized ? input.workingDirectory : undefined,
+      );
     } catch (error) {
       if (isCodexThreadNotLoadedError(error)) {
         return null;
@@ -194,13 +202,23 @@ export class CodexThreadInventoryReader {
     return response;
   }
 
-  async readThreadWithTurns(client: CodexAppServerClient, threadId: string): Promise<unknown> {
+  async readThreadWithTurns(
+    client: CodexAppServerClient,
+    threadId: string,
+    unmaterializedWorkingDirectory?: string,
+  ): Promise<unknown> {
     let response: unknown;
     try {
       response = await client.threadRead({ threadId, includeTurns: true });
     } catch (error) {
       if (isCodexUnmaterializedThreadError(error)) {
-        return { thread: { id: threadId, turns: [] } };
+        return {
+          thread: {
+            id: threadId,
+            ...(unmaterializedWorkingDirectory ? { cwd: unmaterializedWorkingDirectory } : {}),
+            turns: [],
+          },
+        };
       }
       throw error;
     }

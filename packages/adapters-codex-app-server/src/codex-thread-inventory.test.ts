@@ -374,6 +374,25 @@ describe("CodexThreadInventoryReader", () => {
     expect(calls).toEqual(["thread/read"]);
   });
 
+  test("preserves a synthetic empty history response for a known local session", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadRead: async () => {
+        throw new Error(
+          "thread is not materialized yet: includeTurns is unavailable before first user message",
+        );
+      },
+    } as unknown as CodexAppServerClient;
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-local",
+        workingDirectory: "/repo",
+        allowUnmaterialized: true,
+      }),
+    ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
+  });
+
   test("returns null when read-only history cwd does not match", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];

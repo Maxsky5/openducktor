@@ -247,7 +247,7 @@ export function useRuntimeTranscriptSessionHistory({
     shouldLoadHistory,
     stableTarget,
   ]);
-  const interactionSession = matchingLiveSession ?? liveOverlay.interactionSession;
+  const interactionSession = liveOverlay.interactionSession ?? matchingLiveSession;
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };

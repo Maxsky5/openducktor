@@ -11,6 +11,7 @@ describe("CodexSubagentLinkState", () => {
       itemId: "spawn-1",
       status: "error",
       error: "First turn failed",
+      endedAtMs: 100,
     });
 
     const staleRunning = subagents.upsertLink({
@@ -27,6 +28,7 @@ describe("CodexSubagentLinkState", () => {
       itemId: "followup-1",
       status: "running",
       allowStatusRestart: true,
+      startedAtMs: 200,
     });
 
     expect(staleRunning).toMatchObject({ status: "error", error: "First turn failed" });
@@ -59,6 +61,49 @@ describe("CodexSubagentLinkState", () => {
       childExternalSessionId: "child-thread",
       runtimeId: "runtime-2",
     });
+  });
+
+  test("clears provisional links without deleting the same correlation in another runtime", () => {
+    const subagents = new CodexSubagentLinkState();
+    for (const runtimeId of ["runtime-1", "runtime-2"]) {
+      subagents.upsertLink({
+        runtimeId,
+        parentThreadId: "parent-thread",
+        itemId: "spawn-1",
+        status: "running",
+      });
+    }
+
+    subagents.clearSession("parent-thread", "runtime-1");
+
+    expect(
+      subagents.failUnlinkedSpawnsForParent("parent-thread", "runtime-2", "Spawn failed"),
+    ).toHaveLength(1);
+  });
+
+  test("ignores an explicit restart older than the terminal lifecycle", () => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "error",
+      error: "Finished",
+      endedAtMs: 200,
+    });
+
+    const staleRestart = subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "resume-1",
+      status: "running",
+      allowStatusRestart: true,
+      startedAtMs: 100,
+    });
+
+    expect(staleRestart).toMatchObject({ status: "error", error: "Finished", endedAtMs: 200 });
   });
 
   test("fails only active provisional spawns in the requested parent runtime", () => {
