@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import {
   buildQueuedSignature,
@@ -12,6 +13,167 @@ import {
 const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 
 describe("OpencodeSdkAdapter user message", () => {
+  test("manual compaction bypasses workflow-tool discovery", async () => {
+    const mock = makeMockClient({});
+    const summarizeCalls: unknown[] = [];
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.session, {
+      summarize: async (input: unknown) => {
+        summarizeCalls.push(input);
+        return { data: true, error: undefined };
+      },
+    });
+    Object.assign(mock.client.mcp, {
+      status: async () => {
+        throw new Error("MCP discovery must not run");
+      },
+    });
+    Object.assign(mock.client.tool, {
+      ids: async () => {
+        throw new Error("Tool discovery must not run");
+      },
+    });
+    mock.mcp.statusCalls.length = 0;
+    mock.tool.idsCalls.length = 0;
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
+    );
+
+    try {
+      await adapter.sendUserMessage({
+        ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+        parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+        model: { providerId: "openai", modelId: "gpt-5" },
+      });
+    } finally {
+      unsubscribe();
+    }
+
+    expect(summarizeCalls).toHaveLength(1);
+    expect(events.some((event) => event.type === "user_message")).toBe(false);
+    expect(mock.mcp.statusCalls).toEqual([]);
+    expect(mock.tool.idsCalls).toEqual([]);
+  });
+
+  test("rejected manual compaction preserves an active assistant turn", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.session, {
+      summarize: async () => {
+        throw new Error("Session is busy");
+      },
+    });
+    const session = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          {
+            activeAssistantMessageId: string | null;
+            streamTurnStatus: "active" | "idle";
+          }
+        >;
+      }
+    ).sessions.get("session-opencode-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+    session.activeAssistantMessageId = "assistant-active";
+    session.streamTurnStatus = "active";
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
+    );
+
+    try {
+      await expect(
+        adapter.sendUserMessage({
+          ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+          parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+          model: { providerId: "openai", modelId: "gpt-5" },
+        }),
+      ).rejects.toThrow("Session is busy");
+    } finally {
+      unsubscribe();
+    }
+
+    expect(session.activeAssistantMessageId).toBe("assistant-active");
+    expect(session.streamTurnStatus).toBe("active");
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
+  test("invalid compaction shape fails before workflow-tool discovery", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.mcp, {
+      status: async () => {
+        throw new Error("MCP discovery must not run");
+      },
+    });
+    mock.mcp.statusCalls.length = 0;
+
+    await expect(
+      adapter.sendUserMessage({
+        ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+        parts: [
+          { kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND },
+          { kind: "text", text: " now" },
+        ],
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: compact session: /compact must be sent without arguments or references",
+    );
+    expect(mock.mcp.statusCalls).toEqual([]);
+  });
+
+  test("rejects cached session route mismatches before compaction", async () => {
+    const mock = makeMockClient({});
+    const summarizeCalls: unknown[] = [];
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    Object.assign(mock.client.session, {
+      summarize: async (input: unknown) => {
+        summarizeCalls.push(input);
+        return { data: true, error: undefined };
+      },
+    });
+
+    for (const override of [{ repoPath: "/other" }, { workingDirectory: "/other" }]) {
+      await expect(
+        adapter.sendUserMessage({
+          ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+          ...override,
+          parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
+          model: { providerId: "openai", modelId: "gpt-5" },
+        }),
+      ).rejects.toThrow("Cannot send OpenCode session 'session-opencode-1'");
+    }
+
+    expect(summarizeCalls).toEqual([]);
+  });
+
   test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
@@ -207,9 +369,9 @@ describe("OpencodeSdkAdapter user message", () => {
         {
           kind: "slash_command",
           command: {
-            id: "compact",
-            trigger: "compact",
-            title: "compact",
+            id: "review",
+            trigger: "review",
+            title: "review",
             hints: [],
           },
         },
@@ -228,7 +390,7 @@ describe("OpencodeSdkAdapter user message", () => {
         sessionID: "session-opencode-1",
         directory: "/repo",
         messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-        command: "compact",
+        command: "review",
         arguments: "summarize the latest session",
         model: "openai/gpt-5",
         variant: "high",
@@ -258,9 +420,9 @@ describe("OpencodeSdkAdapter user message", () => {
         {
           kind: "slash_command",
           command: {
-            id: "compact",
-            trigger: "compact",
-            title: "compact",
+            id: "review",
+            trigger: "review",
+            title: "review",
             hints: [],
           },
         },
@@ -294,9 +456,9 @@ describe("OpencodeSdkAdapter user message", () => {
           {
             kind: "slash_command",
             command: {
-              id: "compact",
-              trigger: "compact",
-              title: "compact",
+              id: "review",
+              trigger: "review",
+              title: "review",
               hints: [],
             },
           },
@@ -334,9 +496,9 @@ describe("OpencodeSdkAdapter user message", () => {
           {
             kind: "slash_command",
             command: {
-              id: "compact",
-              trigger: "compact",
-              title: "compact",
+              id: "review",
+              trigger: "review",
+              title: "review",
               hints: [],
             },
           },
@@ -506,9 +668,9 @@ describe("OpencodeSdkAdapter user message", () => {
         {
           kind: "slash_command",
           command: {
-            id: "compact",
-            trigger: "compact",
-            title: "compact",
+            id: "review",
+            trigger: "review",
+            title: "review",
             hints: [],
           },
         },

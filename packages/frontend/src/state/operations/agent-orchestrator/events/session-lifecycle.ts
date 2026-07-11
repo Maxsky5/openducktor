@@ -11,6 +11,7 @@ import {
   buildSessionCompactionStartedNoticeMessage,
   buildSessionErrorNoticeMessage,
   buildUserStoppedNoticeMessage,
+  removeRunningSessionCompactionNotices,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
@@ -315,18 +316,22 @@ export const handleSessionError = (
         pendingApprovals: [],
         pendingQuestions: [],
         messages: appendUserStoppedNotice
-          ? settleTerminalMessages(current, event.timestamp, {
-              outcome: "error",
-              errorMessage: sessionErrorMessage,
-              appendUserStoppedNotice: true,
-            })
+          ? removeRunningSessionCompactionNotices(
+              settleTerminalMessages(current, event.timestamp, {
+                outcome: "error",
+                errorMessage: sessionErrorMessage,
+                appendUserStoppedNotice: true,
+              }),
+            )
           : appendSessionMessage(
               {
                 externalSessionId: current.externalSessionId,
-                messages: settleTerminalMessages(current, event.timestamp, {
-                  outcome: "error",
-                  errorMessage: sessionErrorMessage,
-                }),
+                messages: removeRunningSessionCompactionNotices(
+                  settleTerminalMessages(current, event.timestamp, {
+                    outcome: "error",
+                    errorMessage: sessionErrorMessage,
+                  }),
+                ),
               },
               buildSessionErrorNoticeMessage(event.timestamp, sessionErrorMessage),
             ),

@@ -24,6 +24,45 @@ const codexStatusNotification = {
 const receivedAt = "2026-07-06T12:00:00.000Z";
 
 describe("createCodexAppServerCommandHandlers", () => {
+  test("forwards thread compaction requests to the Codex service", async () => {
+    const requests: unknown[] = [];
+    const service: CodexAppServerService = {
+      request(input) {
+        requests.push(input);
+        return Effect.succeed({} as CodexAppServerRequestResult);
+      },
+      listLoadedThreads() {
+        return Effect.succeed({ data: [], nextCursor: null });
+      },
+      listThreads() {
+        return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
+      },
+      takeBufferedEvents() {
+        return Effect.succeed([]);
+      },
+      respond() {
+        return Effect.void;
+      },
+    };
+    const router = createHostCommandRouter({
+      handlers: createCodexAppServerCommandHandlers(service),
+    });
+
+    await router.invoke("codex_app_server_request", {
+      runtimeId: "runtime-1",
+      method: "thread/compact/start",
+      params: { threadId: "thread-1" },
+    });
+
+    expect(requests).toEqual([
+      {
+        runtimeId: "runtime-1",
+        method: "thread/compact/start",
+        params: { threadId: "thread-1" },
+      },
+    ]);
+  });
+
   test("logs Codex policy-bearing requests through the host logger", async () => {
     const infos: string[] = [];
     const service: CodexAppServerService = {

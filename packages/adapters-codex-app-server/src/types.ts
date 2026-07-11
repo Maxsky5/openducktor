@@ -200,6 +200,12 @@ export type CodexThreadSetNameParams = {
   name: string;
 };
 
+export type CodexThreadCompactStartParams = {
+  threadId: string;
+};
+
+export type CodexThreadCompactStartResponse = Record<string, never>;
+
 export type CodexTurnStartParams = {
   approvalPolicy: CodexAppServerAskForApproval;
   approvalsReviewer: CodexAppServerApprovalsReviewer | null;
@@ -284,6 +290,9 @@ export type CodexAppServerClient = {
   threadResume(params: CodexThreadResumeParams): Promise<CodexThreadResumeResult>;
   threadFork(params: CodexThreadForkParams): Promise<CodexThreadForkResult>;
   threadSetName(params: CodexThreadSetNameParams): Promise<Record<string, never>>;
+  threadCompactStart(
+    params: CodexThreadCompactStartParams,
+  ): Promise<CodexThreadCompactStartResponse>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexTurnSteerResult>;
   turnInterrupt(params: CodexTurnInterruptParams): Promise<Record<string, never>>;

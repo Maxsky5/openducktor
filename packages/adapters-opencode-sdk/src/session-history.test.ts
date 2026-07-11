@@ -13,6 +13,85 @@ import {
 import type { SessionRecord } from "./types";
 
 describe("OpencodeSdkAdapter session history", () => {
+  test("loadSessionHistory keeps the assistant compaction summary and hides its marker", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-summary",
+            role: "assistant",
+            summary: true,
+            tokens: { input: 2_000, output: 300 },
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "summary-text",
+              sessionID: "session-opencode-1",
+              messageID: "msg-summary",
+              type: "text",
+              text: "Internal compaction summary",
+            } as unknown as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-marker",
+            role: "user",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "compact-marker",
+              sessionID: "session-opencode-1",
+              messageID: "msg-marker",
+              type: "compaction",
+              auto: false,
+            } as unknown as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-visible",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:01:00Z") },
+          },
+          parts: [
+            {
+              id: "visible-text",
+              sessionID: "session-opencode-1",
+              messageID: "msg-visible",
+              type: "text",
+              text: "Visible answer",
+            } as unknown as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:01:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+    });
+
+    expect(history).toEqual([
+      expect.objectContaining({
+        messageId: "msg-summary",
+        role: "assistant",
+        text: "Internal compaction summary",
+      }),
+      expect.objectContaining({
+        messageId: "msg-visible",
+        role: "assistant",
+        text: "Visible answer",
+      }),
+    ]);
+  });
+
   test("loadSessionHistory maps Opencode user message system prompts to system history once", async () => {
     const mock = makeMockClient({
       messagesResponse: [

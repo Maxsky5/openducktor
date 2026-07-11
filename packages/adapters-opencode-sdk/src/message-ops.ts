@@ -49,6 +49,9 @@ const hasCompletedAssistantMessage = (value: unknown): boolean => {
   return typeof time?.completed === "number";
 };
 
+const isCompactionMarkerEntry = (entry: { parts: Part[] }): boolean =>
+  entry.parts.some((part) => asRecord(part)?.type === "compaction");
+
 type MappedSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ChildSessionLink = {
   externalSessionId: string;
@@ -456,6 +459,7 @@ export const loadSessionHistory = async (
   const data = unwrapData(response, "load session messages");
   const childSessionLinks = await listChildSessionLinks(client, input);
   const normalizedEntries = data
+    .filter((entry) => !isCompactionMarkerEntry(entry))
     .map((entry) => {
       const infoText = readTextFromMessageInfo(entry.info);
       const displayParts =

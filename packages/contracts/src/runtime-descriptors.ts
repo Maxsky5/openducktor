@@ -155,8 +155,14 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     pendingVisibility: ["live_snapshot"],
   },
   promptInput: {
-    supportedParts: ["text", "skill_mention", "file_reference", "folder_reference"],
-    supportsSlashCommands: false,
+    supportedParts: [
+      "text",
+      "slash_command",
+      "skill_mention",
+      "file_reference",
+      "folder_reference",
+    ],
+    supportsSlashCommands: true,
     supportsFileSearch: true,
     supportsSkillReferences: true,
     supportsSubagentReferences: false,

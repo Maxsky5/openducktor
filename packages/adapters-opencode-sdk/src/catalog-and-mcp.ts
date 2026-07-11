@@ -1,4 +1,8 @@
-import { slashCommandCatalogSchema, subagentCatalogSchema } from "@openducktor/contracts";
+import {
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  slashCommandCatalogSchema,
+  subagentCatalogSchema,
+} from "@openducktor/contracts";
 import type {
   AgentDescriptor,
   AgentFileSearchResult,
@@ -297,7 +301,12 @@ export const listAvailableSlashCommands = async (
       })
       .sort((left, right) => left.trigger.localeCompare(right.trigger));
 
-    return slashCommandCatalogSchema.parse({ commands });
+    return slashCommandCatalogSchema.parse({
+      commands: [
+        MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+        ...commands.filter((command) => command.trigger.toLowerCase() !== "compact"),
+      ],
+    });
   } catch (error) {
     throw toOpenCodeRequestError("list slash commands", error);
   }

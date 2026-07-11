@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, SendAgentUserMessageInput } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -37,6 +38,76 @@ const acceptedUserMessage = (
 });
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
+  test("does not store the Codex compaction send result as a user message", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    adapter.sendUserMessage = async (input) => acceptedUserMessage(input);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        runtimeKind: "codex",
+        status: "idle",
+        selectedModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5.3-codex",
+          variant: "high",
+        },
+      }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureRuntime: async () => ({
+        kind: "codex",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo",
+      }),
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND },
+      ]);
+
+      expect(
+        sessionMessagesToArray(getSession(sessionsRef)).some((message) => message.role === "user"),
+      ).toBe(false);
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("does not store the OpenCode compaction send result as a user message", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    adapter.sendUserMessage = async (input) => acceptedUserMessage(input);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        runtimeKind: "opencode",
+        status: "idle",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5.3-codex",
+          variant: "high",
+        },
+      }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND },
+      ]);
+
+      expect(
+        sessionMessagesToArray(getSession(sessionsRef)).some((message) => message.role === "user"),
+      ).toBe(false);
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
   test("stores accepted user messages from the runtime send result", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;

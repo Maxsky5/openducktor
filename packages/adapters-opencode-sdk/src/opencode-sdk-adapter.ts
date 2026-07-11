@@ -37,6 +37,7 @@ import type {
 import {
   agentSessionRefsEqual,
   assertAgentRuntimePolicyBinding,
+  classifySystemSlashCommandInvocation,
   formatWorkflowAgentSessionTitle,
   requireWorkflowAgentSessionScope,
   toAgentSessionRuntimeSnapshot,
@@ -75,6 +76,7 @@ import {
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadAndSeedSessionHistory, loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
+import { toOpenCodeRequestError } from "./request-errors";
 import {
   type OpencodeRuntimeResolutionInput,
   resolveOpencodeRuntimeClientInput,
@@ -628,11 +630,26 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
+    let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
+    try {
+      systemInvocation = classifySystemSlashCommandInvocation(input.parts);
+    } catch (error) {
+      throw toOpenCodeRequestError("compact session", error);
+    }
     if (!this.sessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
     const session = requireSession(this.sessions, input.externalSessionId);
+    const registeredSessionRef = opencodeSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      throw new Error(
+        `Cannot send OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
     applyRuntimeContextToSession(session, input);
+    const preserveActiveTurnOnFailure =
+      systemInvocation.kind === "manual_session_compaction" &&
+      session.streamTurnStatus === "active";
     startUserMessageSend(session, {
       expectRuntimeTurnStart:
         session.activeAssistantMessageId === null && usesPromptAsyncTransport(input.parts),
@@ -644,7 +661,10 @@ export class OpencodeSdkAdapter
       status: { type: "busy", message: null },
     });
     try {
-      const tools = await this.resolveSessionToolSelection(session);
+      const tools =
+        systemInvocation.kind === "manual_session_compaction"
+          ? {}
+          : await this.resolveSessionToolSelection(session);
       const admittedUserMessage = await sendUserMessage({
         session,
         request: input,
@@ -657,18 +677,22 @@ export class OpencodeSdkAdapter
         timestamp,
         ...admittedUserMessage,
       };
-      emitAdmittedUserMessage(this.createRuntimeEventView(session), {
-        ...admittedUserMessage,
-        timestamp,
-      });
+      if (systemInvocation.kind !== "manual_session_compaction") {
+        emitAdmittedUserMessage(this.createRuntimeEventView(session), {
+          ...admittedUserMessage,
+          timestamp,
+        });
+      }
       return event;
     } catch (error) {
-      markStreamTurnIdle(session);
-      this.emit(input.externalSessionId, {
-        type: "session_idle",
-        externalSessionId: input.externalSessionId,
-        timestamp: this.now(),
-      });
+      if (!preserveActiveTurnOnFailure) {
+        markStreamTurnIdle(session);
+        this.emit(input.externalSessionId, {
+          type: "session_idle",
+          externalSessionId: input.externalSessionId,
+          timestamp: this.now(),
+        });
+      }
       throw error;
     } finally {
       finishUserMessageSend(session);

@@ -643,7 +643,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().supportsSlashCommands).toBe(false);
+      expect(harness.getLatest().supportsSlashCommands).toBe(true);
       expect(harness.getLatest().supportsFileSearch).toBe(true);
       expect(harness.getLatest().supportsSkillReferences).toBe(true);
       expect(harness.getLatest().supportsSubagentReferences).toBe(false);
@@ -879,7 +879,7 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().supportsSlashCommands).toBe(false);
+      expect(harness.getLatest().supportsSlashCommands).toBe(true);
       expect(harness.getLatest().supportsFileSearch).toBe(true);
 
       let results: AgentFileSearchResult[] = [];
@@ -1053,7 +1053,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("gives reusable prompt slash commands precedence over matching runtime triggers", async () => {
+  test("reserves compact while giving reusable prompts precedence over ordinary triggers", async () => {
     const loadSlashCommands = mock(async () => ({
       commands: [
         { id: "native-review", trigger: "review", title: "Runtime review", hints: [] },
@@ -1079,7 +1079,6 @@ describe("useAgentStudioChatComposer", () => {
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
       expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
-        "native-compact",
         "reusable-prompt:prompt-1",
       ]);
     } finally {

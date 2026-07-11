@@ -513,6 +513,8 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
 export const handleSessionEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   return (
     bindChildSessionCorrelation(event, runtime) ||
+    // OpenCode owns compaction presentation; only its ordinary session status is shared.
+    event.type === "session.compacted" ||
     handleSessionStatusEvent(event, runtime) ||
     handlePermissionAskedEvent(event, runtime) ||
     handleQuestionAskedEvent(event, runtime) ||

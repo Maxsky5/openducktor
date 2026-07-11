@@ -6,6 +6,22 @@ import type { SessionMessageMetadata } from "../../types";
 import type { EventStreamRuntime } from "../shared";
 import { applyDeltaToPart } from "../shared";
 
+export const suppressCompactionMessage = (runtime: EventStreamRuntime, messageId: string): void => {
+  runtime.compactionMessageIds.add(messageId);
+  for (const [partId, part] of runtime.partsById) {
+    if (part.messageID === messageId) {
+      runtime.partsById.delete(partId);
+      runtime.pendingDeltasByPartId.delete(partId);
+    }
+  }
+  runtime.messageRoleById.delete(messageId);
+  const session = runtime.getSession(runtime.externalSessionId);
+  session?.messageMetadataById.delete(messageId);
+  if (session?.activeAssistantMessageId === messageId) {
+    session.activeAssistantMessageId = null;
+  }
+};
+
 export type MappedAssistantPart = NonNullable<ReturnType<typeof mapPartToAgentStreamPart>>;
 export type MappedSubagentPart = Extract<MappedAssistantPart, { kind: "subagent" }>;
 

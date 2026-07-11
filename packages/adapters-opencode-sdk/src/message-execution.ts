@@ -2,6 +2,7 @@ import {
   type AgentModelSelection,
   type AgentUserMessageDisplayPart,
   type AgentUserMessageState,
+  classifySystemSlashCommandInvocation,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
   serializeAgentUserMessagePartsToText,
@@ -282,6 +283,46 @@ const prepareSlashCommandSend = (
   };
 };
 
+const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
+  execute: async ({ session, modelInput }) => {
+    if (!modelInput.model) {
+      throw toOpenCodeRequestError(
+        "compact session",
+        new Error("OpenCode session compaction requires a selected provider and model."),
+      );
+    }
+    if (typeof session.client.session.summarize !== "function") {
+      throw toOpenCodeRequestError(
+        "compact session",
+        new Error("OpenCode runtime client does not expose session summarization."),
+      );
+    }
+    try {
+      const response = await session.client.session.summarize({
+        sessionID: session.externalSessionId,
+        directory: session.input.workingDirectory,
+        providerID: modelInput.model.providerID,
+        modelID: modelInput.model.modelID,
+      });
+      if ("error" in response && response.error) {
+        throw toOpenCodeRequestError("compact session", response.error, response.response);
+      }
+      if (response.data !== true) {
+        throw toOpenCodeRequestError(
+          "compact session",
+          new Error("OpenCode runtime returned an invalid summarization response."),
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("OpenCode request failed:")) {
+        throw error;
+      }
+      throw toOpenCodeRequestError("compact session", error);
+    }
+    return { assistantMessageId: null };
+  },
+});
+
 const toAdmittedUserDisplayParts = (
   parts: SendAgentUserMessageInput["parts"],
 ): AgentUserMessageDisplayPart[] =>
@@ -324,16 +365,32 @@ export const sendUserMessage = async (input: {
 }): Promise<AdmittedUserMessage> => {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
-  const slashCommandRequest = toSlashCommandExecutionRequest(input.request.parts);
-  const preparedSend = slashCommandRequest
-    ? prepareSlashCommandSend(input.request, slashCommandRequest)
-    : preparePromptSend(input.request);
+  let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
+  try {
+    systemInvocation = classifySystemSlashCommandInvocation(input.request.parts);
+  } catch (error) {
+    throw toOpenCodeRequestError("compact session", error);
+  }
+  const slashCommandRequest =
+    systemInvocation.kind === "not_system"
+      ? toSlashCommandExecutionRequest(input.request.parts)
+      : null;
+  const isManualSessionCompaction = systemInvocation.kind === "manual_session_compaction";
+  let preparedSend: PreparedUserSend;
+  if (isManualSessionCompaction) {
+    preparedSend = prepareManualSessionCompactionSend();
+  } else if (slashCommandRequest) {
+    preparedSend = prepareSlashCommandSend(input.request, slashCommandRequest);
+  } else {
+    preparedSend = preparePromptSend(input.request);
+  }
   const messageId = input.messageId ?? createOpenCodeMessageId();
   const pendingQueuedUserMessages = input.session.pendingQueuedUserMessages ?? [];
   input.session.pendingQueuedUserMessages = pendingQueuedUserMessages;
   const queuedAttachmentParts = readQueuedAttachmentDisplayParts(input.request.parts);
   const isQueuedBehindActiveAssistant = input.session.activeAssistantMessageId !== null;
   const shouldTrackPendingSend =
+    !isManualSessionCompaction &&
     normalizeAgentUserMessageParts(input.request.parts).length > 0 &&
     (isQueuedBehindActiveAssistant || queuedAttachmentParts.length > 0);
   const queuedEntry = shouldTrackPendingSend
@@ -369,7 +426,7 @@ export const sendUserMessage = async (input: {
       messageId,
       message: serializeAgentUserMessagePartsToText(input.request.parts),
       parts: toAdmittedUserDisplayParts(input.request.parts),
-      state: isQueuedBehindActiveAssistant ? "queued" : "read",
+      state: isQueuedBehindActiveAssistant && !isManualSessionCompaction ? "queued" : "read",
       ...(model ? { model } : {}),
     };
   } catch (error) {

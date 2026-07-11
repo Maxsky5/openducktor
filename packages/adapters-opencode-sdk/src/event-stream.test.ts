@@ -168,6 +168,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     getSession: () => undefined,
     partsById: new Map(),
     messageRoleById: new Map(),
+    compactionMessageIds: new Set(),
     pendingDeltasByPartId: new Map(),
     subagentCorrelationKeyByPartId: new Map<string, string>(),
     subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
@@ -418,6 +419,88 @@ const makeMessagePartDeltaEvent = (input: {
   }) as unknown as Event;
 
 describe("event-stream", () => {
+  test("does not project OpenCode compaction events as shared transcript notices", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "compact-part-1",
+            sessionID: "external-session-1",
+            messageID: "compact-message-1",
+            type: "compaction",
+            auto: false,
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "session.compacted",
+        properties: { sessionID: "external-session-1" },
+      } as unknown as Event,
+      {
+        type: "session.compacted",
+        properties: { sessionID: "external-session-1" },
+      } as unknown as Event,
+    ]);
+
+    expect(
+      emitted.filter(
+        (event) =>
+          event.type === "session_compaction_started" || event.type === "session_compacted",
+      ),
+    ).toEqual([]);
+  });
+
+  test("projects OpenCode compaction summary messages as assistant output", async () => {
+    const emitted = await runEventStream([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "compact-summary-message",
+        text: "Compacted session context",
+        finish: "stop",
+        completedAt: 2,
+        info: { summary: true },
+      }),
+    ]);
+
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      messageId: "compact-summary-message",
+      message: "Compacted session context",
+    });
+  });
+
+  test("keeps the OpenCode compaction marker hidden without suppressing its assistant summary", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "compact-marker",
+            sessionID: "external-session-1",
+            messageID: "compact-marker-message",
+            type: "compaction",
+            auto: false,
+          },
+        },
+      } as unknown as Event,
+      makeAssistantMessageUpdatedEvent({
+        messageId: "compact-summary-message",
+        text: "Compacted session context",
+        finish: "stop",
+        completedAt: 3,
+        info: { summary: true },
+      }),
+    ]);
+
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      messageId: "compact-summary-message",
+      message: "Compacted session context",
+    });
+  });
+
   test("emits user_message when opencode acknowledges a user turn", async () => {
     const emitted = await runEventStream([
       {

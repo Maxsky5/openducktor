@@ -1,5 +1,9 @@
 import type { ReusablePrompt } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import {
+  type AgentModelCatalog,
+  type AgentRole,
+  classifySystemSlashCommandInvocation,
+} from "@openducktor/core";
 import { useCallback } from "react";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -110,6 +114,21 @@ export function useAgentStudioSendAction({
       const activity = beginSendingActivity(activeComposerContextKey);
 
       try {
+        const messageParts = await messagePartsResult;
+        const systemInvocation = classifySystemSlashCommandInvocation(messageParts);
+        if (systemInvocation.kind === "manual_session_compaction") {
+          if (!selectedSessionIdentity) {
+            throw new Error("/compact requires an existing selected session.");
+          }
+          if (
+            selectedSessionIdentity.runtimeKind !== "opencode" &&
+            selectedSessionIdentity.runtimeKind !== "codex"
+          ) {
+            throw new Error(
+              `/compact is unavailable for ${selectedSessionIdentity.runtimeKind} sessions.`,
+            );
+          }
+        }
         const targetSession = await resolveAgentStudioSendTargetSession({
           selectedSessionIdentity,
           canStartNewSession,
@@ -126,7 +145,6 @@ export function useAgentStudioSendAction({
           session: targetSession,
         });
         activity.add(targetComposerContextKey);
-        const messageParts = await messagePartsResult;
         await sendAgentMessage(targetSession, messageParts);
         return true;
       } finally {

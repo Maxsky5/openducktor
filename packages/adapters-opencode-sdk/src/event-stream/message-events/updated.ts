@@ -18,6 +18,7 @@ import {
   isAssistantMessageSettled,
   normalizeMessagePart,
   readRawMessageParts,
+  suppressCompactionMessage,
   updateMessageMetadata,
 } from "./helpers";
 import { handleUserMessageUpdated } from "./user";
@@ -36,6 +37,10 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
   const messageId = infoRecord
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
+  if (messageId && runtime.compactionMessageIds.has(messageId)) {
+    suppressCompactionMessage(runtime, messageId);
+    return true;
+  }
   const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
   const messageTimestamp = (() => {
     const infoTime = infoRecord ? readRecordProp(infoRecord, "time") : undefined;

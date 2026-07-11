@@ -212,6 +212,10 @@ export type CodexAppServerThreadSetNameParams = {
   name: string;
 };
 export type CodexAppServerThreadSetNameResult = Record<string, never>;
+export type CodexAppServerThreadCompactStartParams = {
+  threadId: string;
+};
+export type CodexAppServerThreadCompactStartResult = Record<string, never>;
 export type CodexAppServerThreadStartResult = {
   approvalPolicy: CodexAppServerAskForApproval;
   approvalsReviewer: CodexAppServerApprovalsReviewer;
@@ -755,6 +759,10 @@ export type CodexAppServerClientRequestMap = {
   "thread/name/set": {
     params: CodexAppServerThreadSetNameParams;
     result: CodexAppServerThreadSetNameResult;
+  };
+  "thread/compact/start": {
+    params: CodexAppServerThreadCompactStartParams;
+    result: CodexAppServerThreadCompactStartResult;
   };
   "thread/turns/list": {
     params: CodexAppServerThreadTurnsListParams;

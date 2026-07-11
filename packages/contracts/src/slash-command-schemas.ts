@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const slashCommandSourceValues = ["command", "mcp", "skill", "custom"] as const;
+export const slashCommandSourceValues = ["command", "mcp", "skill", "custom", "system"] as const;
 export const slashCommandSourceSchema = z.enum(slashCommandSourceValues);
 export type SlashCommandSource = z.infer<typeof slashCommandSourceSchema>;
 
@@ -18,6 +18,20 @@ export const slashCommandDescriptorSchema = z.object({
   hints: z.array(slashCommandTextSchema).default([]),
 });
 export type SlashCommandDescriptor = z.infer<typeof slashCommandDescriptorSchema>;
+
+export const MANUAL_SESSION_COMPACTION_SLASH_COMMAND = {
+  id: "system:compact",
+  trigger: "compact",
+  title: "Compact session",
+  description: "Summarize the current session to reduce context size",
+  source: "system",
+  hints: [],
+} as const satisfies SlashCommandDescriptor;
+
+export const isManualSessionCompactionSlashCommand = (command: SlashCommandDescriptor): boolean =>
+  command.id === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.id &&
+  command.source === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.source &&
+  command.trigger.toLowerCase() === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
 
 export const slashCommandCatalogSchema = z
   .object({

@@ -542,7 +542,7 @@ describe("agent-orchestrator session transcript events", () => {
     expect(userMessage.meta.state).toBe("read");
   });
 
-  test("appends session compaction notices without changing live session state", async () => {
+  test("upserts session compaction notices without replacing native lifecycle state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const adapter: SessionEventAdapter = {
@@ -560,6 +560,7 @@ describe("agent-orchestrator session transcript events", () => {
     };
     const protectedSessionState = {
       status: "running" as const,
+      runtimeStatusMessage: "Runtime is still working",
       pendingUserMessageStartedAt: Date.parse("2026-05-18T21:00:00.000Z"),
       pendingApprovals: [
         {
@@ -627,12 +628,19 @@ describe("agent-orchestrator session transcript events", () => {
       messageId: "compact-live",
       message: "Session compaction started.",
     });
+    handleEvent({
+      type: "session_compaction_started",
+      externalSessionId: "session-1",
+      timestamp: "2026-05-18T21:00:31.000Z",
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
     expect(getSessionMessages(sessionsRef).at(-1)).toEqual(
       expect.objectContaining({
         id: "compact-live",
         role: "system",
         content: "Session compaction started.",
-        timestamp: "2026-05-18T21:00:30.000Z",
+        timestamp: "2026-05-18T21:00:31.000Z",
         meta: {
           kind: "session_notice",
           tone: "info",
@@ -643,6 +651,13 @@ describe("agent-orchestrator session transcript events", () => {
       }),
     );
 
+    handleEvent({
+      type: "session_compacted",
+      externalSessionId: "session-1",
+      timestamp: "2026-05-18T21:01:00.000Z",
+      messageId: "compact-live",
+      message: "Session compacted.",
+    });
     handleEvent({
       type: "session_compacted",
       externalSessionId: "session-1",
@@ -674,10 +689,16 @@ describe("agent-orchestrator session transcript events", () => {
         },
       }),
     );
-    expect(updateSessionOptions).toEqual([{ persist: true }, { persist: true }]);
+    expect(updateSessionOptions).toEqual([
+      { persist: true },
+      { persist: true },
+      { persist: true },
+      { persist: true },
+    ]);
     expect(session).toEqual(
       expect.objectContaining({
         ...protectedSessionState,
+        status: "running",
       }),
     );
   });

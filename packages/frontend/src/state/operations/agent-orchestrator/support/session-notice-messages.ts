@@ -1,4 +1,4 @@
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 
 type SessionNoticeMeta = Extract<AgentChatMessage["meta"], { kind: "session_notice" }>;
 
@@ -82,3 +82,22 @@ export const buildSessionCompactionStartedNoticeMessage = (
   id?: string,
 ): AgentChatMessage =>
   buildSessionCompactionNoticeMessage(timestamp, message, "Compacting", "running", id);
+
+export const removeRunningSessionCompactionNotices = (
+  messages: SessionMessagesState,
+): SessionMessagesState => {
+  const filtered = messages.items.filter(
+    (message) =>
+      message.meta?.kind !== "session_notice" ||
+      message.meta.reason !== "session_compacted" ||
+      message.meta.compactionStatus !== "running",
+  );
+  if (filtered.length === messages.items.length) {
+    return messages;
+  }
+  return {
+    externalSessionId: messages.externalSessionId,
+    items: filtered,
+    version: messages.version + 1,
+  };
+};

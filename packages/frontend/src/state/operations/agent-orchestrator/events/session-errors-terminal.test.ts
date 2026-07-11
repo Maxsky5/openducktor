@@ -357,6 +357,19 @@ describe("agent-orchestrator session errors and terminal state", () => {
         stopRequestedAt: "2026-02-22T08:00:09.000Z",
         messages: [
           {
+            id: "compact-running",
+            role: "system",
+            content: "Session compaction started.",
+            timestamp: "2026-02-22T08:00:07.000Z",
+            meta: {
+              kind: "session_notice",
+              tone: "info",
+              reason: "session_compacted",
+              title: "Compacting",
+              compactionStatus: "running",
+            },
+          },
+          {
             id: "tool-running",
             role: "tool",
             content: "Tool todowrite running...",
@@ -436,6 +449,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
     expect(findSession(sessionsRef, "session-1")?.stopRequestedAt).toBeNull();
     expect(
       getSessionMessages(sessionsRef).some((message) => message.content.includes("Session error:")),
+    ).toBe(false);
+    expect(
+      getSessionMessages(sessionsRef).some(
+        (message) =>
+          message.meta?.kind === "session_notice" &&
+          message.meta.reason === "session_compacted" &&
+          message.meta.compactionStatus === "running",
+      ),
     ).toBe(false);
   });
 

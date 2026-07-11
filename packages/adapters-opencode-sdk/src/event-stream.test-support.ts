@@ -80,6 +80,7 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   partsById: new Map(),
   messageRoleById: new Map(),
   messageMetadataById: new Map(),
+  compactionMessageIds: new Set(),
   pendingDeltasByPartId: new Map(),
   subagentCorrelationKeyByPartId: new Map(),
   subagentCorrelationKeyByExternalSessionId: new Map(),

@@ -1,4 +1,9 @@
-import { CODEX_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  type RuntimeDescriptor,
+  slashCommandCatalogSchema,
+} from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
@@ -36,6 +41,7 @@ import type {
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
+  classifySystemSlashCommandInvocation,
   formatWorkflowAgentSessionTitle,
   requireWorkflowAgentSessionScope,
   withAgentSessionRef,
@@ -289,7 +295,10 @@ export class CodexAppServerAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
-    assertCodexUserMessagePartsSupported(input.parts);
+    const systemInvocation = classifySystemSlashCommandInvocation(input.parts);
+    if (systemInvocation.kind === "not_system") {
+      assertCodexUserMessagePartsSupported(input.parts);
+    }
     if (!this.localSessions.has(input.externalSessionId)) {
       await this.ensureSessionState(input);
     }
@@ -297,12 +306,32 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
+    const registeredSessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      throw new Error(
+        `Cannot send Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
     applyRuntimeContextToSession(session, input);
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
       model: input.model ?? session.model ?? undefined,
     });
+    if (systemInvocation.kind === "manual_session_compaction") {
+      await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
+      const client = this.runtimeClients.clientForRuntime(session.runtimeId);
+      try {
+        await client.threadCompactStart({ threadId: session.threadId });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Codex failed to compact thread '${session.threadId}': ${message}`);
+      }
+      if (!this.options.subscribeEvents) {
+        await this.runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
+      }
+      return acceptedUserMessage;
+    }
     return startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,
@@ -317,7 +346,9 @@ export class CodexAppServerAdapter
   }
 
   async listAvailableSlashCommands(_: ListAgentSlashCommandsInput) {
-    return unsupported("listAvailableSlashCommands");
+    return slashCommandCatalogSchema.parse({
+      commands: [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
+    });
   }
 
   async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {

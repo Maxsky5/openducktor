@@ -72,10 +72,10 @@ const createComposerDraft = (text: string): AgentChatComposerDraft => ({
 });
 
 const COMMAND = {
-  id: "compact",
-  trigger: "compact",
-  title: "compact",
-  hints: ["compact"],
+  id: "review",
+  trigger: "review",
+  title: "review",
+  hints: ["review"],
 };
 
 const REUSABLE_PROMPT_COMMAND = {

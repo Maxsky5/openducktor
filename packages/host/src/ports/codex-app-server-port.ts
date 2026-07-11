@@ -22,6 +22,7 @@ export const CODEX_APP_SERVER_REQUEST_METHODS = [
   "thread/fork",
   "thread/list",
   "thread/loaded/list",
+  "thread/compact/start",
   "thread/read",
   "thread/resume",
   "thread/start",

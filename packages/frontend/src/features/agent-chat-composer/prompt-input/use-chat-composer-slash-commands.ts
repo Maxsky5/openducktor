@@ -1,4 +1,10 @@
-import type { RepoRuntimeRef, ReusablePrompt } from "@openducktor/contracts";
+import {
+  isManualSessionCompactionSlashCommand,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  type RepoRuntimeRef,
+  type ReusablePrompt,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import type { AgentSlashCommand, AgentSlashCommandCatalog } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -15,16 +21,39 @@ export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
   reusablePromptSlashCommands: AgentSlashCommand[],
 ): AgentSlashCommand[] => {
+  const reservedTrigger = MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
+  const systemCommands = runtimeSlashCommands.filter(isManualSessionCompactionSlashCommand);
+  const systemTriggers = new Set(systemCommands.map((command) => command.trigger.toLowerCase()));
   const reusablePromptTriggers = new Set(
-    reusablePromptSlashCommands.map((command) => command.trigger.toLowerCase()),
+    reusablePromptSlashCommands
+      .map((command) => command.trigger.toLowerCase())
+      .filter((trigger) => trigger !== reservedTrigger && !systemTriggers.has(trigger)),
   );
   return [
+    ...systemCommands,
     ...runtimeSlashCommands.filter(
-      (command) => !reusablePromptTriggers.has(command.trigger.toLowerCase()),
+      (command) =>
+        !isManualSessionCompactionSlashCommand(command) &&
+        command.trigger.toLowerCase() !== reservedTrigger &&
+        !systemTriggers.has(command.trigger.toLowerCase()) &&
+        !reusablePromptTriggers.has(command.trigger.toLowerCase()),
     ),
-    ...reusablePromptSlashCommands,
+    ...reusablePromptSlashCommands.filter(
+      (command) =>
+        command.trigger.toLowerCase() !== reservedTrigger &&
+        !systemTriggers.has(command.trigger.toLowerCase()),
+    ),
   ];
 };
+
+export const filterSlashCommandsForComposerScope = (
+  commands: AgentSlashCommand[],
+  scope: "session" | "repo",
+  runtimeKind: RuntimeKind,
+): AgentSlashCommand[] =>
+  scope === "session" && (runtimeKind === "opencode" || runtimeKind === "codex")
+    ? commands
+    : commands.filter((command) => !isManualSessionCompactionSlashCommand(command));
 
 const skippedSlashCommandsQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
   skippedQueryOptions<AgentSlashCommandCatalog>({
@@ -64,10 +93,18 @@ export const useChatComposerSlashCommands = ({
     () => reusablePrompts.map(toReusablePromptSlashCommand),
     [reusablePrompts],
   );
-  const runtimeSlashCommands = useMemo(
-    () => (runtimeSupportsSlashCommands ? (runtimeSlashCommandCatalog?.commands ?? []) : []),
-    [runtimeSupportsSlashCommands, runtimeSlashCommandCatalog?.commands],
-  );
+  const runtimeSlashCommands = useMemo(() => {
+    const commands = runtimeSupportsSlashCommands
+      ? (runtimeSlashCommandCatalog?.commands ?? [])
+      : [];
+    return promptInputRuntime.state === "available"
+      ? filterSlashCommandsForComposerScope(
+          commands,
+          promptInputRuntime.scope,
+          promptInputRuntime.runtimeRef.runtimeKind,
+        )
+      : [];
+  }, [promptInputRuntime, runtimeSupportsSlashCommands, runtimeSlashCommandCatalog?.commands]);
   const slashCommands = useMemo(
     () => mergeSlashCommands(runtimeSlashCommands, reusablePromptSlashCommands),
     [reusablePromptSlashCommands, runtimeSlashCommands],
