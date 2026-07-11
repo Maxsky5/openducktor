@@ -8,16 +8,6 @@ import { act, createElement, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
-const omitDialogDomProps = ({
-  onOpenChange: _onOpenChange,
-  open: _open,
-  ...props
-}: {
-  onOpenChange?: unknown;
-  open?: unknown;
-  [key: string]: unknown;
-}) => props;
-
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -221,15 +211,18 @@ const wrapElement = (element: Element): DomTestNode => ({
 
 const wrapRoot = (rendered: RenderResult): DomTestNode =>
   ({
-    ...wrapElement(rendered.container),
+    ...wrapElement(rendered.baseElement),
     findAll: (predicate) =>
-      Array.from(rendered.container.querySelectorAll("*")).reduce<DomTestNode[]>((nodes, node) => {
-        const wrappedNode = wrapElement(node);
-        if (predicate(wrappedNode)) {
-          nodes.push(wrappedNode);
-        }
-        return nodes;
-      }, []),
+      Array.from(rendered.baseElement.querySelectorAll("*")).reduce<DomTestNode[]>(
+        (nodes, node) => {
+          const wrappedNode = wrapElement(node);
+          if (predicate(wrappedNode)) {
+            nodes.push(wrappedNode);
+          }
+          return nodes;
+        },
+        [],
+      ),
   }) satisfies DomTestNode;
 
 const findByTestId = (root: DomTestNode, testId: string): DomTestNode => {
@@ -302,27 +295,6 @@ describe("AgentStudioGitPanel", () => {
       TooltipContent: ({ children }: { children: React.ReactNode }) =>
         createElement("div", null, children),
     }));
-    mock.module("@/components/ui/dialog", () => ({
-      Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
-        open === false ? null : createElement("div", null, children),
-      DialogContent: ({
-        children,
-        ...props
-      }: {
-        children: React.ReactNode;
-        [key: string]: unknown;
-      }) => createElement("div", omitDialogDomProps(props), children),
-      DialogHeader: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-      DialogTitle: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-      DialogDescription: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-      DialogBody: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-      DialogFooter: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-    }));
     mock.module("@/components/layout/theme-provider", () => ({
       useTheme: () => ({ theme: "light", setTheme: () => {} }),
     }));
@@ -359,6 +331,7 @@ describe("AgentStudioGitPanel", () => {
         ),
     }));
     mock.module("@pierre/diffs/react", () => ({
+      File: () => createElement("div", { "data-testid": "mock-pierre-file-viewer" }),
       FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
       Virtualizer: ({ children }: { children: React.ReactNode }) =>
         createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
@@ -370,7 +343,6 @@ describe("AgentStudioGitPanel", () => {
   afterEach(async () => {
     await restoreMockedModules([
       ["@/components/ui/tooltip", () => import("@/components/ui/tooltip")],
-      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
       ["@/components/layout/theme-provider", () => import("@/components/layout/theme-provider")],
       [
         "@/components/features/repository/branch-selector",

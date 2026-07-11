@@ -7,22 +7,9 @@ import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-util
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const actualHostOperationsModule = await import("@/state/operations/host");
-const actualDialogModule = await import("@/components/ui/dialog");
 const actualScrollAreaModule = await import("@/components/ui/scroll-area");
 
 enableReactActEnvironment();
-
-const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unknown> => {
-  const {
-    closeButton: _closeButton,
-    onEscapeKeyDown: _onEscapeKeyDown,
-    onPointerDownOutside: _onPointerDownOutside,
-    onOpenChange: _onOpenChange,
-    ...domProps
-  } = props;
-
-  return domProps;
-};
 
 const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryListing => ({
   currentPath: "/Users/dev",
@@ -59,28 +46,6 @@ describe("FolderPickerDialog", () => {
       },
     }));
 
-    mock.module("@/components/ui/dialog", () => ({
-      Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogDescription: ({
-        children,
-        ...props
-      }: {
-        children: ReactNode;
-        [key: string]: unknown;
-      }) => createElement("p", omitDialogDomProps(props), children),
-      DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("h2", omitDialogDomProps(props), children),
-    }));
-
     mock.module("@/components/ui/scroll-area", () => ({
       ScrollArea: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
         createElement("div", props, children),
@@ -92,7 +57,6 @@ describe("FolderPickerDialog", () => {
   afterEach(async () => {
     await restoreMockedModules([
       ["@/state/operations/host", async () => actualHostOperationsModule],
-      ["@/components/ui/dialog", async () => actualDialogModule],
       ["@/components/ui/scroll-area", async () => actualScrollAreaModule],
     ]);
   });

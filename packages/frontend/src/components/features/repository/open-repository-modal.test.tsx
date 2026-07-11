@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode, useEffect } from "react";
@@ -6,22 +6,10 @@ import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
+import { OpenRepositoryModal } from "./open-repository-modal";
 
 enableReactActEnvironment();
-
-const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unknown> => {
-  const {
-    closeButton: _closeButton,
-    onEscapeKeyDown: _onEscapeKeyDown,
-    onPointerDownOutside: _onPointerDownOutside,
-    onOpenChange: _onOpenChange,
-    ...domProps
-  } = props;
-
-  return domProps;
-};
 
 const addWorkspaceMock = mock(
   async (_input: {
@@ -31,8 +19,6 @@ const addWorkspaceMock = mock(
   }): Promise<void> => {},
 );
 const selectWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
-const actualButtonModule = await import("@/components/ui/button");
-const actualDialogModule = await import("@/components/ui/dialog");
 
 const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   activeWorkspace: null,
@@ -77,57 +63,13 @@ function SeedFilesystemDirectory(): ReactNode {
 }
 
 describe("OpenRepositoryModal", () => {
-  let OpenRepositoryModal: (props: {
-    open: boolean;
-    canClose: boolean;
-    onOpenChange: () => void;
-  }) => ReactNode;
-
-  beforeEach(async () => {
-    mock.module("@/components/ui/button", () => ({
-      Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("button", { type: "button", ...props }, children),
-    }));
-
-    mock.module("@/components/ui/dialog", () => ({
-      Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogDescription: ({
-        children,
-        ...props
-      }: {
-        children: ReactNode;
-        [key: string]: unknown;
-      }) => createElement("p", omitDialogDomProps(props), children),
-      DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("h2", omitDialogDomProps(props), children),
-    }));
-
-    ({ OpenRepositoryModal } = await import("./open-repository-modal"));
-  });
-
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/components/ui/button", async () => actualButtonModule],
-      ["@/components/ui/dialog", async () => actualDialogModule],
-    ]);
-  });
-
   test("renders string host errors from repository add failures", async () => {
     addWorkspaceMock.mockClear();
     addWorkspaceMock.mockImplementation(() => {
       throw "bd not found in PATH";
     });
 
-    const { container, unmount } = render(
+    const { unmount } = render(
       <QueryProvider useIsolatedClient>
         <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
           <SeedFilesystemDirectory />
@@ -140,14 +82,9 @@ describe("OpenRepositoryModal", () => {
       </QueryProvider>,
     );
 
-    const primaryButton = container.querySelector("button");
-    if (!primaryButton) {
-      throw new Error("Primary button not found");
-    }
-
-    fireEvent.click(primaryButton);
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
     fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^open repository$/i }));
 
     await waitFor(() => {
       expect(addWorkspaceMock).toHaveBeenCalledWith({

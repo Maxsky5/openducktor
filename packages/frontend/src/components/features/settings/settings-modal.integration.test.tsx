@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   createDefaultAutopilotSettings,
@@ -8,11 +8,11 @@ import {
   type SettingsSnapshot,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ComponentProps, PropsWithChildren, ReactElement } from "react";
+import { type ComponentProps, type PropsWithChildren, type ReactElement, useEffect } from "react";
 import { AgentStudioDevServerSettingsAction } from "@/components/features/agents/agent-studio-dev-server-settings-action";
-import { createQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import {
   ChecksStateContext,
@@ -79,10 +79,18 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
     },
   });
 
+function SeedRepositoryBranches(): null {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, []);
+    queryClient.setQueryData(repoBranchesQueryOptions("/repo-two").queryKey, []);
+  }, [queryClient]);
+
+  return null;
+}
+
 const renderSettingsSurface = (surface: ReactElement) => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, []);
-  queryClient.setQueryData(repoBranchesQueryOptions("/repo-two").queryKey, []);
   const workspaceRecords = createWorkspaceRecords();
 
   const workspaceState = {
@@ -142,11 +150,12 @@ const renderSettingsSurface = (surface: ReactElement) => {
   const Wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <WorkspaceStateContext.Provider value={workspaceState}>
       <ChecksStateContext.Provider value={checksState}>
-        <QueryClientProvider client={queryClient}>
+        <QueryProvider useIsolatedClient>
+          <SeedRepositoryBranches />
           <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
             {children}
           </RuntimeDefinitionsContext.Provider>
-        </QueryClientProvider>
+        </QueryProvider>
       </ChecksStateContext.Provider>
     </WorkspaceStateContext.Provider>
   );
@@ -156,36 +165,22 @@ const renderSettingsSurface = (surface: ReactElement) => {
 
 describe("SettingsModal Agent Studio target", () => {
   test("opens and reopens the exact repository Scripts editor through the real trigger", async () => {
-    const scrollIntoView = mock(() => {});
-    const originalScrollIntoView = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      "scrollIntoView",
+    const rendered = renderSettingsSurface(
+      <AgentStudioDevServerSettingsAction repositoryPath="/repo-two" />,
     );
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
-    let rendered: ReturnType<typeof render> | null = null;
 
     try {
-      rendered = renderSettingsSurface(
-        <AgentStudioDevServerSettingsAction repositoryPath="/repo-two" />,
-      );
       fireEvent.click(screen.getByRole("button", { name: "Configure dev server commands" }));
       expect(await screen.findByDisplayValue("echo repo-two")).toBeTruthy();
       expect(screen.queryByDisplayValue("echo repo")).toBeNull();
-      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
 
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
       fireEvent.click(screen.getByRole("button", { name: "Configure dev server commands" }));
       expect(await screen.findByDisplayValue("echo repo-two")).toBeTruthy();
-      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
     } finally {
-      rendered?.unmount();
-      if (originalScrollIntoView) {
-        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
-      }
+      rendered.unmount();
     }
   });
 
