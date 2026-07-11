@@ -25,6 +25,7 @@ const createSession = (threadId: string, runtimeId = "runtime-1"): CodexSessionS
 const childLifecycleNotification = (
   method: "turn/started" | "turn/completed",
   status: "inProgress" | "completed" | "failed",
+  error?: string,
 ): CodexNotificationRecord => ({
   method,
   receivedAt: "2026-07-10T12:00:04.000Z",
@@ -36,6 +37,7 @@ const childLifecycleNotification = (
       ...(method === "turn/started"
         ? { startedAt: 1_783_683_602 }
         : { completedAt: 1_783_683_604 }),
+      ...(error ? { error: { message: error } } : {}),
     },
   },
 });
@@ -71,6 +73,11 @@ const linkChild = (subagents: CodexSubagentLinkState, runtimeId = "runtime-1") =
 const emittedStatuses = (events: AgentEvent[]) =>
   events.flatMap((event) =>
     event.type === "assistant_part" && event.part.kind === "subagent" ? [event.part.status] : [],
+  );
+
+const emittedSubagentParts = (events: AgentEvent[]) =>
+  events.flatMap((event) =>
+    event.type === "assistant_part" && event.part.kind === "subagent" ? [event.part] : [],
   );
 
 describe("CodexSubagentLifecycleProjector", () => {
@@ -149,5 +156,74 @@ describe("CodexSubagentLifecycleProjector", () => {
 
     expect(emittedStatuses(events)).toEqual(["running"]);
     expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
+  });
+
+  test("projects completion timing after inventory already recorded completion", () => {
+    const { events, projector, subagents } = createHarness();
+    const route = linkChild(subagents);
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: route.parentExternalSessionId,
+      childThreadId: route.childExternalSessionId,
+      itemId: route.childExternalSessionId,
+      status: "completed",
+    });
+
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/completed", "completed"),
+    );
+
+    expect(emittedSubagentParts(events)).toEqual([
+      expect.objectContaining({
+        status: "completed",
+        endedAtMs: 1_783_683_604_000,
+      }),
+    ]);
+  });
+
+  test("projects failure detail after the link already recorded an error", () => {
+    const { events, projector, subagents } = createHarness();
+    const route = linkChild(subagents);
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: route.parentExternalSessionId,
+      childThreadId: route.childExternalSessionId,
+      itemId: route.childExternalSessionId,
+      status: "error",
+    });
+
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/completed", "failed", "Child command failed"),
+    );
+
+    expect(emittedSubagentParts(events)).toEqual([
+      expect.objectContaining({
+        status: "error",
+        error: "Child command failed",
+        endedAtMs: 1_783_683_604_000,
+      }),
+    ]);
+  });
+
+  test("does not project a stale lower-precedence terminal update", () => {
+    const { events, projector, subagents } = createHarness();
+    const route = linkChild(subagents);
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: route.parentExternalSessionId,
+      childThreadId: route.childExternalSessionId,
+      itemId: route.childExternalSessionId,
+      status: "error",
+      error: "Authoritative failure",
+    });
+
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/completed", "completed"),
+    );
+
+    expect(events).toEqual([]);
   });
 });

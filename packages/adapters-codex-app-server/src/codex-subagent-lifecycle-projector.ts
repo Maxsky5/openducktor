@@ -125,11 +125,12 @@ export class CodexSubagentLifecycleProjector {
       ...(update.error ? { error: update.error } : {}),
       allowStatusRestart: update.allowStatusRestart,
     });
-    if (part.status === previousStatus) {
-      return true;
-    }
     const isTerminal =
       part.status === "completed" || part.status === "cancelled" || part.status === "error";
+    const isSameTerminalLifecycle = isTerminal && part.status === update.status;
+    if (part.status === previousStatus && !isSameTerminalLifecycle) {
+      return true;
+    }
     this.deps.emitParentSessionEvent(parentSession.threadId, {
       type: "assistant_part",
       externalSessionId: parentSession.threadId,
