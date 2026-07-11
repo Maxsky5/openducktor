@@ -106,6 +106,25 @@ describe("CodexSubagentLinkState", () => {
     expect(staleRestart).toMatchObject({ status: "error", error: "Finished", endedAtMs: 200 });
   });
 
+  test("preserves the newest running start and terminal end timestamps", () => {
+    const subagents = new CodexSubagentLinkState();
+    const update = (status: "running" | "completed", startedAtMs?: number, endedAtMs?: number) =>
+      subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId: "parent-thread",
+        childThreadId: "child-thread",
+        itemId: "spawn-1",
+        status,
+        ...(startedAtMs !== undefined ? { startedAtMs } : {}),
+        ...(endedAtMs !== undefined ? { endedAtMs } : {}),
+      });
+
+    update("running", 200);
+    expect(update("running", 100)).toMatchObject({ startedAtMs: 200 });
+    update("completed", undefined, 300);
+    expect(update("completed", undefined, 150)).toMatchObject({ endedAtMs: 300 });
+  });
+
   test("fails only active provisional spawns in the requested parent runtime", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({

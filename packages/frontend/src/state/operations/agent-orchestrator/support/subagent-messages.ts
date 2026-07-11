@@ -200,6 +200,13 @@ const mergeSubagentMeta = (
   } else if (isPreviousRunUpdate) {
     startedAtMs = existingMeta?.startedAtMs;
   } else if (
+    existingMeta?.status === "running" &&
+    incomingMeta.status === "running" &&
+    typeof existingMeta.startedAtMs === "number" &&
+    typeof incomingMeta.startedAtMs === "number"
+  ) {
+    startedAtMs = Math.max(existingMeta.startedAtMs, incomingMeta.startedAtMs);
+  } else if (
     typeof existingMeta?.startedAtMs === "number" &&
     typeof incomingMeta.startedAtMs === "number"
   ) {

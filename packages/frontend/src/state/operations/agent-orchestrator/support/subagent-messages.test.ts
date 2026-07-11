@@ -248,4 +248,30 @@ describe("upsertSubagentMessage", () => {
     expect(messages.items[0]?.meta).not.toHaveProperty("endedAtMs");
     expect(messages.items[0]?.meta).not.toHaveProperty("error");
   });
+
+  test("does not backdate an active restart from older running history", () => {
+    const restarted = makeSubagentMessage({
+      correlationKey: "codex-subagent:parent-thread:child-thread",
+      externalSessionId: "child-thread",
+      status: "running",
+      startedAtMs: 300,
+    });
+    const messages = upsertSubagentMessage({
+      owner: {
+        externalSessionId: "parent-thread",
+        messages: createSessionMessagesState("parent-thread", [restarted]),
+      },
+      incomingMeta: {
+        kind: "subagent",
+        partId: "child-thread",
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        externalSessionId: "child-thread",
+        status: "running",
+        startedAtMs: 100,
+      },
+      timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(messages.items[0]?.meta).toMatchObject({ status: "running", startedAtMs: 300 });
+  });
 });

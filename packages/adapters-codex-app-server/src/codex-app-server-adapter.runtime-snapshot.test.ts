@@ -1272,6 +1272,29 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         subagentCorrelationKey: "codex-subagent:parent-thread:spawn-1",
       },
     });
+    adapterState.pendingInput.addQuestion({
+      runtimeId: "runtime-other",
+      threadId: "child-other",
+      request: {
+        requestId: "question-other-runtime",
+        questions: [
+          {
+            id: "question-item-other",
+            header: "Wrong runtime",
+            question: "Should not replay?",
+            options: ["Yes", "No"],
+          },
+        ],
+      },
+      questionIds: ["question-item-other"],
+      input: { requestId: "question-other-runtime" },
+      route: {
+        runtimeId: "runtime-other",
+        parentExternalSessionId: "parent-thread",
+        childExternalSessionId: "child-other",
+        subagentCorrelationKey: "codex-subagent:parent-thread:spawn-other",
+      },
+    });
     const events: unknown[] = [];
 
     const unsubscribe = await adapter.subscribeEvents(
@@ -1286,6 +1309,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
           externalSessionId: "parent-thread",
           childExternalSessionId: "child-thread",
         }),
+      );
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ requestId: "question-other-runtime" }),
       );
     } finally {
       unsubscribe();

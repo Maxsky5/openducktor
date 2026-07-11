@@ -101,7 +101,7 @@ export const resolveCodexForkBoundary = (
 export const codexForkBoundaryHistoryMessage = (
   boundary: CodexForkBoundary,
 ): AgentSessionHistoryMessage => ({
-  messageId: `codex-fork-boundary:${boundary.childThreadId}:${boundary.beforeTurnId ?? "tail"}`,
+  messageId: `codex-fork-boundary:${boundary.childThreadId}`,
   role: "system",
   timestamp: boundary.timestamp,
   text: CODEX_FORK_BOUNDARY_TITLE,

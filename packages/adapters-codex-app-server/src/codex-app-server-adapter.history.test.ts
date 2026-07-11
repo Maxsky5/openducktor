@@ -272,12 +272,12 @@ describe("CodexAppServerAdapter history loading", () => {
       "codex-subagent:parent-thread:child-thread",
       "parent-answer",
       "parent-final-answer",
-      "codex-fork-boundary:child-thread:child-turn",
+      "codex-fork-boundary:child-thread",
       "child-user",
       "child-answer",
     ]);
     expect(history[4]).toEqual({
-      messageId: "codex-fork-boundary:child-thread:child-turn",
+      messageId: "codex-fork-boundary:child-thread",
       role: "system",
       timestamp: "1970-01-01T00:00:30.000Z",
       text: "Session forked here",

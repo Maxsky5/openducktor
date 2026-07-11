@@ -26,6 +26,26 @@ const childThreadRead = ({
 });
 
 describe("resolveCodexForkBoundary", () => {
+  test("keeps the boundary message id stable when the first child turn appears", () => {
+    const before = resolveCodexForkBoundary(
+      childThreadRead({ turns: [{ id: "parent-turn-1", startedAt: 10, items: [] }] }),
+      new Set(["parent-turn-1"]),
+    );
+    const after = resolveCodexForkBoundary(
+      childThreadRead(),
+      new Set(["parent-turn-1", "parent-turn-2"]),
+    );
+
+    expect(before).not.toBeNull();
+    expect(after).not.toBeNull();
+    if (!before || !after) {
+      throw new Error("Expected both fork boundaries.");
+    }
+    expect(codexForkBoundaryHistoryMessage(before).messageId).toBe(
+      codexForkBoundaryHistoryMessage(after).messageId,
+    );
+  });
+
   test("places the boundary before the first child-owned turn", () => {
     expect(
       resolveCodexForkBoundary(childThreadRead(), new Set(["parent-turn-1", "parent-turn-2"])),

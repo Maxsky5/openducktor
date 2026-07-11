@@ -673,9 +673,9 @@ export class CodexAppServerAdapter
   ): Promise<EventUnsubscribe> {
     assertCodexRuntimePolicyBinding(input, "subscribe Codex session events");
     const externalSessionId = input.externalSessionId;
-    if (!this.localSessions.has(externalSessionId)) {
-      await this.prepareLiveSessionSubscription(input);
-    }
+    const preparedRuntimeId = !this.localSessions.has(externalSessionId)
+      ? await this.prepareLiveSessionSubscription(input)
+      : undefined;
 
     const session = this.localSessions.get(externalSessionId);
     const registeredSessionRef = session ? codexSessionRef(session) : input;
@@ -688,7 +688,7 @@ export class CodexAppServerAdapter
     const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
     for (const { request: approval, route } of this.pendingInput.pendingApprovalEventsForSession(
       externalSessionId,
-      session?.runtimeId,
+      session?.runtimeId ?? preparedRuntimeId,
     )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
@@ -702,7 +702,7 @@ export class CodexAppServerAdapter
     }
     for (const { request: question, route } of this.pendingInput.pendingQuestionEventsForSession(
       externalSessionId,
-      session?.runtimeId,
+      session?.runtimeId ?? preparedRuntimeId,
     )) {
       listener(
         withAgentSessionRef(registeredSessionRef, {
@@ -718,7 +718,7 @@ export class CodexAppServerAdapter
     return unsubscribe;
   }
 
-  private async prepareLiveSessionSubscription(input: PolicyBoundSessionRef): Promise<void> {
+  private async prepareLiveSessionSubscription(input: PolicyBoundSessionRef): Promise<string> {
     const { client, runtimeId } = await this.runtimeClients.resolve(
       input,
       "subscribe session events",
@@ -732,10 +732,10 @@ export class CodexAppServerAdapter
         await this.ensureSessionState(input);
         this.clearThreadInventory(runtimeId);
       }
-      return;
+      return runtimeId;
     }
     if (thread.cwd !== input.workingDirectory) {
-      return;
+      return runtimeId;
     }
     this.subagents.recordThread(thread, runtimeId);
     if (thread.status.classification === "idle") {
@@ -749,7 +749,7 @@ export class CodexAppServerAdapter
           return childThread !== undefined && childThread.status.classification !== "idle";
         });
       if (!isRoutedChild && !hasActiveRoutedChild) {
-        return;
+        return runtimeId;
       }
       const session = sessionStateFromThreadSnapshot(input, runtimeId, thread);
       this.localSessions.remember(
@@ -758,11 +758,12 @@ export class CodexAppServerAdapter
           this.localSessions.get(session.summary.externalSessionId),
         ),
       );
-      return;
+      return runtimeId;
     }
 
     await this.ensureSessionState(input);
     this.clearThreadInventory(runtimeId);
+    return runtimeId;
   }
 
   async stopSession(input: SessionRef): Promise<void> {

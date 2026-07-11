@@ -276,13 +276,28 @@ export class CodexSubagentLinkState {
     const agent = input.agent ?? existing?.agent;
     const metadata = mergeDefined(existing?.metadata, input.metadata);
     const executionMode = input.executionMode ?? existing?.executionMode;
-    const startedAtMs = isPreviousRunUpdate
+    let startedAtMs = isPreviousRunUpdate
       ? existing?.startedAtMs
       : (input.startedAtMs ?? existing?.startedAtMs);
-    const endedAtMs =
+    if (
+      status === "running" &&
+      existing?.status === "running" &&
+      typeof existing.startedAtMs === "number" &&
+      typeof input.startedAtMs === "number"
+    ) {
+      startedAtMs = Math.max(existing.startedAtMs, input.startedAtMs);
+    }
+    let endedAtMs =
       isExplicitRunningTransition || isPreviousRunUpdate
         ? undefined
         : (input.endedAtMs ?? existing?.endedAtMs);
+    if (
+      isTerminalStatus(status) &&
+      typeof existing?.endedAtMs === "number" &&
+      typeof input.endedAtMs === "number"
+    ) {
+      endedAtMs = Math.max(existing.endedAtMs, input.endedAtMs);
+    }
     const link: CodexStoredSubagentLink = {
       ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
       parentThreadId: input.parentThreadId,
