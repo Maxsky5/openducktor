@@ -109,7 +109,7 @@ export function TaskExecutionCiCommentCard({
         </div>
       ) : null}
       {hasBody ? (
-        <div className="min-w-0 overflow-hidden border-t border-border px-3 py-3">
+        <div className="min-w-0 overflow-hidden border-t border-border px-3 py-1">
           <MarkdownRenderer
             markdown={comment.body}
             variant="compact"
