@@ -50,6 +50,52 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain('autoHideMenuBar: process.platform !== "darwin"');
   });
 
+  test("startup starts scheduled app update checks after the main window is created", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("createMainWindowEffect(rendererSession).pipe(");
+    expect(source).toContain("appUpdateService.startBackgroundChecks()");
+  });
+
+  test("app update service is disposed with the active Electron runtime", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("let activeAppUpdateService: ElectronAppUpdateService | null = null");
+    expect(source).toContain("activeAppUpdateService?.dispose()");
+    expect(source).toContain("disposeActiveElectronRuntimeEffect");
+    expect(source).toContain(
+      'cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure")',
+    );
+    expect(source).toContain(
+      "disposeHost: (reason) => disposeActiveElectronRuntimeForShutdownEffect(reason)",
+    );
+  });
+
+  test("update install shutdown keeps app update listeners alive through native handoff", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("disposeActiveElectronRuntimeForShutdownEffect");
+    expect(source).toContain('if (reason === "update-install")');
+    expect(source).toContain("return disposeActiveHostEffect(reason)");
+    expect(source).toContain("return disposeActiveElectronRuntimeEffect(reason)");
+  });
+
+  test("app update check IPC returns a structured rejection for invalid input", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("createRejectedAppUpdateCommandResult");
+    expect(source).toContain("checkInput = readElectronAppUpdateCheckInput(input)");
+    expect(source).toContain('code: "invalid_state"');
+  });
+
+  test("app update state forwarding skips destroyed windows and logs send failures", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("window.isDestroyed() || window.webContents.isDestroyed()");
+    expect(source).toContain("window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL");
+    expect(source).toContain("OpenDucktor update state forwarding failed");
+  });
+
   test("startup runs pre-ready setup before app readiness and initializes host before window", async () => {
     const calls: string[] = [];
 
@@ -273,5 +319,55 @@ describe("Electron main lifecycle policy", () => {
         error: disposalError,
       },
     ]);
+  });
+
+  test("shutdown controller preserves a failed host disposal outcome across run retries", async () => {
+    const disposalError = new ElectronLifecycleError({
+      operation: "electron.main.dispose-host",
+      message: "dispose failed",
+      reason: "update-install",
+    });
+    const installCalls: string[] = [];
+    let disposeCalls = 0;
+
+    const controller = createElectronMainShutdownController({
+      disposeHost: () => {
+        disposeCalls += 1;
+        return Effect.fail(disposalError);
+      },
+      exitProcess: () => {},
+      logger: {
+        error() {},
+        info() {},
+      },
+      quitApp: () => {},
+    });
+
+    await expect(
+      controller.shutdownHostAndRun({
+        reason: "update-install",
+        runAfterShutdown: () => {
+          installCalls.push("install");
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.shutdown-host-before-run",
+    });
+
+    await expect(
+      controller.shutdownHostAndRun({
+        reason: "update-install",
+        runAfterShutdown: () => {
+          installCalls.push("install");
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.shutdown-host-before-run",
+    });
+
+    expect(disposeCalls).toBe(1);
+    expect(installCalls).toEqual([]);
   });
 });

@@ -26,6 +26,7 @@ jobs:
     outputs:
       tag: ${{ steps.release_meta.outputs.tag }}
       version: ${{ steps.release_meta.outputs.version }}
+      update_channel: ${{ steps.release_meta.outputs.update_channel }}
       release_url: ${{ steps.release_meta.outputs.release_url }}
 
     steps:
@@ -80,8 +81,16 @@ jobs:
             exit 1
           fi
 
+          VERSION="${TAG#v}"
+          UPDATE_CHANNEL="latest"
+          if [[ "$VERSION" == *-* ]]; then
+            PRERELEASE="${VERSION#*-}"
+            UPDATE_CHANNEL="${PRERELEASE%%.*}"
+          fi
+
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "update_channel=$UPDATE_CHANNEL" >> "$GITHUB_OUTPUT"
           echo "release_url=$(gh release view "$TAG" --json url --jq '.url')" >> "$GITHUB_OUTPUT"
 
       - name: Verify repo version matches tag
@@ -203,6 +212,7 @@ jobs:
           args=(
             --platform "${{ matrix.platform }}"
             --arch "${{ matrix.arch }}"
+            --release-version "${{ needs.preflight.outputs.version }}"
             --output-dir release-publish
           )
           if [[ -n "$SIGNED_ARGS" ]]; then
@@ -210,6 +220,21 @@ jobs:
           fi
 
           bun run --cwd apps/electron release:artifact -- "${args[@]}"
+
+      - name: Preserve macOS update manifest per architecture
+        if: matrix.platform == 'macos'
+        env:
+          UPDATE_CHANNEL: ${{ needs.preflight.outputs.update_channel }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="apps/electron/release-publish/${UPDATE_CHANNEL}-mac.yml"
+          arch_manifest="apps/electron/release-publish/${UPDATE_CHANNEL}-mac-${{ matrix.arch }}.yml"
+          if [[ ! -f "$manifest" ]]; then
+            echo "Expected macOS updater manifest at $manifest." >&2
+            exit 1
+          fi
+          mv "$manifest" "$arch_manifest"
 
       - name: Verify signed Electron macOS app
         if: matrix.platform == 'macos'
@@ -248,12 +273,47 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun download cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
       - name: Download Electron build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: electron-*
           merge-multiple: true
           path: electron-release-assets
+
+      - name: Merge and validate updater metadata
+        env:
+          UPDATE_CHANNEL: ${{ needs.preflight.outputs.update_channel }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run apps/electron/scripts/merge-mac-update-manifests.ts electron-release-assets "$UPDATE_CHANNEL"
+          for required in "${UPDATE_CHANNEL}.yml" "${UPDATE_CHANNEL}-mac.yml" "${UPDATE_CHANNEL}-linux.yml"; do
+            if [[ ! -f "electron-release-assets/$required" ]]; then
+              echo "Missing required Electron updater metadata: $required" >&2
+              exit 1
+            fi
+          done
 
       - name: Publish Electron assets to draft release
         env:

@@ -116,6 +116,11 @@ export type ElectronMainShutdownOptions = {
   reason: string;
 };
 
+export type ElectronMainShutdownRunOptions = {
+  reason: string;
+  runAfterShutdown(): void;
+};
+
 type ShutdownControllerOptions = {
   disposeHost(reason: string): Effect.Effect<void, ElectronLifecycleError>;
   exitProcess(exitCode: number): void;
@@ -129,6 +134,7 @@ export type ElectronMainShutdownController = {
   markHostShutdownComplete(): void;
   markHostShutdownStarted(): void;
   shutdownHostAndQuit(options: ElectronMainShutdownOptions): Promise<void>;
+  shutdownHostAndRun(options: ElectronMainShutdownRunOptions): Promise<void>;
 };
 
 export const createElectronMainShutdownController = ({
@@ -139,13 +145,24 @@ export const createElectronMainShutdownController = ({
 }: ShutdownControllerOptions): ElectronMainShutdownController => {
   let hostShutdownStarted = false;
   let hostShutdownComplete = false;
+  let hostShutdownExitCode: number | null = null;
 
-  const shutdownHostAndQuit = async ({
-    exitAfterShutdown = false,
-    reason,
-  }: ElectronMainShutdownOptions): Promise<void> => {
+  const shutdownHost = async (
+    reason: string,
+    { rejectIfInProgress }: { rejectIfInProgress: boolean },
+  ): Promise<number | null> => {
     if (hostShutdownStarted) {
-      return;
+      if (hostShutdownComplete) {
+        return hostShutdownExitCode ?? 0;
+      }
+      if (!rejectIfInProgress) {
+        return null;
+      }
+      throw new ElectronLifecycleError({
+        operation: "electron.main.shutdown-host",
+        message: "OpenDucktor host shutdown is already in progress.",
+        reason,
+      });
     }
 
     hostShutdownStarted = true;
@@ -163,6 +180,18 @@ export const createElectronMainShutdownController = ({
     }
 
     hostShutdownComplete = true;
+    hostShutdownExitCode = exitCode;
+    return exitCode;
+  };
+
+  const shutdownHostAndQuit = async ({
+    exitAfterShutdown = false,
+    reason,
+  }: ElectronMainShutdownOptions): Promise<void> => {
+    const exitCode = await shutdownHost(reason, { rejectIfInProgress: false });
+    if (exitCode === null) {
+      return;
+    }
     if (exitAfterShutdown) {
       exitProcess(exitCode);
       return;
@@ -175,10 +204,22 @@ export const createElectronMainShutdownController = ({
     isHostShutdownStarted: () => hostShutdownStarted,
     markHostShutdownComplete: () => {
       hostShutdownComplete = true;
+      hostShutdownExitCode ??= 0;
     },
     markHostShutdownStarted: () => {
       hostShutdownStarted = true;
     },
     shutdownHostAndQuit,
+    shutdownHostAndRun: async ({ reason, runAfterShutdown }) => {
+      const exitCode = await shutdownHost(reason, { rejectIfInProgress: true });
+      if (exitCode !== 0) {
+        throw new ElectronLifecycleError({
+          operation: "electron.main.shutdown-host-before-run",
+          message: "OpenDucktor host shutdown failed before the requested shutdown action.",
+          reason,
+        });
+      }
+      runAfterShutdown();
+    },
   };
 };

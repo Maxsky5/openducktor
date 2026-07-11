@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   configureShellBridge,
+  createDisabledAppUpdateBridge,
   createUnavailableShellBridge,
   type ShellBridge,
 } from "@/lib/shell-bridge";
@@ -24,6 +25,7 @@ const configureAttachmentPreviewShellBridge = (
       unsubscribe: () => {},
     }),
     subscribeTaskEvents: async () => () => {},
+    appUpdates: createDisabledAppUpdateBridge("Updates are unavailable in this test shell."),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,

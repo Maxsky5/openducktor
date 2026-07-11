@@ -17,9 +17,14 @@
     },
     "apps/electron": {
       "name": "@openducktor/electron",
-      "version": "0.4.1",
+      "version": "0.4.3",
+      "dependencies": {
+        "electron-updater": "^6.8.9",
+        "yaml": "^2.9.0",
+      },
       "devDependencies": {
         "@openducktor/build-tools": "workspace:*",
+        "@openducktor/contracts": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
@@ -37,7 +42,7 @@
     },
     "packages/adapters-codex-app-server": {
       "name": "@openducktor/adapters-codex-app-server",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -46,7 +51,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "dependencies": {
         "@opencode-ai/sdk": "^1.17.13",
         "@openducktor/contracts": "workspace:*",
@@ -56,21 +61,21 @@
     },
     "packages/build-tools": {
       "name": "@openducktor/build-tools",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "devDependencies": {
         "bun-types": "^1.3.14",
       },
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "dependencies": {
         "zod": "^4.4.3",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
@@ -78,7 +83,7 @@
     },
     "packages/frontend": {
       "name": "@openducktor/frontend",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/modifiers": "^9.0.0",
@@ -133,7 +138,7 @@
     },
     "packages/host": {
       "name": "@openducktor/host",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
@@ -148,7 +153,7 @@
     },
     "packages/host-client": {
       "name": "@openducktor/host-client",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -157,7 +162,7 @@
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "bin": {
         "openducktor-mcp": "dist/index.js",
       },
@@ -174,7 +179,7 @@
     },
     "packages/openducktor-web": {
       "name": "@openducktor/web",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "bin": {
         "web": "dist/cli.js",
         "openducktor-web": "dist/cli.js",
@@ -195,7 +200,7 @@
     },
     "packages/path-support": {
       "name": "@openducktor/path-support",
-      "version": "0.4.1",
+      "version": "0.4.3",
       "devDependencies": {
         "bun-types": "^1.3.14",
       },
@@ -967,6 +972,8 @@
 
     "electron-publish": ["electron-publish@26.15.3", "", { "dependencies": { "@types/fs-extra": "^9.0.11", "aws4": "^1.13.2", "builder-util": "26.15.3", "builder-util-runtime": "9.7.0", "chalk": "^4.1.2", "form-data": "^4.0.5", "fs-extra": "^10.1.0", "lazy-val": "^1.0.5", "mime": "^2.5.2" } }, "sha512-g/2bn8YTavY4cuS5F+jOS7zmZbXXBV8KZ8yHKfJjFPoKtzBqrpCdNPxBd3tqdBwP7BVd0lGzf7Bk2s0KesWZ4Q=="],
 
+    "electron-updater": ["electron-updater@6.8.9", "", { "dependencies": { "builder-util-runtime": "9.7.0", "fs-extra": "^10.1.0", "js-yaml": "^4.1.0", "lazy-val": "^1.0.5", "lodash.escaperegexp": "^4.1.2", "lodash.isequal": "^4.5.0", "semver": "~7.7.3", "tiny-typed-emitter": "^2.1.0" } }, "sha512-ZhVxM9iGONUpZGI1FxdMRgJjUFXi7AYGVa5PwKlO1tV1/4zDxQmfKpXOHVztKrd6L9rLcFjERvi1Mf2vxyTkig=="],
+
     "electron-winstaller": ["electron-winstaller@5.4.0", "", { "dependencies": { "@electron/asar": "^3.2.1", "debug": "^4.1.1", "fs-extra": "^7.0.1", "lodash": "^4.17.21", "temp": "^0.9.0" }, "optionalDependencies": { "@electron/windows-sign": "^1.1.2" } }, "sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg=="],
 
     "emoji-regex": ["emoji-regex@10.6.0", "", {}, "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A=="],
@@ -1234,6 +1241,10 @@
     "lines-and-columns": ["lines-and-columns@1.2.4", "", {}, "sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg=="],
 
     "lodash": ["lodash@4.18.1", "", {}, "sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q=="],
+
+    "lodash.escaperegexp": ["lodash.escaperegexp@4.1.2", "", {}, "sha512-TM9YBvyC84ZxE3rgfefxUWiQKLilstD6k7PTGt6wfbtXF8ixIJLOL3VYyV/z+ZiPLsVxAsKAFVwWlWeb2Y8Yyw=="],
+
+    "lodash.isequal": ["lodash.isequal@4.5.0", "", {}, "sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ=="],
 
     "longest-streak": ["longest-streak@3.1.0", "", {}, "sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g=="],
 
@@ -1638,6 +1649,8 @@
     "temp-file": ["temp-file@3.4.0", "", { "dependencies": { "async-exit-hook": "^2.0.1", "fs-extra": "^10.0.0" } }, "sha512-C5tjlC/HCtVUOi3KWVokd4vHVViOmGjtLwIh4MuzPo/nMYTV/p1urt3RnMz2IWXDdKEGJH3k5+KPxtqRsUYGtg=="],
 
     "tiny-async-pool": ["tiny-async-pool@1.3.0", "", { "dependencies": { "semver": "^5.5.0" } }, "sha512-01EAw5EDrcVrdgyCLgoSPvqznC0sVxDSVeiOz09FUpjh71G79VCqneOr+xvt7T1r76CF6ZZfPjHorN2+d+3mqA=="],
+
+    "tiny-typed-emitter": ["tiny-typed-emitter@2.1.0", "", {}, "sha512-qVtvMxeXbVej0cQWKqVSSAHmKZEHAvxdF8HEUBFWts8h+xEo5m/lEiPakuyZ3BnCBjOD8i24kzNOiOLLgsSxhA=="],
 
     "tinyexec": ["tinyexec@1.1.1", "", {}, "sha512-VKS/ZaQhhkKFMANmAOhhXVoIfBXblQxGX1myCQ2faQrfmobMftXeJPcZGp0gS07ocvGJWDLZGyOZDadDBqYIJg=="],
 

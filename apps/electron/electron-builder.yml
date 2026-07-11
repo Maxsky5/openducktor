@@ -2,6 +2,11 @@ appId: com.openducktor.app
 productName: OpenDucktor
 asar: true
 
+publish:
+  provider: github
+  owner: Maxsky5
+  repo: openducktor
+
 directories:
   output: release
 

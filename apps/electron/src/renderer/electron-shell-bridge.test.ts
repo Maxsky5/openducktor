@@ -16,16 +16,49 @@ const setElectronApi = (electronApi: OpenDucktorElectronApi | undefined): void =
 
 const createElectronApi = (): {
   electronApi: OpenDucktorElectronApi;
+  unsubscribeAppUpdates: ReturnType<typeof mock>;
   unsubscribe: ReturnType<typeof mock>;
 } => {
   const unsubscribe = mock(() => {});
+  const unsubscribeAppUpdates = mock(() => {});
   return {
     electronApi: {
       invoke: mock(async () => ({})),
       subscribe: mock(() => unsubscribe),
+      appUpdates: {
+        getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
+        check: mock(async () => ({
+          accepted: true,
+          state: {
+            status: "upToDate",
+            currentVersion: "0.4.2",
+            checkedAt: "2026-07-08T22:00:00.000Z",
+          },
+        })),
+        download: mock(async () => ({
+          accepted: true,
+          state: {
+            status: "downloaded",
+            currentVersion: "0.4.2",
+            availableVersion: "0.4.3",
+            progressPercent: 100,
+          },
+        })),
+        install: mock(async () => ({
+          accepted: true,
+          state: {
+            status: "downloaded",
+            currentVersion: "0.4.2",
+            availableVersion: "0.4.3",
+            progressPercent: 100,
+          },
+        })),
+        subscribe: mock(() => unsubscribeAppUpdates),
+      },
       openExternalUrl: mock(async () => {}),
       resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
     },
+    unsubscribeAppUpdates,
     unsubscribe,
   };
 };
@@ -85,6 +118,44 @@ describe("electron shell bridge", () => {
     unsubscribeTaskEvents();
     unsubscribeCodexAppServerEvents();
     expect(unsubscribeSpy).toHaveBeenCalledTimes(4);
+  });
+
+  test("uses the preload bridge for app update state and actions", async () => {
+    const { electronApi, unsubscribeAppUpdates } = createElectronApi();
+    setElectronApi(electronApi);
+
+    const bridge = createElectronShellBridge();
+    const listener = mock(() => {});
+    const unsubscribe = await bridge.appUpdates.subscribeState(listener);
+
+    await expect(bridge.appUpdates.getState()).resolves.toEqual({
+      status: "idle",
+      currentVersion: "0.4.2",
+    });
+    await bridge.appUpdates.check({ initiator: "settings" });
+    await bridge.appUpdates.download();
+    await bridge.appUpdates.install();
+    const appUpdateListener = (electronApi.appUpdates.subscribe as ReturnType<typeof mock>).mock
+      .calls[0]?.[0];
+    appUpdateListener?.({
+      status: "available",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    unsubscribe();
+
+    expect(electronApi.appUpdates.subscribe).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      status: "available",
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    expect(electronApi.appUpdates.check).toHaveBeenCalledWith({ initiator: "settings" });
+    expect(electronApi.appUpdates.download).toHaveBeenCalled();
+    expect(electronApi.appUpdates.install).toHaveBeenCalled();
+    expect(unsubscribeAppUpdates).toHaveBeenCalled();
   });
 
   test("uses the preload bridge for shell actions", async () => {

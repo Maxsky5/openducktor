@@ -3,6 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@opend
 import type { HostClient } from "@openducktor/host-client";
 import {
   configureShellBridge,
+  createDisabledAppUpdateBridge,
   createUnavailableShellBridge,
   type ShellBridge,
 } from "./shell-bridge";
@@ -30,6 +31,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
     unsubscribe: () => {},
   }),
   subscribeTaskEvents: async () => () => {},
+  appUpdates: createDisabledAppUpdateBridge("Updates are unavailable in this test shell."),
   capabilities: {
     canOpenExternalUrls: true,
     canPreviewLocalAttachments: true,

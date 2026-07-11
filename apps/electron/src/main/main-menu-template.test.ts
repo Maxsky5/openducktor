@@ -1,3 +1,4 @@
+import { describe, expect, mock, test } from "bun:test";
 import {
   createApplicationMenuTemplate,
   createContextMenuTemplate,
@@ -15,6 +16,13 @@ const rolesFromSubmenu = (submenu: unknown): string[] => {
     }
   }
   return roles;
+};
+
+const submenuItems = (submenu: unknown): Array<Record<string, unknown>> => {
+  if (!Array.isArray(submenu)) {
+    return [];
+  }
+  return submenu.filter((item): item is Record<string, unknown> => Boolean(item));
 };
 
 describe("main menu template", () => {
@@ -52,5 +60,25 @@ describe("main menu template", () => {
 
     expect(roles).toEqual(expect.arrayContaining(["reload", "forceReload"]));
     expect(template.some((item) => item.label === "View")).toBe(true);
+  });
+
+  test("adds Check for Updates and invokes the provided callback", () => {
+    const onCheckForUpdates = mock(() => {});
+    const template = createApplicationMenuTemplate({
+      isDevelopment: false,
+      appName: "OpenDucktor",
+      onCheckForUpdates,
+    });
+    const updateItem = template
+      .flatMap((item) => submenuItems(item.submenu))
+      .find((item) => item.label === "Check for Updates...");
+
+    expect(updateItem).toMatchObject({
+      label: "Check for Updates...",
+      enabled: true,
+    });
+
+    (updateItem?.click as () => void)();
+    expect(onCheckForUpdates).toHaveBeenCalled();
   });
 });

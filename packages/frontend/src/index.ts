@@ -1,8 +1,10 @@
-export type {
-  DevServerEventSubscription,
-  HostBridge,
-  ShellBridge,
-  ShellCapabilities,
+export {
+  type AppUpdateBridge,
+  createDisabledAppUpdateBridge,
+  type DevServerEventSubscription,
+  type HostBridge,
+  type ShellBridge,
+  type ShellCapabilities,
 } from "./lib/shell-bridge";
 export {
   bootstrapOpenDucktorShell,

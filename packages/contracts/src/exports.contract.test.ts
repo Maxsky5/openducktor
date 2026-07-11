@@ -17,6 +17,17 @@ import type {
   AgentWorkflows,
   AppearanceSettings,
   AppPlatform,
+  AppUpdateCheckInitiator,
+  AppUpdateCheckInput,
+  AppUpdateCommandRejection,
+  AppUpdateCommandResult,
+  AppUpdateDownloadableState,
+  AppUpdateError,
+  AppUpdateErrorCode,
+  AppUpdateInstallableState,
+  AppUpdateOperation,
+  AppUpdateState,
+  AppUpdateStatus,
   AutopilotActionId,
   AutopilotEventId,
   AutopilotRule,
@@ -185,6 +196,21 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStatusSchema",
   "agentSessionStopTargetSchema",
   "APP_PLATFORM_VALUES",
+  "appUpdateCheckInputSchema",
+  "appUpdateCheckInitiatorSchema",
+  "appUpdateCheckInitiatorValues",
+  "appUpdateCommandRejectionSchema",
+  "appUpdateCommandResultSchema",
+  "appUpdateErrorCodeSchema",
+  "appUpdateErrorCodeValues",
+  "appUpdateErrorSchema",
+  "appUpdateOperationSchema",
+  "appUpdateOperationValues",
+  "appUpdateStateSchema",
+  "appUpdateStatusSchema",
+  "appUpdateStatusValues",
+  "canDownloadAppUpdate",
+  "canInstallAppUpdate",
   "CODEX_APP_SERVER_COMMAND_REQUEST_METHODS",
   "CODEX_APP_SERVER_FILE_MUTATION_REQUEST_METHODS",
   "CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS",
@@ -520,6 +546,17 @@ type ExportedTypeContract = {
   AgentWorkflows: AgentWorkflows;
   AppearanceSettings: AppearanceSettings;
   AppPlatform: AppPlatform;
+  AppUpdateCheckInput: AppUpdateCheckInput;
+  AppUpdateCheckInitiator: AppUpdateCheckInitiator;
+  AppUpdateCommandRejection: AppUpdateCommandRejection;
+  AppUpdateCommandResult: AppUpdateCommandResult;
+  AppUpdateDownloadableState: AppUpdateDownloadableState;
+  AppUpdateError: AppUpdateError;
+  AppUpdateErrorCode: AppUpdateErrorCode;
+  AppUpdateInstallableState: AppUpdateInstallableState;
+  AppUpdateOperation: AppUpdateOperation;
+  AppUpdateState: AppUpdateState;
+  AppUpdateStatus: AppUpdateStatus;
   TaskStoreCheck: TaskStoreCheck;
   ChatSettings: ChatSettings;
   CodexReasoningEffort: CodexReasoningEffort;

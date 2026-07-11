@@ -1,4 +1,4 @@
-import type { ShellBridge } from "@openducktor/frontend";
+import { createDisabledAppUpdateBridge, type ShellBridge } from "@openducktor/frontend";
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "./browser-config";
 import { validateExternalBrowserUrlEffect } from "./browser-url-validation";
@@ -62,6 +62,9 @@ export const createBrowserShellBridge = (): ShellBridge => {
 
   return {
     client,
+    appUpdates: createDisabledAppUpdateBridge(
+      "Updates are available only in the packaged OpenDucktor desktop app.",
+    ),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
