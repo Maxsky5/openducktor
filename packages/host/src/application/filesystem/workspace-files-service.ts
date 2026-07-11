@@ -10,6 +10,11 @@ import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
+import {
+  isContainedPath,
+  requireRelativePath,
+  toWorkspaceRelativeGitPath,
+} from "./workspace-files-paths";
 
 export type WorkspaceFilesService = {
   listTree(input: {
@@ -33,9 +38,6 @@ const PIERRE_GIT_STATUSES = new Set<WorkspaceFileGitStatus>([
   "ignored",
 ]);
 
-const isAbsolutePathLike = (value: string): boolean =>
-  value.startsWith("/") || value.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/u.test(value);
-
 const compareWorkspacePaths = (left: string, right: string): number => {
   const insensitive = left.toLowerCase().localeCompare(right.toLowerCase());
   return insensitive === 0 ? left.localeCompare(right) : insensitive;
@@ -51,27 +53,6 @@ const toHostValidationError = (
     cause,
     ...(details ? { details } : {}),
   });
-
-const requireRelativePath = (relativePath: string): Effect.Effect<string, HostValidationError> => {
-  if (relativePath.trim().length === 0) {
-    return Effect.fail(
-      new HostValidationError({
-        field: "relativePath",
-        message: "File path is required.",
-      }),
-    );
-  }
-  if (isAbsolutePathLike(relativePath)) {
-    return Effect.fail(
-      new HostValidationError({
-        field: "relativePath",
-        message: "File path must be relative to the selected workspace root.",
-        details: { relativePath },
-      }),
-    );
-  }
-  return Effect.succeed(relativePath);
-};
 
 const canonicalizeRoot = (filesystem: FilesystemPort, rootPath: string) =>
   Effect.gen(function* () {
@@ -128,30 +109,6 @@ const loadWorkspaceFilePaths = (gitPort: GitPort, canonicalRoot: string) =>
       ),
     );
   });
-
-const isContainedPath = (
-  filesystem: FilesystemPort,
-  canonicalRoot: string,
-  canonicalCandidate: string,
-): boolean => {
-  const relative = filesystem.relative(canonicalRoot, canonicalCandidate);
-  const firstSegment = relative.split(/[\\/]/, 1)[0];
-  return relative === "" || (firstSegment !== ".." && !isAbsolutePathLike(relative));
-};
-
-const toWorkspaceRelativeGitPath = (
-  filesystem: FilesystemPort,
-  repositoryRoot: string,
-  workspaceRoot: string,
-  repositoryRelativePath: string,
-): string | null => {
-  const absolutePath = filesystem.join(repositoryRoot, repositoryRelativePath);
-  if (!isContainedPath(filesystem, workspaceRoot, absolutePath)) {
-    return null;
-  }
-  const relativePath = filesystem.relative(workspaceRoot, absolutePath);
-  return relativePath.replaceAll("\\", "/");
-};
 
 const canonicalizeContainedFile = (
   filesystem: FilesystemPort,
@@ -344,15 +301,19 @@ export const createWorkspaceFilesService = (
       }
       const filePaths = [...filePathSet].sort(compareWorkspacePaths);
       const directoryPaths = directoryPathsForFiles(filePaths);
-      const entries: WorkspaceFileTreeEntry[] = [
-        ...directoryPaths.map((directoryPath) => ({
-          path: directoryPath,
-          kind: "directory" as const,
-          size: null,
-          mtimeMs: null,
-          gitStatus: null,
-        })),
-      ];
+      const directoryEntries = new Map<string, WorkspaceFileTreeEntry>(
+        directoryPaths.map((directoryPath) => [
+          directoryPath,
+          {
+            path: directoryPath,
+            kind: "directory" as const,
+            size: null,
+            mtimeMs: null,
+            gitStatus: null,
+          },
+        ]),
+      );
+      const fileEntries: WorkspaceFileTreeEntry[] = [];
       for (const filePath of filePaths) {
         const gitStatus = gitStatusByPath.get(filePath) ?? null;
         const metadataResult = yield* Effect.either(statFile(filesystem, canonicalRoot, filePath));
@@ -360,7 +321,7 @@ export const createWorkspaceFilesService = (
           if (gitStatus !== "deleted") {
             return yield* Effect.fail(metadataResult.left);
           }
-          entries.push({
+          fileEntries.push({
             path: filePath,
             kind: "file",
             size: null,
@@ -370,7 +331,18 @@ export const createWorkspaceFilesService = (
           continue;
         }
         const metadata = metadataResult.right;
-        entries.push({
+        if (metadata.isDirectory) {
+          const directoryPath = filePath.replace(/\/+$/u, "");
+          directoryEntries.set(directoryPath, {
+            path: directoryPath,
+            kind: "directory",
+            size: null,
+            mtimeMs: null,
+            gitStatus,
+          });
+          continue;
+        }
+        fileEntries.push({
           path: filePath,
           kind: "file",
           size: metadata.size ?? null,
@@ -380,7 +352,12 @@ export const createWorkspaceFilesService = (
       }
       return workspaceFileTreeSchema.parse({
         rootPath: canonicalRoot,
-        entries,
+        entries: [
+          ...[...directoryEntries.values()].sort((left, right) =>
+            compareWorkspacePaths(left.path, right.path),
+          ),
+          ...fileEntries,
+        ],
       });
     });
   },

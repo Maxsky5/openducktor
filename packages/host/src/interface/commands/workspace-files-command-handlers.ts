@@ -1,11 +1,6 @@
 import type { WorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
-import {
-  optionalString,
-  requireRecord,
-  requireString,
-  requireStringPreservingWhitespace,
-} from "./command-inputs";
+import { optionalString, requireRecord, requireStringPreservingWhitespace } from "./command-inputs";
 
 const parseListTreeInput = (
   args: Record<string, unknown> | undefined,
@@ -13,7 +8,7 @@ const parseListTreeInput = (
   const record = requireRecord(args, "filesystem_list_tree input");
   const targetBranch = optionalString(record.targetBranch, "targetBranch");
   return {
-    rootPath: requireString(record.rootPath, "rootPath"),
+    rootPath: requireStringPreservingWhitespace(record.rootPath, "rootPath"),
     ...(targetBranch ? { targetBranch } : {}),
   };
 };
@@ -23,7 +18,7 @@ const parseReadTextFileInput = (
 ): { rootPath: string; relativePath: string } => {
   const record = requireRecord(args, "filesystem_read_text_file input");
   return {
-    rootPath: requireString(record.rootPath, "rootPath"),
+    rootPath: requireStringPreservingWhitespace(record.rootPath, "rootPath"),
     relativePath: requireStringPreservingWhitespace(record.relativePath, "relativePath"),
   };
 };

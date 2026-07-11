@@ -572,6 +572,57 @@ describe("createWorkspaceFilesService", () => {
     });
   });
 
+  test("preserves literal backslashes in POSIX Git paths", async () => {
+    const filePath = "a\\b.txt";
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          [`/repo/${filePath}`]: { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
+        },
+      }),
+      createFakeGitPort({
+        files: [filePath],
+        statuses: [{ path: filePath, status: "modified", staged: false }],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toContainEqual({
+      path: filePath,
+      kind: "file",
+      size: 2,
+      mtimeMs: 20,
+      gitStatus: "modified",
+    });
+    expect(tree.entries).toHaveLength(1);
+  });
+
+  test("emits materialized directories as directory entries", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/nested/": { isDirectory: true, isFile: false, size: 0, mtimeMs: 20 },
+        },
+      }),
+      createFakeGitPort({ files: ["nested/"] }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo" }));
+
+    expect(tree.entries).toEqual([
+      {
+        path: "nested",
+        kind: "directory",
+        size: null,
+        mtimeMs: null,
+        gitStatus: null,
+      },
+    ]);
+  });
+
   test("adapts known Git-only statuses without a generic fallback", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({
