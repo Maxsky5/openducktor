@@ -1,16 +1,18 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import type { CodeViewFileItem, CodeViewOptions, FileContents } from "@pierre/diffs";
-import { CodeView } from "@pierre/diffs/react";
+import { CodeView, useWorkerPool } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, X } from "lucide-react";
 import {
   type CSSProperties,
   memo,
   type ReactElement,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -29,8 +31,10 @@ const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const CODE_VIEW_THEME_BACKGROUND = { dark: "#0a0a0a", light: "#ffffff" } as const;
 const CODE_VIEW_DIFFS_BACKGROUND = "light-dark(var(--diffs-light-bg), var(--diffs-dark-bg))";
 const CODE_VIEW_BACKGROUND_COLOR = "var(--diffs-bg)";
+const CODE_VIEW_NUMBER_COLUMN_WIDTH = "var(--file-preview-number-column-width)";
 const CODE_VIEW_LINE_HEIGHT = 18;
 const CODE_VIEW_CONTENT_PADDING = 8;
+const CODE_VIEW_NUMBER_COLUMN_PADDING = 1.25;
 const CODE_VIEW_CLASS_NAME = "h-full min-h-0 overflow-auto";
 const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-light-bg": CODE_VIEW_THEME_BACKGROUND.light,
@@ -49,27 +53,98 @@ const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
   padding-right: 0.75ch;
 }
 
-[data-line-number-content] {
-  min-width: 2ch;
+[data-file] {
+  --diffs-grid-number-column-width: ${CODE_VIEW_NUMBER_COLUMN_WIDTH};
 }
 `;
 
+type PreparedCodeViewFile = {
+  id: string;
+  file: FileContents;
+  numberColumnWidth: string;
+};
 type FilePreviewSnapshot = {
   selectedFile: TaskExecutionSelectedFile;
   result: WorkspaceTextFileReadResult;
+  codeViewFile: PreparedCodeViewFile | null;
 };
 type CommittedFilePreviewSnapshot = {
   sessionKey: number;
   snapshot: FilePreviewSnapshot;
 };
 
-const contentHash = (value: string): string => {
+const getContentMetrics = (value: string): { contentHash: string; numberColumnWidth: string } => {
   let hash = 0x811c9dc5;
+  let lineCount = 1;
   for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
+    const characterCode = value.charCodeAt(index);
+    hash ^= characterCode;
     hash = Math.imul(hash, 0x01000193);
+    if (characterCode === 10) {
+      lineCount += 1;
+    }
   }
-  return (hash >>> 0).toString(36);
+  const numberColumnWidth = String(lineCount).length + CODE_VIEW_NUMBER_COLUMN_PADDING;
+  return {
+    contentHash: (hash >>> 0).toString(36),
+    numberColumnWidth: `${numberColumnWidth}ch`,
+  };
+};
+
+const createFilePreviewSnapshot = (
+  selectedFile: TaskExecutionSelectedFile,
+  result: WorkspaceTextFileReadResult,
+): FilePreviewSnapshot => {
+  if (result.kind !== "text") {
+    return { selectedFile, result, codeViewFile: null };
+  }
+
+  const id = `${selectedFile.rootPath}:${selectedFile.relativePath}`;
+  const metrics = getContentMetrics(result.contents);
+  return {
+    selectedFile,
+    result,
+    codeViewFile: {
+      id,
+      file: {
+        name: selectedFile.relativePath,
+        contents: result.contents,
+        cacheKey: `${id}:${result.size}:${metrics.contentHash}`,
+      },
+      numberColumnWidth: metrics.numberColumnWidth,
+    },
+  };
+};
+
+const useFileHighlightReady = (file: FileContents | null): boolean => {
+  const workerPool = useWorkerPool();
+  const subscribeToHighlightCache = useCallback(
+    (onStoreChange: () => void) => {
+      if (workerPool == null || file == null) {
+        return () => undefined;
+      }
+      return workerPool.subscribeToStatChanges(onStoreChange);
+    },
+    [file, workerPool],
+  );
+  const getHighlightCacheSnapshot = useCallback(
+    () => workerPool == null || file == null || workerPool.getFileResultCache(file) != null,
+    [file, workerPool],
+  );
+  const isHighlightReady = useSyncExternalStore(
+    subscribeToHighlightCache,
+    getHighlightCacheSnapshot,
+    () => false,
+  );
+
+  useEffect(() => {
+    if (workerPool == null || file == null || isHighlightReady) {
+      return;
+    }
+    workerPool.primeFileHighlightCache(file);
+  }, [file, isHighlightReady, workerPool]);
+
+  return isHighlightReady;
 };
 
 function FilePreviewState({ message }: { message: string }): ReactElement {
@@ -113,21 +188,24 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     if (!selectedFile || !resultBelongsToSelectedFile(fileQuery.data, selectedFile)) {
       return null;
     }
-    return {
-      selectedFile,
-      result: fileQuery.data,
-    };
+    return createFilePreviewSnapshot(selectedFile, fileQuery.data);
   }, [fileQuery.data, selectedFile]);
+  const isCurrentHighlightReady = useFileHighlightReady(
+    currentSnapshot?.codeViewFile?.file ?? null,
+  );
+  const isCurrentSnapshotReady =
+    currentSnapshot !== null && (currentSnapshot.codeViewFile === null || isCurrentHighlightReady);
+  const readyCurrentSnapshot = isCurrentSnapshotReady ? currentSnapshot : null;
   const retainedSnapshot =
     committedSnapshot?.sessionKey === model.previewSessionKey ? committedSnapshot.snapshot : null;
   const visibleSnapshot =
-    currentSnapshot ?? (model.preservePreviousSnapshot ? retainedSnapshot : null);
+    readyCurrentSnapshot ?? (model.preservePreviousSnapshot ? retainedSnapshot : null);
   const isSwitchingFiles =
     selectedFile !== null &&
     visibleSnapshot !== null &&
     (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
       visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
-    fileQuery.isFetching;
+    (fileQuery.isFetching || !isCurrentSnapshotReady);
   const codeViewOptions = useMemo<CodeViewOptions<undefined>>(
     () => ({
       theme: CODE_VIEW_THEME,
@@ -152,33 +230,26 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const codeViewRootStyle = useMemo<CSSProperties>(
     () => ({
       ...CODE_VIEW_ROOT_BASE_STYLE,
+      "--file-preview-number-column-width":
+        visibleSnapshot?.codeViewFile?.numberColumnWidth ?? "2.25ch",
       backgroundColor: CODE_VIEW_BACKGROUND_COLOR,
       colorScheme: theme,
     }),
-    [theme],
+    [theme, visibleSnapshot?.codeViewFile?.numberColumnWidth],
   );
-  const codeViewFileId =
-    visibleSnapshot?.result.kind === "text"
-      ? `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}`
-      : null;
+  const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const codeViewRenderKey =
     codeViewFileId !== null ? `${model.previewSessionKey}:${codeViewFileId}` : null;
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
-    if (visibleSnapshot?.result.kind !== "text" || !codeViewFileId) {
+    if (!visibleSnapshot?.codeViewFile || !codeViewFileId) {
       return [];
     }
-
-    const file: FileContents = {
-      name: visibleSnapshot.selectedFile.relativePath,
-      contents: visibleSnapshot.result.contents,
-      cacheKey: `${codeViewFileId}:${visibleSnapshot.result.size}:${contentHash(visibleSnapshot.result.contents)}`,
-    };
 
     return [
       {
         id: codeViewFileId,
         type: "file",
-        file,
+        file: visibleSnapshot.codeViewFile.file,
       },
     ];
   }, [codeViewFileId, visibleSnapshot]);
@@ -188,20 +259,21 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       setCommittedSnapshot(null);
       return;
     }
-    if (currentSnapshot) {
+    if (readyCurrentSnapshot) {
       setCommittedSnapshot((previous) => {
         if (
           previous?.sessionKey === model.previewSessionKey &&
-          previous.snapshot.result === currentSnapshot.result &&
-          previous.snapshot.selectedFile.rootPath === currentSnapshot.selectedFile.rootPath &&
-          previous.snapshot.selectedFile.relativePath === currentSnapshot.selectedFile.relativePath
+          previous.snapshot.result === readyCurrentSnapshot.result &&
+          previous.snapshot.selectedFile.rootPath === readyCurrentSnapshot.selectedFile.rootPath &&
+          previous.snapshot.selectedFile.relativePath ===
+            readyCurrentSnapshot.selectedFile.relativePath
         ) {
           return previous;
         }
-        return { sessionKey: model.previewSessionKey, snapshot: currentSnapshot };
+        return { sessionKey: model.previewSessionKey, snapshot: readyCurrentSnapshot };
       });
     }
-  }, [currentSnapshot, model.previewSessionKey, selectedFile]);
+  }, [model.previewSessionKey, readyCurrentSnapshot, selectedFile]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -225,10 +297,10 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   }
 
   let body: ReactElement;
-  if (fileQuery.isLoading && !visibleSnapshot) {
-    body = <FilePreviewState message="Loading file..." />;
-  } else if (fileQuery.isError) {
+  if (fileQuery.isError) {
     body = <FilePreviewState message={errorMessage(fileQuery.error)} />;
+  } else if ((fileQuery.isLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
+    body = <FilePreviewState message="Loading file..." />;
   } else if (visibleSnapshot?.result.kind === "unsupported") {
     body = <FilePreviewState message={visibleSnapshot.result.message} />;
   } else if (codeViewFileId && codeViewItems.length > 0) {

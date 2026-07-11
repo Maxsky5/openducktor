@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   createElement,
   type PropsWithChildren,
@@ -26,6 +26,35 @@ let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
+let highlightCompletionMode: "auto" | "manual" = "auto";
+let primeFileHighlightCacheMock: ReturnType<typeof mock>;
+const highlightedFileCacheKeys = new Set<string>();
+const highlightCacheSubscribers = new Set<() => void>();
+
+const completeFileHighlight = (file: { cacheKey?: string }): void => {
+  if (file.cacheKey) {
+    highlightedFileCacheKeys.add(file.cacheKey);
+  }
+  for (const subscriber of highlightCacheSubscribers) {
+    subscriber();
+  }
+};
+
+const previewWorkerPool = {
+  getFileResultCache: (file: { cacheKey?: string }) =>
+    file.cacheKey && highlightedFileCacheKeys.has(file.cacheKey) ? {} : undefined,
+  primeFileHighlightCache: (file: { cacheKey?: string }) => {
+    primeFileHighlightCacheMock(file);
+    if (highlightCompletionMode === "auto") {
+      queueMicrotask(() => completeFileHighlight(file));
+    }
+  },
+  subscribeToStatChanges: (subscriber: () => void) => {
+    highlightCacheSubscribers.add(subscriber);
+    subscriber();
+    return () => highlightCacheSubscribers.delete(subscriber);
+  },
+};
 
 const actualDiffsReact = await import("@pierre/diffs/react");
 const actualThemeProvider = await import("@/components/layout/theme-provider");
@@ -87,6 +116,10 @@ beforeEach(async () => {
   codeViewUnmountCount = 0;
   secondFileReadMode = "pending";
   previewTheme = "light";
+  highlightCompletionMode = "auto";
+  highlightedFileCacheKeys.clear();
+  highlightCacheSubscribers.clear();
+  primeFileHighlightCacheMock = mock();
 
   readTextFileMock = mock((input: { rootPath: string; relativePath: string }) => {
     if (input.relativePath === secondFile.relativePath) {
@@ -113,6 +146,7 @@ beforeEach(async () => {
   }));
 
   mock.module("@pierre/diffs/react", () => ({
+    useWorkerPool: () => previewWorkerPool,
     CodeView: ({ items }: { items: Array<{ file: { contents: string } }> }): ReactElement => {
       useEffect(() => {
         codeViewMountCount += 1;
@@ -141,6 +175,48 @@ afterEach(async () => {
 });
 
 describe("TaskExecutionSelectedFilePreview", () => {
+  test("waits for the worker highlight result before displaying a newly opened file", async () => {
+    highlightCompletionMode = "manual";
+    const onClose = mock(() => {});
+
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+
+    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Loading file...")).toBeTruthy();
+    expect(screen.queryByTestId("mock-code-view")).toBeNull();
+
+    const [file] = primeFileHighlightCacheMock.mock.calls[0] ?? [];
+    expect(file?.name).toBe(firstFile.relativePath);
+    act(() => completeFileHighlight(file));
+
+    await screen.findByText("const first = true;");
+  });
+
+  test("keeps the previous file visible while the next file is being highlighted", async () => {
+    secondFileReadMode = "resolve";
+    const onClose = mock(() => {});
+    const view = render(
+      renderPreview({ selectedFile: firstFile, preservePreviousSnapshot: true, onClose }),
+    );
+
+    await screen.findByText("const first = true;");
+    highlightCompletionMode = "manual";
+
+    view.rerender(
+      renderPreview({ selectedFile: secondFile, preservePreviousSnapshot: true, onClose }),
+    );
+
+    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("const first = true;")).toBeTruthy();
+    expect(screen.getByText("Loading...")).toBeTruthy();
+
+    const [file] = primeFileHighlightCacheMock.mock.calls[1] ?? [];
+    act(() => completeFileHighlight(file));
+
+    await screen.findByText("const second = true;");
+    expect(screen.queryByText("const first = true;")).toBeNull();
+  });
+
   test("keeps the previous file visible while the next selected file is loading", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
