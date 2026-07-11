@@ -6,11 +6,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  resolveSettingsDeepLink,
-  type SettingsContentFocusRequest,
-  type SettingsDeepLink,
-  type SettingsDeepLinkResolution,
+import type {
+  SettingsContentFocusRequest,
+  SettingsDeepLink,
+  SettingsDeepLinkResolution,
 } from "./settings-deep-link";
 import type {
   PromptRoleTabId,
@@ -19,6 +18,11 @@ import type {
 } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
+import {
+  INITIAL_SETTINGS_MODAL_NAVIGATION,
+  resolveSettingsModalOpenState,
+  type SettingsModalNavigationState,
+} from "./settings-modal-open-state";
 import { SettingsSidebar } from "./settings-modal-sidebars";
 import { SettingsModalTrigger } from "./settings-modal-trigger";
 import { useSettingsModalController } from "./use-settings-modal-controller";
@@ -33,25 +37,6 @@ type SettingsModalProps = {
   deepLink?: SettingsDeepLink;
 };
 
-type SettingsModalNavigationState = {
-  section: SettingsSectionId;
-  repositorySection: RepositorySectionId;
-  globalPromptRoleTab: PromptRoleTabId;
-  repoPromptRoleTab: PromptRoleTabId;
-  selectedReusablePromptId: string | null;
-};
-
-const INITIAL_SECTION: SettingsSectionId = "repositories";
-const INITIAL_REPOSITORY_SECTION: RepositorySectionId = "configuration";
-const INITIAL_PROMPT_ROLE_TAB: PromptRoleTabId = "shared";
-const INITIAL_NAVIGATION_STATE: SettingsModalNavigationState = {
-  section: INITIAL_SECTION,
-  repositorySection: INITIAL_REPOSITORY_SECTION,
-  globalPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
-  repoPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
-  selectedReusablePromptId: null,
-};
-
 export function SettingsModal({
   triggerClassName,
   triggerIconOnly = false,
@@ -64,8 +49,9 @@ export function SettingsModal({
     useState<SettingsDeepLinkResolution | null>(null);
   const [contentFocusRequest, setContentFocusRequest] =
     useState<SettingsContentFocusRequest | null>(null);
-  const [navigation, setNavigation] =
-    useState<SettingsModalNavigationState>(INITIAL_NAVIGATION_STATE);
+  const [navigation, setNavigation] = useState<SettingsModalNavigationState>(
+    INITIAL_SETTINGS_MODAL_NAVIGATION,
+  );
   const workspaceSelectionPolicy =
     activeDeepLinkResolution?.scope === "repository"
       ? activeDeepLinkResolution.workspaceSelectionPolicy
@@ -128,16 +114,10 @@ export function SettingsModal({
       return;
     }
 
-    const nextDeepLinkResolution = deepLink ? resolveSettingsDeepLink(deepLink) : null;
-    setActiveDeepLinkResolution(nextDeepLinkResolution);
-    if (nextDeepLinkResolution) {
-      setNavigation((current) => ({ ...current, ...nextDeepLinkResolution.navigation }));
-      setContentFocusRequest(
-        nextDeepLinkResolution.scope === "repository"
-          ? (nextDeepLinkResolution.contentFocus ?? null)
-          : null,
-      );
-    }
+    const nextOpenState = resolveSettingsModalOpenState(deepLink);
+    setActiveDeepLinkResolution(nextOpenState.deepLinkResolution);
+    setNavigation(nextOpenState.navigation);
+    setContentFocusRequest(nextOpenState.contentFocusRequest);
     setOpen(true);
   };
 

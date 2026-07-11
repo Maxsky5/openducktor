@@ -27,10 +27,18 @@ describe("resolveSettingsDeepLink", () => {
   test("preserves an explicit missing repository without choosing a fallback", () => {
     expect(
       resolveSettingsDeepLink({ kind: "repository-dev-servers", repositoryPath: null }),
-    ).toMatchObject({
+    ).toEqual({
+      scope: "repository",
+      navigation: {
+        section: "repositories",
+        repositorySection: "scripts",
+      },
       workspaceSelectionPolicy: {
         kind: "required",
         repoPath: null,
+      },
+      contentFocus: {
+        kind: "repository-dev-servers",
       },
     });
   });

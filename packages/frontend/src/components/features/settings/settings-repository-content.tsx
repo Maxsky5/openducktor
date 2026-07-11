@@ -50,6 +50,10 @@ const resolveRepositoryAvailabilityNotice = ({
   workspaceCount: number;
   hasSelectedRepository: boolean;
 }): RepositoryAvailabilityNotice | null => {
+  if (workspaceCount === 0) {
+    return { message: "Add a repository first, then configure repository settings." };
+  }
+
   if (requiredWorkspaceSelectionUnresolved) {
     return {
       message: requiredWorkspaceRepoPath
@@ -57,10 +61,6 @@ const resolveRepositoryAvailabilityNotice = ({
         : "This Agent Studio panel has no repository to configure. Choose a repository explicitly or close Settings.",
       role: "alert",
     };
-  }
-
-  if (workspaceCount === 0) {
-    return { message: "Add a repository first, then configure repository settings." };
   }
 
   if (!hasSelectedRepository) {

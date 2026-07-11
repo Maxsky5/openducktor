@@ -93,6 +93,7 @@ function GitActionIconButton({
   isSpinning = false,
   wrapTrigger = false,
 }: GitActionIconButtonProps): ReactElement {
+  const tooltipDescriptionId = `${testId}-tooltip-description`;
   const button = (
     <Button
       type="button"
@@ -102,6 +103,7 @@ function GitActionIconButton({
       onClick={onClick ?? undefined}
       disabled={disabled}
       data-testid={testId}
+      aria-describedby={tooltipDescriptionId}
     >
       <Icon className={cn("size-3.5", isSpinning ? "animate-spin" : "")} />
       {badge ? (
@@ -120,14 +122,19 @@ function GitActionIconButton({
   );
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {wrapTrigger ? <span className="inline-flex">{button}</span> : button}
-      </TooltipTrigger>
-      <TooltipContent side="top">
-        <p>{tooltip}</p>
-      </TooltipContent>
-    </Tooltip>
+    <>
+      <span id={tooltipDescriptionId} className="sr-only">
+        {tooltip}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {wrapTrigger ? <span className="inline-flex">{button}</span> : button}
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    </>
   );
 }
 

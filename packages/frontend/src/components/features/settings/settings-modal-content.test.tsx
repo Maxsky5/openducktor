@@ -180,9 +180,9 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("/missing/repo");
-    expect(html).toContain("Choose a repository explicitly or close Settings");
-    expect(html).not.toContain("Add a repository first");
+    expect(html).toContain("Add a repository first");
+    expect(html).not.toContain("/missing/repo");
+    expect(html).not.toContain("Choose a repository explicitly or close Settings");
     expect(html).not.toContain("Select a repository to edit repository scripts");
   });
 

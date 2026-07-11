@@ -12,7 +12,7 @@ import {
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 
 type RepositoryScriptsSectionProps = {
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: RepoConfig;
   selectedRepoDevServerValidationErrors?: Record<string, { name?: string; command?: string }>;
   validationState?: {
     showDevServerValidationErrors?: boolean;
@@ -39,11 +39,9 @@ export function RepositoryScriptsSection({
 }: RepositoryScriptsSectionProps): ReactElement {
   const devServersRef = useRef<HTMLDivElement>(null);
   const handledFocusRequestRef = useRef<SettingsContentFocusRequest | null>(null);
-  const hasSelectedRepoConfig = selectedRepoConfig !== null;
 
   useEffect(() => {
     if (
-      !hasSelectedRepoConfig ||
       focusRequest?.kind !== "repository-dev-servers" ||
       focusRequest === handledFocusRequestRef.current ||
       !devServersRef.current
@@ -54,15 +52,7 @@ export function RepositoryScriptsSection({
     devServersRef.current.scrollIntoView({ block: "start" });
     handledFocusRequestRef.current = focusRequest;
     onFocusRequestHandled?.(focusRequest);
-  }, [focusRequest, hasSelectedRepoConfig, onFocusRequestHandled]);
-
-  if (!selectedRepoConfig) {
-    return (
-      <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
-        Select a repository to edit repository scripts.
-      </div>
-    );
-  }
+  }, [focusRequest, onFocusRequestHandled]);
 
   const isDisabled = loadingState.isLoadingSettings || loadingState.isSaving;
   const devServerValidationErrors =

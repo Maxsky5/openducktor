@@ -181,48 +181,4 @@ describe("RepositoryScriptsSection", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     rendered.unmount();
   });
-
-  test("positions the dev-server editor after an unresolved repository is selected", () => {
-    const scrollIntoView = mock(() => {});
-    const onFocusRequestHandled = mock(() => {});
-    const originalScrollIntoView = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      "scrollIntoView",
-    );
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
-
-    const props = {
-      focusRequest: { kind: "repository-dev-servers" as const },
-      loadingState: { isLoadingSettings: false, isSaving: false },
-      onFocusRequestHandled,
-      onUpdateSelectedRepoConfig: () => {},
-    };
-    const rendered = render(
-      createElement(RepositoryScriptsSection, {
-        ...props,
-        selectedRepoConfig: null,
-      }),
-    );
-
-    try {
-      expect(scrollIntoView).not.toHaveBeenCalled();
-
-      rendered.rerender(
-        createElement(RepositoryScriptsSection, {
-          ...props,
-          selectedRepoConfig: createRepoConfig(),
-        }),
-      );
-
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(onFocusRequestHandled).toHaveBeenCalledWith(props.focusRequest);
-    } finally {
-      rendered.unmount();
-      if (originalScrollIntoView) {
-        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
-      }
-    }
-  });
 });

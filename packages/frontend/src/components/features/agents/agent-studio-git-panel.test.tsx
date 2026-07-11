@@ -285,16 +285,6 @@ const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
 
 describe("AgentStudioGitPanel", () => {
   beforeEach(async () => {
-    mock.module("@/components/ui/tooltip", () => ({
-      TooltipProvider: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-      Tooltip: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-      TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-      TooltipContent: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", null, children),
-    }));
     mock.module("@/components/layout/theme-provider", () => ({
       useTheme: () => ({ theme: "light", setTheme: () => {} }),
     }));
@@ -342,7 +332,6 @@ describe("AgentStudioGitPanel", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/components/ui/tooltip", () => import("@/components/ui/tooltip")],
       ["@/components/layout/theme-provider", () => import("@/components/layout/theme-provider")],
       [
         "@/components/features/repository/branch-selector",

@@ -291,6 +291,8 @@ describe("useSettingsModalController", () => {
     await harness.update({ isOpen: false, shouldLoad: false });
     expect(harness.getLatest().snapshotDraft).toBeNull();
     expect(harness.getLatest().selectedWorkspaceId).toBeNull();
+    expect(harness.getLatest().requiredWorkspaceSelectionUnresolved).toBe(false);
+    expect(harness.getLatest().requiredWorkspaceRepoPath).toBe("/repo-two");
 
     await harness.update({ isOpen: true, shouldLoad: false });
     await harness.waitFor((state) => state.snapshotDraft !== null);
