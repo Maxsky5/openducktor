@@ -316,6 +316,46 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
+  test("uses the task worktree for QA session build tools", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          role: "qa",
+          loadedSession: createAgentSessionFixture({
+            role: "qa",
+            status: "running",
+            workingDirectory: "/repo/.worktrees/task-24",
+          }),
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().gitPanelContextMode).toBe("worktree");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-24",
+        status: "resolved",
+        error: null,
+        shouldBlockDiffLoading: false,
+      });
+      expect(harness.getLatest().openInTarget).toEqual({
+        path: "/repo/.worktrees/task-24",
+        disabledReason: null,
+      });
+      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        repoPath: "/repo",
+        worktreePath: "/repo/.worktrees/task-24",
+        worktreeResolutionTaskId: null,
+        shouldBlockDiffLoading: false,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("uses the selected session summary while the full session is still loading", async () => {
     const selectedSessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({

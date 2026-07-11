@@ -124,8 +124,10 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
-  const gitPanelContextMode: AgentStudioGitPanelContextMode =
-    selectedView.role === "build" ? "worktree" : "repository";
+  const usesTaskWorktree = selectedView.role === "build" || selectedView.role === "qa";
+  const gitPanelContextMode: AgentStudioGitPanelContextMode = usesTaskWorktree
+    ? "worktree"
+    : "repository";
   const repositoryBranchIdentityKey =
     gitPanelContextMode === "repository"
       ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
