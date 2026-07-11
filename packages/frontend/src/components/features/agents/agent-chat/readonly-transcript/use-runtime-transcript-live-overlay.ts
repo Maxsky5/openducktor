@@ -2,6 +2,7 @@ import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openduc
 import { useEffect, useRef, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { observeTransientAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/transient-session-events";
+import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -51,6 +52,40 @@ const hasVisibleRuntimeData = (session: AgentSessionState): boolean =>
   session.pendingApprovals.length > 0 ||
   session.pendingQuestions.length > 0;
 
+const mergePendingInput = <Entry extends { requestId: string }>(
+  baseEntries: Entry[],
+  runtimeEntries: Entry[],
+): Entry[] => {
+  const runtimeRequestIds = new Set(runtimeEntries.map((entry) => entry.requestId));
+  return [
+    ...baseEntries.filter((entry) => !runtimeRequestIds.has(entry.requestId)),
+    ...runtimeEntries,
+  ];
+};
+
+const mergeBaseSessionIntoLiveOverlay = (
+  baseSession: AgentSessionState,
+  liveSession: AgentSessionState,
+): AgentSessionState => ({
+  ...baseSession,
+  status: liveSession.status,
+  runtimeStatusMessage: liveSession.runtimeStatusMessage,
+  messages: mergeHistoryMessages(
+    liveSession.externalSessionId,
+    baseSession.messages,
+    liveSession.messages,
+  ),
+  ...(liveSession.contextUsage !== undefined ? { contextUsage: liveSession.contextUsage } : {}),
+  pendingApprovals: mergePendingInput(baseSession.pendingApprovals, liveSession.pendingApprovals),
+  pendingQuestions: mergePendingInput(baseSession.pendingQuestions, liveSession.pendingQuestions),
+  ...(liveSession.pendingUserMessageStartedAt !== undefined
+    ? { pendingUserMessageStartedAt: liveSession.pendingUserMessageStartedAt }
+    : {}),
+  ...(liveSession.stopRequestedAt !== undefined
+    ? { stopRequestedAt: liveSession.stopRequestedAt }
+    : {}),
+});
+
 export function useRuntimeTranscriptLiveOverlay({
   shouldObserve,
   repoPath,
@@ -74,6 +109,23 @@ export function useRuntimeTranscriptLiveOverlay({
   useEffect(() => {
     liveStateRef.current = liveState;
   }, [liveState]);
+
+  useEffect(() => {
+    if (!baseSession || target === null) {
+      return;
+    }
+    setLiveState((current) => {
+      if (!current?.hasRuntimeEvents || !matchesAgentSessionIdentity(current.session, target)) {
+        return current;
+      }
+      const nextState = {
+        ...current,
+        session: mergeBaseSessionIntoLiveOverlay(baseSession, current.session),
+      };
+      liveStateRef.current = nextState;
+      return nextState;
+    });
+  }, [baseSession, target]);
 
   useEffect(() => {
     if (!shouldObserve || repoPath === null || target === null || sessionRef === null) {

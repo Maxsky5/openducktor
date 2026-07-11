@@ -436,6 +436,45 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("merges refreshed projected state into the live overlay without dropping streamed data", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a/worktree",
+      selectedModel: null,
+    });
+    const harness = createHookHarness(createBaseArgs({ liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(createLiveUserMessageEvent()));
+      await harness.waitFor(
+        (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 1,
+      );
+
+      const selectedModel = { providerId: "openai", modelId: "gpt-5", variant: "high" };
+      await harness.update(createBaseArgs({ liveSession: { ...liveSession, selectedModel } }));
+
+      await harness.waitFor((state) => state.interactionSession?.selectedModel?.variant === "high");
+      const renderedSession = harness.getLatest().session;
+      expect(renderedSession).not.toBeNull();
+      if (!renderedSession) {
+        throw new Error("Expected the refreshed transcript session.");
+      }
+      expect(getSessionMessageCount(renderedSession)).toBe(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps the first hydrated child subscription when operation callbacks refresh", async () => {
     const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
     const firstUnsubscribe = mock(() => undefined);
