@@ -20,6 +20,29 @@ type CodexSubagentLifecycleProjectorDeps = {
   emitParentSessionEvent: (externalSessionId: string, event: AgentEvent) => void;
 };
 
+const LIFECYCLE_STATUS_PRECEDENCE: Record<CodexSubagentLifecycleUpdate["status"], number> = {
+  pending: 0,
+  running: 1,
+  cancelled: 2,
+  completed: 3,
+  error: 4,
+};
+
+const isNewerLifecycleUpdate = (
+  existing: CodexSubagentLifecycleUpdate,
+  incoming: CodexSubagentLifecycleUpdate,
+): boolean => {
+  if (incoming.timestampMs !== existing.timestampMs) {
+    return incoming.timestampMs > existing.timestampMs;
+  }
+  if (incoming.allowStatusRestart !== existing.allowStatusRestart) {
+    return incoming.allowStatusRestart;
+  }
+  return (
+    LIFECYCLE_STATUS_PRECEDENCE[incoming.status] >= LIFECYCLE_STATUS_PRECEDENCE[existing.status]
+  );
+};
+
 const hasLifecycleStatus = (notification: CodexNotificationRecord): boolean => {
   const params = isPlainObject(notification.params) ? notification.params : null;
   const turn = params && isPlainObject(params.turn) ? params.turn : null;
@@ -149,7 +172,10 @@ export class CodexSubagentLifecycleProjector {
     update: CodexSubagentLifecycleUpdate,
   ): void {
     const lifecycleByThreadId = this.pendingLifecycleByRuntimeId.get(runtimeId) ?? new Map();
-    lifecycleByThreadId.set(childThreadId, update);
+    const existing = lifecycleByThreadId.get(childThreadId);
+    if (!existing || isNewerLifecycleUpdate(existing, update)) {
+      lifecycleByThreadId.set(childThreadId, update);
+    }
     trimOldestMapKeys(lifecycleByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
     this.pendingLifecycleByRuntimeId.set(runtimeId, lifecycleByThreadId);
     trimOldestMapKeys(this.pendingLifecycleByRuntimeId, MAX_CODEX_BUFFERED_THREAD_COUNT);

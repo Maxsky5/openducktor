@@ -583,6 +583,7 @@ describe("Codex subagent event mapper", () => {
             id: "resume-1",
             tool: "resumeAgent",
             status: "completed",
+            startedAtMs: 1_778_284_801_000,
             senderThreadId: "parent-thread",
             receiverThreadIds: ["child-thread"],
             prompt: null,
@@ -600,6 +601,7 @@ describe("Codex subagent event mapper", () => {
         correlationKey: "codex-subagent:parent-thread:child-thread",
         status: "running",
         externalSessionId: "child-thread",
+        startedAtMs: 1_778_284_801_000,
       }),
     ]);
   });

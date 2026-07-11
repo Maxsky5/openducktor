@@ -98,16 +98,33 @@ describe("CodexSubagentLifecycleProjector", () => {
     const { events, projector, subagents } = createHarness();
     projector.projectNotification(
       "runtime-1",
-      childLifecycleNotification("turn/completed", "completed"),
+      childLifecycleNotification("turn/completed", "completed", undefined, 1_783_683_620),
     );
     projector.projectNotification(
       "runtime-1",
-      childLifecycleNotification("turn/started", "inProgress"),
+      childLifecycleNotification("turn/started", "inProgress", undefined, 1_783_683_630),
     );
 
     projector.projectBufferedRoute(linkChild(subagents));
 
     expect(emittedStatuses(events)).toEqual([]);
+    expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
+  });
+
+  test("keeps a newer buffered restart when a stale completion arrives later", () => {
+    const { events, projector, subagents } = createHarness();
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/started", "inProgress", undefined, 1_783_683_630),
+    );
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/completed", "completed", undefined, 1_783_683_620),
+    );
+
+    projector.projectBufferedRoute(linkChild(subagents));
+
+    expect(events).toEqual([]);
     expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
   });
 

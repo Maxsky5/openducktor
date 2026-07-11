@@ -253,7 +253,7 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
-  test("projects only the latest child lifecycle state learned before the parent-child link", async () => {
+  test("projects the newest runtime lifecycle state learned before the parent-child link", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
     const sessions = new Map([[parentSession.threadId, parentSession]]);
@@ -306,7 +306,7 @@ describe("CodexRuntimeSessionEvents", () => {
       return [event.part.status];
     });
 
-    expect(statuses).toEqual(["running"]);
+    expect(statuses).toEqual(["running", "completed"]);
   });
 
   test("projects pre-link child completion when the child session is already loaded", async () => {
