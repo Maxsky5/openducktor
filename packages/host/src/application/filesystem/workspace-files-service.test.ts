@@ -225,6 +225,37 @@ describe("createWorkspaceFilesService", () => {
     });
   });
 
+  test("skips non-materialized target changes while preserving deletions", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/src/visible.ts": { isDirectory: false, isFile: true, size: 12, mtimeMs: 10 },
+        },
+      }),
+      createFakeGitPort({
+        files: ["src/visible.ts"],
+        changedFiles: [
+          { path: "src/skipped.ts", status: "modified" },
+          { path: "src/deleted.ts", status: "deleted" },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(
+      service.listTree({ rootPath: "/repo", targetBranch: "origin/main" }),
+    );
+
+    expect(tree.entries.map((entry) => entry.path)).not.toContain("src/skipped.ts");
+    expect(tree.entries).toContainEqual({
+      path: "src/deleted.ts",
+      kind: "file",
+      size: null,
+      mtimeMs: null,
+      gitStatus: "deleted",
+    });
+  });
+
   test("reads a contained text file", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({

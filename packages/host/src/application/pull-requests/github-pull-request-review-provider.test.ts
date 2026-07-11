@@ -195,6 +195,14 @@ const defaultReviewThreadNodes = [
   },
 ];
 
+const fairnestSuggestionBody = [
+  "Disable all login options while any login flow is active.",
+  "",
+  "```suggestion",
+  "  const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;",
+  "```",
+].join("\n");
+
 const fairnestPullRequestReviewThreadNodes = [
   {
     id: "thread-fairnest-1",
@@ -205,13 +213,7 @@ const fairnestPullRequestReviewThreadNodes = [
         {
           id: "thread-comment-fairnest-1",
           author: { login: "gemini-code-assist" },
-          body: [
-            "Disable all login options while any login flow is active.",
-            "",
-            "```suggestion",
-            "  const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;",
-            "```",
-          ].join("\n"),
+          body: fairnestSuggestionBody,
           diffHunk: [
             "@@ -12,7 +12,8 @@ export default function LandingPage() {",
             "   const { login } = useAuth();",
@@ -503,10 +505,55 @@ describe("createGithubPullRequestReviewProvider", () => {
       ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false, null],
       ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false, null],
     ]);
-    expect(context.comments[2]?.body).toBe(
-      "Disable all login options while any login flow is active.",
-    );
+    expect(context.comments[2]?.body).toBe(fairnestSuggestionBody);
     expect(commands.flat().join(" ")).toContain("diffHunk");
+  });
+
+  test("preserves suggestion-only review thread comments", async () => {
+    const suggestionBody = ["```suggestion", "const enabled = isReady && isValid;", "```"].join(
+      "\n",
+    );
+    const provider = createGithubPullRequestReviewProvider();
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          pullRequestViewResponse: fairnestPullRequestViewResponse,
+          reviewThreadNodes: [
+            {
+              id: "thread-suggestion-only",
+              isResolved: false,
+              comments: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    id: "thread-comment-suggestion-only",
+                    author: { login: "reviewer" },
+                    body: suggestionBody,
+                    diffHunk: "@@ -1,1 +1,1 @@\n-const enabled = false;",
+                    url: "https://github.com/Maxsky5/fairnest/pull/128#discussion-suggestion",
+                    createdAt: "2026-07-08T20:19:39Z",
+                    updatedAt: "2026-07-08T20:19:39Z",
+                    path: "apps/web/src/example.ts",
+                    line: 1,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "Maxsky5", name: "fairnest" },
+        pullRequestNumber: 128,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(
+      context.comments.find((comment) => comment.id === "thread-comment-suggestion-only")?.body,
+    ).toBe(suggestionBody);
   });
 
   test("loads every review thread and comment page", async () => {

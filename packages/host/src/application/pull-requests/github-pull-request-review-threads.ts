@@ -189,14 +189,6 @@ const parseNextCursor = (
   return hasNextPage ? requireString(pageInfo.endCursor, `${field}.endCursor`) : null;
 };
 
-const GITHUB_SUGGESTION_BLOCK = /^```suggestion[^\n]*\n[\s\S]*?^```[ \t]*$/gm;
-
-const withoutGithubSuggestionBlocks = (body: string): string =>
-  body
-    .replace(GITHUB_SUGGESTION_BLOCK, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
 const toReviewThreadComment = (
   payload: GithubGraphqlReviewThreadCommentPayload,
   threadId: string,
@@ -209,7 +201,7 @@ const toReviewThreadComment = (
   return {
     id: requireString(payload.id, "id"),
     author: toNullableString(payload.author?.login),
-    body: withoutGithubSuggestionBlocks(body),
+    body: body.trim(),
     patch: toNullableString(payload.diffHunk),
     url: toNullableString(payload.url),
     createdAt: toNullableString(payload.createdAt),

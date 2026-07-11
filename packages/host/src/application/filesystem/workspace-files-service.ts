@@ -277,10 +277,14 @@ export const createWorkspaceFilesService = (
           }),
         ),
       );
-      const filePathSet = new Set(listedFilePaths);
+      const materializedFilePaths = new Set(listedFilePaths);
+      const filePathSet = new Set(materializedFilePaths);
       const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
       for (const change of targetChanges) {
         const normalizedStatus = yield* normalizeGitStatus(change.status);
+        if (normalizedStatus !== "deleted" && !materializedFilePaths.has(change.path)) {
+          continue;
+        }
         filePathSet.add(change.path);
         gitStatusByPath.set(
           change.path,
