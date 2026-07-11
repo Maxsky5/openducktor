@@ -106,6 +106,31 @@ describe("createGitCliAdapter", () => {
       { path: "src/add-add-conflict.ts", status: "unmerged", staged: true },
     ]);
   });
+  test("prefers worktree deletions in mixed porcelain status rows", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "status --porcelain=v1 -z --untracked-files=all":
+          "AD src/added.ts\0MD src/modified.ts\0RD src/renamed.ts\0src/original.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
+      { path: "src/added.ts", status: "deleted", staged: false },
+      { path: "src/modified.ts", status: "deleted", staged: false },
+      { path: "src/renamed.ts", status: "deleted", staged: false },
+    ]);
+  });
+  test("resolves the repository root for a nested working directory", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "rev-parse --show-toplevel": "/repo\n",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getRepositoryRoot("/repo/packages/host"))).resolves.toBe(
+      "/repo",
+    );
+  });
   test("uses the destination path for NUL-delimited rename status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({

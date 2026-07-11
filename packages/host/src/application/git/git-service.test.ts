@@ -115,6 +115,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    getRepositoryRoot(path) {
+      return Effect.succeed(path);
+    },
     shareGitCommonDirectory(repoPath, workingDir) {
       return Effect.tryPromise({
         try: async () => {

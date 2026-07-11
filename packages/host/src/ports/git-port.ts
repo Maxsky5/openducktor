@@ -90,6 +90,7 @@ export type GitBranchUpstreamSetup = {
 export type GitPort = {
   canonicalizePath(path: string): Effect.Effect<string, HostOperationError>;
   isGitRepository(path: string): Effect.Effect<boolean, GitPortError>;
+  getRepositoryRoot(workingDirectory: string): Effect.Effect<string, GitPortError>;
   shareGitCommonDirectory(
     repoPath: string,
     workingDir: string,

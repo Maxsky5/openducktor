@@ -110,10 +110,7 @@ afterEach(async () => {
   await restoreMockedModules([
     ["@pierre/trees", async () => actualPierreTrees],
     ["@pierre/trees/react", async () => actualPierreTreesReact],
-    [
-      "./agent-studio-dev-server-settings-action",
-      async () => actualDevServerSettingsAction,
-    ],
+    ["./agent-studio-dev-server-settings-action", async () => actualDevServerSettingsAction],
   ]);
 });
 

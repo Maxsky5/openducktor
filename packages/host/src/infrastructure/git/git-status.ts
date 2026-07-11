@@ -103,6 +103,9 @@ const parseStatusRecord = (line: string): FileStatus[] => {
   if (isUnmergedStatusPair(index, worktree)) {
     return [{ path: filePath, status: "unmerged", staged: true }];
   }
+  if (worktree === "D") {
+    return [{ path: filePath, status: "deleted", staged: false }];
+  }
   if (index !== " " && worktree === " ") {
     return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
   }

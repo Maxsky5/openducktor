@@ -72,12 +72,14 @@ const createFakeFilesystem = ({
 
 const createFakeGitPort = ({
   isRepository = true,
+  repositoryRoot = "/repo",
   files = [],
   statuses = [],
   diffs = [],
   changedFiles,
 }: {
   isRepository?: boolean;
+  repositoryRoot?: string;
   files?: string[];
   statuses?: FileStatus[];
   diffs?: FileDiff[];
@@ -85,6 +87,7 @@ const createFakeGitPort = ({
 } = {}): GitPort =>
   ({
     isGitRepository: () => Effect.succeed(isRepository),
+    getRepositoryRoot: () => Effect.succeed(repositoryRoot),
     listFiles: () => Effect.succeed(files),
     getStatus: () => Effect.succeed(statuses),
     getDiff: () => Effect.succeed(diffs),
@@ -254,6 +257,62 @@ describe("createWorkspaceFilesService", () => {
       mtimeMs: null,
       gitStatus: "deleted",
     });
+  });
+
+  test("normalizes repository-relative changes to a nested workspace root", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo/packages/host": { isDirectory: true },
+          "/repo/packages/host/src/status.ts": {
+            isDirectory: false,
+            isFile: true,
+            size: 12,
+            mtimeMs: 10,
+          },
+          "/repo/packages/host/src/target.ts": {
+            isDirectory: false,
+            isFile: true,
+            size: 18,
+            mtimeMs: 20,
+          },
+        },
+      }),
+      createFakeGitPort({
+        repositoryRoot: "/repo",
+        files: ["src/status.ts", "src/target.ts"],
+        statuses: [
+          { path: "packages/host/src/status.ts", status: "modified", staged: false },
+          { path: "packages/frontend/src/outside.ts", status: "modified", staged: false },
+        ],
+        changedFiles: [
+          { path: "packages/host/src/target.ts", status: "modified" },
+          { path: "packages/frontend/src/outside.ts", status: "modified" },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(
+      service.listTree({ rootPath: "/repo/packages/host", targetBranch: "origin/main" }),
+    );
+
+    expect(tree.entries).toContainEqual({
+      path: "src/status.ts",
+      kind: "file",
+      size: 12,
+      mtimeMs: 10,
+      gitStatus: "modified",
+    });
+    expect(tree.entries).toContainEqual({
+      path: "src/target.ts",
+      kind: "file",
+      size: 18,
+      mtimeMs: 20,
+      gitStatus: "modified",
+    });
+    expect(tree.entries.map((entry) => entry.path)).not.toContain(
+      "packages/frontend/src/outside.ts",
+    );
   });
 
   test("reads a contained text file", async () => {

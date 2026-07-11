@@ -113,6 +113,21 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         return result.ok && result.stdout.trim() === "true";
       });
     },
+    getRepositoryRoot(workingDirectory) {
+      return Effect.gen(function* () {
+        const output = yield* runGit(runner, workingDirectory, ["rev-parse", "--show-toplevel"]);
+        const repositoryRoot = output.trim();
+        if (!repositoryRoot) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "git.rev-parse.show-toplevel",
+              message: "Git returned an empty repository root.",
+            }),
+          );
+        }
+        return repositoryRoot;
+      });
+    },
     shareGitCommonDirectory(repoPath, workingDir) {
       return Effect.gen(function* () {
         const [repoCommonDir, workingCommonDir] = yield* Effect.all([

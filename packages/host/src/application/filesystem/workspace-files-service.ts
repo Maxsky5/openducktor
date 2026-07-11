@@ -139,6 +139,20 @@ const isContainedPath = (
   return relative === "" || (firstSegment !== ".." && !isAbsolutePathLike(relative));
 };
 
+const toWorkspaceRelativeGitPath = (
+  filesystem: FilesystemPort,
+  repositoryRoot: string,
+  workspaceRoot: string,
+  repositoryRelativePath: string,
+): string | null => {
+  const absolutePath = filesystem.join(repositoryRoot, repositoryRelativePath);
+  if (!isContainedPath(filesystem, workspaceRoot, absolutePath)) {
+    return null;
+  }
+  const relativePath = filesystem.relative(workspaceRoot, absolutePath);
+  return relativePath.replaceAll("\\", "/");
+};
+
 const canonicalizeContainedFile = (
   filesystem: FilesystemPort,
   canonicalRoot: string,
@@ -256,6 +270,17 @@ export const createWorkspaceFilesService = (
     return Effect.gen(function* () {
       const canonicalRoot = yield* canonicalizeRoot(filesystem, input.rootPath);
       const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot);
+      const repositoryRoot = yield* gitPort.getRepositoryRoot(canonicalRoot).pipe(
+        Effect.mapError((cause) =>
+          toHostValidationError(
+            cause,
+            `Unable to resolve Git repository root for '${canonicalRoot}'.`,
+            {
+              rootPath: canonicalRoot,
+            },
+          ),
+        ),
+      );
       const targetChanges = input.targetBranch
         ? yield* gitPort.listChangedFiles(canonicalRoot, input.targetBranch).pipe(
             Effect.mapError((cause) =>
@@ -281,22 +306,40 @@ export const createWorkspaceFilesService = (
       const filePathSet = new Set(materializedFilePaths);
       const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
       for (const change of targetChanges) {
-        const normalizedStatus = yield* normalizeGitStatus(change.status);
-        if (normalizedStatus !== "deleted" && !materializedFilePaths.has(change.path)) {
+        const workspacePath = toWorkspaceRelativeGitPath(
+          filesystem,
+          repositoryRoot,
+          canonicalRoot,
+          change.path,
+        );
+        if (!workspacePath) {
           continue;
         }
-        filePathSet.add(change.path);
+        const normalizedStatus = yield* normalizeGitStatus(change.status);
+        if (normalizedStatus !== "deleted" && !materializedFilePaths.has(workspacePath)) {
+          continue;
+        }
+        filePathSet.add(workspacePath);
         gitStatusByPath.set(
-          change.path,
-          mergeGitStatus(gitStatusByPath.get(change.path), normalizedStatus),
+          workspacePath,
+          mergeGitStatus(gitStatusByPath.get(workspacePath), normalizedStatus),
         );
       }
       for (const status of statuses) {
-        const normalizedStatus = yield* normalizeGitStatus(status.status);
-        filePathSet.add(status.path);
-        gitStatusByPath.set(
+        const workspacePath = toWorkspaceRelativeGitPath(
+          filesystem,
+          repositoryRoot,
+          canonicalRoot,
           status.path,
-          mergeGitStatus(gitStatusByPath.get(status.path), normalizedStatus),
+        );
+        if (!workspacePath) {
+          continue;
+        }
+        const normalizedStatus = yield* normalizeGitStatus(status.status);
+        filePathSet.add(workspacePath);
+        gitStatusByPath.set(
+          workspacePath,
+          mergeGitStatus(gitStatusByPath.get(workspacePath), normalizedStatus),
         );
       }
       const filePaths = [...filePathSet].sort(compareWorkspacePaths);
