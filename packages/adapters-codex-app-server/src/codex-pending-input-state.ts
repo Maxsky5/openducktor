@@ -88,7 +88,11 @@ export class CodexPendingInputState {
     return this.pendingEntry(this.pendingQuestionsByRequestKey, "question", requestId, runtimeId);
   }
 
-  requireApprovalForSession(requestId: string, externalSessionId: string): PendingApprovalEntry {
+  requireApprovalForSession(
+    requestId: string,
+    externalSessionId: string,
+    runtimeId?: string,
+  ): PendingApprovalEntry {
     const approval =
       this.pendingEntryForSession(
         this.pendingApprovalsByRequestKey,
@@ -97,7 +101,8 @@ export class CodexPendingInputState {
         "approval",
         requestId,
         externalSessionId,
-      ) ?? this.pendingEntry(this.pendingApprovalsByRequestKey, "approval", requestId);
+        runtimeId,
+      ) ?? this.pendingEntry(this.pendingApprovalsByRequestKey, "approval", requestId, runtimeId);
     if (!approval) {
       throw new Error(`Unknown Codex approval request '${requestId}'.`);
     }
@@ -111,7 +116,11 @@ export class CodexPendingInputState {
     return approval;
   }
 
-  requireQuestionForSession(requestId: string, externalSessionId: string): PendingQuestionEntry {
+  requireQuestionForSession(
+    requestId: string,
+    externalSessionId: string,
+    runtimeId?: string,
+  ): PendingQuestionEntry {
     const question =
       this.pendingEntryForSession(
         this.pendingQuestionsByRequestKey,
@@ -120,7 +129,8 @@ export class CodexPendingInputState {
         "question",
         requestId,
         externalSessionId,
-      ) ?? this.pendingEntry(this.pendingQuestionsByRequestKey, "question", requestId);
+        runtimeId,
+      ) ?? this.pendingEntry(this.pendingQuestionsByRequestKey, "question", requestId, runtimeId);
     if (!question) {
       throw new Error(`Unknown Codex question request '${requestId}'.`);
     }
@@ -323,6 +333,9 @@ export class CodexPendingInputState {
       this.deleteSessionRequestId(mirrorIndex, requestKey);
     }
     for (const requestKey of mirroredRequestKeys) {
+      if (activeTurnsByRequestKey.get(requestKey)?.session.threadId === externalSessionId) {
+        activeTurnsByRequestKey.delete(requestKey);
+      }
       this.deleteSessionRequestId(mirrorIndex, requestKey);
     }
   }
@@ -464,6 +477,7 @@ export class CodexPendingInputState {
     kind: "approval" | "question",
     requestId: string,
     externalSessionId: string,
+    runtimeId?: string,
   ): Entry | undefined {
     const requestKeys = new Set([
       ...(ownerIndex.get(externalSessionId) ?? []),
@@ -472,7 +486,10 @@ export class CodexPendingInputState {
     const matches = [...requestKeys]
       .map((requestKey) => entries.get(requestKey))
       .filter(
-        (entry): entry is Entry => entry !== undefined && entry.request.requestId === requestId,
+        (entry): entry is Entry =>
+          entry !== undefined &&
+          entry.request.requestId === requestId &&
+          (!runtimeId || entry.runtimeId === runtimeId),
       );
     if (matches.length > 1) {
       throw new Error(

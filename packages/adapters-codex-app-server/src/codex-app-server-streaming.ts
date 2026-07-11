@@ -58,7 +58,6 @@ export type CompletedAgentMessage = {
 
 export type CodexStreamingContext = {
   subscribeEvents: boolean;
-  bufferedNotificationsByThreadId: Map<string, CodexNotificationRecord[]>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   startedItemTimestampsByKey: Map<string, number>;
   syntheticUserMessageTextsByThreadId: Map<string, string[]>;
@@ -70,7 +69,8 @@ export type CodexStreamingContext = {
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
-  bufferNotification(notification: CodexNotificationRecord): void;
+  takeBufferedNotifications(threadId: string, runtimeId: string): CodexNotificationRecord[];
+  bufferNotification(runtimeId: string, notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
 };
 
@@ -549,8 +549,10 @@ export const handleCodexPendingNotifications = async (
   session: CodexSessionState,
   notificationsFromBatch?: CodexNotificationRecord[],
 ): Promise<void> => {
-  const bufferedNotifications = context.bufferedNotificationsByThreadId.get(session.threadId) ?? [];
-  context.bufferedNotificationsByThreadId.delete(session.threadId);
+  const bufferedNotifications = context.takeBufferedNotifications(
+    session.threadId,
+    session.runtimeId,
+  );
   const takenNotifications = notificationsFromBatch ?? [];
   const notifications = [...bufferedNotifications, ...takenNotifications];
   for (const notification of notifications) {
@@ -564,7 +566,7 @@ export const handleCodexPendingNotifications = async (
       );
     }
     if (notificationThreadId !== session.threadId) {
-      context.bufferNotification(notification);
+      context.bufferNotification(session.runtimeId, notification);
       continue;
     }
     const timestamp = timestampFromCodexNotification(notification);

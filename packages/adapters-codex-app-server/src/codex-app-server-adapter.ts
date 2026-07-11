@@ -565,12 +565,14 @@ export class CodexAppServerAdapter
       await this.ensureSessionState(input);
     }
     const session = this.localSessions.get(input.externalSessionId);
-    if (session) {
-      applyRuntimeContextToSession(session, input);
+    if (!session) {
+      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
+    applyRuntimeContextToSession(session, input);
     const pending = this.pendingInput.requireApprovalForSession(
       input.requestId,
       input.externalSessionId,
+      session.runtimeId,
     );
     const supportedOutcomes = pending.request.supportedReplyOutcomes ?? ["approve_once", "reject"];
     if (!supportedOutcomes.includes(input.outcome)) {
@@ -610,12 +612,14 @@ export class CodexAppServerAdapter
       await this.ensureSessionState(input);
     }
     const session = this.localSessions.get(input.externalSessionId);
-    if (session) {
-      applyRuntimeContextToSession(session, input);
+    if (!session) {
+      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
+    applyRuntimeContextToSession(session, input);
     const pending = this.pendingInput.requireQuestionForSession(
       input.requestId,
       input.externalSessionId,
+      session.runtimeId,
     );
     if (input.answers.length !== pending.questionIds.length) {
       throw new Error(

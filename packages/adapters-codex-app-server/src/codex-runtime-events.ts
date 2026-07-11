@@ -38,12 +38,16 @@ export type BufferedCodexRuntimeEvent =
     };
 
 export class CodexRuntimeEventBuffer {
-  readonly notificationsByThreadId = new Map<string, CodexNotificationRecord[]>();
+  readonly notificationsByRuntimeId = new Map<string, Map<string, CodexNotificationRecord[]>>();
   readonly serverRequestsByRuntimeId = new Map<string, Map<string, BufferedCodexServerRequest[]>>();
 
-  takeNotifications(threadId: string): CodexNotificationRecord[] {
-    const notifications = this.notificationsByThreadId.get(threadId) ?? [];
-    this.notificationsByThreadId.delete(threadId);
+  takeNotifications(threadId: string, runtimeId: string): CodexNotificationRecord[] {
+    const notificationsByThreadId = this.notificationsByRuntimeId.get(runtimeId);
+    const notifications = notificationsByThreadId?.get(threadId) ?? [];
+    notificationsByThreadId?.delete(threadId);
+    if (notificationsByThreadId?.size === 0) {
+      this.notificationsByRuntimeId.delete(runtimeId);
+    }
     return notifications;
   }
 
@@ -85,22 +89,25 @@ export class CodexRuntimeEventBuffer {
   }
 
   clearSession(threadId: string, runtimeId?: string): void {
-    this.notificationsByThreadId.delete(threadId);
     if (runtimeId) {
+      this.takeNotifications(threadId, runtimeId);
       this.takeServerRequestsForRuntime(threadId, runtimeId);
       return;
+    }
+    for (const runtime of [...this.notificationsByRuntimeId.keys()]) {
+      this.takeNotifications(threadId, runtime);
     }
     for (const runtime of [...this.serverRequestsByRuntimeId.keys()]) {
       this.takeServerRequestsForRuntime(threadId, runtime);
     }
   }
 
-  bufferNotification(notification: CodexNotificationRecord): void {
+  bufferNotification(runtimeId: string, notification: CodexNotificationRecord): void {
     const threadId = extractThreadIdFromParams(notification.params);
     if (!threadId) {
       return;
     }
-    this.bufferNotificationForThread(threadId, notification);
+    this.bufferNotificationForThread(threadId, runtimeId, notification);
   }
 
   bufferRuntimeStreamEvent(
@@ -109,7 +116,7 @@ export class CodexRuntimeEventBuffer {
   ): BufferedCodexRuntimeEvent {
     if (event.kind === "notification") {
       const notification = parseNotificationRecord(event.message, event.receivedAt);
-      this.bufferNotificationForThread(threadId, notification);
+      this.bufferNotificationForThread(threadId, event.runtimeId, notification);
       return { kind: "notification", notification };
     }
 
@@ -126,10 +133,17 @@ export class CodexRuntimeEventBuffer {
     };
   }
 
-  private bufferNotificationForThread(threadId: string, notification: CodexNotificationRecord) {
-    const buffered = this.notificationsByThreadId.get(threadId) ?? [];
+  private bufferNotificationForThread(
+    threadId: string,
+    runtimeId: string,
+    notification: CodexNotificationRecord,
+  ) {
+    const notificationsByThreadId = this.notificationsByRuntimeId.get(runtimeId) ?? new Map();
+    const buffered = notificationsByThreadId.get(threadId) ?? [];
     buffered.push(notification);
-    this.trimAndStore(this.notificationsByThreadId, threadId, buffered);
+    this.trimAndStore(notificationsByThreadId, threadId, buffered);
+    this.notificationsByRuntimeId.set(runtimeId, notificationsByThreadId);
+    trimOldestMapKeys(this.notificationsByRuntimeId, MAX_CODEX_BUFFERED_THREAD_COUNT);
   }
 
   private bufferServerRequestForThread(

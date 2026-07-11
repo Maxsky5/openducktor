@@ -86,9 +86,35 @@ describe("CodexPendingInputState", () => {
         subagentCorrelationKey: "codex-subagent:parent-two:child-thread",
       },
     });
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: questionRequest("0"),
+      questionIds: ["question-runtime-1"],
+      input: { requestId: "0" },
+    });
+    pendingInput.addQuestion({
+      runtimeId: "runtime-2",
+      threadId: "child-thread",
+      request: questionRequest("0"),
+      questionIds: ["question-runtime-2"],
+      input: { requestId: "0" },
+    });
 
     expect(pendingInput.requireApprovalForSession("0", "parent-one").runtimeId).toBe("runtime-1");
     expect(pendingInput.requireApprovalForSession("0", "parent-two").runtimeId).toBe("runtime-2");
+    expect(pendingInput.requireApprovalForSession("0", "child-thread", "runtime-1").runtimeId).toBe(
+      "runtime-1",
+    );
+    expect(pendingInput.requireApprovalForSession("0", "child-thread", "runtime-2").runtimeId).toBe(
+      "runtime-2",
+    );
+    expect(pendingInput.requireQuestionForSession("0", "child-thread", "runtime-1").runtimeId).toBe(
+      "runtime-1",
+    );
+    expect(pendingInput.requireQuestionForSession("0", "child-thread", "runtime-2").runtimeId).toBe(
+      "runtime-2",
+    );
     expect(pendingInput.pendingApprovalsForSession("child-thread", "runtime-1")).toEqual([
       approvalRequest("0"),
     ]);
@@ -287,6 +313,45 @@ describe("CodexPendingInputState", () => {
     pendingInput.clearSession("parent-thread");
 
     expect(pendingInput.resolveQuestion("question-1")).toBe(activeTurn);
+  });
+
+  test("clearing a parent mirror removes its stale active turn bindings", () => {
+    const pendingInput = new CodexPendingInputState();
+    const route = {
+      parentExternalSessionId: "parent-thread",
+      childExternalSessionId: "child-thread",
+      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
+    };
+    const activeParentTurn = {
+      session: { threadId: "parent-thread" },
+    } as unknown as ActiveCodexTurn;
+
+    pendingInput.addApproval({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: approvalRequest("approval-1"),
+      route,
+    });
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "child-thread",
+      request: questionRequest("question-1"),
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+      route,
+    });
+
+    pendingInput.bindActiveTurn("parent-thread", activeParentTurn);
+    pendingInput.clearSession("parent-thread", "runtime-1");
+
+    expect(pendingInput.pendingApprovalsForSession("child-thread", "runtime-1")).toEqual([
+      approvalRequest("approval-1"),
+    ]);
+    expect(pendingInput.pendingQuestionsForSession("child-thread", "runtime-1")).toEqual([
+      questionRequest("question-1"),
+    ]);
+    expect(pendingInput.resolveApproval("approval-1", "runtime-1")).toBeUndefined();
+    expect(pendingInput.resolveQuestion("question-1", "runtime-1")).toBeUndefined();
   });
 
   test("clears all pending input for one session only", () => {

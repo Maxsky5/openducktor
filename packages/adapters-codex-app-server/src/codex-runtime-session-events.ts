@@ -992,7 +992,6 @@ export class CodexRuntimeSessionEvents {
   private streamingContext(): CodexStreamingContext {
     return {
       subscribeEvents: Boolean(this.deps.subscribeEvents),
-      bufferedNotificationsByThreadId: this.runtimeEventBuffer.notificationsByThreadId,
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       startedItemTimestampsByKey: this.startedItemTimestampsByKey,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
@@ -1007,8 +1006,10 @@ export class CodexRuntimeSessionEvents {
         this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
-      bufferNotification: (notification) =>
-        this.runtimeEventBuffer.bufferNotification(notification),
+      takeBufferedNotifications: (threadId, runtimeId) =>
+        this.runtimeEventBuffer.takeNotifications(threadId, runtimeId),
+      bufferNotification: (runtimeId, notification) =>
+        this.runtimeEventBuffer.bufferNotification(runtimeId, notification),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
     };
   }
@@ -1052,7 +1053,7 @@ export class CodexRuntimeSessionEvents {
     const tokenUsageByTurnId = new Map<string, CodexTokenUsageTotals>();
 
     const collectOnce = async (): Promise<void> => {
-      const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
+      const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId, runtimeId);
       const takenEvents = await this.deps.takeBufferedEvents(runtimeId);
       const resolvedRequestKeys = this.resolvedServerRequestBatchKeys(takenEvents);
       const takenNotifications: CodexNotificationRecord[] = [];
@@ -1097,7 +1098,7 @@ export class CodexRuntimeSessionEvents {
           continue;
         }
         if (!this.deps.subscribeEvents) {
-          this.runtimeEventBuffer.bufferNotification(notification);
+          this.runtimeEventBuffer.bufferNotification(runtimeId, notification);
         }
       }
     };
