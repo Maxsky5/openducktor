@@ -3,7 +3,6 @@ import { type PullRequestReviewContext, repoConfigSchema } from "@openducktor/co
 import { Effect } from "effect";
 import type { GithubPullRequestReviewProvider } from "../../application/pull-requests/github-pull-request-review-provider";
 import type { GithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
-import type { GitPort } from "../../ports/git-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createGithubPullRequestReviewAdapter } from "./github-pull-request-review-adapter";
 
@@ -25,15 +24,7 @@ const loadedContext: PullRequestReviewContext = {
 };
 
 describe("createGithubPullRequestReviewAdapter", () => {
-  test("uses the linked pull request without resolving the current branch", async () => {
-    const getCurrentBranch = mock(() =>
-      Effect.succeed({ name: "feature/other", detached: false, revision: "abc123" }),
-    );
-    const gitPort = {
-      getCurrentBranch,
-      listRemotes: () =>
-        Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
-    } as unknown as GitPort;
+  test("uses the linked pull request without requiring a local Git remote", async () => {
     const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
       runCommandAllowFailure: () =>
         Effect.succeed({
@@ -54,7 +45,6 @@ describe("createGithubPullRequestReviewAdapter", () => {
     const read = mock(() => Effect.succeed(loadedContext));
     const reviewProvider: GithubPullRequestReviewProvider = { read };
     const adapter = createGithubPullRequestReviewAdapter({
-      gitPort,
       githubDependencies,
       reviewProvider,
     });
@@ -88,14 +78,10 @@ describe("createGithubPullRequestReviewAdapter", () => {
     );
 
     expect(context).toBe(loadedContext);
-    expect(getCurrentBranch).not.toHaveBeenCalled();
     expect(read).toHaveBeenCalledWith({
       dependencies: githubDependencies,
       repoPath: "/repo",
-      context: {
-        repository: { host: "github.com", owner: "openai", name: "openducktor" },
-        remoteName: "origin",
-      },
+      repository: { host: "github.com", owner: "openai", name: "openducktor" },
       pullRequestNumber: 42,
     });
   });

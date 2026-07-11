@@ -165,6 +165,42 @@ describe("useAgentStudioRightPanelBridge", () => {
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(false);
       expect(state.rightPanelBridge).toBeNull();
+      expect(state.selectedFileRefresh).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps selected file refresh active when the panel is closed", async () => {
+    const selectedFile = {
+      rootPath: "/repo/worktrees/task-1",
+      relativePath: "src/index.ts",
+    };
+    const harness = createHookHarness(
+      createArgs({
+        selectedFile,
+        panel: createPanelState({
+          tabs: [{ id: "file_explorer", label: "File explorer" }],
+          activeTabId: "file_explorer",
+          isPanelOpen: false,
+          onActiveTabChange: mock(() => {}),
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const state = harness.getLatest();
+      expect(state.isRightPanelVisible).toBe(false);
+      expect(state.rightPanelBridge).toBeNull();
+      expect(state.selectedFileRefresh).toEqual({
+        selectedFile,
+        selectedView: {
+          role: "build",
+          loadedSession: expect.objectContaining({ externalSessionId: "session-1" }),
+        },
+      });
     } finally {
       await harness.unmount();
     }

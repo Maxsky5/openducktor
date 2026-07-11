@@ -255,7 +255,6 @@ export const createNodeEffectHostCommandRouter = (
   const pullRequestReviewService = createPullRequestReviewService({
     providers: [
       createGithubPullRequestReviewAdapter({
-        gitPort: git,
         githubDependencies: githubCommandDependencies,
       }),
     ],

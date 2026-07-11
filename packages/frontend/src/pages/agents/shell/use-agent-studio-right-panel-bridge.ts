@@ -65,6 +65,11 @@ export type AgentStudioBuildWorktreeRefreshModel = Pick<
   };
 };
 
+export type AgentStudioSelectedFileRefreshModel = {
+  selectedFile: NonNullable<UseAgentsPageRightPanelModelArgs["selectedFile"]>;
+  selectedView: AgentStudioBuildWorktreeRefreshModel["selectedView"];
+};
+
 export type AgentStudioRightPanelBridgeModel = {
   buildWorktreeRefresh: AgentStudioBuildWorktreeRefreshModel;
   rightPanel: AgentStudioRightPanelRuntimeModel;
@@ -73,6 +78,7 @@ export type AgentStudioRightPanelBridgeModel = {
 export type AgentStudioRightPanelShellModel = {
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
+  selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
 };
 
 type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
@@ -207,8 +213,23 @@ export function useAgentStudioRightPanelBridge({
     tabs,
   ]);
 
+  const selectedFileRefresh = useMemo<AgentStudioSelectedFileRefreshModel | null>(() => {
+    if (isPanelOpen || !selectedFile) {
+      return null;
+    }
+
+    return {
+      selectedFile,
+      selectedView: {
+        role: selection.view.role,
+        loadedSession: selection.view.selectedSession.loadedSession,
+      },
+    };
+  }, [isPanelOpen, selectedFile, selection.view]);
+
   return {
     isRightPanelVisible,
     rightPanelBridge,
+    selectedFileRefresh,
   };
 }

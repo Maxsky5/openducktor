@@ -286,8 +286,8 @@ const probeResolvedGithubAuthOrThrow = (
       }),
     );
   });
-export const requireGithubPullRequestContext = (
-  dependencies: GithubRepositoryDependencies,
+export const requireGithubPullRequestReadRepository = (
+  dependencies: GithubCommandDependencies,
   repoPath: string,
   repoConfig: RepoConfig,
 ) =>
@@ -314,6 +314,20 @@ export const requireGithubPullRequestContext = (
     }
     const githubCommand = yield* resolveRequiredGithubCommandDependencies(dependencies, repoPath);
     yield* probeResolvedGithubAuthOrThrow(githubCommand, repository.host);
+    return repository;
+  });
+
+export const requireGithubPullRequestContext = (
+  dependencies: GithubRepositoryDependencies,
+  repoPath: string,
+  repoConfig: RepoConfig,
+) =>
+  Effect.gen(function* () {
+    const repository = yield* requireGithubPullRequestReadRepository(
+      dependencies,
+      repoPath,
+      repoConfig,
+    );
     const remoteName = yield* requireSingleGithubRemoteName(
       dependencies.gitPort,
       repoPath,

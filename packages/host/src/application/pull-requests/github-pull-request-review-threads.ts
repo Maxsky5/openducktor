@@ -1,9 +1,8 @@
-import type { PullRequestReviewComment } from "@openducktor/contracts";
+import type { GitProviderRepository, PullRequestReviewComment } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import {
   type GithubCommandDependencies,
-  type GithubPullRequestContext,
   runGithubCommand,
 } from "../tasks/support/github-pull-requests";
 
@@ -316,7 +315,7 @@ const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadComme
 type GithubReviewThreadsReadInput = {
   dependencies: GithubCommandDependencies;
   repoPath: string;
-  context: GithubPullRequestContext;
+  repository: GitProviderRepository;
   pullRequestNumber: number;
 };
 
@@ -325,7 +324,7 @@ const runReviewGraphql = (
   query: string,
   variables: readonly { name: string; value: string | number }[],
 ) =>
-  runGithubCommand(input.dependencies, input.repoPath, input.context.repository.host, [
+  runGithubCommand(input.dependencies, input.repoPath, input.repository.host, [
     "api",
     "graphql",
     "-f",
@@ -351,8 +350,8 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
 
     do {
       const variables: { name: string; value: string | number }[] = [
-        { name: "owner", value: input.context.repository.owner },
-        { name: "name", value: input.context.repository.name },
+        { name: "owner", value: input.repository.owner },
+        { name: "name", value: input.repository.name },
         { name: "number", value: input.pullRequestNumber },
       ];
       if (threadsCursor) {

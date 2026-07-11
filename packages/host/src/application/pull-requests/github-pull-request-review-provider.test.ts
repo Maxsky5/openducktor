@@ -25,6 +25,7 @@ const createDependencies = ({
   checksResponse?: {
     ok: boolean;
     stdout: unknown;
+    rawStdout?: string;
     stderr?: string;
     exitCode?: number | null;
   };
@@ -58,7 +59,7 @@ const createDependencies = ({
         if (checksResponse) {
           return Effect.succeed({
             ok: checksResponse.ok,
-            stdout: JSON.stringify(checksResponse.stdout),
+            stdout: checksResponse.rawStdout ?? JSON.stringify(checksResponse.stdout),
             stderr: checksResponse.stderr ?? "",
             exitCode: checksResponse.exitCode,
           });
@@ -337,10 +338,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       provider.read({
         dependencies: createDependencies(),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
       }),
     );
@@ -395,10 +393,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       provider.read({
         dependencies: createDependencies({ commands }),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
       }),
     );
@@ -433,10 +428,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       provider.read({
         dependencies: createDependencies({ includeReviewId: false }),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
       }),
     );
@@ -463,10 +455,7 @@ describe("createGithubPullRequestReviewProvider", () => {
           reviewThreadNodes: fairnestPullRequestReviewThreadNodes,
         }),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "Maxsky5", name: "fairnest" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "Maxsky5", name: "fairnest" },
         pullRequestNumber: 128,
       }),
     );
@@ -624,10 +613,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       provider.read({
         dependencies: createDependencies({ commands, reviewThreadResponse }),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
       }),
     );
@@ -653,10 +639,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       provider.read({
         dependencies: createDependencies({ commandActivity, commandDelayMs: 20 }),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
       }),
     );
@@ -685,10 +668,7 @@ describe("createGithubPullRequestReviewProvider", () => {
           },
         }),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
       }),
     );
@@ -703,6 +683,34 @@ describe("createGithubPullRequestReviewProvider", () => {
     ]);
   });
 
+  test("loads an empty check list when gh reports no checks", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          checksResponse: {
+            ok: false,
+            exitCode: 1,
+            stdout: [],
+            rawStdout: "",
+            stderr: "no checks reported on the 'feature/review' branch",
+          },
+        }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(context.aggregateStatus).toBe("unknown");
+    expect(context.checks).toEqual([]);
+  });
+
   test("returns malformed review contexts through the typed error channel", async () => {
     const provider = createGithubPullRequestReviewProvider();
     const malformedView = {
@@ -715,10 +723,7 @@ describe("createGithubPullRequestReviewProvider", () => {
         .read({
           dependencies: createDependencies({ pullRequestViewResponse: malformedView }),
           repoPath: "/repo",
-          context: {
-            repository: { host: "github.com", owner: "openai", name: "openducktor" },
-            remoteName: "origin",
-          },
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
         })
         .pipe(Effect.either),
@@ -751,10 +756,7 @@ describe("createGithubPullRequestReviewProvider", () => {
           },
         }),
         repoPath: "/repo",
-        context: {
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-          remoteName: "origin",
-        },
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
       }),
     );
@@ -782,10 +784,7 @@ describe("createGithubPullRequestReviewProvider", () => {
             },
           }),
           repoPath: "/repo",
-          context: {
-            repository: { host: "github.com", owner: "openai", name: "openducktor" },
-            remoteName: "origin",
-          },
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
         }),
       ),

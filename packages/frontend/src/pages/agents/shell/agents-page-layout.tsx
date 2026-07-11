@@ -11,8 +11,12 @@ import {
   AgentsPageModalContent,
   type AgentsPageModalContentModel,
 } from "./agents-page-modal-content";
+import { AgentsPageSelectedFileRefreshRuntime } from "./agents-page-right-panel-runtime";
 import { AgentsPageShell } from "./agents-page-shell";
-import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
+import type {
+  AgentStudioRightPanelBridgeModel,
+  AgentStudioSelectedFileRefreshModel,
+} from "./use-agent-studio-right-panel-bridge";
 
 const PANEL_CONTAINMENT_STYLE = {
   contain: "layout paint",
@@ -135,6 +139,7 @@ export type AgentsPageLayoutModel = {
   >["model"];
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
+  selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
 };
 
@@ -159,6 +164,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     taskExecutionSelectedFilePreviewModel,
     isRightPanelVisible,
     rightPanelBridge,
+    selectedFileRefresh,
     modalContent,
   } = model;
 
@@ -215,17 +221,22 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   );
 
   return (
-    <AgentsPageShell
-      activeWorkspace={activeWorkspace}
-      navigationPersistenceError={navigationPersistenceError}
-      chatSettingsLoadError={chatSettingsLoadError}
-      activeTabValue={activeTabValue}
-      onRetryNavigationPersistence={onRetryNavigationPersistence}
-      onRetryChatSettingsLoad={onRetryChatSettingsLoad}
-      onTabValueChange={onTabValueChange}
-      taskTabs={taskTabsContent}
-      workspace={workspaceContent}
-      modalContent={modalContentElement}
-    />
+    <>
+      {selectedFileRefresh ? (
+        <AgentsPageSelectedFileRefreshRuntime {...selectedFileRefresh} />
+      ) : null}
+      <AgentsPageShell
+        activeWorkspace={activeWorkspace}
+        navigationPersistenceError={navigationPersistenceError}
+        chatSettingsLoadError={chatSettingsLoadError}
+        activeTabValue={activeTabValue}
+        onRetryNavigationPersistence={onRetryNavigationPersistence}
+        onRetryChatSettingsLoad={onRetryChatSettingsLoad}
+        onTabValueChange={onTabValueChange}
+        taskTabs={taskTabsContent}
+        workspace={workspaceContent}
+        modalContent={modalContentElement}
+      />
+    </>
   );
 }

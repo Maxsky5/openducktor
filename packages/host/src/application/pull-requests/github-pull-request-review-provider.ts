@@ -1,4 +1,5 @@
 import {
+  type GitProviderRepository,
   type PullRequestReviewAggregateStatus,
   type PullRequestReviewCheck,
   type PullRequestReviewCheckConclusion,
@@ -12,10 +13,7 @@ import {
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import { combinedCommandOutput } from "../tasks/support/github-pull-request-model";
-import type {
-  GithubCommandDependencies,
-  GithubPullRequestContext,
-} from "../tasks/support/github-pull-requests";
+import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
 import { runGithubRepositoryCommand } from "../tasks/support/github-pull-requests";
 import { runGithubRepositoryCommandAllowFailure } from "../tasks/support/github-repository-command";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
@@ -64,7 +62,7 @@ type GithubPullViewPayload = {
 type GithubPullRequestReviewReadInput = {
   dependencies: GithubCommandDependencies;
   repoPath: string;
-  context: GithubPullRequestContext;
+  repository: GitProviderRepository;
   pullRequestNumber: number;
 };
 
@@ -73,6 +71,15 @@ export type GithubPullRequestReviewProvider = {
     input: GithubPullRequestReviewReadInput,
   ): Effect.Effect<PullRequestReviewContext, HostValidationError>;
 };
+
+const isNoChecksReported = (result: {
+  exitCode?: number | null;
+  stdout: string;
+  stderr: string;
+}): boolean =>
+  result.exitCode === 1 &&
+  result.stdout.trim().length === 0 &&
+  result.stderr.toLowerCase().includes("no checks reported");
 
 const toNullableString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value : null;
@@ -332,7 +339,7 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
     return Effect.gen(function* () {
       const [pullViewPayload, checksPayload, reviewThreads] = yield* Effect.all(
         [
-          runGithubRepositoryCommand(input.dependencies, input.repoPath, input.context.repository, [
+          runGithubRepositoryCommand(input.dependencies, input.repoPath, input.repository, [
             "pr",
             "view",
             String(input.pullRequestNumber),
@@ -352,7 +359,7 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
           runGithubRepositoryCommandAllowFailure(
             input.dependencies,
             input.repoPath,
-            input.context.repository,
+            input.repository,
             [
               "pr",
               "checks",
@@ -364,6 +371,9 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             Effect.flatMap((result) => {
               if (result.ok || result.exitCode === 8) {
                 return Effect.succeed(result.stdout);
+              }
+              if (isNoChecksReported(result)) {
+                return Effect.succeed("[]");
               }
               return Effect.fail(
                 new HostValidationError({

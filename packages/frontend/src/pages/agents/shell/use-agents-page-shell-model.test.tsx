@@ -537,6 +537,7 @@ const registerModuleMocks = (): void => {
           onGitConflictQuickActionContextChange: mock(() => {}),
         },
       } satisfies AgentStudioRightPanelBridgeModel,
+      selectedFileRefresh: null,
     }),
   }));
 };

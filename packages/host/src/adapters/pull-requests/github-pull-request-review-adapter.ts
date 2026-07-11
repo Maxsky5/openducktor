@@ -7,12 +7,9 @@ import {
 import {
   GITHUB_PROVIDER_ID,
   type GithubCommandDependencies,
-  type GithubRepositoryDependencies,
-  githubProviderStatus,
-  requireGithubPullRequestContext,
+  requireGithubPullRequestReadRepository,
 } from "../../application/tasks/support/github-pull-requests";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
 import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
 
 const unavailable = (reason: string) =>
@@ -23,19 +20,12 @@ const unavailable = (reason: string) =>
   });
 
 export const createGithubPullRequestReviewAdapter = ({
-  gitPort,
   githubDependencies,
   reviewProvider = createGithubPullRequestReviewProvider(),
 }: {
-  gitPort: GitPort;
   githubDependencies: GithubCommandDependencies;
   reviewProvider?: GithubPullRequestReviewProvider;
 }): PullRequestReviewProviderPort => {
-  const repositoryDependencies: GithubRepositoryDependencies = {
-    ...githubDependencies,
-    gitPort,
-  };
-
   return {
     providerId: GITHUB_PROVIDER_ID,
     isEnabled: (repoConfig) => repoConfig.git.providers[GITHUB_PROVIDER_ID]?.enabled === true,
@@ -51,27 +41,17 @@ export const createGithubPullRequestReviewAdapter = ({
         }
 
         const repoPath = input.repoConfig.repoPath;
-        const status = yield* githubProviderStatus(
-          repositoryDependencies,
-          repoPath,
-          input.repoConfig,
+        const repositoryResult = yield* Effect.either(
+          requireGithubPullRequestReadRepository(githubDependencies, repoPath, input.repoConfig),
         );
-        if (!status.available) {
-          return unavailable(status.reason ?? "GitHub provider is unavailable.");
+        if (repositoryResult._tag === "Left") {
+          return unavailable(errorMessage(repositoryResult.left));
         }
-
-        const contextResult = yield* Effect.either(
-          requireGithubPullRequestContext(repositoryDependencies, repoPath, input.repoConfig),
-        );
-        if (contextResult._tag === "Left") {
-          return unavailable(errorMessage(contextResult.left));
-        }
-        const context = contextResult.right;
 
         return yield* reviewProvider.read({
           dependencies: githubDependencies,
           repoPath,
-          context,
+          repository: repositoryResult.right,
           pullRequestNumber: input.linkedPullRequest.number,
         });
       }).pipe(
