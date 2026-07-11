@@ -161,7 +161,6 @@ describe("settings modal content", () => {
     const snapshot = createMockSnapshot();
     const controller = {
       ...createMockController(snapshot),
-      workspaceIds: ["repo"],
       requiredWorkspaceSelectionUnresolved: true,
       requiredWorkspaceRepoPath: "/missing/repo",
     };
@@ -183,6 +182,8 @@ describe("settings modal content", () => {
 
     expect(html).toContain("/missing/repo");
     expect(html).toContain("Choose a repository explicitly or close Settings");
+    expect(html).not.toContain("Add a repository first");
+    expect(html).not.toContain("Select a repository to edit repository scripts");
   });
 
   test("renders general section with automatic Agent Studio tab setting", () => {

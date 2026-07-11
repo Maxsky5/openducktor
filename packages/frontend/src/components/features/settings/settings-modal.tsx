@@ -66,11 +66,15 @@ export function SettingsModal({
     useState<SettingsContentFocusRequest | null>(null);
   const [navigation, setNavigation] =
     useState<SettingsModalNavigationState>(INITIAL_NAVIGATION_STATE);
+  const workspaceSelectionPolicy =
+    activeDeepLinkResolution?.scope === "repository"
+      ? activeDeepLinkResolution.workspaceSelectionPolicy
+      : undefined;
   const controller = useSettingsModalController({
     open,
     shouldLoadCatalog:
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
-    workspaceSelectionPolicy: activeDeepLinkResolution?.workspaceSelectionPolicy,
+    workspaceSelectionPolicy,
   });
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
@@ -128,7 +132,11 @@ export function SettingsModal({
     setActiveDeepLinkResolution(nextDeepLinkResolution);
     if (nextDeepLinkResolution) {
       setNavigation((current) => ({ ...current, ...nextDeepLinkResolution.navigation }));
-      setContentFocusRequest(nextDeepLinkResolution.contentFocus);
+      setContentFocusRequest(
+        nextDeepLinkResolution.scope === "repository"
+          ? (nextDeepLinkResolution.contentFocus ?? null)
+          : null,
+      );
     }
     setOpen(true);
   };

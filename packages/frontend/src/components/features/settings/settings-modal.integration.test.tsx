@@ -198,6 +198,7 @@ describe("SettingsModal Agent Studio target", () => {
         ),
       ).toBeTruthy();
       expect(screen.queryByLabelText("Worktree setup script (one command per line)")).toBeNull();
+      expect(screen.queryByText("Select a repository to edit repository scripts.")).toBeNull();
 
       fireEvent.click(screen.getByRole("button", { name: "Select repository" }));
       fireEvent.click(await screen.findByText("Repo Two"));

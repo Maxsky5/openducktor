@@ -10,19 +10,32 @@ export type SettingsContentFocusRequest = {
   kind: "repository-dev-servers";
 };
 
-export type SettingsDeepLinkResolution = {
+type GlobalSettingsDeepLinkResolution = {
+  scope: "global";
   navigation: {
-    section: SettingsSectionId;
+    section: Exclude<SettingsSectionId, "repositories">;
+  };
+};
+
+type RepositorySettingsDeepLinkResolution = {
+  scope: "repository";
+  navigation: {
+    section: "repositories";
     repositorySection: RepositorySectionId;
   };
   workspaceSelectionPolicy: SettingsWorkspaceSelectionPolicy;
-  contentFocus: SettingsContentFocusRequest;
+  contentFocus?: SettingsContentFocusRequest;
 };
+
+export type SettingsDeepLinkResolution =
+  | GlobalSettingsDeepLinkResolution
+  | RepositorySettingsDeepLinkResolution;
 
 export const resolveSettingsDeepLink = (deepLink: SettingsDeepLink): SettingsDeepLinkResolution => {
   switch (deepLink.kind) {
     case "repository-dev-servers":
       return {
+        scope: "repository",
         navigation: {
           section: "repositories",
           repositorySection: "scripts",

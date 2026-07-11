@@ -9,6 +9,7 @@ describe("resolveSettingsDeepLink", () => {
     };
 
     expect(resolveSettingsDeepLink(deepLink)).toEqual({
+      scope: "repository",
       navigation: {
         section: "repositories",
         repositorySection: "scripts",
