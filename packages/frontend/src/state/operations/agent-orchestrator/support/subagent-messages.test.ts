@@ -212,4 +212,40 @@ describe("upsertSubagentMessage", () => {
     expect(messages.items[0]?.meta).not.toHaveProperty("endedAtMs");
     expect(messages.items[0]?.meta).not.toHaveProperty("error");
   });
+
+  test("keeps a restarted lifecycle running when the previous completion arrives late", () => {
+    const restarted = makeSubagentMessage({
+      correlationKey: "codex-subagent:parent-thread:child-thread",
+      externalSessionId: "child-thread",
+      status: "running",
+      startedAtMs: 300,
+    });
+    const messages = upsertSubagentMessage({
+      owner: {
+        externalSessionId: "parent-thread",
+        messages: createSessionMessagesState("parent-thread", [restarted]),
+      },
+      incomingMeta: {
+        kind: "subagent",
+        partId: "child-thread",
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        externalSessionId: "child-thread",
+        status: "error",
+        error: "Previous run failed",
+        startedAtMs: 100,
+        endedAtMs: 200,
+      },
+      timestamp: "2026-02-22T08:00:02.000Z",
+    });
+
+    expect(messages.items).toHaveLength(1);
+    expect(messages.items[0]?.meta).toMatchObject({
+      kind: "subagent",
+      externalSessionId: "child-thread",
+      status: "running",
+      startedAtMs: 300,
+    });
+    expect(messages.items[0]?.meta).not.toHaveProperty("endedAtMs");
+    expect(messages.items[0]?.meta).not.toHaveProperty("error");
+  });
 });

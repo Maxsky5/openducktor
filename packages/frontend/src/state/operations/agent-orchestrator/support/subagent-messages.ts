@@ -59,6 +59,16 @@ const isLaterSubagentRestart = (
   typeof incomingMeta.startedAtMs === "number" &&
   incomingMeta.startedAtMs > existingMeta.endedAtMs;
 
+const isPreviousRunTerminalUpdate = (
+  existingMeta: SubagentMeta | null | undefined,
+  incomingMeta: SubagentMeta,
+): boolean =>
+  existingMeta?.status === "running" &&
+  isTerminalSubagentStatus(incomingMeta.status) &&
+  typeof existingMeta.startedAtMs === "number" &&
+  typeof incomingMeta.endedAtMs === "number" &&
+  incomingMeta.endedAtMs < existingMeta.startedAtMs;
+
 export const formatSubagentContent = (meta: {
   agent?: string;
   prompt?: string;
@@ -175,9 +185,11 @@ const mergeSubagentMeta = (
   },
 ): SubagentMeta => {
   const isRestart = isLaterSubagentRestart(existingMeta, incomingMeta);
-  const status = isRestart
-    ? "running"
-    : resolveSubagentStatus(existingMeta?.status, incomingMeta.status);
+  const isPreviousRunUpdate = isPreviousRunTerminalUpdate(existingMeta, incomingMeta);
+  const status =
+    isRestart || isPreviousRunUpdate
+      ? "running"
+      : resolveSubagentStatus(existingMeta?.status, incomingMeta.status);
   const metadata =
     existingMeta?.metadata && incomingMeta.metadata
       ? { ...existingMeta.metadata, ...incomingMeta.metadata }
@@ -185,6 +197,8 @@ const mergeSubagentMeta = (
   let startedAtMs = incomingMeta.startedAtMs ?? existingMeta?.startedAtMs;
   if (isRestart) {
     startedAtMs = incomingMeta.startedAtMs;
+  } else if (isPreviousRunUpdate) {
+    startedAtMs = existingMeta?.startedAtMs;
   } else if (
     typeof existingMeta?.startedAtMs === "number" &&
     typeof incomingMeta.startedAtMs === "number"
@@ -195,15 +209,29 @@ const mergeSubagentMeta = (
   }
 
   let endedAtMs: number | undefined;
-  if (typeof existingMeta?.endedAtMs === "number" && typeof incomingMeta.endedAtMs === "number") {
+  if (isRestart || isPreviousRunUpdate) {
+    endedAtMs = undefined;
+  } else if (
+    typeof existingMeta?.endedAtMs === "number" &&
+    typeof incomingMeta.endedAtMs === "number"
+  ) {
     endedAtMs = Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs);
   } else if (isTerminalSubagentStatus(status)) {
     endedAtMs = incomingMeta.endedAtMs ?? existingMeta?.endedAtMs;
   }
   const agent = incomingMeta.agent ?? existingMeta?.agent;
   const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
-  const description = incomingMeta.description ?? existingMeta?.description;
-  const error = isRestart ? incomingMeta.error : (incomingMeta.error ?? existingMeta?.error);
+  const description = isPreviousRunUpdate
+    ? existingMeta?.description
+    : (incomingMeta.description ?? existingMeta?.description);
+  let error: string | undefined;
+  if (isRestart) {
+    error = incomingMeta.error;
+  } else if (isPreviousRunUpdate) {
+    error = existingMeta?.error;
+  } else {
+    error = incomingMeta.error ?? existingMeta?.error;
+  }
   const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
   const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
 

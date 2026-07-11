@@ -137,12 +137,12 @@ const projectCodexThreadReadToHistory = ({
             : input.externalSessionId;
         const turnModel =
           model ??
-          (turnId ? modelByTurnKey.get(codexTurnKey(input.externalSessionId, turnId)) : undefined);
+          (turnId ? modelByTurnKey.get(codexTurnKey(itemOwnerThreadId, turnId)) : undefined);
         let finalTokenUsage: CodexTokenUsageTotals | null = null;
         if (isFinalAgentMessage && turnId) {
           finalTokenUsage =
             tokenUsageByTurnId.get(turnId) ??
-            tokenUsageByTurnKey.get(codexTurnKey(input.externalSessionId, turnId)) ??
+            tokenUsageByTurnKey.get(codexTurnKey(itemOwnerThreadId, turnId)) ??
             null;
         }
         const canonicalEvents = eventMapperPipeline.runThreadItem(

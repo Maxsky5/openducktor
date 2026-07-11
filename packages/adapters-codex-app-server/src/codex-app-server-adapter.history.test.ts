@@ -155,6 +155,20 @@ describe("CodexAppServerAdapter history loading", () => {
         ],
       },
       {
+        id: "parent-final-turn",
+        startedAt: 21,
+        completedAt: 24,
+        status: "completed",
+        items: [
+          {
+            id: "parent-final-answer",
+            type: "agentMessage",
+            phase: "final_answer",
+            text: "Parent final answer",
+          },
+        ],
+      },
+      {
         id: "child-turn",
         startedAt: 30,
         completedAt: 40,
@@ -178,6 +192,18 @@ describe("CodexAppServerAdapter history loading", () => {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
         if (request.method === "thread/read") {
+          const params = request.params as { threadId?: string };
+          if (params.threadId === "parent-thread") {
+            return {
+              thread: {
+                id: "parent-thread",
+                cwd: "/repo",
+                createdAt: 1,
+                status: { type: "idle" },
+                turns: childTurns.slice(0, 2),
+              },
+            } as Response;
+          }
           return {
             thread: {
               id: "child-thread",
@@ -197,7 +223,10 @@ describe("CodexAppServerAdapter history loading", () => {
           };
           if (params.threadId === "parent-thread") {
             return {
-              data: [{ id: "parent-turn", status: "completed", items: [] }],
+              data: [
+                { id: "parent-turn", status: "completed", items: [] },
+                { id: "parent-final-turn", status: "completed", items: [] },
+              ],
               nextCursor: null,
             } as Response;
           }
@@ -206,7 +235,28 @@ describe("CodexAppServerAdapter history loading", () => {
         throw new Error(`Unexpected method '${request.method}'.`);
       },
     };
-    const adapter = createAdapterWithTransport(transport);
+    let shouldReturnParentUsage = true;
+    const adapter = createAdapterWithTransport(transport, {
+      takeBufferedEvents: async () => {
+        if (!shouldReturnParentUsage) {
+          return [];
+        }
+        shouldReturnParentUsage = false;
+        return [
+          bufferedNotificationEvent(
+            restoredTokenUsageNotification("parent-thread", "parent-final-turn"),
+          ),
+        ];
+      },
+    });
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "parent-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -220,11 +270,12 @@ describe("CodexAppServerAdapter history loading", () => {
       "parent-user",
       "codex-subagent:parent-thread:child-thread",
       "parent-answer",
+      "parent-final-answer",
       "codex-fork-boundary:child-thread:child-turn",
       "child-user",
       "child-answer",
     ]);
-    expect(history[3]).toEqual({
+    expect(history[4]).toEqual({
       messageId: "codex-fork-boundary:child-thread:child-turn",
       role: "system",
       timestamp: "1970-01-01T00:00:30.000Z",
@@ -236,6 +287,18 @@ describe("CodexAppServerAdapter history loading", () => {
         parentExternalSessionId: "parent-thread",
       },
       parts: [],
+    });
+    expect(history.find((message) => message.messageId === "parent-final-answer")).toMatchObject({
+      totalTokens: 1_000,
+      contextWindow: 200_000,
+      parts: [
+        expect.objectContaining({
+          kind: "step",
+          phase: "finish",
+          totalTokens: 1_000,
+          contextWindow: 200_000,
+        }),
+      ],
     });
     expect(
       calls.some(
