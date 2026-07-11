@@ -11,7 +11,7 @@ export type PullRequestReviewContextQueryInput = {
 
 const PULL_REQUEST_REVIEW_STALE_TIME_MS = 30_000;
 const EMPTY_VALUE = "__none__";
-const PULL_REQUEST_REVIEW_QUERY_VERSION = "v5";
+const PULL_REQUEST_REVIEW_QUERY_VERSION = "v6";
 
 export const pullRequestReviewQueryKeys = {
   all: ["pull-request-review", PULL_REQUEST_REVIEW_QUERY_VERSION] as const,

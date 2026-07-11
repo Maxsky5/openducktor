@@ -5,6 +5,7 @@ import {
   type GithubCommandDependencies,
   runGithubCommand,
 } from "../tasks/support/github-pull-requests";
+import { parseGithubReviewCommentContent } from "./github-pull-request-review-suggestions";
 
 type GithubGraphqlPageInfoPayload = {
   hasNextPage?: unknown;
@@ -21,6 +22,9 @@ type GithubGraphqlReviewThreadCommentPayload = {
   url?: unknown;
   path?: unknown;
   line?: unknown;
+  startLine?: unknown;
+  originalLine?: unknown;
+  originalStartLine?: unknown;
 };
 
 type GithubGraphqlReviewThreadPayload = {
@@ -81,6 +85,9 @@ const REVIEW_THREAD_COMMENT_FIELDS = `
   updatedAt
   path
   line
+  startLine
+  originalLine
+  originalStartLine
 `;
 
 const REVIEW_THREADS_QUERY = `
@@ -195,19 +202,30 @@ const toReviewThreadComment = (
   isResolved: boolean,
 ): PullRequestReviewComment | null => {
   const body = typeof payload.body === "string" ? payload.body : "";
-  if (!body.trim()) {
+  const patch = toNullableString(payload.diffHunk);
+  const line = toNullableNumber(payload.line) ?? toNullableNumber(payload.originalLine);
+  const startLine =
+    toNullableNumber(payload.startLine) ?? toNullableNumber(payload.originalStartLine) ?? line;
+  const content = parseGithubReviewCommentContent({
+    body,
+    diffHunk: patch,
+    startLine,
+    endLine: line,
+  });
+  if (!content.body && content.suggestionPatches.length === 0) {
     return null;
   }
   return {
     id: requireString(payload.id, "id"),
     author: toNullableString(payload.author?.login),
-    body: body.trim(),
-    patch: toNullableString(payload.diffHunk),
+    body: content.body,
+    patch,
+    suggestionPatches: content.suggestionPatches,
     url: toNullableString(payload.url),
     createdAt: toNullableString(payload.createdAt),
     updatedAt: toNullableString(payload.updatedAt),
     path: toNullableString(payload.path),
-    line: toNullableNumber(payload.line),
+    line,
     threadId,
     isResolved,
     source: "review_thread",

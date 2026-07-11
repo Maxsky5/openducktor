@@ -258,6 +258,7 @@ const toComment = (
     author: toNullableString(payload.author?.login),
     body,
     patch: null,
+    suggestionPatches: [],
     url: toNullableString(payload.url),
     createdAt: toNullableString(payload.createdAt) ?? toNullableString(payload.submittedAt),
     updatedAt: toNullableString(payload.updatedAt),

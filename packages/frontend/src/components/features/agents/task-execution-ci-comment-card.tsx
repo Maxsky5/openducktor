@@ -1,9 +1,12 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { ExternalLink, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { errorMessage } from "@/lib/errors";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
 import { commentLocationLabel } from "./task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
@@ -19,8 +22,21 @@ export function TaskExecutionCiCommentCard({
   const location = commentLocationLabel(comment);
   const author = comment.author ?? "Unknown author";
   const activityTimestamp = comment.createdAt ?? comment.updatedAt;
+  const filePath = comment.path;
   const hasBody = comment.body.trim().length > 0;
-  const hasPatch = Boolean(comment.patch?.trim() && comment.path);
+  const hasPatch = Boolean(comment.patch?.trim() && filePath);
+  const hasSuggestionPatches = comment.suggestionPatches.length > 0 && filePath !== null;
+
+  const openComment = (): void => {
+    if (!comment.url) {
+      return;
+    }
+    void openExternalUrl(comment.url).catch((error) => {
+      toast.error("Failed to open comment", {
+        description: errorMessage(error),
+      });
+    });
+  };
 
   return (
     <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card">
@@ -63,21 +79,35 @@ export function TaskExecutionCiCommentCard({
           {comment.url ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <a
-                  href={comment.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
+                <button
+                  type="button"
+                  onClick={openComment}
                   className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
                   aria-label={`Open comment from ${author}`}
                 >
                   <ExternalLink className="size-3.5" />
-                </a>
+                </button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Open comment</TooltipContent>
             </Tooltip>
           ) : null}
         </div>
       </header>
+      {hasPatch && filePath && comment.patch ? (
+        <div
+          className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
+          data-testid="ci-review-comment-diff"
+        >
+          <PierrePreloadedDiffViewer
+            patch={comment.patch}
+            filePath={filePath}
+            diffStyle="unified"
+            diffIndicators="bars"
+            lineOverflow="wrap"
+            hunkSeparators="simple"
+          />
+        </div>
+      ) : null}
       {hasBody ? (
         <div className="min-w-0 overflow-hidden border-t border-border px-3 py-3">
           <MarkdownRenderer
@@ -87,22 +117,25 @@ export function TaskExecutionCiCommentCard({
           />
         </div>
       ) : null}
-      {hasPatch && comment.path && comment.patch ? (
-        <div
-          className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
-          data-testid="ci-review-comment-diff"
-        >
-          <PierrePreloadedDiffViewer
-            patch={comment.patch}
-            filePath={comment.path}
-            diffStyle="unified"
-            diffIndicators="bars"
-            lineOverflow="wrap"
-            hunkSeparators="line-info"
-          />
-        </div>
-      ) : null}
-      {!hasBody && !hasPatch ? (
+      {hasSuggestionPatches && filePath
+        ? comment.suggestionPatches.map((suggestionPatch) => (
+            <div
+              key={suggestionPatch}
+              className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
+              data-testid="ci-review-comment-suggestion-diff"
+            >
+              <PierrePreloadedDiffViewer
+                patch={suggestionPatch}
+                filePath={filePath}
+                diffStyle="unified"
+                diffIndicators="bars"
+                lineOverflow="wrap"
+                hunkSeparators="simple"
+              />
+            </div>
+          ))
+        : null}
+      {!hasBody && !hasPatch && !hasSuggestionPatches ? (
         <p className="border-t border-border px-3 py-3 text-sm text-muted-foreground">
           No comment body.
         </p>

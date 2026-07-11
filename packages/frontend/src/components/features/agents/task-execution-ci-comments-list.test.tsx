@@ -8,6 +8,7 @@ const comment = (id: string): PullRequestReviewComment => ({
   author: "reviewer",
   body: `Comment ${id}`,
   patch: null,
+  suggestionPatches: [],
   url: null,
   createdAt: "2026-07-10T10:00:00Z",
   updatedAt: null,

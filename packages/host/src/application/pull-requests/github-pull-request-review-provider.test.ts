@@ -199,6 +199,9 @@ const fairnestSuggestionBody = [
   "Disable all login options while any login flow is active.",
   "",
   "```suggestion",
+  "  const [isGoogleLoading, setIsGoogleLoading] = useState(false);",
+  "  const [isFacebookLoading, setIsFacebookLoading] = useState(false);",
+  "",
   "  const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;",
   "```",
 ].join("\n");
@@ -217,13 +220,17 @@ const fairnestPullRequestReviewThreadNodes = [
           diffHunk: [
             "@@ -12,7 +12,8 @@ export default function LandingPage() {",
             "   const { login } = useAuth();",
+            "   const [devEmail, setDevEmail] = useState('');",
+            "   const [isLoading, setIsLoading] = useState(false);",
             "-  const [isLoggingIn, setIsLoggingIn] = useState(false);",
             "+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);",
+            "+  const [isFacebookLoading, setIsFacebookLoading] = useState(false);",
           ].join("\n"),
           url: "https://github.com/Maxsky5/fairnest/pull/128#discussion_r1",
           createdAt: "2026-07-08T20:19:39Z",
           updatedAt: "2026-07-08T20:19:39Z",
           path: "apps/web/src/components/LandingPage.tsx",
+          startLine: 15,
           line: 16,
         },
       ],
@@ -496,8 +503,11 @@ describe("createGithubPullRequestReviewProvider", () => {
         [
           "@@ -12,7 +12,8 @@ export default function LandingPage() {",
           "   const { login } = useAuth();",
+          "   const [devEmail, setDevEmail] = useState('');",
+          "   const [isLoading, setIsLoading] = useState(false);",
           "-  const [isLoggingIn, setIsLoggingIn] = useState(false);",
           "+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);",
+          "+  const [isFacebookLoading, setIsFacebookLoading] = useState(false);",
         ].join("\n"),
       ],
       ["gemini-code-assist", "apps/web/src/components/LandingPage.tsx", 86, false, null],
@@ -505,7 +515,20 @@ describe("createGithubPullRequestReviewProvider", () => {
       ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false, null],
       ["chatgpt-codex-connector", "apps/api/src/lib/auth.ts", 56, false, null],
     ]);
-    expect(context.comments[2]?.body).toBe(fairnestSuggestionBody);
+    expect(context.comments[2]?.body).toBe(
+      "Disable all login options while any login flow is active.",
+    );
+    expect(context.comments[2]?.suggestionPatches).toEqual([
+      [
+        "@@ -15,2 +15,4 @@",
+        "-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);",
+        "-  const [isFacebookLoading, setIsFacebookLoading] = useState(false);",
+        "+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);",
+        "+  const [isFacebookLoading, setIsFacebookLoading] = useState(false);",
+        "+",
+        "+  const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;",
+      ].join("\n"),
+    ]);
     expect(commands.flat().join(" ")).toContain("diffHunk");
   });
 
@@ -529,7 +552,7 @@ describe("createGithubPullRequestReviewProvider", () => {
                     id: "thread-comment-suggestion-only",
                     author: { login: "reviewer" },
                     body: suggestionBody,
-                    diffHunk: "@@ -1,1 +1,1 @@\n-const enabled = false;",
+                    diffHunk: "@@ -1,1 +1,1 @@\n const enabled = false;",
                     url: "https://github.com/Maxsky5/fairnest/pull/128#discussion-suggestion",
                     createdAt: "2026-07-08T20:19:39Z",
                     updatedAt: "2026-07-08T20:19:39Z",
@@ -551,9 +574,13 @@ describe("createGithubPullRequestReviewProvider", () => {
     if (context.status !== "loaded") {
       return;
     }
-    expect(
-      context.comments.find((comment) => comment.id === "thread-comment-suggestion-only")?.body,
-    ).toBe(suggestionBody);
+    const suggestionComment = context.comments.find(
+      (comment) => comment.id === "thread-comment-suggestion-only",
+    );
+    expect(suggestionComment?.body).toBe("");
+    expect(suggestionComment?.suggestionPatches).toEqual([
+      "@@ -1,1 +1,1 @@\n-const enabled = false;\n+const enabled = isReady && isValid;",
+    ]);
   });
 
   test("loads every review thread and comment page", async () => {

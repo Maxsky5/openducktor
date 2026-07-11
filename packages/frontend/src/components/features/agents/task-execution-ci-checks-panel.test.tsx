@@ -47,6 +47,9 @@ const loadedContext = {
       body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
       patch:
         "@@ -10,3 +10,3 @@\n-const isAnyLoading = isLoading;\n+const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n",
+      suggestionPatches: [
+        "@@ -12,1 +12,1 @@\n-const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n+const isAnyLoading = auth.isLoading;",
+      ],
       url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
       createdAt: "2026-07-08T10:06:00Z",
       updatedAt: "2026-07-08T10:07:00Z",
@@ -177,6 +180,13 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("ago");
     expect(html).toContain("2026-07-08T10:06:00Z");
     expect(html).toContain('data-testid="ci-review-comment-diff"');
+    expect(html).toContain('data-testid="ci-review-comment-suggestion-diff"');
+    expect(html.indexOf('data-testid="ci-review-comment-diff"')).toBeLessThan(
+      html.indexOf("This thread still needs work."),
+    );
+    expect(html.indexOf("This thread still needs work.")).toBeLessThan(
+      html.indexOf('data-testid="ci-review-comment-suggestion-diff"'),
+    );
     expect(html).not.toContain("language-ts");
     expect(html).toContain('aria-label="Open comment from codex"');
     expect(html).toContain("prose-pre:whitespace-pre-wrap");
