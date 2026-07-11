@@ -9,6 +9,7 @@ import {
   buildDevServerDraftValidationMap,
   parseHookLines,
 } from "@/state/read-models/settings-read-model";
+import type { SettingsContentFocusRequest } from "./settings-deep-link";
 
 type RepositoryScriptsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
@@ -20,7 +21,8 @@ type RepositoryScriptsSectionProps = {
     isLoadingSettings: boolean;
     isSaving: boolean;
   };
-  devServersAnchorRequest?: number | null | undefined;
+  focusRequest?: SettingsContentFocusRequest | null | undefined;
+  onFocusRequestHandled?: ((request: SettingsContentFocusRequest) => void) | undefined;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
 };
 
@@ -31,26 +33,28 @@ export function RepositoryScriptsSection({
   selectedRepoDevServerValidationErrors,
   validationState,
   loadingState,
-  devServersAnchorRequest = null,
+  focusRequest = null,
+  onFocusRequestHandled,
   onUpdateSelectedRepoConfig,
 }: RepositoryScriptsSectionProps): ReactElement {
   const devServersRef = useRef<HTMLDivElement>(null);
-  const handledAnchorRequestRef = useRef<number | null>(null);
+  const handledFocusRequestRef = useRef<SettingsContentFocusRequest | null>(null);
   const hasSelectedRepoConfig = selectedRepoConfig !== null;
 
   useEffect(() => {
     if (
       !hasSelectedRepoConfig ||
-      devServersAnchorRequest === null ||
-      devServersAnchorRequest === handledAnchorRequestRef.current ||
+      focusRequest?.kind !== "repository-dev-servers" ||
+      focusRequest === handledFocusRequestRef.current ||
       !devServersRef.current
     ) {
       return;
     }
 
     devServersRef.current.scrollIntoView({ block: "start" });
-    handledAnchorRequestRef.current = devServersAnchorRequest;
-  }, [devServersAnchorRequest, hasSelectedRepoConfig]);
+    handledFocusRequestRef.current = focusRequest;
+    onFocusRequestHandled?.(focusRequest);
+  }, [focusRequest, hasSelectedRepoConfig, onFocusRequestHandled]);
 
   if (!selectedRepoConfig) {
     return (

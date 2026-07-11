@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
-import { buildDevServerSettingsOpenTarget } from "./agent-studio-right-panel-settings";
 
 export function AgentStudioDevServerSettingsAction({
   repositoryPath,
@@ -13,7 +12,7 @@ export function AgentStudioDevServerSettingsAction({
       triggerSize="icon"
       triggerClassName="shrink-0"
       triggerLabel="Configure dev server commands"
-      openTarget={buildDevServerSettingsOpenTarget(repositoryPath)}
+      deepLink={{ kind: "repository-dev-servers", repositoryPath }}
     />
   );
 }

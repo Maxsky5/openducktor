@@ -3,6 +3,7 @@ import type { RepoConfig } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import { RepositoryScriptsSection } from "./settings-repository-scripts-section";
 
 enableReactActEnvironment();
@@ -28,7 +29,7 @@ const renderStatefulSection = (
   initialRepoConfig: RepoConfig,
   options?: {
     showValidation?: boolean;
-    devServersAnchorRequest?: number;
+    focusRequest?: SettingsContentFocusRequest;
   },
 ) => {
   let latestRepoConfig = initialRepoConfig;
@@ -40,7 +41,7 @@ const renderStatefulSection = (
       selectedRepoConfig,
       loadingState: { isLoadingSettings: false, isSaving: false },
       validationState: { showDevServerValidationErrors: options?.showValidation ?? false },
-      devServersAnchorRequest: options?.devServersAnchorRequest,
+      focusRequest: options?.focusRequest,
       onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => {
         setSelectedRepoConfig((current) => updater(current));
       },
@@ -140,17 +141,20 @@ describe("RepositoryScriptsSection", () => {
     }
   });
 
-  test("positions the dev-server editor once when an anchor is requested", () => {
+  test("handles one semantic focus request exactly once", () => {
     const scrollIntoView = mock(() => {});
+    const onFocusRequestHandled = mock(() => {});
+    const focusRequest = { kind: "repository-dev-servers" as const };
     const props = {
       selectedRepoConfig: createRepoConfig(),
       loadingState: { isLoadingSettings: false, isSaving: false },
+      onFocusRequestHandled,
       onUpdateSelectedRepoConfig: () => {},
     };
     const rendered = render(
       createElement(RepositoryScriptsSection, {
         ...props,
-        devServersAnchorRequest: null,
+        focusRequest: null,
       }),
     );
     const devServers = rendered.container.querySelector("#repository-dev-servers");
@@ -162,15 +166,16 @@ describe("RepositoryScriptsSection", () => {
     rendered.rerender(
       createElement(RepositoryScriptsSection, {
         ...props,
-        devServersAnchorRequest: 1,
+        focusRequest,
       }),
     );
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(onFocusRequestHandled).toHaveBeenCalledWith(focusRequest);
     rendered.rerender(
       createElement(RepositoryScriptsSection, {
         ...props,
-        devServersAnchorRequest: 1,
+        focusRequest,
       }),
     );
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -179,6 +184,7 @@ describe("RepositoryScriptsSection", () => {
 
   test("positions the dev-server editor after an unresolved repository is selected", () => {
     const scrollIntoView = mock(() => {});
+    const onFocusRequestHandled = mock(() => {});
     const originalScrollIntoView = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       "scrollIntoView",
@@ -186,8 +192,9 @@ describe("RepositoryScriptsSection", () => {
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
 
     const props = {
-      devServersAnchorRequest: 1,
+      focusRequest: { kind: "repository-dev-servers" as const },
       loadingState: { isLoadingSettings: false, isSaving: false },
+      onFocusRequestHandled,
       onUpdateSelectedRepoConfig: () => {},
     };
     const rendered = render(
@@ -208,6 +215,7 @@ describe("RepositoryScriptsSection", () => {
       );
 
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(onFocusRequestHandled).toHaveBeenCalledWith(props.focusRequest);
     } finally {
       rendered.unmount();
       if (originalScrollIntoView) {

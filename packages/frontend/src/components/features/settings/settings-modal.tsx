@@ -1,4 +1,4 @@
-import { type ReactElement, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,6 +6,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  resolveSettingsDeepLink,
+  type SettingsContentFocusRequest,
+  type SettingsDeepLink,
+  type SettingsDeepLinkResolution,
+} from "./settings-deep-link";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
@@ -13,23 +19,26 @@ import type {
 } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
-import {
-  applySettingsModalOpenTarget,
-  type SettingsModalNavigationState,
-  type SettingsModalOpenTarget,
-} from "./settings-modal-navigation";
 import { SettingsSidebar } from "./settings-modal-sidebars";
 import { SettingsModalTrigger } from "./settings-modal-trigger";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
-export type { SettingsModalOpenTarget } from "./settings-modal-navigation";
+export type { SettingsDeepLink } from "./settings-deep-link";
 
 type SettingsModalProps = {
   triggerClassName?: string;
   triggerIconOnly?: boolean;
   triggerSize?: "default" | "sm" | "lg" | "icon";
   triggerLabel?: string;
-  openTarget?: SettingsModalOpenTarget;
+  deepLink?: SettingsDeepLink;
+};
+
+type SettingsModalNavigationState = {
+  section: SettingsSectionId;
+  repositorySection: RepositorySectionId;
+  globalPromptRoleTab: PromptRoleTabId;
+  repoPromptRoleTab: PromptRoleTabId;
+  selectedReusablePromptId: string | null;
 };
 
 const INITIAL_SECTION: SettingsSectionId = "repositories";
@@ -48,26 +57,20 @@ export function SettingsModal({
   triggerIconOnly = false,
   triggerSize = triggerIconOnly ? "icon" : "sm",
   triggerLabel = "Settings",
-  openTarget,
+  deepLink,
 }: SettingsModalProps): ReactElement {
   const [open, setOpen] = useState(false);
-  const [devServersAnchorRequest, setDevServersAnchorRequest] = useState<number | null>(null);
-  const anchorRequestSequence = useRef(0);
+  const [activeDeepLinkResolution, setActiveDeepLinkResolution] =
+    useState<SettingsDeepLinkResolution | null>(null);
+  const [contentFocusRequest, setContentFocusRequest] =
+    useState<SettingsContentFocusRequest | null>(null);
   const [navigation, setNavigation] =
     useState<SettingsModalNavigationState>(INITIAL_NAVIGATION_STATE);
-  const targetRepositoryPath = openTarget?.repositoryPath;
-  const workspaceSelectionPolicy = useMemo(
-    () =>
-      targetRepositoryPath !== undefined
-        ? ({ kind: "required", repoPath: targetRepositoryPath } as const)
-        : undefined,
-    [targetRepositoryPath],
-  );
   const controller = useSettingsModalController({
     open,
     shouldLoadCatalog:
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
-    workspaceSelectionPolicy,
+    workspaceSelectionPolicy: activeDeepLinkResolution?.workspaceSelectionPolicy,
   });
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
@@ -91,27 +94,43 @@ export function SettingsModal({
     setNavigation((current) => ({ ...current, selectedReusablePromptId }));
   };
 
+  const handleContentFocusRequestHandled = useCallback(
+    (handledRequest: SettingsContentFocusRequest): void => {
+      setContentFocusRequest((current) => (current === handledRequest ? null : current));
+    },
+    [],
+  );
+
+  const closeModal = useCallback((): void => {
+    setOpen(false);
+    setActiveDeepLinkResolution(null);
+    setContentFocusRequest(null);
+  }, []);
+
   const handleSave = (): void => {
     controller.markRepoScriptSaveAttempt();
     void controller.submit().then((saved) => {
       if (saved) {
-        setOpen(false);
+        closeModal();
       }
     });
   };
 
   const handleOpenChange = (nextOpen: boolean): void => {
-    if (!nextOpen && controller.isSaving) {
+    if (!nextOpen) {
+      if (!controller.isSaving) {
+        closeModal();
+      }
       return;
     }
 
-    if (nextOpen && openTarget) {
-      setNavigation((current) => applySettingsModalOpenTarget(current, openTarget));
-      anchorRequestSequence.current += 1;
-      setDevServersAnchorRequest(anchorRequestSequence.current);
+    const nextDeepLinkResolution = deepLink ? resolveSettingsDeepLink(deepLink) : null;
+    setActiveDeepLinkResolution(nextDeepLinkResolution);
+    if (nextDeepLinkResolution) {
+      setNavigation((current) => ({ ...current, ...nextDeepLinkResolution.navigation }));
+      setContentFocusRequest(nextDeepLinkResolution.contentFocus);
     }
-
-    setOpen(nextOpen);
+    setOpen(true);
   };
 
   return (
@@ -152,7 +171,8 @@ export function SettingsModal({
                 onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
                 onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
                 onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
-                devServersAnchorRequest={devServersAnchorRequest}
+                contentFocusRequest={contentFocusRequest}
+                onContentFocusRequestHandled={handleContentFocusRequestHandled}
               />
             </div>
           </div>
@@ -182,7 +202,7 @@ export function SettingsModal({
             section: navigation.section,
             repositorySection: navigation.repositorySection,
           }}
-          onCancel={() => setOpen(false)}
+          onCancel={closeModal}
           onSave={handleSave}
         />
       </DialogContent>

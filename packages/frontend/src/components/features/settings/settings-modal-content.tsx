@@ -3,6 +3,7 @@ import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
+import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import { SettingsKanbanSection } from "./settings-kanban-section";
@@ -33,7 +34,8 @@ type SettingsModalContentProps = {
   onGlobalPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onSelectedReusablePromptIdChange: (next: string | null) => void;
-  devServersAnchorRequest?: number | null;
+  contentFocusRequest?: SettingsContentFocusRequest | null;
+  onContentFocusRequestHandled?: (request: SettingsContentFocusRequest) => void;
 };
 
 export function SettingsModalContent({
@@ -48,7 +50,8 @@ export function SettingsModalContent({
   onGlobalPromptRoleTabChange,
   onRepoPromptRoleTabChange,
   onSelectedReusablePromptIdChange,
-  devServersAnchorRequest,
+  contentFocusRequest,
+  onContentFocusRequestHandled,
 }: SettingsModalContentProps): ReactElement {
   const {
     isLoadingSettings,
@@ -288,7 +291,8 @@ export function SettingsModalContent({
               isLoadingSettings,
               isSaving,
             }}
-            devServersAnchorRequest={devServersAnchorRequest}
+            focusRequest={contentFocusRequest}
+            onFocusRequestHandled={onContentFocusRequestHandled}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
         ) : null}
