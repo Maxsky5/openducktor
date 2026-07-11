@@ -1,11 +1,13 @@
 import type { ReactElement } from "react";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
 
+type AgentStudioDevServerSettingsActionProps = {
+  repositoryPath: string | null;
+};
+
 export function AgentStudioDevServerSettingsAction({
   repositoryPath,
-}: {
-  repositoryPath: string | null;
-}): ReactElement {
+}: AgentStudioDevServerSettingsActionProps): ReactElement {
   return (
     <SettingsModal
       triggerIconOnly

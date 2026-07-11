@@ -3,7 +3,6 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogTrigger } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 
 type SettingsModalTriggerProps = {
   className?: string | undefined;
@@ -23,7 +22,7 @@ export function SettingsModalTrigger({
       type="button"
       variant="outline"
       size={size}
-      className={cn(className)}
+      className={className}
       aria-label={iconOnly ? label : undefined}
       title={iconOnly ? label : undefined}
     >
