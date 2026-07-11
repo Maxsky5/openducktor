@@ -3,6 +3,7 @@ import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
+import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import { SettingsKanbanSection } from "./settings-kanban-section";
@@ -11,12 +12,8 @@ import type {
   RepositorySectionId,
   SettingsSectionId,
 } from "./settings-modal-constants";
-import { RepositorySidebar } from "./settings-modal-sidebars";
-import { buildInheritedPromptPreview } from "./settings-prompt-inheritance";
 import { PromptOverridesSection } from "./settings-prompt-overrides-section";
-import { RepositoryAgentsSection } from "./settings-repository-agents-section";
-import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
-import { RepositoryGitSection } from "./settings-repository-git-section";
+import { SettingsRepositoryContent } from "./settings-repository-content";
 import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
@@ -32,6 +29,8 @@ type SettingsModalContentProps = {
   onGlobalPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onSelectedReusablePromptIdChange: (next: string | null) => void;
+  contentFocusRequest?: SettingsContentFocusRequest | null;
+  onContentFocusRequestHandled?: (request: SettingsContentFocusRequest) => void;
 };
 
 export function SettingsModalContent({
@@ -46,44 +45,21 @@ export function SettingsModalContent({
   onGlobalPromptRoleTabChange,
   onRepoPromptRoleTabChange,
   onSelectedReusablePromptIdChange,
+  contentFocusRequest,
+  onContentFocusRequestHandled,
 }: SettingsModalContentProps): ReactElement {
   const {
     isLoadingSettings,
-    isLoadingRuntimeDefinitions,
-    isLoadingCatalog,
-    isSaving,
     settingsError,
-    runtimeDefinitionsError,
     snapshotDraft,
     runtimeDefinitions,
-    availableRuntimeDefinitions,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
-    updateAgentRuntimes,
-    setCodexDangerAcknowledged,
-    getCatalogForRuntime,
-    getCatalogErrorForRuntime,
-    isCatalogLoadingForRuntime,
-    workspaceIds,
-    selectedWorkspace,
-    selectedWorkspaceId,
-    selectedRepoConfig,
-    selectedRepoEffectiveWorktreeBasePath,
-    selectedRepoBranches,
-    isLoadingSelectedRepoBranches,
-    selectedRepoBranchesError,
-    showRepoScriptValidationErrors,
-    selectedRepoDevServerValidationErrors,
     promptValidationState,
     reusablePromptValidationState,
-    selectedRepoRuntimeAvailabilityErrors,
-    selectedRepoPromptValidationErrors,
-    selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
-    selectedRepoPromptRoleTabErrorCounts,
-    setSelectedWorkspaceId,
-    retrySelectedRepoBranchesLoad,
-    updateSelectedRepoConfig,
+    updateAgentRuntimes,
+    setCodexDangerAcknowledged,
     updateGlobalGitConfig,
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
@@ -92,9 +68,6 @@ export function SettingsModalContent({
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,
-    updateRepoPromptOverrides,
-    updateSelectedRepoAgentDefault,
-    clearSelectedRepoAgentDefault,
   } = controller;
 
   if (settingsError) {
@@ -196,10 +169,10 @@ export function SettingsModalContent({
     return (
       <SettingsReusablePromptsSection
         reusablePrompts={snapshotDraft.reusablePrompts}
-        selectedReusablePromptId={selectedReusablePromptId ?? null}
+        selectedReusablePromptId={selectedReusablePromptId}
         validationErrors={reusablePromptValidationState.errorsById}
         disabled={isInteractionDisabled}
-        onSelectedReusablePromptIdChange={onSelectedReusablePromptIdChange ?? (() => {})}
+        onSelectedReusablePromptIdChange={onSelectedReusablePromptIdChange}
         onUpdateReusablePrompts={updateReusablePrompts}
       />
     );
@@ -226,105 +199,16 @@ export function SettingsModalContent({
   }
 
   return (
-    <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
-      <RepositorySidebar
-        workspaces={controller.workspaces}
-        selectedWorkspaceId={selectedWorkspaceId}
-        selectedRepositorySection={repositorySection}
-        disabled={isInteractionDisabled}
-        selectedRepoPromptValidationErrorCount={selectedRepoPromptValidationErrorCount}
-        repoPromptErrorCountByWorkspaceId={promptValidationState.repoErrorCountByWorkspaceId}
-        onSelectWorkspaceId={setSelectedWorkspaceId}
-        onSelectSection={onRepositorySectionChange}
-      />
-
-      <div className="min-w-0 space-y-4">
-        {workspaceIds.length === 0 ? (
-          <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
-            Add a repository first, then configure repository settings.
-          </div>
-        ) : null}
-
-        {repositorySection === "configuration" ? (
-          <RepositoryConfigurationSection
-            selectedRepoConfig={selectedRepoConfig}
-            selectedRepoEffectiveWorktreeBasePath={selectedRepoEffectiveWorktreeBasePath}
-            selectedRepoBranches={selectedRepoBranches}
-            selectedRepoBranchesError={selectedRepoBranchesError}
-            loadingState={{
-              isLoadingSettings: isLoadingSettings,
-              isSaving: isSaving,
-              isLoadingSelectedRepoBranches: isLoadingSelectedRepoBranches,
-            }}
-            onRetrySelectedRepoBranchesLoad={retrySelectedRepoBranchesLoad}
-            validationState={{
-              showDevServerValidationErrors: showRepoScriptValidationErrors,
-            }}
-            selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
-            onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
-          />
-        ) : null}
-
-        {repositorySection === "git" ? (
-          <RepositoryGitSection
-            selectedRepoPath={selectedWorkspace?.repoPath ?? null}
-            selectedRepoConfig={selectedRepoConfig}
-            runtimeCheck={controller.runtimeCheck}
-            disabled={isInteractionDisabled}
-            onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
-            onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
-          />
-        ) : null}
-
-        {repositorySection === "agents" ? (
-          <RepositoryAgentsSection
-            selectedRepoConfig={selectedRepoConfig}
-            availableRuntimeDefinitions={availableRuntimeDefinitions}
-            loadingState={{
-              isLoadingRuntimeDefinitions,
-              isLoadingCatalog,
-              isLoadingSettings,
-              isSaving,
-            }}
-            runtimeDefinitionsError={runtimeDefinitionsError}
-            runtimeAvailabilityErrors={selectedRepoRuntimeAvailabilityErrors}
-            getCatalogForRuntime={getCatalogForRuntime}
-            getCatalogErrorForRuntime={getCatalogErrorForRuntime}
-            isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}
-            onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
-            onUpdateSelectedRepoAgentDefault={updateSelectedRepoAgentDefault}
-            onClearSelectedRepoAgentDefault={clearSelectedRepoAgentDefault}
-          />
-        ) : null}
-
-        {repositorySection === "prompts" ? (
-          selectedRepoConfig ? (
-            <PromptOverridesSection
-              title="Repository Prompt Overrides"
-              description="Repository overrides take precedence over global overrides when enabled."
-              tab={repoPromptRoleTab}
-              errorCountsByTab={selectedRepoPromptRoleTabErrorCounts}
-              overrides={selectedRepoConfig.promptOverrides}
-              validationErrors={selectedRepoPromptValidationErrors}
-              disabled={isInteractionDisabled}
-              onTabChange={onRepoPromptRoleTabChange}
-              onUpdateOverrides={updateRepoPromptOverrides}
-              resolveInheritedPreview={(templateId, builtinTemplate, repoOverride) =>
-                buildInheritedPromptPreview(
-                  templateId,
-                  repoOverride,
-                  snapshotDraft.globalPromptOverrides,
-                  builtinTemplate,
-                )
-              }
-            />
-          ) : (
-            <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
-              Select a repository to configure repository-level prompts.
-            </div>
-          )
-        ) : null}
-      </div>
-    </div>
+    <SettingsRepositoryContent
+      repositorySection={repositorySection}
+      repoPromptRoleTab={repoPromptRoleTab}
+      isInteractionDisabled={isInteractionDisabled}
+      controller={controller}
+      globalPromptOverrides={snapshotDraft.globalPromptOverrides}
+      onRepositorySectionChange={onRepositorySectionChange}
+      onRepoPromptRoleTabChange={onRepoPromptRoleTabChange}
+      contentFocusRequest={contentFocusRequest}
+      onContentFocusRequestHandled={onContentFocusRequestHandled}
+    />
   );
 }

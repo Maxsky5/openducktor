@@ -25,7 +25,7 @@ export type SettingsSectionId =
   | "chat"
   | "kanban"
   | "autopilot";
-export type RepositorySectionId = "configuration" | "git" | "agents" | "prompts";
+export type RepositorySectionId = "configuration" | "scripts" | "git" | "agents" | "prompts";
 export type PromptRoleTabId = "shared" | "spec" | "planner" | "build" | "qa";
 
 type BuiltinPromptDefinition = ReturnType<typeof listBuiltinAgentPromptTemplates>[number];
@@ -52,6 +52,7 @@ export const REPOSITORY_SECTIONS: ReadonlyArray<{
   label: string;
 }> = [
   { id: "configuration", label: "Configuration" },
+  { id: "scripts", label: "Scripts" },
   { id: "git", label: "Git" },
   { id: "agents", label: "Agents" },
   { id: "prompts", label: "Repo Prompts" },

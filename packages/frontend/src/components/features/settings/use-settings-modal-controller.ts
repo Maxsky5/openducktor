@@ -25,6 +25,7 @@ import {
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
+import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
@@ -59,6 +60,8 @@ export type SettingsModalController = {
   workspaceIds: string[];
   selectedWorkspaceId: string | null;
   selectedRepoConfig: RepoConfig | null;
+  requiredWorkspaceSelectionUnresolved: boolean;
+  requiredWorkspaceRepoPath: string | null;
   selectedWorkspace: WorkspaceRecord | null;
   selectedRepoDefaultWorktreeBasePath: string | null;
   selectedRepoEffectiveWorktreeBasePath: string | null;
@@ -82,6 +85,7 @@ export type SettingsModalController = {
   selectedRepoRuntimeAvailabilityErrors: string[];
   selectedRepoRuntimeAvailabilityErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
+  repoScriptValidationErrorCountByWorkspaceId: Record<string, number>;
   repoScriptValidationErrorCount: number;
   showRepoScriptValidationErrors: boolean;
   selectedRepoDevServerValidationErrors: Record<string, { name?: string; command?: string }>;
@@ -129,11 +133,13 @@ export type SettingsModalController = {
 type UseSettingsModalControllerArgs = {
   open: boolean;
   shouldLoadCatalog: boolean;
+  workspaceSelectionPolicy?: SettingsWorkspaceSelectionPolicy | undefined;
 };
 
 export const useSettingsModalController = ({
   open,
   shouldLoadCatalog,
+  workspaceSelectionPolicy,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
   const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
   const checksState = useRequiredContext(ChecksStateContext, "useSettingsModalController");
@@ -146,6 +152,16 @@ export const useSettingsModalController = ({
     saveSettingsSnapshot,
   } = workspaceState;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const workspaceSelectionKind = workspaceSelectionPolicy?.kind ?? "preferred";
+  const workspaceSelectionRepoPath =
+    workspaceSelectionPolicy === undefined ? workspaceRepoPath : workspaceSelectionPolicy.repoPath;
+  const resolvedWorkspaceSelectionPolicy = useMemo<SettingsWorkspaceSelectionPolicy>(
+    () => ({
+      kind: workspaceSelectionKind,
+      repoPath: workspaceSelectionRepoPath,
+    }),
+    [workspaceSelectionKind, workspaceSelectionRepoPath],
+  );
   const { runtimeCheck } = checksState;
   const {
     allRuntimeDefinitions: runtimeDefinitions,
@@ -164,9 +180,11 @@ export const useSettingsModalController = ({
     isLoadingSettings,
     settingsError,
     clearSettingsError,
+    requiredWorkspaceSelectionUnresolved,
+    requiredWorkspaceRepoPath,
   } = useSettingsModalSnapshotState({
     open,
-    workspaceRepoPath: workspaceRepoPath,
+    workspaceSelectionPolicy: resolvedWorkspaceSelectionPolicy,
     loadSettingsSnapshot,
   });
 
@@ -266,21 +284,6 @@ export const useSettingsModalController = ({
     ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
     : [];
   const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
-  const settingsSectionErrorCountByIdWithReusablePrompts = useMemo(
-    () => ({
-      ...settingsSectionErrorCountById,
-      repositories:
-        settingsSectionErrorCountById.repositories +
-        runtimeAvailabilityValidationState.totalErrorCount,
-      "reusable-prompts": reusablePromptValidationState.totalErrorCount,
-    }),
-    [
-      reusablePromptValidationState.totalErrorCount,
-      runtimeAvailabilityValidationState.totalErrorCount,
-      settingsSectionErrorCountById,
-    ],
-  );
-
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
@@ -317,12 +320,29 @@ export const useSettingsModalController = ({
   const {
     selectedRepoDevServerValidationErrors,
     invalidRepoPathsWithDevServerErrors,
+    repoScriptValidationErrorCountByWorkspaceId,
     repoScriptValidationErrorCount,
     hasRepoScriptValidationErrors,
   } = useSettingsModalRepoScriptValidation({
     snapshotDraft,
     selectedRepoConfig,
   });
+  const settingsSectionErrorCountByIdWithValidation = useMemo(
+    () => ({
+      ...settingsSectionErrorCountById,
+      repositories:
+        settingsSectionErrorCountById.repositories +
+        runtimeAvailabilityValidationState.totalErrorCount +
+        repoScriptValidationErrorCount,
+      "reusable-prompts": reusablePromptValidationState.totalErrorCount,
+    }),
+    [
+      repoScriptValidationErrorCount,
+      reusablePromptValidationState.totalErrorCount,
+      runtimeAvailabilityValidationState.totalErrorCount,
+      settingsSectionErrorCountById,
+    ],
+  );
 
   const {
     isSaving,
@@ -431,6 +451,8 @@ export const useSettingsModalController = ({
     workspaceIds,
     selectedWorkspaceId,
     selectedRepoConfig,
+    requiredWorkspaceSelectionUnresolved,
+    requiredWorkspaceRepoPath,
     selectedWorkspace,
     selectedRepoDefaultWorktreeBasePath,
     selectedRepoEffectiveWorktreeBasePath,
@@ -443,7 +465,7 @@ export const useSettingsModalController = ({
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
-    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithReusablePrompts,
+    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithValidation,
     reusablePromptValidationState,
     hasReusablePromptValidationErrors,
     runtimeAvailabilityValidationState,
@@ -454,6 +476,7 @@ export const useSettingsModalController = ({
     selectedRepoRuntimeAvailabilityErrors,
     selectedRepoRuntimeAvailabilityErrorCount,
     hasRepoScriptValidationErrors,
+    repoScriptValidationErrorCountByWorkspaceId,
     repoScriptValidationErrorCount,
     showRepoScriptValidationErrors,
     selectedRepoDevServerValidationErrors,

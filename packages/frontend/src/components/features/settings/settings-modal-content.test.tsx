@@ -31,6 +31,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   workspaceIds: [],
   selectedWorkspaceId: null,
   selectedRepoConfig: null,
+  requiredWorkspaceSelectionUnresolved: false,
+  requiredWorkspaceRepoPath: null,
   selectedWorkspace: null,
   selectedRepoDefaultWorktreeBasePath: null,
   selectedRepoEffectiveWorktreeBasePath: null,
@@ -60,6 +62,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   selectedRepoRuntimeAvailabilityErrors: [],
   selectedRepoRuntimeAvailabilityErrorCount: 0,
   hasRepoScriptValidationErrors: false,
+  repoScriptValidationErrorCountByWorkspaceId: {},
   repoScriptValidationErrorCount: 0,
   showRepoScriptValidationErrors: false,
   selectedRepoDevServerValidationErrors: {},
@@ -101,6 +104,151 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
 });
 
 describe("settings modal content", () => {
+  test("renders repository scripts separately from repository configuration", () => {
+    const snapshot = createMockSnapshot({
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "opencode",
+          branchPrefix: "odt",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          git: { providers: {} },
+          hooks: { preStart: ["bun install"], postComplete: ["bun run clean"] },
+          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+          worktreeCopyPaths: [".env"],
+          promptOverrides: {},
+          agentDefaults: {},
+        },
+      },
+    });
+    const selectedRepoConfig = snapshot.workspaces.repo ?? null;
+    const controller = {
+      ...createMockController(snapshot),
+      workspaceIds: ["repo"],
+      selectedWorkspaceId: "repo",
+      selectedRepoConfig,
+    };
+    const baseProps = {
+      section: "repositories" as const,
+      globalPromptRoleTab: "shared" as const,
+      repoPromptRoleTab: "shared" as const,
+      selectedReusablePromptId: null,
+      isInteractionDisabled: false,
+      controller,
+      onRepositorySectionChange: () => {},
+      onGlobalPromptRoleTabChange: () => {},
+      onRepoPromptRoleTabChange: () => {},
+      onSelectedReusablePromptIdChange: () => {},
+    };
+
+    const scriptsHtml = renderToStaticMarkup(
+      createElement(SettingsModalContent, { ...baseProps, repositorySection: "scripts" }),
+    );
+    const configurationHtml = renderToStaticMarkup(
+      createElement(SettingsModalContent, { ...baseProps, repositorySection: "configuration" }),
+    );
+
+    expect(scriptsHtml).toContain("Worktree setup script");
+    expect(scriptsHtml).toContain("Dev servers");
+    expect(scriptsHtml).toContain("Files copied to worktrees");
+    expect(configurationHtml).not.toContain("Worktree setup script");
+    expect(configurationHtml).not.toContain("Dev servers");
+    expect(configurationHtml).not.toContain("Files copied to worktrees");
+  });
+
+  test("surfaces dev-server validation on the repository and Scripts navigation", () => {
+    const snapshot = createMockSnapshot({
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "opencode",
+          branchPrefix: "odt",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          git: { providers: {} },
+          hooks: { preStart: [], postComplete: [] },
+          devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
+          worktreeCopyPaths: [],
+          promptOverrides: {},
+          agentDefaults: {},
+        },
+      },
+    });
+    const selectedRepoConfig = snapshot.workspaces.repo ?? null;
+    const controller = {
+      ...createMockController(snapshot),
+      workspaces: [
+        {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          isActive: true,
+          hasConfig: true,
+          configuredWorktreeBasePath: null,
+          defaultWorktreeBasePath: "/tmp/worktrees",
+          effectiveWorktreeBasePath: "/tmp/worktrees",
+        },
+      ],
+      workspaceIds: ["repo"],
+      selectedWorkspaceId: "repo",
+      selectedRepoConfig,
+      hasRepoScriptValidationErrors: true,
+      repoScriptValidationErrorCountByWorkspaceId: { repo: 1 },
+      repoScriptValidationErrorCount: 1,
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "repositories",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      }),
+    );
+
+    expect(html).toContain('title="1 error in Scripts"');
+    expect(html).toContain("background-color:hsl(var(--destructive))");
+  });
+
+  test("shows an actionable state instead of falling back from a required repository", () => {
+    const snapshot = createMockSnapshot();
+    const controller = {
+      ...createMockController(snapshot),
+      requiredWorkspaceSelectionUnresolved: true,
+      requiredWorkspaceRepoPath: "/missing/repo",
+    };
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "repositories",
+        repositorySection: "scripts",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      }),
+    );
+
+    expect(html).toContain("Add a repository first");
+    expect(html).not.toContain("/missing/repo");
+    expect(html).not.toContain("Choose a repository explicitly or close Settings");
+    expect(html).not.toContain("Select a repository to edit repository scripts");
+  });
+
   test("renders general section with automatic Agent Studio tab setting", () => {
     const controller = createMockController(createMockSnapshot());
 

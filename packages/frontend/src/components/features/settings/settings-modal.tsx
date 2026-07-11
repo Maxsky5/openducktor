@@ -1,15 +1,16 @@
-import { Settings2 } from "lucide-react";
-import { type ReactElement, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { type ReactElement, useCallback, useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import type {
+  SettingsContentFocusRequest,
+  SettingsDeepLink,
+  SettingsDeepLinkResolution,
+} from "./settings-deep-link";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
@@ -17,46 +18,51 @@ import type {
 } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
+import {
+  INITIAL_SETTINGS_MODAL_NAVIGATION,
+  resolveSettingsModalOpenState,
+  type SettingsModalNavigationState,
+} from "./settings-modal-open-state";
 import { SettingsSidebar } from "./settings-modal-sidebars";
+import { SettingsModalTrigger } from "./settings-modal-trigger";
 import { useSettingsModalController } from "./use-settings-modal-controller";
+
+export type { SettingsDeepLink } from "./settings-deep-link";
 
 type SettingsModalProps = {
   triggerClassName?: string;
   triggerIconOnly?: boolean;
   triggerSize?: "default" | "sm" | "lg" | "icon";
-};
-
-type SettingsModalNavigationState = {
-  section: SettingsSectionId;
-  repositorySection: RepositorySectionId;
-  globalPromptRoleTab: PromptRoleTabId;
-  repoPromptRoleTab: PromptRoleTabId;
-  selectedReusablePromptId: string | null;
-};
-
-const INITIAL_SECTION: SettingsSectionId = "repositories";
-const INITIAL_REPOSITORY_SECTION: RepositorySectionId = "configuration";
-const INITIAL_PROMPT_ROLE_TAB: PromptRoleTabId = "shared";
-const INITIAL_NAVIGATION_STATE: SettingsModalNavigationState = {
-  section: INITIAL_SECTION,
-  repositorySection: INITIAL_REPOSITORY_SECTION,
-  globalPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
-  repoPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
-  selectedReusablePromptId: null,
+  triggerLabel?: string;
+  deepLink?: SettingsDeepLink;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function SettingsModal({
   triggerClassName,
   triggerIconOnly = false,
   triggerSize = triggerIconOnly ? "icon" : "sm",
+  triggerLabel = "Settings",
+  deepLink,
+  onOpenChange,
 }: SettingsModalProps): ReactElement {
   const [open, setOpen] = useState(false);
-  const [navigation, setNavigation] =
-    useState<SettingsModalNavigationState>(INITIAL_NAVIGATION_STATE);
+  const [activeDeepLinkResolution, setActiveDeepLinkResolution] =
+    useState<SettingsDeepLinkResolution | null>(null);
+  const [contentFocusRequest, setContentFocusRequest] =
+    useState<SettingsContentFocusRequest | null>(null);
+  const [navigation, setNavigation] = useState<SettingsModalNavigationState>(
+    INITIAL_SETTINGS_MODAL_NAVIGATION,
+  );
+  const workspaceSelectionPolicy =
+    activeDeepLinkResolution?.scope === "repository"
+      ? activeDeepLinkResolution.workspaceSelectionPolicy
+      : undefined;
   const controller = useSettingsModalController({
     open,
     shouldLoadCatalog:
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
+    workspaceSelectionPolicy,
   });
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
@@ -80,38 +86,53 @@ export function SettingsModal({
     setNavigation((current) => ({ ...current, selectedReusablePromptId }));
   };
 
+  const handleContentFocusRequestHandled = useCallback(
+    (handledRequest: SettingsContentFocusRequest): void => {
+      setContentFocusRequest((current) => (current === handledRequest ? null : current));
+    },
+    [],
+  );
+
+  const closeModal = useCallback((): void => {
+    setOpen(false);
+    setActiveDeepLinkResolution(null);
+    setContentFocusRequest(null);
+    onOpenChange?.(false);
+  }, [onOpenChange]);
+
   const handleSave = (): void => {
     controller.markRepoScriptSaveAttempt();
     void controller.submit().then((saved) => {
       if (saved) {
-        setOpen(false);
+        closeModal();
       }
     });
   };
 
+  const handleOpenChange = (nextOpen: boolean): void => {
+    if (!nextOpen) {
+      if (!controller.isSaving) {
+        closeModal();
+      }
+      return;
+    }
+
+    const nextOpenState = resolveSettingsModalOpenState(deepLink);
+    setActiveDeepLinkResolution(nextOpenState.deepLinkResolution);
+    setNavigation(nextOpenState.navigation);
+    setContentFocusRequest(nextOpenState.contentFocusRequest);
+    setOpen(true);
+    onOpenChange?.(true);
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && controller.isSaving) {
-          return;
-        }
-        setOpen(nextOpen);
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size={triggerSize}
-          className={cn(triggerClassName)}
-          aria-label={triggerIconOnly ? "Settings" : undefined}
-          title={triggerIconOnly ? "Settings" : undefined}
-        >
-          <Settings2 className="size-4" />
-          {triggerIconOnly ? null : "Settings"}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <SettingsModalTrigger
+        className={triggerClassName}
+        iconOnly={triggerIconOnly}
+        label={triggerLabel}
+        size={triggerSize}
+      />
 
       <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0">
         <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
@@ -142,6 +163,8 @@ export function SettingsModal({
                 onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
                 onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
                 onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
+                contentFocusRequest={contentFocusRequest}
+                onContentFocusRequestHandled={handleContentFocusRequestHandled}
               />
             </div>
           </div>
@@ -171,7 +194,7 @@ export function SettingsModal({
             section: navigation.section,
             repositorySection: navigation.repositorySection,
           }}
-          onCancel={() => setOpen(false)}
+          onCancel={closeModal}
           onSave={handleSave}
         />
       </DialogContent>

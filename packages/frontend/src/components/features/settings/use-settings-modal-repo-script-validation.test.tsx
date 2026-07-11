@@ -79,6 +79,10 @@ describe("useSettingsModalRepoScriptValidation", () => {
       },
     });
     expect(latest.invalidRepoPathsWithDevServerErrors).toEqual(["repo-a", "repo-b"]);
+    expect(latest.repoScriptValidationErrorCountByWorkspaceId).toEqual({
+      "repo-a": 1,
+      "repo-b": 1,
+    });
     expect(latest.repoScriptValidationErrorCount).toBe(2);
     expect(latest.hasRepoScriptValidationErrors).toBe(true);
 
@@ -97,6 +101,10 @@ describe("useSettingsModalRepoScriptValidation", () => {
 
     expect(latest.selectedRepoDevServerValidationErrors).toEqual({});
     expect(latest.invalidRepoPathsWithDevServerErrors).toEqual(["repo-a", "repo-b"]);
+    expect(latest.repoScriptValidationErrorCountByWorkspaceId).toEqual({
+      "repo-a": 1,
+      "repo-b": 1,
+    });
     expect(latest.repoScriptValidationErrorCount).toBe(2);
     expect(latest.hasRepoScriptValidationErrors).toBe(true);
 
@@ -114,6 +122,7 @@ describe("useSettingsModalRepoScriptValidation", () => {
     expect(harness.getLatest()).toEqual({
       selectedRepoDevServerValidationErrors: {},
       invalidRepoPathsWithDevServerErrors: [],
+      repoScriptValidationErrorCountByWorkspaceId: {},
       repoScriptValidationErrorCount: 0,
       hasRepoScriptValidationErrors: false,
     });

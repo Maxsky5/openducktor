@@ -23,6 +23,7 @@ beforeEach(async () => {
   }));
 
   mock.module("@pierre/diffs/react", () => ({
+    File: () => createElement("div", { "data-testid": "mock-pierre-file-viewer" }),
     FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
     Virtualizer: ({ children }: { children: ReactNode }) =>
       createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),

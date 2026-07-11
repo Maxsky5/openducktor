@@ -63,7 +63,9 @@ type RepositorySidebarProps = {
   selectedRepositorySection: RepositorySectionId;
   disabled: boolean;
   selectedRepoPromptValidationErrorCount: number;
+  selectedRepoScriptValidationErrorCount: number;
   repoPromptErrorCountByWorkspaceId: Record<string, number>;
+  repoScriptErrorCountByWorkspaceId: Record<string, number>;
   onSelectWorkspaceId: (next: string) => void;
   onSelectSection: (next: RepositorySectionId) => void;
 };
@@ -74,10 +76,26 @@ export function RepositorySidebar({
   selectedRepositorySection,
   disabled,
   selectedRepoPromptValidationErrorCount,
+  selectedRepoScriptValidationErrorCount,
   repoPromptErrorCountByWorkspaceId,
+  repoScriptErrorCountByWorkspaceId,
   onSelectWorkspaceId,
   onSelectSection,
 }: RepositorySidebarProps): ReactElement {
+  const repoErrorCountByWorkspaceId: Record<string, number> = {};
+  for (const workspace of workspaces) {
+    const errorCount =
+      (repoPromptErrorCountByWorkspaceId[workspace.workspaceId] ?? 0) +
+      (repoScriptErrorCountByWorkspaceId[workspace.workspaceId] ?? 0);
+    if (errorCount > 0) {
+      repoErrorCountByWorkspaceId[workspace.workspaceId] = errorCount;
+    }
+  }
+  const sectionErrorCountById: Partial<Record<RepositorySectionId, number>> = {
+    prompts: selectedRepoPromptValidationErrorCount,
+    scripts: selectedRepoScriptValidationErrorCount,
+  };
+
   return (
     <aside className="space-y-3 border-r border-border bg-muted p-3">
       <div className="space-y-2">
@@ -88,15 +106,14 @@ export function RepositorySidebar({
           placeholder={workspaces.length > 0 ? "Select repository" : "No repository configured"}
           searchPlaceholder="Search repository..."
           disabled={disabled || workspaces.length === 0}
-          errorCountByWorkspaceId={repoPromptErrorCountByWorkspaceId}
+          errorCountByWorkspaceId={repoErrorCountByWorkspaceId}
           onValueChange={onSelectWorkspaceId}
         />
       </div>
 
       <div className="space-y-1">
         {REPOSITORY_SECTIONS.map((entry) => {
-          const sectionErrorCount =
-            entry.id === "prompts" ? selectedRepoPromptValidationErrorCount : 0;
+          const sectionErrorCount = sectionErrorCountById[entry.id] ?? 0;
           return (
             <Button
               key={entry.id}
@@ -107,7 +124,7 @@ export function RepositorySidebar({
               onClick={() => onSelectSection(entry.id)}
               title={
                 sectionErrorCount > 0
-                  ? `${sectionErrorCount} prompt placeholder error${sectionErrorCount > 1 ? "s" : ""}`
+                  ? `${sectionErrorCount} error${sectionErrorCount > 1 ? "s" : ""} in ${entry.label}`
                   : undefined
               }
             >

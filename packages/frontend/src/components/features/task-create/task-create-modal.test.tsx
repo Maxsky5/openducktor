@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { render } from "@testing-library/react";
-import { act, createElement, type ReactNode } from "react";
+import { render, screen } from "@testing-library/react";
+import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
@@ -69,22 +69,6 @@ describe("TaskCreateModal", () => {
     mock.module("@/components/features/task-composer/task-document-editor", () => ({
       TaskDocumentEditor: () => createElement("div", null, "Mock task document editor"),
     }));
-    mock.module("@/components/ui/dialog", () => ({
-      Dialog: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", null, children),
-      DialogBody: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", null, children),
-      DialogContent: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", null, children),
-      DialogDescription: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("p", null, children),
-      DialogFooter: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", null, children),
-      DialogHeader: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", null, children),
-      DialogTitle: ({ children }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("h2", null, children),
-    }));
     ({ TaskCreateModal } = await import("./task-create-modal"));
   });
 
@@ -102,7 +86,6 @@ describe("TaskCreateModal", () => {
         "@/components/features/task-composer/task-document-editor",
         () => import("@/components/features/task-composer/task-document-editor"),
       ],
-      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
     ]);
   });
 
@@ -117,10 +100,10 @@ describe("TaskCreateModal", () => {
       }),
     );
 
-    expect(rendered.container.textContent).toContain("Edit Task");
-    expect(rendered.container.textContent).toContain("Markdown");
-    expect(rendered.container.textContent).toContain("Preview");
-    expect(rendered.container.textContent).toContain("Save Spec");
+    expect(await screen.findByText("Edit Task")).toBeTruthy();
+    expect(screen.getByText("Markdown")).toBeTruthy();
+    expect(screen.getByText("Preview")).toBeTruthy();
+    expect(screen.getByText("Save Spec")).toBeTruthy();
 
     await act(async () => {
       rendered.unmount();

@@ -1,18 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { SessionStartModalModel } from "./session-start-modal";
-
-const omitDialogDomProps = ({
-  onOpenChange: _onOpenChange,
-  open: _open,
-  ...props
-}: {
-  onOpenChange?: unknown;
-  open?: unknown;
-  [key: string]: unknown;
-}) => props;
 
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -79,7 +69,6 @@ const getFieldButton = (testId: string): HTMLButtonElement => {
 describe("SessionStartModal", () => {
   let SessionStartModal: typeof import("./session-start-modal").SessionStartModal;
   let actualAgentRuntimeCombobox: typeof import("./agent-runtime-combobox");
-  let actualDialog: typeof import("../../ui/dialog");
 
   const restoreSessionStartModalMocks = async (): Promise<void> => {
     await restoreMockedModules([
@@ -87,38 +76,17 @@ describe("SessionStartModal", () => {
         "@/components/features/agents/agent-runtime-combobox",
         async () => actualAgentRuntimeCombobox,
       ],
-      ["@/components/ui/dialog", async () => actualDialog],
     ]);
   };
 
   beforeEach(async () => {
     actualAgentRuntimeCombobox = await import("./agent-runtime-combobox");
-    actualDialog = await import("../../ui/dialog");
-
     mock.module("@/components/features/agents/agent-runtime-combobox", () => ({
       AgentRuntimeCombobox: (props: Record<string, unknown>) =>
-        createElement("agent-runtime-combobox", props),
-    }));
-    mock.module("@/components/ui/dialog", () => ({
-      Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("mock-dialog", omitDialogDomProps(props), children),
-      DialogBody: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogContent: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogDescription: ({
-        children,
-        ...props
-      }: {
-        children: ReactNode;
-        [key: string]: unknown;
-      }) => createElement("p", omitDialogDomProps(props), children),
-      DialogFooter: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogHeader: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", omitDialogDomProps(props), children),
-      DialogTitle: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("h2", omitDialogDomProps(props), children),
+        createElement("agent-runtime-combobox", {
+          ...props,
+          "data-testid": "session-start-runtime-combobox",
+        }),
     }));
     ({ SessionStartModal } = await import("./session-start-modal"));
     await restoreSessionStartModalMocks();
@@ -130,16 +98,11 @@ describe("SessionStartModal", () => {
 
   test("submits through the form action", () => {
     const onConfirm = mock(() => {});
-    const { container, unmount } = render(
+    const { unmount } = render(
       createElement(SessionStartModal, { model: createModel({ onConfirm }) }),
     );
 
-    const form = container.querySelector("form");
-    if (!form) {
-      throw new Error("Expected form element");
-    }
-
-    fireEvent.submit(form);
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     expect(onConfirm).toHaveBeenCalledWith({
       runInBackground: false,
@@ -153,7 +116,7 @@ describe("SessionStartModal", () => {
   });
 
   test("disables runtime and model selectors when reusing an existing session", () => {
-    const { container, unmount } = render(
+    const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
           availableStartModes: ["fresh", "reuse"],
@@ -164,10 +127,7 @@ describe("SessionStartModal", () => {
       }),
     );
 
-    const runtimeCombobox = container.querySelector("agent-runtime-combobox");
-    if (!runtimeCombobox) {
-      throw new Error("Expected runtime combobox element");
-    }
+    const runtimeCombobox = screen.getByTestId("session-start-runtime-combobox");
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(true);
 
     const sourceCombobox = getFieldButton("session-start-source-field");
@@ -185,7 +145,7 @@ describe("SessionStartModal", () => {
 
   test("allows reuse confirm while catalog is loading", () => {
     const onConfirm = mock(() => {});
-    const { container, unmount } = render(
+    const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
           isSelectionCatalogLoading: true,
@@ -199,12 +159,7 @@ describe("SessionStartModal", () => {
       }),
     );
 
-    const form = container.querySelector("form");
-    if (!form) {
-      throw new Error("Expected form element");
-    }
-
-    fireEvent.submit(form);
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     expect(onConfirm).toHaveBeenCalledWith({
       runInBackground: false,
@@ -259,7 +214,7 @@ describe("SessionStartModal", () => {
   });
 
   test("keeps existing-session selection visible and model controls enabled in fork mode", () => {
-    const { container, unmount } = render(
+    const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
           availableStartModes: ["reuse", "fork"],
@@ -275,10 +230,7 @@ describe("SessionStartModal", () => {
     expect(screen.getByRole("button", { name: /fork existing/i })).toBeTruthy();
     expect(screen.getByText("Existing Session")).toBeTruthy();
 
-    const runtimeCombobox = container.querySelector("agent-runtime-combobox");
-    if (!runtimeCombobox) {
-      throw new Error("Expected runtime combobox element");
-    }
+    const runtimeCombobox = screen.getByTestId("session-start-runtime-combobox");
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(false);
 
     const sourceCombobox = getFieldButton("session-start-source-field");
