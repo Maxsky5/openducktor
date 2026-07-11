@@ -385,7 +385,6 @@ const emitCompletedItem = (
   }
 
   if (codexItemTypeMatches(item, "agentMessage")) {
-    emitUnlinkedSpawnFailures(context, session, timestamp);
     const text = extractStringField(item, ["text"]);
     if (text) {
       emitCodexSessionEvent(context, session.threadId, {

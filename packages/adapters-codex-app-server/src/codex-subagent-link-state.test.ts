@@ -90,6 +90,12 @@ describe("CodexSubagentLinkState", () => {
       status: "error",
       error: "Codex reported the failure.",
     });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "completed-without-child",
+      status: "completed",
+    });
 
     const failed = subagents.failUnlinkedSpawnsForParent(
       "parent-thread",
@@ -103,6 +109,11 @@ describe("CodexSubagentLinkState", () => {
         status: "error",
         error: "Codex ended this subagent spawn without creating a session.",
         prompt: "Explore the repository",
+      }),
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:completed-without-child",
+        status: "error",
+        error: "Codex ended this subagent spawn without creating a session.",
       }),
     ]);
     expect(subagents.statusForChild("linked-child", "runtime-1")).toBe("running");

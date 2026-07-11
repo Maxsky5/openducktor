@@ -26,6 +26,7 @@ const childLifecycleNotification = (
   method: "turn/started" | "turn/completed",
   status: "inProgress" | "completed" | "failed",
   error?: string,
+  timestampSeconds?: number,
 ): CodexNotificationRecord => ({
   method,
   receivedAt: "2026-07-10T12:00:04.000Z",
@@ -35,8 +36,8 @@ const childLifecycleNotification = (
       id: "child-turn",
       status,
       ...(method === "turn/started"
-        ? { startedAt: 1_783_683_602 }
-        : { completedAt: 1_783_683_604 }),
+        ? { startedAt: timestampSeconds ?? 1_783_683_602 }
+        : { completedAt: timestampSeconds ?? 1_783_683_604 }),
       ...(error ? { error: { message: error } } : {}),
     },
   },
@@ -155,6 +156,23 @@ describe("CodexSubagentLifecycleProjector", () => {
     );
 
     expect(emittedStatuses(events)).toEqual(["running"]);
+    expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
+  });
+
+  test("ignores a previous turn completion delivered after a child restart", () => {
+    const { events, projector, subagents } = createHarness();
+    linkChild(subagents);
+
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/started", "inProgress", undefined, 1_783_683_630),
+    );
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/completed", "completed", undefined, 1_783_683_620),
+    );
+
+    expect(events).toEqual([]);
     expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
   });
 

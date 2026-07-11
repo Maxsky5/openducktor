@@ -1990,7 +1990,7 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
-  test("terminalizes orphaned spawns at model and turn lifecycle boundaries", async () => {
+  test("terminalizes orphaned spawns only at turn lifecycle boundaries", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
     > = [];
@@ -2060,6 +2060,36 @@ describe("CodexAppServerAdapter streaming", () => {
               type: "agentMessage",
               id: "retry-message",
               text: "The first spawn failed validation. Retrying now.",
+            },
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: "assistant_part",
+          externalSessionId: "thread-saved",
+          part: expect.objectContaining({
+            kind: "subagent",
+            correlationKey: "codex-subagent:thread-saved:spawn-live",
+            status: "error",
+          }),
+        }),
+      );
+
+      streamListeners[0]?.({
+        runtimeId: "runtime-live",
+        kind: "notification",
+        receivedAt: new Date().toISOString(),
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-saved",
+            turn: {
+              id: "turn-live",
+              status: "failed",
+              completedAt: 1_777_766_452,
             },
           },
         },

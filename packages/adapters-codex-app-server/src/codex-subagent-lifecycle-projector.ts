@@ -124,6 +124,9 @@ export class CodexSubagentLifecycleProjector {
       status: update.status,
       ...(update.error ? { error: update.error } : {}),
       allowStatusRestart: update.allowStatusRestart,
+      ...(update.status === "running"
+        ? { startedAtMs: update.timestampMs }
+        : { endedAtMs: update.timestampMs }),
     });
     const isTerminal =
       part.status === "completed" || part.status === "cancelled" || part.status === "error";
@@ -135,10 +138,7 @@ export class CodexSubagentLifecycleProjector {
       type: "assistant_part",
       externalSessionId: parentSession.threadId,
       timestamp: new Date(update.timestampMs).toISOString(),
-      part: {
-        ...part,
-        ...(isTerminal ? { endedAtMs: update.timestampMs } : { startedAtMs: update.timestampMs }),
-      },
+      part,
     });
     return true;
   }
