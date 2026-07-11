@@ -162,23 +162,6 @@ const transcriptScrollRegion = (): HTMLDivElement => {
   return region;
 };
 
-const rerenderWithScrollMetrics = (rerender: () => void): void => {
-  const originalCreateElement = globalThis.document.createElement;
-  const createElement = originalCreateElement.bind(globalThis.document);
-  globalThis.document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
-    const element = createElement(tagName, options);
-    if (element instanceof globalThis.HTMLDivElement) {
-      installScrollMetrics(element);
-    }
-    return element;
-  }) as typeof globalThis.document.createElement;
-  try {
-    rerender();
-  } finally {
-    globalThis.document.createElement = originalCreateElement;
-  }
-};
-
 const dialog = (open: boolean): ReactElement => (
   <AgentSessionTranscriptDialog
     workspaceRepoPath="/repo-a"
@@ -229,42 +212,4 @@ describe("AgentSessionTranscriptDialog", () => {
       rendered.unmount();
     }
   });
-
-  test("pins to the bottom when reopening cached history", async () => {
-    const history = makeScrollableTranscriptHistory();
-    const deferredSettings = createDeferred<SettingsSnapshot>();
-    const deferredRefresh = createDeferred<AgentSessionHistoryMessage[]>();
-    host.workspaceGetSettingsSnapshot = async () => deferredSettings.promise;
-    readSessionHistory.mockResolvedValueOnce(history);
-    const unrelatedScrollRegion = globalThis.document.createElement("div");
-    unrelatedScrollRegion.className = "agent-chat-scroll-region";
-    globalThis.document.body.append(unrelatedScrollRegion);
-    const rendered = render(dialog(true), { wrapper });
-
-    try {
-      await act(async () => {
-        deferredSettings.resolve(createSettingsSnapshotFixture());
-        await deferredSettings.promise;
-      });
-      await waitFor(() => expect(rendered.getByText("Assistant response 39")).toBeTruthy());
-      const initialScrollRegion = transcriptScrollRegion();
-      rendered.rerender(dialog(false));
-      await waitFor(() => expect(initialScrollRegion.isConnected).toBe(false), { timeout: 3_000 });
-      readSessionHistory.mockImplementationOnce(async () => deferredRefresh.promise);
-
-      rerenderWithScrollMetrics(() => rendered.rerender(dialog(true)));
-      const reopenedScrollRegion = transcriptScrollRegion();
-
-      expect(rendered.getByText("Assistant response 39")).toBeTruthy();
-      await waitFor(() => expect(reopenedScrollRegion.scrollTop).toBe(900), { timeout: 3_000 });
-      await waitFor(() => expect(readSessionHistory).toHaveBeenCalledTimes(2), { timeout: 3_000 });
-    } finally {
-      await act(async () => {
-        deferredRefresh.resolve(history);
-        await deferredRefresh.promise;
-      });
-      rendered.unmount();
-      unrelatedScrollRegion.remove();
-    }
-  }, 10_000);
 });

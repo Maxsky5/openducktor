@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
@@ -14,6 +14,7 @@ import {
   useAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
+import { withAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript-dialog";
 
 const transcriptTarget: AgentSessionTranscriptTarget = {
@@ -135,7 +136,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     }
   });
 
-  test("closes the real dialog and cancels pending transcript content", async () => {
+  test("cancels pending transcript content when the dialog closes", async () => {
     function DialogControls(): ReactElement {
       const { openSessionTranscript, closeSessionTranscript } = useAgentSessionTranscriptDialog();
       return (
@@ -165,24 +166,22 @@ describe("AgentSessionTranscriptDialogHost", () => {
       </ActiveWorkspaceTestProvider>
     );
 
-    const rendered = render(<DialogControls />, { wrapper });
-    const unrelatedIndicator = globalThis.document.createElement("output");
-    unrelatedIndicator.textContent = "Opening conversation…";
-    try {
-      fireEvent.click(screen.getByRole("button", { name: "Open" }));
-      const openingIndicator = screen.getByText("Opening conversation…");
-      expect(openingIndicator).toBeTruthy();
-      globalThis.document.body.append(unrelatedIndicator);
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const rendered = render(<DialogControls />, { wrapper });
+      try {
+        fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
-      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        expect(screen.getByText("Opening conversation…")).toBeTruthy();
+        expect(frameDriver.pendingFrameCount()).toBe(1);
 
-      await waitFor(() => expect(openingIndicator.isConnected).toBe(false), { timeout: 3_000 });
-      expect(unrelatedIndicator.isConnected).toBe(true);
-    } finally {
-      unrelatedIndicator.remove();
-      rendered.unmount();
-    }
-  }, 10_000);
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+        expect(frameDriver.pendingFrameCount()).toBe(0);
+      } finally {
+        rendered.unmount();
+      }
+    });
+  });
 
   test("opens a linked subagent transcript from the visible subagent card", async () => {
     const { AgentChatMessageCard } = await import("./agent-chat-message-card");
