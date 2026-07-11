@@ -272,6 +272,36 @@ export class CodexSubagentLinkState {
     return this.linkForChild(childThreadId, runtimeId)?.status ?? null;
   }
 
+  failUnlinkedSpawnsForParent(
+    parentThreadId: string,
+    runtimeId: string | undefined,
+    error: string,
+  ): CodexSubagentPart[] {
+    const failedParts: CodexSubagentPart[] = [];
+    for (const [parentItemKey, link] of this.provisionalByParentItemKey) {
+      if (
+        link.parentThreadId !== parentThreadId ||
+        link.runtimeId !== runtimeId ||
+        link.childThreadId ||
+        (link.status !== "pending" && link.status !== "running")
+      ) {
+        continue;
+      }
+      const failedLink: CodexStoredSubagentLink = {
+        ...link,
+        status: "error",
+        error,
+      };
+      this.provisionalByParentItemKey.set(parentItemKey, failedLink);
+      this.linksByCorrelationKey.set(
+        scopedKey(failedLink.runtimeId, failedLink.correlationKey),
+        failedLink,
+      );
+      failedParts.push(this.toPart(failedLink));
+    }
+    return failedParts;
+  }
+
   routesForParent(parentThreadId: string, runtimeId?: string): CodexSubagentRoute[] {
     const routes: CodexSubagentRoute[] = [];
     for (const link of this.linksByChildThreadId.values()) {

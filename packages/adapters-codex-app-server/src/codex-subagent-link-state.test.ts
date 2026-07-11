@@ -60,4 +60,54 @@ describe("CodexSubagentLinkState", () => {
       runtimeId: "runtime-2",
     });
   });
+
+  test("fails only active provisional spawns in the requested parent runtime", () => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "orphaned-spawn",
+      status: "running",
+      prompt: "Explore the repository",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "linked-child",
+      itemId: "linked-spawn",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-2",
+      parentThreadId: "parent-thread",
+      itemId: "other-runtime-spawn",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "already-failed-spawn",
+      status: "error",
+      error: "Codex reported the failure.",
+    });
+
+    const failed = subagents.failUnlinkedSpawnsForParent(
+      "parent-thread",
+      "runtime-1",
+      "Codex ended this subagent spawn without creating a session.",
+    );
+
+    expect(failed).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:orphaned-spawn",
+        status: "error",
+        error: "Codex ended this subagent spawn without creating a session.",
+        prompt: "Explore the repository",
+      }),
+    ]);
+    expect(subagents.statusForChild("linked-child", "runtime-1")).toBe("running");
+    expect(
+      subagents.failUnlinkedSpawnsForParent("parent-thread", "runtime-2", "Other failure"),
+    ).toHaveLength(1);
+  });
 });

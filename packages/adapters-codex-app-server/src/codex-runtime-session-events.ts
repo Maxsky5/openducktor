@@ -1011,6 +1011,8 @@ export class CodexRuntimeSessionEvents {
       bufferNotification: (runtimeId, notification) =>
         this.runtimeEventBuffer.bufferNotification(runtimeId, notification),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
+      failUnlinkedSubagentSpawns: (parentThreadId, runtimeId, error) =>
+        this.deps.subagents.failUnlinkedSpawnsForParent(parentThreadId, runtimeId, error),
     };
   }
 

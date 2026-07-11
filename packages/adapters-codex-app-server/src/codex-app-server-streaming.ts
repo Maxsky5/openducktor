@@ -3,6 +3,7 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
+  AgentStreamPart,
   AgentUserMessagePart,
 } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
@@ -48,6 +49,7 @@ import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 const CODEX_SAFETY_BUFFERING_MESSAGE =
   "Our systems are thinking a bit more about this request before responding.";
+const CODEX_UNLINKED_SPAWN_ERROR = "Codex ended this subagent spawn without creating a session.";
 
 export type CompletedAgentMessage = {
   session: CodexSessionState;
@@ -72,6 +74,11 @@ export type CodexStreamingContext = {
   takeBufferedNotifications(threadId: string, runtimeId: string): CodexNotificationRecord[];
   bufferNotification(runtimeId: string, notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
+  failUnlinkedSubagentSpawns(
+    parentThreadId: string,
+    runtimeId: string,
+    error: string,
+  ): AgentStreamPart[];
 };
 
 const modelForTurn = (
@@ -120,6 +127,26 @@ const emitCanonicalEvents = (
   }
   for (const event of projectCodexCanonicalEvents(events)) {
     emitCodexSessionEvent(context, event.externalSessionId, event);
+  }
+};
+
+const emitUnlinkedSpawnFailures = (
+  context: CodexStreamingContext,
+  session: CodexSessionState,
+  timestamp: string,
+): void => {
+  const parts = context.failUnlinkedSubagentSpawns(
+    session.threadId,
+    session.runtimeId,
+    CODEX_UNLINKED_SPAWN_ERROR,
+  );
+  for (const part of parts) {
+    emitCodexSessionEvent(context, session.threadId, {
+      type: "assistant_part",
+      externalSessionId: session.threadId,
+      timestamp,
+      part,
+    });
   }
 };
 
@@ -358,6 +385,7 @@ const emitCompletedItem = (
   }
 
   if (codexItemTypeMatches(item, "agentMessage")) {
+    emitUnlinkedSpawnFailures(context, session, timestamp);
     const text = extractStringField(item, ["text"]);
     if (text) {
       emitCodexSessionEvent(context, session.threadId, {
@@ -614,6 +642,9 @@ export const handleCodexPendingNotifications = async (
         ) {
           continue;
         }
+        if (isIdleStatus) {
+          emitUnlinkedSpawnFailures(context, session, timestamp);
+        }
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
         context.setSessionLiveStatus(session, liveStatus);
         if (activeTurn && isIdleStatus) {
@@ -718,6 +749,7 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "turn/completed") {
+      emitUnlinkedSpawnFailures(context, session, timestamp);
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
       if (turnId && isPlainObject(turn) && turn.status === "completed") {
