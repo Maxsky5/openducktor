@@ -31,6 +31,7 @@ type UseRuntimeTranscriptLiveOverlayArgs = {
   repoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
   sessionRef: PolicyBoundSessionRef | null;
+  baseSession: AgentSessionState | null;
   history: AgentSessionHistoryMessage[] | undefined;
   shouldMergeHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
@@ -55,6 +56,7 @@ export function useRuntimeTranscriptLiveOverlay({
   repoPath,
   target,
   sessionRef,
+  baseSession,
   history,
   shouldMergeHistory,
   replyAgentApproval,
@@ -62,6 +64,8 @@ export function useRuntimeTranscriptLiveOverlay({
 }: UseRuntimeTranscriptLiveOverlayArgs): RuntimeTranscriptLiveOverlay {
   const [liveState, setLiveState] = useState<RuntimeTranscriptLiveState | null>(null);
   const liveStateRef = useRef<RuntimeTranscriptLiveState | null>(null);
+  const baseSessionRef = useRef(baseSession);
+  baseSessionRef.current = baseSession;
 
   useEffect(() => {
     liveStateRef.current = liveState;
@@ -81,6 +85,10 @@ export function useRuntimeTranscriptLiveOverlay({
       const current = liveStateRef.current?.session;
       if (current && matchesAgentSessionIdentity(current, target)) {
         return current;
+      }
+      const currentBaseSession = baseSessionRef.current;
+      if (currentBaseSession && matchesAgentSessionIdentity(currentBaseSession, target)) {
+        return currentBaseSession;
       }
       return createEmptyReadonlyRuntimeSessionState(target);
     };

@@ -127,16 +127,23 @@ export function useRuntimeTranscriptSessionHistory({
     matchesAgentSessionIdentity(liveSession, stableTarget)
       ? liveSession
       : null;
+  const policySession = matchingLiveSession ?? stableTarget;
+  const policySessionRuntimeKind = policySession?.runtimeKind ?? null;
+  const policySessionScope = policySession ? sessionScopeForPolicySession(policySession) : null;
+  const policySessionScopeTaskId = policySessionScope?.taskId ?? null;
+  const policySessionScopeRole = policySessionScope?.role ?? null;
   const runtimePolicyTarget = useMemo(() => {
-    const policySession = matchingLiveSession ?? stableTarget;
-    if (policySession === null) {
+    if (policySessionRuntimeKind === null) {
       return null;
     }
     return {
-      runtimeKind: policySession.runtimeKind,
-      sessionScope: sessionScopeForPolicySession(policySession),
+      runtimeKind: policySessionRuntimeKind,
+      sessionScope:
+        policySessionScopeTaskId !== null && policySessionScopeRole !== null
+          ? workflowAgentSessionScope(policySessionScopeTaskId, policySessionScopeRole)
+          : null,
     };
-  }, [matchingLiveSession, stableTarget]);
+  }, [policySessionRuntimeKind, policySessionScopeRole, policySessionScopeTaskId]);
   const settingsSnapshotQuery = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: runtimePolicyTarget?.runtimeKind === "codex",
@@ -174,19 +181,17 @@ export function useRuntimeTranscriptSessionHistory({
   const runtimePolicy = runtimePolicyResult.runtimePolicy;
   const runtimeSessionScope = runtimePolicyTarget?.sessionScope ?? null;
   const runtimeSessionRef = useMemo<PolicyBoundSessionRef | null>(() => {
-    const policySession = matchingLiveSession ?? stableTarget;
-    if (repoPath === null || policySession === null || runtimePolicy === null) {
+    if (repoPath === null || stableTarget === null || runtimePolicy === null) {
       return null;
     }
     return {
-      ...toRuntimeSessionRefWithPolicy(repoPath, policySession, runtimePolicy),
+      ...toRuntimeSessionRefWithPolicy(repoPath, stableTarget, runtimePolicy),
       ...(runtimeSessionScope ? { sessionScope: runtimeSessionScope } : {}),
     };
-  }, [matchingLiveSession, repoPath, runtimePolicy, runtimeSessionScope, stableTarget]);
+  }, [repoPath, runtimePolicy, runtimeSessionScope, stableTarget]);
   const shouldLoadHistory = emptyReason === null && runtimeSessionRef !== null;
   const shouldObserveRuntimeSession =
     shouldLoadHistory &&
-    matchingLiveSession === null &&
     repoPath !== null &&
     stableTarget !== null &&
     repoReadinessState === "ready";
@@ -204,13 +209,17 @@ export function useRuntimeTranscriptSessionHistory({
     repoPath,
     target: stableTarget,
     sessionRef: runtimeSessionRef,
+    baseSession: matchingLiveSession,
     history: historyQuery.data,
-    shouldMergeHistory: shouldLoadHistory && matchingLiveSession === null,
+    shouldMergeHistory: shouldLoadHistory,
     replyAgentApproval,
     subscribeSessionEvents,
   });
 
   const session = useMemo(() => {
+    if (liveOverlay.interactionSession !== null && liveOverlay.session !== null) {
+      return toAgentChatThreadSession(liveOverlay.session);
+    }
     if (matchingLiveSession !== null) {
       const sessionWithHistory = historyQuery.data
         ? mergeReadonlyRuntimeHistory(matchingLiveSession, historyQuery.data)
@@ -231,6 +240,7 @@ export function useRuntimeTranscriptSessionHistory({
   }, [
     historyQuery.data,
     liveOverlay.hasVisibleRuntimeData,
+    liveOverlay.interactionSession,
     liveOverlay.session,
     matchingLiveSession,
     repoPath,
