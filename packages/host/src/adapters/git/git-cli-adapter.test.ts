@@ -59,6 +59,31 @@ describe("createGitCliAdapter", () => {
       { name: "backup", url: "https://github.com/openai/openducktor.git" },
     ]);
   });
+  test("lists only materialized tracked and untracked files", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -co --exclude-standard -z -- .":
+          "H src/index.ts\0S packages/sparse.ts\0? untracked file.ts\0H  padded.ts \0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
+      "src/index.ts",
+      "untracked file.ts",
+      " padded.ts ",
+    ]);
+  });
+  test("fails when tagged file output is malformed", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -co --exclude-standard -z -- .": "src/index.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).rejects.toThrow(
+      "Git returned an invalid tagged file entry",
+    );
+  });
   test("parses porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({

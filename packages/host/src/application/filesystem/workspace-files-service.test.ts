@@ -236,7 +236,7 @@ describe("createWorkspaceFilesService", () => {
           "/repo/src/index.ts": encoder.encode("console.log('ok');"),
         },
       }),
-      createFakeGitPort(),
+      createFakeGitPort({ files: ["src/index.ts"] }),
     );
 
     await expect(
@@ -262,7 +262,7 @@ describe("createWorkspaceFilesService", () => {
           "/repo/ padded.ts ": encoder.encode("ok"),
         },
       }),
-      createFakeGitPort(),
+      createFakeGitPort({ files: [" padded.ts "] }),
     );
 
     await expect(
@@ -285,7 +285,7 @@ describe("createWorkspaceFilesService", () => {
           "/repo/image.bin": new Uint8Array([0x66, 0, 0x6f]),
         },
       }),
-      createFakeGitPort(),
+      createFakeGitPort({ files: ["image.bin"] }),
     );
 
     await expect(
@@ -315,7 +315,7 @@ describe("createWorkspaceFilesService", () => {
           "/repo/growing.txt": grownContents,
         },
       }),
-      createFakeGitPort(),
+      createFakeGitPort({ files: ["growing.txt"] }),
     );
 
     await expect(
@@ -338,12 +338,47 @@ describe("createWorkspaceFilesService", () => {
           "/repo": { isDirectory: true },
         },
       }),
-      createFakeGitPort(),
+      createFakeGitPort({ files: ["../secret.txt"] }),
     );
 
     await expect(
       Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "../secret.txt" })),
     ).rejects.toThrow("outside the selected workspace root");
+  });
+
+  test("rejects files that are not exposed by the workspace file tree", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/.env": { isDirectory: false, isFile: true, size: 12, mtimeMs: 20 },
+        },
+        files: {
+          "/repo/.env": encoder.encode("SECRET=value"),
+        },
+      }),
+      createFakeGitPort({ files: ["README.md"] }),
+    );
+
+    await expect(
+      Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: ".env" })),
+    ).rejects.toThrow("not available in the workspace file tree");
+  });
+
+  test("requires a Git repository when reading a workspace file", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/README.md": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
+        },
+      }),
+      createFakeGitPort({ isRepository: false, files: ["README.md"] }),
+    );
+
+    await expect(
+      Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "README.md" })),
+    ).rejects.toThrow("File explorer requires a Git repository root");
   });
 
   test("accepts contained files whose names begin with two dots", async () => {
@@ -355,7 +390,7 @@ describe("createWorkspaceFilesService", () => {
         },
         files: { "/repo/..config": encoder.encode("ok") },
       }),
-      createFakeGitPort(),
+      createFakeGitPort({ files: ["..config"] }),
     );
 
     await expect(
@@ -374,7 +409,7 @@ describe("createWorkspaceFilesService", () => {
           "/repo": { isDirectory: true },
         },
       }),
-      createFakeGitPort(),
+      createFakeGitPort({ files: ["link.txt"] }),
     );
 
     await expect(

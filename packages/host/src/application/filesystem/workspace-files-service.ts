@@ -101,6 +101,34 @@ const canonicalizeRoot = (filesystem: FilesystemPort, rootPath: string) =>
     return canonicalRoot;
   });
 
+const loadWorkspaceFilePaths = (gitPort: GitPort, canonicalRoot: string) =>
+  Effect.gen(function* () {
+    const isGitRepository = yield* gitPort.isGitRepository(canonicalRoot).pipe(
+      Effect.mapError((cause) =>
+        toHostValidationError(cause, `Unable to inspect Git repository '${canonicalRoot}'.`, {
+          rootPath: canonicalRoot,
+        }),
+      ),
+    );
+    if (!isGitRepository) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "rootPath",
+          message: `File explorer requires a Git repository root: ${canonicalRoot}`,
+          details: { rootPath: canonicalRoot },
+        }),
+      );
+    }
+
+    return yield* gitPort.listFiles(canonicalRoot).pipe(
+      Effect.mapError((cause) =>
+        toHostValidationError(cause, `Unable to list Git files for '${canonicalRoot}'.`, {
+          rootPath: canonicalRoot,
+        }),
+      ),
+    );
+  });
+
 const isContainedPath = (
   filesystem: FilesystemPort,
   canonicalRoot: string,
@@ -227,30 +255,7 @@ export const createWorkspaceFilesService = (
   listTree(input) {
     return Effect.gen(function* () {
       const canonicalRoot = yield* canonicalizeRoot(filesystem, input.rootPath);
-      const isGitRepository = yield* gitPort.isGitRepository(canonicalRoot).pipe(
-        Effect.mapError((cause) =>
-          toHostValidationError(cause, `Unable to inspect Git repository '${canonicalRoot}'.`, {
-            rootPath: canonicalRoot,
-          }),
-        ),
-      );
-      if (!isGitRepository) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "rootPath",
-            message: `File explorer requires a Git repository root: ${canonicalRoot}`,
-            details: { rootPath: canonicalRoot },
-          }),
-        );
-      }
-
-      const listedFilePaths = yield* gitPort.listFiles(canonicalRoot).pipe(
-        Effect.mapError((cause) =>
-          toHostValidationError(cause, `Unable to list Git files for '${canonicalRoot}'.`, {
-            rootPath: canonicalRoot,
-          }),
-        ),
-      );
+      const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot);
       const targetChanges = input.targetBranch
         ? yield* gitPort.listChangedFiles(canonicalRoot, input.targetBranch).pipe(
             Effect.mapError((cause) =>
@@ -336,6 +341,16 @@ export const createWorkspaceFilesService = (
     return Effect.gen(function* () {
       const canonicalRoot = yield* canonicalizeRoot(filesystem, input.rootPath);
       const relativePath = yield* requireRelativePath(input.relativePath);
+      const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot);
+      if (!listedFilePaths.includes(relativePath)) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "relativePath",
+            message: `File '${relativePath}' is not available in the workspace file tree.`,
+            details: { rootPath: canonicalRoot, relativePath },
+          }),
+        );
+      }
       const canonicalPath = yield* canonicalizeContainedFile(
         filesystem,
         canonicalRoot,

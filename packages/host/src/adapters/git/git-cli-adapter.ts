@@ -1,6 +1,10 @@
 import { realpath } from "node:fs/promises";
 import { Effect } from "effect";
-import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { loadChangedFiles } from "../../infrastructure/git/git-changed-files";
 import {
   createDefaultGitRunner,
@@ -59,6 +63,31 @@ export type CreateGitCliAdapterInput = (
 ) & {
   processEnv?: NodeJS.ProcessEnv;
 };
+
+const parseMaterializedGitFilePaths = (
+  output: string,
+): Effect.Effect<string[], HostOperationError> =>
+  Effect.gen(function* () {
+    const filePaths: string[] = [];
+    for (const entry of output.split("\0")) {
+      if (entry.length === 0) {
+        continue;
+      }
+      if (entry.length < 3 || entry[1] !== " ") {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "git.listFiles",
+            message: "Git returned an invalid tagged file entry.",
+            details: { entry },
+          }),
+        );
+      }
+      if (entry[0] !== "S") {
+        filePaths.push(entry.slice(2));
+      }
+    }
+    return filePaths;
+  });
 
 export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort => {
   const processEnv = input.processEnv ?? process.env;
@@ -131,13 +160,14 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
       return Effect.gen(function* () {
         const output = yield* runGit(runner, workingDirectory, [
           "ls-files",
+          "-t",
           "-co",
           "--exclude-standard",
           "-z",
           "--",
           ".",
         ]);
-        return output.split("\0").filter((filePath) => filePath.length > 0);
+        return yield* parseMaterializedGitFilePaths(output);
       });
     },
     getCurrentBranch(workingDirectory) {
