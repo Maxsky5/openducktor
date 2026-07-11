@@ -1,4 +1,4 @@
-import { Settings2 } from "lucide-react";
+import { Settings } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogTrigger } from "@/components/ui/dialog";
@@ -27,7 +27,7 @@ export function SettingsModalTrigger({
       aria-label={iconOnly ? label : undefined}
       title={iconOnly ? label : undefined}
     >
-      <Settings2 />
+      <Settings />
       {iconOnly ? null : label}
     </Button>
   );

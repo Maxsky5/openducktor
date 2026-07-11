@@ -9,8 +9,8 @@ export function AgentStudioDevServerSettingsAction({
   return (
     <SettingsModal
       triggerIconOnly
-      triggerSize="icon"
-      triggerClassName="shrink-0"
+      triggerSize="sm"
+      triggerClassName="size-8 shrink-0 p-0"
       triggerLabel="Configure dev server commands"
       deepLink={{ kind: "repository-dev-servers", repositoryPath }}
     />
