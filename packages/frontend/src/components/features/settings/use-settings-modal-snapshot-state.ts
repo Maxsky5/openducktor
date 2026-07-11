@@ -2,11 +2,14 @@ import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { errorMessage } from "@/lib/errors";
-import { chooseInitialSettingsWorkspaceId } from "./settings-workspace-selection";
+import {
+  chooseInitialSettingsWorkspaceId,
+  type SettingsWorkspaceSelectionPolicy,
+} from "./settings-workspace-selection";
 
 type UseSettingsModalSnapshotStateArgs = {
   open: boolean;
-  workspaceRepoPath: string | null;
+  workspaceSelectionPolicy: SettingsWorkspaceSelectionPolicy;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
 };
 
@@ -21,6 +24,8 @@ type SettingsModalSnapshotState = {
   isLoadingSettings: boolean;
   settingsError: string | null;
   clearSettingsError: () => void;
+  requiredWorkspaceSelectionUnresolved: boolean;
+  requiredWorkspaceRepoPath: string | null;
 };
 
 type SettingsSnapshotState = {
@@ -37,7 +42,7 @@ type SettingsSnapshotAction =
   | {
       type: "loaded";
       snapshot: SettingsSnapshot;
-      workspaceRepoPath: string | null;
+      workspaceSelectionPolicy: SettingsWorkspaceSelectionPolicy;
     }
   | { type: "loadFailed"; error: string }
   | { type: "loadingFinished" }
@@ -59,7 +64,7 @@ const settingsSnapshotReducer = (
 ): SettingsSnapshotState => {
   switch (action.type) {
     case "closed":
-      return { ...state, settingsError: null };
+      return initialSettingsSnapshotState;
     case "loadingStarted":
       return { ...state, isLoadingSettings: true, settingsError: null };
     case "loaded":
@@ -69,7 +74,7 @@ const settingsSnapshotReducer = (
         snapshotDraft: action.snapshot,
         selectedWorkspaceId: chooseInitialSettingsWorkspaceId(
           action.snapshot,
-          action.workspaceRepoPath,
+          action.workspaceSelectionPolicy,
         ),
       };
     case "loadFailed":
@@ -96,7 +101,7 @@ const settingsSnapshotReducer = (
 
 export const useSettingsModalSnapshotState = ({
   open,
-  workspaceRepoPath,
+  workspaceSelectionPolicy,
   loadSettingsSnapshot,
 }: UseSettingsModalSnapshotStateArgs): SettingsModalSnapshotState => {
   const [state, dispatch] = useReducer(settingsSnapshotReducer, initialSettingsSnapshotState);
@@ -142,7 +147,7 @@ export const useSettingsModalSnapshotState = ({
           return;
         }
 
-        dispatch({ type: "loaded", snapshot, workspaceRepoPath });
+        dispatch({ type: "loaded", snapshot, workspaceSelectionPolicy });
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -160,13 +165,16 @@ export const useSettingsModalSnapshotState = ({
     return () => {
       cancelled = true;
     };
-  }, [workspaceRepoPath, loadSettingsSnapshot, open]);
+  }, [loadSettingsSnapshot, open, workspaceSelectionPolicy]);
 
   if (
     snapshotDraft &&
     (!selectedWorkspaceId || snapshotDraft.workspaces[selectedWorkspaceId] === undefined)
   ) {
-    const fallbackWorkspaceId = chooseInitialSettingsWorkspaceId(snapshotDraft, workspaceRepoPath);
+    const fallbackWorkspaceId = chooseInitialSettingsWorkspaceId(
+      snapshotDraft,
+      workspaceSelectionPolicy,
+    );
     if (fallbackWorkspaceId !== selectedWorkspaceId) {
       dispatch({ type: "workspaceSelected", workspaceId: fallbackWorkspaceId });
     }
@@ -183,5 +191,11 @@ export const useSettingsModalSnapshotState = ({
     isLoadingSettings,
     settingsError,
     clearSettingsError,
+    requiredWorkspaceSelectionUnresolved:
+      workspaceSelectionPolicy.kind === "required" &&
+      snapshotDraft !== null &&
+      selectedWorkspaceId === null,
+    requiredWorkspaceRepoPath:
+      workspaceSelectionPolicy.kind === "required" ? workspaceSelectionPolicy.repoPath : null,
   };
 };

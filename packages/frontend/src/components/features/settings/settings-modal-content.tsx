@@ -17,6 +17,7 @@ import { PromptOverridesSection } from "./settings-prompt-overrides-section";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
+import { RepositoryScriptsSection } from "./settings-repository-scripts-section";
 import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
@@ -32,6 +33,7 @@ type SettingsModalContentProps = {
   onGlobalPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onSelectedReusablePromptIdChange: (next: string | null) => void;
+  devServersAnchorRequest?: number | null;
 };
 
 export function SettingsModalContent({
@@ -46,6 +48,7 @@ export function SettingsModalContent({
   onGlobalPromptRoleTabChange,
   onRepoPromptRoleTabChange,
   onSelectedReusablePromptIdChange,
+  devServersAnchorRequest,
 }: SettingsModalContentProps): ReactElement {
   const {
     isLoadingSettings,
@@ -68,6 +71,8 @@ export function SettingsModalContent({
     selectedWorkspace,
     selectedWorkspaceId,
     selectedRepoConfig,
+    requiredWorkspaceSelectionUnresolved,
+    requiredWorkspaceRepoPath,
     selectedRepoEffectiveWorktreeBasePath,
     selectedRepoBranches,
     isLoadingSelectedRepoBranches,
@@ -239,6 +244,17 @@ export function SettingsModalContent({
       />
 
       <div className="min-w-0 space-y-4">
+        {requiredWorkspaceSelectionUnresolved ? (
+          <div
+            role="alert"
+            className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground"
+          >
+            {requiredWorkspaceRepoPath
+              ? `The repository at ${requiredWorkspaceRepoPath} is not available in Settings. Choose a repository explicitly or close Settings.`
+              : "This Agent Studio panel has no repository to configure. Choose a repository explicitly or close Settings."}
+          </div>
+        ) : null}
+
         {workspaceIds.length === 0 ? (
           <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
             Add a repository first, then configure repository settings.
@@ -257,10 +273,22 @@ export function SettingsModalContent({
               isLoadingSelectedRepoBranches: isLoadingSelectedRepoBranches,
             }}
             onRetrySelectedRepoBranchesLoad={retrySelectedRepoBranchesLoad}
+            onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
+          />
+        ) : null}
+
+        {repositorySection === "scripts" ? (
+          <RepositoryScriptsSection
+            selectedRepoConfig={selectedRepoConfig}
+            selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
             validationState={{
               showDevServerValidationErrors: showRepoScriptValidationErrors,
             }}
-            selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
+            loadingState={{
+              isLoadingSettings,
+              isSaving,
+            }}
+            devServersAnchorRequest={devServersAnchorRequest}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
         ) : null}

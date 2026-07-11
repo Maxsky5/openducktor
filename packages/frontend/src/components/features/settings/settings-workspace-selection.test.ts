@@ -39,8 +39,38 @@ describe("settings workspace selection", () => {
       "repo-a": createRepoConfig(),
     });
 
-    expect(chooseInitialSettingsWorkspaceId(snapshot, "/repo-b")).toBe("repo-b");
-    expect(chooseInitialSettingsWorkspaceId(snapshot, "/missing")).toBe("repo-a");
-    expect(chooseInitialSettingsWorkspaceId(createSnapshot({}), null)).toBeNull();
+    expect(
+      chooseInitialSettingsWorkspaceId(snapshot, { kind: "preferred", repoPath: "/repo-b" }),
+    ).toBe("repo-b");
+    expect(
+      chooseInitialSettingsWorkspaceId(snapshot, { kind: "preferred", repoPath: "/missing" }),
+    ).toBe("repo-a");
+    expect(
+      chooseInitialSettingsWorkspaceId(createSnapshot({}), {
+        kind: "preferred",
+        repoPath: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("requires an exact repository match for explicit settings navigation", () => {
+    const snapshot = createSnapshot({
+      "repo-b": createRepoConfig({
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repo-b",
+      }),
+      "repo-a": createRepoConfig(),
+    });
+
+    expect(
+      chooseInitialSettingsWorkspaceId(snapshot, { kind: "required", repoPath: "/repo-b" }),
+    ).toBe("repo-b");
+    expect(
+      chooseInitialSettingsWorkspaceId(snapshot, { kind: "required", repoPath: "/missing" }),
+    ).toBeNull();
+    expect(
+      chooseInitialSettingsWorkspaceId(snapshot, { kind: "required", repoPath: null }),
+    ).toBeNull();
   });
 });

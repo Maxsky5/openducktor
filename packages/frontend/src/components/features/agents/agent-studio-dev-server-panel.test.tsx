@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerScriptState } from "@openducktor/contracts";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
@@ -139,6 +139,49 @@ const failedScript: DevServerScriptState = {
 };
 
 describe("AgentStudioDevServerPanel", () => {
+  test.each([
+    ["stopped", {}],
+    ["empty", { mode: "empty", disabledReason: DEV_SERVER_EMPTY_REASON, worktreePath: null }],
+    [
+      "disabled",
+      { mode: "disabled", disabledReason: DEV_SERVER_DISABLED_REASON, worktreePath: null },
+    ],
+    ["loading", { mode: "loading", isLoading: true }],
+    ["start pending", { isStartPending: true }],
+  ] as const)("keeps configure available while compact mode is %s", (_label, overrides) => {
+    let configureCalls = 0;
+    let startCalls = 0;
+    const view = render(
+      <AgentStudioDevServerPanel
+        model={baseModel({ ...overrides, onStart: () => startCalls++ })}
+        compactAction={
+          <button type="button" onClick={() => configureCalls++}>
+            Configure dev server commands
+          </button>
+        }
+      />,
+    );
+
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Configure dev server commands" }));
+      expect(configureCalls).toBe(1);
+      expect(startCalls).toBe(0);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("does not render the compact configure action in expanded mode", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({ mode: "active", isExpanded: true, scripts: [runningScript] }),
+        compactAction: createElement("button", { type: "button" }, "Configure dev server commands"),
+      }),
+    );
+
+    expect(html).not.toContain("Configure dev server commands");
+  });
+
   test("renders compact start row while stopped", () => {
     const view = render(<AgentStudioDevServerPanel model={baseModel()} />);
 

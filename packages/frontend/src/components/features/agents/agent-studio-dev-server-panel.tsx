@@ -133,8 +133,10 @@ function CompactStartButton({
 
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
+  compactAction,
 }: {
   model: AgentStudioDevServerPanelModel;
+  compactAction?: ReactElement;
 }): ReactElement {
   const [rendererError, setRendererError] = useState<string | null>(null);
   const selectedScript = model.selectedScript;
@@ -224,12 +226,15 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         className="border-t border-border bg-card/70 p-3"
         data-testid="agent-studio-dev-server-compact-panel"
       >
-        <div className="flex items-center">
-          <CompactStartButton
-            button={startButton}
-            disabledReason={model.disabledReason}
-            disabledReasonId={disabledReasonId}
-          />
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <CompactStartButton
+              button={startButton}
+              disabledReason={model.disabledReason}
+              disabledReasonId={disabledReasonId}
+            />
+          </div>
+          {compactAction}
         </div>
         {panelError ? (
           <div

@@ -1,15 +1,11 @@
-import { Settings2 } from "lucide-react";
-import { type ReactElement, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
@@ -17,21 +13,23 @@ import type {
 } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
+import {
+  applySettingsModalOpenTarget,
+  type SettingsModalNavigationState,
+  type SettingsModalOpenTarget,
+} from "./settings-modal-navigation";
 import { SettingsSidebar } from "./settings-modal-sidebars";
+import { SettingsModalTrigger } from "./settings-modal-trigger";
 import { useSettingsModalController } from "./use-settings-modal-controller";
+
+export type { SettingsModalOpenTarget } from "./settings-modal-navigation";
 
 type SettingsModalProps = {
   triggerClassName?: string;
   triggerIconOnly?: boolean;
   triggerSize?: "default" | "sm" | "lg" | "icon";
-};
-
-type SettingsModalNavigationState = {
-  section: SettingsSectionId;
-  repositorySection: RepositorySectionId;
-  globalPromptRoleTab: PromptRoleTabId;
-  repoPromptRoleTab: PromptRoleTabId;
-  selectedReusablePromptId: string | null;
+  triggerLabel?: string;
+  openTarget?: SettingsModalOpenTarget;
 };
 
 const INITIAL_SECTION: SettingsSectionId = "repositories";
@@ -49,14 +47,27 @@ export function SettingsModal({
   triggerClassName,
   triggerIconOnly = false,
   triggerSize = triggerIconOnly ? "icon" : "sm",
+  triggerLabel = "Settings",
+  openTarget,
 }: SettingsModalProps): ReactElement {
   const [open, setOpen] = useState(false);
+  const [devServersAnchorRequest, setDevServersAnchorRequest] = useState<number | null>(null);
+  const anchorRequestSequence = useRef(0);
   const [navigation, setNavigation] =
     useState<SettingsModalNavigationState>(INITIAL_NAVIGATION_STATE);
+  const targetRepositoryPath = openTarget?.repositoryPath;
+  const workspaceSelectionPolicy = useMemo(
+    () =>
+      targetRepositoryPath !== undefined
+        ? ({ kind: "required", repoPath: targetRepositoryPath } as const)
+        : undefined,
+    [targetRepositoryPath],
+  );
   const controller = useSettingsModalController({
     open,
     shouldLoadCatalog:
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
+    workspaceSelectionPolicy,
   });
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
@@ -89,29 +100,28 @@ export function SettingsModal({
     });
   };
 
+  const handleOpenChange = (nextOpen: boolean): void => {
+    if (!nextOpen && controller.isSaving) {
+      return;
+    }
+
+    if (nextOpen && openTarget) {
+      setNavigation((current) => applySettingsModalOpenTarget(current, openTarget));
+      anchorRequestSequence.current += 1;
+      setDevServersAnchorRequest(anchorRequestSequence.current);
+    }
+
+    setOpen(nextOpen);
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && controller.isSaving) {
-          return;
-        }
-        setOpen(nextOpen);
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size={triggerSize}
-          className={cn(triggerClassName)}
-          aria-label={triggerIconOnly ? "Settings" : undefined}
-          title={triggerIconOnly ? "Settings" : undefined}
-        >
-          <Settings2 className="size-4" />
-          {triggerIconOnly ? null : "Settings"}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <SettingsModalTrigger
+        className={triggerClassName}
+        iconOnly={triggerIconOnly}
+        label={triggerLabel}
+        size={triggerSize}
+      />
 
       <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0">
         <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
@@ -142,6 +152,7 @@ export function SettingsModal({
                 onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
                 onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
                 onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
+                devServersAnchorRequest={devServersAnchorRequest}
               />
             </div>
           </div>

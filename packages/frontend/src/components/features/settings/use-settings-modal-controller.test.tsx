@@ -103,6 +103,7 @@ const createHookHarness = (
   shouldLoadCatalog = false,
   options?: {
     loadRepoRuntimeCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+    requiredRepoPath?: string | null;
   },
 ) => {
   const queryClient = createQueryClient();
@@ -179,6 +180,14 @@ const createHookHarness = (
       useSettingsModalController({
         open: isOpen,
         shouldLoadCatalog: shouldLoad,
+        ...(options && "requiredRepoPath" in options
+          ? {
+              workspaceSelectionPolicy: {
+                kind: "required" as const,
+                repoPath: options.requiredRepoPath ?? null,
+              },
+            }
+          : {}),
       }),
     {
       isOpen: open,
@@ -241,6 +250,52 @@ describe("useSettingsModalController", () => {
 
     expect(nextRefreshChecks).toHaveBeenCalledTimes(0);
 
+    await harness.unmount();
+  });
+
+  test("selects the exact required repository instead of the active workspace", async () => {
+    const harness = createHookHarness(true, false, { requiredRepoPath: "/repo-two" });
+    await harness.mount();
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+
+    expect(harness.getLatest().selectedWorkspaceId).toBe("repo-two");
+    expect(harness.getLatest().selectedRepoConfig?.repoPath).toBe("/repo-two");
+    expect(harness.getLatest().requiredWorkspaceSelectionUnresolved).toBe(false);
+    await harness.unmount();
+  });
+
+  test("clears stale selection on close and reapplies the required repository on reopen", async () => {
+    const harness = createHookHarness(true, false, { requiredRepoPath: "/repo-two" });
+    await harness.mount();
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+
+    await harness.run((state) => state.setSelectedWorkspaceId("repo"));
+    expect(harness.getLatest().selectedWorkspaceId).toBe("repo");
+
+    await harness.update({ isOpen: false, shouldLoad: false });
+    expect(harness.getLatest().snapshotDraft).toBeNull();
+    expect(harness.getLatest().selectedWorkspaceId).toBeNull();
+
+    await harness.update({ isOpen: true, shouldLoad: false });
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+    expect(harness.getLatest().selectedWorkspaceId).toBe("repo-two");
+    expect(harness.getLatest().selectedRepoConfig?.repoPath).toBe("/repo-two");
+    await harness.unmount();
+  });
+
+  test("does not fall back when the required repository is missing", async () => {
+    const harness = createHookHarness(true, false, { requiredRepoPath: "/missing" });
+    await harness.mount();
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+
+    expect(harness.getLatest().selectedWorkspaceId).toBeNull();
+    expect(harness.getLatest().selectedRepoConfig).toBeNull();
+    expect(harness.getLatest().requiredWorkspaceSelectionUnresolved).toBe(true);
+    expect(harness.getLatest().requiredWorkspaceRepoPath).toBe("/missing");
+
+    await harness.run((state) => state.setSelectedWorkspaceId("repo-two"));
+    expect(harness.getLatest().selectedWorkspaceId).toBe("repo-two");
+    expect(harness.getLatest().requiredWorkspaceSelectionUnresolved).toBe(false);
     await harness.unmount();
   });
 
