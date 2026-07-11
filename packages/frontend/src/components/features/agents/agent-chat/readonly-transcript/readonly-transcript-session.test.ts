@@ -95,6 +95,25 @@ describe("createReadonlyTranscriptSession", () => {
     expect(approximate.messages.version).not.toBe(exact.messages.version);
   });
 
+  test("versions system context messages without a notice", () => {
+    expect(() =>
+      createReadonlyTranscriptSession({
+        externalSessionId: "session-1",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        history: [
+          {
+            messageId: "system-context-1",
+            role: "system",
+            timestamp: "2026-07-10T12:00:00.000Z",
+            text: "System context",
+            parts: [],
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
   test("reconciles runtime and history subagent rows by child session identity", () => {
     const emptySession = createEmptyReadonlyRuntimeSessionState({
       externalSessionId: "parent-thread",

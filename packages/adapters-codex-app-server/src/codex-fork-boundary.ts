@@ -78,8 +78,11 @@ export const resolveCodexForkBoundary = (
   const timestamp = firstChildOwnedTurn
     ? timestampFromSeconds(
         isPlainObject(firstChildOwnedTurn)
-          ? (firstChildOwnedTurn.startedAt ?? firstChildOwnedTurn.started_at)
-          : undefined,
+          ? (firstChildOwnedTurn.startedAt ??
+              firstChildOwnedTurn.started_at ??
+              thread.createdAt ??
+              thread.created_at)
+          : (thread.createdAt ?? thread.created_at),
         `child turn '${turnIds[beforeTurnIndex]}'`,
       )
     : timestampFromSeconds(

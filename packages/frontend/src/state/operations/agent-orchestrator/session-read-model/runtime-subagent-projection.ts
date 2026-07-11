@@ -1,6 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { upsertSessionMessage } from "../support/messages";
-import { createSubagentMessage } from "../support/subagent-messages";
+import { upsertSubagentMessage } from "../support/subagent-messages";
 import type { RuntimeChildSnapshot } from "./runtime-child-snapshots";
 
 export type RuntimeSubagentProjection = {
@@ -24,20 +23,18 @@ export const projectRuntimeSubagentsToSession = ({
     hasProjectedChild = true;
     hasActiveChild = hasActiveChild || status === "running";
     const correlationKey = `session:${snapshot.ref.externalSessionId}`;
-    messages = upsertSessionMessage(
-      { ...session, messages },
-      createSubagentMessage({
-        timestamp: snapshot.startedAt,
-        meta: {
-          kind: "subagent",
-          partId: correlationKey,
-          correlationKey,
-          status,
-          prompt: snapshot.title,
-          externalSessionId: snapshot.ref.externalSessionId,
-        },
-      }),
-    );
+    messages = upsertSubagentMessage({
+      owner: { ...session, messages },
+      timestamp: snapshot.startedAt,
+      incomingMeta: {
+        kind: "subagent",
+        partId: correlationKey,
+        correlationKey,
+        status,
+        prompt: snapshot.title,
+        externalSessionId: snapshot.ref.externalSessionId,
+      },
+    });
   }
 
   return {

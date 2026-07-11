@@ -153,34 +153,29 @@ const installScrollMetrics = (element: HTMLDivElement): void => {
   });
 };
 
-const withTranscriptScrollMetrics = <Result,>(renderAction: () => Result): Result => {
-  const originalSetAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function setAttributeWithScrollMetrics(
-    name: string,
-    value: string,
-  ): void {
-    originalSetAttribute.call(this, name, value);
-    if (
-      name === "class" &&
-      value.includes("agent-chat-scroll-region") &&
-      this instanceof HTMLDivElement
-    ) {
-      installScrollMetrics(this);
-    }
-  };
-  try {
-    return renderAction();
-  } finally {
-    Element.prototype.setAttribute = originalSetAttribute;
-  }
-};
-
 const transcriptScrollRegion = (): HTMLDivElement => {
-  const region = document.querySelector(".agent-chat-scroll-region");
-  if (!(region instanceof HTMLDivElement)) {
+  const region = globalThis.document.querySelector(".agent-chat-scroll-region");
+  if (!(region instanceof globalThis.HTMLDivElement)) {
     throw new Error("Expected the transcript dialog to render its chat scroll region.");
   }
   return region;
+};
+
+const rerenderWithScrollMetrics = (rerender: () => void): void => {
+  const originalCreateElement = globalThis.document.createElement;
+  const createElement = originalCreateElement.bind(globalThis.document);
+  globalThis.document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
+    const element = createElement(tagName, options);
+    if (element instanceof globalThis.HTMLDivElement) {
+      installScrollMetrics(element);
+    }
+    return element;
+  }) as typeof globalThis.document.createElement;
+  try {
+    rerender();
+  } finally {
+    globalThis.document.createElement = originalCreateElement;
+  }
 };
 
 const dialog = (open: boolean): ReactElement => (
@@ -210,7 +205,7 @@ describe("AgentSessionTranscriptDialog", () => {
     const deferredSettings = createDeferred<SettingsSnapshot>();
     host.workspaceGetSettingsSnapshot = async () => deferredSettings.promise;
     readSessionHistory.mockImplementationOnce(async () => deferredHistory.promise);
-    const rendered = withTranscriptScrollMetrics(() => render(dialog(true), { wrapper }));
+    const rendered = render(dialog(true), { wrapper });
 
     try {
       await act(async () => {
@@ -219,6 +214,7 @@ describe("AgentSessionTranscriptDialog", () => {
       });
       await waitFor(() => expect(readSessionHistory).toHaveBeenCalledTimes(1));
       const scrollRegion = transcriptScrollRegion();
+      installScrollMetrics(scrollRegion);
       scrollRegion.scrollTop = 0;
 
       await act(async () => {
@@ -239,7 +235,7 @@ describe("AgentSessionTranscriptDialog", () => {
     const deferredRefresh = createDeferred<AgentSessionHistoryMessage[]>();
     host.workspaceGetSettingsSnapshot = async () => deferredSettings.promise;
     readSessionHistory.mockResolvedValueOnce(history);
-    const rendered = withTranscriptScrollMetrics(() => render(dialog(true), { wrapper }));
+    const rendered = render(dialog(true), { wrapper });
 
     try {
       await act(async () => {
@@ -248,13 +244,16 @@ describe("AgentSessionTranscriptDialog", () => {
       });
       await waitFor(() => expect(rendered.getByText("Assistant response 39")).toBeTruthy());
       rendered.rerender(dialog(false));
-      await waitFor(() => expect(document.querySelector(".agent-chat-scroll-region")).toBeNull());
+      await waitFor(() =>
+        expect(globalThis.document.querySelector(".agent-chat-scroll-region")).toBeNull(),
+      );
       readSessionHistory.mockImplementationOnce(async () => deferredRefresh.promise);
 
-      withTranscriptScrollMetrics(() => rendered.rerender(dialog(true)));
+      rerenderWithScrollMetrics(() => rendered.rerender(dialog(true)));
+      const reopenedScrollRegion = transcriptScrollRegion();
 
       expect(rendered.getByText("Assistant response 39")).toBeTruthy();
-      expect(transcriptScrollRegion().scrollTop).toBe(900);
+      await waitFor(() => expect(reopenedScrollRegion.scrollTop).toBe(900));
       await waitFor(() => expect(readSessionHistory).toHaveBeenCalledTimes(2));
     } finally {
       await act(async () => {

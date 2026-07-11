@@ -238,7 +238,7 @@ describe("CodexPendingInputState", () => {
     ]);
   });
 
-  test("does not bind parent active turns to mirrored child pending input", () => {
+  test("binds mirrored child pending input to the active parent turn", () => {
     const pendingInput = new CodexPendingInputState();
     const route = {
       parentExternalSessionId: "parent-thread",
@@ -260,7 +260,7 @@ describe("CodexPendingInputState", () => {
 
     pendingInput.bindActiveTurn("parent-thread", activeTurn);
 
-    expect(pendingInput.resolveQuestion("question-1")).toBeUndefined();
+    expect(pendingInput.resolveQuestion("question-1")).toBe(activeTurn);
   });
 
   test("clearing a parent mirror preserves child pending input turn ownership", () => {

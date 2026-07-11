@@ -109,7 +109,12 @@ const projectCodexThreadReadToHistory = ({
   runtimeId: string;
   forkBoundary: CodexForkBoundary | null;
 }): AgentSessionHistoryMessage[] => {
-  const forkBoundaryMessage = forkBoundary ? codexForkBoundaryHistoryMessage(forkBoundary) : null;
+  const forkBoundaryProjection = forkBoundary
+    ? {
+        ...forkBoundary,
+        message: codexForkBoundaryHistoryMessage(forkBoundary),
+      }
+    : null;
   let didInsertForkBoundary = false;
   const projectedHistory = codexTurnItemsFromThreadRead(response)
     .flatMap(
@@ -126,6 +131,10 @@ const projectCodexThreadReadToHistory = ({
         },
         index,
       ) => {
+        const itemOwnerThreadId =
+          forkBoundaryProjection && turnIndex < forkBoundaryProjection.beforeTurnIndex
+            ? forkBoundaryProjection.parentThreadId
+            : input.externalSessionId;
         const turnModel =
           model ??
           (turnId ? modelByTurnKey.get(codexTurnKey(input.externalSessionId, turnId)) : undefined);
@@ -146,7 +155,7 @@ const projectCodexThreadReadToHistory = ({
           {
             source: "thread_read",
             runtimeId,
-            threadId: input.externalSessionId,
+            threadId: itemOwnerThreadId,
             ...(timestamp ? { timestamp } : {}),
           },
         );
@@ -174,20 +183,19 @@ const projectCodexThreadReadToHistory = ({
           history = history.map((message) => ({ ...message, timestampIsApproximate: true }));
         }
         if (
-          forkBoundaryMessage &&
-          forkBoundary &&
+          forkBoundaryProjection &&
           !didInsertForkBoundary &&
-          turnIndex >= forkBoundary.beforeTurnIndex
+          turnIndex >= forkBoundaryProjection.beforeTurnIndex
         ) {
           didInsertForkBoundary = true;
-          return [forkBoundaryMessage, ...history];
+          return [forkBoundaryProjection.message, ...history];
         }
         return history;
       },
     )
     .filter((message): message is AgentSessionHistoryMessage => Boolean(message));
-  if (forkBoundaryMessage && !didInsertForkBoundary) {
-    projectedHistory.push(forkBoundaryMessage);
+  if (forkBoundaryProjection && !didInsertForkBoundary) {
+    projectedHistory.push(forkBoundaryProjection.message);
   }
   const systemPromptHistoryMessage = codexHistorySystemPrompt(input, session);
   return systemPromptHistoryMessage

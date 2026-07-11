@@ -50,6 +50,15 @@ const resolveSubagentStatus = (
     : existingStatus;
 };
 
+const isLaterSubagentRestart = (
+  existingMeta: SubagentMeta | null | undefined,
+  incomingMeta: SubagentMeta,
+): boolean =>
+  incomingMeta.status === "running" &&
+  typeof existingMeta?.endedAtMs === "number" &&
+  typeof incomingMeta.startedAtMs === "number" &&
+  incomingMeta.startedAtMs > existingMeta.endedAtMs;
+
 export const formatSubagentContent = (meta: {
   agent?: string;
   prompt?: string;
@@ -165,13 +174,17 @@ const mergeSubagentMeta = (
     startedAtMsFallback?: number;
   },
 ): SubagentMeta => {
-  const status = resolveSubagentStatus(existingMeta?.status, incomingMeta.status);
+  const isRestart = isLaterSubagentRestart(existingMeta, incomingMeta);
+  const status = isRestart
+    ? "running"
+    : resolveSubagentStatus(existingMeta?.status, incomingMeta.status);
   const metadata =
     existingMeta?.metadata && incomingMeta.metadata
       ? { ...existingMeta.metadata, ...incomingMeta.metadata }
       : (incomingMeta.metadata ?? existingMeta?.metadata);
-  const startedAtMs =
-    typeof existingMeta?.startedAtMs === "number" && typeof incomingMeta.startedAtMs === "number"
+  const startedAtMs = isRestart
+    ? incomingMeta.startedAtMs
+    : typeof existingMeta?.startedAtMs === "number" && typeof incomingMeta.startedAtMs === "number"
       ? Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs)
       : (incomingMeta.startedAtMs ?? existingMeta?.startedAtMs ?? options?.startedAtMsFallback);
   const endedAtMs =
@@ -183,7 +196,7 @@ const mergeSubagentMeta = (
   const agent = incomingMeta.agent ?? existingMeta?.agent;
   const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
   const description = incomingMeta.description ?? existingMeta?.description;
-  const error = incomingMeta.error ?? existingMeta?.error;
+  const error = isRestart ? incomingMeta.error : (incomingMeta.error ?? existingMeta?.error);
   const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
   const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
 

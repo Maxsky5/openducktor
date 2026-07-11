@@ -735,7 +735,16 @@ export class CodexAppServerAdapter
     }
     this.subagents.recordThread(thread, runtimeId);
     if (thread.status.classification === "idle") {
-      if (!this.subagents.routeForChild(input.externalSessionId, runtimeId)) {
+      const isRoutedChild = Boolean(
+        this.subagents.routeForChild(input.externalSessionId, runtimeId),
+      );
+      const hasActiveRoutedChild = this.subagents
+        .routesForParent(input.externalSessionId, runtimeId)
+        .some((route) => {
+          const childThread = inventory.threadsById.get(route.childExternalSessionId);
+          return childThread !== undefined && childThread.status.classification !== "idle";
+        });
+      if (!isRoutedChild && !hasActiveRoutedChild) {
         return;
       }
       const session = sessionStateFromThreadSnapshot(input, runtimeId, thread);

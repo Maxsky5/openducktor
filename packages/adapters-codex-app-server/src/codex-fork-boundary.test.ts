@@ -91,6 +91,20 @@ describe("resolveCodexForkBoundary", () => {
     });
   });
 
+  test("uses the thread creation time when the first child turn has no start time", () => {
+    const response = childThreadRead({
+      turns: [
+        { id: "parent-turn-1", startedAt: 10, status: "completed", items: [] },
+        { id: "child-turn-1", startedAt: null, status: "inProgress", items: [] },
+      ],
+    });
+
+    expect(resolveCodexForkBoundary(response, new Set(["parent-turn-1"]))).toMatchObject({
+      beforeTurnId: "child-turn-1",
+      timestamp: "1970-01-01T00:00:25.000Z",
+    });
+  });
+
   test("fails when parent-owned turns appear after child-owned history", () => {
     const response = childThreadRead({
       turns: [

@@ -205,7 +205,7 @@ export function useRuntimeTranscriptSessionHistory({
     target: stableTarget,
     sessionRef: runtimeSessionRef,
     history: historyQuery.data,
-    shouldMergeHistory: shouldLoadHistory,
+    shouldMergeHistory: shouldLoadHistory && matchingLiveSession === null,
     replyAgentApproval,
     subscribeSessionEvents,
   });

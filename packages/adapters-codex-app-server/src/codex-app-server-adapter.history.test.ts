@@ -140,6 +140,13 @@ describe("CodexAppServerAdapter history loading", () => {
             content: [{ type: "text", text: "Parent prompt" }],
           },
           {
+            id: "parent-spawn",
+            type: "subAgentActivity",
+            agentThreadId: "child-thread",
+            agentPath: "/root/child",
+            kind: "started",
+          },
+          {
             id: "parent-answer",
             type: "agentMessage",
             phase: "commentary",
@@ -211,12 +218,13 @@ describe("CodexAppServerAdapter history loading", () => {
 
     expect(history.map((message) => message.messageId)).toEqual([
       "parent-user",
+      "codex-subagent:parent-thread:child-thread",
       "parent-answer",
       "codex-fork-boundary:child-thread:child-turn",
       "child-user",
       "child-answer",
     ]);
-    expect(history[2]).toEqual({
+    expect(history[3]).toEqual({
       messageId: "codex-fork-boundary:child-thread:child-turn",
       role: "system",
       timestamp: "1970-01-01T00:00:30.000Z",

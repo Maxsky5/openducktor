@@ -135,6 +135,36 @@ class ParentWithChildThreadListTransport extends RecordingTransport {
   }
 }
 
+class IdleParentWithActiveChildThreadListTransport extends RecordingTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      return {
+        data: [
+          {
+            id: "parent-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            preview: "Idle parent session",
+            status: { type: "idle" },
+          },
+          {
+            id: "child-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_020,
+            preview: "Running child subagent",
+            status: { type: "active", activeFlags: [] },
+            parentThreadId: "parent-thread",
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
 class IdleParentThreadListTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
@@ -1163,6 +1193,55 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         (event as { childExternalSessionId?: unknown }).childExternalSessionId === "child-thread",
     );
     unsubscribe();
+  });
+
+  test("streams active child lifecycle through an idle parent observer", async () => {
+    const streamListeners: RuntimeListener[] = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
+      return () => {};
+    });
+    const { adapter } = createHarness({
+      takeBufferedEvents: mock(async () => [] as unknown[]),
+      subscribeEvents,
+      transportFactory: mock(() => new IdleParentWithActiveChildThreadListTransport()),
+    });
+    const events: unknown[] = [];
+
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("parent-thread"),
+      (event) => events.push(event),
+    );
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "turn/completed",
+        params: {
+          threadId: "child-thread",
+          turn: {
+            id: "child-turn",
+            status: "completed",
+            completedAt: 1_778_112_040,
+          },
+        },
+      },
+    });
+
+    try {
+      await waitForEvent(
+        events,
+        (event) =>
+          typeof event === "object" &&
+          event !== null &&
+          (event as { type?: unknown }).type === "assistant_part" &&
+          (event as { part?: { externalSessionId?: unknown; status?: unknown } }).part
+            ?.externalSessionId === "child-thread" &&
+          (event as { part?: { status?: unknown } }).part?.status === "completed",
+      );
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("replays mirrored pending input when subscribing an idle parent without a local session", async () => {

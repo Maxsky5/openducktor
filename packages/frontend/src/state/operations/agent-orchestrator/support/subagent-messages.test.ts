@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { appendHistorySubagentMessage } from "./subagent-messages";
+import { createSessionMessagesState } from "./messages";
+import { appendHistorySubagentMessage, upsertSubagentMessage } from "./subagent-messages";
 
 type SubagentMessage = AgentChatMessage & {
   role: "system";
@@ -173,5 +174,42 @@ describe("appendHistorySubagentMessage", () => {
     expect(messages[0].meta.correlationKey).toBe("session:m1:session-child-1");
     expect(messages[0].meta.externalSessionId).toBe("session-child-1");
     expect(messages[0].meta.status).toBe("completed");
+  });
+});
+
+describe("upsertSubagentMessage", () => {
+  test("accepts a running lifecycle that starts after the previous completion", () => {
+    const completed = makeSubagentMessage({
+      correlationKey: "codex-subagent:parent-thread:child-thread",
+      externalSessionId: "child-thread",
+      status: "completed",
+      startedAtMs: 100,
+      endedAtMs: 200,
+    });
+    const messages = upsertSubagentMessage({
+      owner: {
+        externalSessionId: "parent-thread",
+        messages: createSessionMessagesState("parent-thread", [completed]),
+      },
+      incomingMeta: {
+        kind: "subagent",
+        partId: "child-thread",
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        externalSessionId: "child-thread",
+        status: "running",
+        startedAtMs: 300,
+      },
+      timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(messages.items).toHaveLength(1);
+    expect(messages.items[0]?.meta).toMatchObject({
+      kind: "subagent",
+      externalSessionId: "child-thread",
+      status: "running",
+      startedAtMs: 300,
+    });
+    expect(messages.items[0]?.meta).not.toHaveProperty("endedAtMs");
+    expect(messages.items[0]?.meta).not.toHaveProperty("error");
   });
 });
