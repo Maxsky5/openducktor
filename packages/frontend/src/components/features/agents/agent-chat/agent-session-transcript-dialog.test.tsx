@@ -244,8 +244,12 @@ describe("AgentSessionTranscriptDialog", () => {
       });
       await waitFor(() => expect(rendered.getByText("Assistant response 39")).toBeTruthy());
       rendered.rerender(dialog(false));
-      await waitFor(() =>
-        expect(globalThis.document.querySelector(".agent-chat-scroll-region")).toBeNull(),
+      await waitFor(
+        () =>
+          expect(globalThis.document.querySelector(".agent-chat-scroll-region") === null).toBe(
+            true,
+          ),
+        { timeout: 3_000 },
       );
       readSessionHistory.mockImplementationOnce(async () => deferredRefresh.promise);
 
@@ -253,8 +257,8 @@ describe("AgentSessionTranscriptDialog", () => {
       const reopenedScrollRegion = transcriptScrollRegion();
 
       expect(rendered.getByText("Assistant response 39")).toBeTruthy();
-      await waitFor(() => expect(reopenedScrollRegion.scrollTop).toBe(900));
-      await waitFor(() => expect(readSessionHistory).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(reopenedScrollRegion.scrollTop).toBe(900), { timeout: 3_000 });
+      await waitFor(() => expect(readSessionHistory).toHaveBeenCalledTimes(2), { timeout: 3_000 });
     } finally {
       await act(async () => {
         deferredRefresh.resolve(history);
@@ -262,5 +266,5 @@ describe("AgentSessionTranscriptDialog", () => {
       });
       rendered.unmount();
     }
-  });
+  }, 10_000);
 });

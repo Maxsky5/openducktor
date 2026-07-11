@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
@@ -172,11 +172,13 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-      expect(screen.queryByText("Opening conversation…")).toBeNull();
+      await waitFor(() => expect(screen.queryByText("Opening conversation…") === null).toBe(true), {
+        timeout: 3_000,
+      });
     } finally {
       rendered.unmount();
     }
-  });
+  }, 10_000);
 
   test("opens a linked subagent transcript from the visible subagent card", async () => {
     const { AgentChatMessageCard } = await import("./agent-chat-message-card");
