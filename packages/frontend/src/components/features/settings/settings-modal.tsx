@@ -35,6 +35,7 @@ type SettingsModalProps = {
   triggerSize?: "default" | "sm" | "lg" | "icon";
   triggerLabel?: string;
   deepLink?: SettingsDeepLink;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function SettingsModal({
@@ -43,6 +44,7 @@ export function SettingsModal({
   triggerSize = triggerIconOnly ? "icon" : "sm",
   triggerLabel = "Settings",
   deepLink,
+  onOpenChange,
 }: SettingsModalProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [activeDeepLinkResolution, setActiveDeepLinkResolution] =
@@ -95,7 +97,8 @@ export function SettingsModal({
     setOpen(false);
     setActiveDeepLinkResolution(null);
     setContentFocusRequest(null);
-  }, []);
+    onOpenChange?.(false);
+  }, [onOpenChange]);
 
   const handleSave = (): void => {
     controller.markRepoScriptSaveAttempt();
@@ -119,6 +122,7 @@ export function SettingsModal({
     setNavigation(nextOpenState.navigation);
     setContentFocusRequest(nextOpenState.contentFocusRequest);
     setOpen(true);
+    onOpenChange?.(true);
   };
 
   return (

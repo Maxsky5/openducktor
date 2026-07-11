@@ -3,10 +3,12 @@ import { SettingsModal } from "@/components/features/settings/settings-modal";
 
 type AgentStudioDevServerSettingsActionProps = {
   repositoryPath: string | null;
+  onOpenChange: (open: boolean) => void;
 };
 
 export function AgentStudioDevServerSettingsAction({
   repositoryPath,
+  onOpenChange,
 }: AgentStudioDevServerSettingsActionProps): ReactElement {
   return (
     <SettingsModal
@@ -15,6 +17,7 @@ export function AgentStudioDevServerSettingsAction({
       triggerClassName="size-8 shrink-0 p-0"
       triggerLabel="Configure dev server commands"
       deepLink={{ kind: "repository-dev-servers", repositoryPath }}
+      onOpenChange={onOpenChange}
     />
   );
 }

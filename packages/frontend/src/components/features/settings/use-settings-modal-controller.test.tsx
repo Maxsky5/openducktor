@@ -631,6 +631,7 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().hasRepoScriptValidationErrors).toBe(true);
       expect(harness.getLatest().showRepoScriptValidationErrors).toBe(false);
       expect(harness.getLatest().repoScriptValidationErrorCount).toBe(1);
+      expect(harness.getLatest().settingsSectionErrorCountById.repositories).toBe(1);
       expect(harness.getLatest().selectedRepoDevServerValidationErrors).toEqual({
         frontend: {
           name: "Tab label is required.",

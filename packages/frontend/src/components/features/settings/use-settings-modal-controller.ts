@@ -284,21 +284,6 @@ export const useSettingsModalController = ({
     ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
     : [];
   const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
-  const settingsSectionErrorCountByIdWithReusablePrompts = useMemo(
-    () => ({
-      ...settingsSectionErrorCountById,
-      repositories:
-        settingsSectionErrorCountById.repositories +
-        runtimeAvailabilityValidationState.totalErrorCount,
-      "reusable-prompts": reusablePromptValidationState.totalErrorCount,
-    }),
-    [
-      reusablePromptValidationState.totalErrorCount,
-      runtimeAvailabilityValidationState.totalErrorCount,
-      settingsSectionErrorCountById,
-    ],
-  );
-
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
@@ -342,6 +327,22 @@ export const useSettingsModalController = ({
     snapshotDraft,
     selectedRepoConfig,
   });
+  const settingsSectionErrorCountByIdWithValidation = useMemo(
+    () => ({
+      ...settingsSectionErrorCountById,
+      repositories:
+        settingsSectionErrorCountById.repositories +
+        runtimeAvailabilityValidationState.totalErrorCount +
+        repoScriptValidationErrorCount,
+      "reusable-prompts": reusablePromptValidationState.totalErrorCount,
+    }),
+    [
+      repoScriptValidationErrorCount,
+      reusablePromptValidationState.totalErrorCount,
+      runtimeAvailabilityValidationState.totalErrorCount,
+      settingsSectionErrorCountById,
+    ],
+  );
 
   const {
     isSaving,
@@ -464,7 +465,7 @@ export const useSettingsModalController = ({
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
-    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithReusablePrompts,
+    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithValidation,
     reusablePromptValidationState,
     hasReusablePromptValidationErrors,
     runtimeAvailabilityValidationState,

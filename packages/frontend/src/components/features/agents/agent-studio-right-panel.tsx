@@ -1,6 +1,6 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
@@ -11,6 +11,7 @@ import {
 import { AgentStudioDevServerSettingsAction } from "./agent-studio-dev-server-settings-action";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
+import { shouldUseExpandedDevServerLayout } from "./agent-studio-right-panel-layout";
 import {
   AgentStudioWorkspaceSidebar,
   type AgentStudioWorkspaceSidebarModel,
@@ -49,7 +50,17 @@ function AgentStudioBuildToolsPanel({
   diffModel: AgentStudioGitPanelModel;
   devServerModel: AgentStudioDevServerPanelModel;
 }): ReactElement {
-  if (!devServerModel.isExpanded) {
+  const [devServerSettingsIsOpen, setDevServerSettingsIsOpen] = useState(false);
+  const useExpandedDevServerLayout = shouldUseExpandedDevServerLayout({
+    devServerIsExpanded: devServerModel.isExpanded,
+    devServerSettingsIsOpen,
+  });
+  const visibleDevServerModel =
+    devServerModel.isExpanded === useExpandedDevServerLayout
+      ? devServerModel
+      : { ...devServerModel, isExpanded: useExpandedDevServerLayout };
+
+  if (!useExpandedDevServerLayout) {
     return (
       <DiffWorkerProvider>
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -57,9 +68,12 @@ function AgentStudioBuildToolsPanel({
             <AgentStudioGitPanel model={diffModel} />
           </div>
           <AgentStudioDevServerPanel
-            model={devServerModel}
+            model={visibleDevServerModel}
             compactAction={
-              <AgentStudioDevServerSettingsAction repositoryPath={devServerModel.repoPath} />
+              <AgentStudioDevServerSettingsAction
+                repositoryPath={devServerModel.repoPath}
+                onOpenChange={setDevServerSettingsIsOpen}
+              />
             }
           />
         </div>
@@ -75,7 +89,7 @@ function AgentStudioBuildToolsPanel({
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={40} minSize={20}>
-          <AgentStudioDevServerPanel model={devServerModel} />
+          <AgentStudioDevServerPanel model={visibleDevServerModel} />
         </ResizablePanel>
       </ResizablePanelGroup>
     </DiffWorkerProvider>
