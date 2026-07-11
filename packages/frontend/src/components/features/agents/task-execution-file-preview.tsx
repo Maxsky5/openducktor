@@ -1,12 +1,21 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
+import type { CodeViewFileItem, CodeViewOptions, FileContents } from "@pierre/diffs";
+import { CodeView } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, X } from "lucide-react";
-import { memo, type ReactElement, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  memo,
+  type ReactElement,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
 import { workspaceTextFileQueryOptions } from "@/state/queries/filesystem";
-import { TaskExecutionCodePreview } from "./task-execution-code-preview";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 
 export type TaskExecutionSelectedFilePreviewModel = {
@@ -16,6 +25,42 @@ export type TaskExecutionSelectedFilePreviewModel = {
   onClose: () => void;
 };
 
+const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
+const CODE_VIEW_THEME_BACKGROUND = { dark: "#0a0a0a", light: "#ffffff" } as const;
+const CODE_VIEW_DIFFS_BACKGROUND = "light-dark(var(--diffs-light-bg), var(--diffs-dark-bg))";
+const CODE_VIEW_BACKGROUND_COLOR = "var(--diffs-bg)";
+const CODE_VIEW_LINE_HEIGHT = 18;
+const CODE_VIEW_CONTENT_PADDING = 8;
+const CODE_VIEW_CLASS_NAME =
+  "h-full min-h-0 overflow-auto [&>div]:min-h-full [&>div>div:last-child]:min-h-full";
+const CODE_VIEW_ROOT_BASE_STYLE = {
+  "--diffs-light-bg": CODE_VIEW_THEME_BACKGROUND.light,
+  "--diffs-dark-bg": CODE_VIEW_THEME_BACKGROUND.dark,
+  "--diffs-bg": CODE_VIEW_DIFFS_BACKGROUND,
+  "--diffs-font-size": "12px",
+  "--diffs-line-height": `${CODE_VIEW_LINE_HEIGHT}px`,
+  "--diffs-gap-block": `${CODE_VIEW_CONTENT_PADDING}px`,
+  "--diffs-scrollbar-gutter-override": "0px",
+  "--diffs-tab-size": 2,
+} as CSSProperties;
+const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
+:host,
+[data-file] {
+  min-height: 100%;
+  background-color: var(--diffs-bg);
+}
+
+[data-column-number],
+[data-gutter-buffer] {
+  padding-left: 0.5ch;
+  padding-right: 0.75ch;
+}
+
+[data-line-number-content] {
+  min-width: 2ch;
+}
+`;
+
 type FilePreviewSnapshot = {
   selectedFile: TaskExecutionSelectedFile;
   result: WorkspaceTextFileReadResult;
@@ -23,6 +68,15 @@ type FilePreviewSnapshot = {
 type CommittedFilePreviewSnapshot = {
   sessionKey: number;
   snapshot: FilePreviewSnapshot;
+};
+
+const contentHash = (value: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 };
 
 function FilePreviewState({ message }: { message: string }): ReactElement {
@@ -81,12 +135,60 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
       visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
     fileQuery.isFetching;
-  const codePreviewFileId =
+  const codeViewOptions = useMemo<CodeViewOptions<undefined>>(
+    () => ({
+      theme: CODE_VIEW_THEME,
+      themeType: theme,
+      overflow: "wrap" as const,
+      disableFileHeader: true,
+      itemMetrics: {
+        lineHeight: CODE_VIEW_LINE_HEIGHT,
+        spacing: CODE_VIEW_CONTENT_PADDING,
+        paddingTop: CODE_VIEW_CONTENT_PADDING,
+        paddingBottom: CODE_VIEW_CONTENT_PADDING,
+      },
+      layout: {
+        paddingTop: 0,
+        paddingBottom: 0,
+        gap: 0,
+      },
+      unsafeCSS: CODE_VIEW_PREVIEW_UNSAFE_CSS,
+    }),
+    [theme],
+  );
+  const codeViewRootStyle = useMemo<CSSProperties>(
+    () => ({
+      ...CODE_VIEW_ROOT_BASE_STYLE,
+      backgroundColor: CODE_VIEW_BACKGROUND_COLOR,
+      colorScheme: theme,
+    }),
+    [theme],
+  );
+  const codeViewFileId =
     visibleSnapshot?.result.kind === "text"
       ? `${visibleSnapshot.selectedFile.rootPath}:${visibleSnapshot.selectedFile.relativePath}`
       : null;
-  const codePreviewRenderKey =
-    codePreviewFileId !== null ? `${model.previewSessionKey}:${codePreviewFileId}` : null;
+  const codeViewRenderKey =
+    codeViewFileId !== null ? `${model.previewSessionKey}:${codeViewFileId}` : null;
+  const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
+    if (visibleSnapshot?.result.kind !== "text" || !codeViewFileId) {
+      return [];
+    }
+
+    const file: FileContents = {
+      name: visibleSnapshot.selectedFile.relativePath,
+      contents: visibleSnapshot.result.contents,
+      cacheKey: `${codeViewFileId}:${visibleSnapshot.result.size}:${contentHash(visibleSnapshot.result.contents)}`,
+    };
+
+    return [
+      {
+        id: codeViewFileId,
+        type: "file",
+        file,
+      },
+    ];
+  }, [codeViewFileId, visibleSnapshot]);
 
   useLayoutEffect(() => {
     if (!selectedFile) {
@@ -136,14 +238,14 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     body = <FilePreviewState message={errorMessage(fileQuery.error)} />;
   } else if (visibleSnapshot?.result.kind === "unsupported") {
     body = <FilePreviewState message={visibleSnapshot.result.message} />;
-  } else if (visibleSnapshot?.result.kind === "text" && codePreviewFileId) {
+  } else if (codeViewFileId && codeViewItems.length > 0) {
     body = (
-      <TaskExecutionCodePreview
-        key={codePreviewRenderKey}
-        className="h-full min-h-0"
-        contents={visibleSnapshot.result.contents}
-        fileName={visibleSnapshot.selectedFile.relativePath}
-        theme={theme}
+      <CodeView
+        key={codeViewRenderKey}
+        className={CODE_VIEW_CLASS_NAME}
+        style={codeViewRootStyle}
+        items={codeViewItems}
+        options={codeViewOptions}
       />
     );
   } else {
