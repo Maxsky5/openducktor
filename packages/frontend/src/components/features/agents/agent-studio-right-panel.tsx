@@ -1,7 +1,6 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo } from "react";
-import { SettingsModal } from "@/components/features/settings/settings-modal";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
@@ -9,9 +8,9 @@ import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
 } from "./agent-studio-dev-server-panel";
+import { AgentStudioDevServerSettingsAction } from "./agent-studio-dev-server-settings-action";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
-import { buildDevServerSettingsOpenTarget } from "./agent-studio-right-panel-settings";
 import {
   AgentStudioWorkspaceSidebar,
   type AgentStudioWorkspaceSidebarModel,
@@ -60,13 +59,7 @@ function AgentStudioBuildToolsPanel({
           <AgentStudioDevServerPanel
             model={devServerModel}
             compactAction={
-              <SettingsModal
-                triggerIconOnly
-                triggerSize="icon"
-                triggerClassName="shrink-0"
-                triggerLabel="Configure dev server commands"
-                openTarget={buildDevServerSettingsOpenTarget(devServerModel.repoPath)}
-              />
+              <AgentStudioDevServerSettingsAction repositoryPath={devServerModel.repoPath} />
             }
           />
         </div>

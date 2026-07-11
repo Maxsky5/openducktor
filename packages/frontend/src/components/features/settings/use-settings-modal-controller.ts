@@ -152,7 +152,8 @@ export const useSettingsModalController = ({
   } = workspaceState;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const workspaceSelectionKind = workspaceSelectionPolicy?.kind ?? "preferred";
-  const workspaceSelectionRepoPath = workspaceSelectionPolicy?.repoPath ?? workspaceRepoPath;
+  const workspaceSelectionRepoPath =
+    workspaceSelectionPolicy === undefined ? workspaceRepoPath : workspaceSelectionPolicy.repoPath;
   const resolvedWorkspaceSelectionPolicy = useMemo<SettingsWorkspaceSelectionPolicy>(
     () => ({
       kind: workspaceSelectionKind,

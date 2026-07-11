@@ -264,6 +264,22 @@ describe("useSettingsModalController", () => {
     await harness.unmount();
   });
 
+  test("does not fall back to the active workspace when the required repository is null", async () => {
+    const harness = createHookHarness(true, false, { requiredRepoPath: null });
+    await harness.mount();
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+
+    expect(harness.getLatest().selectedWorkspaceId).toBeNull();
+    expect(harness.getLatest().selectedRepoConfig).toBeNull();
+    expect(harness.getLatest().requiredWorkspaceSelectionUnresolved).toBe(true);
+    expect(harness.getLatest().requiredWorkspaceRepoPath).toBeNull();
+
+    await harness.run((state) => state.setSelectedWorkspaceId("repo-two"));
+    expect(harness.getLatest().selectedWorkspaceId).toBe("repo-two");
+    expect(harness.getLatest().requiredWorkspaceSelectionUnresolved).toBe(false);
+    await harness.unmount();
+  });
+
   test("clears stale selection on close and reapplies the required repository on reopen", async () => {
     const harness = createHookHarness(true, false, { requiredRepoPath: "/repo-two" });
     await harness.mount();
