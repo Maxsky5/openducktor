@@ -182,17 +182,24 @@ const mergeSubagentMeta = (
     existingMeta?.metadata && incomingMeta.metadata
       ? { ...existingMeta.metadata, ...incomingMeta.metadata }
       : (incomingMeta.metadata ?? existingMeta?.metadata);
-  const startedAtMs = isRestart
-    ? incomingMeta.startedAtMs
-    : typeof existingMeta?.startedAtMs === "number" && typeof incomingMeta.startedAtMs === "number"
-      ? Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs)
-      : (incomingMeta.startedAtMs ?? existingMeta?.startedAtMs ?? options?.startedAtMsFallback);
-  const endedAtMs =
-    typeof existingMeta?.endedAtMs === "number" && typeof incomingMeta.endedAtMs === "number"
-      ? Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs)
-      : isTerminalSubagentStatus(status)
-        ? (incomingMeta.endedAtMs ?? existingMeta?.endedAtMs)
-        : undefined;
+  let startedAtMs = incomingMeta.startedAtMs ?? existingMeta?.startedAtMs;
+  if (isRestart) {
+    startedAtMs = incomingMeta.startedAtMs;
+  } else if (
+    typeof existingMeta?.startedAtMs === "number" &&
+    typeof incomingMeta.startedAtMs === "number"
+  ) {
+    startedAtMs = Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs);
+  } else {
+    startedAtMs ??= options?.startedAtMsFallback;
+  }
+
+  let endedAtMs: number | undefined;
+  if (typeof existingMeta?.endedAtMs === "number" && typeof incomingMeta.endedAtMs === "number") {
+    endedAtMs = Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs);
+  } else if (isTerminalSubagentStatus(status)) {
+    endedAtMs = incomingMeta.endedAtMs ?? existingMeta?.endedAtMs;
+  }
   const agent = incomingMeta.agent ?? existingMeta?.agent;
   const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
   const description = incomingMeta.description ?? existingMeta?.description;

@@ -35,7 +35,7 @@ export const resolveCodexForkBoundary = (
   parentTurnIds: ReadonlySet<string>,
 ): CodexForkBoundary | null => {
   const thread = threadFromReadResponse(response);
-  const childThreadId = extractStringField(thread, ["id"]);
+  const childThreadId = extractStringField(thread, ["id", "threadId"]);
   if (!childThreadId) {
     throw new Error("Codex forked thread/read response is missing the child thread id.");
   }

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { codexForkBoundaryHistoryMessage, resolveCodexForkBoundary } from "./codex-fork-boundary";
 
 const childThreadRead = ({
+  childThreadIdField = "id",
   forkedFromId = "parent-thread",
   parentThreadId = "parent-thread",
   turns = [
@@ -10,12 +11,13 @@ const childThreadRead = ({
     { id: "child-turn-1", startedAt: 30, status: "completed", items: [] },
   ],
 }: {
+  childThreadIdField?: "id" | "threadId";
   forkedFromId?: string | null;
   parentThreadId?: string | null;
   turns?: unknown[];
 } = {}) => ({
   thread: {
-    id: "child-thread",
+    [childThreadIdField]: "child-thread",
     forkedFromId,
     ...(parentThreadId ? { parentThreadId } : {}),
     createdAt: 25,
@@ -51,6 +53,15 @@ describe("resolveCodexForkBoundary", () => {
         new Set(["parent-turn-1", "parent-turn-8", "parent-turn-9"]),
       ),
     ).toMatchObject({ beforeTurnId: "child-turn-1" });
+  });
+
+  test("accepts threadId as the child identifier", () => {
+    expect(
+      resolveCodexForkBoundary(
+        childThreadRead({ childThreadIdField: "threadId" }),
+        new Set(["parent-turn-1", "parent-turn-2"]),
+      ),
+    ).toMatchObject({ childThreadId: "child-thread" });
   });
 
   test("does not create a history boundary for a non-forked child thread", () => {
