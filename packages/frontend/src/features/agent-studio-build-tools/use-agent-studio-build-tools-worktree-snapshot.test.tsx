@@ -356,6 +356,72 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
+  test("normalizes repository path variants before resolving the QA worktree", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          role: "qa",
+          loadedSession: createAgentSessionFixture({
+            role: "qa",
+            status: "running",
+            workingDirectory: "/repo/",
+          }),
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-24",
+        status: "resolved",
+        error: null,
+      });
+      expect(harness.getLatest().openInTarget).toEqual({
+        path: "/repo/.worktrees/task-24",
+        disabledReason: null,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects queried repository root path variants as task worktrees", async () => {
+    taskWorktreeGetMock.mockResolvedValue({ workingDirectory: "/repo/" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          role: "qa",
+          loadedSession: createAgentSessionFixture({
+            role: "qa",
+            status: "running",
+            workingDirectory: "/repo/",
+          }),
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.status === "failed");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: null,
+        status: "failed",
+      });
+      expect(harness.getLatest().worktree.error).toContain(
+        "Task worktree resolved to the repository root.",
+      );
+      expect(harness.getLatest().openInTarget.path).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("uses the selected session summary while the full session is still loading", async () => {
     const selectedSessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
