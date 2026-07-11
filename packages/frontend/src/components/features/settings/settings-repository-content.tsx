@@ -104,6 +104,7 @@ export function SettingsRepositoryContent({
     selectedRepoRuntimeAvailabilityErrors,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
+    repoScriptValidationErrorCountByWorkspaceId,
     selectedRepoPromptRoleTabErrorCounts,
     setSelectedWorkspaceId,
     retrySelectedRepoBranchesLoad,
@@ -119,6 +120,9 @@ export function SettingsRepositoryContent({
     workspaceCount: workspaceIds.length,
     hasSelectedRepository: selectedRepoConfig !== null,
   });
+  const selectedRepoScriptValidationErrorCount = selectedWorkspaceId
+    ? (repoScriptValidationErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
+    : 0;
 
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -128,7 +132,9 @@ export function SettingsRepositoryContent({
         selectedRepositorySection={repositorySection}
         disabled={isInteractionDisabled}
         selectedRepoPromptValidationErrorCount={selectedRepoPromptValidationErrorCount}
+        selectedRepoScriptValidationErrorCount={selectedRepoScriptValidationErrorCount}
         repoPromptErrorCountByWorkspaceId={promptValidationState.repoErrorCountByWorkspaceId}
+        repoScriptErrorCountByWorkspaceId={repoScriptValidationErrorCountByWorkspaceId}
         onSelectWorkspaceId={setSelectedWorkspaceId}
         onSelectSection={onRepositorySectionChange}
       />

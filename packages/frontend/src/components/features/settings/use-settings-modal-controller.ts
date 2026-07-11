@@ -85,6 +85,7 @@ export type SettingsModalController = {
   selectedRepoRuntimeAvailabilityErrors: string[];
   selectedRepoRuntimeAvailabilityErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
+  repoScriptValidationErrorCountByWorkspaceId: Record<string, number>;
   repoScriptValidationErrorCount: number;
   showRepoScriptValidationErrors: boolean;
   selectedRepoDevServerValidationErrors: Record<string, { name?: string; command?: string }>;
@@ -334,6 +335,7 @@ export const useSettingsModalController = ({
   const {
     selectedRepoDevServerValidationErrors,
     invalidRepoPathsWithDevServerErrors,
+    repoScriptValidationErrorCountByWorkspaceId,
     repoScriptValidationErrorCount,
     hasRepoScriptValidationErrors,
   } = useSettingsModalRepoScriptValidation({
@@ -473,6 +475,7 @@ export const useSettingsModalController = ({
     selectedRepoRuntimeAvailabilityErrors,
     selectedRepoRuntimeAvailabilityErrorCount,
     hasRepoScriptValidationErrors,
+    repoScriptValidationErrorCountByWorkspaceId,
     repoScriptValidationErrorCount,
     showRepoScriptValidationErrors,
     selectedRepoDevServerValidationErrors,
