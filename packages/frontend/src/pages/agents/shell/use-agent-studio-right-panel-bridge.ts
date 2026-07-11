@@ -21,6 +21,7 @@ type UseAgentStudioRightPanelBridgeArgs = {
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
+  onClearSelectedFile: UseAgentsPageRightPanelModelArgs["onClearSelectedFile"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
@@ -43,6 +44,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
+  onClearSelectedFile: UseAgentsPageRightPanelModelArgs["onClearSelectedFile"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
@@ -95,6 +97,7 @@ function buildAgentStudioRightPanelBridgeModel({
   documentsModel,
   selectedFile,
   onSelectFile,
+  onClearSelectedFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -123,6 +126,7 @@ function buildAgentStudioRightPanelBridgeModel({
       documentsModel,
       selectedFile,
       onSelectFile,
+      onClearSelectedFile,
       repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
@@ -142,6 +146,7 @@ export function useAgentStudioRightPanelBridge({
   documentsModel,
   selectedFile,
   onSelectFile,
+  onClearSelectedFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -172,6 +177,7 @@ export function useAgentStudioRightPanelBridge({
       documentsModel,
       selectedFile,
       onSelectFile,
+      onClearSelectedFile,
       repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
@@ -188,6 +194,7 @@ export function useAgentStudioRightPanelBridge({
     activeTabId,
     isPanelOpen,
     isRightPanelVisible,
+    onClearSelectedFile,
     onDetectPullRequest,
     onSelectFile,
     onActiveTabChange,

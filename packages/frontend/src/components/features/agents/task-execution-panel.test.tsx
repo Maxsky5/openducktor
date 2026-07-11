@@ -303,6 +303,7 @@ const basePanelModel = {
     isActive: false,
     selectedFile: null,
     onSelectFile: () => {},
+    onClearSelectedFile: () => {},
   },
   ciChecksModel: {
     isActive: false,
@@ -601,6 +602,7 @@ describe("TaskExecutionPanel", () => {
         isActive: true,
         selectedFile: null,
         onSelectFile: () => {},
+        onClearSelectedFile: () => {},
       },
       ciChecksModel: null,
     });
@@ -630,6 +632,7 @@ describe("TaskExecutionPanel", () => {
           isActive: true,
           selectedFile: null,
           onSelectFile: () => {},
+          onClearSelectedFile: () => {},
         },
         ciChecksModel: null,
       },
@@ -705,6 +708,7 @@ describe("TaskExecutionPanel", () => {
                 isActive: true,
                 selectedFile: null,
                 onSelectFile: () => {},
+                onClearSelectedFile: () => {},
               },
               ciChecksModel: null,
             },
@@ -758,6 +762,7 @@ describe("TaskExecutionPanel", () => {
                 isActive: true,
                 selectedFile: null,
                 onSelectFile,
+                onClearSelectedFile: () => {},
               },
             },
           }),
@@ -773,6 +778,53 @@ describe("TaskExecutionPanel", () => {
       rootPath: fileTree.rootPath,
       relativePath: "src/index.ts",
     });
+  });
+
+  test("clears a selected preview when the canonical file tree root changes", async () => {
+    const onClearSelectedFile = mock(() => {});
+    const requestedRoot = "/repo/task-worktree";
+    const fileTree: WorkspaceFileTree = {
+      rootPath: "/private/repo/new-task-worktree",
+      entries: [],
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(filesystemQueryKeys.tree(requestedRoot, "origin/main"), fileTree);
+
+    render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          ThemeProvider,
+          null,
+          createElement(TaskExecutionPanel, {
+            model: {
+              ...basePanelModel,
+              tabs: [
+                { id: "git", label: "Git" },
+                { id: "file_explorer", label: "File explorer" },
+              ],
+              activeTabId: "file_explorer",
+              documentModel: null,
+              fileExplorerModel: {
+                rootPath: requestedRoot,
+                targetBranch: "origin/main",
+                unavailableReason: null,
+                isActive: true,
+                selectedFile: {
+                  rootPath: "/private/repo/old-task-worktree",
+                  relativePath: "src/index.ts",
+                },
+                onSelectFile: () => {},
+                onClearSelectedFile,
+              },
+            },
+          }),
+        ),
+      ),
+    );
+
+    await waitFor(() => expect(onClearSelectedFile).toHaveBeenCalledTimes(1));
   });
 
   test("renders Dev Servers below the task execution panel", () => {

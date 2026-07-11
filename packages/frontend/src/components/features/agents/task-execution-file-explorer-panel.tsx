@@ -8,6 +8,7 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -20,6 +21,7 @@ import {
   buildTaskExecutionFileTreeGitStatusEntries,
   buildTaskExecutionFileTreeInputPaths,
   resolveTaskExecutionFileTreeSelectionEntry,
+  shouldClearTaskExecutionSelectedFile,
   type TaskExecutionFileExplorerPanelModel,
   type TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
@@ -217,6 +219,7 @@ export function TaskExecutionFileExplorerPanel({
     enabled: model.isActive && requestedRootPath !== null,
   });
   const rootPath = treeQuery.data?.rootPath ?? requestedRootPath;
+  const resolvedRootPath = treeQuery.data?.rootPath ?? null;
   const { theme } = useTheme();
   const treeStyle = useMemo(() => treeStylesForTheme(theme), [theme]);
   const entriesByPath = useMemo(
@@ -283,6 +286,12 @@ export function TaskExecutionFileExplorerPanel({
   useEffect(() => {
     syncFileTreeSelection(fileTree, model.selectedFile, rootPath, entriesByPath);
   }, [entriesByPath, fileTree, model.selectedFile, rootPath]);
+
+  useLayoutEffect(() => {
+    if (shouldClearTaskExecutionSelectedFile(model.selectedFile, resolvedRootPath)) {
+      model.onClearSelectedFile();
+    }
+  }, [model.onClearSelectedFile, model.selectedFile, resolvedRootPath]);
 
   useEffect(() => {
     if (previousRootPathRef.current === rootPath) {

@@ -153,6 +153,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     documentsModel: orchestration.taskExecutionDocumentPanelModel,
     selectedFile: orchestration.taskExecutionSelectedFilePreviewModel.selectedFile,
     onSelectFile: orchestration.onSelectTaskExecutionFile,
+    onClearSelectedFile: orchestration.taskExecutionSelectedFilePreviewModel.onClose,
     repoSettings: orchestration.repoSettings,
     setTaskTargetBranch,
     detectingPullRequestTaskId,

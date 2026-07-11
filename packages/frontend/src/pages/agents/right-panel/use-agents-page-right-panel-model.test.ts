@@ -154,6 +154,19 @@ describe("resolveTaskExecutionFileExplorerTargetBranch", () => {
         contextMode: "repository",
         targetBranch: "@{upstream}",
         upstreamStatus: "untracked",
+        hasLoadedRepositoryStatus: true,
+        targetBranchValidationError: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("omits the upstream comparison until repository tracking has loaded", () => {
+    expect(
+      resolveTaskExecutionFileExplorerTargetBranch({
+        contextMode: "repository",
+        targetBranch: "@{upstream}",
+        upstreamStatus: "tracking",
+        hasLoadedRepositoryStatus: false,
         targetBranchValidationError: null,
       }),
     ).toBeNull();
@@ -165,6 +178,7 @@ describe("resolveTaskExecutionFileExplorerTargetBranch", () => {
         contextMode: "worktree",
         targetBranch: "origin/main",
         upstreamStatus: "untracked",
+        hasLoadedRepositoryStatus: false,
         targetBranchValidationError: null,
       }),
     ).toBe("origin/main");
@@ -176,6 +190,7 @@ describe("resolveTaskExecutionFileExplorerTargetBranch", () => {
         contextMode: "worktree",
         targetBranch: "origin/main",
         upstreamStatus: "untracked",
+        hasLoadedRepositoryStatus: false,
         targetBranchValidationError: "Invalid task target branch.",
       }),
     ).toBeNull();

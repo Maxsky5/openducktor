@@ -83,6 +83,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   },
   selectedFile: null,
   onSelectFile: mock(() => {}),
+  onClearSelectedFile: mock(() => {}),
   repoSettings: null,
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
@@ -109,6 +110,7 @@ describe("useAgentStudioRightPanelBridge", () => {
       expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe("task-1");
       expect(state.rightPanelBridge?.rightPanel.selectedView.role).toBe("build");
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
+      expect(state.rightPanelBridge?.rightPanel.onClearSelectedFile).toBe(args.onClearSelectedFile);
       expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
       expect(state.rightPanelBridge?.buildWorktreeRefresh.selectedView.loadedSession).toBe(
         args.selection.view.selectedSession.loadedSession,

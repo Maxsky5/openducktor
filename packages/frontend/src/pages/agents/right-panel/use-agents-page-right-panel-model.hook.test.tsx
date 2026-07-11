@@ -66,6 +66,8 @@ const createSnapshot = (gitConflictId: string | null) => ({
     gitConflict: null,
     worktreePath: null,
     targetBranch: "origin/main",
+    diffScope: "uncommitted",
+    loadedScopesByScope: { target: false, uncommitted: true },
     upstreamStatus: "tracking",
     hashVersion: null,
     statusHash: null,
@@ -288,6 +290,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   documentsModel: { activeDocument: null },
   selectedFile: null,
   onSelectFile: () => {},
+  onClearSelectedFile: () => {},
   repoSettings: { defaultTargetBranch: null } as never,
   detectingPullRequestTaskId: null,
   onDetectPullRequest: () => {},
@@ -442,14 +445,20 @@ describe("useAgentsPageRightPanelModel", () => {
 
   test("refreshes Git and invalidates file explorer data after builder mutations", async () => {
     const queryClient = createQueryClient();
-    const rootPath = "/repo/.worktrees/task-1";
+    const requestedRootPath = "/repo-link/.worktrees/task-1";
+    const canonicalRootPath = "/repo/.worktrees/task-1";
+    const snapshot = createSnapshot("A");
     buildToolsSnapshotState.current = {
-      ...createSnapshot("A"),
+      ...snapshot,
       gitPanelContextMode: "worktree",
+      worktree: {
+        ...snapshot.worktree,
+        path: requestedRootPath,
+      },
     };
-    const selectedFile = { rootPath, relativePath: "src/index.ts" };
-    const treeKey = filesystemQueryKeys.tree(rootPath, "origin/main");
-    const textFileKey = filesystemQueryKeys.textFile(rootPath, selectedFile.relativePath);
+    const selectedFile = { rootPath: canonicalRootPath, relativePath: "src/index.ts" };
+    const treeKey = filesystemQueryKeys.tree(requestedRootPath, "origin/main");
+    const textFileKey = filesystemQueryKeys.textFile(canonicalRootPath, selectedFile.relativePath);
     queryClient.setQueryData(treeKey, { entries: [] });
     queryClient.setQueryData(textFileKey, { kind: "text" });
     const harness = createHookHarness(

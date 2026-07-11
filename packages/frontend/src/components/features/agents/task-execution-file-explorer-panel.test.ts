@@ -5,6 +5,7 @@ import {
   buildTaskExecutionFileTreeInputPaths,
   normalizeTaskExecutionFileTreeSelectionPath,
   resolveTaskExecutionFileTreeSelectionEntry,
+  shouldClearTaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
 
 const fileEntry = (
@@ -70,6 +71,25 @@ describe("buildTaskExecutionFileTreeGitStatusEntries", () => {
       { path: "packages/frontend/src/App.tsx", status: "added" },
       { path: "packages/frontend/src/index.ts", status: "deleted" },
     ]);
+  });
+});
+
+describe("shouldClearTaskExecutionSelectedFile", () => {
+  test("clears a preview after the canonical tree root changes", () => {
+    expect(
+      shouldClearTaskExecutionSelectedFile(
+        { rootPath: "/repo/.worktrees/old", relativePath: "src/App.tsx" },
+        "/repo/.worktrees/new",
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps previews while the canonical root is unavailable or unchanged", () => {
+    const selectedFile = { rootPath: "/repo/.worktrees/task", relativePath: "src/App.tsx" };
+
+    expect(shouldClearTaskExecutionSelectedFile(selectedFile, null)).toBe(false);
+    expect(shouldClearTaskExecutionSelectedFile(selectedFile, selectedFile.rootPath)).toBe(false);
+    expect(shouldClearTaskExecutionSelectedFile(null, selectedFile.rootPath)).toBe(false);
   });
 });
 

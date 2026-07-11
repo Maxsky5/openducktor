@@ -497,12 +497,14 @@ const registerModuleMocks = (): void => {
       documentsModel,
       selectedFile,
       onSelectFile,
+      onClearSelectedFile,
     }: {
       selection: OrchestrationControllerArgs["selection"];
       panel: OrchestrationState["rightPanel"];
       documentsModel: OrchestrationState["taskExecutionDocumentPanelModel"];
       selectedFile: OrchestrationState["taskExecutionSelectedFilePreviewModel"]["selectedFile"];
       onSelectFile: OrchestrationState["onSelectTaskExecutionFile"];
+      onClearSelectedFile: OrchestrationState["taskExecutionSelectedFilePreviewModel"]["onClose"];
     }) => ({
       isRightPanelVisible: panel.isPanelOpen,
       rightPanelBridge: {
@@ -526,6 +528,7 @@ const registerModuleMocks = (): void => {
           documentsModel,
           selectedFile,
           onSelectFile,
+          onClearSelectedFile,
           repoSettings: orchestrationState.repoSettings,
           setTaskTargetBranch: tasksState.setTaskTargetBranch,
           detectingPullRequestTaskId: tasksState.detectingPullRequestTaskId,

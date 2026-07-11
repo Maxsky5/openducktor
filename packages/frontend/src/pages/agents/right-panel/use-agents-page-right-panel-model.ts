@@ -38,6 +38,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => void;
+  onClearSelectedFile: () => void;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
@@ -213,6 +214,7 @@ export const resolveTaskExecutionFileExplorerTargetBranch = ({
   contextMode,
   targetBranch,
   upstreamStatus,
+  hasLoadedRepositoryStatus,
   targetBranchValidationError,
 }: {
   contextMode: ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>["gitPanelContextMode"];
@@ -220,13 +222,16 @@ export const resolveTaskExecutionFileExplorerTargetBranch = ({
   upstreamStatus: ReturnType<
     typeof useAgentStudioBuildToolsWorktreeSnapshot
   >["diffData"]["upstreamStatus"];
+  hasLoadedRepositoryStatus: boolean;
   targetBranchValidationError: string | null;
 }): string | null => {
   if (targetBranchValidationError) {
     return null;
   }
-  if (contextMode === "repository" && upstreamStatus !== "tracking") {
-    return null;
+  if (contextMode === "repository") {
+    if (!hasLoadedRepositoryStatus || upstreamStatus !== "tracking") {
+      return null;
+    }
   }
   return targetBranch;
 };
@@ -243,6 +248,7 @@ export function useAgentsPageRightPanelModel({
   documentsModel,
   selectedFile,
   onSelectFile,
+  onClearSelectedFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -360,6 +366,7 @@ export function useAgentsPageRightPanelModel({
     contextMode: buildToolsSnapshot.gitPanelContextMode,
     targetBranch: diffData.targetBranch ?? null,
     upstreamStatus: diffData.upstreamStatus,
+    hasLoadedRepositoryStatus: diffData.loadedScopesByScope[diffData.diffScope],
     targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
   });
   const fileExplorerModel = useMemo(
@@ -369,6 +376,7 @@ export function useAgentsPageRightPanelModel({
       isActive: activeTabId === "file_explorer" && isPanelOpen,
       selectedFile,
       onSelectFile,
+      onClearSelectedFile,
     }),
     [
       activeTabId,
@@ -376,6 +384,7 @@ export function useAgentsPageRightPanelModel({
       fileExplorerTargetBranch,
       isPanelOpen,
       onSelectFile,
+      onClearSelectedFile,
       selectedFile,
     ],
   );
@@ -446,12 +455,17 @@ export function useAgentsPageRightPanelModel({
   const refreshWorktree = useCallback<GitDiffRefresh>(
     async (mode): Promise<void> => {
       const refreshes: Promise<unknown>[] = [buildToolsSnapshot.refreshWorktree(mode)];
-      if (fileExplorerRoot.rootPath) {
-        refreshes.push(invalidateWorkspaceFileQueries(queryClient, fileExplorerRoot.rootPath));
+      const fileQueryRoots = new Set(
+        [fileExplorerRoot.rootPath, selectedFile?.rootPath ?? null].filter(
+          (rootPath): rootPath is string => rootPath !== null,
+        ),
+      );
+      for (const rootPath of fileQueryRoots) {
+        refreshes.push(invalidateWorkspaceFileQueries(queryClient, rootPath));
       }
       await Promise.all(refreshes);
     },
-    [buildToolsSnapshot.refreshWorktree, fileExplorerRoot.rootPath, queryClient],
+    [buildToolsSnapshot.refreshWorktree, fileExplorerRoot.rootPath, queryClient, selectedFile],
   );
 
   return {

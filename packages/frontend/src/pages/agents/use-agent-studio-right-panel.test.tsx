@@ -144,6 +144,7 @@ const fileExplorerModel = {
   isActive: false,
   selectedFile: null,
   onSelectFile: () => {},
+  onClearSelectedFile: () => {},
 };
 
 const tabs = [
