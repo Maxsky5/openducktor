@@ -1,5 +1,10 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
-import type { CodeViewFileItem, CodeViewOptions, FileContents } from "@pierre/diffs";
+import {
+  type CodeViewFileItem,
+  type CodeViewOptions,
+  type FileContents,
+  getFiletypeFromFileName,
+} from "@pierre/diffs";
 import { CodeView, useWorkerPool } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, X } from "lucide-react";
@@ -101,6 +106,7 @@ const createFilePreviewSnapshot = (
 
   const id = `${selectedFile.rootPath}:${selectedFile.relativePath}`;
   const metrics = getContentMetrics(result.contents);
+  const language = getFiletypeFromFileName(selectedFile.relativePath);
   return {
     selectedFile,
     result,
@@ -109,6 +115,7 @@ const createFilePreviewSnapshot = (
       file: {
         name: selectedFile.relativePath,
         contents: result.contents,
+        lang: language,
         cacheKey: `${id}:${result.size}:${metrics.contentHash}`,
       },
       numberColumnWidth: metrics.numberColumnWidth,
@@ -118,18 +125,23 @@ const createFilePreviewSnapshot = (
 
 const useFileHighlightReady = (file: FileContents | null): boolean => {
   const workerPool = useWorkerPool();
+  const requiresHighlight = file !== null && file.lang !== "text";
   const subscribeToHighlightCache = useCallback(
     (onStoreChange: () => void) => {
-      if (workerPool == null || file == null) {
+      if (workerPool == null || file == null || !requiresHighlight) {
         return () => undefined;
       }
       return workerPool.subscribeToStatChanges(onStoreChange);
     },
-    [file, workerPool],
+    [file, requiresHighlight, workerPool],
   );
   const getHighlightCacheSnapshot = useCallback(
-    () => workerPool == null || file == null || workerPool.getFileResultCache(file) != null,
-    [file, workerPool],
+    () =>
+      workerPool == null ||
+      file == null ||
+      !requiresHighlight ||
+      workerPool.getFileResultCache(file) != null,
+    [file, requiresHighlight, workerPool],
   );
   const isHighlightReady = useSyncExternalStore(
     subscribeToHighlightCache,
@@ -138,11 +150,11 @@ const useFileHighlightReady = (file: FileContents | null): boolean => {
   );
 
   useEffect(() => {
-    if (workerPool == null || file == null || isHighlightReady) {
+    if (workerPool == null || file == null || !requiresHighlight || isHighlightReady) {
       return;
     }
     workerPool.primeFileHighlightCache(file);
-  }, [file, isHighlightReady, workerPool]);
+  }, [file, isHighlightReady, requiresHighlight, workerPool]);
 
   return isHighlightReady;
 };

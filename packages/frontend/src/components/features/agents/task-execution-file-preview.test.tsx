@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
+import { getFiletypeFromFileName } from "@pierre/diffs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
@@ -43,8 +44,11 @@ const completeFileHighlight = (file: { cacheKey?: string }): void => {
 const previewWorkerPool = {
   getFileResultCache: (file: { cacheKey?: string }) =>
     file.cacheKey && highlightedFileCacheKeys.has(file.cacheKey) ? {} : undefined,
-  primeFileHighlightCache: (file: { cacheKey?: string }) => {
+  primeFileHighlightCache: (file: { cacheKey?: string; name?: string }) => {
     primeFileHighlightCacheMock(file);
+    if (getFiletypeFromFileName(file.name ?? "") === "text") {
+      return;
+    }
     if (highlightCompletionMode === "auto") {
       queueMicrotask(() => completeFileHighlight(file));
     }
@@ -67,6 +71,10 @@ const firstFile: TaskExecutionSelectedFile = {
 const secondFile: TaskExecutionSelectedFile = {
   rootPath: "/repo",
   relativePath: "src/second.ts",
+};
+const editorConfigFile: TaskExecutionSelectedFile = {
+  rootPath: "/repo",
+  relativePath: ".editorconfig",
 };
 
 const textFileResult = (
@@ -128,6 +136,9 @@ beforeEach(async () => {
       }
       return new Promise<WorkspaceTextFileReadResult>(() => {});
     }
+    if (input.relativePath === editorConfigFile.relativePath) {
+      return Promise.resolve(textFileResult(editorConfigFile, "root = true"));
+    }
     return Promise.resolve(textFileResult(firstFile, "const first = true;"));
   });
 
@@ -175,6 +186,14 @@ afterEach(async () => {
 });
 
 describe("TaskExecutionSelectedFilePreview", () => {
+  test("displays files that Pierre treats as plain text without waiting for a worker cache entry", async () => {
+    const onClose = mock(() => {});
+
+    render(renderPreview({ selectedFile: editorConfigFile, onClose }));
+
+    await screen.findByText("root = true");
+  });
+
   test("waits for the worker highlight result before displaying a newly opened file", async () => {
     highlightCompletionMode = "manual";
     const onClose = mock(() => {});
