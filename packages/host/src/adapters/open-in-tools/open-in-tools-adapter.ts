@@ -219,9 +219,9 @@ export const createOpenInToolsAdapter = ({
         );
       }
     });
-  const resolveApplicationPathByName = (
+  const resolveDirectApplicationPathByName = (
     appName: string,
-  ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+  ): Effect.Effect<string | null, HostPathAccessError> =>
     Effect.gen(function* () {
       for (const candidate of candidateApplicationPaths(appName, homeDirectory)) {
         if (yield* pathExists(candidate)) {
@@ -229,13 +229,14 @@ export const createOpenInToolsAdapter = ({
         }
       }
 
+      return null;
+    });
+  const resolveApplicationPathWithSpotlight = (
+    appName: string,
+  ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+    Effect.gen(function* () {
       const bundleName = bundleNameForApp(appName);
-      const output = yield* runRequiredOpenInCommand("mdfind", ["-name", bundleName]).pipe(
-        Effect.catchAll(() => Effect.succeed(null)),
-      );
-      if (!output) {
-        return null;
-      }
+      const output = yield* runRequiredOpenInCommand("mdfind", ["-name", bundleName]);
 
       for (const line of output.stdout.split(/\r?\n/)) {
         const candidate = line.trim();
@@ -256,7 +257,14 @@ export const createOpenInToolsAdapter = ({
   ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
     Effect.gen(function* () {
       for (const appName of metadata.appNames) {
-        const appPath = yield* resolveApplicationPathByName(appName);
+        const appPath = yield* resolveDirectApplicationPathByName(appName);
+        if (appPath) {
+          return appPath;
+        }
+      }
+
+      for (const appName of metadata.appNames) {
+        const appPath = yield* resolveApplicationPathWithSpotlight(appName);
         if (appPath) {
           return appPath;
         }
