@@ -31,8 +31,7 @@ const CODE_VIEW_DIFFS_BACKGROUND = "light-dark(var(--diffs-light-bg), var(--diff
 const CODE_VIEW_BACKGROUND_COLOR = "var(--diffs-bg)";
 const CODE_VIEW_LINE_HEIGHT = 18;
 const CODE_VIEW_CONTENT_PADDING = 8;
-const CODE_VIEW_CLASS_NAME =
-  "h-full min-h-0 overflow-auto [&>div]:min-h-full [&>div>div:last-child]:min-h-full";
+const CODE_VIEW_CLASS_NAME = "h-full min-h-0 overflow-auto";
 const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-light-bg": CODE_VIEW_THEME_BACKGROUND.light,
   "--diffs-dark-bg": CODE_VIEW_THEME_BACKGROUND.dark,
@@ -44,12 +43,6 @@ const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-tab-size": 2,
 } as CSSProperties;
 const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
-:host,
-[data-file] {
-  min-height: 100%;
-  background-color: var(--diffs-bg);
-}
-
 [data-column-number],
 [data-gutter-buffer] {
   padding-left: 0.5ch;

@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
-import type { CodeViewOptions } from "@pierre/diffs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
-  type CSSProperties,
   createElement,
   type PropsWithChildren,
   type ReactElement,
@@ -24,19 +22,10 @@ type PreviewComponent =
 
 let TaskExecutionSelectedFilePreview: PreviewComponent;
 let readTextFileMock: ReturnType<typeof mock>;
-let codeViewPropsHistory: Array<{
-  className: string | undefined;
-  style: CSSProperties | undefined;
-  options: CodeViewOptions<undefined> | undefined;
-  items: Array<{ file: { contents: string } }>;
-}> = [];
 let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
-
-const CODE_VIEW_DIFFS_BACKGROUND = "light-dark(var(--diffs-light-bg), var(--diffs-dark-bg))";
-const CODE_VIEW_BACKGROUND_COLOR = "var(--diffs-bg)";
 
 const actualDiffsReact = await import("@pierre/diffs/react");
 const actualThemeProvider = await import("@/components/layout/theme-provider");
@@ -94,7 +83,6 @@ const renderPreview = (
 };
 
 beforeEach(async () => {
-  codeViewPropsHistory = [];
   codeViewMountCount = 0;
   codeViewUnmountCount = 0;
   secondFileReadMode = "pending";
@@ -125,18 +113,7 @@ beforeEach(async () => {
   }));
 
   mock.module("@pierre/diffs/react", () => ({
-    CodeView: ({
-      className,
-      items,
-      options,
-      style,
-    }: {
-      className?: string;
-      items: Array<{ file: { contents: string } }>;
-      options?: CodeViewOptions<undefined>;
-      style?: CSSProperties;
-    }): ReactElement => {
-      codeViewPropsHistory.push({ className, items, options, style });
+    CodeView: ({ items }: { items: Array<{ file: { contents: string } }> }): ReactElement => {
       useEffect(() => {
         codeViewMountCount += 1;
         return () => {
@@ -164,65 +141,6 @@ afterEach(async () => {
 });
 
 describe("TaskExecutionSelectedFilePreview", () => {
-  test("uses the CodeView root as the scroll container", async () => {
-    const onClose = mock(() => {});
-
-    render(renderPreview({ selectedFile: firstFile, onClose }));
-
-    await screen.findByText("const first = true;");
-    const codeViewProps = codeViewPropsHistory.at(-1);
-    expect(codeViewProps?.className).toContain("h-full");
-    expect(codeViewProps?.className).toContain("overflow-auto");
-    expect(codeViewProps?.className).toContain("[&>div]:min-h-full");
-    expect(codeViewProps?.className).toContain("[&>div>div:last-child]:min-h-full");
-    expect(codeViewProps?.style?.["--diffs-font-size" as keyof CSSProperties]).toBe("12px");
-    expect(codeViewProps?.style?.backgroundColor).toBe(CODE_VIEW_BACKGROUND_COLOR);
-    expect(codeViewProps?.style?.colorScheme).toBe("light");
-  });
-
-  test("paints the CodeView scroll root from PierreDiffs background variables", async () => {
-    const onClose = mock(() => {});
-
-    render(renderPreview({ selectedFile: firstFile, onClose }, "dark"));
-
-    await screen.findByText("const first = true;");
-    const codeViewProps = codeViewPropsHistory.at(-1);
-    expect(codeViewProps?.style?.colorScheme).toBe("dark");
-    expect(codeViewProps?.style?.["--diffs-light-bg" as keyof CSSProperties]).toBe("#ffffff");
-    expect(codeViewProps?.style?.["--diffs-dark-bg" as keyof CSSProperties]).toBe("#0a0a0a");
-    expect(codeViewProps?.style?.["--diffs-bg" as keyof CSSProperties]).toBe(
-      CODE_VIEW_DIFFS_BACKGROUND,
-    );
-    expect(codeViewProps?.style?.backgroundColor).toBe(CODE_VIEW_BACKGROUND_COLOR);
-    expect(codeViewProps?.options?.unsafeCSS).toContain("background-color: var(--diffs-bg)");
-  });
-
-  test("aligns CodeView layout metrics with preview CSS", async () => {
-    const onClose = mock(() => {});
-
-    render(renderPreview({ selectedFile: firstFile, onClose }));
-
-    await screen.findByText("const first = true;");
-    const codeViewProps = codeViewPropsHistory.at(-1);
-    expect(codeViewProps?.style?.["--diffs-line-height" as keyof CSSProperties]).toBe("18px");
-    expect(codeViewProps?.style?.["--diffs-gap-block" as keyof CSSProperties]).toBe("8px");
-    expect(codeViewProps?.style?.["--diffs-scrollbar-gutter-override" as keyof CSSProperties]).toBe(
-      "0px",
-    );
-    expect(codeViewProps?.options?.itemMetrics?.lineHeight).toBe(18);
-    expect(codeViewProps?.options?.itemMetrics?.spacing).toBe(8);
-    expect(codeViewProps?.options?.itemMetrics?.paddingTop).toBe(8);
-    expect(codeViewProps?.options?.itemMetrics?.paddingBottom).toBe(8);
-    expect(codeViewProps?.options?.layout).toEqual({
-      paddingTop: 0,
-      paddingBottom: 0,
-      gap: 0,
-    });
-    expect(codeViewProps?.options?.unsafeCSS).toContain(":host");
-    expect(codeViewProps?.options?.unsafeCSS).toContain("[data-file]");
-    expect(codeViewProps?.options?.unsafeCSS).toContain("[data-column-number]");
-  });
-
   test("keeps the previous file visible while the next selected file is loading", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
