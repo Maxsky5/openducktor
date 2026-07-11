@@ -115,9 +115,6 @@ describe("createOpenInToolsAdapter", () => {
         if (command === "mdfind") {
           return Effect.succeed({ ok: false, stdout: "", stderr: "Spotlight unavailable" });
         }
-        if (command === "mdls") {
-          return Effect.succeed({ ok: true, stdout: "MissingIcon\n", stderr: "" });
-        }
         return Effect.succeed({ ok: true, stdout: "", stderr: "" });
       },
     });
@@ -142,6 +139,34 @@ describe("createOpenInToolsAdapter", () => {
       program: "mdfind",
       stderr: "Spotlight unavailable",
     });
+  });
+  test("checks every direct application alias before requiring Spotlight", async () => {
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {},
+      runCommand: ({ command }) =>
+        Effect.succeed({
+          ok: command !== "mdfind",
+          stdout: "",
+          stderr: command === "mdfind" ? "Spotlight unavailable" : "",
+        }),
+    });
+    const port = createOpenInToolsAdapter({
+      platform: "darwin",
+      systemCommands,
+      homeDirectory: () => "/Users/dev",
+      pathExists: (inputPath) => Effect.succeed(inputPath === "/Applications/PyCharm CE.app"),
+      pathIsDirectory: () => Effect.succeed(true),
+      realpathFn: (inputPath) => Effect.succeed(inputPath),
+    });
+
+    await Effect.runPromise(port.openDirectoryInTool("/repo", "pycharm"));
+
+    expect(launches).toEqual([
+      {
+        command: "open",
+        args: ["-na", "/Applications/PyCharm CE.app", "--args", "/repo"],
+      },
+    ]);
   });
   test("treats successful empty Spotlight output as an application-not-found result", async () => {
     const { launches, systemCommands } = createSystemCommands({ resolvedCommands: {} });
