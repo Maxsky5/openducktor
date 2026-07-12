@@ -123,14 +123,17 @@ const renderPendingPanel = (): string => {
   return renderPanel(queryClient);
 };
 
-const renderCheckCard = (status: "queued" | "in_progress" | "unknown"): string =>
+const renderCheckCard = (
+  status: "queued" | "in_progress" | "unknown",
+  conclusion: "failure" | "success" | null = null,
+): string =>
   renderToStaticMarkup(
     <TaskExecutionCiCheckCard
       check={{
         name: `${status} check`,
         workflow: "CI",
         status,
-        conclusion: null,
+        conclusion,
         url: null,
         details: null,
         startedAt: null,
@@ -259,11 +262,15 @@ describe("TaskExecutionCiChecksPanel", () => {
       expect(html.match(/text-info-muted/g)?.length).toBe(2);
     }
 
-    const unknownHtml = renderCheckCard("unknown");
+    for (const conclusion of [null, "success", "failure"] as const) {
+      const unknownHtml = renderCheckCard("unknown", conclusion);
 
-    expect(unknownHtml).toContain("lucide-circle-dashed");
-    expect(unknownHtml).toContain("text-muted-foreground");
-    expect(unknownHtml).not.toContain("text-info-muted");
+      expect(unknownHtml).toContain("lucide-circle-dashed");
+      expect(unknownHtml).toContain("text-muted-foreground");
+      expect(unknownHtml).not.toContain("text-info-muted");
+      expect(unknownHtml).not.toContain("text-success-muted");
+      expect(unknownHtml).not.toContain("text-destructive-muted");
+    }
   });
 
   test("classifies common automation authors as bots", () => {
