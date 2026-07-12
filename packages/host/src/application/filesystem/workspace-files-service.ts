@@ -196,6 +196,28 @@ const mergeGitStatus = (
   return GIT_STATUS_PRIORITY[candidate] > GIT_STATUS_PRIORITY[current] ? candidate : current;
 };
 
+const projectGitChangeToWorkspace = (
+  filesystem: FilesystemPort,
+  repositoryRoot: string,
+  workspaceRoot: string,
+  change: { originalPath?: string; path: string; status: string },
+): { path: string; status: string } | null => {
+  const path = toWorkspaceRelativeGitPath(filesystem, repositoryRoot, workspaceRoot, change.path);
+  if (path) {
+    return { path, status: change.status };
+  }
+  if (change.status !== "renamed" || !change.originalPath) {
+    return null;
+  }
+  const originalPath = toWorkspaceRelativeGitPath(
+    filesystem,
+    repositoryRoot,
+    workspaceRoot,
+    change.originalPath,
+  );
+  return originalPath ? { path: originalPath, status: "deleted" } : null;
+};
+
 const directoryPathsForFiles = (filePaths: readonly string[]): string[] => {
   const directories = new Set<string>();
   for (const filePath of filePaths) {
@@ -277,40 +299,40 @@ export const createWorkspaceFilesService = (
       const filePathSet = new Set(materializedFilePaths);
       const gitStatusByPath = new Map<string, WorkspaceFileGitStatus | null>();
       for (const change of targetChanges) {
-        const workspacePath = toWorkspaceRelativeGitPath(
+        const workspaceChange = projectGitChangeToWorkspace(
           filesystem,
           repositoryRoot,
           canonicalRoot,
-          change.path,
+          change,
         );
-        if (!workspacePath) {
+        if (!workspaceChange) {
           continue;
         }
-        const normalizedStatus = yield* normalizeGitStatus(change.status);
-        if (normalizedStatus !== "deleted" && !materializedFilePaths.has(workspacePath)) {
+        const normalizedStatus = yield* normalizeGitStatus(workspaceChange.status);
+        if (normalizedStatus !== "deleted" && !materializedFilePaths.has(workspaceChange.path)) {
           continue;
         }
-        filePathSet.add(workspacePath);
+        filePathSet.add(workspaceChange.path);
         gitStatusByPath.set(
-          workspacePath,
-          mergeGitStatus(gitStatusByPath.get(workspacePath), normalizedStatus),
+          workspaceChange.path,
+          mergeGitStatus(gitStatusByPath.get(workspaceChange.path), normalizedStatus),
         );
       }
       for (const status of statuses) {
-        const workspacePath = toWorkspaceRelativeGitPath(
+        const workspaceChange = projectGitChangeToWorkspace(
           filesystem,
           repositoryRoot,
           canonicalRoot,
-          status.path,
+          status,
         );
-        if (!workspacePath) {
+        if (!workspaceChange) {
           continue;
         }
-        const normalizedStatus = yield* normalizeGitStatus(status.status);
-        filePathSet.add(workspacePath);
+        const normalizedStatus = yield* normalizeGitStatus(workspaceChange.status);
+        filePathSet.add(workspaceChange.path);
         gitStatusByPath.set(
-          workspacePath,
-          mergeGitStatus(gitStatusByPath.get(workspacePath), normalizedStatus),
+          workspaceChange.path,
+          mergeGitStatus(gitStatusByPath.get(workspaceChange.path), normalizedStatus),
         );
       }
       const filePaths = [...filePathSet].sort(compareWorkspacePaths);

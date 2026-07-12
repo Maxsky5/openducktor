@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { FileDiff, FileStatus } from "@openducktor/contracts";
+import type { FileDiff } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
+import type { GitChangedFile, GitFileStatus, GitPort } from "../../ports/git-port";
 import { createWorkspaceFilesService } from "./workspace-files-service";
 
 type FakeFilesystemInput = {
@@ -81,9 +81,9 @@ const createFakeGitPort = ({
   isRepository?: boolean;
   repositoryRoot?: string;
   files?: string[];
-  statuses?: FileStatus[];
+  statuses?: GitFileStatus[];
   diffs?: FileDiff[];
-  changedFiles?: Array<{ path: string; status: string }>;
+  changedFiles?: GitChangedFile[];
 } = {}): GitPort =>
   ({
     isGitRepository: () => Effect.succeed(isRepository),
@@ -313,6 +313,69 @@ describe("createWorkspaceFilesService", () => {
     expect(tree.entries.map((entry) => entry.path)).not.toContain(
       "packages/frontend/src/outside.ts",
     );
+  });
+
+  test("shows a live rename leaving a nested workspace root as a deletion", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo/packages/host": { isDirectory: true },
+        },
+      }),
+      createFakeGitPort({
+        repositoryRoot: "/repo",
+        statuses: [
+          {
+            path: "packages/frontend/src/moved.ts",
+            originalPath: "packages/host/src/moved.ts",
+            status: "renamed",
+            staged: true,
+          },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(service.listTree({ rootPath: "/repo/packages/host" }));
+
+    expect(tree.entries).toContainEqual({
+      path: "src/moved.ts",
+      kind: "file",
+      size: null,
+      mtimeMs: null,
+      gitStatus: "deleted",
+    });
+  });
+
+  test("shows a target rename leaving a nested workspace root as a deletion", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        stats: {
+          "/repo/packages/host": { isDirectory: true },
+        },
+      }),
+      createFakeGitPort({
+        repositoryRoot: "/repo",
+        changedFiles: [
+          {
+            path: "packages/frontend/src/moved.ts",
+            originalPath: "packages/host/src/moved.ts",
+            status: "renamed",
+          },
+        ],
+      }),
+    );
+
+    const tree = await Effect.runPromise(
+      service.listTree({ rootPath: "/repo/packages/host", targetBranch: "origin/main" }),
+    );
+
+    expect(tree.entries).toContainEqual({
+      path: "src/moved.ts",
+      kind: "file",
+      size: null,
+      mtimeMs: null,
+      gitStatus: "deleted",
+    });
   });
 
   test("reads a contained text file", async () => {
@@ -601,7 +664,14 @@ describe("createWorkspaceFilesService", () => {
       }),
       createFakeGitPort({
         files: ["src/new.ts"],
-        statuses: [{ path: "src/new.ts", status: "renamed", staged: true }],
+        statuses: [
+          {
+            path: "src/new.ts",
+            originalPath: "src/old.ts",
+            status: "renamed",
+            staged: true,
+          },
+        ],
       }),
     );
 
@@ -614,6 +684,7 @@ describe("createWorkspaceFilesService", () => {
       mtimeMs: 20,
       gitStatus: "renamed",
     });
+    expect(tree.entries.some((entry) => entry.path === "src/old.ts")).toBe(false);
   });
 
   test("preserves literal backslashes in POSIX Git paths", async () => {

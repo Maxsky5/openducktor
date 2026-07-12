@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
+import type { GitFileStatus } from "../../ports/git-port";
 import { type GitCommandRunner, runGit, runGitAllowFailure } from "./git-command-runner";
 
 const unmergedStatusPairs = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
@@ -87,7 +88,7 @@ const isUnmergedStatusPair = (index: string, worktree: string): boolean => {
   return unmergedStatusPairs.has(pair);
 };
 
-const parseStatusRecord = (line: string): FileStatus[] => {
+const parseStatusRecord = (line: string): GitFileStatus[] => {
   if (line.length < 4) {
     return [];
   }
@@ -115,26 +116,35 @@ const parseStatusRecord = (line: string): FileStatus[] => {
   return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
 };
 
-const parseStatusPorcelain = (output: string): FileStatus[] => {
+const parseStatusPorcelain = (output: string): GitFileStatus[] => {
   if (!output.includes("\0")) {
     return output.split(/\r?\n/).flatMap(parseStatusRecord);
   }
 
   const records = output.split("\0");
-  const statuses: FileStatus[] = [];
+  const statuses: GitFileStatus[] = [];
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index] ?? "";
-    statuses.push(...parseStatusRecord(record));
     const indexStatus = record.at(0);
     const worktreeStatus = record.at(1);
-    if (
+    const hasOriginalPath =
       indexStatus === "R" ||
       indexStatus === "C" ||
       worktreeStatus === "R" ||
-      worktreeStatus === "C"
-    ) {
+      worktreeStatus === "C";
+    const parsedStatuses = parseStatusRecord(record);
+    if (hasOriginalPath) {
+      const originalPath = records[index + 1] ?? "";
+      statuses.push(
+        ...parsedStatuses.map((status) => ({
+          ...status,
+          ...(originalPath ? { originalPath } : {}),
+        })),
+      );
       index += 1;
+      continue;
     }
+    statuses.push(...parsedStatuses);
   }
   return statuses;
 };

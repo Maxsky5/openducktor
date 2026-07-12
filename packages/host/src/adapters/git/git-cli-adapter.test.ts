@@ -117,7 +117,12 @@ describe("createGitCliAdapter", () => {
     await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
       { path: "src/added.ts", status: "deleted", staged: false },
       { path: "src/modified.ts", status: "deleted", staged: false },
-      { path: "src/renamed.ts", status: "deleted", staged: false },
+      {
+        path: "src/renamed.ts",
+        originalPath: "src/original.ts",
+        status: "deleted",
+        staged: false,
+      },
     ]);
   });
   test("resolves the repository root for a nested working directory", async () => {
@@ -152,7 +157,12 @@ describe("createGitCliAdapter", () => {
     });
 
     await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
-      { path: "src/new name.ts", status: "renamed", staged: true },
+      {
+        path: "src/new name.ts",
+        originalPath: "src/old name.ts",
+        status: "renamed",
+        staged: true,
+      },
       { path: "src/other.ts", status: "modified", staged: false },
     ]);
   });
@@ -165,7 +175,12 @@ describe("createGitCliAdapter", () => {
     });
 
     await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
-      { path: "src/new.ts", status: "renamed", staged: false },
+      {
+        path: "src/new.ts",
+        originalPath: "src/old.ts",
+        status: "renamed",
+        staged: false,
+      },
       { path: "src/other.ts", status: "modified", staged: false },
     ]);
   });
@@ -180,7 +195,7 @@ describe("createGitCliAdapter", () => {
 
     await expect(Effect.runPromise(git.listChangedFiles("/repo", "origin/main"))).resolves.toEqual([
       { path: "src/modified.ts", status: "modified" },
-      { path: "src/new.ts", status: "renamed" },
+      { path: "src/new.ts", originalPath: "src/old.ts", status: "renamed" },
     ]);
   });
   test("returns sorted file diffs with additions and deletions", async () => {

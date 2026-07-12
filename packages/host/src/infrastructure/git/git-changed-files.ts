@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { GitChangedFile } from "../../ports/git-port";
 import type { GitCommandRunner } from "./git-command-runner";
 import { requireNonEmptyEffect, runGit } from "./git-command-runner";
 import { resolveBranchDiffBase } from "./git-diff";
@@ -16,9 +17,9 @@ const nameStatusToFileStatus = (value: string): string => {
   }
 };
 
-const parseChangedFiles = (output: string): Array<{ path: string; status: string }> => {
+const parseChangedFiles = (output: string): GitChangedFile[] => {
   const fields = output.split("\0");
-  const files: Array<{ path: string; status: string }> = [];
+  const files: GitChangedFile[] = [];
   for (let index = 0; index < fields.length; ) {
     const status = fields[index] ?? "";
     index += 1;
@@ -33,7 +34,11 @@ const parseChangedFiles = (output: string): Array<{ path: string; status: string
       index += 1;
     }
     if (path) {
-      files.push({ path, status: nameStatusToFileStatus(status) });
+      files.push({
+        path,
+        ...(isRenameOrCopy && firstPath ? { originalPath: firstPath } : {}),
+        status: nameStatusToFileStatus(status),
+      });
     }
   }
   return files;
