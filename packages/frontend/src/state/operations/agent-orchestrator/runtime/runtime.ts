@@ -9,6 +9,7 @@ import type {
 import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -42,6 +43,7 @@ export type TaskDocuments = {
 };
 
 type EnsureRuntimeDependencies = {
+  queryClient?: QueryClient;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -178,6 +180,7 @@ export const createEnsureRuntime = ({
   refreshTaskData,
   hostClient = host,
   repoConfigLoader = defaultRepoConfigLoader,
+  queryClient = appQueryClient,
 }: EnsureRuntimeDependencies): EnsureRuntime => {
   return async (repoPath, taskId, role, options): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
@@ -218,6 +221,9 @@ export const createEnsureRuntime = ({
       bootstrap: {
         complete: async () => {
           await completeBootstrap(repoPath, taskId, bootstrap.bootstrapId);
+          await queryClient.invalidateQueries({
+            queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+          });
           if (role === "build") {
             runOrchestratorSideEffect(
               "runtime-refresh-task-data-after-build-start",
@@ -226,7 +232,12 @@ export const createEnsureRuntime = ({
             );
           }
         },
-        abort: () => abortBootstrap(repoPath, taskId, bootstrap.bootstrapId),
+        abort: async () => {
+          await abortBootstrap(repoPath, taskId, bootstrap.bootstrapId);
+          await queryClient.invalidateQueries({
+            queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+          });
+        },
       },
     };
   };

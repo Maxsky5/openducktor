@@ -147,8 +147,13 @@ const createGitPort = (input: {
   branches?: GitBranch[];
   currentBranch?: string | null;
   deleteBranchFails?: boolean;
+  registered?: boolean;
 }): GitPort =>
   ({
+    canonicalizePath: (path: string) => Effect.succeed(path),
+    isGitRepository: () => Effect.succeed(true),
+    shareGitCommonDirectory: () => Effect.succeed(true),
+    isRegisteredWorktree: () => Effect.succeed(input.registered ?? true),
     listBranches: () => Effect.succeed(input.branches ?? []),
     getCurrentBranch: () =>
       Effect.succeed({
@@ -384,7 +389,7 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
-      "is detached or has no active branch",
+      "is not on its task branch",
     );
     expect(calls).toEqual([]);
   });
@@ -402,7 +407,25 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
-      "is on unrelated branch feature/other",
+      "is not on its task branch",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  test("retains an unrelated repository at the canonical managed path", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls, currentBranch: "odt/task-1", registered: false }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "is not a registered worktree",
     );
     expect(calls).toEqual([]);
   });
@@ -503,7 +526,7 @@ describe("TaskService.closeTask", () => {
     expect(calls[0]).toBe("close task:spec,planner,build,qa");
   });
 
-  test("guards non-implementation sessions without collecting their working directories", async () => {
+  test("guards and cleans legacy Planner worktrees", async () => {
     const calls: string[] = [];
     const specSession: AgentSessionRecord = {
       externalSessionId: "session-1",
@@ -536,7 +559,7 @@ describe("TaskService.closeTask", () => {
       devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
-        currentBranch: "feature/planner-session",
+        currentBranch: "odt/task-1-legacy",
       }),
       settingsConfig: createSettingsConfig(new Set(["/repo", "/worktrees/repo/planner-session"])),
       taskWorktreeService: createTaskWorktreeService(null),
@@ -550,6 +573,8 @@ describe("TaskService.closeTask", () => {
     expect(calls).toEqual([
       "close task:spec,planner,build,qa",
       "stop-dev:task-1",
+      "remove-worktree:/worktrees/repo/planner-session",
+      "remove-path:/worktrees/repo/planner-session",
       "transition:task-1:closed",
     ]);
   });

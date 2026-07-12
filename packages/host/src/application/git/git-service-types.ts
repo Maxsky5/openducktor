@@ -49,6 +49,7 @@ export type GitServiceError =
   | WorktreeFileError;
 
 export type GitService = {
+  canonicalizePath(input: GitScopeInput): Effect.Effect<string, GitServiceError>;
   getBranches(input: GitScopeInput): Effect.Effect<GitBranch[], GitServiceError>;
   getCurrentBranch(input: GitScopeInput): Effect.Effect<GitCurrentBranch, GitServiceError>;
   getStatus(input: GitScopeInput): Effect.Effect<FileStatus[], GitServiceError>;

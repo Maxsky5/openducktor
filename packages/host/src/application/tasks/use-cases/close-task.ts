@@ -31,12 +31,14 @@ export const createTaskCloseUseCase = ({
   taskWorktreeService,
   worktreeFiles,
   workspaceSettingsService,
+  taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
+    let releaseLifecycle = () => {};
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
+      let currentTasks = yield* taskStore.listTasks({ repoPath });
+      let current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -51,6 +53,26 @@ export const createTaskCloseUseCase = ({
       }
 
       yield* validateManualCloseTaskEffect(current, currentTasks);
+      if (taskSessionBootstrapCoordinator && gitPort) {
+        const canonicalInputRepo = yield* gitPort.canonicalizePath(repoPath);
+        releaseLifecycle = yield* taskSessionBootstrapCoordinator.beginLifecycle(
+          canonicalInputRepo,
+          [taskId],
+          "close task",
+        );
+        currentTasks = yield* taskStore.listTasks({ repoPath });
+        current = currentTasks.find((task) => task.id === taskId);
+        if (!current) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Task not found: ${taskId}`,
+              details: { repoPath, taskId },
+            }),
+          );
+        }
+        yield* validateManualCloseTaskEffect(current, currentTasks);
+      }
 
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
@@ -151,6 +173,6 @@ export const createTaskCloseUseCase = ({
           ),
         ),
       );
-    });
+    }).pipe(Effect.ensuring(Effect.sync(() => releaseLifecycle())));
   },
 });

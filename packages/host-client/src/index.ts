@@ -115,6 +115,7 @@ const AGENT_METHODS = [
 ] as const satisfies readonly MethodName<HostAgentClient>[];
 
 const GIT_METHODS = [
+  "gitCanonicalizePath",
   "gitGetBranches",
   "gitGetCurrentBranch",
   "gitSwitchBranch",

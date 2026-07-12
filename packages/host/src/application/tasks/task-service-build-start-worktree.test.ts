@@ -14,6 +14,7 @@ import {
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
+import { createTaskSessionBootstrapCoordinator } from "./worktrees/task-session-bootstrap-coordinator";
 
 const taskStoreEffect = <Success>(run: () => Promise<Success>) =>
   Effect.tryPromise({
@@ -27,6 +28,129 @@ const taskStoreEffect = <Success>(run: () => Promise<Success>) =>
   });
 
 describe("createTaskService build start worktree handling", () => {
+  test("supports Planner and QA as the first worktree creator", async () => {
+    for (const role of ["planner", "qa"] as const) {
+      const calls: unknown[] = [];
+      const service = createTaskService({
+        taskStore: {
+          getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+        } as TaskStorePort,
+        gitPort: createBuildStartGitPort({ calls }),
+        runtimeDefinitionsService: createRuntimeDefinitionsService(),
+        runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        systemCommands: createBuildSystemCommands(calls),
+        worktreeFiles: createBuildStartWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      });
+      const bootstrap = await Effect.runPromise(
+        service.taskSessionBootstrapPrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role,
+          runtimeKind: "opencode",
+        }),
+      );
+      expect(bootstrap.role).toBe(role);
+      await Effect.runPromise(
+        service.taskSessionBootstrapAbort({
+          repoPath: "/repo",
+          taskId: "task-1",
+          bootstrapId: bootstrap.bootstrapId,
+        }),
+      );
+    }
+  });
+
+  test("rejects lifecycle changes during Builder startup and replays terminal calls safely", async () => {
+    const status: ReturnType<typeof task>["status"] = "ready_for_dev";
+    let updatedAt = "2026-01-01T00:00:00.000Z";
+    const calls: unknown[] = [];
+    const coordinator = createTaskSessionBootstrapCoordinator();
+    const taskStore = {
+      getTask: () => Effect.succeed(task({ status, updatedAt })),
+      transitionTask: () => Effect.succeed(task({ status: "in_progress" })),
+    } as TaskStorePort;
+    const service = createTaskService({
+      taskStore,
+      taskSessionBootstrapCoordinator: coordinator,
+      gitPort: createBuildStartGitPort({ calls }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      systemCommands: createBuildSystemCommands(calls),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+    const bootstrap = await Effect.runPromise(
+      service.taskSessionBootstrapPrepare({
+        repoPath: "/repo",
+        taskId: "task-1",
+        role: "build",
+        runtimeKind: "opencode",
+      }),
+    );
+    await expect(
+      Effect.runPromise(coordinator.beginLifecycle("/repo", ["task-1"], "reset task")),
+    ).rejects.toThrow("bootstrap is in progress");
+    updatedAt = "2026-01-02T00:00:00.000Z";
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapComplete({
+          repoPath: "/repo",
+          taskId: "task-1",
+          bootstrapId: bootstrap.bootstrapId,
+        }),
+      ),
+    ).rejects.toThrow("changed from ready_for_dev to ready_for_dev");
+    await Effect.runPromise(
+      service.taskSessionBootstrapAbort({
+        repoPath: "/repo",
+        taskId: "task-1",
+        bootstrapId: bootstrap.bootstrapId,
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapAbort({
+          repoPath: "/repo",
+          taskId: "task-1",
+          bootstrapId: bootstrap.bootstrapId,
+        }),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapAbort({
+          repoPath: "/repo",
+          taskId: "other-task",
+          bootstrapId: bootstrap.bootstrapId,
+        }),
+      ),
+    ).rejects.toThrow("Unknown or mismatched");
+    const releaseLifecycle = await Effect.runPromise(
+      coordinator.beginLifecycle("/repo", ["task-1"], "close task"),
+    );
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapPrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: "spec",
+          runtimeKind: "opencode",
+        }),
+      ),
+    ).rejects.toThrow("close task is in progress");
+    releaseLifecycle();
+  });
   test("prepares the same canonical worktree for non-Builder roles without transitioning", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
@@ -79,6 +203,24 @@ describe("createTaskService build start worktree handling", () => {
         bootstrapId: bootstrap.bootstrapId,
       }),
     );
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapComplete({
+          repoPath: "/repo",
+          taskId: "task-1",
+          bootstrapId: bootstrap.bootstrapId,
+        }),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapAbort({
+          repoPath: "/repo",
+          taskId: "task-1",
+          bootstrapId: bootstrap.bootstrapId,
+        }),
+      ),
+    ).resolves.toBe(true);
     expect(calls.filter((call) => JSON.stringify(call).includes('"type":"transition"'))).toEqual(
       [],
     );

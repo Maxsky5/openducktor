@@ -4,7 +4,10 @@ import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
-import { implementationSessionRoles, isRelatedTaskBranch } from "./task-cleanup-support";
+import {
+  validateExistingTaskWorktreeCandidate,
+  workflowCleanupSessionRoles,
+} from "./task-cleanup-support";
 
 type CloseWorktreeCandidate = {
   path: string;
@@ -15,7 +18,7 @@ const collectCloseManagedSessionWorktreePaths = (
   sessions: AgentSessionRecord[],
 ): CloseWorktreeCandidate[] =>
   sessions.reduce<CloseWorktreeCandidate[]>((candidates, session) => {
-    if (!implementationSessionRoles.has(session.role.trim())) {
+    if (!workflowCleanupSessionRoles.has(session.role.trim())) {
       return candidates;
     }
 
@@ -74,28 +77,21 @@ export const collectCloseWorktreePaths = (
       }
       seen.add(normalizedWorktree);
       if (yield* dependencies.settingsConfig.pathExists(worktreePath)) {
-        const currentBranch = yield* dependencies.gitPort.getCurrentBranch(worktreePath);
-        const branchName = currentBranch.name?.trim();
-        if (!branchName) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Cannot close task ${task.id} because worktree ${worktreePath} is detached or has no active branch.`,
-              details: { repoPath, taskId: task.id, worktreePath },
-            }),
-          );
+        const validated = yield* validateExistingTaskWorktreeCandidate(
+          dependencies.gitPort,
+          repoPath,
+          worktreePath,
+          branchPrefix,
+          task.id,
+          "close",
+        );
+        const normalizedValidated = normalizePathForComparison(validated);
+        if (seen.has(normalizedValidated) && normalizedValidated !== normalizedWorktree) {
+          continue;
         }
-        if (!isRelatedTaskBranch(branchName, branchPrefix, task.id)) {
-          // Manual close is an administrative completion path, so an existing
-          // cleanup candidate on an unrelated branch must be inspected explicitly.
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Cannot close task ${task.id} because worktree ${worktreePath} is on unrelated branch ${branchName}.`,
-              details: { repoPath, taskId: task.id, worktreePath, branchName },
-            }),
-          );
-        }
+        seen.add(normalizedValidated);
+        paths.push(validated);
+        continue;
       }
       // Missing candidates stay in the list so shared local cleanup can apply
       // its explicit missing-path policy while preserving dependency checks.

@@ -1,12 +1,9 @@
-import { type AgentRole, taskSessionBootstrapSchema } from "@openducktor/contracts";
+import { taskSessionBootstrapSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { buildBranchName } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
-import {
-  resolveRuntimeDescriptorForTaskSession,
-  type rollbackFailedBuildWorktree,
-} from "../support/builder-worktree-cleanup";
+import { resolveRuntimeDescriptorForTaskSession } from "../support/builder-worktree-cleanup";
 import {
   prepareNewBuildWorktree,
   validateExistingGitBuildWorktree,
@@ -17,14 +14,7 @@ import {
 } from "../support/required-task-dependencies";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
-
-type Reservation = {
-  bootstrapId: string;
-  canonicalRepoPath: string;
-  taskId: string;
-  role: AgentRole;
-  cleanup: () => ReturnType<typeof rollbackFailedBuildWorktree>;
-};
+import type { TaskSessionBootstrapReservation } from "./task-session-bootstrap-coordinator";
 
 export const createTaskSessionBootstrapUseCase = ({
   gitPort,
@@ -35,12 +25,15 @@ export const createTaskSessionBootstrapUseCase = ({
   runtimeDefinitionsService,
   runtimeRegistry,
   worktreeFiles,
+  taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<
   TaskService,
   "taskSessionBootstrapPrepare" | "taskSessionBootstrapComplete" | "taskSessionBootstrapAbort"
 > => {
-  const reservations = new Map<string, Reservation>();
-  const reservationKey = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
+  if (!taskSessionBootstrapCoordinator) {
+    throw new Error("Task session bootstrap coordinator is required.");
+  }
+  const coordinator = taskSessionBootstrapCoordinator;
 
   return {
     taskSessionBootstrapPrepare(input) {
@@ -74,10 +67,6 @@ export const createTaskSessionBootstrapUseCase = ({
             }),
           );
         }
-        const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
-        if (role === "build") {
-          yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
-        }
         const worktreeBase = repoConfig.worktreeBasePath
           ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
           : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
@@ -100,35 +89,26 @@ export const createTaskSessionBootstrapUseCase = ({
             }),
           );
         }
-        const key = reservationKey(canonicalRepoPath, taskId);
-        const activeReservation = reservations.get(key);
-        if (activeReservation) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "task.session_bootstrap.prepare",
-              message: `Task session bootstrap is already in progress for task ${taskId} (${activeReservation.role}).`,
-              details: {
-                repoPath: canonicalRepoPath,
-                taskId,
-                role,
-                activeRole: activeReservation.role,
-              },
-            }),
-          );
-        }
         const bootstrapId = crypto.randomUUID();
-        reservations.set(key, {
-          bootstrapId,
-          canonicalRepoPath,
-          taskId,
-          role,
-          cleanup: () => Effect.succeed(""),
-        });
+        yield* coordinator.acquireBootstrap(canonicalRepoPath, taskId, bootstrapId, role);
         const prepared = yield* Effect.either(
           Effect.gen(function* () {
+            const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
+            if (role === "build") {
+              yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
+            }
+            coordinator.set({
+              bootstrapId,
+              canonicalRepoPath,
+              taskId,
+              role,
+              preparedStatus: task.status,
+              preparedUpdatedAt: task.updatedAt,
+              cleanup: () => Effect.succeed(""),
+            });
             const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
             const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
-            let cleanup: Reservation["cleanup"] = () => Effect.succeed("");
+            let cleanup: TaskSessionBootstrapReservation["cleanup"] = () => Effect.succeed("");
             if (exists) {
               if (!(yield* dependencies.gitPort.isGitRepository(worktreePath))) {
                 return yield* Effect.fail(
@@ -158,11 +138,13 @@ export const createTaskSessionBootstrapUseCase = ({
               );
               cleanup = newWorktree.cleanup;
             }
-            reservations.set(key, {
+            coordinator.set({
               bootstrapId,
               canonicalRepoPath,
               taskId,
               role,
+              preparedStatus: task.status,
+              preparedUpdatedAt: task.updatedAt,
               cleanup,
             });
             yield* dependencies.runtimeRegistry
@@ -202,9 +184,9 @@ export const createTaskSessionBootstrapUseCase = ({
         if (prepared._tag === "Right") {
           return prepared.right;
         }
-        const reservation = reservations.get(key);
+        const reservation = coordinator.get(canonicalRepoPath, taskId);
         const cleanupError = reservation ? yield* reservation.cleanup() : "";
-        reservations.delete(key);
+        coordinator.delete(canonicalRepoPath, taskId);
         return yield* Effect.fail(
           new HostOperationError({
             operation: "task.session_bootstrap.prepare",
@@ -221,8 +203,28 @@ export const createTaskSessionBootstrapUseCase = ({
           return yield* Effect.fail(new HostValidationError({ message: "Git port is required." }));
         }
         const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
-        const key = reservationKey(canonicalRepoPath, taskId);
-        const reservation = reservations.get(key);
+        const terminalOutcome = coordinator.terminalOutcome(bootstrapId);
+        if (
+          terminalOutcome &&
+          (terminalOutcome.repoPath !== canonicalRepoPath || terminalOutcome.taskId !== taskId)
+        ) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "bootstrapId",
+              message: `Unknown or mismatched task session bootstrap for task ${taskId}.`,
+            }),
+          );
+        }
+        if (terminalOutcome?.outcome === "completed") return true;
+        if (terminalOutcome?.outcome === "aborted" || terminalOutcome?.outcome === "abort_failed") {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "bootstrapId",
+              message: `Task session bootstrap ${bootstrapId} was already aborted.`,
+            }),
+          );
+        }
+        const reservation = coordinator.get(canonicalRepoPath, taskId);
         if (!reservation || reservation.bootstrapId !== bootstrapId) {
           return yield* Effect.fail(
             new HostValidationError({
@@ -234,15 +236,27 @@ export const createTaskSessionBootstrapUseCase = ({
         }
         if (reservation.role === "build") {
           const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
-          if (task.status !== "in_progress") {
-            yield* taskStore.transitionTask({
-              repoPath: canonicalRepoPath,
-              taskId,
-              status: "in_progress",
-            });
+          if (
+            task.status !== reservation.preparedStatus ||
+            task.updatedAt !== reservation.preparedUpdatedAt
+          ) {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "task.session_bootstrap.complete",
+                message: `Task ${taskId} changed from ${reservation.preparedStatus} to ${task.status} while Builder startup was in progress.`,
+                details: { repoPath: canonicalRepoPath, taskId, bootstrapId },
+              }),
+            );
           }
+          yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
+          yield* taskStore.transitionTask({
+            repoPath: canonicalRepoPath,
+            taskId,
+            status: "in_progress",
+          });
         }
-        reservations.delete(key);
+        coordinator.delete(canonicalRepoPath, taskId);
+        coordinator.recordTerminal(bootstrapId, "completed", canonicalRepoPath, taskId);
         return true;
       });
     },
@@ -252,8 +266,31 @@ export const createTaskSessionBootstrapUseCase = ({
           return yield* Effect.fail(new HostValidationError({ message: "Git port is required." }));
         }
         const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
-        const key = reservationKey(canonicalRepoPath, taskId);
-        const reservation = reservations.get(key);
+        const terminalOutcome = coordinator.terminalOutcome(bootstrapId);
+        if (
+          terminalOutcome &&
+          (terminalOutcome.repoPath !== canonicalRepoPath || terminalOutcome.taskId !== taskId)
+        ) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "bootstrapId",
+              message: `Unknown or mismatched task session bootstrap for task ${taskId}.`,
+            }),
+          );
+        }
+        if (terminalOutcome?.outcome === "abort_failed") {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "task.session_bootstrap.abort",
+              message:
+                terminalOutcome.failureMessage ??
+                "Task session bootstrap rollback did not complete.",
+            }),
+          );
+        }
+        if (terminalOutcome?.outcome === "aborted" || terminalOutcome?.outcome === "completed")
+          return true;
+        const reservation = coordinator.get(canonicalRepoPath, taskId);
         if (!reservation || reservation.bootstrapId !== bootstrapId) {
           return yield* Effect.fail(
             new HostValidationError({
@@ -264,8 +301,15 @@ export const createTaskSessionBootstrapUseCase = ({
           );
         }
         const cleanupError = yield* reservation.cleanup();
-        reservations.delete(key);
+        coordinator.delete(canonicalRepoPath, taskId);
         if (cleanupError) {
+          coordinator.recordTerminal(
+            bootstrapId,
+            "abort_failed",
+            canonicalRepoPath,
+            taskId,
+            `Task session bootstrap rollback did not complete.${cleanupError}`,
+          );
           return yield* Effect.fail(
             new HostOperationError({
               operation: "task.session_bootstrap.abort",
@@ -274,6 +318,7 @@ export const createTaskSessionBootstrapUseCase = ({
             }),
           );
         }
+        coordinator.recordTerminal(bootstrapId, "aborted", canonicalRepoPath, taskId);
         return true;
       });
     },

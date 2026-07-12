@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import { collectTaskDeletionIds } from "./task-deletion-ids";
@@ -107,6 +108,16 @@ export function useTaskMutationCommands({
             taskIds: taskIdsToRemove,
             mutation: async () => {
               await host.taskDelete(repoPath, taskId, deleteSubtasks);
+              await Promise.all(
+                taskIdsToRemove.map((deletedTaskId) =>
+                  queryClient.invalidateQueries({
+                    queryKey: taskWorktreeQueryKeys.taskWorktree({
+                      repoPath,
+                      taskId: deletedTaskId,
+                    }),
+                  }),
+                ),
+              );
             },
           });
         },
@@ -130,6 +141,9 @@ export function useTaskMutationCommands({
             taskIds: [taskId],
             mutation: async () => {
               await host.taskClose(repoPath, taskId);
+              await queryClient.invalidateQueries({
+                queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+              });
             },
           });
         },

@@ -24,7 +24,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     const sessionsRef = createSessionsRef([
       sessionFixture({
         externalSessionId: "legacy-root-session",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo-alias",
         historyLoadState: "loaded",
       }),
     ]);
@@ -32,6 +32,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
+      canonicalizePath: async (path) => (path === "/tmp/repo-alias" ? "/tmp/repo" : path),
     });
 
     await expect(
@@ -43,7 +44,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         sourceSession: {
           externalSessionId: "legacy-root-session",
           runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo",
+          workingDirectory: "/tmp/repo-alias",
         },
       }),
     ).rejects.toThrow("Start a fresh session in the task worktree instead");

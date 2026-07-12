@@ -461,4 +461,12 @@ export class HostGitClient {
   ): Promise<GitConflictAbortResult> {
     return gitAbortConflict(this.invokeFn, repoPath, operation, workingDir);
   }
+
+  async gitCanonicalizePath(path: string): Promise<string> {
+    const payload = await this.invokeFn("git_canonicalize_path", { repoPath: path });
+    if (typeof payload !== "string" || payload.length === 0) {
+      throw new Error("git_canonicalize_path returned an invalid path.");
+    }
+    return payload;
+  }
 }

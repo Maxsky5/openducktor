@@ -62,6 +62,7 @@ export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},
 ): RuntimeDependencies => ({
   adapter: {} as RuntimeDependencies["adapter"],
+  canonicalizePath: async (path) => path,
   ensureRuntime: async () => {
     throw new Error("should not resolve runtime");
   },

@@ -2,6 +2,7 @@ import type { RepoPromptOverrides, TaskCard, TaskWorktreeSummary } from "@opendu
 import type { AgentEnginePort } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { host } from "../../shared/host";
 import type { UpdateSession } from "../events/session-event-types";
 import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
@@ -120,6 +121,7 @@ export const createAgentSessionActions = ({
     },
     runtime: {
       adapter,
+      canonicalizePath: (path) => host.gitCanonicalizePath(path),
       resolveTaskWorktree,
       ensureRuntime,
     },

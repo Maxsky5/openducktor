@@ -18,6 +18,10 @@ const createRecordingGitService = () => {
     input: unknown;
   }> = [];
   const promiseService: GitService = {
+    canonicalizePath(input) {
+      calls.push({ method: "canonicalizePath", input });
+      return Effect.succeed(input.workingDir ?? input.repoPath);
+    },
     getBranches(input) {
       return Effect.tryPromise({
         try: async () => {

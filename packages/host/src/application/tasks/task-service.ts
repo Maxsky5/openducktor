@@ -79,6 +79,10 @@ import { createTaskReviewUseCases } from "./use-cases/review-task";
 import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
 import { createTaskSessionBootstrapUseCase } from "./use-cases/task-session-bootstrap";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
+import {
+  createTaskSessionBootstrapCoordinator,
+  type TaskSessionBootstrapCoordinator,
+} from "./worktrees/task-session-bootstrap-coordinator";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 export type TaskServiceError =
@@ -183,6 +187,7 @@ export type CreateTaskServiceInput = {
   runtimeDefinitionsService?: RuntimeDefinitionsService;
   runtimeRegistry?: RuntimeRegistryPort;
   worktreeFiles?: WorktreeFilePort;
+  taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
   cause instanceof TaskPolicyError || isHostError(cause);
@@ -204,7 +209,9 @@ const mapTaskServiceErrors = <A, E>(
 
 export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
   const githubDependencies = createTaskGithubDependencies(input);
-  const useCaseInput = { ...input, githubDependencies };
+  const taskSessionBootstrapCoordinator =
+    input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
+  const useCaseInput = { ...input, githubDependencies, taskSessionBootstrapCoordinator };
   const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),

@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { validateExistingTaskWorktreeCandidate } from "../../application/tasks/support/task-cleanup-support";
 import {
   createGitCliAdapter as createEffectGitCliAdapter,
   type GitCommandRunner,
@@ -584,6 +585,35 @@ describe("createGitCliAdapter", () => {
       expect(git("worktree", "list", "--porcelain")).toContain(
         `worktree ${await realpath(worktree)}`,
       );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  test("rejects an unrelated real repository at a managed task path before cleanup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openducktor-unrelated-cleanup-"));
+    const repo = join(root, "repo");
+    const unrelated = join(root, "task-1");
+    const init = async (path: string, branch: string) => {
+      await mkdir(path);
+      execFileSync("git", ["init", "-b", branch], { cwd: path });
+    };
+    try {
+      await init(repo, "main");
+      await init(unrelated, "odt/task-1-unrelated");
+      const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
+      await expect(
+        Effect.runPromise(
+          validateExistingTaskWorktreeCandidate(
+            adapter,
+            repo,
+            unrelated,
+            "odt",
+            "task-1",
+            "delete",
+          ),
+        ),
+      ).rejects.toThrow("is not a registered worktree");
+      expect(await access(unrelated).then(() => true)).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

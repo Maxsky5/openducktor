@@ -176,8 +176,8 @@ export type FlatStartSessionDependencies = Omit<
       "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
     >
   > &
-  Omit<StartSessionDependencies["runtime"], "resolveTaskWorktree"> &
-  Partial<Pick<StartSessionDependencies["runtime"], "resolveTaskWorktree">> &
+  Omit<StartSessionDependencies["runtime"], "resolveTaskWorktree" | "canonicalizePath"> &
+  Partial<Pick<StartSessionDependencies["runtime"], "resolveTaskWorktree" | "canonicalizePath">> &
   StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
@@ -205,6 +205,7 @@ export const toStartSessionDependencies = (
     },
     runtime: {
       adapter: deps.adapter,
+      canonicalizePath: deps.canonicalizePath ?? (async (path) => path),
       resolveTaskWorktree:
         deps.resolveTaskWorktree ??
         (async () => ({
@@ -254,6 +255,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run" as const,
     }),
+    canonicalizePath = async (path: string) => path,
     ensureRuntime = ensureRuntimeWithKind,
     loadTaskDocuments = async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     refreshTaskData = async () => {},
@@ -293,6 +295,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       loadAgentSessionHistory,
       persistSessionRecord,
       resolveTaskWorktree,
+      canonicalizePath,
       ensureRuntime,
       loadTaskDocuments,
       refreshTaskData,

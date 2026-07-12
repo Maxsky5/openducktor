@@ -25,8 +25,10 @@ export const createTaskDeleteUseCase = ({
   settingsConfig,
   worktreeFiles,
   workspaceSettingsService,
+  taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "deleteTask"> => ({
   deleteTask(input) {
+    let releaseLifecycle = () => {};
     return Effect.gen(function* () {
       const { repoPath, taskId, deleteSubtasks } = input;
       const dependencies = yield* requireDependencies(() =>
@@ -37,6 +39,14 @@ export const createTaskDeleteUseCase = ({
           workspaceSettingsService,
         ),
       );
+      const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
+      if (taskSessionBootstrapCoordinator) {
+        releaseLifecycle = yield* taskSessionBootstrapCoordinator.beginLifecycle(
+          canonicalInputRepo,
+          [taskId],
+          "delete tasks",
+        );
+      }
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
@@ -64,6 +74,19 @@ export const createTaskDeleteUseCase = ({
 
       const targetTasks = collectTaskDeleteTargets(currentTasks, taskId, deleteSubtasks);
       const targetTaskIds = targetTasks.map((task) => task.id);
+      const additionalTaskIds = targetTaskIds.filter((targetTaskId) => targetTaskId !== taskId);
+      if (taskSessionBootstrapCoordinator && additionalTaskIds.length > 0) {
+        const releaseSubtasks = yield* taskSessionBootstrapCoordinator.beginLifecycle(
+          canonicalInputRepo,
+          additionalTaskIds,
+          "delete tasks",
+        );
+        const releaseParent = releaseLifecycle;
+        releaseLifecycle = () => {
+          releaseSubtasks();
+          releaseParent();
+        };
+      }
       const targetTaskSessions: TaskSessionRecords[] = [];
       for (const targetTask of targetTasks) {
         const metadata = yield* taskStore.getTaskMetadata({
@@ -99,7 +122,7 @@ export const createTaskDeleteUseCase = ({
 
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
@@ -153,6 +176,6 @@ export const createTaskDeleteUseCase = ({
           ),
         ),
       );
-    });
+    }).pipe(Effect.ensuring(Effect.sync(() => releaseLifecycle())));
   },
 });

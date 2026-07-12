@@ -16,6 +16,7 @@ import {
 } from "./git-command-inputs";
 
 export const createGitCommandHandlers = (gitService: GitService): HostCommandHandlers => ({
+  git_canonicalize_path: (args) => gitService.canonicalizePath(parseGitScopeInput(args)),
   git_abort_conflict: (args) => gitService.abortConflict(parseGitAbortConflictInput(args)),
   git_commit_all: (args) => gitService.commitAll(parseGitCommitAllInput(args)),
   git_commits_ahead_behind: (args) => gitService.commitsAheadBehind(parseGitAheadBehindInput(args)),

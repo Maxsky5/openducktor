@@ -218,11 +218,12 @@ export function useAgentOrchestratorOperations({
     () =>
       createEnsureRuntime({
         refreshTaskData,
+        queryClient,
         hostClient: {
           ...runtimeHostPort,
         },
       }),
-    [refreshTaskData, runtimeHostPort],
+    [queryClient, refreshTaskData, runtimeHostPort],
   );
   const sessionActions = useMemo(
     () =>

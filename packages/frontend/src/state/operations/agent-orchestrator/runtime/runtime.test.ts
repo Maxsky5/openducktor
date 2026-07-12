@@ -4,7 +4,9 @@ import {
   type RepoConfig,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { createDeferred, withTimeout } from "../test-utils";
 import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } from "./runtime";
@@ -94,6 +96,26 @@ describe("agent-orchestrator-runtime", () => {
     expect(refreshCalls).toBe(0);
     await runtime.bootstrap?.complete();
     expect(refreshCalls).toBe(1);
+  });
+
+  test("invalidates a cached missing worktree after Spec bootstrap completes", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = taskWorktreeQueryKeys.taskWorktree({
+      repoPath: "/tmp/repo",
+      taskId: "task-1",
+    });
+    queryClient.setQueryData(queryKey, null);
+    const ensureRuntime = createEnsureRuntime({
+      hostClient: runtimeHost,
+      queryClient,
+      repoConfigLoader,
+      refreshTaskData: async () => {},
+    });
+    const runtime = await ensureRuntime("/tmp/repo", "task-1", "spec", {
+      workspaceId: "workspace-1",
+    });
+    await runtime.bootstrap?.complete();
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
   });
 
   test("returns build runtime without waiting for refresh completion", async () => {

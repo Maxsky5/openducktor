@@ -32,6 +32,7 @@ export type SessionDependencies = {
 };
 
 export type RuntimeDependencies = {
+  canonicalizePath: (path: string) => Promise<string>;
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   adapter: AgentEnginePort;
   ensureRuntime: EnsureRuntime;
