@@ -199,7 +199,7 @@ function AgentStudioTaskTabShell({
         className={cn(
           "mr-1 rounded-md p-1 text-muted-foreground transition-opacity hover:bg-secondary hover:text-foreground",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          "opacity-60 group-hover:opacity-100 data-[active=true]:opacity-100",
+          "opacity-60 group-hover:opacity-100 data-[active=true]:opacity-100 transition-none",
           onCloseTab ? "cursor-pointer" : "pointer-events-none",
         )}
         data-active={tab.isActive ? "true" : "false"}
