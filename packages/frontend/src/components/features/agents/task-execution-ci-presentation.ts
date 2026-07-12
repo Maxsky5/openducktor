@@ -23,7 +23,7 @@ export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string
 export const checkBadgeVariant = (
   check: PullRequestReviewCheck,
 ): "success" | "danger" | "info" | "secondary" => {
-  if (check.status !== "completed") {
+  if (isPendingCheck(check)) {
     return "info";
   }
   if (check.conclusion === "success" || check.conclusion === "skipped") {

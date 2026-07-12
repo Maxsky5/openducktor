@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
 import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 import { isBotCommentAuthor } from "./task-execution-ci-presentation";
@@ -122,6 +123,22 @@ const renderPendingPanel = (): string => {
   return renderPanel(queryClient);
 };
 
+const renderCheckCard = (status: "queued" | "in_progress" | "unknown"): string =>
+  renderToStaticMarkup(
+    <TaskExecutionCiCheckCard
+      check={{
+        name: `${status} check`,
+        workflow: "CI",
+        status,
+        conclusion: null,
+        url: null,
+        details: null,
+        startedAt: null,
+        completedAt: null,
+      }}
+    />,
+  );
+
 describe("TaskExecutionCiChecksPanel", () => {
   test("renders a useful loading state while review data is pending", () => {
     const html = renderPanel();
@@ -232,6 +249,21 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("bg-info-surface");
     expect(html).toContain("text-info-surface-foreground");
     expect(html).toContain("text-info-muted");
+  });
+
+  test("colors only queued and in-progress check rows as informational blue", () => {
+    for (const status of ["queued", "in_progress"] as const) {
+      const html = renderCheckCard(status);
+
+      expect(html).toContain("lucide-clock");
+      expect(html.match(/text-info-muted/g)?.length).toBe(2);
+    }
+
+    const unknownHtml = renderCheckCard("unknown");
+
+    expect(unknownHtml).toContain("lucide-circle-dashed");
+    expect(unknownHtml).toContain("text-muted-foreground");
+    expect(unknownHtml).not.toContain("text-info-muted");
   });
 
   test("classifies common automation authors as bots", () => {
