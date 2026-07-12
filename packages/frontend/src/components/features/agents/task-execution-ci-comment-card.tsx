@@ -83,7 +83,7 @@ export function TaskExecutionCiCommentCard({
   };
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card">
+    <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card [--diffs-gap-block:0px]">
       <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2">
         <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
           <MessageSquare className="size-3.5" />
