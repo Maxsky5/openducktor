@@ -1,5 +1,5 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
-import { ExternalLink, MessageSquare } from "lucide-react";
+import { ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,50 @@ import { openExternalUrl } from "@/lib/open-external-url";
 import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
 import { commentLocationLabel } from "./task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
+
+function TaskExecutionCiSuggestedChange({
+  patch,
+  filePath,
+  position,
+  total,
+}: {
+  patch: string;
+  filePath: string;
+  position: number;
+  total: number;
+}): ReactElement {
+  return (
+    <section
+      aria-label="Suggested change"
+      className="min-w-0 border-info-border/70 border-t bg-info-surface/40 px-3 py-3"
+      data-testid="ci-review-comment-suggestion-diff"
+    >
+      <div className="min-w-0 overflow-hidden rounded-md border border-info-border bg-card">
+        <header className="flex h-8 items-center justify-between gap-2 border-info-border border-b bg-info-surface px-2.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Lightbulb className="size-3.5 shrink-0 text-info-muted" aria-hidden="true" />
+            <h4 className="truncate text-xs font-semibold text-info-surface-foreground">
+              Suggested change
+            </h4>
+          </div>
+          {total > 1 ? (
+            <span className="shrink-0 text-[10px] font-medium text-info-muted">
+              {position} of {total}
+            </span>
+          ) : null}
+        </header>
+        <PierrePreloadedDiffViewer
+          patch={patch}
+          filePath={filePath}
+          diffStyle="unified"
+          diffIndicators="bars"
+          lineOverflow="wrap"
+          hunkSeparators="simple"
+        />
+      </div>
+    </section>
+  );
+}
 
 export function TaskExecutionCiCommentCard({
   comment,
@@ -118,21 +162,14 @@ export function TaskExecutionCiCommentCard({
         </div>
       ) : null}
       {hasSuggestionPatches && filePath
-        ? comment.suggestionPatches.map((suggestionPatch) => (
-            <div
+        ? comment.suggestionPatches.map((suggestionPatch, index) => (
+            <TaskExecutionCiSuggestedChange
               key={suggestionPatch}
-              className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
-              data-testid="ci-review-comment-suggestion-diff"
-            >
-              <PierrePreloadedDiffViewer
-                patch={suggestionPatch}
-                filePath={filePath}
-                diffStyle="unified"
-                diffIndicators="bars"
-                lineOverflow="wrap"
-                hunkSeparators="simple"
-              />
-            </div>
+              patch={suggestionPatch}
+              filePath={filePath}
+              position={index + 1}
+              total={comment.suggestionPatches.length}
+            />
           ))
         : null}
       {!hasBody && !hasPatch && !hasSuggestionPatches ? (

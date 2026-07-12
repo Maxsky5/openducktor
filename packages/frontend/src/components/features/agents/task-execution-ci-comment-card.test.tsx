@@ -1,8 +1,10 @@
 import { expect, spyOn, test } from "bun:test";
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { fireEvent, render } from "@testing-library/react";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import * as externalUrl from "@/lib/open-external-url";
+import { QueryProvider } from "@/lib/query-provider";
 import { TaskExecutionCiCommentCard } from "./task-execution-ci-comment-card";
 
 const comment: PullRequestReviewComment = {
@@ -37,4 +39,28 @@ test("opens review comments through the external URL shell bridge", () => {
   } finally {
     openExternalUrlSpy.mockRestore();
   }
+});
+
+test("labels suggested changes as a distinct review section", () => {
+  const view = render(
+    <QueryProvider useIsolatedClient>
+      <ThemeProvider defaultTheme="light">
+        <TooltipProvider>
+          <TaskExecutionCiCommentCard
+            comment={{
+              ...comment,
+              body: "Use the shared loading state.",
+              suggestionPatches: [
+                "@@ -8,1 +8,1 @@\n-disabled={isGoogleLoading}\n+disabled={isAnyLoading}",
+              ],
+            }}
+            isBot={true}
+          />
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryProvider>,
+  );
+
+  expect(view.getByRole("heading", { name: "Suggested change" })).toBeTruthy();
+  expect(view.getByLabelText("Suggested change")).toBeTruthy();
 });
