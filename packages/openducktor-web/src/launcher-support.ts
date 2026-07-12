@@ -274,7 +274,7 @@ export const resolveStaticAssetPath = (staticRoot: string, requestPath: string):
   }
   const relativePath = decodedPath === "/" ? "index.html" : decodedPath.replace(/^\/+/, "");
   const normalized = path.normalize(relativePath);
-  if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
+  if (normalized === "." || normalized.startsWith("..") || path.isAbsolute(normalized)) {
     return null;
   }
 

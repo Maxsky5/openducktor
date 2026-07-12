@@ -308,10 +308,12 @@ describe("launcher internals", () => {
       path.join("/web-shell", "assets/app.js"),
     );
     expect(resolveStaticAssetPath("/web-shell", "/../secret.txt")).toBeNull();
-    expect(resolveStaticAssetPath("/web-shell", "/%E0%A4%A")).toBeNull();
+    expect(resolveStaticAssetPath("/web-shell", "/foo/..")).toBeNull();
+    expect(resolveStaticAssetPath("/web-shell", "/foo%2F..")).toBeNull();
   });
 
-  test("rejects decoded control characters in static request paths", () => {
+  test("rejects malformed and decoded control characters in static request paths", () => {
+    expect(resolveStaticAssetPath("/web-shell", "/%E0%A4%A")).toBeNull();
     expect(resolveStaticAssetPath("/web-shell", "/%00")).toBeNull();
     expect(resolveStaticAssetPath("/web-shell", "/%0A")).toBeNull();
     expect(resolveStaticAssetPath("/web-shell", "/%C2%80")).toBeNull();
@@ -323,6 +325,7 @@ describe("launcher internals", () => {
     const appPath = path.join(staticRoot, "assets/app.js");
     const assetPaths = new Set([indexPath, appPath]);
 
+    expect(resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/")).toBe(indexPath);
     expect(resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/assets/app.js")).toBe(
       appPath,
     );
@@ -349,11 +352,12 @@ describe("launcher internals", () => {
   test("indexes nested web shell assets during startup", async () => {
     const staticRoot = await mkdtemp(path.join(os.tmpdir(), "openducktor-web-shell-"));
     const assetDirectory = path.join(staticRoot, "assets");
+    const chunksDirectory = path.join(assetDirectory, "chunks");
     const indexPath = path.join(staticRoot, "index.html");
-    const appPath = path.join(assetDirectory, "app.js");
+    const appPath = path.join(chunksDirectory, "app.js");
 
     try {
-      await mkdir(assetDirectory);
+      await mkdir(chunksDirectory, { recursive: true });
       await Promise.all([writeFile(indexPath, "shell"), writeFile(appPath, "app")]);
 
       expect(await indexStaticAssetPaths(staticRoot)).toEqual(new Set([appPath, indexPath]));
