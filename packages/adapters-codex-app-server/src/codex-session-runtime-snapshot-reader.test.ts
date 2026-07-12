@@ -3,7 +3,10 @@ import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-serv
 import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexSessionRuntimeSnapshotReaderDeps } from "./codex-session-runtime-snapshot-reader";
-import { readCodexSessionRuntimeSnapshot } from "./codex-session-runtime-snapshot-reader";
+import {
+  listCodexSessionRuntimeSnapshots,
+  readCodexSessionRuntimeSnapshot,
+} from "./codex-session-runtime-snapshot-reader";
 
 const createChildThread = (): CodexThreadSnapshot => ({
   id: "child-thread",
@@ -55,5 +58,40 @@ describe("Codex session runtime snapshot reader", () => {
       availability: "runtime",
       parentExternalSessionId: "parent-thread",
     });
+  });
+
+  test("lists a completed unloaded child so hydration can settle its parent card", async () => {
+    const child = {
+      ...createChildThread(),
+      status: codexThreadStatusSnapshot("notLoaded"),
+    };
+    const unrelatedMainThread = {
+      ...child,
+      id: "unloaded-main-thread",
+      parentThreadId: null,
+    };
+    const inventory = {
+      ...createInventory(child),
+      loadedIds: new Set<string>(),
+      threadsById: new Map([
+        [child.id, child],
+        [unrelatedMainThread.id, unrelatedMainThread],
+      ]),
+    };
+
+    await expect(
+      listCodexSessionRuntimeSnapshots(createDeps(inventory), {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        directories: ["/repo"],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        availability: "runtime",
+        classification: "idle",
+        parentExternalSessionId: "parent-thread",
+        ref: expect.objectContaining({ externalSessionId: "child-thread" }),
+      }),
+    ]);
   });
 });
