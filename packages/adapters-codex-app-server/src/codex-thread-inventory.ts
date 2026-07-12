@@ -176,11 +176,19 @@ export class CodexThreadInventoryReader {
 
   async readThreadHistory(
     client: CodexAppServerClient,
-    input: { externalSessionId: string; workingDirectory: string },
+    input: {
+      externalSessionId: string;
+      workingDirectory: string;
+      allowUnmaterialized?: boolean;
+    },
   ): Promise<unknown | null> {
     let response: unknown;
     try {
-      response = await this.readThreadWithTurns(client, input.externalSessionId);
+      response = await this.readThreadWithTurns(
+        client,
+        input.externalSessionId,
+        input.allowUnmaterialized ? input.workingDirectory : undefined,
+      );
     } catch (error) {
       if (isCodexThreadNotLoadedError(error)) {
         return null;
@@ -194,17 +202,29 @@ export class CodexThreadInventoryReader {
     return response;
   }
 
-  async readThreadWithTurns(client: CodexAppServerClient, threadId: string): Promise<unknown> {
+  async readThreadWithTurns(
+    client: CodexAppServerClient,
+    threadId: string,
+    unmaterializedWorkingDirectory?: string,
+  ): Promise<unknown> {
     let response: unknown;
     try {
       response = await client.threadRead({ threadId, includeTurns: true });
     } catch (error) {
       if (isCodexUnmaterializedThreadError(error)) {
-        return { thread: { id: threadId, turns: [] } };
+        return {
+          thread: {
+            id: threadId,
+            ...(unmaterializedWorkingDirectory ? { cwd: unmaterializedWorkingDirectory } : {}),
+            turns: [],
+          },
+        };
       }
       throw error;
     }
-    const pagedTurns = await this.fetchThreadTurns(client, threadId);
+    const pagedTurns = (await this.fetchThreadTurns(client, threadId, "full")).filter(
+      isPlainObject,
+    );
     if (pagedTurns.length === 0) {
       return response;
     }
@@ -212,6 +232,18 @@ export class CodexThreadInventoryReader {
       return { thread: { id: threadId, turns: pagedTurns } };
     }
     return { ...response, thread: { ...response.thread, turns: pagedTurns } };
+  }
+
+  async readThreadTurnIds(client: CodexAppServerClient, threadId: string): Promise<Set<string>> {
+    const turnIds = new Set<string>();
+    for (const turn of await this.fetchThreadTurns(client, threadId, "summary")) {
+      const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]);
+      if (!turnId) {
+        throw new Error(`Codex thread '${threadId}' returned a summary turn without an id.`);
+      }
+      turnIds.add(turnId);
+    }
+    return turnIds;
   }
 
   private async fetch(
@@ -275,8 +307,9 @@ export class CodexThreadInventoryReader {
   private async fetchThreadTurns(
     client: CodexAppServerClient,
     threadId: string,
-  ): Promise<Record<string, unknown>[]> {
-    const turns: Record<string, unknown>[] = [];
+    itemsView: "full" | "summary",
+  ): Promise<unknown[]> {
+    const turns: unknown[] = [];
     let cursor: string | null = null;
     const seenCursors = new Set<string>();
     do {
@@ -288,9 +321,9 @@ export class CodexThreadInventoryReader {
         cursor,
         limit: 100,
         sortDirection: "asc",
-        itemsView: "full",
+        itemsView,
       });
-      turns.push(...arrayFromUnknown(response).filter(isPlainObject));
+      turns.push(...arrayFromUnknown(response));
       cursor = isPlainObject(response)
         ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
         : null;

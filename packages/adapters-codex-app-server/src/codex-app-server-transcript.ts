@@ -59,8 +59,10 @@ export type CodexTurnTiming = {
 
 export type CodexThreadReadItem = {
   item: Record<string, unknown>;
+  turnIndex: number;
   turnId: string | null;
   timestamp: string | null;
+  timestampIsApproximate?: true;
   isFinalAgentMessage: boolean;
   turnTiming: CodexTurnTiming | null;
   model?: AgentModelSelection;
@@ -197,7 +199,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
     throw new Error("Codex thread/read response is missing thread turns.");
   }
   const threadModelProvider = extractStringField(value.thread, ["modelProvider", "model_provider"]);
-  return value.thread.turns.flatMap((turn): CodexThreadReadItem[] => {
+  return value.thread.turns.flatMap((turn, turnIndex): CodexThreadReadItem[] => {
     if (!isPlainObject(turn)) {
       return [];
     }
@@ -227,20 +229,27 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
         : undefined;
     return items.map((item) => {
       const itemIsFinalAgentMessage = finalAgentMessageId !== null && item === finalAgentMessageId;
-      let timestampSeconds: number | null;
+      const itemTimestamp = codexItemTimestamp(item);
+      let semanticTimestampSeconds: number | null;
       if (codexItemType(item) === "userMessage") {
-        timestampSeconds = startedAtSeconds;
+        semanticTimestampSeconds = startedAtSeconds;
       } else if (itemIsFinalAgentMessage) {
-        timestampSeconds = completedAtSeconds;
+        semanticTimestampSeconds = completedAtSeconds;
       } else {
-        timestampSeconds = completedAtSeconds ?? startedAtSeconds;
+        semanticTimestampSeconds = null;
       }
+      const fallbackTimestampSeconds = completedAtSeconds ?? startedAtSeconds;
       const timestamp =
-        codexItemTimestamp(item) ?? codexTimestampFromSeconds(timestampSeconds) ?? null;
+        itemTimestamp ??
+        codexTimestampFromSeconds(semanticTimestampSeconds ?? fallbackTimestampSeconds) ??
+        null;
+      const timestampIsApproximate = itemTimestamp === null && semanticTimestampSeconds === null;
       return {
         item: withCodexItemCompletedAtMs(item),
+        turnIndex,
         turnId,
         timestamp,
+        ...(timestampIsApproximate ? { timestampIsApproximate: true as const } : {}),
         isFinalAgentMessage: itemIsFinalAgentMessage,
         turnTiming:
           itemIsFinalAgentMessage && typeof durationMs === "number" && durationMs > 0

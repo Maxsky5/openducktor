@@ -31,7 +31,6 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue, ChecksStateContextValue } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
-import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 
 type RepoRuntimeReadinessArgs = Parameters<
@@ -341,6 +340,39 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("loads authoritative history when a child session only has a live transcript tail", async () => {
+    setLiveTranscriptSessions(makeLiveTranscriptSession());
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        workspaceRepoPath: "/repo-a",
+        isOpen: true,
+        target: makeTranscriptTarget(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+        externalSessionId: "session-subagent-1",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-a", role: "build" },
+      });
+      expect(harness.getLatest().model.thread.session?.messages).toBeTruthy();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("passes explicit file diff expansion settings into the read-only chat surface", async () => {
     settingsChat = createChatSettingsFixture({ expandFileDiffsByDefault: false });
     const { useSessionTranscriptSurfaceModel } = await import(
@@ -632,7 +664,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("prefers an already-live transcript session when it exists locally", async () => {
+  test("preserves an already-live transcript session while loading its history", async () => {
     const liveSession = makeLiveTranscriptSession();
     setLiveTranscriptSessions(liveSession);
     const { useSessionTranscriptSurfaceModel } = await import(
@@ -650,12 +682,17 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
       const model = harness.getLatest().model;
-      expect(model.thread.session).toEqual(toAgentChatThreadSession(liveSession));
+      expect(model.thread.session).toMatchObject({
+        externalSessionId: liveSession.externalSessionId,
+        runtimeKind: liveSession.runtimeKind,
+        workingDirectory: liveSession.workingDirectory,
+      });
       expect(model.thread.transcriptState).toEqual({ kind: "visible" });
       expect(model.thread.canReplyToApprovals).toBe(true);
-      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(readSessionHistory).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

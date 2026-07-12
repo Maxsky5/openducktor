@@ -6,6 +6,7 @@ import {
   createHarness,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
+  RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
@@ -23,6 +24,293 @@ const restoredTokenUsageNotification = (threadId: string, turnId = "turn-1") => 
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("marks hydrated item timestamps approximate when Codex only reports a turn boundary", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 1_783_715_580,
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "child-turn",
+                  startedAt: 1_783_715_581,
+                  completedAt: null,
+                  durationMs: null,
+                  status: "inProgress",
+                  items: [
+                    {
+                      id: "child-user",
+                      type: "userMessage",
+                      content: [{ type: "text", text: "Inspect the repository" }],
+                    },
+                    {
+                      id: "child-commentary",
+                      type: "agentMessage",
+                      phase: "commentary",
+                      text: "I’m checking the repository now.",
+                    },
+                    {
+                      id: "child-command",
+                      type: "commandExecution",
+                      command: "pwd",
+                      cwd: "/repo",
+                      processId: null,
+                      source: "model",
+                      status: "completed",
+                      commandActions: [{ type: "unknown", command: "pwd" }],
+                      aggregatedOutput: "/repo",
+                      exitCode: 0,
+                      durationMs: 12,
+                    },
+                    {
+                      id: "child-tool",
+                      type: "mcpToolCall",
+                      server: "semble",
+                      tool: "search",
+                      status: "completed",
+                      arguments: { query: "architecture" },
+                      appContext: null,
+                      pluginId: null,
+                      result: { content: [{ type: "text", text: "result" }] },
+                      error: null,
+                      durationMs: 107,
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "child-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+    const byId = new Map(history.map((message) => [message.messageId, message]));
+    const hasApproximateTimestamp = (messageId: string): boolean | undefined =>
+      (byId.get(messageId) as { timestampIsApproximate?: boolean } | undefined)
+        ?.timestampIsApproximate;
+
+    expect(byId.get("child-user")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-user")).toBeUndefined();
+    expect(byId.get("child-commentary")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-commentary")).toBe(true);
+    expect(byId.get("child-command")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-command")).toBe(true);
+    expect(byId.get("child-tool")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
+    expect(hasApproximateTimestamp("child-tool")).toBe(true);
+    expect(
+      (
+        byId.get("child-command")?.parts[0] as
+          | { startedAtMs?: number; endedAtMs?: number }
+          | undefined
+      )?.startedAtMs,
+    ).toBeUndefined();
+    expect(
+      (byId.get("child-tool")?.parts[0] as { startedAtMs?: number; endedAtMs?: number } | undefined)
+        ?.endedAtMs,
+    ).toBeUndefined();
+  });
+
+  test("preserves inherited Codex history and inserts the exact subagent fork boundary", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const childTurns = [
+      {
+        id: "parent-turn",
+        startedAt: 10,
+        completedAt: 20,
+        status: "interrupted",
+        items: [
+          {
+            id: "parent-user",
+            type: "userMessage",
+            content: [{ type: "text", text: "Parent prompt" }],
+          },
+          {
+            id: "parent-spawn",
+            type: "subAgentActivity",
+            agentThreadId: "child-thread",
+            agentPath: "/root/child",
+            kind: "started",
+          },
+          {
+            id: "parent-answer",
+            type: "agentMessage",
+            phase: "commentary",
+            text: "Parent answer",
+          },
+        ],
+      },
+      {
+        id: "parent-final-turn",
+        startedAt: 21,
+        completedAt: 24,
+        status: "completed",
+        items: [
+          {
+            id: "parent-final-answer",
+            type: "agentMessage",
+            phase: "final_answer",
+            text: "Parent final answer",
+          },
+        ],
+      },
+      {
+        id: "child-turn",
+        startedAt: 30,
+        completedAt: 40,
+        status: "completed",
+        items: [
+          {
+            id: "child-user",
+            type: "userMessage",
+            content: [{ type: "text", text: "Child task" }],
+          },
+          {
+            id: "child-answer",
+            type: "agentMessage",
+            phase: "final_answer",
+            text: "Child result",
+          },
+        ],
+      },
+    ];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/read") {
+          const params = request.params as { threadId?: string };
+          if (params.threadId === "parent-thread") {
+            return {
+              thread: {
+                id: "parent-thread",
+                cwd: "/repo",
+                createdAt: 1,
+                status: { type: "idle" },
+                turns: childTurns.slice(0, 2),
+              },
+            } as Response;
+          }
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 25,
+              status: { type: "idle" },
+              forkedFromId: "parent-thread",
+              parentThreadId: "parent-thread",
+              turns: childTurns,
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          const params = request.params as {
+            threadId: string;
+            itemsView: string;
+          };
+          if (params.threadId === "parent-thread") {
+            return {
+              data: [
+                { id: "parent-turn", status: "completed", items: [] },
+                { id: "parent-final-turn", status: "completed", items: [] },
+              ],
+              nextCursor: null,
+            } as Response;
+          }
+          return { data: childTurns, nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    let shouldReturnParentUsage = true;
+    const adapter = createAdapterWithTransport(transport, {
+      takeBufferedEvents: async () => {
+        if (!shouldReturnParentUsage) {
+          return [];
+        }
+        shouldReturnParentUsage = false;
+        return [
+          bufferedNotificationEvent(
+            restoredTokenUsageNotification("parent-thread", "parent-final-turn"),
+          ),
+        ];
+      },
+    });
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "parent-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "child-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(history.map((message) => message.messageId)).toEqual([
+      "parent-user",
+      "codex-subagent:parent-thread:child-thread",
+      "parent-answer",
+      "parent-final-answer",
+      "codex-fork-boundary:child-thread",
+      "child-user",
+      "child-answer",
+    ]);
+    expect(history[4]).toEqual({
+      messageId: "codex-fork-boundary:child-thread",
+      role: "system",
+      timestamp: "1970-01-01T00:00:30.000Z",
+      text: "Session forked here",
+      notice: {
+        tone: "info",
+        reason: "session_forked",
+        title: "Session forked here",
+        parentExternalSessionId: "parent-thread",
+      },
+      parts: [],
+    });
+    expect(history.find((message) => message.messageId === "parent-final-answer")).toMatchObject({
+      totalTokens: 1_000,
+      contextWindow: 200_000,
+      parts: [
+        expect.objectContaining({
+          kind: "step",
+          phase: "finish",
+          totalTokens: 1_000,
+          contextWindow: 200_000,
+        }),
+      ],
+    });
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "thread/turns/list" &&
+          (call.params as { threadId?: string; itemsView?: string }).threadId === "parent-thread" &&
+          (call.params as { itemsView?: string }).itemsView === "summary",
+      ),
+    ).toBe(true);
+  });
+
   test("loads Codex history and diff from App Server reads", async () => {
     const { adapter, takeBufferedEvents, transports } = createHarness();
 
@@ -274,6 +562,49 @@ describe("CodexAppServerAdapter history loading", () => {
       parts: [],
     });
     unsubscribe();
+  });
+
+  test("keeps the runtime-owned system prompt before the local thread is materialized", async () => {
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async <Response>(request: CodexJsonRpcRequest): Promise<Response> => {
+        if (request.method === "thread/read") {
+          throw new Error(
+            "thread is not materialized yet: includeTurns is unavailable before first user message",
+          );
+        }
+        return baseTransport.request<Response>(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread/start-runtime-live",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+    expect(history).toEqual([
+      {
+        messageId: "codex-system-prompt:thread/start-runtime-live",
+        role: "system",
+        timestamp: "2026-05-07T00:00:00.000Z",
+        text: "System prompt:\n\nUse the repo rules.",
+        parts: [],
+      },
+    ]);
   });
 
   test("projects supplied prompt context for cold persisted history reads", async () => {

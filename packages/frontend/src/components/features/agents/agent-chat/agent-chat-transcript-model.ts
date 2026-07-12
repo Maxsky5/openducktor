@@ -18,6 +18,12 @@ export type AgentChatTranscriptRow =
       durationMs: number;
     }
   | {
+      kind: "fork_boundary";
+      key: string;
+      label: string;
+      parentExternalSessionId: string;
+    }
+  | {
       kind: "message";
       key: string;
       message: AgentChatMessage;
@@ -97,6 +103,20 @@ const appendMessageRows = (
     typeof turnDurationMs === "number" &&
     turnDurationMs > 0;
   const rowKey = `${sessionKey}:${messageIndex}:${message.id}`;
+  const forkBoundaryMeta =
+    message.meta?.kind === "session_notice" && message.meta.reason === "session_forked"
+      ? message.meta
+      : null;
+
+  if (forkBoundaryMeta) {
+    rows.push({
+      kind: "fork_boundary",
+      key: `${rowKey}:fork-boundary`,
+      label: forkBoundaryMeta.title,
+      parentExternalSessionId: forkBoundaryMeta.parentExternalSessionId,
+    });
+    return rowKey;
+  }
 
   if (shouldShowTurnDuration) {
     rows.push({
@@ -139,7 +159,9 @@ export function createAgentChatTranscriptModelBuilder(
     }
 
     const nextRowStart = rows.length;
-    if (nextRowStart === 0 || message.role === "user") {
+    const isForkBoundary =
+      message.meta?.kind === "session_notice" && message.meta.reason === "session_forked";
+    if (nextRowStart === 0 || message.role === "user" || isForkBoundary) {
       turnRowStartIndexes.push(nextRowStart);
     }
 
@@ -321,7 +343,9 @@ export function buildAgentChatTurnAnchors(rows: AgentChatTranscriptRow[]): Agent
 
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
     const row = rows[rowIndex];
-    if (row?.kind !== "message" || row.message.role !== "user") {
+    const startsTurn =
+      row?.kind === "fork_boundary" || (row?.kind === "message" && row.message.role === "user");
+    if (!startsTurn) {
       continue;
     }
 

@@ -28,6 +28,23 @@ describe("AgentChatThreadRow", () => {
     expect(html).toContain("1.2s");
   });
 
+  test("renders fork boundary rows with the transcript separator treatment", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThreadRow, {
+        ...baseProps,
+        row: {
+          kind: "fork_boundary",
+          key: "fork-1",
+          label: "Session forked here",
+          parentExternalSessionId: "parent-thread",
+        },
+      }),
+    );
+
+    expect(html).toContain("Session forked here");
+    expect(html.match(/aria-hidden/g)).toHaveLength(2);
+  });
+
   test("renders message rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThreadRow, {

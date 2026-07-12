@@ -3,6 +3,7 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionTodoItem,
+  AgentStreamPart,
   AgentUserMessagePart,
 } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
@@ -48,6 +49,7 @@ import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 const CODEX_SAFETY_BUFFERING_MESSAGE =
   "Our systems are thinking a bit more about this request before responding.";
+const CODEX_UNLINKED_SPAWN_ERROR = "Codex ended this subagent spawn without creating a session.";
 
 export type CompletedAgentMessage = {
   session: CodexSessionState;
@@ -58,7 +60,6 @@ export type CompletedAgentMessage = {
 
 export type CodexStreamingContext = {
   subscribeEvents: boolean;
-  bufferedNotificationsByThreadId: Map<string, CodexNotificationRecord[]>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   startedItemTimestampsByKey: Map<string, number>;
   syntheticUserMessageTextsByThreadId: Map<string, string[]>;
@@ -70,8 +71,14 @@ export type CodexStreamingContext = {
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
-  bufferNotification(notification: CodexNotificationRecord): void;
+  takeBufferedNotifications(threadId: string, runtimeId: string): CodexNotificationRecord[];
+  bufferNotification(runtimeId: string, notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
+  failUnlinkedSubagentSpawns(
+    parentThreadId: string,
+    runtimeId: string,
+    error: string,
+  ): AgentStreamPart[];
 };
 
 const modelForTurn = (
@@ -120,6 +127,26 @@ const emitCanonicalEvents = (
   }
   for (const event of projectCodexCanonicalEvents(events)) {
     emitCodexSessionEvent(context, event.externalSessionId, event);
+  }
+};
+
+const emitUnlinkedSpawnFailures = (
+  context: CodexStreamingContext,
+  session: CodexSessionState,
+  timestamp: string,
+): void => {
+  const parts = context.failUnlinkedSubagentSpawns(
+    session.threadId,
+    session.runtimeId,
+    CODEX_UNLINKED_SPAWN_ERROR,
+  );
+  for (const part of parts) {
+    emitCodexSessionEvent(context, session.threadId, {
+      type: "assistant_part",
+      externalSessionId: session.threadId,
+      timestamp,
+      part,
+    });
   }
 };
 
@@ -549,8 +576,10 @@ export const handleCodexPendingNotifications = async (
   session: CodexSessionState,
   notificationsFromBatch?: CodexNotificationRecord[],
 ): Promise<void> => {
-  const bufferedNotifications = context.bufferedNotificationsByThreadId.get(session.threadId) ?? [];
-  context.bufferedNotificationsByThreadId.delete(session.threadId);
+  const bufferedNotifications = context.takeBufferedNotifications(
+    session.threadId,
+    session.runtimeId,
+  );
   const takenNotifications = notificationsFromBatch ?? [];
   const notifications = [...bufferedNotifications, ...takenNotifications];
   for (const notification of notifications) {
@@ -564,7 +593,7 @@ export const handleCodexPendingNotifications = async (
       );
     }
     if (notificationThreadId !== session.threadId) {
-      context.bufferNotification(notification);
+      context.bufferNotification(session.runtimeId, notification);
       continue;
     }
     const timestamp = timestampFromCodexNotification(notification);
@@ -611,6 +640,9 @@ export const handleCodexPendingNotifications = async (
           !isNotificationAtOrAfterActiveTurnStart(notification.receivedAt, activeTurn)
         ) {
           continue;
+        }
+        if (isIdleStatus) {
+          emitUnlinkedSpawnFailures(context, session, timestamp);
         }
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
         context.setSessionLiveStatus(session, liveStatus);
@@ -716,6 +748,7 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "turn/completed") {
+      emitUnlinkedSpawnFailures(context, session, timestamp);
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
       if (turnId && isPlainObject(turn) && turn.status === "completed") {

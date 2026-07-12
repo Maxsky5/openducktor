@@ -2,6 +2,7 @@ import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openduc
 import { useEffect, useRef, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { observeTransientAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/transient-session-events";
+import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -31,6 +32,7 @@ type UseRuntimeTranscriptLiveOverlayArgs = {
   repoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
   sessionRef: PolicyBoundSessionRef | null;
+  baseSession: AgentSessionState | null;
   history: AgentSessionHistoryMessage[] | undefined;
   shouldMergeHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
@@ -50,11 +52,46 @@ const hasVisibleRuntimeData = (session: AgentSessionState): boolean =>
   session.pendingApprovals.length > 0 ||
   session.pendingQuestions.length > 0;
 
+const mergePendingInput = <Entry extends { requestId: string }>(
+  baseEntries: Entry[],
+  runtimeEntries: Entry[],
+): Entry[] => {
+  const runtimeRequestIds = new Set(runtimeEntries.map((entry) => entry.requestId));
+  return [
+    ...baseEntries.filter((entry) => !runtimeRequestIds.has(entry.requestId)),
+    ...runtimeEntries,
+  ];
+};
+
+const mergeBaseSessionIntoLiveOverlay = (
+  baseSession: AgentSessionState,
+  liveSession: AgentSessionState,
+): AgentSessionState => ({
+  ...baseSession,
+  status: liveSession.status,
+  runtimeStatusMessage: liveSession.runtimeStatusMessage,
+  messages: mergeHistoryMessages(
+    liveSession.externalSessionId,
+    baseSession.messages,
+    liveSession.messages,
+  ),
+  ...(liveSession.contextUsage !== undefined ? { contextUsage: liveSession.contextUsage } : {}),
+  pendingApprovals: mergePendingInput(baseSession.pendingApprovals, liveSession.pendingApprovals),
+  pendingQuestions: mergePendingInput(baseSession.pendingQuestions, liveSession.pendingQuestions),
+  ...(liveSession.pendingUserMessageStartedAt !== undefined
+    ? { pendingUserMessageStartedAt: liveSession.pendingUserMessageStartedAt }
+    : {}),
+  ...(liveSession.stopRequestedAt !== undefined
+    ? { stopRequestedAt: liveSession.stopRequestedAt }
+    : {}),
+});
+
 export function useRuntimeTranscriptLiveOverlay({
   shouldObserve,
   repoPath,
   target,
   sessionRef,
+  baseSession,
   history,
   shouldMergeHistory,
   replyAgentApproval,
@@ -62,10 +99,33 @@ export function useRuntimeTranscriptLiveOverlay({
 }: UseRuntimeTranscriptLiveOverlayArgs): RuntimeTranscriptLiveOverlay {
   const [liveState, setLiveState] = useState<RuntimeTranscriptLiveState | null>(null);
   const liveStateRef = useRef<RuntimeTranscriptLiveState | null>(null);
+  const baseSessionRef = useRef(baseSession);
+  const replyAgentApprovalRef = useRef(replyAgentApproval);
+  const subscribeSessionEventsRef = useRef(subscribeSessionEvents);
+  baseSessionRef.current = baseSession;
+  replyAgentApprovalRef.current = replyAgentApproval;
+  subscribeSessionEventsRef.current = subscribeSessionEvents;
 
   useEffect(() => {
     liveStateRef.current = liveState;
   }, [liveState]);
+
+  useEffect(() => {
+    if (!baseSession || target === null) {
+      return;
+    }
+    setLiveState((current) => {
+      if (!current?.hasRuntimeEvents || !matchesAgentSessionIdentity(current.session, target)) {
+        return current;
+      }
+      const nextState = {
+        ...current,
+        session: mergeBaseSessionIntoLiveOverlay(baseSession, current.session),
+      };
+      liveStateRef.current = nextState;
+      return nextState;
+    });
+  }, [baseSession, target]);
 
   useEffect(() => {
     if (!shouldObserve || repoPath === null || target === null || sessionRef === null) {
@@ -82,6 +142,10 @@ export function useRuntimeTranscriptLiveOverlay({
       if (current && matchesAgentSessionIdentity(current, target)) {
         return current;
       }
+      const currentBaseSession = baseSessionRef.current;
+      if (currentBaseSession && matchesAgentSessionIdentity(currentBaseSession, target)) {
+        return currentBaseSession;
+      }
       return createEmptyReadonlyRuntimeSessionState(target);
     };
 
@@ -97,8 +161,8 @@ export function useRuntimeTranscriptLiveOverlay({
     });
 
     void observeTransientAgentSessionEvents({
-      subscribeEvents: subscribeSessionEvents,
-      replyApproval: replyAgentApproval,
+      subscribeEvents: (input, listener) => subscribeSessionEventsRef.current(input, listener),
+      replyApproval: (...args) => replyAgentApprovalRef.current(...args),
       sessionRef,
       readSession: () => liveStateRef.current?.session ?? null,
       applySessionEvent: (updater) => {
@@ -133,7 +197,7 @@ export function useRuntimeTranscriptLiveOverlay({
       isCancelled = true;
       unsubscribe?.();
     };
-  }, [repoPath, replyAgentApproval, sessionRef, shouldObserve, subscribeSessionEvents, target]);
+  }, [repoPath, sessionRef, shouldObserve, target]);
 
   useEffect(() => {
     if (!shouldMergeHistory || target === null || !history) {

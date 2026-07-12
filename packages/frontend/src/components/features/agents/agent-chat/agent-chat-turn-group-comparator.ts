@@ -82,6 +82,11 @@ export const areChatRowsEquivalent = (
   if (left.kind === "turn_duration" && right.kind === "turn_duration") {
     return left.durationMs === right.durationMs;
   }
+  if (left.kind === "fork_boundary" && right.kind === "fork_boundary") {
+    return (
+      left.label === right.label && left.parentExternalSessionId === right.parentExternalSessionId
+    );
+  }
   return left.kind === "message" && right.kind === "message" && left.message === right.message;
 };
 

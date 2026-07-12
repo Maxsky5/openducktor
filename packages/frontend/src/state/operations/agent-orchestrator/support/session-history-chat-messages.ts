@@ -56,6 +56,14 @@ const userMessageMeta = (
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 };
 
+const inheritTimestampAccuracy = (
+  chatMessage: AgentChatMessage,
+  historyMessage: AgentSessionHistoryMessage,
+): AgentChatMessage =>
+  historyMessage.timestampIsApproximate
+    ? { ...chatMessage, timestampIsApproximate: true }
+    : chatMessage;
+
 const historyPartToChatMessage = (
   message: AgentSessionHistoryMessage,
   part: SessionHistoryPart,
@@ -65,87 +73,99 @@ const historyPartToChatMessage = (
       if (part.text.trim().length === 0) {
         return null;
       }
-      return {
-        id: toReasoningMessageId(message.messageId, part.partId),
-        role: "thinking",
-        content: part.text,
-        timestamp: message.timestamp,
-        meta: {
-          kind: "reasoning",
-          partId: part.partId,
-          completed: part.completed,
+      return inheritTimestampAccuracy(
+        {
+          id: toReasoningMessageId(message.messageId, part.partId),
+          role: "thinking",
+          content: part.text,
+          timestamp: message.timestamp,
+          meta: {
+            kind: "reasoning",
+            partId: part.partId,
+            completed: part.completed,
+          },
         },
-      };
+        message,
+      );
     }
     case "tool": {
       const input = normalizeToolInput(part.input);
       const output = normalizeToolText(part.output);
       const error = normalizeToolText(part.error);
-      return {
-        id: toToolMessageId({
-          messageId: message.messageId,
-          partId: part.partId,
-          callId: part.callId,
-        }),
-        role: "tool",
-        content: formatToolContent(part),
-        timestamp: message.timestamp,
-        meta: {
-          kind: "tool",
-          partId: part.partId,
-          callId: part.callId,
-          tool: part.tool,
-          toolType: part.toolType,
-          status: part.status,
-          ...(part.preview ? { preview: part.preview } : {}),
-          ...(part.title ? { title: part.title } : {}),
-          ...(part.displayLabel ? { displayLabel: part.displayLabel } : {}),
-          ...(input ? { input } : {}),
-          ...(output ? { output } : {}),
-          ...(error ? { error } : {}),
-          ...(part.fileDiffs ? { fileDiffs: part.fileDiffs } : {}),
-          ...(part.fileContent ? { fileContent: part.fileContent } : {}),
-          ...(part.fileChanges ? { fileChanges: part.fileChanges } : {}),
-          ...(part.metadata ? { metadata: part.metadata } : {}),
-          ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-          ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+      return inheritTimestampAccuracy(
+        {
+          id: toToolMessageId({
+            messageId: message.messageId,
+            partId: part.partId,
+            callId: part.callId,
+          }),
+          role: "tool",
+          content: formatToolContent(part),
+          timestamp: message.timestamp,
+          meta: {
+            kind: "tool",
+            partId: part.partId,
+            callId: part.callId,
+            tool: part.tool,
+            toolType: part.toolType,
+            status: part.status,
+            ...(part.preview ? { preview: part.preview } : {}),
+            ...(part.title ? { title: part.title } : {}),
+            ...(part.displayLabel ? { displayLabel: part.displayLabel } : {}),
+            ...(input ? { input } : {}),
+            ...(output ? { output } : {}),
+            ...(error ? { error } : {}),
+            ...(part.fileDiffs ? { fileDiffs: part.fileDiffs } : {}),
+            ...(part.fileContent ? { fileContent: part.fileContent } : {}),
+            ...(part.fileChanges ? { fileChanges: part.fileChanges } : {}),
+            ...(part.metadata ? { metadata: part.metadata } : {}),
+            ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+          },
         },
-      };
+        message,
+      );
     }
     case "subagent": {
-      return createSubagentMessage({
-        timestamp: message.timestamp,
-        meta: {
-          kind: "subagent",
-          partId: part.partId,
-          correlationKey: part.correlationKey,
-          status: part.status,
-          ...(part.agent ? { agent: part.agent } : {}),
-          ...(part.prompt ? { prompt: part.prompt } : {}),
-          ...(part.description ? { description: part.description } : {}),
-          ...(part.error ? { error: part.error } : {}),
-          ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : {}),
-          ...(part.executionMode ? { executionMode: part.executionMode } : {}),
-          ...(part.metadata ? { metadata: part.metadata } : {}),
-          ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-          ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-        },
-      });
+      return inheritTimestampAccuracy(
+        createSubagentMessage({
+          timestamp: message.timestamp,
+          meta: {
+            kind: "subagent",
+            partId: part.partId,
+            correlationKey: part.correlationKey,
+            status: part.status,
+            ...(part.agent ? { agent: part.agent } : {}),
+            ...(part.prompt ? { prompt: part.prompt } : {}),
+            ...(part.description ? { description: part.description } : {}),
+            ...(part.error ? { error: part.error } : {}),
+            ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : {}),
+            ...(part.executionMode ? { executionMode: part.executionMode } : {}),
+            ...(part.metadata ? { metadata: part.metadata } : {}),
+            ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+          },
+        }),
+        message,
+      );
     }
     case "subtask": {
       const correlationKey = `legacy:${message.messageId}:${part.partId}`;
-      return createSubagentMessage({
-        timestamp: message.timestamp,
-        meta: {
-          kind: "subagent",
-          partId: part.partId,
-          correlationKey,
-          status: "completed",
-          agent: part.agent,
-          prompt: part.prompt,
-          description: part.description,
-        },
-      });
+      return inheritTimestampAccuracy(
+        createSubagentMessage({
+          timestamp: message.timestamp,
+          meta: {
+            kind: "subagent",
+            partId: part.partId,
+            correlationKey,
+            status: "completed",
+            agent: part.agent,
+            prompt: part.prompt,
+            description: part.description,
+          },
+        }),
+        message,
+      );
     }
     case "step":
     case "text":
@@ -218,12 +238,21 @@ export const historyToChatMessages = (
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
       } else if (message.role === "system" && message.notice) {
-        meta = {
-          kind: "session_notice",
-          tone: message.notice.tone,
-          reason: message.notice.reason,
-          title: message.notice.title,
-        };
+        meta =
+          message.notice.reason === "session_forked"
+            ? {
+                kind: "session_notice",
+                tone: message.notice.tone,
+                reason: message.notice.reason,
+                title: message.notice.title,
+                parentExternalSessionId: message.notice.parentExternalSessionId,
+              }
+            : {
+                kind: "session_notice",
+                tone: message.notice.tone,
+                reason: message.notice.reason,
+                title: message.notice.title,
+              };
       }
 
       next.push({
@@ -231,6 +260,7 @@ export const historyToChatMessages = (
         role: message.role,
         content,
         timestamp: message.timestamp,
+        ...(message.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
         ...(meta ? { meta } : {}),
       });
     }

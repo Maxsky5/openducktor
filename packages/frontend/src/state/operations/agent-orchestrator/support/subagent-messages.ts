@@ -1,5 +1,10 @@
 import type { AgentChatMessage, AgentChatMessageMeta } from "@/types/agent-orchestrator";
 import {
+  applyPreferredMessageTimestamp,
+  type MessageTimestamp,
+  preferredMessageTimestamp,
+} from "./message-timestamp";
+import {
   findLastSessionMessageByRole,
   getSessionMessagesSlice,
   removeSessionMessageById,
@@ -45,6 +50,25 @@ const resolveSubagentStatus = (
     : existingStatus;
 };
 
+const isLaterSubagentRestart = (
+  existingMeta: SubagentMeta | null | undefined,
+  incomingMeta: SubagentMeta,
+): boolean =>
+  incomingMeta.status === "running" &&
+  typeof existingMeta?.endedAtMs === "number" &&
+  typeof incomingMeta.startedAtMs === "number" &&
+  incomingMeta.startedAtMs > existingMeta.endedAtMs;
+
+const isPreviousRunTerminalUpdate = (
+  existingMeta: SubagentMeta | null | undefined,
+  incomingMeta: SubagentMeta,
+): boolean =>
+  existingMeta?.status === "running" &&
+  isTerminalSubagentStatus(incomingMeta.status) &&
+  typeof existingMeta.startedAtMs === "number" &&
+  typeof incomingMeta.endedAtMs === "number" &&
+  incomingMeta.endedAtMs < existingMeta.startedAtMs;
+
 export const formatSubagentContent = (meta: {
   agent?: string;
   prompt?: string;
@@ -65,10 +89,12 @@ export const formatSubagentContent = (meta: {
 export const createSubagentMessage = ({
   id,
   timestamp,
+  timestampIsApproximate,
   meta,
 }: {
   id?: string;
   timestamp: string;
+  timestampIsApproximate?: true;
   meta: SubagentMeta;
 }): SubagentMessage => {
   return {
@@ -76,6 +102,7 @@ export const createSubagentMessage = ({
     role: "system",
     content: formatSubagentContent(meta),
     timestamp,
+    ...(timestampIsApproximate ? { timestampIsApproximate: true } : {}),
     meta,
   };
 };
@@ -157,25 +184,61 @@ const mergeSubagentMeta = (
     startedAtMsFallback?: number;
   },
 ): SubagentMeta => {
-  const status = resolveSubagentStatus(existingMeta?.status, incomingMeta.status);
+  const isRestart = isLaterSubagentRestart(existingMeta, incomingMeta);
+  const isPreviousRunUpdate = isPreviousRunTerminalUpdate(existingMeta, incomingMeta);
+  const status =
+    isRestart || isPreviousRunUpdate
+      ? "running"
+      : resolveSubagentStatus(existingMeta?.status, incomingMeta.status);
   const metadata =
     existingMeta?.metadata && incomingMeta.metadata
       ? { ...existingMeta.metadata, ...incomingMeta.metadata }
       : (incomingMeta.metadata ?? existingMeta?.metadata);
-  const startedAtMs =
-    typeof existingMeta?.startedAtMs === "number" && typeof incomingMeta.startedAtMs === "number"
-      ? Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs)
-      : (incomingMeta.startedAtMs ?? existingMeta?.startedAtMs ?? options?.startedAtMsFallback);
-  const endedAtMs =
-    typeof existingMeta?.endedAtMs === "number" && typeof incomingMeta.endedAtMs === "number"
-      ? Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs)
-      : isTerminalSubagentStatus(status)
-        ? (incomingMeta.endedAtMs ?? existingMeta?.endedAtMs)
-        : undefined;
+  let startedAtMs = incomingMeta.startedAtMs ?? existingMeta?.startedAtMs;
+  if (isRestart) {
+    startedAtMs = incomingMeta.startedAtMs;
+  } else if (isPreviousRunUpdate) {
+    startedAtMs = existingMeta?.startedAtMs;
+  } else if (
+    existingMeta?.status === "running" &&
+    incomingMeta.status === "running" &&
+    typeof existingMeta.startedAtMs === "number" &&
+    typeof incomingMeta.startedAtMs === "number"
+  ) {
+    startedAtMs = Math.max(existingMeta.startedAtMs, incomingMeta.startedAtMs);
+  } else if (
+    typeof existingMeta?.startedAtMs === "number" &&
+    typeof incomingMeta.startedAtMs === "number"
+  ) {
+    startedAtMs = Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs);
+  } else {
+    startedAtMs ??= options?.startedAtMsFallback;
+  }
+
+  let endedAtMs: number | undefined;
+  if (isRestart || isPreviousRunUpdate) {
+    endedAtMs = undefined;
+  } else if (
+    typeof existingMeta?.endedAtMs === "number" &&
+    typeof incomingMeta.endedAtMs === "number"
+  ) {
+    endedAtMs = Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs);
+  } else if (isTerminalSubagentStatus(status)) {
+    endedAtMs = incomingMeta.endedAtMs ?? existingMeta?.endedAtMs;
+  }
   const agent = incomingMeta.agent ?? existingMeta?.agent;
   const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
-  const description = incomingMeta.description ?? existingMeta?.description;
-  const error = incomingMeta.error ?? existingMeta?.error;
+  const description = isPreviousRunUpdate
+    ? existingMeta?.description
+    : (incomingMeta.description ?? existingMeta?.description);
+  let error: string | undefined;
+  if (isRestart) {
+    error = incomingMeta.error;
+  } else if (isPreviousRunUpdate) {
+    error = existingMeta?.error;
+  } else {
+    error = incomingMeta.error ?? existingMeta?.error;
+  }
   const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
   const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
 
@@ -220,12 +283,13 @@ export const upsertSubagentMessage = ({
     duplicateMessageId === null
       ? owner
       : { ...owner, messages: removeSessionMessageById(owner, duplicateMessageId) };
+  const nextTimestamp = preferredMessageTimestamp(existingMessage ?? { timestamp }, { timestamp });
 
   return upsertSessionMessage(
     ownerWithoutDuplicate,
     createSubagentMessage({
       id: existingMessage?.id ?? toSubagentMessageId(incomingMeta.correlationKey),
-      timestamp: existingMessage?.timestamp ?? timestamp,
+      ...nextTimestamp,
       meta: nextMeta,
     }),
   );
@@ -266,11 +330,16 @@ export const mergeSubagentMessages = (
     ...(typeof description === "string" ? { description } : {}),
   };
 
-  return createSubagentMessage({
-    id: loadedMessage.id,
-    timestamp: loadedMessage.timestamp,
-    meta: resolvedMeta,
-  });
+  return applyPreferredMessageTimestamp(
+    createSubagentMessage({
+      id: loadedMessage.id,
+      timestamp: loadedMessage.timestamp,
+      ...(loadedMessage.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
+      meta: resolvedMeta,
+    }),
+    loadedMessage,
+    currentMessage,
+  );
 };
 
 const matchesLoadedSubagent = (
@@ -472,9 +541,10 @@ const mergeHistorySubagentMessages = (
     correlationKey,
   });
 
+  const timestamp: MessageTimestamp = preferredMessageTimestamp(existingMessage, incomingMessage);
   return createSubagentMessage({
     id: toSubagentMessageId(correlationKey),
-    timestamp: existingMessage.timestamp,
+    ...timestamp,
     meta: nextMeta,
   });
 };

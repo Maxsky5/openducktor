@@ -2,6 +2,7 @@ import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 import type { CodexMappingContext } from "./codex-canonical-events";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { codexToolTimingFields } from "./codex-tool-timing";
 
 type CodexCollabTool = "spawnAgent" | "sendInput" | "resumeAgent" | "wait" | "closeAgent";
 type CodexCollabCallStatus = "inProgress" | "completed" | "failed";
@@ -323,6 +324,8 @@ export const codexSubagentPartsFromItem = (
         ...(mapped.error ? { error: mapped.error } : {}),
         metadata: collabMetadata(item, type, parentThreadId, childThreadId),
         preferItemCorrelationKey: tool === "spawnAgent",
+        allowStatusRestart: tool === "resumeAgent" && mapped.status === "running",
+        ...codexToolTimingFields(item, { allowStartedAtOnly: mapped.status === "running" }),
       });
     });
   }

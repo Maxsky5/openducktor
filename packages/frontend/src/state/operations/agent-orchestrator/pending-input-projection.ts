@@ -1,12 +1,10 @@
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type {
   AgentPendingInputSource,
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { RepoRuntimeSessionSnapshots } from "./session-read-model/repo-runtime-session-snapshots";
-import type { AgentSessionRuntimeSnapshot } from "./session-read-model/session-runtime-snapshot";
+import type { RuntimeChildSnapshot } from "./session-read-model/runtime-child-snapshots";
 
 export type PendingInputRoute = {
   shouldPatchParentLink: boolean;
@@ -54,42 +52,8 @@ const toPendingInputLink = ({
   };
 };
 
-const sameRuntimeScope = (
-  session: AgentSessionState,
-  snapshot: AgentSessionRuntimeSnapshot,
-): boolean => {
-  return (
-    snapshot.ref.runtimeKind === session.runtimeKind &&
-    normalizeWorkingDirectory(snapshot.ref.workingDirectory) ===
-      normalizeWorkingDirectory(session.workingDirectory)
-  );
-};
-
-const hasPendingInput = (snapshot: AgentSessionRuntimeSnapshot): boolean =>
+const hasPendingInput = (snapshot: RuntimeChildSnapshot): boolean =>
   snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
-
-const shouldProjectChildPendingInput = ({
-  session,
-  snapshot,
-  materializedSessionKeys,
-}: {
-  session: AgentSessionState;
-  snapshot: AgentSessionRuntimeSnapshot;
-  materializedSessionKeys: ReadonlySet<string>;
-}): boolean => {
-  if (
-    snapshot.availability !== "runtime" ||
-    !snapshot.parentExternalSessionId ||
-    snapshot.parentExternalSessionId !== session.externalSessionId ||
-    snapshot.ref.externalSessionId === session.externalSessionId ||
-    !hasPendingInput(snapshot) ||
-    !sameRuntimeScope(session, snapshot)
-  ) {
-    return false;
-  }
-
-  return !materializedSessionKeys.has(agentSessionIdentityKey(snapshot.ref));
-};
 
 const appendPendingInput = <Entry>(current: Entry[], additional: readonly Entry[]): Entry[] => {
   if (additional.length === 0) {
@@ -132,30 +96,22 @@ const withSubagentPendingInputSource = <
 
 export const projectRuntimeChildPendingInputToSession = ({
   session,
-  runtimeSnapshots,
-  materializedSessionKeys,
+  runtimeChildSnapshots,
 }: {
   session: AgentSessionState;
-  runtimeSnapshots: RepoRuntimeSessionSnapshots;
-  materializedSessionKeys: ReadonlySet<string>;
+  runtimeChildSnapshots: readonly RuntimeChildSnapshot[];
 }): PendingInputProjection => {
   let pendingApprovals = session.pendingApprovals;
   let pendingQuestions = session.pendingQuestions;
   let hasProjectedChildPendingInput = false;
 
-  for (const snapshot of runtimeSnapshots.values()) {
-    if (!shouldProjectChildPendingInput({ session, snapshot, materializedSessionKeys })) {
-      continue;
-    }
-    if (snapshot.availability !== "runtime") {
+  for (const snapshot of runtimeChildSnapshots) {
+    if (!hasPendingInput(snapshot)) {
       continue;
     }
 
     const childSession = toAgentSessionIdentity(snapshot.ref);
     const parentExternalSessionId = snapshot.parentExternalSessionId;
-    if (!parentExternalSessionId) {
-      continue;
-    }
     const source = toSubagentPendingInputSource({
       parentExternalSessionId,
       childExternalSessionId: childSession.externalSessionId,

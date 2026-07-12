@@ -16,7 +16,6 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
-import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
@@ -37,6 +36,7 @@ const subscribeSessionEventsRef: {
   current: async () => () => undefined,
 };
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+const replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"] = async () => undefined;
 
 const operationsValue = (): AgentOperationsContextValue => ({
   readSessionHistory: readSessionHistoryRef.current,
@@ -51,7 +51,7 @@ const operationsValue = (): AgentOperationsContextValue => ({
   sendAgentMessage: async () => undefined,
   stopAgentSession: async () => undefined,
   updateAgentSessionModel: () => undefined,
-  replyAgentApproval: async () => undefined,
+  replyAgentApproval,
   answerAgentQuestion: async () => undefined,
 });
 
@@ -98,6 +98,20 @@ const createLiveUserMessageEvent = (
     parts: [],
     ...overrides,
   }) satisfies Extract<AgentEvent, { type: "user_message" }>;
+
+const createLiveApprovalEvent = (): Extract<AgentEvent, { type: "approval_required" }> => ({
+  type: "approval_required",
+  externalSessionId: "session-1",
+  requestId: "approval-live",
+  requestType: "permission_grant",
+  title: "Approve read",
+  summary: "Approval request for read.",
+  affectedPaths: ["src/**"],
+  action: { name: "read" },
+  mutation: "read_only",
+  supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+  timestamp: "2026-02-22T12:01:00.000Z",
+});
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isOpen: true,
@@ -303,7 +317,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("prefers an already-live runtime session over history loading", async () => {
+  test("merges history into an already-live runtime session", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     readSessionHistoryRef.current = readSessionHistory;
     const liveSession = createAgentSessionFixture({
@@ -320,10 +334,175 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+      await harness.waitFor((state) =>
+        state.session ? getSessionMessageCount(state.session) > 0 : false,
+      );
 
-      expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().session).toEqual(toAgentChatThreadSession(liveSession));
+      expect(readSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().session).toMatchObject({
+        externalSessionId: liveSession.externalSessionId,
+        runtimeKind: liveSession.runtimeKind,
+        workingDirectory: liveSession.workingDirectory,
+      });
+      const mergedSession = harness.getLatest().session;
+      expect(mergedSession ? getSessionMessageCount(mergedSession) : 0).toBeGreaterThan(0);
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("observes child runtime events when a matching projected session already exists", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    const subscribeSessionEvents = mock(async (_sessionRef: PolicyBoundSessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    });
+    readSessionHistoryRef.current = async () => [];
+    subscribeSessionEventsRef.current = subscribeSessionEvents;
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a/worktree",
+    });
+    const harness = createHookHarness(createBaseArgs({ liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribeSessionEvents.mock.calls.length === 1);
+
+      await harness.run(async () => {
+        subscribed.listener?.(createLiveUserMessageEvent());
+      });
+      await harness.waitFor(
+        (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 1,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses overlay pending input when rendering over a matching projected session", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a/worktree",
+    });
+    const harness = createHookHarness(createBaseArgs({ liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(createLiveApprovalEvent()));
+      await harness.waitFor((state) => state.interactionSession?.pendingApprovals.length === 1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the child runtime subscription stable across projected session updates", async () => {
+    const unsubscribe = mock(() => undefined);
+    const subscribeSessionEvents = mock(async () => unsubscribe);
+    readSessionHistoryRef.current = async () => [];
+    subscribeSessionEventsRef.current = subscribeSessionEvents;
+    const matchingSession = () =>
+      createAgentSessionFixture({
+        externalSessionId: "session-1",
+        status: "running",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a/worktree",
+      });
+    const harness = createHookHarness(createBaseArgs({ liveSession: matchingSession() }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribeSessionEvents.mock.calls.length === 1);
+
+      await harness.update(createBaseArgs({ liveSession: matchingSession() }));
+
+      expect(subscribeSessionEvents).toHaveBeenCalledTimes(1);
+      expect(unsubscribe).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("merges refreshed projected state into the live overlay without dropping streamed data", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a/worktree",
+      selectedModel: null,
+    });
+    const harness = createHookHarness(createBaseArgs({ liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(createLiveUserMessageEvent()));
+      await harness.waitFor(
+        (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 1,
+      );
+
+      const selectedModel = { providerId: "openai", modelId: "gpt-5", variant: "high" };
+      await harness.update(createBaseArgs({ liveSession: { ...liveSession, selectedModel } }));
+
+      await harness.waitFor((state) => state.interactionSession?.selectedModel?.variant === "high");
+      const renderedSession = harness.getLatest().session;
+      expect(renderedSession).not.toBeNull();
+      if (!renderedSession) {
+        throw new Error("Expected the refreshed transcript session.");
+      }
+      expect(getSessionMessageCount(renderedSession)).toBe(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the first hydrated child subscription when operation callbacks refresh", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    const firstUnsubscribe = mock(() => undefined);
+    const firstSubscribe = mock(async (_sessionRef: PolicyBoundSessionRef, listener) => {
+      subscribed.listener = listener;
+      return firstUnsubscribe;
+    });
+    const secondSubscribe = mock(async () => () => undefined);
+    readSessionHistoryRef.current = async () => [];
+    subscribeSessionEventsRef.current = firstSubscribe;
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => firstSubscribe.mock.calls.length === 1);
+
+      subscribeSessionEventsRef.current = secondSubscribe;
+      await harness.update(createBaseArgs());
+
+      expect(firstUnsubscribe).not.toHaveBeenCalled();
+      expect(secondSubscribe).not.toHaveBeenCalled();
+
+      await harness.run(async () => {
+        subscribed.listener?.(createLiveUserMessageEvent());
+      });
+      await harness.waitFor(
+        (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 1,
+      );
     } finally {
       await harness.unmount();
     }

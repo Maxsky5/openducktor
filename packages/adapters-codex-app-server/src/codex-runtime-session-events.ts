@@ -43,6 +43,7 @@ import {
 } from "./codex-runtime-events";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
+import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
 import {
   type CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -111,7 +112,10 @@ const serverRequestFromRuntimeEvent = (
 
 export class CodexRuntimeSessionEvents {
   private readonly runtimeEventBuffer = new CodexRuntimeEventBuffer();
-  private readonly handledStreamRequestKeysByThreadId = new Map<string, Set<string>>();
+  private readonly handledStreamRequestKeysByRuntimeId = new Map<
+    string,
+    Map<string, Set<string>>
+  >();
   private readonly syntheticUserMessageTextsByThreadId = new Map<string, string[]>();
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
@@ -125,14 +129,21 @@ export class CodexRuntimeSessionEvents {
   >();
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
+  private readonly subagentLifecycle: CodexSubagentLifecycleProjector;
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
     this.eventMapperPipeline = createCodexEventMapperPipeline(
       createCodexEventMappers(deps.subagents),
     );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
+    this.subagentLifecycle = new CodexSubagentLifecycleProjector({
+      sessions: deps.sessions,
+      subagents: deps.subagents,
+      emitParentSessionEvent: (externalSessionId, event) =>
+        this.emitSessionEvent(externalSessionId, event),
+    });
     deps.subagents.onRouteLearned((route) => {
-      this.scheduleBufferedSubagentServerRequestProcessing(route);
+      this.scheduleBufferedSubagentRouteProcessing(route);
     });
   }
 
@@ -196,7 +207,8 @@ export class CodexRuntimeSessionEvents {
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
     this.runtimeEventBuffer.clearSession(externalSessionId, runtimeId);
-    this.handledStreamRequestKeysByThreadId.delete(externalSessionId);
+    this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
+    this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
     this.clearTurnScopedMap(this.completedAgentMessagesByTurnKey, externalSessionId);
@@ -271,7 +283,7 @@ export class CodexRuntimeSessionEvents {
     for (const event of events) {
       await this.processBufferedRuntimeEvent(session, handledRequestKeys, event);
     }
-    return this.hasPendingInputForSession(session.threadId);
+    return this.hasPendingInputForSession(session.threadId, session.runtimeId);
   }
 
   emitUserMessage(
@@ -292,12 +304,14 @@ export class CodexRuntimeSessionEvents {
       session.runtimeId,
     );
     await this.processServerRequestsForSession(session, bufferedRequests);
+    this.subagentLifecycle.projectBufferedForParent(session);
     await this.processBufferedSubagentServerRequestsForParent(session);
   }
 
-  private scheduleBufferedSubagentServerRequestProcessing(route: CodexSubagentRoute): void {
+  private scheduleBufferedSubagentRouteProcessing(route: CodexSubagentRoute): void {
     void Promise.resolve()
       .then(() => this.applyRouteToPendingInput(route))
+      .then(() => this.subagentLifecycle.projectBufferedRoute(route))
       .then(() => this.processBufferedSubagentServerRequests(route))
       .catch((error) => this.emitBufferedSubagentServerRequestError(route, error));
   }
@@ -446,7 +460,10 @@ export class CodexRuntimeSessionEvents {
           return;
         }
       }
-      this.bufferRuntimeStreamEvent(threadId, event);
+      const bufferedEvent = this.bufferRuntimeStreamEvent(threadId, event);
+      if (bufferedEvent.kind === "notification") {
+        this.subagentLifecycle.projectNotification(event.runtimeId, bufferedEvent.notification);
+      }
       return;
     }
     if (session.runtimeId !== event.runtimeId) {
@@ -460,6 +477,12 @@ export class CodexRuntimeSessionEvents {
         this.bufferRuntimeStreamEvent(threadId, event);
       }
       return;
+    }
+    if (event.kind === "notification") {
+      this.subagentLifecycle.projectNotification(
+        event.runtimeId,
+        parseNotificationRecord(event.message, event.receivedAt),
+      );
     }
     await this.processRuntimeStreamEventForSession(session, event);
   }
@@ -487,8 +510,8 @@ export class CodexRuntimeSessionEvents {
     requestId: string,
     runtimeId?: string,
   ): boolean {
-    const approval = this.deps.pendingInput.approval(requestId);
-    const question = this.deps.pendingInput.question(requestId);
+    const approval = this.deps.pendingInput.approval(requestId, runtimeId);
+    const question = this.deps.pendingInput.question(requestId, runtimeId);
     const entry = approval ?? question;
     if (!entry) {
       return false;
@@ -509,8 +532,8 @@ export class CodexRuntimeSessionEvents {
       ...codexSubagentRouteEventFields(route),
     };
     const activeTurn = approval
-      ? this.deps.pendingInput.resolveApproval(requestId)
-      : this.deps.pendingInput.resolveQuestion(requestId);
+      ? this.deps.pendingInput.resolveApproval(requestId, entry.runtimeId)
+      : this.deps.pendingInput.resolveQuestion(requestId, entry.runtimeId);
     const type = approval ? "approval_resolved" : "question_resolved";
     if (this.deps.sessions.get(threadId)) {
       this.emitSessionEvent(threadId, {
@@ -606,8 +629,8 @@ export class CodexRuntimeSessionEvents {
   private bufferRuntimeStreamEvent(
     threadId: string,
     event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "receivedAt" | "message">,
-  ): void {
-    this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
+  ): ReturnType<CodexRuntimeEventBuffer["bufferRuntimeStreamEvent"]> {
+    return this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
   }
 
   private emitRuntimeStreamEventError(event: CodexRuntimeStreamEvent, error: unknown): void {
@@ -681,24 +704,50 @@ export class CodexRuntimeSessionEvents {
     requests: BufferedCodexServerRequest[],
     handledRequestKeysOverride?: Set<string>,
   ): Promise<boolean> {
-    const ownerThreadIds = new Set(
-      requests.map(({ request }) => extractThreadIdFromParams(request.params) ?? session.threadId),
-    );
     const activeTurn = this.deps.activeTurnsBySessionId.get(session.threadId);
-    const handledRequestKeys =
-      handledRequestKeysOverride ??
-      activeTurn?.handledRequestKeys ??
-      this.handledStreamRequestKeysByThreadId.get(session.threadId) ??
-      new Set();
-    this.handledStreamRequestKeysByThreadId.set(session.threadId, handledRequestKeys);
-    const hasPendingInput = await this.handleServerRequests(session, handledRequestKeys, requests);
-    for (const ownerThreadId of ownerThreadIds) {
+    let hasPendingInput = false;
+    const requestsByOwnerThreadId = new Map<string, BufferedCodexServerRequest[]>();
+    for (const request of requests) {
+      const ownerThreadId = extractThreadIdFromParams(request.request.params) ?? session.threadId;
+      const ownerRequests = requestsByOwnerThreadId.get(ownerThreadId) ?? [];
+      ownerRequests.push(request);
+      requestsByOwnerThreadId.set(ownerThreadId, ownerRequests);
+    }
+    for (const [ownerThreadId, ownerRequests] of requestsByOwnerThreadId) {
+      const handledRequestKeysByThreadId =
+        this.handledStreamRequestKeysByRuntimeId.get(session.runtimeId) ?? new Map();
+      const existingHandledRequestKeys = handledRequestKeysByThreadId.get(ownerThreadId);
+      const handledRequestKeys =
+        existingHandledRequestKeys ??
+        (ownerThreadId === session.threadId
+          ? (handledRequestKeysOverride ?? activeTurn?.handledRequestKeys)
+          : undefined) ??
+        new Set<string>();
+      handledRequestKeysByThreadId.set(ownerThreadId, handledRequestKeys);
+      this.handledStreamRequestKeysByRuntimeId.set(session.runtimeId, handledRequestKeysByThreadId);
+      hasPendingInput =
+        (await this.handleServerRequests(session, handledRequestKeys, ownerRequests)) ||
+        hasPendingInput;
       this.resolveBufferedServerRequests(ownerThreadId, session.runtimeId);
     }
     if (hasPendingInput && activeTurn && !activeTurn.isTurnSettled()) {
       this.bindPendingInputToActiveTurn(session.threadId, activeTurn);
     }
     return hasPendingInput;
+  }
+
+  private clearHandledStreamRequestKeys(externalSessionId: string, runtimeId?: string): void {
+    const runtimeIds = runtimeId
+      ? [runtimeId]
+      : [...this.handledStreamRequestKeysByRuntimeId.keys()];
+    for (const currentRuntimeId of runtimeIds) {
+      const handledRequestKeysByThreadId =
+        this.handledStreamRequestKeysByRuntimeId.get(currentRuntimeId);
+      handledRequestKeysByThreadId?.delete(externalSessionId);
+      if (handledRequestKeysByThreadId?.size === 0) {
+        this.handledStreamRequestKeysByRuntimeId.delete(currentRuntimeId);
+      }
+    }
   }
 
   private async processBufferedRuntimeEvent(
@@ -746,6 +795,7 @@ export class CodexRuntimeSessionEvents {
       this.handleServerRequestResolvedNotification(event.runtimeId, notification);
       return;
     }
+    this.subagentLifecycle.projectNotification(event.runtimeId, notification);
     if (!threadId) {
       await this.handlePendingNotifications(preferredSession, [notification]);
       return;
@@ -820,10 +870,10 @@ export class CodexRuntimeSessionEvents {
     return hasPendingInput;
   }
 
-  private hasPendingInputForSession(threadId: string): boolean {
+  private hasPendingInputForSession(threadId: string, runtimeId: string): boolean {
     return (
-      this.deps.pendingInput.pendingApprovalEventsForSession(threadId).length > 0 ||
-      this.deps.pendingInput.pendingQuestionEventsForSession(threadId).length > 0
+      this.deps.pendingInput.pendingApprovalEventsForSession(threadId, runtimeId).length > 0 ||
+      this.deps.pendingInput.pendingQuestionEventsForSession(threadId, runtimeId).length > 0
     );
   }
 
@@ -942,7 +992,6 @@ export class CodexRuntimeSessionEvents {
   private streamingContext(): CodexStreamingContext {
     return {
       subscribeEvents: Boolean(this.deps.subscribeEvents),
-      bufferedNotificationsByThreadId: this.runtimeEventBuffer.notificationsByThreadId,
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       startedItemTimestampsByKey: this.startedItemTimestampsByKey,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
@@ -957,9 +1006,13 @@ export class CodexRuntimeSessionEvents {
         this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       flushQueuedUserMessagesLater: (activeTurn) =>
         this.deps.flushQueuedUserMessagesLater(activeTurn),
-      bufferNotification: (notification) =>
-        this.runtimeEventBuffer.bufferNotification(notification),
+      takeBufferedNotifications: (threadId, runtimeId) =>
+        this.runtimeEventBuffer.takeNotifications(threadId, runtimeId),
+      bufferNotification: (runtimeId, notification) =>
+        this.runtimeEventBuffer.bufferNotification(runtimeId, notification),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
+      failUnlinkedSubagentSpawns: (parentThreadId, runtimeId, error) =>
+        this.deps.subagents.failUnlinkedSpawnsForParent(parentThreadId, runtimeId, error),
     };
   }
 
@@ -1002,7 +1055,7 @@ export class CodexRuntimeSessionEvents {
     const tokenUsageByTurnId = new Map<string, CodexTokenUsageTotals>();
 
     const collectOnce = async (): Promise<void> => {
-      const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
+      const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId, runtimeId);
       const takenEvents = await this.deps.takeBufferedEvents(runtimeId);
       const resolvedRequestKeys = this.resolvedServerRequestBatchKeys(takenEvents);
       const takenNotifications: CodexNotificationRecord[] = [];
@@ -1020,6 +1073,7 @@ export class CodexRuntimeSessionEvents {
           this.handleServerRequestResolvedNotification(event.runtimeId, notification);
           continue;
         }
+        this.subagentLifecycle.projectNotification(event.runtimeId, notification);
         takenNotifications.push(notification);
       }
       const notifications = [...bufferedNotifications, ...takenNotifications];
@@ -1046,7 +1100,7 @@ export class CodexRuntimeSessionEvents {
           continue;
         }
         if (!this.deps.subscribeEvents) {
-          this.runtimeEventBuffer.bufferNotification(notification);
+          this.runtimeEventBuffer.bufferNotification(runtimeId, notification);
         }
       }
     };

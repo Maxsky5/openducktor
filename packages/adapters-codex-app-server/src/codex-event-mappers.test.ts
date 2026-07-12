@@ -3,7 +3,7 @@ import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
-import { todoMapper } from "./event-mappers";
+import { createCodexEventMappers, todoMapper } from "./event-mappers";
 
 const TODO_PAYLOAD = {
   explanation: "Tracking work",
@@ -583,6 +583,7 @@ describe("Codex subagent event mapper", () => {
             id: "resume-1",
             tool: "resumeAgent",
             status: "completed",
+            startedAtMs: 1_778_284_801_000,
             senderThreadId: "parent-thread",
             receiverThreadIds: ["child-thread"],
             prompt: null,
@@ -600,8 +601,38 @@ describe("Codex subagent event mapper", () => {
         correlationKey: "codex-subagent:parent-thread:child-thread",
         status: "running",
         externalSessionId: "child-thread",
+        startedAtMs: 1_778_284_801_000,
       }),
     ]);
+  });
+
+  test("does not restart a completed V2 subagent for generic interacted activity", () => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "completed",
+    });
+    const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+    const ctx = {
+      source: "live" as const,
+      threadId: "parent-thread",
+      timestamp: "2026-07-10T12:00:00.000Z",
+    };
+    const activity = (id: string, kind: "started" | "interacted") => ({
+      type: "subAgentActivity",
+      id,
+      agentThreadId: "child-thread",
+      agentPath: "/root/child",
+      kind,
+    });
+
+    const interacted = projectCodexCanonicalEvents(
+      pipeline.runLive({ kind: "item_completed", item: activity("message-1", "interacted") }, ctx),
+    );
+
+    expect(projectedSubagents(interacted)[0]).toMatchObject({ status: "completed" });
   });
 
   test("projects thread-read collab items to subagent history instead of generic collab tools", () => {

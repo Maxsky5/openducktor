@@ -119,7 +119,7 @@ export const buildAgentChatMessageCardViewModel = ({
   sessionRuntimeKind,
   workflowToolAliasesByCanonical,
 }: AgentChatMessageCardViewModelInput): AgentChatMessageCardViewModel => {
-  const timeLabel = formatTime(message.timestamp);
+  const timeLabel = message.timestampIsApproximate ? "" : formatTime(message.timestamp);
   const meta = message.meta;
   const isReasoningMessage = meta?.kind === "reasoning";
   const isAssistantMessage = message.role === "assistant";

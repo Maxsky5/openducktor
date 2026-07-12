@@ -1,5 +1,6 @@
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { matchesLoadedTool, mergeToolMessages } from "./history-tool-message-merge";
+import { applyPreferredMessageTimestamp } from "./message-timestamp";
 import {
   createSessionMessagesState,
   findSessionMessageById,
@@ -29,7 +30,7 @@ const mergeReasoningMessages = (
     return currentMessage;
   }
 
-  return loadedMessage;
+  return applyPreferredMessageTimestamp(loadedMessage, loadedMessage, currentMessage);
 };
 
 const sameIdCurrentMessageOrEmpty = (
@@ -211,11 +212,15 @@ const mergeSameMessageId = (
       ...loadedMessage.meta,
       ...(parts ? { parts } : {}),
     };
-    return {
-      ...loadedMessage,
-      ...currentMessage,
-      meta,
-    };
+    return applyPreferredMessageTimestamp(
+      {
+        ...loadedMessage,
+        ...currentMessage,
+        meta,
+      },
+      currentMessage,
+      loadedMessage,
+    );
   }
 
   if (isFinalAssistantChatMessage(loadedMessage) && currentMessage.role === "assistant") {
@@ -223,11 +228,15 @@ const mergeSameMessageId = (
       currentMessage.meta && loadedMessage.meta
         ? { ...currentMessage.meta, ...loadedMessage.meta }
         : (loadedMessage.meta ?? currentMessage.meta);
-    return {
-      ...currentMessage,
-      ...loadedMessage,
-      ...(mergedMeta ? { meta: mergedMeta } : {}),
-    };
+    return applyPreferredMessageTimestamp(
+      {
+        ...currentMessage,
+        ...loadedMessage,
+        ...(mergedMeta ? { meta: mergedMeta } : {}),
+      },
+      loadedMessage,
+      currentMessage,
+    );
   }
 
   if (isSubagentMessage(loadedMessage) && isSubagentMessage(currentMessage)) {

@@ -90,6 +90,14 @@ const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId:
     (session) => session.externalSessionId === externalSessionId,
   ) ?? null;
 
+const requireReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) => {
+  const session = getReadModelSession(readModel, externalSessionId);
+  if (!session) {
+    throw new Error(`Expected session '${externalSessionId}' in the repo read model.`);
+  }
+  return session;
+};
+
 const createRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
   externalSessionId: "external-1",
   role: "build",
@@ -997,7 +1005,7 @@ describe("repo session read model", () => {
       resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
-    const parentSession = getReadModelSession(readModel, parentRecord.externalSessionId);
+    const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
     const childResponseSession = {
       externalSessionId: "child-session",
       runtimeKind: "opencode" as const,
@@ -1024,6 +1032,108 @@ describe("repo session read model", () => {
       },
     ]);
     expect(getReadModelSession(readModel, "child-session")).toBeNull();
+    expect(readModel.liveSessionRefs).toEqual([
+      expectedRuntimeRef({
+        externalSessionId: parentRecord.externalSessionId,
+        workingDirectory: parentRecord.workingDirectory,
+      }),
+    ]);
+  });
+
+  test("restores completed subagents from runtime snapshots after reload", async () => {
+    const parentRecord = createRecord({
+      externalSessionId: "parent-session",
+      runtimeKind: "codex",
+    });
+    const tasks = createTaskSessionRecords([parentRecord]);
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
+      repoPath: "/repo",
+      tasks,
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
+          runtimeKind: "codex",
+          externalSessionId: parentRecord.externalSessionId,
+          taskId: "task-1",
+          role: "build",
+          runtimeActivity: "idle",
+        }),
+        createRuntimeSnapshot({
+          runtimeKind: "codex",
+          externalSessionId: "child-session",
+          taskId: "task-1",
+          role: "build",
+          parentExternalSessionId: parentRecord.externalSessionId,
+          runtimeActivity: "idle",
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      runtimeSnapshots,
+      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
+    });
+
+    const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
+    expect(
+      sessionMessagesToArray(parentSession).filter((message) => message.meta?.kind === "subagent"),
+    ).toEqual([
+      expect.objectContaining({
+        role: "system",
+        meta: expect.objectContaining({
+          kind: "subagent",
+          externalSessionId: "child-session",
+          status: "completed",
+          prompt: "codex session",
+        }),
+      }),
+    ]);
+    expect(getReadModelSession(readModel, "child-session")).toBeNull();
+    expect(readModel.liveSessionRefs).toEqual([]);
+  });
+
+  test("observes a persisted parent while an unmaterialized child is running", async () => {
+    const parentRecord = createRecord({ externalSessionId: "parent-session" });
+    const tasks = createTaskSessionRecords([parentRecord]);
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
+      repoPath: "/repo",
+      tasks,
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
+          runtimeKind: "opencode",
+          externalSessionId: parentRecord.externalSessionId,
+          taskId: "task-1",
+          role: "build",
+          runtimeActivity: "idle",
+        }),
+        createRuntimeSnapshot({
+          runtimeKind: "opencode",
+          externalSessionId: "child-session",
+          taskId: "task-1",
+          role: "build",
+          parentExternalSessionId: parentRecord.externalSessionId,
+          runtimeActivity: "running",
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      runtimeSnapshots,
+      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
+    });
+
+    const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
+    expect(
+      sessionMessagesToArray(parentSession).find((message) => message.meta?.kind === "subagent")
+        ?.meta,
+    ).toMatchObject({
+      kind: "subagent",
+      externalSessionId: "child-session",
+      status: "running",
+    });
     expect(readModel.liveSessionRefs).toEqual([
       expectedRuntimeRef({
         externalSessionId: parentRecord.externalSessionId,

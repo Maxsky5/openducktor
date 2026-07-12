@@ -8,6 +8,48 @@ import {
 } from "./agent-chat-transcript-model";
 
 describe("agent chat transcript model", () => {
+  test("renders a fork notice as a standalone boundary without hiding inherited history", () => {
+    const session = buildSession({
+      messages: [
+        buildMessage("user", "Inherited parent prompt", { id: "parent-user" }),
+        buildMessage("assistant", "Inherited parent answer", { id: "parent-assistant" }),
+        buildMessage("system", "Session forked here", {
+          id: "fork-boundary",
+          meta: {
+            kind: "session_notice",
+            tone: "info",
+            reason: "session_forked",
+            title: "Session forked here",
+            parentExternalSessionId: "parent-thread",
+          },
+        }),
+        buildMessage("user", "Child task", { id: "child-user" }),
+        buildMessage("assistant", "Child result", { id: "child-assistant" }),
+      ],
+      pendingQuestions: [],
+    });
+
+    const model = buildAgentChatTranscriptModel(session, { showThinkingMessages: true });
+
+    expect(model.rows.map((row) => row.kind)).toEqual([
+      "message",
+      "turn_duration",
+      "message",
+      "fork_boundary",
+      "message",
+      "turn_duration",
+      "message",
+    ]);
+    expect(model.rows[3]).toMatchObject({
+      kind: "fork_boundary",
+      label: "Session forked here",
+      parentExternalSessionId: "parent-thread",
+    });
+    expect(
+      model.rows.filter((row) => row.kind === "message").map((row) => row.message.content),
+    ).toEqual(["Inherited parent prompt", "Inherited parent answer", "Child task", "Child result"]);
+  });
+
   test("buildAgentChatTranscriptModel keeps message order without synthetic draft rows", () => {
     const session = buildSession({
       messages: [

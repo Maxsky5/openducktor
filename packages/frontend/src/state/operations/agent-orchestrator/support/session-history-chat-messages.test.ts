@@ -23,6 +23,39 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     expect(messages).toEqual([]);
   });
 
+  test("preserves approximate timestamp metadata on hydrated tool messages", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "hydrated-tool",
+          role: "assistant",
+          timestamp: "2026-07-10T20:33:01.000Z",
+          timestampIsApproximate: true,
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "hydrated-tool",
+              partId: "hydrated-tool-part",
+              callId: "hydrated-tool-call",
+              tool: "search",
+              toolType: "search",
+              status: "completed",
+            },
+          ],
+        },
+      ],
+      { role: "build" },
+    );
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        id: "tool:hydrated-tool:hydrated-tool-call",
+        timestampIsApproximate: true,
+      }),
+    ]);
+  });
+
   test("maps compacted session history notices to chat notice messages", () => {
     const messages = historyToChatMessages(
       [
@@ -55,6 +88,43 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
           tone: "info",
           reason: "session_compacted",
           title: "Compacted",
+        },
+      },
+    ]);
+  });
+
+  test("maps fork boundaries to transient transcript notice metadata", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "fork-boundary-1",
+          role: "system",
+          timestamp: "2026-07-10T10:00:00.000Z",
+          text: "Session forked here",
+          notice: {
+            tone: "info",
+            reason: "session_forked",
+            title: "Session forked here",
+            parentExternalSessionId: "parent-thread",
+          },
+          parts: [],
+        },
+      ],
+      { role: null },
+    );
+
+    expect(messages).toEqual([
+      {
+        id: "fork-boundary-1",
+        role: "system",
+        content: "Session forked here",
+        timestamp: "2026-07-10T10:00:00.000Z",
+        meta: {
+          kind: "session_notice",
+          tone: "info",
+          reason: "session_forked",
+          title: "Session forked here",
+          parentExternalSessionId: "parent-thread",
         },
       },
     ]);

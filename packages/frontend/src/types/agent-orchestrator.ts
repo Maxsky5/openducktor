@@ -101,6 +101,13 @@ export type AgentChatMessageMeta =
       reason: "session_compacted";
       title: string;
       compactionStatus?: "running" | "completed";
+    }
+  | {
+      kind: "session_notice";
+      tone: "info";
+      reason: "session_forked";
+      title: string;
+      parentExternalSessionId: string;
     };
 
 export type AgentChatMessage = {
@@ -108,6 +115,8 @@ export type AgentChatMessage = {
   role: "user" | "assistant" | "system" | "thinking" | "tool";
   content: string;
   timestamp: string;
+  /** The timestamp is retained for ordering but hidden from the transcript clock label. */
+  timestampIsApproximate?: true;
   meta?: AgentChatMessageMeta;
 };
 

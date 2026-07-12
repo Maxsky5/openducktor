@@ -43,6 +43,50 @@ const threadReadResponse = (
 });
 
 describe("CodexThreadInventoryReader", () => {
+  test("reads every parent turn id with summary-only pagination", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadTurnsList: async (params: Record<string, unknown>) => {
+        calls.push(params);
+        return params.cursor
+          ? { data: [{ id: "turn-2" }], nextCursor: null }
+          : { data: [{ id: "turn-1" }], nextCursor: "page-2" };
+      },
+    } as unknown as CodexAppServerClient;
+
+    const turnIds = await reader.readThreadTurnIds(client, "parent-thread");
+
+    expect([...turnIds]).toEqual(["turn-1", "turn-2"]);
+    expect(calls).toEqual([
+      {
+        threadId: "parent-thread",
+        cursor: null,
+        limit: 100,
+        sortDirection: "asc",
+        itemsView: "summary",
+      },
+      {
+        threadId: "parent-thread",
+        cursor: "page-2",
+        limit: 100,
+        sortDirection: "asc",
+        itemsView: "summary",
+      },
+    ]);
+  });
+
+  test("rejects malformed summary turn entries instead of returning an incomplete id set", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadTurnsList: async () => ({ data: [null], nextCursor: null }),
+    } as unknown as CodexAppServerClient;
+
+    await expect(reader.readThreadTurnIds(client, "parent-thread")).rejects.toThrow(
+      "returned a summary turn without an id",
+    );
+  });
+
   test("does not let a stale in-flight read overwrite a refreshed inventory", async () => {
     const reader = new CodexThreadInventoryReader();
     const firstLoaded = createDeferred<unknown>();
@@ -328,6 +372,25 @@ describe("CodexThreadInventoryReader", () => {
 
     expect(historyLoad).toBeNull();
     expect(calls).toEqual(["thread/read"]);
+  });
+
+  test("preserves a synthetic empty history response for a known local session", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadRead: async () => {
+        throw new Error(
+          "thread is not materialized yet: includeTurns is unavailable before first user message",
+        );
+      },
+    } as unknown as CodexAppServerClient;
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-local",
+        workingDirectory: "/repo",
+        allowUnmaterialized: true,
+      }),
+    ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
   });
 
   test("returns null when read-only history cwd does not match", async () => {

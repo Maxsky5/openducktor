@@ -96,7 +96,7 @@ describe("prepareElectronSidecars", () => {
         path: prepared.plan.outputPaths["openducktor-mcp"],
       },
     ]);
-  });
+  }, 5_000);
 
   test("rejects a missing MCP entrypoint before mutating sidecar output", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();

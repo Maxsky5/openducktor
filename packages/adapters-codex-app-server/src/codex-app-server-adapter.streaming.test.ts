@@ -1990,7 +1990,7 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
-  test("emits live subagent rows from started collab items", async () => {
+  test("terminalizes orphaned spawns only at turn lifecycle boundaries", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
     > = [];
@@ -2042,6 +2042,170 @@ describe("CodexAppServerAdapter streaming", () => {
             correlationKey: "codex-subagent:thread-saved:spawn-live",
             status: "running",
             prompt: "Review this change",
+          }),
+        }),
+      );
+
+      streamListeners[0]?.({
+        runtimeId: "runtime-live",
+        kind: "notification",
+        receivedAt: new Date().toISOString(),
+        message: {
+          method: "item/completed",
+          params: {
+            threadId: "thread-saved",
+            turnId: "turn-live",
+            completedAtMs: 1_777_766_452_021,
+            item: {
+              type: "agentMessage",
+              id: "retry-message",
+              text: "The first spawn failed validation. Retrying now.",
+            },
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: "assistant_part",
+          externalSessionId: "thread-saved",
+          part: expect.objectContaining({
+            kind: "subagent",
+            correlationKey: "codex-subagent:thread-saved:spawn-live",
+            status: "error",
+          }),
+        }),
+      );
+
+      streamListeners[0]?.({
+        runtimeId: "runtime-live",
+        kind: "notification",
+        receivedAt: new Date().toISOString(),
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-saved",
+            turn: {
+              id: "turn-live",
+              status: "failed",
+              completedAt: 1_777_766_452,
+            },
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_part",
+          externalSessionId: "thread-saved",
+          part: expect.objectContaining({
+            kind: "subagent",
+            correlationKey: "codex-subagent:thread-saved:spawn-live",
+            status: "error",
+          }),
+        }),
+      );
+
+      streamListeners[0]?.({
+        runtimeId: "runtime-live",
+        kind: "notification",
+        receivedAt: new Date().toISOString(),
+        message: {
+          method: "item/started",
+          params: {
+            threadId: "thread-saved",
+            turnId: "turn-without-followup",
+            startedAtMs: 1_777_766_453_000,
+            item: {
+              type: "collabAgentToolCall",
+              id: "spawn-without-followup",
+              tool: "spawnAgent",
+              status: "inProgress",
+              senderThreadId: "thread-saved",
+              receiverThreadIds: [],
+              prompt: "Review another change",
+              agentsStates: {},
+            },
+          },
+        },
+      });
+      streamListeners[0]?.({
+        runtimeId: "runtime-live",
+        kind: "notification",
+        receivedAt: new Date().toISOString(),
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-saved",
+            turn: {
+              id: "turn-without-followup",
+              status: "failed",
+              completedAt: 1_777_766_454,
+            },
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_part",
+          externalSessionId: "thread-saved",
+          part: expect.objectContaining({
+            kind: "subagent",
+            correlationKey: "codex-subagent:thread-saved:spawn-without-followup",
+            status: "error",
+          }),
+        }),
+      );
+
+      streamListeners[0]?.({
+        runtimeId: "runtime-live",
+        kind: "notification",
+        receivedAt: new Date().toISOString(),
+        message: {
+          method: "item/started",
+          params: {
+            threadId: "thread-saved",
+            turnId: "turn-settled-by-idle",
+            startedAtMs: 1_777_766_455_000,
+            item: {
+              type: "collabAgentToolCall",
+              id: "spawn-settled-by-idle",
+              tool: "spawnAgent",
+              status: "inProgress",
+              senderThreadId: "thread-saved",
+              receiverThreadIds: [],
+              prompt: "Review a third change",
+              agentsStates: {},
+            },
+          },
+        },
+      });
+      streamListeners[0]?.({
+        runtimeId: "runtime-live",
+        kind: "notification",
+        receivedAt: new Date().toISOString(),
+        message: {
+          method: "thread/status/changed",
+          params: {
+            threadId: "thread-saved",
+            status: { type: "idle" },
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_part",
+          externalSessionId: "thread-saved",
+          part: expect.objectContaining({
+            kind: "subagent",
+            correlationKey: "codex-subagent:thread-saved:spawn-settled-by-idle",
+            status: "error",
           }),
         }),
       );

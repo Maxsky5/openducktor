@@ -42,8 +42,14 @@ const toLocalRuntimeSnapshot = async (
     session,
     inventory,
     ...(input ? { input } : {}),
-    pendingApprovals: deps.pendingInput.pendingApprovalsForSession(session.threadId),
-    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(session.threadId),
+    pendingApprovals: deps.pendingInput.pendingApprovalsForSession(
+      session.threadId,
+      session.runtimeId,
+    ),
+    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(
+      session.threadId,
+      session.runtimeId,
+    ),
     hasActiveTurn: deps.hasActiveTurn(session.threadId),
   });
 };
@@ -79,8 +85,14 @@ export const listCodexSessionRuntimeSnapshots = async (
       toRefreshedRuntimeSnapshot({
         session,
         inventory: await readRuntimeInventoryOnce(deps, inventoryByRuntimeId, session.runtimeId),
-        pendingApprovals: deps.pendingInput.pendingApprovalsForSession(session.threadId),
-        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(session.threadId),
+        pendingApprovals: deps.pendingInput.pendingApprovalsForSession(
+          session.threadId,
+          session.runtimeId,
+        ),
+        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(
+          session.threadId,
+          session.runtimeId,
+        ),
         hasActiveTurn: deps.hasActiveTurn(session.threadId),
       }),
     ),
@@ -97,8 +109,8 @@ export const listCodexSessionRuntimeSnapshots = async (
     .filter((thread) => threadMatchesDirectories(thread, directories))
     .map((thread) =>
       toRuntimeSnapshotFromThread(thread, input, {
-        pendingApprovals: deps.pendingInput.pendingApprovalsForSession(thread.id),
-        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(thread.id),
+        pendingApprovals: deps.pendingInput.pendingApprovalsForSession(thread.id, runtimeId),
+        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(thread.id, runtimeId),
       }),
     );
   return [...localSnapshots, ...remoteSnapshots];
@@ -126,7 +138,7 @@ export const readCodexSessionRuntimeSnapshot = async (
     return missingRuntimeSnapshot(input);
   }
   return toRuntimeSnapshotFromThread(snapshot, input, {
-    pendingApprovals: deps.pendingInput.pendingApprovalsForSession(snapshot.id),
-    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(snapshot.id),
+    pendingApprovals: deps.pendingInput.pendingApprovalsForSession(snapshot.id, runtimeId),
+    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(snapshot.id, runtimeId),
   });
 };

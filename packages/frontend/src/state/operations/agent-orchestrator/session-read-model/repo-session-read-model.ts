@@ -20,6 +20,8 @@ import { projectRuntimeChildPendingInputToSession } from "../pending-input-proje
 import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
 import { toRuntimeSessionRef, toRuntimeSessionRefWithPolicy } from "../support/session-runtime-ref";
 import type { RepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
+import { runtimeChildSnapshotsForSession } from "./runtime-child-snapshots";
+import { projectRuntimeSubagentsToSession } from "./runtime-subagent-projection";
 import {
   applyRuntimeSnapshotToSession,
   shouldObserveAgentSessionRuntimeSnapshot,
@@ -115,17 +117,26 @@ export const buildRepoSessionReadModel = ({
       current,
     });
     const directSession = applyRuntimeSnapshotToSession(persistedSessionView, snapshot);
-    const projectedPendingInput = projectRuntimeChildPendingInputToSession({
+    const runtimeChildSnapshots = runtimeChildSnapshotsForSession({
       session: directSession,
       runtimeSnapshots,
       materializedSessionKeys,
     });
-    const session = projectedPendingInput.session;
+    const projectedPendingInput = projectRuntimeChildPendingInputToSession({
+      session: directSession,
+      runtimeChildSnapshots,
+    });
+    const projectedSubagents = projectRuntimeSubagentsToSession({
+      session: projectedPendingInput.session,
+      runtimeChildSnapshots,
+    });
+    const session = projectedSubagents.session;
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
     if (
       shouldObserveAgentSessionRuntimeSnapshot(snapshot) ||
-      projectedPendingInput.hasProjectedChildPendingInput
+      projectedPendingInput.hasProjectedChildPendingInput ||
+      projectedSubagents.hasActiveChild
     ) {
       liveSessionRefs.push(policyBoundSessionRefForSession(session));
     }

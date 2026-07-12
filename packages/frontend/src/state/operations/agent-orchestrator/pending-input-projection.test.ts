@@ -6,6 +6,7 @@ import {
   projectPendingInputRoute,
   projectRuntimeChildPendingInputToSession,
 } from "./pending-input-projection";
+import { runtimeChildSnapshotsForSession } from "./session-read-model/runtime-child-snapshots";
 
 const createParentChildSessions = () => {
   const parentSession = createAgentSessionFixture({
@@ -86,10 +87,15 @@ describe("pending input projection", () => {
       },
     });
 
+    const runtimeSnapshots = new Map([[agentSessionIdentityKey(childSnapshot.ref), childSnapshot]]);
+    const materializedSessionKeys = new Set([agentSessionIdentityKey(parentSession)]);
     const projection = projectRuntimeChildPendingInputToSession({
       session: parentSession,
-      runtimeSnapshots: new Map([[agentSessionIdentityKey(childSnapshot.ref), childSnapshot]]),
-      materializedSessionKeys: new Set([agentSessionIdentityKey(parentSession)]),
+      runtimeChildSnapshots: runtimeChildSnapshotsForSession({
+        session: parentSession,
+        runtimeSnapshots,
+        materializedSessionKeys,
+      }),
     });
 
     expect(projection.hasProjectedChildPendingInput).toBe(true);
@@ -134,13 +140,18 @@ describe("pending input projection", () => {
       },
     });
 
+    const runtimeSnapshots = new Map([[agentSessionIdentityKey(childSnapshot.ref), childSnapshot]]);
+    const materializedSessionKeys = new Set([
+      agentSessionIdentityKey(parentSession),
+      agentSessionIdentityKey(childSnapshot.ref),
+    ]);
     const projection = projectRuntimeChildPendingInputToSession({
       session: parentSession,
-      runtimeSnapshots: new Map([[agentSessionIdentityKey(childSnapshot.ref), childSnapshot]]),
-      materializedSessionKeys: new Set([
-        agentSessionIdentityKey(parentSession),
-        agentSessionIdentityKey(childSnapshot.ref),
-      ]),
+      runtimeChildSnapshots: runtimeChildSnapshotsForSession({
+        session: parentSession,
+        runtimeSnapshots,
+        materializedSessionKeys,
+      }),
     });
 
     expect(projection.hasProjectedChildPendingInput).toBe(false);

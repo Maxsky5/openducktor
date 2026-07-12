@@ -7,6 +7,7 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage } from "./agent-chat-test-fixtures";
+import { formatTime } from "./message-formatting";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
 const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
@@ -66,6 +67,57 @@ const renderToHtml = async (element: ReturnType<typeof createElement>): Promise<
 };
 
 describe("AgentChatMessageCard tool duration", () => {
+  test("hides approximate hydrated tool timestamps", () => {
+    const timestamp = "2026-07-10T20:33:01.000Z";
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "hydrated-tool",
+          role: "tool",
+          content: "Tool search completed",
+          timestamp,
+          timestampIsApproximate: true,
+          meta: {
+            kind: "tool",
+            partId: "hydrated-tool-part",
+            callId: "hydrated-tool-call",
+            tool: "search",
+            toolType: "search",
+            status: "completed",
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).not.toContain(formatTime(timestamp));
+  });
+
+  test("keeps exact tool timestamps visible", () => {
+    const timestamp = "2026-07-10T20:33:19.261Z";
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "exact-tool",
+          role: "tool",
+          content: "Tool search completed",
+          timestamp,
+          meta: {
+            kind: "tool",
+            partId: "exact-tool-part",
+            callId: "exact-tool-call",
+            tool: "search",
+            toolType: "search",
+            status: "completed",
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(formatTime(timestamp));
+  });
+
   test("uses runtime part timing for workflow duration display", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

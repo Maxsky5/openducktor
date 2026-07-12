@@ -6,6 +6,10 @@ const request = (id: number, threadId: string) => ({
   method: "item/tool/requestUserInput",
   params: { threadId, turnId: `turn-${id}` },
 });
+const notification = (threadId: string, status: "active" | "idle") => ({
+  method: "thread/status/changed",
+  params: { threadId, status: { type: status } },
+});
 const receivedAt = "2026-07-06T12:00:00.000Z";
 
 describe("CodexRuntimeEventSubscriptions", () => {
@@ -69,6 +73,29 @@ describe("CodexRuntimeEventBuffer", () => {
     expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([]);
     expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
       { request: request(2, "child-thread"), receivedAt },
+    ]);
+  });
+
+  test("clears buffered notifications for one runtime only", () => {
+    const buffer = new CodexRuntimeEventBuffer();
+    buffer.bufferRuntimeStreamEvent("child-thread", {
+      runtimeId: "runtime-1",
+      kind: "notification",
+      receivedAt,
+      message: notification("child-thread", "active"),
+    });
+    buffer.bufferRuntimeStreamEvent("child-thread", {
+      runtimeId: "runtime-2",
+      kind: "notification",
+      receivedAt,
+      message: notification("child-thread", "idle"),
+    });
+
+    buffer.clearSession("child-thread", "runtime-1");
+
+    expect(buffer.takeNotifications("child-thread", "runtime-1")).toEqual([]);
+    expect(buffer.takeNotifications("child-thread", "runtime-2")).toEqual([
+      expect.objectContaining(notification("child-thread", "idle")),
     ]);
   });
 });

@@ -9,6 +9,7 @@ import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { codex0144MultiAgentV2Replay } from "./test-fixtures/codex-0-144-multi-agent-v2";
 import type { CodexSessionState } from "./types";
 
 const waitForRuntimeEvent = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -150,6 +151,450 @@ const createChildThreadSnapshot = (
 });
 
 describe("CodexRuntimeSessionEvents", () => {
+  test("projects Codex 0.144 MultiAgentV2 child completion onto the parent subagent", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    for (const event of codex0144MultiAgentV2Replay) {
+      listener?.({
+        runtimeId: "runtime-1",
+        kind: event.kind,
+        message: event.message,
+      });
+      await flushRuntimeEvents();
+    }
+
+    const subagentParts = emittedEvents.flatMap((event) => {
+      if (
+        typeof event !== "object" ||
+        event === null ||
+        !("type" in event) ||
+        event.type !== "assistant_part" ||
+        !("part" in event) ||
+        typeof event.part !== "object" ||
+        event.part === null ||
+        !("kind" in event.part) ||
+        event.part.kind !== "subagent"
+      ) {
+        return [];
+      }
+      return [event.part];
+    });
+
+    expect(subagentParts).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        externalSessionId: "child-thread",
+        status: "running",
+      }),
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        externalSessionId: "child-thread",
+        status: "completed",
+      }),
+    ]);
+  });
+
+  test("projects child completion buffered before the V2 parent-child link is learned", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+    });
+    const spawnEvent = codex0144MultiAgentV2Replay[0];
+    const childCompletionEvent = codex0144MultiAgentV2Replay[4];
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: childCompletionEvent.kind,
+      message: childCompletionEvent.message,
+    });
+    await flushRuntimeEvents();
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: spawnEvent.kind,
+      message: spawnEvent.message,
+    });
+    await flushRuntimeEvents();
+
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "parent-thread",
+        part: expect.objectContaining({
+          kind: "subagent",
+          externalSessionId: "child-thread",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  test("projects the newest runtime lifecycle state learned before the parent-child link", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+    });
+    const spawnEvent = codex0144MultiAgentV2Replay[0];
+    const childStartedEvent = codex0144MultiAgentV2Replay[1];
+    const staleChildCompletionEvent = codex0144MultiAgentV2Replay[4];
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    for (const event of [staleChildCompletionEvent, childStartedEvent]) {
+      listener?.({
+        runtimeId: "runtime-1",
+        kind: event.kind,
+        message: event.message,
+      });
+      await flushRuntimeEvents();
+    }
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: spawnEvent.kind,
+      message: spawnEvent.message,
+    });
+    await flushRuntimeEvents();
+
+    const statuses = emittedEvents.flatMap((event) => {
+      if (
+        typeof event !== "object" ||
+        event === null ||
+        !("type" in event) ||
+        event.type !== "assistant_part" ||
+        !("part" in event) ||
+        typeof event.part !== "object" ||
+        event.part === null ||
+        !("kind" in event.part) ||
+        event.part.kind !== "subagent" ||
+        !("status" in event.part)
+      ) {
+        return [];
+      }
+      return [event.part.status];
+    });
+
+    expect(statuses).toEqual(["running", "completed"]);
+  });
+
+  test("projects pre-link child completion when the child session is already loaded", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const childSession = createSession("child-thread");
+    const sessions = new Map([
+      [parentSession.threadId, parentSession],
+      [childSession.threadId, childSession],
+    ]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+    });
+    const spawnEvent = codex0144MultiAgentV2Replay[0];
+    const childCompletionEvent = codex0144MultiAgentV2Replay[4];
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: childCompletionEvent.kind,
+      message: childCompletionEvent.message,
+    });
+    await flushRuntimeEvents();
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: spawnEvent.kind,
+      message: spawnEvent.message,
+    });
+    await flushRuntimeEvents();
+
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "parent-thread",
+        part: expect.objectContaining({
+          kind: "subagent",
+          externalSessionId: "child-thread",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  test("keeps pre-link child lifecycle notifications isolated by runtime", async () => {
+    const listeners = new Map<string, RuntimeListener>();
+    const parentOne = createSessionForRuntime("parent-one", "runtime-1");
+    const parentTwo = createSessionForRuntime("parent-two", "runtime-2");
+    const sessions = new Map([
+      [parentOne.threadId, parentOne],
+      [parentTwo.threadId, parentTwo],
+    ]);
+    const sessionEvents = new CodexSessionEventBus();
+    const parentOneEvents: unknown[] = [];
+    const parentTwoEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentOne), (event) => parentOneEvents.push(event));
+    sessionEvents.subscribe(codexSessionRef(parentTwo), (event) => parentTwoEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (runtimeId, next) => {
+        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+    });
+    const childCompletionEvent = codex0144MultiAgentV2Replay[4];
+    const spawnEvent = codex0144MultiAgentV2Replay[0];
+    const spawnMessageForParent = (parentThreadId: string) => ({
+      ...spawnEvent.message,
+      params: {
+        ...spawnEvent.message.params,
+        threadId: parentThreadId,
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
+    listeners.get("runtime-1")?.({
+      runtimeId: "runtime-1",
+      kind: childCompletionEvent.kind,
+      message: childCompletionEvent.message,
+    });
+    await flushRuntimeEvents();
+    listeners.get("runtime-2")?.({
+      runtimeId: "runtime-2",
+      kind: spawnEvent.kind,
+      message: spawnMessageForParent("parent-two"),
+    });
+    await flushRuntimeEvents();
+
+    expect(parentTwoEvents).not.toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({ status: "completed" }),
+      }),
+    );
+
+    listeners.get("runtime-1")?.({
+      runtimeId: "runtime-1",
+      kind: spawnEvent.kind,
+      message: spawnMessageForParent("parent-one"),
+    });
+    await flushRuntimeEvents();
+
+    expect(parentOneEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "parent-one",
+        part: expect.objectContaining({
+          externalSessionId: "child-thread",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  test("handles identical child approval request ids independently across runtimes", async () => {
+    const listeners = new Map<string, RuntimeListener>();
+    const parentOne = createSessionForRuntime("parent-one", "runtime-1");
+    const parentTwo = createSessionForRuntime("parent-two", "runtime-2");
+    const sessions = new Map([
+      [parentOne.threadId, parentOne],
+      [parentTwo.threadId, parentTwo],
+    ]);
+    const sessionEvents = new CodexSessionEventBus();
+    const parentOneEvents: unknown[] = [];
+    const parentTwoEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentOne), (event) => parentOneEvents.push(event));
+    sessionEvents.subscribe(codexSessionRef(parentTwo), (event) => parentTwoEvents.push(event));
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: parentOne.threadId,
+      childThreadId: "shared-child-thread",
+      itemId: "spawn-one",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-2",
+      parentThreadId: parentTwo.threadId,
+      childThreadId: "shared-child-thread",
+      itemId: "spawn-two",
+      status: "running",
+    });
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (runtimeId, next) => {
+        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
+        return () => undefined;
+      },
+      sessions,
+      sessionEvents,
+      subagents,
+    });
+    const approval = {
+      id: 0,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "shared-child-thread",
+        turnId: "child-turn",
+        itemId: "child-command",
+        command: "pwd",
+        cwd: "/repo",
+      },
+    };
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
+    listeners.get("runtime-1")?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: approval,
+    });
+    await flushRuntimeEvents();
+    listeners.get("runtime-2")?.({
+      runtimeId: "runtime-2",
+      kind: "server_request",
+      message: approval,
+    });
+    await flushRuntimeEvents();
+
+    expect(parentOneEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: "parent-one",
+        requestId: "0",
+      }),
+    );
+    expect(parentTwoEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: "parent-two",
+        requestId: "0",
+      }),
+    );
+  });
+
+  test("restarts a terminal child from an actual buffered child turn start", async () => {
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "error",
+      error: "First child turn failed",
+      endedAtMs: 1_783_683_601_000,
+    });
+    const childTurnStarted = codex0144MultiAgentV2Replay[1];
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => [
+        bufferedNotificationEvent(childTurnStarted.message, "runtime-1"),
+      ],
+      sessions,
+      sessionEvents,
+      subagents,
+    });
+
+    await runtimeEvents.handleBufferedRuntimeEvents(parentSession, new Set());
+
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "parent-thread",
+        part: expect.objectContaining({
+          externalSessionId: "child-thread",
+          status: "running",
+        }),
+      }),
+    );
+    expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
+  });
+
+  test("retains child completion drained during token-usage collection", async () => {
+    const parentSession = createSession("parent-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const subagents = new CodexSubagentLinkState();
+    const childCompletion = codex0144MultiAgentV2Replay[4];
+    let bufferedEvents = [bufferedNotificationEvent(childCompletion.message, "runtime-1")];
+    const runtimeEvents = createRuntimeEvents({
+      takeBufferedEvents: async () => {
+        const events = bufferedEvents;
+        bufferedEvents = [];
+        return events;
+      },
+      sessions,
+      sessionEvents,
+      subagents,
+    });
+
+    await runtimeEvents
+      .historyLoadContext()
+      .collectThreadReadTokenUsage("runtime-1", "parent-thread");
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    await flushRuntimeEvents();
+
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "parent-thread",
+        part: expect.objectContaining({
+          externalSessionId: "child-thread",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
   test("clears turn-scoped stream metadata for one session only", () => {
     const runtimeEvents = createRuntimeEvents();
     const { modelByTurnKey } = runtimeEvents.historyLoadContext();
@@ -310,6 +755,53 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(hasPendingInput).toBe(false);
     expect(pendingInput.approval("buffered-approval-1")).toBeUndefined();
     expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
+  });
+
+  test("does not replay an answered child approval when the child session materializes", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const childSession = createSession("child-thread");
+    const sessions = new Map([[parentSession.threadId, parentSession]]);
+    const pendingInput = new CodexPendingInputState();
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    const childApproval = {
+      id: 0,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "child-thread",
+        turnId: "child-turn",
+        itemId: "child-command",
+        command: "pwd",
+        cwd: "/repo",
+      },
+    };
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      takeBufferedEvents: async () => [bufferedServerRequestEvent(childApproval)],
+      sessions,
+      pendingInput,
+      subagents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({ runtimeId: "runtime-1", kind: "server_request", message: childApproval });
+    await flushRuntimeEvents();
+    expect(pendingInput.approval("0")).toMatchObject({ threadId: "child-thread" });
+
+    pendingInput.resolveApproval("0");
+    sessions.set(childSession.threadId, childSession);
+    await runtimeEvents.handleBufferedRuntimeEvents(childSession, new Set());
+
+    expect(pendingInput.approval("0")).toBeUndefined();
   });
 
   test("uses server-request receipt time when binding a buffered active turn", async () => {

@@ -1,5 +1,7 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
+import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/support/message-timestamp";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
@@ -26,8 +28,13 @@ const transcriptHistoryVersion = (history: AgentSessionHistoryMessage[]): number
     hash = updateHash(hash, message.messageId);
     hash = updateHash(hash, message.role);
     hash = updateHash(hash, message.timestamp);
+    hash = updateHash(hash, message.timestampIsApproximate ? "approximate" : "exact");
     hash = updateHash(hash, message.text);
     hash = updateHash(hash, JSON.stringify(message.parts));
+    hash = updateHash(
+      hash,
+      JSON.stringify(message.role === "system" ? (message.notice ?? null) : null),
+    );
   }
   return hash;
 };
@@ -101,7 +108,7 @@ const areMessagesEquivalent = (left: AgentChatMessage, right: AgentChatMessage):
   left.id === right.id &&
   left.role === right.role &&
   left.content === right.content &&
-  left.timestamp === right.timestamp &&
+  haveSameMessageTimestamp(left, right) &&
   left.meta === right.meta;
 
 const areMessageListsEquivalent = (
@@ -122,12 +129,12 @@ export const mergeReadonlyRuntimeHistory = (
   history: AgentSessionHistoryMessage[],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
-  const historyMessageIds = new Set(historyMessages.map((message) => message.id));
-  const liveMessageById = new Map(session.messages.items.map((message) => [message.id, message]));
-  const mergedMessages = [
-    ...historyMessages.map((message) => liveMessageById.get(message.id) ?? message),
-    ...session.messages.items.filter((message) => !historyMessageIds.has(message.id)),
-  ];
+  const mergedMessageState = mergeHistoryMessages(
+    session.externalSessionId,
+    createSessionMessagesState(session.externalSessionId, historyMessages),
+    session.messages,
+  );
+  const mergedMessages = mergedMessageState.items;
 
   if (
     session.historyLoadState === "loaded" &&
@@ -140,10 +147,6 @@ export const mergeReadonlyRuntimeHistory = (
     ...session,
     startedAt: history[0]?.timestamp ?? session.startedAt,
     historyLoadState: "loaded",
-    messages: createSessionMessagesState(
-      session.externalSessionId,
-      mergedMessages,
-      session.messages.version + 1,
-    ),
+    messages: mergedMessageState,
   };
 };

@@ -28,7 +28,10 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
-import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
+import {
+  createReadonlyTranscriptSession,
+  mergeReadonlyRuntimeHistory,
+} from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 import { useRuntimeTranscriptLiveOverlay } from "./use-runtime-transcript-live-overlay";
 
@@ -124,16 +127,23 @@ export function useRuntimeTranscriptSessionHistory({
     matchesAgentSessionIdentity(liveSession, stableTarget)
       ? liveSession
       : null;
+  const policySession = matchingLiveSession ?? stableTarget;
+  const policySessionRuntimeKind = policySession?.runtimeKind ?? null;
+  const policySessionScope = policySession ? sessionScopeForPolicySession(policySession) : null;
+  const policySessionScopeTaskId = policySessionScope?.taskId ?? null;
+  const policySessionScopeRole = policySessionScope?.role ?? null;
   const runtimePolicyTarget = useMemo(() => {
-    const policySession = matchingLiveSession ?? stableTarget;
-    if (policySession === null) {
+    if (policySessionRuntimeKind === null) {
       return null;
     }
     return {
-      runtimeKind: policySession.runtimeKind,
-      sessionScope: sessionScopeForPolicySession(policySession),
+      runtimeKind: policySessionRuntimeKind,
+      sessionScope:
+        policySessionScopeTaskId !== null && policySessionScopeRole !== null
+          ? workflowAgentSessionScope(policySessionScopeTaskId, policySessionScopeRole)
+          : null,
     };
-  }, [matchingLiveSession, stableTarget]);
+  }, [policySessionRuntimeKind, policySessionScopeRole, policySessionScopeTaskId]);
   const settingsSnapshotQuery = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: runtimePolicyTarget?.runtimeKind === "codex",
@@ -171,17 +181,15 @@ export function useRuntimeTranscriptSessionHistory({
   const runtimePolicy = runtimePolicyResult.runtimePolicy;
   const runtimeSessionScope = runtimePolicyTarget?.sessionScope ?? null;
   const runtimeSessionRef = useMemo<PolicyBoundSessionRef | null>(() => {
-    const policySession = matchingLiveSession ?? stableTarget;
-    if (repoPath === null || policySession === null || runtimePolicy === null) {
+    if (repoPath === null || stableTarget === null || runtimePolicy === null) {
       return null;
     }
     return {
-      ...toRuntimeSessionRefWithPolicy(repoPath, policySession, runtimePolicy),
+      ...toRuntimeSessionRefWithPolicy(repoPath, stableTarget, runtimePolicy),
       ...(runtimeSessionScope ? { sessionScope: runtimeSessionScope } : {}),
     };
-  }, [matchingLiveSession, repoPath, runtimePolicy, runtimeSessionScope, stableTarget]);
-  const shouldLoadHistory =
-    emptyReason === null && matchingLiveSession === null && runtimeSessionRef !== null;
+  }, [repoPath, runtimePolicy, runtimeSessionScope, stableTarget]);
+  const shouldLoadHistory = emptyReason === null && runtimeSessionRef !== null;
   const shouldObserveRuntimeSession =
     shouldLoadHistory &&
     repoPath !== null &&
@@ -201,6 +209,7 @@ export function useRuntimeTranscriptSessionHistory({
     repoPath,
     target: stableTarget,
     sessionRef: runtimeSessionRef,
+    baseSession: matchingLiveSession,
     history: historyQuery.data,
     shouldMergeHistory: shouldLoadHistory,
     replyAgentApproval,
@@ -208,8 +217,14 @@ export function useRuntimeTranscriptSessionHistory({
   });
 
   const session = useMemo(() => {
+    if (liveOverlay.interactionSession !== null && liveOverlay.session !== null) {
+      return toAgentChatThreadSession(liveOverlay.session);
+    }
     if (matchingLiveSession !== null) {
-      return toAgentChatThreadSession(matchingLiveSession);
+      const sessionWithHistory = historyQuery.data
+        ? mergeReadonlyRuntimeHistory(matchingLiveSession, historyQuery.data)
+        : matchingLiveSession;
+      return toAgentChatThreadSession(sessionWithHistory);
     }
     if (liveOverlay.hasVisibleRuntimeData && liveOverlay.session !== null) {
       return toAgentChatThreadSession(liveOverlay.session);
@@ -225,13 +240,14 @@ export function useRuntimeTranscriptSessionHistory({
   }, [
     historyQuery.data,
     liveOverlay.hasVisibleRuntimeData,
+    liveOverlay.interactionSession,
     liveOverlay.session,
     matchingLiveSession,
     repoPath,
     shouldLoadHistory,
     stableTarget,
   ]);
-  const interactionSession = matchingLiveSession ?? liveOverlay.interactionSession;
+  const interactionSession = liveOverlay.interactionSession ?? matchingLiveSession;
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };
