@@ -394,7 +394,7 @@ describe("createGithubPullRequestReviewProvider", () => {
     ]);
   });
 
-  test("scopes pull request gh commands with --repo instead of --hostname", async () => {
+  test("scopes pull request gh commands to the configured host and repository", async () => {
     const provider = createGithubPullRequestReviewProvider();
     const commands: string[][] = [];
 
@@ -416,7 +416,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       "--json",
       "number,title,url,state,isDraft,comments,reviews,latestReviews",
       "--repo",
-      "openai/openducktor",
+      "github.com/openai/openducktor",
     ]);
     expect(pullRequestCommands).toContainEqual([
       "pr",
@@ -425,7 +425,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       "--json",
       "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
       "--repo",
-      "openai/openducktor",
+      "github.com/openai/openducktor",
     ]);
     expect(pullRequestCommands.flat()).not.toContain("--hostname");
   });
@@ -450,6 +450,41 @@ describe("createGithubPullRequestReviewProvider", () => {
       "github-review:0",
       "review",
     ]);
+  });
+
+  test("uses the full review history when gh also returns latest reviews", async () => {
+    const provider = createGithubPullRequestReviewProvider();
+    const pullRequestViewResponse = defaultPullRequestViewResponse(true) as {
+      reviews: unknown[];
+      latestReviews?: unknown[];
+    };
+    pullRequestViewResponse.reviews.push({
+      id: "review-2",
+      author: { login: "reviewer" },
+      body: "Follow-up review.",
+      state: "COMMENTED",
+      submittedAt: "2026-07-08T10:03:00Z",
+    });
+    pullRequestViewResponse.latestReviews = [pullRequestViewResponse.reviews[1]];
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({ pullRequestViewResponse }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(
+      context.comments
+        .filter((comment) => comment.source === "review")
+        .map((comment) => comment.body),
+    ).toEqual(["Changes requested.", "Follow-up review."]);
   });
 
   test("includes unresolved code review threads alongside review summaries", async () => {

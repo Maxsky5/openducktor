@@ -296,10 +296,10 @@ const parsePullView = (
       comments.push(normalized);
     }
   }
-  const reviews = Array.isArray(view.latestReviews)
-    ? view.latestReviews
-    : Array.isArray(view.reviews)
-      ? view.reviews
+  const reviews = Array.isArray(view.reviews)
+    ? view.reviews
+    : Array.isArray(view.latestReviews)
+      ? view.latestReviews
       : [];
   for (const [reviewIndex, review] of reviews.entries()) {
     const normalized = toComment(

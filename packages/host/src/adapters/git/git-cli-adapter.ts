@@ -116,7 +116,7 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     getRepositoryRoot(workingDirectory) {
       return Effect.gen(function* () {
         const output = yield* runGit(runner, workingDirectory, ["rev-parse", "--show-toplevel"]);
-        const repositoryRoot = output.trim();
+        const repositoryRoot = output.replace(/\r?\n$/u, "");
         if (!repositoryRoot) {
           return yield* Effect.fail(
             new HostOperationError({

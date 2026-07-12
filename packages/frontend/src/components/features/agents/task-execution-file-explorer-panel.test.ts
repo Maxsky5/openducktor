@@ -39,14 +39,20 @@ describe("normalizeTaskExecutionFileTreeSelectionPath", () => {
 });
 
 describe("buildTaskExecutionFileTreeInputPaths", () => {
-  test("passes only file leaves to PierreTrees", () => {
+  test("passes explicit directories and file leaves to PierreTrees", () => {
     expect(
       buildTaskExecutionFileTreeInputPaths([
         directoryEntry(".agent"),
         directoryEntry(".agent/.shared"),
         fileEntry(".agent/.shared/charts.csv"),
       ]),
-    ).toEqual([".agent/.shared/charts.csv"]);
+    ).toEqual([".agent/", ".agent/.shared/", ".agent/.shared/charts.csv"]);
+  });
+
+  test("keeps directory-only entries visible", () => {
+    expect(buildTaskExecutionFileTreeInputPaths([directoryEntry("nested-checkout")])).toEqual([
+      "nested-checkout/",
+    ]);
   });
 });
 

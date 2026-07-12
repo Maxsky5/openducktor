@@ -5,8 +5,7 @@ import type { GithubCommandDependencies } from "./github-pull-requests";
 
 const githubRepositorySelector = (repository: GitProviderRepository): string => {
   const host = repository.host.trim();
-  const prefix = host.toLowerCase() === "github.com" ? "" : `${host}/`;
-  return `${prefix}${repository.owner.trim()}/${repository.name.trim()}`;
+  return `${host}/${repository.owner.trim()}/${repository.name.trim()}`;
 };
 
 export const runGithubRepositoryCommandAllowFailure = (

@@ -114,6 +114,7 @@ const canonicalizeContainedFile = (
   filesystem: FilesystemPort,
   canonicalRoot: string,
   relativePath: string,
+  listedFilePaths: readonly string[],
 ) =>
   Effect.gen(function* () {
     const requestedPath = filesystem.join(canonicalRoot, relativePath);
@@ -130,6 +131,19 @@ const canonicalizeContainedFile = (
         new HostValidationError({
           field: "relativePath",
           message: `File '${relativePath}' is outside the selected workspace root.`,
+          details: { rootPath: canonicalRoot, relativePath },
+        }),
+      );
+    }
+    const canonicalTargetIsListed = listedFilePaths.some(
+      (listedPath) =>
+        filesystem.relative(filesystem.join(canonicalRoot, listedPath), canonicalPath) === "",
+    );
+    if (!canonicalTargetIsListed) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "relativePath",
+          message: `File '${relativePath}' target is not available in the workspace file tree.`,
           details: { rootPath: canonicalRoot, relativePath },
         }),
       );
@@ -379,6 +393,7 @@ export const createWorkspaceFilesService = (
         filesystem,
         canonicalRoot,
         relativePath,
+        listedFilePaths,
       );
       const metadata = yield* filesystem.stat(canonicalPath).pipe(
         Effect.mapError((cause) =>

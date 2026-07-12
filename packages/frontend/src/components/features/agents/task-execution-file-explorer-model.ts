@@ -21,9 +21,7 @@ export const buildTaskExecutionFileTreeInputPaths = (
 ): string[] => {
   const paths: string[] = [];
   for (const entry of entries ?? []) {
-    if (entry.kind === "file") {
-      paths.push(entry.path);
-    }
+    paths.push(entry.kind === "directory" ? `${entry.path}/` : entry.path);
   }
   return paths;
 };

@@ -131,6 +131,18 @@ describe("createGitCliAdapter", () => {
       "/repo",
     );
   });
+
+  test("preserves repository root whitespace while removing the line terminator", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "rev-parse --show-toplevel": " /repo with spaces/ \r\n",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getRepositoryRoot(" /repo with spaces/ "))).resolves.toBe(
+      " /repo with spaces/ ",
+    );
+  });
   test("uses the destination path for NUL-delimited rename status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({

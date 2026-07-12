@@ -455,6 +455,50 @@ describe("createWorkspaceFilesService", () => {
     ).rejects.toThrow("not available in the workspace file tree");
   });
 
+  test("rejects tracked symlinks whose canonical targets are not exposed", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        canonical: {
+          "/repo/secrets": "/repo/.env",
+        },
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/.env": { isDirectory: false, isFile: true, size: 12, mtimeMs: 20 },
+        },
+        files: {
+          "/repo/.env": encoder.encode("SECRET=value"),
+        },
+      }),
+      createFakeGitPort({ files: ["secrets"] }),
+    );
+
+    await expect(
+      Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "secrets" })),
+    ).rejects.toThrow("target is not available in the workspace file tree");
+  });
+
+  test("allows tracked symlinks whose canonical targets are also exposed", async () => {
+    const service = createWorkspaceFilesService(
+      createFakeFilesystem({
+        canonical: {
+          "/repo/config-link": "/repo/config.txt",
+        },
+        stats: {
+          "/repo": { isDirectory: true },
+          "/repo/config.txt": { isDirectory: false, isFile: true, size: 2, mtimeMs: 20 },
+        },
+        files: {
+          "/repo/config.txt": encoder.encode("ok"),
+        },
+      }),
+      createFakeGitPort({ files: ["config-link", "config.txt"] }),
+    );
+
+    await expect(
+      Effect.runPromise(service.readTextFile({ rootPath: "/repo", relativePath: "config-link" })),
+    ).resolves.toMatchObject({ kind: "text", relativePath: "config-link", contents: "ok" });
+  });
+
   test("requires a Git repository when reading a workspace file", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({
