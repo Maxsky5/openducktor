@@ -263,6 +263,15 @@ export const resolveStaticAssetPath = (staticRoot: string, requestPath: string):
   } catch {
     return null;
   }
+  for (const character of decodedPath) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint !== undefined &&
+      (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
+    ) {
+      return null;
+    }
+  }
   const relativePath = decodedPath === "/" ? "index.html" : decodedPath.replace(/^\/+/, "");
   const normalized = path.normalize(relativePath);
   if (normalized.startsWith("..") || path.isAbsolute(normalized)) {

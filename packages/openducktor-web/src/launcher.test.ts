@@ -311,6 +311,12 @@ describe("launcher internals", () => {
     expect(resolveStaticAssetPath("/web-shell", "/%E0%A4%A")).toBeNull();
   });
 
+  test("rejects decoded control characters in static request paths", () => {
+    expect(resolveStaticAssetPath("/web-shell", "/%00")).toBeNull();
+    expect(resolveStaticAssetPath("/web-shell", "/%0A")).toBeNull();
+    expect(resolveStaticAssetPath("/web-shell", "/%C2%80")).toBeNull();
+  });
+
   test("resolves static requests against the startup asset index", () => {
     const staticRoot = path.resolve("/web-shell");
     const indexPath = path.join(staticRoot, "index.html");
@@ -326,6 +332,7 @@ describe("launcher internals", () => {
     expect(
       resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/missing%2Ejs"),
     ).toBeNull();
+    expect(resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/%00")).toBeNull();
     expect(resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/tasks/example")).toBe(
       indexPath,
     );
