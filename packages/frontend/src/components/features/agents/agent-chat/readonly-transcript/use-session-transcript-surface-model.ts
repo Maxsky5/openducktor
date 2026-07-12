@@ -3,11 +3,7 @@ import { useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import {
-  useAgentOperations,
-  useAgentSession,
-  useAgentSessionVisiblePendingInput,
-} from "@/state/app-state-provider";
+import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
@@ -52,7 +48,6 @@ export function useSessionTranscriptSurfaceModel({
   target,
 }: UseSessionTranscriptSurfaceModelArgs) {
   const hasWorkspace = workspaceRepoPath !== null;
-  const { replyAgentApproval, answerAgentQuestion } = useAgentOperations();
   const liveSession = useAgentSession(isOpen ? target : null);
   const visiblePendingInput = useAgentSessionVisiblePendingInput(isOpen ? target : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
@@ -92,8 +87,8 @@ export function useSessionTranscriptSurfaceModel({
     pendingApprovalRequests,
     pendingQuestionRequests,
     isRuntimeReady: runtimeReadiness.state === "ready",
-    replyAgentApproval,
-    answerAgentQuestion,
+    replyAgentApproval: sessionHistory.replyAgentApproval,
+    answerAgentQuestion: sessionHistory.answerAgentQuestion,
   });
 
   const transcriptSurfaceState = deriveRuntimeTranscriptSurfaceState({

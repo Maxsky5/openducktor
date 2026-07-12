@@ -36,7 +36,12 @@ const subscribeSessionEventsRef: {
   current: async () => () => undefined,
 };
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-const replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"] = async () => undefined;
+const replyAgentApprovalRef: {
+  current: AgentOperationsContextValue["replyAgentApproval"];
+} = { current: async () => undefined };
+const answerAgentQuestionRef: {
+  current: AgentOperationsContextValue["answerAgentQuestion"];
+} = { current: async () => undefined };
 
 const operationsValue = (): AgentOperationsContextValue => ({
   readSessionHistory: readSessionHistoryRef.current,
@@ -51,8 +56,8 @@ const operationsValue = (): AgentOperationsContextValue => ({
   sendAgentMessage: async () => undefined,
   stopAgentSession: async () => undefined,
   updateAgentSessionModel: () => undefined,
-  replyAgentApproval,
-  answerAgentQuestion: async () => undefined,
+  replyAgentApproval: replyAgentApprovalRef.current,
+  answerAgentQuestion: answerAgentQuestionRef.current,
 });
 
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
@@ -113,6 +118,14 @@ const createLiveApprovalEvent = (): Extract<AgentEvent, { type: "approval_requir
   timestamp: "2026-02-22T12:01:00.000Z",
 });
 
+const createLiveQuestionEvent = (): Extract<AgentEvent, { type: "question_required" }> => ({
+  type: "question_required",
+  externalSessionId: "session-1",
+  requestId: "question-live",
+  questions: [{ header: "Confirm", question: "Continue?", options: [] }],
+  timestamp: "2026-02-22T12:01:00.000Z",
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isOpen: true,
   repoPath: "/repo-a",
@@ -125,6 +138,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 describe("useRuntimeTranscriptSessionHistory", () => {
   beforeEach(() => {
     subscribeSessionEventsRef.current = async () => () => undefined;
+    replyAgentApprovalRef.current = async () => undefined;
+    answerAgentQuestionRef.current = async () => undefined;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
@@ -182,6 +197,98 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(harness.getLatest().interactionSession?.externalSessionId).toBe("session-1");
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("replies to transient input through the bound runtime ref and clears resolved controls", async () => {
+    host.workspaceGetSettingsSnapshot = async () =>
+      createSettingsSnapshotFixture({
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          codex: {
+            enabled: true,
+            defaults: {
+              sandboxMode: "read-only",
+              approvalPolicy: "untrusted",
+              approvalsReviewer: "user",
+              commandNetworkAccess: false,
+            },
+            roleOverrides: {
+              spec: {
+                sandboxMode: "workspace-write",
+                approvalPolicy: "on-request",
+                approvalsReviewer: "auto_review",
+                commandNetworkAccess: true,
+              },
+            },
+          },
+        },
+      });
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "spec" as const };
+    let listener: ((event: AgentEvent) => void) | null = null;
+    subscribeSessionEventsRef.current = async (_sessionRef, nextListener) => {
+      listener = nextListener;
+      return () => undefined;
+    };
+    const replyAgentApproval = mock(async () => undefined);
+    const answerAgentQuestion = mock(async () => undefined);
+    replyAgentApprovalRef.current = replyAgentApproval;
+    answerAgentQuestionRef.current = answerAgentQuestion;
+    readSessionHistoryRef.current = async () => [createHistoryMessage()];
+    const target = createTarget({ runtimeKind: "codex", sessionScope });
+    const harness = createHookHarness(createBaseArgs({ target }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null && listener !== null);
+      await harness.run(async () => {
+        listener?.(createLiveApprovalEvent());
+        listener?.(createLiveQuestionEvent());
+      });
+      await harness.waitFor(
+        (state) =>
+          state.interactionSession?.pendingApprovals.length === 1 &&
+          state.interactionSession.pendingQuestions.length === 1,
+      );
+
+      const approval = harness.getLatest().interactionSession?.pendingApprovals[0];
+      const question = harness.getLatest().interactionSession?.pendingQuestions[0];
+      if (!approval || !question) {
+        throw new Error("Expected transient pending input.");
+      }
+      await harness.run(async () => {
+        await harness.getLatest().replyAgentApproval(target, approval, "approve_once");
+        await harness.getLatest().answerAgentQuestion(target, question, [["yes"]]);
+      });
+
+      const expectedRef = {
+        repoPath: "/repo-a",
+        runtimeKind: "codex",
+        workingDirectory: "/repo-a/worktree",
+        externalSessionId: "session-1",
+        sessionScope,
+        runtimePolicy: {
+          kind: "codex",
+          policy: {
+            sandboxMode: "workspace-write",
+            approvalPolicy: "on-request",
+            approvalsReviewer: "auto_review",
+            approvalsReviewerApplies: true,
+            commandNetworkAccess: true,
+          },
+        },
+      };
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        expectedRef,
+        approval,
+        "approve_once",
+        undefined,
+      );
+      expect(answerAgentQuestion).toHaveBeenCalledWith(expectedRef, question, [["yes"]]);
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([]);
+      expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
     } finally {
       await harness.unmount();
     }
@@ -391,6 +498,8 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       return () => undefined;
     };
     readSessionHistoryRef.current = async () => [];
+    const replyAgentApproval = mock(async () => undefined);
+    replyAgentApprovalRef.current = replyAgentApproval;
     const liveSession = createAgentSessionFixture({
       externalSessionId: "session-1",
       status: "running",
@@ -404,6 +513,15 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.waitFor(() => subscribed.listener !== null);
       await harness.run(async () => subscribed.listener?.(createLiveApprovalEvent()));
       await harness.waitFor((state) => state.interactionSession?.pendingApprovals.length === 1);
+      const approval = harness.getLatest().interactionSession?.pendingApprovals[0];
+      if (!approval) {
+        throw new Error("Expected overlay approval.");
+      }
+      await harness.run(async () => {
+        await harness.getLatest().replyAgentApproval(createTarget(), approval, "approve_once");
+      });
+
+      expect(replyAgentApproval).toHaveBeenCalledWith(createTarget(), approval, "approve_once");
     } finally {
       await harness.unmount();
     }

@@ -1,5 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, PolicyBoundSessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import type {
@@ -79,6 +79,9 @@ type PendingInputReplyContext = {
   loadedSessionsToUpdate: AgentSessionState[];
 };
 
+const isPolicyBoundSessionRef = (session: AgentSessionIdentity): session is PolicyBoundSessionRef =>
+  "repoPath" in session && "runtimePolicy" in session;
+
 const readUniqueLoadedSessions = (
   readSessionSnapshot: ReadSessionSnapshot,
   identities: readonly AgentSessionIdentity[],
@@ -134,6 +137,15 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
+    if (isPolicyBoundSessionRef(identity)) {
+      await dependencies.adapter.replyApproval({
+        ...identity,
+        requestId: request.requestId,
+        outcome,
+        ...(message ? { message } : {}),
+      });
+      return;
+    }
     const { runtimeSession, loadedSessionsToUpdate } = resolvePendingInputReplyContext({
       readSessionSnapshot: dependencies.readSessionSnapshot,
       currentSession: identity,
@@ -168,6 +180,14 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     request: AgentQuestionRequest,
     answers: string[][],
   ): Promise<void> => {
+    if (isPolicyBoundSessionRef(identity)) {
+      await dependencies.adapter.replyQuestion({
+        ...identity,
+        requestId: request.requestId,
+        answers,
+      });
+      return;
+    }
     const { runtimeSession, loadedSessionsToUpdate } = resolvePendingInputReplyContext({
       readSessionSnapshot: dependencies.readSessionSnapshot,
       currentSession: identity,

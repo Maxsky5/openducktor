@@ -25,6 +25,7 @@ import {
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
@@ -47,6 +48,8 @@ type RuntimeTranscriptSessionHistory = {
   session: AgentChatThreadSession | null;
   interactionSession: AgentSessionState | null;
   transcriptState: AgentSessionTranscriptState;
+  replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
+  answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 
 const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHistoryMessage[]>({
@@ -81,7 +84,8 @@ export function useRuntimeTranscriptSessionHistory({
   repoReadinessState,
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
-  const { readSessionHistory, replyAgentApproval, subscribeSessionEvents } = useAgentOperations();
+  const { readSessionHistory, replyAgentApproval, answerAgentQuestion, subscribeSessionEvents } =
+    useAgentOperations();
   const targetExternalSessionId = target?.externalSessionId ?? null;
   const targetRuntimeKind = target?.runtimeKind ?? null;
   const targetWorkingDirectory = target?.workingDirectory ?? null;
@@ -213,6 +217,7 @@ export function useRuntimeTranscriptSessionHistory({
     history: historyQuery.data,
     shouldMergeHistory: shouldLoadHistory,
     replyAgentApproval,
+    answerAgentQuestion,
     subscribeSessionEvents,
   });
 
@@ -248,6 +253,8 @@ export function useRuntimeTranscriptSessionHistory({
     stableTarget,
   ]);
   const interactionSession = liveOverlay.interactionSession ?? matchingLiveSession;
+  const useTransientInteractionActions =
+    matchingLiveSession === null && liveOverlay.interactionSession !== null;
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };
@@ -290,5 +297,13 @@ export function useRuntimeTranscriptSessionHistory({
     session,
     interactionSession,
     transcriptState,
+    replyAgentApproval:
+      useTransientInteractionActions && liveOverlay.replyAgentApproval
+        ? liveOverlay.replyAgentApproval
+        : replyAgentApproval,
+    answerAgentQuestion:
+      useTransientInteractionActions && liveOverlay.answerAgentQuestion
+        ? liveOverlay.answerAgentQuestion
+        : answerAgentQuestion,
   };
 }

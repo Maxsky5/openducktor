@@ -36,6 +36,31 @@ describe("CodexSubagentLinkState", () => {
     expect(restarted).not.toHaveProperty("error");
   });
 
+  test("restarts a child completed by a snapshot without terminal timing", () => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.recordThread(
+      {
+        id: "child-thread",
+        cwd: "/repo",
+        parentThreadId: "parent-thread",
+        status: { classification: "idle", rawType: "idle" },
+      },
+      "runtime-1",
+    );
+
+    const restarted = subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "resume-1",
+      status: "running",
+      allowStatusRestart: true,
+      startedAtMs: 200,
+    });
+
+    expect(restarted).toMatchObject({ status: "running", startedAtMs: 200 });
+  });
+
   test("clears links for one runtime without deleting matching thread ids in another runtime", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({

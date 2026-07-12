@@ -7,6 +7,7 @@ import {
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import { codexTurnKey } from "./codex-app-server-requests";
+import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
 import {
   type CodexTokenUsageTotals,
   codexTodosFromThreadRead,
@@ -224,12 +225,17 @@ export const loadCodexSessionHistory = async ({
   }
   rememberTodos(input.externalSessionId, codexTodosFromThreadRead(response));
   const forkedFromThreadId = codexForkedFromThreadId(response);
-  const [parentTurnIds, tokenUsageByTurnId] = await Promise.all([
-    forkedFromThreadId
-      ? threadInventory.readThreadTurnIds(client, forkedFromThreadId)
-      : Promise.resolve(null),
-    collectThreadReadTokenUsage(runtimeId, input.externalSessionId),
-  ]);
+  const tokenUsageByTurnId = await collectThreadReadTokenUsage(runtimeId, input.externalSessionId);
+  let parentTurnIds: ReadonlySet<string> | null = null;
+  if (forkedFromThreadId) {
+    try {
+      parentTurnIds = await threadInventory.readThreadTurnIds(client, forkedFromThreadId);
+    } catch (error) {
+      if (!isCodexThreadNotLoadedError(error)) {
+        throw error;
+      }
+    }
+  }
   const forkBoundary = parentTurnIds ? resolveCodexForkBoundary(response, parentTurnIds) : null;
   return projectCodexThreadReadToHistory({
     input,

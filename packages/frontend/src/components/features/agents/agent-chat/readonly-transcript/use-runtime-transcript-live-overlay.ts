@@ -1,5 +1,5 @@
 import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openducktor/core";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { observeTransientAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/transient-session-events";
 import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
@@ -25,6 +25,8 @@ type RuntimeTranscriptLiveOverlay = {
   error: string | null;
   hasHistoryBase: boolean;
   hasVisibleRuntimeData: boolean;
+  replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"] | null;
+  answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"] | null;
 };
 
 type UseRuntimeTranscriptLiveOverlayArgs = {
@@ -36,6 +38,7 @@ type UseRuntimeTranscriptLiveOverlayArgs = {
   history: AgentSessionHistoryMessage[] | undefined;
   shouldMergeHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
+  answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
   subscribeSessionEvents: AgentOperationsContextValue["subscribeSessionEvents"];
 };
 
@@ -45,6 +48,8 @@ const EMPTY_RUNTIME_TRANSCRIPT_LIVE_OVERLAY: RuntimeTranscriptLiveOverlay = {
   error: null,
   hasHistoryBase: false,
   hasVisibleRuntimeData: false,
+  replyAgentApproval: null,
+  answerAgentQuestion: null,
 };
 
 const hasVisibleRuntimeData = (session: AgentSessionState): boolean =>
@@ -95,15 +100,18 @@ export function useRuntimeTranscriptLiveOverlay({
   history,
   shouldMergeHistory,
   replyAgentApproval,
+  answerAgentQuestion,
   subscribeSessionEvents,
 }: UseRuntimeTranscriptLiveOverlayArgs): RuntimeTranscriptLiveOverlay {
   const [liveState, setLiveState] = useState<RuntimeTranscriptLiveState | null>(null);
   const liveStateRef = useRef<RuntimeTranscriptLiveState | null>(null);
   const baseSessionRef = useRef(baseSession);
   const replyAgentApprovalRef = useRef(replyAgentApproval);
+  const answerAgentQuestionRef = useRef(answerAgentQuestion);
   const subscribeSessionEventsRef = useRef(subscribeSessionEvents);
   baseSessionRef.current = baseSession;
   replyAgentApprovalRef.current = replyAgentApproval;
+  answerAgentQuestionRef.current = answerAgentQuestion;
   subscribeSessionEventsRef.current = subscribeSessionEvents;
 
   useEffect(() => {
@@ -219,6 +227,58 @@ export function useRuntimeTranscriptLiveOverlay({
     });
   }, [history, shouldMergeHistory, target]);
 
+  const replyOverlayApproval = useCallback<AgentOperationsContextValue["replyAgentApproval"]>(
+    async (_identity, request, outcome, message) => {
+      if (!sessionRef) {
+        throw new Error("Cannot reply to a transcript approval without a runtime session ref.");
+      }
+      await replyAgentApprovalRef.current(sessionRef, request, outcome, message);
+      setLiveState((current) => {
+        if (!current || !matchesAgentSessionIdentity(current.session, sessionRef)) {
+          return current;
+        }
+        const nextState = {
+          ...current,
+          session: {
+            ...current.session,
+            pendingApprovals: current.session.pendingApprovals.filter(
+              (entry) => entry.requestId !== request.requestId,
+            ),
+          },
+        };
+        liveStateRef.current = nextState;
+        return nextState;
+      });
+    },
+    [sessionRef],
+  );
+
+  const answerOverlayQuestion = useCallback<AgentOperationsContextValue["answerAgentQuestion"]>(
+    async (_identity, request, answers) => {
+      if (!sessionRef) {
+        throw new Error("Cannot answer a transcript question without a runtime session ref.");
+      }
+      await answerAgentQuestionRef.current(sessionRef, request, answers);
+      setLiveState((current) => {
+        if (!current || !matchesAgentSessionIdentity(current.session, sessionRef)) {
+          return current;
+        }
+        const nextState = {
+          ...current,
+          session: {
+            ...current.session,
+            pendingQuestions: current.session.pendingQuestions.filter(
+              (entry) => entry.requestId !== request.requestId,
+            ),
+          },
+        };
+        liveStateRef.current = nextState;
+        return nextState;
+      });
+    },
+    [sessionRef],
+  );
+
   if (
     target === null ||
     !liveState?.session ||
@@ -235,5 +295,7 @@ export function useRuntimeTranscriptLiveOverlay({
     error: liveState.error,
     hasHistoryBase: session.historyLoadState === "loaded",
     hasVisibleRuntimeData: hasRuntimeEvents && hasVisibleRuntimeData(session),
+    replyAgentApproval: hasRuntimeEvents ? replyOverlayApproval : null,
+    answerAgentQuestion: hasRuntimeEvents ? answerOverlayQuestion : null,
   };
 }

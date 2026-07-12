@@ -224,7 +224,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     try {
       await expect(
         actions.replyAgentApproval(
-          buildSession({ externalSessionId: "session-transcript-1" }),
+          {
+            externalSessionId: "session-transcript-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo",
+          },
           missingApprovalRequest("perm-1"),
           "approve_once",
         ),
@@ -232,6 +236,38 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
       expect(replyCalls).toBe(0);
       expect(updateCalls).toBe(0);
+    } finally {
+      adapter.replyApproval = originalReplyApproval;
+    }
+  });
+
+  test("replies through a policy-bound transient transcript ref", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyApproval = adapter.replyApproval;
+    const replies: Array<{ requestId: string; outcome: string }> = [];
+    adapter.replyApproval = async (input) => {
+      replies.push({ requestId: input.requestId, outcome: input.outcome });
+    };
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef: createSessionsRef(),
+    });
+    const transientSessionRef = {
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-transcript-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo",
+      runtimePolicy: { kind: "opencode" as const },
+    };
+
+    try {
+      await actions.replyAgentApproval(
+        transientSessionRef,
+        missingApprovalRequest("perm-1"),
+        "approve_once",
+      );
+
+      expect(replies).toEqual([{ requestId: "perm-1", outcome: "approve_once" }]);
     } finally {
       adapter.replyApproval = originalReplyApproval;
     }
@@ -337,7 +373,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     try {
       await expect(
         actions.answerAgentQuestion(
-          buildSession({ externalSessionId: "session-transcript-1" }),
+          {
+            externalSessionId: "session-transcript-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo",
+          },
           missingQuestionRequest("question-1"),
           [["yes"]],
         ),
@@ -345,6 +385,36 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
       expect(replyCalls).toBe(0);
       expect(updateCalls).toBe(0);
+    } finally {
+      adapter.replyQuestion = originalReplyQuestion;
+    }
+  });
+
+  test("answers through a policy-bound transient transcript ref", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyQuestion = adapter.replyQuestion;
+    const replies: Array<{ requestId: string; answers: string[][] }> = [];
+    adapter.replyQuestion = async (input) => {
+      replies.push({ requestId: input.requestId, answers: input.answers });
+    };
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef: createSessionsRef(),
+    });
+    const transientSessionRef = {
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-transcript-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo",
+      runtimePolicy: { kind: "opencode" as const },
+    };
+
+    try {
+      await actions.answerAgentQuestion(transientSessionRef, missingQuestionRequest("question-1"), [
+        ["yes"],
+      ]);
+
+      expect(replies).toEqual([{ requestId: "question-1", answers: [["yes"]] }]);
     } finally {
       adapter.replyQuestion = originalReplyQuestion;
     }
