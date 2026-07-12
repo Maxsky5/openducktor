@@ -60,6 +60,7 @@ describe("getManagedTaskCleanupImpact", () => {
       legacyWorktreeCount: 4,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     });
   });
 
@@ -81,6 +82,7 @@ describe("getManagedTaskCleanupImpact", () => {
       legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     });
   });
 
@@ -107,6 +109,7 @@ describe("getManagedTaskCleanupImpact", () => {
       legacyWorktreeCount: 1,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     });
   });
 
@@ -123,6 +126,7 @@ describe("getManagedTaskCleanupImpact", () => {
       legacyWorktreeCount: 1,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     });
   });
 
@@ -158,6 +162,7 @@ describe("getManagedTaskCleanupImpact", () => {
       legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: true,
+      terminalCount: 0,
     });
   });
 
@@ -205,6 +210,7 @@ describe("getManagedTaskCleanupImpact", () => {
       legacyWorktreeCount: 2,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     });
     expect(impact).toMatchObject({ hasCanonicalWorktree: true });
   });

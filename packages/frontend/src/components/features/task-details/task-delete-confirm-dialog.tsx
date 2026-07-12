@@ -28,6 +28,7 @@ type TaskDeleteConfirmDialogProps = {
     isLoading: boolean;
     hasManagedSessionCleanup: boolean;
     managedWorktreeCount: number;
+    terminalCount: number;
     error: string | null;
   };
   deletion: {
@@ -66,6 +67,11 @@ export function TaskDeleteConfirmDialog({
                 Direct subtasks will also be deleted to avoid orphaned children in the workflow.
               </p>
             ) : null}
+            <p>
+              {impact.terminalCount === 0
+                ? "No running task terminals will be stopped."
+                : `${impact.terminalCount} associated terminal${impact.terminalCount === 1 ? "" : "s"} will be terminated before deletion.`}
+            </p>
             {impact.isLoading ? (
               <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
             ) : impact.error ? (

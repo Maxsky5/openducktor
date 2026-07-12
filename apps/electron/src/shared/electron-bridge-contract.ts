@@ -16,6 +16,8 @@ export const ELECTRON_APP_UPDATE_INSTALL_CHANNEL = "openducktor:app-update:insta
 export const ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL = "openducktor:app-update:state-changed";
 export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
   "OpenDucktor is shutting down. The requested command was not run.";
+export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
+export const ELECTRON_TERMINAL_EVENT_CHANNEL = "openducktor:terminal:event";
 
 export type ElectronHostInvokeRequest = {
   command: string;
@@ -46,10 +48,16 @@ export type OpenDucktorElectronAppUpdateApi = {
   subscribe(listener: (state: AppUpdateState) => void): () => void;
 };
 
+export type OpenDucktorElectronTerminalApi = {
+  send(frame: Uint8Array): Promise<void>;
+  subscribe(listener: (frame: Uint8Array) => void): () => void;
+};
+
 export type OpenDucktorElectronApi = {
   invoke(command: HostCommandName, args?: Record<string, unknown>): Promise<unknown>;
   subscribe(channel: string, listener: (payload: unknown) => void): () => void;
   appUpdates: OpenDucktorElectronAppUpdateApi;
   openExternalUrl(url: string): Promise<void>;
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
+  terminals: OpenDucktorElectronTerminalApi;
 };

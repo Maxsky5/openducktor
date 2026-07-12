@@ -9,10 +9,13 @@ import {
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
+  ELECTRON_TERMINAL_EVENT_CHANNEL,
+  ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
   type OpenDucktorElectronApi,
   type OpenDucktorElectronAppUpdateApi,
+  type OpenDucktorElectronTerminalApi,
 } from "../shared/electron-bridge-contract";
 import { createElectronHostInvoke } from "./electron-host-invoke";
 
@@ -59,6 +62,19 @@ const appUpdates: OpenDucktorElectronAppUpdateApi = {
   },
 };
 
+const terminals: OpenDucktorElectronTerminalApi = {
+  async send(frame) {
+    await ipcRenderer.invoke(ELECTRON_TERMINAL_SEND_CHANNEL, frame);
+  },
+  subscribe(listener) {
+    const handleEvent = (_event: Electron.IpcRendererEvent, frame: unknown) => {
+      if (frame instanceof Uint8Array) listener(frame);
+    };
+    ipcRenderer.on(ELECTRON_TERMINAL_EVENT_CHANNEL, handleEvent);
+    return () => ipcRenderer.off(ELECTRON_TERMINAL_EVENT_CHANNEL, handleEvent);
+  },
+};
+
 const electronApi: OpenDucktorElectronApi = {
   invoke: createElectronHostInvoke(ipcRenderer),
   subscribe(channel, listener) {
@@ -84,6 +100,7 @@ const electronApi: OpenDucktorElectronApi = {
   resolveLocalAttachmentPreviewSrc(path) {
     return ipcRenderer.invoke(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, path);
   },
+  terminals,
 };
 
 contextBridge.exposeInMainWorld("openducktorElectron", electronApi);

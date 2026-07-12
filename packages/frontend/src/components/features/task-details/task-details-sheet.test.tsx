@@ -97,6 +97,7 @@ describe("TaskDetailsSheet", () => {
       legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     }));
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
@@ -159,6 +160,7 @@ describe("TaskDetailsSheet", () => {
       legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     }));
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
@@ -224,6 +226,7 @@ describe("TaskDetailsSheet", () => {
       legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
+      terminalCount: 0,
     }));
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {

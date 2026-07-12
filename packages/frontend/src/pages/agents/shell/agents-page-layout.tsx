@@ -1,11 +1,21 @@
-import { type ComponentProps, memo, type ReactElement, type ReactNode, useMemo } from "react";
+import {
+  type ComponentProps,
+  memo,
+  type ReactElement,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
+import { AgentStudioTerminalPanel } from "@/components/features/agents/interactive-terminal/agent-studio-terminal-panel";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentStudioRightPanelBridge } from "./agent-studio-right-panel-bridge";
 import {
   AgentsPageModalContent,
@@ -29,9 +39,13 @@ type AgentsPageWorkspaceProps = {
   selectedFilePreviewContent: ReactNode;
   isRightPanelVisible: boolean;
   rightPanelContent: ReactNode;
+  terminalPanel: AgentStudioTerminalPanelModel;
 };
 
-export type AgentsPageWorkspacePanesProps = Omit<AgentsPageWorkspaceProps, "hasSelectedTask">;
+export type AgentsPageWorkspacePanesProps = Omit<
+  AgentsPageWorkspaceProps,
+  "hasSelectedTask" | "terminalPanel"
+>;
 
 type AgentChatPaneProps = {
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
@@ -90,7 +104,16 @@ function AgentsPageWorkspace({
   selectedFilePreviewContent,
   isRightPanelVisible,
   rightPanelContent,
+  terminalPanel,
 }: AgentsPageWorkspaceProps): ReactElement {
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsNarrow(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
   if (!hasSelectedTask) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
@@ -99,15 +122,33 @@ function AgentsPageWorkspace({
     );
   }
 
+  const workspacePanes = (
+    <AgentsPageWorkspacePanes
+      chatContent={chatContent}
+      hasSelectedFilePreview={hasSelectedFilePreview}
+      selectedFilePreviewContent={selectedFilePreviewContent}
+      isRightPanelVisible={isRightPanelVisible}
+      rightPanelContent={rightPanelContent}
+    />
+  );
+  if (isNarrow && terminalPanel.isVisible) {
+    return <AgentStudioTerminalPanel model={terminalPanel} />;
+  }
   return (
     <DiffWorkerProvider>
-      <AgentsPageWorkspacePanes
-        chatContent={chatContent}
-        hasSelectedFilePreview={hasSelectedFilePreview}
-        selectedFilePreviewContent={selectedFilePreviewContent}
-        isRightPanelVisible={isRightPanelVisible}
-        rightPanelContent={rightPanelContent}
-      />
+      {terminalPanel.isVisible ? (
+        <ResizablePanelGroup direction="vertical" className="h-full min-h-0 overflow-hidden">
+          <ResizablePanel defaultSize={68} minSize={30}>
+            {workspacePanes}
+          </ResizablePanel>
+          <ResizableHandle withHandle aria-label="Resize terminal panel" />
+          <ResizablePanel defaultSize={32} minSize={20}>
+            <AgentStudioTerminalPanel model={terminalPanel} />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
+        workspacePanes
+      )}
     </DiffWorkerProvider>
   );
 }
@@ -141,6 +182,7 @@ export type AgentsPageLayoutModel = {
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
+  terminalPanel: AgentStudioTerminalPanelModel;
 };
 
 type AgentsPageLayoutProps = {
@@ -166,6 +208,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     rightPanelBridge,
     selectedFileRefresh,
     modalContent,
+    terminalPanel,
   } = model;
 
   const taskTabsContent = useMemo(
@@ -173,9 +216,16 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       <AgentStudioTaskTabs
         model={taskTabsModel}
         {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
+        terminalPanelToggleModel={{
+          isVisible: terminalPanel.isVisible,
+          runningCount: terminalPanel.tabs.filter((tab) => tab.summary?.lifecycle === "running")
+            .length,
+          disabled: terminalPanel.taskId === null,
+          onToggle: terminalPanel.onToggle,
+        }}
       />
     ),
-    [rightPanelToggleModel, taskTabsModel],
+    [rightPanelToggleModel, taskTabsModel, terminalPanel],
   );
   const chatContent = useMemo(
     () => <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />,
@@ -204,6 +254,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         selectedFilePreviewContent={selectedFilePreviewContent}
         isRightPanelVisible={isRightPanelVisible}
         rightPanelContent={rightPanelContent}
+        terminalPanel={terminalPanel}
       />
     ),
     [
@@ -213,6 +264,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       isRightPanelVisible,
       rightPanelContent,
       selectedFilePreviewContent,
+      terminalPanel,
     ],
   );
   const modalContentElement = useMemo(

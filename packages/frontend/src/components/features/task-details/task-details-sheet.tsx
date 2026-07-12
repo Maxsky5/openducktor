@@ -216,6 +216,7 @@ export function TaskDetailsSheet({
             isLoading: viewModel.isLoadingDeleteImpact,
             hasManagedSessionCleanup: viewModel.hasManagedDeleteSessionCleanup,
             managedWorktreeCount: viewModel.deleteManagedWorktreeCount,
+            terminalCount: viewModel.deleteTerminalCount,
             error: viewModel.deleteImpactError,
           }}
           deletion={{
@@ -251,6 +252,7 @@ export function TaskDetailsSheet({
           isLoadingImpact={viewModel.isLoadingCloseImpact}
           hasManagedSessionCleanup={viewModel.hasManagedCloseSessionCleanup}
           managedWorktreeCount={viewModel.closeManagedWorktreeCount}
+          terminalCount={viewModel.closeTerminalCount}
           impactError={viewModel.closeImpactError}
           isClosePending={viewModel.isClosePending}
           closeError={viewModel.closeError}

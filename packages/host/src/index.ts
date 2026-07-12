@@ -33,9 +33,15 @@ export {
 } from "./application/agent-sessions/live-state-coordinator";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
 export {
+  createTerminalService,
+  type TerminalService,
+  TerminalServiceError,
+} from "./application/terminals/terminal-service";
+export {
   type CreateNodeHostCommandRouterInput,
   createNodeEffectHostCommandRouter,
   createNodeHostCommandRouter,
+  type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
 export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
 export {
@@ -91,9 +97,22 @@ export type {
 export type { SettingsConfigPort } from "./ports/settings-config-port";
 export type { SystemCommandPort } from "./ports/system-command-port";
 export type { TaskStorePort } from "./ports/task-repository-ports";
+export {
+  type TerminalGrid,
+  TerminalPtyError,
+  type TerminalPtyExit,
+  type TerminalPtyHandle,
+  type TerminalPtyHandlers,
+  type TerminalPtyLaunchPlan,
+  type TerminalPtyPort,
+} from "./ports/terminal-pty-port";
 export type {
   ToolDiscoveryError,
   ToolDiscoveryId,
   ToolDiscoveryPort,
 } from "./ports/tool-discovery-port";
 export type { WorktreeFilePort } from "./ports/worktree-file-port";
+export {
+  assertTerminalPtyConformance,
+  type TerminalPtyConformanceObservation,
+} from "./testing/terminal-pty-conformance";

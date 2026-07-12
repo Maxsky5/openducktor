@@ -17,6 +17,7 @@ describe("TaskCloseConfirmDialog", () => {
         isLoadingImpact
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
+        terminalCount={0}
         impactError={null}
         isClosePending={false}
         closeError={null}
@@ -53,6 +54,7 @@ describe("TaskCloseConfirmDialog", () => {
         isLoadingImpact={false}
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
+        terminalCount={2}
         impactError="Could not preview cleanup"
         isClosePending={false}
         closeError="Close failed"

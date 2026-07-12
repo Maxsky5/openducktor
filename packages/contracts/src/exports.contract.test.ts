@@ -208,6 +208,25 @@ import type {
   TaskStoreCheck,
   TaskUpdatePatch,
   TaskWorktreeSummary,
+  TerminalAttentionState,
+  TerminalClientMessage,
+  TerminalCloseRequest,
+  TerminalCloseResponse,
+  TerminalConnectionState,
+  TerminalContext,
+  TerminalCreateRequest,
+  TerminalCreateResponse,
+  TerminalExit,
+  TerminalFailure,
+  TerminalFailureCode,
+  TerminalLaunchSpec,
+  TerminalLifecycle,
+  TerminalListFilter,
+  TerminalListRequest,
+  TerminalListResponse,
+  TerminalRef,
+  TerminalServerMessage,
+  TerminalSummary,
   ToolExecutableProvenance,
   ToolExecutableSourceCategory,
   WorkspaceFileGitStatus,
@@ -602,6 +621,36 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskUpdatePatchSchema",
   "taskWorktreeSummarySchema",
   "tasksUpdatedEventSchema",
+  "TERMINAL_PROTOCOL_MAX_COLUMNS",
+  "TERMINAL_PROTOCOL_MAX_HEADER_BYTES",
+  "TERMINAL_PROTOCOL_MAX_INPUT_BYTES",
+  "TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES",
+  "TERMINAL_PROTOCOL_MAX_ROWS",
+  "TERMINAL_PROTOCOL_SUBPROTOCOL",
+  "TERMINAL_PROTOCOL_VERSION",
+  "decodeTerminalProtocolFrame",
+  "encodeTerminalProtocolFrame",
+  "terminalAttentionStateSchema",
+  "terminalClientMessageSchema",
+  "terminalCloseRequestSchema",
+  "terminalCloseResponseSchema",
+  "terminalConnectionStateSchema",
+  "terminalContextSchema",
+  "terminalCreateRequestSchema",
+  "terminalCreateResponseSchema",
+  "terminalExitSchema",
+  "terminalFailureCodeSchema",
+  "terminalFailureSchema",
+  "terminalIdSchema",
+  "terminalLaunchSpecSchema",
+  "terminalLifecycleSchema",
+  "terminalListFilterSchema",
+  "terminalListRequestSchema",
+  "terminalListResponseSchema",
+  "terminalRefSchema",
+  "terminalServerMessageSchema",
+  "terminalSummarySchema",
+  "terminalTaskIdSchema",
   "themeSchema",
   "toolExecutableProvenanceSchema",
   "toolExecutableSourceCategorySchema",
@@ -828,6 +877,25 @@ type ExportedTypeContract = {
   TaskQaDocumentPresence: TaskQaDocumentPresence;
   TaskStatus: TaskStatus;
   TaskWorktreeSummary: TaskWorktreeSummary;
+  TerminalAttentionState: TerminalAttentionState;
+  TerminalClientMessage: TerminalClientMessage;
+  TerminalCloseRequest: TerminalCloseRequest;
+  TerminalCloseResponse: TerminalCloseResponse;
+  TerminalConnectionState: TerminalConnectionState;
+  TerminalContext: TerminalContext;
+  TerminalCreateRequest: TerminalCreateRequest;
+  TerminalCreateResponse: TerminalCreateResponse;
+  TerminalExit: TerminalExit;
+  TerminalFailure: TerminalFailure;
+  TerminalFailureCode: TerminalFailureCode;
+  TerminalLaunchSpec: TerminalLaunchSpec;
+  TerminalLifecycle: TerminalLifecycle;
+  TerminalListFilter: TerminalListFilter;
+  TerminalListRequest: TerminalListRequest;
+  TerminalListResponse: TerminalListResponse;
+  TerminalRef: TerminalRef;
+  TerminalServerMessage: TerminalServerMessage;
+  TerminalSummary: TerminalSummary;
   TaskUpdatePatch: TaskUpdatePatch;
   ToolExecutableProvenance: ToolExecutableProvenance;
   ToolExecutableSourceCategory: ToolExecutableSourceCategory;

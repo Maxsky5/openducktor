@@ -48,10 +48,12 @@ type TaskDetailsSheetViewModel = {
   hasManagedDeleteSessionCleanup: boolean;
   deleteManagedWorktreeCount: number;
   deleteImpactError: string | null;
+  deleteTerminalCount: number;
   isLoadingResetImpact: boolean;
   hasManagedResetSessionCleanup: boolean;
   resetManagedWorktreeCount: number;
   resetImpactError: string | null;
+  resetTerminalCount: number;
   isResetDialogOpen: boolean;
   isResetPending: boolean;
   resetError: string | null;
@@ -62,6 +64,7 @@ type TaskDetailsSheetViewModel = {
   hasManagedCloseSessionCleanup: boolean;
   closeManagedWorktreeCount: number;
   closeImpactError: string | null;
+  closeTerminalCount: number;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
@@ -143,12 +146,14 @@ export function useTaskDetailsSheetViewModel({
     managedWorktreeCount: deleteManagedWorktreeCount,
     impactError: deleteImpactError,
     isLoadingImpact: isLoadingDeleteImpact,
+    terminalCount: deleteTerminalCount,
   } = taskCleanupImpactHook(deleteImpactTaskIds, open);
   const {
     hasManagedSessionCleanup: hasManagedSingleTaskCleanup,
     managedWorktreeCount: singleTaskCleanupWorktreeCount,
     impactError: singleTaskCleanupImpactError,
     isLoadingImpact: isLoadingSingleTaskCleanupImpact,
+    terminalCount: singleTaskTerminalCount,
   } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
@@ -290,11 +295,13 @@ export function useTaskDetailsSheetViewModel({
     hasManagedDeleteSessionCleanup,
     deleteManagedWorktreeCount,
     deleteImpactError,
+    deleteTerminalCount,
     // Reset and close both use the selected task's own build/QA session cleanup impact.
     isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
     hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
     resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     resetImpactError: singleTaskCleanupImpactError,
+    resetTerminalCount: singleTaskTerminalCount,
     isResetDialogOpen,
     isResetPending,
     resetError,
@@ -305,6 +312,7 @@ export function useTaskDetailsSheetViewModel({
     hasManagedCloseSessionCleanup: hasManagedSingleTaskCleanup,
     closeManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     closeImpactError: singleTaskCleanupImpactError,
+    closeTerminalCount: singleTaskTerminalCount,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,

@@ -1,0 +1,57 @@
+import { describe, expect, test } from "bun:test";
+import { HostTerminalClient } from "./terminal-client";
+
+const summary = {
+  terminalId: "terminal-1",
+  hostInstanceId: "host-1",
+  label: "Shell 1",
+  context: { taskId: "task-1" },
+  initialWorkingDir: "/repo/worktree",
+  initialWorkingDirAvailable: true,
+  createdAt: "2026-07-12T00:00:00.000Z",
+  lifecycle: "running",
+  connectionState: "disconnected",
+  attentionState: "none",
+  exit: null,
+};
+
+describe("HostTerminalClient", () => {
+  test("validates create request and response", async () => {
+    const calls: unknown[] = [];
+    const client = new HostTerminalClient(async (command, input) => {
+      calls.push({ command, input });
+      return { ref: { terminalId: "terminal-1" }, summary };
+    });
+    await expect(
+      client.terminalCreate({ workingDir: "/repo/worktree", context: { taskId: "task-1" } }),
+    ).resolves.toEqual({ ref: { terminalId: "terminal-1" }, summary });
+    expect(calls).toEqual([
+      {
+        command: "terminal_create",
+        input: { workingDir: "/repo/worktree", context: { taskId: "task-1" } },
+      },
+    ]);
+  });
+
+  test("validates list and close payloads", async () => {
+    const client = new HostTerminalClient(async (command) => {
+      if (command === "terminal_list") return { hostInstanceId: "host-1", terminals: [summary] };
+      if (command === "terminal_close") return { closed: true };
+      throw new Error(`Unexpected ${command}`);
+    });
+    await expect(
+      client.terminalList({ filter: { kind: "task", taskId: "task-1" } }),
+    ).resolves.toEqual({
+      hostInstanceId: "host-1",
+      terminals: [summary],
+    });
+    await expect(
+      client.terminalClose({ terminalId: "terminal-1", confirmTerminate: true }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("rejects malformed host responses", async () => {
+    const client = new HostTerminalClient(async () => ({ terminals: [] }));
+    await expect(client.terminalList({ filter: { kind: "all" } })).rejects.toThrow();
+  });
+});

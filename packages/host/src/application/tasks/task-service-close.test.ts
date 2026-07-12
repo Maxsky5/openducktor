@@ -14,11 +14,25 @@ import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { DevServerService } from "../dev-servers/dev-server-service";
+import { TerminalServiceError } from "../terminals/terminal-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
-import { createTaskService } from "./task-service";
+import {
+  type CreateTaskServiceInput,
+  createTaskService as createProductionTaskService,
+} from "./task-service";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 const run = <A>(effect: Effect.Effect<A, unknown>): Promise<A> => Effect.runPromise(effect);
+
+const createTaskService = (input: CreateTaskServiceInput) =>
+  createProductionTaskService({
+    ...input,
+    terminalService:
+      input.terminalService ??
+      ({ closeByTaskIds: () => Effect.succeed({ closedTerminalIds: [] }) } satisfies NonNullable<
+        CreateTaskServiceInput["terminalService"]
+      >),
+  });
 
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -524,6 +538,39 @@ describe("TaskService.closeTask", () => {
     await run(service.closeTask({ repoPath: "/repo-alias", taskId: "task-1" }));
 
     expect(calls[0]).toBe("close task:/repo:spec,planner,build,qa");
+  });
+
+  test("aborts destructive cleanup when task terminal termination fails", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(),
+      taskWorktreeService: createTaskWorktreeService(null),
+      terminalService: {
+        closeByTaskIds: (taskIds) => {
+          calls.push(`terminals:${taskIds.join(",")}`);
+          return Effect.fail(
+            new TerminalServiceError({
+              code: "close_failed",
+              operation: "close_by_task",
+              message: "Failed terminal terminal-1.",
+              details: { terminalIds: ["terminal-1"] },
+            }),
+          );
+        },
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "terminal-1",
+    );
+    expect(calls).toContain("terminals:task-1");
+    expect(calls).not.toContain("stop-dev:task-1");
+    expect(calls).not.toContain("transition:task-1:closed");
   });
 
   test("guards and cleans legacy Planner worktrees", async () => {

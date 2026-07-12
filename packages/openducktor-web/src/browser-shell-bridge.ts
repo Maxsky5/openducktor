@@ -20,6 +20,7 @@ import {
   subscribeLocalHostRunEvents,
   subscribeLocalHostTaskEvents,
 } from "./local-host-transport";
+import { createBrowserTerminalBridge } from "./terminals/browser-terminal-transport";
 
 const openExternalUrlEffect = (url: string): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
@@ -88,5 +89,6 @@ export const createBrowserShellBridge = (): ShellBridge => {
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
     resolveLocalAttachmentPreviewSrc: (path) =>
       runWebBoundary(resolveLocalAttachmentPreviewSrcEffect(client, path)),
+    terminals: createBrowserTerminalBridge(),
   };
 };

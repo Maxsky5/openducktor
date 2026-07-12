@@ -2,7 +2,7 @@ import { DndContext, type DraggableSyntheticListeners, DragOverlay } from "@dnd-
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskCard } from "@openducktor/contracts";
-import { Circle, CircleAlert, LoaderCircle, Plus, X } from "lucide-react";
+import { Circle, CircleAlert, LoaderCircle, Plus, SquareTerminal, X } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
@@ -50,6 +50,13 @@ export type AgentStudioTaskTabsModel = {
   onCloseTab: (taskId: string) => void;
   onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
   agentStudioReady: boolean;
+};
+
+export type TerminalPanelToggleModel = {
+  isVisible: boolean;
+  runningCount: number;
+  disabled: boolean;
+  onToggle: () => void;
 };
 
 type AgentStudioTaskTabShellProps = {
@@ -264,9 +271,11 @@ function SortableAgentStudioTaskTab({
 export function AgentStudioTaskTabs({
   model,
   rightPanelToggleModel,
+  terminalPanelToggleModel,
 }: {
   model: AgentStudioTaskTabsModel;
   rightPanelToggleModel?: TaskExecutionPanelToggleModel | null;
+  terminalPanelToggleModel?: TerminalPanelToggleModel;
 }): ReactElement {
   const {
     tabs,
@@ -400,6 +409,28 @@ export function AgentStudioTaskTabs({
             <span className="sr-only">New Tab</span>
           </Button>
         </div>
+        {terminalPanelToggleModel ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-label={terminalPanelToggleModel.isVisible ? "Hide terminals" : "Show terminals"}
+            className="shrink-0 text-studio-chrome-foreground"
+            disabled={terminalPanelToggleModel.disabled}
+            onClick={terminalPanelToggleModel.onToggle}
+          >
+            <SquareTerminal data-icon="inline-start" />
+            Terminal
+            {terminalPanelToggleModel.runningCount > 0 ? (
+              <span
+                role="status"
+                aria-label={`${terminalPanelToggleModel.runningCount} running terminals`}
+              >
+                {terminalPanelToggleModel.runningCount}
+              </span>
+            ) : null}
+          </Button>
+        ) : null}
         {rightPanelToggleModel ? (
           <div className="flex shrink-0 items-center pl-0.5">
             <TaskExecutionPanelToggleButton model={rightPanelToggleModel} />

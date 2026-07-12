@@ -86,5 +86,18 @@ export const createElectronShellBridge = (): ShellBridge => {
     },
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
+    terminals: {
+      connect: async (onFrame, onStateChange) => {
+        const unsubscribe = electronApi.terminals.subscribe(onFrame);
+        onStateChange("connected");
+        return {
+          send: (frame) => electronApi.terminals.send(frame),
+          close: () => {
+            unsubscribe();
+            onStateChange("disconnected");
+          },
+        };
+      },
+    },
   };
 };

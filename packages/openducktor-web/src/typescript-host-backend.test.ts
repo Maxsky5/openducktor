@@ -158,6 +158,25 @@ describe("TypeScript web host backend", () => {
       expect(session.status).toBe(200);
       expect(session.headers.get("set-cookie")).toContain("openducktor_web_session=app-token");
 
+      const rejectedTerminalOrigin = await Bun.fetch(`${backendUrl}/terminal`, {
+        headers: { origin: "http://evil.example" },
+      });
+      expect(rejectedTerminalOrigin.status).toBe(403);
+
+      const rejectedTerminalSession = await Bun.fetch(`${backendUrl}/terminal`, {
+        headers: { origin: FRONTEND_ORIGIN },
+      });
+      expect(rejectedTerminalSession.status).toBe(401);
+
+      const rejectedTerminalProtocol = await Bun.fetch(`${backendUrl}/terminal`, {
+        headers: {
+          cookie: `openducktor_web_session=${APP_TOKEN}`,
+          origin: FRONTEND_ORIGIN,
+          "sec-websocket-protocol": "openducktor-terminal.v0",
+        },
+      });
+      expect(rejectedTerminalProtocol.status).toBe(426);
+
       const invoke = await Bun.fetch(`${backendUrl}/invoke/runtime_definitions_list`, {
         method: "POST",
         headers: {

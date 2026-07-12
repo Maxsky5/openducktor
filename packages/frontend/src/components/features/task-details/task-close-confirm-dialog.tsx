@@ -25,6 +25,7 @@ type TaskCloseConfirmDialogProps = {
   isLoadingImpact: boolean;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
+  terminalCount: number;
   impactError: string | null;
   isClosePending: boolean;
   closeError: string | null;
@@ -39,6 +40,7 @@ export function TaskCloseConfirmDialog({
   isLoadingImpact,
   hasManagedSessionCleanup,
   managedWorktreeCount,
+  terminalCount,
   impactError,
   isClosePending,
   closeError,
@@ -58,6 +60,11 @@ export function TaskCloseConfirmDialog({
             </p>
             <p>No code is merged and no pull request is created, updated, or merged.</p>
             <p>Task-scoped dev servers will be stopped.</p>
+            <p>
+              {terminalCount === 0
+                ? "No running task terminals will be stopped."
+                : `${terminalCount} associated terminal${terminalCount === 1 ? "" : "s"} will be terminated before the task closes.`}
+            </p>
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
             ) : impactError ? (
