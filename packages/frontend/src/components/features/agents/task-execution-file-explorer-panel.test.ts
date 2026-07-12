@@ -57,6 +57,15 @@ describe("buildTaskExecutionFileTreeInputPaths", () => {
 });
 
 describe("buildTaskExecutionFileTreeGitStatusEntries", () => {
+  test("passes directory-only statuses with PierreTrees directory syntax", () => {
+    const directory = directoryEntry("nested-checkout");
+    directory.gitStatus = "untracked";
+
+    expect(buildTaskExecutionFileTreeGitStatusEntries([directory])).toEqual([
+      { path: "nested-checkout/", status: "untracked" },
+    ]);
+  });
+
   test("passes changed file statuses to PierreTrees", () => {
     expect(
       buildTaskExecutionFileTreeGitStatusEntries([

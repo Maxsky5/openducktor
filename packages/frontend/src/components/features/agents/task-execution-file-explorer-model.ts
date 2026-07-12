@@ -32,11 +32,11 @@ export const buildTaskExecutionFileTreeGitStatusEntries = (
   const gitStatusEntries: GitStatusEntry[] = [];
 
   for (const entry of entries ?? []) {
-    if (entry.kind !== "file" || entry.gitStatus === null) {
+    if (entry.gitStatus === null) {
       continue;
     }
     gitStatusEntries.push({
-      path: entry.path,
+      path: entry.kind === "directory" ? `${entry.path}/` : entry.path,
       status: entry.gitStatus as GitStatusEntry["status"],
     });
   }
