@@ -96,6 +96,32 @@ const renderLoadedPanel = (): string => {
   return renderPanel(queryClient);
 };
 
+const renderPendingPanel = (): string => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), {
+    ...loadedContext,
+    aggregateStatus: "pending",
+    comments: [],
+    checks: [
+      {
+        name: "Unit tests",
+        workflow: "CI",
+        status: "in_progress",
+        conclusion: null,
+        url: "https://github.com/openai/openducktor/actions/runs/1",
+        details: null,
+        startedAt: "2026-07-08T10:00:00Z",
+        completedAt: null,
+      },
+    ],
+    reviewThreads: {
+      openCount: 0,
+    },
+  } satisfies PullRequestReviewContext);
+
+  return renderPanel(queryClient);
+};
+
 describe("TaskExecutionCiChecksPanel", () => {
   test("renders a useful loading state while review data is pending", () => {
     const html = renderPanel();
@@ -196,6 +222,16 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).not.toContain("PR #42");
     expect(html).not.toContain(">GitHub<");
     expect(html).not.toContain("Open pull request #42");
+  });
+
+  test("renders pending check icons and labels as informational blue", () => {
+    const html = renderPendingPanel();
+
+    expect(html).toContain("1 pending");
+    expect(html).toContain("in progress");
+    expect(html).toContain("bg-info-surface");
+    expect(html).toContain("text-info-surface-foreground");
+    expect(html).toContain("text-info-muted");
   });
 
   test("classifies common automation authors as bots", () => {

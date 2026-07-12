@@ -16,7 +16,7 @@ const inactiveCiReviewQueryInput = { repoPath: "__inactive_ci_header__" };
 
 const ciCheckStatusDotClassName = {
   failure: "bg-rose-500",
-  pending: "bg-amber-500",
+  pending: "bg-sky-500",
   success: "bg-emerald-500",
 } satisfies Record<CiChecksIndicatorStatus, string>;
 

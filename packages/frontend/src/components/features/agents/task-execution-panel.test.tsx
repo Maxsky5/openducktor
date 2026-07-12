@@ -466,7 +466,7 @@ describe("TaskExecutionPanel", () => {
         }),
       },
       {
-        expectedClassName: "bg-amber-500",
+        expectedClassName: "bg-sky-500",
         context: createLoadedCiContext({
           checks: [
             {
