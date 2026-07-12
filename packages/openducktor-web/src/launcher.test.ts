@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
   closeFrontendServer,
+  indexStaticAssetPaths,
   keepProcessAliveDuring,
+  resolveIndexedStaticAssetPath,
   resolveStaticAssetPath,
   stopLauncherServices,
   waitForBackend,
@@ -304,5 +308,50 @@ describe("launcher internals", () => {
       path.join("/web-shell", "assets/app.js"),
     );
     expect(resolveStaticAssetPath("/web-shell", "/../secret.txt")).toBeNull();
+    expect(resolveStaticAssetPath("/web-shell", "/%E0%A4%A")).toBeNull();
+  });
+
+  test("resolves static requests against the startup asset index", () => {
+    const staticRoot = path.resolve("/web-shell");
+    const indexPath = path.join(staticRoot, "index.html");
+    const appPath = path.join(staticRoot, "assets/app.js");
+    const assetPaths = new Set([indexPath, appPath]);
+
+    expect(resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/assets/app.js")).toBe(
+      appPath,
+    );
+    expect(
+      resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/missing.js"),
+    ).toBeNull();
+    expect(
+      resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/missing%2Ejs"),
+    ).toBeNull();
+    expect(resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/tasks/example")).toBe(
+      indexPath,
+    );
+    expect(
+      resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, "/%2e%2e/secret.txt"),
+    ).toBeNull();
+
+    const traversalUrl = new URL("http://127.0.0.1/%2e%2e%2fsecret.txt");
+    expect(
+      resolveIndexedStaticAssetPath(staticRoot, indexPath, assetPaths, traversalUrl.pathname),
+    ).toBeNull();
+  });
+
+  test("indexes nested web shell assets during startup", async () => {
+    const staticRoot = await mkdtemp(path.join(os.tmpdir(), "openducktor-web-shell-"));
+    const assetDirectory = path.join(staticRoot, "assets");
+    const indexPath = path.join(staticRoot, "index.html");
+    const appPath = path.join(assetDirectory, "app.js");
+
+    try {
+      await mkdir(assetDirectory);
+      await Promise.all([writeFile(indexPath, "shell"), writeFile(appPath, "app")]);
+
+      expect(await indexStaticAssetPaths(staticRoot)).toEqual(new Set([appPath, indexPath]));
+    } finally {
+      await rm(staticRoot, { force: true, recursive: true });
+    }
   });
 });

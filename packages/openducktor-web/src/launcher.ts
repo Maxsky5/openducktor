@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { Deferred, Effect } from "effect";
 import type { ViteDevServer } from "vite";
@@ -18,9 +17,10 @@ import {
   buildFrontendUrl,
   closeFrontendServerEffect,
   type FrontendServer,
+  indexStaticAssetPaths,
   keepProcessAliveDuringEffect,
   LOCALHOST,
-  resolveStaticAssetPath,
+  resolveIndexedStaticAssetPath,
   stopLauncherServicesEffect,
   waitForBackendEffect,
 } from "./launcher-support";
@@ -170,18 +170,18 @@ const startStaticFrontendServerEffect = (
   Effect.gen(function* () {
     const staticRoot = path.join(options.packageRoot, "dist/web-shell");
     const indexPath = path.join(staticRoot, "index.html");
-    const indexFileExists = yield* Effect.try({
-      try: () => existsSync(indexPath) && statSync(indexPath).isFile(),
+    const assetPaths = yield* Effect.tryPromise({
+      try: () => indexStaticAssetPaths(staticRoot),
       catch: (cause) =>
         new WebResourceError({
           resource: "web-shell-assets",
-          operation: "stat",
+          operation: "index",
           message: errorMessage(cause),
           cause,
           details: { indexPath, staticRoot },
         }),
     });
-    if (!indexFileExists) {
+    if (!assetPaths.has(indexPath)) {
       return yield* new WebResourceError({
         resource: "web-shell-assets",
         operation: "resolve",
@@ -208,17 +208,16 @@ const startStaticFrontendServerEffect = (
                 });
               }
 
-              const assetPath = resolveStaticAssetPath(staticRoot, requestUrl.pathname);
-              if (!assetPath) {
+              const responsePath = resolveIndexedStaticAssetPath(
+                staticRoot,
+                indexPath,
+                assetPaths,
+                requestUrl.pathname,
+              );
+              if (!responsePath) {
                 return new Response("Not found", { status: 404 });
               }
 
-              const assetExists = existsSync(assetPath) && statSync(assetPath).isFile();
-              if (!assetExists && path.extname(requestUrl.pathname)) {
-                return new Response("Not found", { status: 404 });
-              }
-
-              const responsePath = assetExists ? assetPath : indexPath;
               return new Response(Bun.file(responsePath), {
                 headers: {
                   "content-type": contentTypeForPath(responsePath),

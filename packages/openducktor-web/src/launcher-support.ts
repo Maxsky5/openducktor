@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
 import {
@@ -256,7 +257,12 @@ export const buildBrowserRuntimeConfigJson = (backendUrl: string, appToken: stri
   `${JSON.stringify({ backendUrl, appToken })}\n`;
 
 export const resolveStaticAssetPath = (staticRoot: string, requestPath: string): string | null => {
-  const decodedPath = decodeURIComponent(requestPath);
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(requestPath);
+  } catch {
+    return null;
+  }
   const relativePath = decodedPath === "/" ? "index.html" : decodedPath.replace(/^\/+/, "");
   const normalized = path.normalize(relativePath);
   if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
@@ -264,6 +270,43 @@ export const resolveStaticAssetPath = (staticRoot: string, requestPath: string):
   }
 
   return path.join(staticRoot, normalized);
+};
+
+export const indexStaticAssetPaths = async (staticRoot: string): Promise<Set<string>> => {
+  const assetPaths = new Set<string>();
+
+  const visitDirectory = async (directoryPath: string): Promise<void> => {
+    const entries = await readdir(directoryPath, { withFileTypes: true });
+    await Promise.all(
+      entries.map(async (entry) => {
+        const entryPath = path.join(directoryPath, entry.name);
+        if (entry.isDirectory()) {
+          await visitDirectory(entryPath);
+        } else if (entry.isFile()) {
+          assetPaths.add(entryPath);
+        }
+      }),
+    );
+  };
+
+  await visitDirectory(staticRoot);
+  return assetPaths;
+};
+
+export const resolveIndexedStaticAssetPath = (
+  staticRoot: string,
+  indexPath: string,
+  assetPaths: ReadonlySet<string>,
+  requestPath: string,
+): string | null => {
+  const assetPath = resolveStaticAssetPath(staticRoot, requestPath);
+  if (!assetPath) {
+    return null;
+  }
+  if (assetPaths.has(assetPath)) {
+    return assetPath;
+  }
+  return path.extname(assetPath) ? null : indexPath;
 };
 
 const launcherShutdownFailure = (failures: unknown[]): WebOperationError | null => {
