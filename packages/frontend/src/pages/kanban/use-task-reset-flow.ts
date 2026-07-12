@@ -19,11 +19,7 @@ type UseTaskResetFlowArgs = {
   closeTaskDetails: () => void;
 };
 
-const isActiveImplementationSession = (session: AgentSessionSummary): boolean => {
-  if (session.role !== "build" && session.role !== "qa") {
-    return false;
-  }
-
+const isActiveTaskSession = (session: AgentSessionSummary): boolean => {
   return isAgentSessionActivityActive(session.activityState);
 };
 
@@ -79,11 +75,11 @@ export function useTaskResetFlow({
       }
 
       const hasActiveSession = sessions.some(
-        (session) => session.taskId === nextTaskId && isActiveImplementationSession(session),
+        (session) => session.taskId === nextTaskId && isActiveTaskSession(session),
       );
       if (hasActiveSession) {
         toast.error("Stop active work first", {
-          description: `Builder or QA is still active for ${nextTaskId}. Stop the active session before resetting the implementation.`,
+          description: `A task session is still active for ${nextTaskId}. Stop the active session before resetting the implementation.`,
         });
         return false;
       }

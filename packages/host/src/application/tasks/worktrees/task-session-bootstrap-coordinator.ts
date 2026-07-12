@@ -82,6 +82,9 @@ export const createTaskSessionBootstrapCoordinator = () => {
     terminalOutcome(bootstrapId: string) {
       return terminalOutcomes.get(bootstrapId);
     },
+    ownsBootstrap(repoPath: string, taskId: string, bootstrapId: string) {
+      return bootstrapLocks.get(key(repoPath, taskId))?.bootstrapId === bootstrapId;
+    },
     recordTerminal,
     beginLifecycle(repoPath: string, taskIds: string[], operation: string) {
       const existingLifecycle = taskIds.find((taskId) => lifecycleLocks.has(key(repoPath, taskId)));

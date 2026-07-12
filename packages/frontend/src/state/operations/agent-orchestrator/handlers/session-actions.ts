@@ -122,6 +122,12 @@ export const createAgentSessionActions = ({
     runtime: {
       adapter,
       canonicalizePath: (path) => host.gitCanonicalizePath(path),
+      prepareTaskSessionStartupLease: (repoPath, taskId, role) =>
+        host.taskSessionStartupLeasePrepare(repoPath, taskId, role),
+      completeTaskSessionStartupLease: (repoPath, taskId, leaseId) =>
+        host.taskSessionStartupLeaseComplete(repoPath, taskId, leaseId),
+      abortTaskSessionStartupLease: (repoPath, taskId, leaseId) =>
+        host.taskSessionStartupLeaseAbort(repoPath, taskId, leaseId),
       resolveTaskWorktree,
       ensureRuntime,
     },

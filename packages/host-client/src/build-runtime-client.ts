@@ -368,6 +368,29 @@ const finalizeTaskSessionBootstrap = async (
   await invokeFn(command, { repoPath, taskId, bootstrapId });
 };
 
+const taskSessionStartupLeasePrepare = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+  role: AgentRole,
+): Promise<string> => {
+  const payload = await invokeFn("task_session_startup_lease_prepare", { repoPath, taskId, role });
+  if (typeof payload !== "string" || !payload.trim()) {
+    throw new Error("task_session_startup_lease_prepare returned an invalid lease id.");
+  }
+  return payload;
+};
+
+const finalizeTaskSessionStartupLease = async (
+  invokeFn: InvokeFn,
+  command: "task_session_startup_lease_complete" | "task_session_startup_lease_abort",
+  repoPath: string,
+  taskId: string,
+  leaseId: string,
+): Promise<void> => {
+  await invokeFn(command, { repoPath, taskId, leaseId });
+};
+
 const devServerGetState = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -705,6 +728,42 @@ export class HostAgentClient {
       repoPath,
       taskId,
       bootstrapId,
+    );
+  }
+
+  async taskSessionStartupLeasePrepare(
+    repoPath: string,
+    taskId: string,
+    role: AgentRole,
+  ): Promise<string> {
+    return taskSessionStartupLeasePrepare(this.invokeFn, repoPath, taskId, role);
+  }
+
+  async taskSessionStartupLeaseComplete(
+    repoPath: string,
+    taskId: string,
+    leaseId: string,
+  ): Promise<void> {
+    return finalizeTaskSessionStartupLease(
+      this.invokeFn,
+      "task_session_startup_lease_complete",
+      repoPath,
+      taskId,
+      leaseId,
+    );
+  }
+
+  async taskSessionStartupLeaseAbort(
+    repoPath: string,
+    taskId: string,
+    leaseId: string,
+  ): Promise<void> {
+    return finalizeTaskSessionStartupLease(
+      this.invokeFn,
+      "task_session_startup_lease_abort",
+      repoPath,
+      taskId,
+      leaseId,
     );
   }
 

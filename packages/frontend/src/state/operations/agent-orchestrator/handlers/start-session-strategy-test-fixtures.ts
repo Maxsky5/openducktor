@@ -63,6 +63,9 @@ export const createRuntimeDependenciesFixture = (
 ): RuntimeDependencies => ({
   adapter: {} as RuntimeDependencies["adapter"],
   canonicalizePath: async (path) => path,
+  prepareTaskSessionStartupLease: async () => "lease-1",
+  completeTaskSessionStartupLease: async () => {},
+  abortTaskSessionStartupLease: async () => {},
   ensureRuntime: async () => {
     throw new Error("should not resolve runtime");
   },

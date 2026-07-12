@@ -151,6 +151,54 @@ describe("createTaskService build start worktree handling", () => {
     ).rejects.toThrow("close task is in progress");
     releaseLifecycle();
   });
+
+  test("coordinates fork startup leases with destructive task lifecycle operations", async () => {
+    const calls: unknown[] = [];
+    const coordinator = createTaskSessionBootstrapCoordinator();
+    const service = createTaskService({
+      taskStore: {
+        getTask: () => Effect.succeed(task({ status: "in_progress" })),
+      } as TaskStorePort,
+      taskSessionBootstrapCoordinator: coordinator,
+      gitPort: createBuildStartGitPort({ calls }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      systemCommands: createBuildSystemCommands(calls),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const leaseId = await Effect.runPromise(
+      service.taskSessionStartupLeasePrepare({ repoPath: "/repo", taskId: "task-1", role: "qa" }),
+    );
+    for (const operation of ["reset implementation", "reset task", "close task", "delete task"]) {
+      await expect(
+        Effect.runPromise(coordinator.beginLifecycle("/repo", ["task-1"], operation)),
+      ).rejects.toThrow("bootstrap is in progress");
+    }
+    await Effect.runPromise(
+      service.taskSessionStartupLeaseComplete({ repoPath: "/repo", taskId: "task-1", leaseId }),
+    );
+
+    const releaseLifecycle = await Effect.runPromise(
+      coordinator.beginLifecycle("/repo", ["task-1"], "full reset"),
+    );
+    await expect(
+      Effect.runPromise(
+        service.taskSessionStartupLeasePrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: "spec",
+        }),
+      ),
+    ).rejects.toThrow("full reset is in progress");
+    releaseLifecycle();
+  });
   test("prepares the same canonical worktree for non-Builder roles without transitioning", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

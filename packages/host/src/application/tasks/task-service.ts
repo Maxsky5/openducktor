@@ -59,6 +59,8 @@ import type {
   TaskIdInput,
   TaskSessionBootstrapFinalizeInput,
   TaskSessionBootstrapPrepareInput,
+  TaskSessionStartupLeaseFinalizeInput,
+  TaskSessionStartupLeasePrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
@@ -78,6 +80,7 @@ import { createTaskFullResetUseCase } from "./use-cases/reset-task";
 import { createTaskReviewUseCases } from "./use-cases/review-task";
 import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
 import { createTaskSessionBootstrapUseCase } from "./use-cases/task-session-bootstrap";
+import { createTaskSessionStartupLeaseUseCase } from "./use-cases/task-session-startup-lease";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
 import {
   createTaskSessionBootstrapCoordinator,
@@ -154,6 +157,15 @@ export type TaskService = {
   taskSessionBootstrapAbort(
     input: TaskSessionBootstrapFinalizeInput,
   ): Effect.Effect<boolean, TaskServiceError>;
+  taskSessionStartupLeasePrepare(
+    input: TaskSessionStartupLeasePrepareInput,
+  ): Effect.Effect<string, TaskServiceError>;
+  taskSessionStartupLeaseComplete(
+    input: TaskSessionStartupLeaseFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
+  taskSessionStartupLeaseAbort(
+    input: TaskSessionStartupLeaseFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
   qaApproved(input: MarkdownDocumentInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -228,6 +240,7 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     ...createTaskFullResetUseCase(useCaseInput),
     ...createTaskDocumentUseCases(useCaseInput),
     ...taskSessionBootstrap,
+    ...createTaskSessionStartupLeaseUseCase(useCaseInput),
     buildStart: (startInput: BuildStartInput) =>
       Effect.gen(function* () {
         const bootstrap = yield* taskSessionBootstrap.taskSessionBootstrapPrepare({
@@ -280,6 +293,12 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
       mapTaskServiceErrors(service.taskSessionBootstrapComplete(input)),
     taskSessionBootstrapAbort: (input) =>
       mapTaskServiceErrors(service.taskSessionBootstrapAbort(input)),
+    taskSessionStartupLeasePrepare: (input) =>
+      mapTaskServiceErrors(service.taskSessionStartupLeasePrepare(input)),
+    taskSessionStartupLeaseComplete: (input) =>
+      mapTaskServiceErrors(service.taskSessionStartupLeaseComplete(input)),
+    taskSessionStartupLeaseAbort: (input) =>
+      mapTaskServiceErrors(service.taskSessionStartupLeaseAbort(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskServiceErrors(service.createTask(input)),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),

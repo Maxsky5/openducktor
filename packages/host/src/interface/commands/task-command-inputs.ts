@@ -17,6 +17,8 @@ import type {
   TaskIdInput,
   TaskSessionBootstrapFinalizeInput,
   TaskSessionBootstrapPrepareInput,
+  TaskSessionStartupLeaseFinalizeInput,
+  TaskSessionStartupLeasePrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
@@ -209,6 +211,35 @@ export const parseTaskSessionBootstrapFinalizeInput = (
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     bootstrapId: requireString(record.bootstrapId, "bootstrapId"),
+  };
+};
+
+export const parseTaskSessionStartupLeasePrepareInput = (
+  input: unknown,
+): TaskSessionStartupLeasePrepareInput => {
+  const record = requireRecord(input, "task_session_startup_lease_prepare input");
+  const role = agentRoleSchema.safeParse(record.role);
+  if (!role.success)
+    throw new HostValidationError({
+      field: "role",
+      message: "A supported agent role is required.",
+    });
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    role: role.data,
+  };
+};
+
+export const parseTaskSessionStartupLeaseFinalizeInput = (
+  input: unknown,
+  label: string,
+): TaskSessionStartupLeaseFinalizeInput => {
+  const record = requireRecord(input, label);
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    leaseId: requireString(record.leaseId, "leaseId"),
   };
 };
 

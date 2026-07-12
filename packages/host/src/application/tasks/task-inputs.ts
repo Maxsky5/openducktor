@@ -84,6 +84,9 @@ export type TaskSessionBootstrapFinalizeInput = TaskIdInput & {
   bootstrapId: string;
 };
 
+export type TaskSessionStartupLeasePrepareInput = TaskIdInput & { role: AgentRole };
+export type TaskSessionStartupLeaseFinalizeInput = TaskIdInput & { leaseId: string };
+
 export type BuildBlockedInput = TaskIdInput & {
   reason: string;
 };

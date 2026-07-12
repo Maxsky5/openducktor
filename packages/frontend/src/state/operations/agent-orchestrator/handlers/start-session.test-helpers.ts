@@ -176,8 +176,24 @@ export type FlatStartSessionDependencies = Omit<
       "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
     >
   > &
-  Omit<StartSessionDependencies["runtime"], "resolveTaskWorktree" | "canonicalizePath"> &
-  Partial<Pick<StartSessionDependencies["runtime"], "resolveTaskWorktree" | "canonicalizePath">> &
+  Omit<
+    StartSessionDependencies["runtime"],
+    | "resolveTaskWorktree"
+    | "canonicalizePath"
+    | "prepareTaskSessionStartupLease"
+    | "completeTaskSessionStartupLease"
+    | "abortTaskSessionStartupLease"
+  > &
+  Partial<
+    Pick<
+      StartSessionDependencies["runtime"],
+      | "resolveTaskWorktree"
+      | "canonicalizePath"
+      | "prepareTaskSessionStartupLease"
+      | "completeTaskSessionStartupLease"
+      | "abortTaskSessionStartupLease"
+    >
+  > &
   StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
@@ -206,6 +222,10 @@ export const toStartSessionDependencies = (
     runtime: {
       adapter: deps.adapter,
       canonicalizePath: deps.canonicalizePath ?? (async (path) => path),
+      prepareTaskSessionStartupLease:
+        deps.prepareTaskSessionStartupLease ?? (async () => "lease-1"),
+      completeTaskSessionStartupLease: deps.completeTaskSessionStartupLease ?? (async () => {}),
+      abortTaskSessionStartupLease: deps.abortTaskSessionStartupLease ?? (async () => {}),
       resolveTaskWorktree:
         deps.resolveTaskWorktree ??
         (async () => ({
@@ -256,6 +276,9 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       source: "active_build_run" as const,
     }),
     canonicalizePath = async (path: string) => path,
+    prepareTaskSessionStartupLease = async () => "lease-1",
+    completeTaskSessionStartupLease = async () => {},
+    abortTaskSessionStartupLease = async () => {},
     ensureRuntime = ensureRuntimeWithKind,
     loadTaskDocuments = async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     refreshTaskData = async () => {},
@@ -296,6 +319,9 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       persistSessionRecord,
       resolveTaskWorktree,
       canonicalizePath,
+      prepareTaskSessionStartupLease,
+      completeTaskSessionStartupLease,
+      abortTaskSessionStartupLease,
       ensureRuntime,
       loadTaskDocuments,
       refreshTaskData,
