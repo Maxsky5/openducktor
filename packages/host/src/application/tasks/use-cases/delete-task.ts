@@ -12,7 +12,8 @@ import {
   managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
   type TaskSessionRecords,
-  taskHasImplementationSessions,
+  taskHasSessionsForRoles,
+  workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -74,14 +75,18 @@ export const createTaskDeleteUseCase = ({
           sessions: metadata.agentSessions,
         });
       }
-      if (targetTaskSessions.some((entry) => taskHasImplementationSessions(entry.sessions))) {
+      if (
+        targetTaskSessions.some((entry) =>
+          taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
+        )
+      ) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
               dependency: "taskActivityGuard",
               operation: "task_delete",
               message:
-                "task_delete requires runtime session activity checks for tasks with build or QA sessions.",
+                "task_delete requires runtime session activity checks for tasks with workflow sessions.",
               details: { repoPath, taskId },
             }),
           );
@@ -103,6 +108,7 @@ export const createTaskDeleteUseCase = ({
       const worktreePaths = yield* collectDeleteWorktreePaths(
         dependencies,
         effectiveRepoPath,
+        managedWorktreeBasePath,
         branchPrefix,
         targetTaskSessions,
       );

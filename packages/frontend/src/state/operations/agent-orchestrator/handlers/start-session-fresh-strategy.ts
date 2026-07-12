@@ -40,47 +40,62 @@ export const executeFreshStart = async ({
     taskCard,
     deps,
   });
-  const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
-  const loadSettingsSnapshot = deps.model.loadSettingsSnapshot;
-  const runtimePolicy = await resolveAgentSessionRuntimePolicy({
-    runtimeKind: selectedModelRuntimeKind,
-    sessionScope,
-    loadSettingsSnapshot,
-  });
-
-  const summary = await deps.runtime.adapter.startSession({
-    repoPath: ctx.repoPath,
-    ...toAgentRuntimePolicyBinding({
+  try {
+    const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
+    const loadSettingsSnapshot = deps.model.loadSettingsSnapshot;
+    const runtimePolicy = await resolveAgentSessionRuntimePolicy({
       runtimeKind: selectedModelRuntimeKind,
-      runtimePolicy,
-    }),
-    workingDirectory: resolved.runtime.workingDirectory,
-    sessionScope,
-    systemPrompt: resolved.systemPrompt,
-    model: selectedModelWithRuntime,
-  });
-
-  const startedCtx = {
-    ...ctx,
-    summary,
-  };
-
-  if (ctx.isStaleRepoOperation()) {
-    await stopSessionOnStaleAndThrow({
-      reason: "start-session-stop-on-stale-after-start",
-      runtime: deps.runtime,
-      startedCtx,
+      sessionScope,
+      loadSettingsSnapshot,
     });
-  }
 
-  return registerStartedSession({
-    ctx,
-    startedCtx,
-    runtimeInfo: resolved.runtime,
-    runtimePolicy,
-    systemPrompt: resolved.systemPrompt,
-    selectedModel: selectedModelWithRuntime,
-    deps,
-    taskCard,
-  });
+    const summary = await deps.runtime.adapter.startSession({
+      repoPath: ctx.repoPath,
+      ...toAgentRuntimePolicyBinding({
+        runtimeKind: selectedModelRuntimeKind,
+        runtimePolicy,
+      }),
+      workingDirectory: resolved.runtime.workingDirectory,
+      sessionScope,
+      systemPrompt: resolved.systemPrompt,
+      model: selectedModelWithRuntime,
+    });
+
+    const startedCtx = {
+      ...ctx,
+      summary,
+    };
+
+    if (ctx.isStaleRepoOperation()) {
+      await stopSessionOnStaleAndThrow({
+        reason: "start-session-stop-on-stale-after-start",
+        runtime: deps.runtime,
+        startedCtx,
+      });
+    }
+
+    return await registerStartedSession({
+      ctx,
+      startedCtx,
+      runtimeInfo: resolved.runtime,
+      runtimePolicy,
+      systemPrompt: resolved.systemPrompt,
+      selectedModel: selectedModelWithRuntime,
+      deps,
+      taskCard,
+    });
+  } catch (cause) {
+    if (!resolved.runtime.bootstrap) {
+      throw cause;
+    }
+    try {
+      await resolved.runtime.bootstrap.abort();
+    } catch (abortCause) {
+      throw new Error(
+        `${cause instanceof Error ? cause.message : String(cause)}\nAlso failed to roll back task worktree bootstrap: ${abortCause instanceof Error ? abortCause.message : String(abortCause)}`,
+        { cause },
+      );
+    }
+    throw cause;
+  }
 };

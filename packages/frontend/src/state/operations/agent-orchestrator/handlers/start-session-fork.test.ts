@@ -14,6 +14,41 @@ import {
 } from "./start-session.test-helpers";
 
 describe("agent-orchestrator/handlers/start-session fork", () => {
+  test("rejects forking a legacy repository-root task session", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let forkCalls = 0;
+    adapter.forkSession = async () => {
+      forkCalls += 1;
+      throw new Error("unexpected fork");
+    };
+    const sessionsRef = createSessionsRef([
+      sessionFixture({
+        externalSessionId: "legacy-root-session",
+        workingDirectory: "/tmp/repo",
+        historyLoadState: "loaded",
+      }),
+    ]);
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fork",
+        selectedModel: BUILD_SELECTION,
+        sourceSession: {
+          externalSessionId: "legacy-root-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo",
+        },
+      }),
+    ).rejects.toThrow("Start a fresh session in the task worktree instead");
+    expect(forkCalls).toBe(0);
+  });
   test("forks from the selected source session for pull request generation", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;

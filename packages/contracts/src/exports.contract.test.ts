@@ -166,6 +166,7 @@ import type {
   TaskMetadataQaReport,
   TaskPriority,
   TaskQaDocumentPresence,
+  TaskSessionBootstrap,
   TaskStatus,
   TaskStoreCheck,
   TaskUpdatePatch,
@@ -190,6 +191,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentToolNameSchema",
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
+  "taskSessionBootstrapSchema",
   "classifyRuntimeDescriptorSchemaIssue",
   "runtimeInstanceSummarySchema",
   "runtimeInstanceSummaryRoleSchema",
@@ -562,6 +564,7 @@ type ExportedTypeContract = {
   RuntimeInstanceSummary: RuntimeInstanceSummary;
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
   BuildSessionBootstrap: BuildSessionBootstrap;
+  TaskSessionBootstrap: TaskSessionBootstrap;
   ChatDiffHeight: ChatDiffHeight;
   ChatDiffIndicators: ChatDiffIndicators;
   ChatDiffStyle: ChatDiffStyle;

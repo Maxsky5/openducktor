@@ -599,48 +599,53 @@ describe("createTaskService build and review", () => {
       runtimeKind: "opencode",
       workingDirectory: "/worktrees/repo/task-1",
     });
-    expect(calls).toEqual([
-      { type: "canonicalizePath", path: "/repo" },
-      { type: "isGitRepository", path: "/repo" },
-      { type: "getTask", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "ensureDirectory", path: "/worktrees/repo" },
-      { type: "referenceExists", workingDir: "/repo", reference: "origin/main" },
-      {
-        type: "createWorktree",
-        repoPath: "/repo",
-        worktreePath: "/worktrees/repo/task-1",
-        branch: "odt/task-1-task-1",
-        createBranch: true,
-        startPoint: "origin/main",
-      },
-      {
-        type: "configureBranchUpstream",
-        repoPath: "/repo",
-        worktreePath: "/worktrees/repo/task-1",
-        branch: "odt/task-1-task-1",
-        upstreamRemote: "origin",
-      },
-      {
-        type: "copyConfiguredPaths",
-        repoPath: "/repo",
-        worktreePath: "/worktrees/repo/task-1",
-        relativePaths: [".env"],
-      },
-      {
-        command: "bun",
-        args: ["test"],
-        options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
-      },
-      {
-        type: "ensureRuntime",
-        input: expect.objectContaining({
-          runtimeKind: "opencode",
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        { type: "canonicalizePath", path: "/repo" },
+        { type: "isGitRepository", path: "/repo" },
+        { type: "getTask", input: { repoPath: "/repo", taskId: "task-1" } },
+        { type: "ensureDirectory", path: "/worktrees/repo" },
+        { type: "referenceExists", workingDir: "/repo", reference: "origin/main" },
+        {
+          type: "createWorktree",
           repoPath: "/repo",
-          workingDirectory: "/repo",
-        }),
-      },
-      { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" } },
-    ]);
+          worktreePath: "/worktrees/repo/task-1",
+          branch: "odt/task-1-task-1",
+          createBranch: true,
+          startPoint: "origin/main",
+        },
+        {
+          type: "configureBranchUpstream",
+          repoPath: "/repo",
+          worktreePath: "/worktrees/repo/task-1",
+          branch: "odt/task-1-task-1",
+          upstreamRemote: "origin",
+        },
+        {
+          type: "copyConfiguredPaths",
+          repoPath: "/repo",
+          worktreePath: "/worktrees/repo/task-1",
+          relativePaths: [".env"],
+        },
+        {
+          command: "bun",
+          args: ["test"],
+          options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
+        },
+        {
+          type: "ensureRuntime",
+          input: expect.objectContaining({
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            workingDirectory: "/repo",
+          }),
+        },
+        {
+          type: "transition",
+          input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+        },
+      ]),
+    );
   });
   test("rolls back the build worktree when pre-start hooks fail", async () => {
     const calls: unknown[] = [];

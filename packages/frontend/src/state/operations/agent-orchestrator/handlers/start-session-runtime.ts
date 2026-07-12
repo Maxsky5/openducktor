@@ -9,7 +9,7 @@ import type {
   StartSessionContext,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
+import { STALE_START_ERROR } from "./start-session-constants";
 
 export const loadStartSystemPrompt = async ({
   ctx,
@@ -63,17 +63,12 @@ export const resolveFreshStartRuntimeContext = async ({
 };
 
 export const resolveFreshStartTargetWorkingDirectory = async ({
-  ctx,
-  resolveTaskWorktree,
+  ctx: _ctx,
+  resolveTaskWorktree: _resolveTaskWorktree,
 }: {
   ctx: StartSessionContext;
   resolveTaskWorktree: StartSessionExecutionDependencies["runtime"]["resolveTaskWorktree"];
 }): Promise<string | null | undefined> => {
-  if (ctx.role === "qa") {
-    return requireBuildContinuationTarget(await resolveTaskWorktree(ctx.repoPath, ctx.taskId))
-      .workingDirectory;
-  }
-
   return undefined;
 };
 

@@ -17,7 +17,6 @@ import { executeForkStart } from "./start-session-fork-strategy";
 import { executeFreshStart } from "./start-session-fresh-strategy";
 import { resolveStartTask } from "./start-session-policies";
 import { executeReuseStart } from "./start-session-reuse-strategy";
-import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
 import {
   resolveFreshStartTargetWorkingDirectoryForStart,
   serializeSelectedModelKey,
@@ -54,11 +53,9 @@ const resolveFreshStartTarget = async ({
 const observeAgentSessionAndGuard = async ({
   startResult,
   session,
-  runtime,
 }: {
   startResult: Extract<StartOrReuseResult, { kind: "started" }>;
   session: SessionDependencies;
-  runtime: RuntimeDependencies;
 }): Promise<void> => {
   const { ctx: startedCtx, runtimeInfo } = startResult;
   const observerTarget: PolicyBoundSessionRef = {
@@ -76,12 +73,7 @@ const observeAgentSessionAndGuard = async ({
   if (!startedCtx.isStaleRepoOperation()) {
     return;
   }
-
-  await stopSessionOnStaleAndThrow({
-    reason: "start-session-stop-on-stale-after-observer-start",
-    runtime,
-    startedCtx,
-  });
+  throw new Error(STALE_START_ERROR);
 };
 
 export const createStartAgentSession = ({
@@ -168,11 +160,44 @@ export const createStartAgentSession = ({
         return startResult.session;
       }
 
-      await observeAgentSessionAndGuard({
-        startResult,
-        session,
-        runtime,
-      });
+      try {
+        await observeAgentSessionAndGuard({
+          startResult,
+          session,
+        });
+        await startResult.runtimeInfo.bootstrap?.complete();
+      } catch (cause) {
+        const identity = {
+          externalSessionId: startResult.ctx.summary.externalSessionId,
+          runtimeKind: startResult.runtimeInfo.runtimeKind,
+          workingDirectory: startResult.runtimeInfo.workingDirectory,
+        };
+        session.removeSession(identity);
+        let stopError: unknown;
+        try {
+          await runtime.adapter.stopSession({ ...identity, repoPath });
+        } catch (error) {
+          stopError = error;
+        }
+        let abortError: unknown;
+        try {
+          await startResult.runtimeInfo.bootstrap?.abort();
+        } catch (error) {
+          abortError = error;
+        }
+        const progress = [
+          stopError
+            ? `Failed to stop the started session: ${stopError instanceof Error ? stopError.message : String(stopError)}`
+            : "The started session was stopped and removed locally.",
+          abortError
+            ? `Failed to roll back task worktree bootstrap: ${abortError instanceof Error ? abortError.message : String(abortError)}`
+            : "The task worktree bootstrap was rolled back.",
+        ].join(" ");
+        throw new Error(
+          `${cause instanceof Error ? cause.message : String(cause)} ${progress}`,
+          cause instanceof Error ? { cause } : undefined,
+        );
+      }
 
       return {
         externalSessionId: startResult.ctx.summary.externalSessionId,

@@ -1,13 +1,15 @@
-import type {
-  AgentSessionRecord,
-  BuildSessionBootstrap,
-  PullRequest,
-  TaskApprovalContextLoadResult,
-  TaskCard,
-  TaskDirectMergeResult,
-  TaskMetadataDocument,
-  TaskMetadataPayload,
-  TaskPullRequestDetectResult,
+import {
+  type AgentSessionRecord,
+  type BuildSessionBootstrap,
+  buildSessionBootstrapSchema,
+  type PullRequest,
+  type TaskApprovalContextLoadResult,
+  type TaskCard,
+  type TaskDirectMergeResult,
+  type TaskMetadataDocument,
+  type TaskMetadataPayload,
+  type TaskPullRequestDetectResult,
+  type TaskSessionBootstrap,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
@@ -55,6 +57,8 @@ import type {
   RepoPathInput,
   SetPlanInput,
   TaskIdInput,
+  TaskSessionBootstrapFinalizeInput,
+  TaskSessionBootstrapPrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
@@ -72,8 +76,8 @@ import { createTaskQueryUseCases } from "./use-cases/query-tasks";
 import { createTaskImplementationResetUseCase } from "./use-cases/reset-implementation";
 import { createTaskFullResetUseCase } from "./use-cases/reset-task";
 import { createTaskReviewUseCases } from "./use-cases/review-task";
-import { createTaskBuildStartUseCase } from "./use-cases/start-build";
 import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
+import { createTaskSessionBootstrapUseCase } from "./use-cases/task-session-bootstrap";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
@@ -137,6 +141,15 @@ export type TaskService = {
   qaGetReport(input: TaskIdInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
   buildBlocked(input: BuildBlockedInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildStart(input: BuildStartInput): Effect.Effect<BuildSessionBootstrap, TaskServiceError>;
+  taskSessionBootstrapPrepare(
+    input: TaskSessionBootstrapPrepareInput,
+  ): Effect.Effect<TaskSessionBootstrap, TaskServiceError>;
+  taskSessionBootstrapComplete(
+    input: TaskSessionBootstrapFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
+  taskSessionBootstrapAbort(
+    input: TaskSessionBootstrapFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
   qaApproved(input: MarkdownDocumentInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -192,6 +205,7 @@ const mapTaskServiceErrors = <A, E>(
 export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
   const githubDependencies = createTaskGithubDependencies(input);
   const useCaseInput = { ...input, githubDependencies };
+  const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),
     ...createTaskApprovalContextUseCase(useCaseInput),
@@ -206,7 +220,42 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     ...createTaskImplementationResetUseCase(useCaseInput),
     ...createTaskFullResetUseCase(useCaseInput),
     ...createTaskDocumentUseCases(useCaseInput),
-    ...createTaskBuildStartUseCase(useCaseInput),
+    ...taskSessionBootstrap,
+    buildStart: (startInput: BuildStartInput) =>
+      Effect.gen(function* () {
+        const bootstrap = yield* taskSessionBootstrap.taskSessionBootstrapPrepare({
+          ...startInput,
+          role: "build",
+        });
+        const completed = yield* Effect.either(
+          taskSessionBootstrap.taskSessionBootstrapComplete({
+            repoPath: startInput.repoPath,
+            taskId: startInput.taskId,
+            bootstrapId: bootstrap.bootstrapId,
+          }),
+        );
+        if (completed._tag === "Left") {
+          const abort = yield* Effect.either(
+            taskSessionBootstrap.taskSessionBootstrapAbort({
+              repoPath: startInput.repoPath,
+              taskId: startInput.taskId,
+              bootstrapId: bootstrap.bootstrapId,
+            }),
+          );
+          return yield* Effect.fail(
+            new HostOperationErrorValue({
+              operation: "task.build_start.finalize",
+              message: `${errorMessage(completed.left)}${abort._tag === "Left" ? `\nAlso failed to roll back: ${errorMessage(abort.left)}` : ""}`,
+              cause: completed.left,
+              details: { repoPath: startInput.repoPath, taskId: startInput.taskId },
+            }),
+          );
+        }
+        return buildSessionBootstrapSchema.parse({
+          runtimeKind: bootstrap.runtimeKind,
+          workingDirectory: bootstrap.workingDirectory,
+        });
+      }),
     ...createTaskBuildStateUseCases(useCaseInput),
     ...createTaskReviewUseCases(useCaseInput),
     ...createTaskPullRequestSyncUseCases(useCaseInput),
@@ -218,6 +267,12 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     buildCompleted: (input) => mapTaskServiceErrors(service.buildCompleted(input)),
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
+    taskSessionBootstrapPrepare: (input) =>
+      mapTaskServiceErrors(service.taskSessionBootstrapPrepare(input)),
+    taskSessionBootstrapComplete: (input) =>
+      mapTaskServiceErrors(service.taskSessionBootstrapComplete(input)),
+    taskSessionBootstrapAbort: (input) =>
+      mapTaskServiceErrors(service.taskSessionBootstrapAbort(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskServiceErrors(service.createTask(input)),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),

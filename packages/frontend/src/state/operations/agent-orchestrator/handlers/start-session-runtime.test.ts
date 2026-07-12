@@ -58,7 +58,7 @@ describe("agent-orchestrator/handlers/start-session-runtime", () => {
     ).toBe("opencode::openai::gpt-5::default::build");
   });
 
-  test("returns the typed continuation target working directory for qa starts", async () => {
+  test("leaves qa target resolution to role-neutral host bootstrap", async () => {
     await expect(
       resolveFreshStartTargetWorkingDirectoryForStart({
         ctx: createStartSessionContextFixture({ role: "qa" }),
@@ -68,8 +68,8 @@ describe("agent-orchestrator/handlers/start-session-runtime", () => {
         }),
       }),
     ).resolves.toEqual({
-      targetWorkingDirectory: "/tmp/repo/worktree",
-      normalizedTargetWorkingDirectory: "/tmp/repo/worktree",
+      targetWorkingDirectory: undefined,
+      normalizedTargetWorkingDirectory: "",
     });
   });
 });

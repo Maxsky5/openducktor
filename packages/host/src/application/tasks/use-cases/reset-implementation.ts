@@ -1,7 +1,13 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { canResetImplementationFromStatus } from "../../../domain/task";
+import { normalizePathForComparison } from "../../../domain/path-comparison";
+import { buildBranchName, canResetImplementationFromStatus } from "../../../domain/task";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
+import {
+  effectiveTargetBranchForTask,
+  resolveBuildStartPoint,
+} from "../support/builder-worktree-cleanup";
+import { validateExistingGitBuildWorktree } from "../support/builder-worktree-start";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
   requireImplementationResetStoreDependencies,
@@ -9,16 +15,11 @@ import {
 } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
-  collectRelatedTaskBranches,
-  collectResetWorktreePaths,
   createTaskCleanupProgressState,
   implementationSessionRoleNames,
   implementationSessionRoles,
-  managedWorktreeBaseForRepoConfig,
   replaceTaskInList,
   resetImplementationRollbackStatus,
-  runTaskLocalCleanup,
-  taskHasSessionsForRoles,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -29,7 +30,6 @@ export const createTaskImplementationResetUseCase = ({
   taskStore,
   taskActivityGuard,
   settingsConfig,
-  worktreeFiles,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "resetImplementation"> => ({
   resetImplementation(input) {
@@ -67,14 +67,30 @@ export const createTaskImplementationResetUseCase = ({
 
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
-      if (taskHasSessionsForRoles(currentSessions, implementationSessionRoles)) {
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+      const managedWorktreeBasePath = repoConfig.worktreeBasePath
+        ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
+        : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
+      const canonicalWorktreePath = dependencies.settingsConfig.join(
+        managedWorktreeBasePath,
+        taskId,
+      );
+      const normalizedCanonicalWorktree = normalizePathForComparison(canonicalWorktreePath);
+      const guardedSessions = currentSessions.filter(
+        (session) =>
+          implementationSessionRoles.has(session.role.trim()) ||
+          normalizePathForComparison(session.workingDirectory) === normalizedCanonicalWorktree,
+      );
+      if (guardedSessions.length > 0) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
               dependency: "taskActivityGuard",
               operation: "task_reset_implementation",
               message:
-                "task_reset_implementation requires runtime session activity checks for tasks with build or QA sessions.",
+                "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
               details: { repoPath, taskId },
             }),
           );
@@ -82,58 +98,68 @@ export const createTaskImplementationResetUseCase = ({
         yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
           repoPath,
           taskId,
-          sessions: currentSessions,
+          sessions: guardedSessions,
           operationLabel: "reset implementation",
-          sessionRoles: [...implementationSessionRoleNames],
+          sessionRoles: [...new Set(guardedSessions.map((session) => session.role.trim()))],
         });
       }
-
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
-      const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
-        dependencies.settingsConfig,
-        repoConfig,
-      );
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const rollbackStatus = resetImplementationRollbackStatus(current);
-      const worktreePaths = yield* collectResetWorktreePaths(
-        dependencies,
-        effectiveRepoPath,
-        branchPrefix,
-        current.id,
-        currentSessions,
-        implementationSessionRoles,
-        "reset implementation",
-      );
-      const branchNames = yield* collectRelatedTaskBranches(
-        dependencies.gitPort,
-        effectiveRepoPath,
-        branchPrefix,
-        [taskId],
-      );
+      const canonicalWorktreeExists =
+        yield* dependencies.settingsConfig.pathExists(canonicalWorktreePath);
+      let restoreReference: string | null = null;
+      if (canonicalWorktreeExists) {
+        if (!(yield* dependencies.gitPort.isGitRepository(canonicalWorktreePath))) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Cannot reset implementation because canonical path is not a Git worktree: ${canonicalWorktreePath}`,
+              details: { repoPath: effectiveRepoPath, taskId, canonicalWorktreePath },
+            }),
+          );
+        }
+        const expectedBranch = buildBranchName(branchPrefix, taskId, current.title);
+        yield* validateExistingGitBuildWorktree(
+          dependencies,
+          effectiveRepoPath,
+          canonicalWorktreePath,
+          taskId,
+          expectedBranch,
+        );
+        const effectiveTarget = yield* effectiveTargetBranchForTask(
+          dependencies.workspaceSettingsService,
+          current,
+          effectiveRepoPath,
+        );
+        restoreReference = (yield* resolveBuildStartPoint(
+          dependencies,
+          effectiveRepoPath,
+          effectiveTarget,
+          current.targetBranch === undefined,
+        )).reference;
+      }
       const cleanupProgress = createTaskCleanupProgressState();
 
       return yield* Effect.gen(function* () {
-        yield* runTaskLocalCleanup({
-          branchNames,
-          devServerService: dependencies.devServerService,
-          gitPort: dependencies.gitPort,
-          managedWorktreeBasePath,
-          progress: cleanupProgress,
-          repoPath: effectiveRepoPath,
-          settingsConfig: dependencies.settingsConfig,
-          taskIds: [taskId],
-          worktreeCleanupOperation: "task_reset_implementation",
-          worktreeFiles,
-          worktreePaths,
-        });
+        if (restoreReference) {
+          yield* dependencies.gitPort.restoreWorktreeToReference(
+            canonicalWorktreePath,
+            restoreReference,
+          );
+          cleanupProgress.completedSteps.push(
+            `Restored canonical worktree ${canonicalWorktreePath} to ${restoreReference}.`,
+          );
+        }
+        yield* dependencies.devServerService.stop({ repoPath: effectiveRepoPath, taskId });
+        cleanupProgress.completedSteps.push(`Stopped dev servers for task ${taskId}.`);
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
           roles: [...implementationSessionRoleNames],
         });
+        cleanupProgress.completedSteps.push("Cleared Builder and QA session records.");
         yield* storeDependencies.clearQaReports({ repoPath: effectiveRepoPath, taskId });
+        cleanupProgress.completedSteps.push("Cleared QA reports.");
         yield* storeDependencies.setPullRequest({
           repoPath: effectiveRepoPath,
           taskId,
@@ -144,6 +170,7 @@ export const createTaskImplementationResetUseCase = ({
           taskId,
           directMerge: null,
         });
+        cleanupProgress.completedSteps.push("Cleared delivery metadata.");
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,

@@ -92,7 +92,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     expect(loadCalls).toBe(1);
   });
 
-  test("rejects reuse when the build continuation target no longer matches", async () => {
+  test("reuses a legacy build session at its exact recorded directory", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef: createSessionsRef([
         createBuildSessionFixture({
@@ -122,10 +122,13 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           model: createModelDependenciesFixture(),
         },
       }),
-    ).rejects.toThrow("it does not match the current builder continuation target");
+    ).resolves.toMatchObject({
+      kind: "reused",
+      session: { workingDirectory: "/tmp/repo/old-worktree" },
+    });
   });
 
-  test("fails fast for qa reuse when no builder continuation target exists", async () => {
+  test("reuses a legacy qa session without resolving a current worktree", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef: createSessionsRef([
         createBuildSessionFixture({
@@ -154,10 +157,13 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           model: createModelDependenciesFixture(),
         },
       }),
-    ).rejects.toThrow("Builder continuation cannot start until a builder worktree exists");
+    ).resolves.toMatchObject({
+      kind: "reused",
+      session: { workingDirectory: "/tmp/repo/worktree" },
+    });
   });
 
-  test("rejects qa reuse when the builder continuation target changed", async () => {
+  test("reuses qa at its recorded directory when the canonical target changed", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef: createSessionsRef([
         createBuildSessionFixture({
@@ -188,7 +194,10 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           model: createModelDependenciesFixture(),
         },
       }),
-    ).rejects.toThrow("it does not match the required builder worktree for this QA session");
+    ).resolves.toMatchObject({
+      kind: "reused",
+      session: { workingDirectory: "/tmp/repo/old-worktree" },
+    });
   });
 
   test("rejects qa reuse when the task workflow does not allow qa", async () => {

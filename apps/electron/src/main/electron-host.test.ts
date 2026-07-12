@@ -1336,12 +1336,15 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: { repo: repoConfig() },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      settingsConfig: {
+        ...createSettingsConfig(
+          globalConfig({
+            workspaces: { repo: repoConfig() },
+            workspaceOrder: ["repo"],
+          }),
+        ),
+        pathExists: () => Effect.succeed(false),
+      },
       taskStore: createTaskStore(),
     });
     await expect(
@@ -1355,12 +1358,15 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: { repo: repoConfig() },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      settingsConfig: {
+        ...createSettingsConfig(
+          globalConfig({
+            workspaces: { repo: repoConfig() },
+            workspaceOrder: ["repo"],
+          }),
+        ),
+        pathExists: () => Effect.succeed(false),
+      },
       taskStore: {
         ...resetImplementationTaskStore,
         listTasks: (input) =>

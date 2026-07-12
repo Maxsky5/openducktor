@@ -441,6 +441,12 @@ const createBuildStartGitPort = ({
         return true;
       });
     },
+    isRegisteredWorktree(repoPath, worktreePath) {
+      return Effect.sync(() => {
+        calls.push({ type: "isRegisteredWorktree", repoPath, worktreePath });
+        return true;
+      });
+    },
     referenceExists(workingDir, reference) {
       return Effect.sync(() => {
         calls.push({ type: "referenceExists", workingDir, reference });
@@ -593,6 +599,12 @@ const createDirectMergeGitPort = ({
         return true;
       });
     },
+    isRegisteredWorktree() {
+      return Effect.succeed(true);
+    },
+    referenceExists() {
+      return Effect.succeed(true);
+    },
     listRemotes() {
       return Effect.sync(() => {
         return [];
@@ -664,6 +676,11 @@ const createDirectMergeGitPort = ({
     },
     resetWorktreeSelection() {
       return Effect.dieMessage("unexpected reset");
+    },
+    restoreWorktreeToReference(workingDirectory, reference) {
+      return Effect.sync(() => {
+        calls.push({ type: "restoreWorktree", workingDirectory, reference });
+      });
     },
     commitsAheadBehind(workingDir, targetBranch) {
       return Effect.sync(() => {

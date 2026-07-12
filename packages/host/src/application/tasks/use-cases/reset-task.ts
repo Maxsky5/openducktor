@@ -98,6 +98,7 @@ export const createTaskFullResetUseCase = ({
       const worktreePaths = yield* collectResetWorktreePaths(
         dependencies,
         effectiveRepoPath,
+        managedWorktreeBasePath,
         branchPrefix,
         current.id,
         currentSessions,

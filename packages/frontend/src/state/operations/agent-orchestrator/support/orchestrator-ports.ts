@@ -17,8 +17,9 @@ export type AgentOrchestratorHostPort = {
 };
 
 export type AgentOrchestratorRuntimeHostPort = {
-  buildStart: typeof host.buildStart;
-  runtimeEnsure: typeof host.runtimeEnsure;
+  taskSessionBootstrapPrepare: typeof host.taskSessionBootstrapPrepare;
+  taskSessionBootstrapComplete: typeof host.taskSessionBootstrapComplete;
+  taskSessionBootstrapAbort: typeof host.taskSessionBootstrapAbort;
 };
 
 export type AgentOrchestratorDependencies = {

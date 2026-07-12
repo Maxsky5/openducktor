@@ -220,10 +220,9 @@ export function useAgentOrchestratorOperations({
         refreshTaskData,
         hostClient: {
           ...runtimeHostPort,
-          taskWorktreeGet: hostPort.taskWorktreeGet,
         },
       }),
-    [refreshTaskData, runtimeHostPort, hostPort.taskWorktreeGet],
+    [refreshTaskData, runtimeHostPort],
   );
   const sessionActions = useMemo(
     () =>

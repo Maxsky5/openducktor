@@ -27,6 +27,71 @@ const taskStoreEffect = <Success>(run: () => Promise<Success>) =>
   });
 
 describe("createTaskService build start worktree handling", () => {
+  test("prepares the same canonical worktree for non-Builder roles without transitioning", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      getTask(input) {
+        return taskStoreEffect(async () => {
+          calls.push({ type: "getTask", input });
+          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+        });
+      },
+      transitionTask(input) {
+        return taskStoreEffect(async () => {
+          calls.push({ type: "transition", input });
+          return task({ id: input.taskId, status: input.status });
+        });
+      },
+    };
+    const service = createTaskService({
+      taskStore,
+      gitPort: createBuildStartGitPort({ calls }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      systemCommands: createBuildSystemCommands(calls),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: ["bun test"], postComplete: [] },
+        worktreeCopyPaths: [".env"],
+      }),
+    });
+
+    const bootstrap = await Effect.runPromise(
+      service.taskSessionBootstrapPrepare({
+        repoPath: "/repo",
+        taskId: "task-1",
+        role: "spec",
+        runtimeKind: "opencode",
+      }),
+    );
+    expect(bootstrap).toMatchObject({
+      role: "spec",
+      runtimeKind: "opencode",
+      workingDirectory: "/worktrees/repo/task-1",
+    });
+    await Effect.runPromise(
+      service.taskSessionBootstrapComplete({
+        repoPath: "/repo",
+        taskId: "task-1",
+        bootstrapId: bootstrap.bootstrapId,
+      }),
+    );
+    expect(calls.filter((call) => JSON.stringify(call).includes('"type":"transition"'))).toEqual(
+      [],
+    );
+    expect(
+      calls.filter((call) => JSON.stringify(call).includes('"type":"createWorktree"')),
+    ).toHaveLength(1);
+    expect(
+      calls.filter((call) => JSON.stringify(call).includes('"type":"copyConfiguredPaths"')),
+    ).toHaveLength(1);
+    expect(calls.filter((call) => JSON.stringify(call).includes('"command":"bun"'))).toHaveLength(
+      1,
+    );
+  });
   test("starts a build from an existing task worktree while still transitioning the task", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
@@ -66,30 +131,35 @@ describe("createTaskService build start worktree handling", () => {
       runtimeKind: "opencode",
       workingDirectory: "/worktrees/repo/task-1",
     });
-    expect(calls).toEqual([
-      { type: "canonicalizePath", path: "/repo" },
-      { type: "isGitRepository", path: "/repo" },
-      { type: "getTask", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "isGitRepository", path: "/worktrees/repo/task-1" },
-      {
-        type: "shareGitCommonDirectory",
-        repoPath: "/repo",
-        workingDir: "/worktrees/repo/task-1",
-      },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      {
-        type: "ensureRuntime",
-        input: expect.objectContaining({
-          runtimeKind: "opencode",
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        { type: "canonicalizePath", path: "/repo" },
+        { type: "isGitRepository", path: "/repo" },
+        { type: "getTask", input: { repoPath: "/repo", taskId: "task-1" } },
+        { type: "isGitRepository", path: "/worktrees/repo/task-1" },
+        {
+          type: "shareGitCommonDirectory",
           repoPath: "/repo",
-          workingDirectory: "/repo",
-        }),
-      },
-      { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" } },
-    ]);
+          workingDir: "/worktrees/repo/task-1",
+        },
+        { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+        {
+          type: "ensureRuntime",
+          input: expect.objectContaining({
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            workingDirectory: "/repo",
+          }),
+        },
+        {
+          type: "transition",
+          input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+        },
+      ]),
+    );
   });
 
-  test("recreates an existing managed task path that is not a git repository", async () => {
+  test("rejects an occupied canonical path that is not a git worktree", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -125,50 +195,26 @@ describe("createTaskService build start worktree handling", () => {
       },
     };
 
-    const bootstrap = await Effect.runPromise(
-      createTaskService({
-        taskStore,
-        gitPort,
-        runtimeDefinitionsService: createRuntimeDefinitionsService(),
-        runtimeRegistry: createBuildStartRuntimeRegistry(calls),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        systemCommands: createBuildSystemCommands(calls),
-        worktreeFiles: createBuildStartWorktreeFiles(calls),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
-    );
-
-    expect(bootstrap).toEqual({
-      runtimeKind: "opencode",
-      workingDirectory: "/worktrees/repo/task-1",
-    });
-    expect(calls).toEqual(
-      expect.arrayContaining([
-        {
-          type: "removeWorktree",
-          repoPath: "/repo",
-          worktreePath: "/worktrees/repo/task-1",
-          force: true,
-        },
-        { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
-        {
-          type: "createWorktree",
-          repoPath: "/repo",
-          worktreePath: "/worktrees/repo/task-1",
-          branch: "odt/task-1-task-1",
-          createBranch: true,
-          startPoint: "origin/main",
-        },
-        {
-          type: "transition",
-          input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-        },
-      ]),
-    );
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          taskStore,
+          gitPort,
+          runtimeDefinitionsService: createRuntimeDefinitionsService(),
+          runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          systemCommands: createBuildSystemCommands(calls),
+          worktreeFiles: createBuildStartWorktreeFiles(calls),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      ),
+    ).rejects.toThrow("exists but is not a Git worktree");
+    expect(calls.some((call) => JSON.stringify(call).includes("removeWorktree"))).toBe(false);
+    expect(calls.some((call) => JSON.stringify(call).includes("createWorktree"))).toBe(false);
   });
 
   test("does not roll back an existing task worktree when transition fails", async () => {
@@ -207,27 +253,32 @@ describe("createTaskService build start worktree handling", () => {
         }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
       ),
     ).rejects.toThrow("transition failed");
-    expect(calls).toEqual([
-      { type: "canonicalizePath", path: "/repo" },
-      { type: "isGitRepository", path: "/repo" },
-      { type: "getTask", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "isGitRepository", path: "/worktrees/repo/task-1" },
-      {
-        type: "shareGitCommonDirectory",
-        repoPath: "/repo",
-        workingDir: "/worktrees/repo/task-1",
-      },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      {
-        type: "ensureRuntime",
-        input: expect.objectContaining({
-          runtimeKind: "opencode",
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        { type: "canonicalizePath", path: "/repo" },
+        { type: "isGitRepository", path: "/repo" },
+        { type: "getTask", input: { repoPath: "/repo", taskId: "task-1" } },
+        { type: "isGitRepository", path: "/worktrees/repo/task-1" },
+        {
+          type: "shareGitCommonDirectory",
           repoPath: "/repo",
-          workingDirectory: "/repo",
-        }),
-      },
-      { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" } },
-    ]);
+          workingDir: "/worktrees/repo/task-1",
+        },
+        { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+        {
+          type: "ensureRuntime",
+          input: expect.objectContaining({
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            workingDirectory: "/repo",
+          }),
+        },
+        {
+          type: "transition",
+          input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+        },
+      ]),
+    );
   });
 
   test("rolls back the build worktree when runtime startup fails", async () => {

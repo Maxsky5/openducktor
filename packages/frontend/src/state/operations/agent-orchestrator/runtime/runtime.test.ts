@@ -1,39 +1,18 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
-  type BuildSessionBootstrap,
-  OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
-  type RuntimeInstanceSummary,
   type SettingsSnapshot,
-  type TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { createDeferred, withTimeout } from "../test-utils";
 import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } from "./runtime";
 
-const buildBootstrapFixture: BuildSessionBootstrap = {
-  runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
-};
-
-const sharedRuntimeFixture: RuntimeInstanceSummary = {
-  kind: "opencode",
-  runtimeId: "runtime-shared",
-  repoPath: "/tmp/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/tmp/repo/shared",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4666",
-  },
-  startedAt: "2026-02-22T08:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-};
-
-const taskWorktreeFixture: TaskWorktreeSummary = {
+const taskBootstrapFixture = {
+  bootstrapId: "bootstrap-1",
+  role: "build" as const,
+  runtimeKind: "opencode" as const,
   workingDirectory: "/tmp/repo/worktree",
 };
 
@@ -75,19 +54,24 @@ describe("agent-orchestrator-runtime", () => {
     await clearAppQueryClient();
     repoConfigLoader = async () => createRepoConfig();
     runtimeHost = {
-      runtimeEnsure: async () => sharedRuntimeFixture,
-      buildStart: async () => buildBootstrapFixture,
-      taskWorktreeGet: async () => taskWorktreeFixture,
+      taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind, target) => ({
+        ...taskBootstrapFixture,
+        role,
+        runtimeKind,
+        workingDirectory: target ?? taskBootstrapFixture.workingDirectory,
+      }),
+      taskSessionBootstrapComplete: async () => undefined,
+      taskSessionBootstrapAbort: async () => undefined,
     };
   });
 
   test("starts build bootstrap and refreshes task data when no target worktree is provided", async () => {
     let refreshCalls = 0;
-    let buildStartCalls = 0;
+    let prepareCalls = 0;
 
-    runtimeHost.buildStart = async () => {
-      buildStartCalls += 1;
-      return buildBootstrapFixture;
+    runtimeHost.taskSessionBootstrapPrepare = async (_repoPath, _taskId, role, runtimeKind) => {
+      prepareCalls += 1;
+      return { ...taskBootstrapFixture, role, runtimeKind };
     };
 
     const ensureRuntime = createEnsureRuntime({
@@ -102,11 +86,13 @@ describe("agent-orchestrator-runtime", () => {
       workspaceId: "workspace-1",
     });
 
-    expect(runtime).toEqual({
+    expect(runtime).toMatchObject({
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
     });
-    expect(buildStartCalls).toBe(1);
+    expect(prepareCalls).toBe(1);
+    expect(refreshCalls).toBe(0);
+    await runtime.bootstrap?.complete();
     expect(refreshCalls).toBe(1);
   });
 
@@ -128,15 +114,15 @@ describe("agent-orchestrator-runtime", () => {
       throw new Error("Expected runtime resolution before timeout");
     }
 
-    expect(raceResult).toEqual({
+    expect(raceResult).toMatchObject({
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
     });
-    await expect(runtimePromise).resolves.toEqual(raceResult);
+    await expect(runtimePromise).resolves.toBe(raceResult);
   });
 
   test("propagates build startup transport errors before returning an unusable stdio runtime", async () => {
-    runtimeHost.buildStart = async () => {
+    runtimeHost.taskSessionBootstrapPrepare = async () => {
       throw new Error("Runtime build session startup requires a local_http runtime route");
     };
 
@@ -159,9 +145,7 @@ describe("agent-orchestrator-runtime", () => {
         defaultRuntimeKind: undefined as never,
         agentDefaults: {},
       });
-    runtimeHost.buildStart = mock(async () => buildBootstrapFixture);
-    runtimeHost.runtimeEnsure = mock(async () => sharedRuntimeFixture);
-    runtimeHost.taskWorktreeGet = mock(async () => taskWorktreeFixture);
+    runtimeHost.taskSessionBootstrapPrepare = mock(async () => taskBootstrapFixture);
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
@@ -176,22 +160,25 @@ describe("agent-orchestrator-runtime", () => {
     ).rejects.toThrow(
       "Runtime kind is not configured for build sessions. Select a build agent runtime or repository default runtime before starting a session.",
     );
-    expect(runtimeHost.buildStart).not.toHaveBeenCalled();
-    expect(runtimeHost.runtimeEnsure).not.toHaveBeenCalled();
-    expect(runtimeHost.taskWorktreeGet).not.toHaveBeenCalled();
+    expect(runtimeHost.taskSessionBootstrapPrepare).not.toHaveBeenCalled();
   });
 
-  test("uses shared repo runtime for build role when a target working directory is provided", async () => {
-    let buildStartCalls = 0;
-    let repoRuntimeEnsureCalls = 0;
-
-    runtimeHost.buildStart = async () => {
-      buildStartCalls += 1;
-      return buildBootstrapFixture;
-    };
-    runtimeHost.runtimeEnsure = async () => {
-      repoRuntimeEnsureCalls += 1;
-      return sharedRuntimeFixture;
+  test("passes an explicit fresh target through canonical bootstrap validation", async () => {
+    let receivedTarget: string | undefined;
+    runtimeHost.taskSessionBootstrapPrepare = async (
+      _repoPath,
+      _taskId,
+      role,
+      runtimeKind,
+      target,
+    ) => {
+      receivedTarget = target;
+      return {
+        ...taskBootstrapFixture,
+        role,
+        runtimeKind,
+        workingDirectory: target ?? "/tmp/repo/worktree",
+      };
     };
 
     const ensureRuntime = createEnsureRuntime({
@@ -205,25 +192,18 @@ describe("agent-orchestrator-runtime", () => {
       targetWorkingDirectory: "/tmp/repo/conflict-worktree",
     });
 
-    expect(runtime).toEqual({
+    expect(runtime).toMatchObject({
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/conflict-worktree",
     });
-    expect(buildStartCalls).toBe(0);
-    expect(repoRuntimeEnsureCalls).toBe(1);
+    expect(receivedTarget).toBe("/tmp/repo/conflict-worktree");
   });
 
-  test("uses task worktree for qa when builder worktree exists", async () => {
-    let continuationCalls = 0;
-    let repoRuntimeEnsureCalls = 0;
-
-    runtimeHost.taskWorktreeGet = async () => {
-      continuationCalls += 1;
-      return taskWorktreeFixture;
-    };
-    runtimeHost.runtimeEnsure = async () => {
-      repoRuntimeEnsureCalls += 1;
-      return sharedRuntimeFixture;
+  test("lets qa create or reuse the canonical task worktree through bootstrap", async () => {
+    let preparedRole = "";
+    runtimeHost.taskSessionBootstrapPrepare = async (_repoPath, _taskId, role, runtimeKind) => {
+      preparedRole = role;
+      return { ...taskBootstrapFixture, role, runtimeKind };
     };
 
     const ensureRuntime = createEnsureRuntime({
@@ -236,16 +216,17 @@ describe("agent-orchestrator-runtime", () => {
       workspaceId: "workspace-1",
     });
 
-    expect(runtime).toEqual({
+    expect(runtime).toMatchObject({
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
     });
-    expect(continuationCalls).toBe(1);
-    expect(repoRuntimeEnsureCalls).toBe(1);
+    expect(preparedRole).toBe("qa");
   });
 
-  test("throws actionable error when qa has no task worktree", async () => {
-    runtimeHost.taskWorktreeGet = async () => null;
+  test("propagates actionable qa bootstrap failures", async () => {
+    runtimeHost.taskSessionBootstrapPrepare = async () => {
+      throw new Error("Canonical task worktree path is occupied by another repository");
+    };
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
@@ -257,7 +238,7 @@ describe("agent-orchestrator-runtime", () => {
       ensureRuntime("/tmp/repo", "task-1", "qa", {
         workspaceId: "workspace-1",
       }),
-    ).rejects.toThrow("Builder continuation cannot start until a builder worktree exists");
+    ).rejects.toThrow("occupied by another repository");
   });
 
   test("propagates repo config loading errors when default model lookup fails", async () => {

@@ -1,3 +1,4 @@
+import { agentRoleSchema } from "@openducktor/contracts";
 import type {
   AgentSessionUpsertInput,
   BuildBlockedInput,
@@ -14,6 +15,8 @@ import type {
   RepoPathInput,
   SetPlanInput,
   TaskIdInput,
+  TaskSessionBootstrapFinalizeInput,
+  TaskSessionBootstrapPrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
@@ -170,6 +173,42 @@ export const parseBuildStartInput = (input: unknown): BuildStartInput => {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
+  };
+};
+
+export const parseTaskSessionBootstrapPrepareInput = (
+  input: unknown,
+): TaskSessionBootstrapPrepareInput => {
+  const record = requireRecord(input, "task_session_bootstrap_prepare input");
+  const parsedRole = agentRoleSchema.safeParse(record.role);
+  if (!parsedRole.success) {
+    throw new HostValidationError({
+      field: "role",
+      message: "A supported agent role is required.",
+    });
+  }
+  const targetWorkingDirectory =
+    typeof record.targetWorkingDirectory === "string" && record.targetWorkingDirectory.trim()
+      ? record.targetWorkingDirectory.trim()
+      : undefined;
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
+    role: parsedRole.data,
+    ...(targetWorkingDirectory ? { targetWorkingDirectory } : {}),
+  };
+};
+
+export const parseTaskSessionBootstrapFinalizeInput = (
+  input: unknown,
+  label: string,
+): TaskSessionBootstrapFinalizeInput => {
+  const record = requireRecord(input, label);
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    bootstrapId: requireString(record.bootstrapId, "bootstrapId"),
   };
 };
 

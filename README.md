@@ -79,7 +79,7 @@ Task data is stored in an OpenDucktor-managed SQLite database, so no external ta
 - Role-specific agent sessions for Specification, Planner, Builder, and QA.
 - Autopilot rules that can automatically start the next workflow action when task transitions are observed.
 - Task-linked documents for specifications, implementation plans, and QA reports.
-- A dedicated Git worktree for each Builder task, with in-app tools to inspect diffs, track Git state, and run dev servers while implementation is in progress.
+- A canonical Git worktree for each task, shared by fresh Specification, Planner, Builder, and QA sessions while the runtime process remains repository-scoped.
 - Runtime-aware Agent Studio support for OpenCode and Codex, including model selection, history hydration, permissions/questions, and workflow-tool routing through the runtime descriptor model.
 - Global and repository-level prompt customization for adapting agent behavior to your workflow.
 - A built-in OpenDucktor MCP server used internally by managed agent sessions and available externally through `@openducktor/mcp`.
@@ -94,7 +94,7 @@ At a high level:
 1. Tasks and workflow state live in a workspace-scoped SQLite database.
 2. OpenDucktor starts role-specific sessions for Specification, Planner, Builder, and QA.
 3. Agent-authored outputs such as specs, plans, and QA reports are stored back on the task.
-4. Builder work happens in a dedicated Git worktree for the task, so implementation stays isolated from the main checkout.
+4. The first fresh task session creates the task's canonical worktree; later fresh roles reuse it, and only Builder advances the task to `in_progress`.
 5. Reviews, approvals, and pull request delivery remain connected to that same task.
 
 Under the hood, OpenDucktor exposes its own MCP server, `openducktor`.

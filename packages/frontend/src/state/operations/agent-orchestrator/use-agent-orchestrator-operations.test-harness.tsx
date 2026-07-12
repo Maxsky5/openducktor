@@ -44,23 +44,14 @@ export const createTestDependencies = (
     ...hostOverrides,
   },
   runtimeHostPort: {
-    buildStart: async (_repoPath, _taskId, runtimeKind) => ({
+    taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind) => ({
+      bootstrapId: "bootstrap-1",
+      role,
       runtimeKind,
-      runtimeId: "runtime-1",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo/worktree",
     }),
-    runtimeEnsure: async (repoPath, runtimeKind) => ({
-      kind: runtimeKind,
-      runtimeId: "runtime-1",
-      repoPath,
-      taskId: null,
-      role: "workspace",
-      workingDirectory: repoPath,
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: { ...OPENCODE_RUNTIME_DESCRIPTOR, kind: runtimeKind },
-    }),
+    taskSessionBootstrapComplete: async () => undefined,
+    taskSessionBootstrapAbort: async () => undefined,
     ...runtimeHostOverrides,
   },
 });

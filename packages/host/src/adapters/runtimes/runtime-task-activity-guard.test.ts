@@ -192,6 +192,31 @@ describe("createRuntimeTaskActivityGuard", () => {
       "Cannot delete tasks with active QA work in progress. Stop the active QA session(s) first: task-1 (qa session)",
     );
   });
+  test("blocks delete while a Planner session is active in the shared worktree", async () => {
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ liveSessions: new Set(["external-planner-session"]) }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.ensureNoActiveTaskDeleteRuns({
+          repoPath: "/repo",
+          taskSessions: [
+            {
+              taskId: "task-1",
+              sessions: [
+                session({
+                  externalSessionId: "external-planner-session",
+                  role: "planner",
+                }),
+              ],
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(
+      "Cannot delete tasks with active workflow sessions. Stop the active session(s) first: task-1 (planner session)",
+    );
+  });
   test("treats unsupported runtime probes as active before destructive cleanup", async () => {
     const guard = createRuntimeTaskActivityGuard({
       runtimeRegistry: registry({ supported: false }),

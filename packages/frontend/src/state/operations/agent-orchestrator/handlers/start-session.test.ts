@@ -161,7 +161,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         role: "planner",
         startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
+        selectedModel: BUILD_SELECTION,
       });
       await buildStarted.promise;
       const plannerStartResult = await withTimeout(plannerStarted.promise, 50);
@@ -693,7 +693,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("resolves the builder worktree target for qa start", async () => {
+  test("lets host bootstrap resolve the canonical worktree for qa start", async () => {
     let qaTargetCalls = 0;
     const ensuredWorkingDirectories: Array<string | null | undefined> = [];
     const adapter = new OpencodeSdkAdapter();
@@ -746,8 +746,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: QA_SELECTION,
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-qa" }));
-      expect(qaTargetCalls).toBe(1);
-      expect(ensuredWorkingDirectories).toEqual(["/tmp/repo/worktree"]);
+      expect(qaTargetCalls).toBe(0);
+      expect(ensuredWorkingDirectories).toEqual([undefined]);
     } finally {
       adapter.startSession = originalStartSession;
     }

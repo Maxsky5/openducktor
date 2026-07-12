@@ -28,6 +28,9 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalRuntimeList = host.runtimeList;
   const originalRuntimeEnsure = host.runtimeEnsure;
   const originalRuntimeRequire = host.runtimeRequire;
+  const originalTaskSessionBootstrapPrepare = host.taskSessionBootstrapPrepare;
+  const originalTaskSessionBootstrapComplete = host.taskSessionBootstrapComplete;
+  const originalTaskSessionBootstrapAbort = host.taskSessionBootstrapAbort;
   const originalListSessionRuntimeSnapshots =
     OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots;
   const originalReadAgentSessionRuntimeSnapshot =
@@ -75,6 +78,14 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     },
   });
   host.runtimeRequire = host.runtimeEnsure;
+  host.taskSessionBootstrapPrepare = async (_repoPath, _taskId, role, runtimeKind) => ({
+    bootstrapId: "bootstrap-1",
+    role,
+    runtimeKind,
+    workingDirectory: "/tmp/repo/worktree",
+  });
+  host.taskSessionBootstrapComplete = async () => undefined;
+  host.taskSessionBootstrapAbort = async () => undefined;
   opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = async () => [
     createAgentSessionRuntimeSnapshotFixture(),
   ];
@@ -113,6 +124,9 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     host.runtimeList = originalRuntimeList;
     host.runtimeEnsure = originalRuntimeEnsure;
     host.runtimeRequire = originalRuntimeRequire;
+    host.taskSessionBootstrapPrepare = originalTaskSessionBootstrapPrepare;
+    host.taskSessionBootstrapComplete = originalTaskSessionBootstrapComplete;
+    host.taskSessionBootstrapAbort = originalTaskSessionBootstrapAbort;
     opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
     opencodeSdkAdapterPrototype.readSessionRuntimeSnapshot =
       originalReadAgentSessionRuntimeSnapshot;

@@ -89,6 +89,7 @@ export const collectDeleteWorktreePaths = (
     settingsConfig: SettingsConfigPort;
   },
   repoPath: string,
+  managedWorktreeBasePath: string,
   branchPrefix: string,
   targetTaskSessions: TaskSessionRecords[],
 ) =>
@@ -97,8 +98,37 @@ export const collectDeleteWorktreePaths = (
     const seen = new Set<string>();
     const paths: string[] = [];
     for (const { taskId, sessions } of targetTaskSessions) {
+      const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+      const normalizedCanonical = normalizePathForComparison(canonicalWorktree);
+      if (normalizedCanonical === normalizedRepo) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Cannot delete task ${taskId} because its canonical worktree resolves to the repository root.`,
+            details: { repoPath, taskId, canonicalWorktree },
+          }),
+        );
+      }
+      if (yield* dependencies.settingsConfig.pathExists(canonicalWorktree)) {
+        const currentBranch = yield* dependencies.gitPort.getCurrentBranch(canonicalWorktree);
+        if (
+          !currentBranch.name ||
+          currentBranch.detached ||
+          !isRelatedTaskBranch(currentBranch.name, branchPrefix, taskId)
+        ) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Cannot delete task ${taskId} because canonical worktree ${canonicalWorktree} is not on its task branch.`,
+              details: { repoPath, taskId, canonicalWorktree, actualBranch: currentBranch.name },
+            }),
+          );
+        }
+        seen.add(normalizedCanonical);
+        paths.push(canonicalWorktree);
+      }
       for (const session of sessions) {
-        if (!implementationSessionRoles.has(session.role.trim())) {
+        if (!workflowCleanupSessionRoles.has(session.role.trim())) {
           continue;
         }
         const workingDirectory = session.workingDirectory.trim();
@@ -109,6 +139,9 @@ export const collectDeleteWorktreePaths = (
         if (normalizedWorktree === normalizedRepo) {
           continue;
         }
+        if (seen.has(normalizedWorktree)) {
+          continue;
+        }
         if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
           const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
           const branchName = currentBranch.name?.trim();
@@ -116,10 +149,8 @@ export const collectDeleteWorktreePaths = (
             continue;
           }
         }
-        if (!seen.has(normalizedWorktree)) {
-          seen.add(normalizedWorktree);
-          paths.push(workingDirectory);
-        }
+        seen.add(normalizedWorktree);
+        paths.push(workingDirectory);
       }
     }
     return paths;
@@ -130,6 +161,7 @@ export const collectResetWorktreePaths = (
     settingsConfig: SettingsConfigPort;
   },
   repoPath: string,
+  managedWorktreeBasePath: string,
   branchPrefix: string,
   taskId: string,
   sessions: AgentSessionRecord[],
@@ -140,6 +172,35 @@ export const collectResetWorktreePaths = (
     const normalizedRepo = normalizePathForComparison(repoPath);
     const seen = new Set<string>();
     const paths: string[] = [];
+    const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+    const normalizedCanonical = normalizePathForComparison(canonicalWorktree);
+    if (normalizedCanonical === normalizedRepo) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Cannot ${operationLabel} task ${taskId} because its canonical worktree resolves to the repository root.`,
+          details: { repoPath, taskId, canonicalWorktree },
+        }),
+      );
+    }
+    if (yield* dependencies.settingsConfig.pathExists(canonicalWorktree)) {
+      const currentBranch = yield* dependencies.gitPort.getCurrentBranch(canonicalWorktree);
+      if (
+        !currentBranch.name ||
+        currentBranch.detached ||
+        !isRelatedTaskBranch(currentBranch.name, branchPrefix, taskId)
+      ) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Cannot ${operationLabel} task ${taskId} because canonical worktree ${canonicalWorktree} is not on its task branch.`,
+            details: { repoPath, taskId, canonicalWorktree, actualBranch: currentBranch.name },
+          }),
+        );
+      }
+      seen.add(normalizedCanonical);
+      paths.push(canonicalWorktree);
+    }
     for (const session of sessions) {
       if (!sessionRoles.has(session.role.trim())) {
         continue;
@@ -150,6 +211,9 @@ export const collectResetWorktreePaths = (
       }
       const normalizedWorktree = normalizePathForComparison(workingDirectory);
       if (normalizedWorktree === normalizedRepo) {
+        continue;
+      }
+      if (seen.has(normalizedWorktree)) {
         continue;
       }
       if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
@@ -168,10 +232,8 @@ export const collectResetWorktreePaths = (
           continue;
         }
       }
-      if (!seen.has(normalizedWorktree)) {
-        seen.add(normalizedWorktree);
-        paths.push(workingDirectory);
-      }
+      seen.add(normalizedWorktree);
+      paths.push(workingDirectory);
     }
     return paths;
   });

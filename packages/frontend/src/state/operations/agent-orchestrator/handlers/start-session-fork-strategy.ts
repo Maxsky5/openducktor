@@ -63,6 +63,11 @@ export const executeForkStart = async ({
     sourceSession: input.sourceSession,
   });
   const { runtimeKind: sourceRuntimeKind, workingDirectory } = readForkSourceRuntime(sourceSession);
+  if (workingDirectory === normalizeWorkingDirectory(ctx.repoPath)) {
+    throw new Error(
+      `Session "${sourceSession.externalSessionId}" is a legacy repository-root task session and cannot be forked. Start a fresh session in the task worktree instead.`,
+    );
+  }
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
 
