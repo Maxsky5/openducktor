@@ -1,15 +1,66 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ComponentProps, MouseEvent, ReactElement } from "react";
+import type { Components, ExtraProps } from "react-markdown";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
+import { cn } from "@/lib/utils";
 import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
 import { commentLocationLabel } from "./task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
+
+const openReviewUrl = (url: string, failureMessage: string): void => {
+  void openExternalUrl(url).catch((error) => {
+    toast.error(failureMessage, {
+      description: errorMessage(error),
+    });
+  });
+};
+
+type TaskExecutionCiMarkdownLinkProps = ComponentProps<"a"> & ExtraProps;
+
+export function TaskExecutionCiMarkdownLink({
+  node: _node,
+  children,
+  className,
+  href,
+  ...props
+}: TaskExecutionCiMarkdownLinkProps): ReactElement {
+  const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
+    event.preventDefault();
+    if (href) {
+      openReviewUrl(href, "Failed to open link");
+    }
+  };
+  const openLinkFromAuxiliaryClick = (event: MouseEvent<HTMLAnchorElement>): void => {
+    if (event.button === 1) {
+      openLink(event);
+    }
+  };
+  return (
+    <a
+      {...props}
+      href={href}
+      target={undefined}
+      onClick={openLink}
+      onAuxClick={openLinkFromAuxiliaryClick}
+      className={cn(
+        "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
+        className,
+      )}
+    >
+      {children}
+    </a>
+  );
+}
+
+const CI_COMMENT_MARKDOWN_COMPONENTS: Components = {
+  a: TaskExecutionCiMarkdownLink,
+};
 
 function TaskExecutionCiSuggestedChange({
   patch,
@@ -75,11 +126,7 @@ export function TaskExecutionCiCommentCard({
     if (!comment.url) {
       return;
     }
-    void openExternalUrl(comment.url).catch((error) => {
-      toast.error("Failed to open comment", {
-        description: errorMessage(error),
-      });
-    });
+    openReviewUrl(comment.url, "Failed to open comment");
   };
 
   return (
@@ -157,6 +204,7 @@ export function TaskExecutionCiCommentCard({
           <MarkdownRenderer
             markdown={comment.body}
             variant="compact"
+            components={CI_COMMENT_MARKDOWN_COMPONENTS}
             className="min-w-0 break-words prose-p:break-words prose-li:break-words prose-code:break-words prose-pre:max-w-full prose-pre:whitespace-pre-wrap prose-pre:break-words prose-blockquote:break-words [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words"
           />
         </div>

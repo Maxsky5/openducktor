@@ -18,6 +18,7 @@ type MarkdownRendererProps = {
   markdown: string;
   variant?: MarkdownRendererVariant;
   className?: string;
+  components?: Components;
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
 };
@@ -74,6 +75,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   markdown,
   variant = "document",
   className,
+  components: componentOverrides,
   premiumCodeBlocks = false,
   fallback,
 }: MarkdownRendererProps): ReactElement | null {
@@ -82,7 +84,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     return null;
   }
 
-  const components = MARKDOWN_COMPONENTS[variant];
+  const components = componentOverrides
+    ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
+    : MARKDOWN_COMPONENTS[variant];
   return (
     <div className={cn(MARKDOWN_CLASSES[variant], className)}>
       {premiumCodeBlocks ? (

@@ -5,7 +5,10 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import * as externalUrl from "@/lib/open-external-url";
 import { QueryProvider } from "@/lib/query-provider";
-import { TaskExecutionCiCommentCard } from "./task-execution-ci-comment-card";
+import {
+  TaskExecutionCiCommentCard,
+  TaskExecutionCiMarkdownLink,
+} from "./task-execution-ci-comment-card";
 
 const comment: PullRequestReviewComment = {
   id: "comment-1",
@@ -36,6 +39,25 @@ test("opens review comments through the external URL shell bridge", () => {
     fireEvent.click(view.getByRole("button", { name: "Open comment from reviewer" }));
 
     expect(openExternalUrlSpy).toHaveBeenCalledWith(comment.url);
+  } finally {
+    openExternalUrlSpy.mockRestore();
+  }
+});
+
+test("opens links in review markdown through the external URL shell bridge", () => {
+  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+  const markdownUrl = "https://example.com/review-guidance";
+
+  try {
+    const view = render(
+      <TaskExecutionCiMarkdownLink href={markdownUrl}>Review guidance</TaskExecutionCiMarkdownLink>,
+    );
+    const link = view.getByRole("link", { name: "Review guidance" });
+
+    expect(link.getAttribute("target")).toBeNull();
+    fireEvent.click(link);
+
+    expect(openExternalUrlSpy).toHaveBeenCalledWith(markdownUrl);
   } finally {
     openExternalUrlSpy.mockRestore();
   }
