@@ -14,6 +14,7 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useState,
@@ -180,15 +181,20 @@ const resultBelongsToSelectedFile = (
 };
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
-  model,
+  model: { selectedFile, previewSessionKey, preservePreviousSnapshot, onClose },
 }: {
   model: TaskExecutionSelectedFilePreviewModel;
 }): ReactElement | null {
-  const selectedFile = model.selectedFile;
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
   );
-  const fileQuery = useQuery({
+  const {
+    data: fileData,
+    error: fileError,
+    isError: isFileError,
+    isFetching: isFileFetching,
+    isLoading: isFileLoading,
+  } = useQuery({
     ...workspaceTextFileQueryOptions(
       selectedFile?.rootPath ?? "__inactive_file_preview__",
       selectedFile?.relativePath ?? "__inactive_file_preview__",
@@ -197,11 +203,11 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   });
   const { theme } = useTheme();
   const currentSnapshot = useMemo<FilePreviewSnapshot | null>(() => {
-    if (!selectedFile || !resultBelongsToSelectedFile(fileQuery.data, selectedFile)) {
+    if (!selectedFile || !resultBelongsToSelectedFile(fileData, selectedFile)) {
       return null;
     }
-    return createFilePreviewSnapshot(selectedFile, fileQuery.data);
-  }, [fileQuery.data, selectedFile]);
+    return createFilePreviewSnapshot(selectedFile, fileData);
+  }, [fileData, selectedFile]);
   const isCurrentHighlightReady = useFileHighlightReady(
     currentSnapshot?.codeViewFile?.file ?? null,
   );
@@ -209,15 +215,15 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     currentSnapshot !== null && (currentSnapshot.codeViewFile === null || isCurrentHighlightReady);
   const readyCurrentSnapshot = isCurrentSnapshotReady ? currentSnapshot : null;
   const retainedSnapshot =
-    committedSnapshot?.sessionKey === model.previewSessionKey ? committedSnapshot.snapshot : null;
+    committedSnapshot?.sessionKey === previewSessionKey ? committedSnapshot.snapshot : null;
   const visibleSnapshot =
-    readyCurrentSnapshot ?? (model.preservePreviousSnapshot ? retainedSnapshot : null);
+    readyCurrentSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
   const isSwitchingFiles =
     selectedFile !== null &&
     visibleSnapshot !== null &&
     (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
       visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
-    (fileQuery.isFetching || !isCurrentSnapshotReady);
+    (isFileFetching || !isCurrentSnapshotReady);
   const codeViewOptions = useMemo<CodeViewOptions<undefined>>(
     () => ({
       theme: CODE_VIEW_THEME,
@@ -251,7 +257,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   );
   const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const codeViewRenderKey =
-    codeViewFileId !== null ? `${model.previewSessionKey}:${codeViewFileId}` : null;
+    codeViewFileId !== null ? `${previewSessionKey}:${codeViewFileId}` : null;
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
     if (!visibleSnapshot?.codeViewFile || !codeViewFileId) {
       return [];
@@ -265,27 +271,27 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       },
     ];
   }, [codeViewFileId, visibleSnapshot]);
+  const closePreview = useEffectEvent(onClose);
 
   useLayoutEffect(() => {
     if (!selectedFile) {
       setCommittedSnapshot(null);
       return;
     }
-    if (readyCurrentSnapshot) {
+    if (isCurrentSnapshotReady && currentSnapshot) {
       setCommittedSnapshot((previous) => {
         if (
-          previous?.sessionKey === model.previewSessionKey &&
-          previous.snapshot.result === readyCurrentSnapshot.result &&
-          previous.snapshot.selectedFile.rootPath === readyCurrentSnapshot.selectedFile.rootPath &&
-          previous.snapshot.selectedFile.relativePath ===
-            readyCurrentSnapshot.selectedFile.relativePath
+          previous?.sessionKey === previewSessionKey &&
+          previous.snapshot.result === currentSnapshot.result &&
+          previous.snapshot.selectedFile.rootPath === currentSnapshot.selectedFile.rootPath &&
+          previous.snapshot.selectedFile.relativePath === currentSnapshot.selectedFile.relativePath
         ) {
           return previous;
         }
-        return { sessionKey: model.previewSessionKey, snapshot: readyCurrentSnapshot };
+        return { sessionKey: previewSessionKey, snapshot: currentSnapshot };
       });
     }
-  }, [model.previewSessionKey, readyCurrentSnapshot, selectedFile]);
+  }, [currentSnapshot, isCurrentSnapshotReady, previewSessionKey, selectedFile]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -297,21 +303,21 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         return;
       }
       event.preventDefault();
-      model.onClose();
+      closePreview();
     };
 
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [model.onClose, selectedFile]);
+  }, [selectedFile]);
 
   if (!selectedFile) {
     return null;
   }
 
   let body: ReactElement;
-  if (fileQuery.isError) {
-    body = <FilePreviewState message={errorMessage(fileQuery.error)} />;
-  } else if ((fileQuery.isLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
+  if (isFileError) {
+    body = <FilePreviewState message={errorMessage(fileError)} />;
+  } else if ((isFileLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
     body = <FilePreviewState message="Loading file..." />;
   } else if (visibleSnapshot?.result.kind === "unsupported") {
     body = <FilePreviewState message={visibleSnapshot.result.message} />;
@@ -345,7 +351,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
           size="icon"
           className="size-7 shrink-0"
           aria-label="Close file preview"
-          onClick={model.onClose}
+          onClick={onClose}
         >
           <X className="size-3.5" />
         </Button>

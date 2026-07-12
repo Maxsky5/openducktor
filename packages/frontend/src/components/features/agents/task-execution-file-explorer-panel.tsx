@@ -206,48 +206,47 @@ function FileExplorerRootPathHeader({ rootPath }: { rootPath: string }): ReactEl
 }
 
 export function TaskExecutionFileExplorerPanel({
-  model,
+  model: {
+    rootPath: requestedRootPath,
+    targetBranch,
+    unavailableReason,
+    isActive,
+    selectedFile,
+    onSelectFile,
+    onClearSelectedFile,
+  },
 }: {
   model: TaskExecutionFileExplorerPanelModel;
 }): ReactElement {
-  const requestedRootPath = model.rootPath;
-  const treeQuery = useQuery({
-    ...workspaceFileTreeQueryOptions(
-      requestedRootPath ?? "__inactive_file_tree__",
-      model.targetBranch,
-    ),
-    enabled: model.isActive && requestedRootPath !== null,
+  const {
+    data: treeData,
+    error: treeError,
+    isError: isTreeError,
+    isLoading: isTreeLoading,
+  } = useQuery({
+    ...workspaceFileTreeQueryOptions(requestedRootPath ?? "__inactive_file_tree__", targetBranch),
+    enabled: isActive && requestedRootPath !== null,
   });
-  const rootPath = treeQuery.data?.rootPath ?? requestedRootPath;
-  const resolvedRootPath = treeQuery.data?.rootPath ?? null;
+  const resolvedRootPath = treeData?.rootPath ?? null;
+  const rootPath = resolvedRootPath ?? requestedRootPath;
   const { theme } = useTheme();
   const treeStyle = useMemo(() => treeStylesForTheme(theme), [theme]);
-  const entriesByPath = useMemo(
-    () => buildEntriesByPath(treeQuery.data?.entries),
-    [treeQuery.data?.entries],
-  );
+  const entriesByPath = useMemo(() => buildEntriesByPath(treeData?.entries), [treeData?.entries]);
   const gitStatusEntries = useMemo(
-    () => buildTaskExecutionFileTreeGitStatusEntries(treeQuery.data?.entries),
-    [treeQuery.data?.entries],
+    () => buildTaskExecutionFileTreeGitStatusEntries(treeData?.entries),
+    [treeData?.entries],
   );
   const fileTreeInputPaths = useMemo(
-    () => buildTaskExecutionFileTreeInputPaths(treeQuery.data?.entries),
-    [treeQuery.data?.entries],
+    () => buildTaskExecutionFileTreeInputPaths(treeData?.entries),
+    [treeData?.entries],
   );
   const selectionRef = useRef<SelectionContextRef>({
     entriesByPath,
     rootPath,
-    selectedFile: model.selectedFile,
-    onSelectFile: model.onSelectFile,
+    selectedFile,
+    onSelectFile,
   });
   const previousRootPathRef = useRef(rootPath);
-
-  selectionRef.current = {
-    entriesByPath,
-    rootPath,
-    selectedFile: model.selectedFile,
-    onSelectFile: model.onSelectFile,
-  };
 
   const { model: fileTree } = useFileTree({
     preparedInput: EMPTY_TREE_INPUT,
@@ -258,9 +257,18 @@ export function TaskExecutionFileExplorerPanel({
     gitStatus: [],
   });
   const preparedInput = useMemo(
-    () => (treeQuery.data ? prepareFileTreeInput(fileTreeInputPaths) : null),
-    [fileTreeInputPaths, treeQuery.data],
+    () => (treeData ? prepareFileTreeInput(fileTreeInputPaths) : null),
+    [fileTreeInputPaths, treeData],
   );
+
+  useLayoutEffect(() => {
+    selectionRef.current = {
+      entriesByPath,
+      rootPath: treeData?.rootPath ?? requestedRootPath,
+      selectedFile,
+      onSelectFile,
+    };
+  }, [entriesByPath, onSelectFile, requestedRootPath, selectedFile, treeData?.rootPath]);
 
   useEffect(
     () =>
@@ -284,40 +292,46 @@ export function TaskExecutionFileExplorerPanel({
   }, [fileTree, gitStatusEntries, preparedInput]);
 
   useEffect(() => {
-    syncFileTreeSelection(fileTree, model.selectedFile, rootPath, entriesByPath);
-  }, [entriesByPath, fileTree, model.selectedFile, rootPath]);
+    syncFileTreeSelection(
+      fileTree,
+      selectedFile,
+      treeData?.rootPath ?? requestedRootPath,
+      entriesByPath,
+    );
+  }, [entriesByPath, fileTree, requestedRootPath, selectedFile, treeData?.rootPath]);
 
   useLayoutEffect(() => {
-    if (shouldClearTaskExecutionSelectedFile(model.selectedFile, resolvedRootPath)) {
-      model.onClearSelectedFile();
+    if (shouldClearTaskExecutionSelectedFile(selectedFile, treeData?.rootPath ?? null)) {
+      onClearSelectedFile();
     }
-  }, [model.onClearSelectedFile, model.selectedFile, resolvedRootPath]);
+  }, [onClearSelectedFile, selectedFile, treeData?.rootPath]);
 
   useEffect(() => {
-    if (previousRootPathRef.current === rootPath) {
+    const currentRootPath = treeData?.rootPath ?? requestedRootPath;
+    if (previousRootPathRef.current === currentRootPath) {
       return;
     }
-    previousRootPathRef.current = rootPath;
+    previousRootPathRef.current = currentRootPath;
     fileTree.setSearch(null);
-  }, [fileTree, rootPath]);
+  }, [fileTree, requestedRootPath, treeData?.rootPath]);
 
-  if (model.unavailableReason) {
-    return <FileExplorerUnavailableState message={model.unavailableReason} />;
+  if (unavailableReason) {
+    return <FileExplorerUnavailableState message={unavailableReason} />;
   }
 
   if (rootPath === null) {
     return <FileExplorerUnavailableState message="No repository is selected." />;
   }
 
-  if (treeQuery.isError) {
-    return <FileExplorerUnavailableState message={errorMessage(treeQuery.error)} />;
+  if (isTreeError) {
+    return <FileExplorerUnavailableState message={errorMessage(treeError)} />;
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
       <FileExplorerRootPathHeader rootPath={rootPath} />
       <div className="min-h-0 flex-1 overflow-hidden py-2.5">
-        {treeQuery.isLoading ? (
+        {isTreeLoading ? (
           <FileExplorerUnavailableState message="Loading files..." />
         ) : fileTreeInputPaths.length === 0 ? (
           <FileExplorerUnavailableState message="No files found." />
