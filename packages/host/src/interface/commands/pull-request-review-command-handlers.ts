@@ -1,6 +1,6 @@
 import type { PullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
-import { optionalString, requireRecord, requireString } from "./command-inputs";
+import { optionalString, requireRecord, requireStringPreservingWhitespace } from "./command-inputs";
 
 const parsePullRequestReviewContextInput = (
   args: Record<string, unknown> | undefined,
@@ -11,7 +11,7 @@ const parsePullRequestReviewContextInput = (
   const record = requireRecord(args, "pull_request_review_context_get input");
   const taskId = optionalString(record.taskId, "taskId");
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
+    repoPath: requireStringPreservingWhitespace(record.repoPath, "repoPath"),
     ...(taskId ? { taskId } : {}),
   };
 };
