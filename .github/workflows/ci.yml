@@ -37,7 +37,7 @@ jobs:
         uses: millionco/react-doctor@e141d90c93a95e0cf2ed63f575bab3f7a4347383 # main
         with:
           project: "@openducktor/frontend,@openducktor/electron"
-          blocking: none
+          blocking: warning
 
   typescript-workspace-quality:
     name: TypeScript Workspace Quality (${{ matrix.label }})
