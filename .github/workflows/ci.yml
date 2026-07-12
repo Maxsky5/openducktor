@@ -34,10 +34,10 @@ jobs:
           fetch-depth: 0
 
       - name: Run React Doctor
-        uses: millionco/react-doctor@1880b152e4d6aedd5c06cf2ca51783e53cfb4004 # main
+        uses: millionco/react-doctor@e141d90c93a95e0cf2ed63f575bab3f7a4347383 # main
         with:
           project: "@openducktor/frontend,@openducktor/electron"
-          fail-on: warning
+          blocking: warning
 
   typescript-workspace-quality:
     name: TypeScript Workspace Quality (${{ matrix.label }})

@@ -14,16 +14,7 @@ export type {
 export { AgentChatSurface } from "./agent-chat/agent-chat";
 export { AgentRuntimeCombobox } from "./agent-runtime-combobox";
 export type { AgentStudioHeaderModel } from "./agent-studio-header";
-export type {
-  AgentStudioRightPanelKind,
-  AgentStudioRightPanelModel,
-  AgentStudioRightPanelToggleModel,
-} from "./agent-studio-right-panel";
 export type { AgentStudioTaskTab, AgentStudioTaskTabsModel } from "./agent-studio-task-tabs";
-export type {
-  AgentStudioWorkspaceDocument,
-  AgentStudioWorkspaceSidebarModel,
-} from "./agent-studio-workspace-sidebar";
 export {
   catalogModelOptionValue,
   toModelGroupsByProvider,
@@ -32,3 +23,18 @@ export {
 } from "./catalog-select-options";
 export type { SessionStartModalModel } from "./session-start-modal";
 export { SessionStartModal } from "./session-start-modal";
+export type {
+  TaskExecutionDocument,
+  TaskExecutionDocumentPanelModel,
+} from "./task-execution-document-panel";
+export type {
+  TaskExecutionFileExplorerPanelModel,
+  TaskExecutionSelectedFile,
+} from "./task-execution-file-explorer-model";
+export type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-file-preview";
+export type {
+  TaskExecutionPanelModel,
+  TaskExecutionPanelTab,
+  TaskExecutionPanelTabId,
+  TaskExecutionPanelToggleModel,
+} from "./task-execution-panel";

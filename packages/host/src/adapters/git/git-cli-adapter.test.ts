@@ -59,10 +59,35 @@ describe("createGitCliAdapter", () => {
       { name: "backup", url: "https://github.com/openai/openducktor.git" },
     ]);
   });
+  test("lists only materialized tracked and untracked files", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -co --exclude-standard -z -- .":
+          "H src/index.ts\0S packages/sparse.ts\0? untracked file.ts\0H  padded.ts \0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).resolves.toEqual([
+      "src/index.ts",
+      "untracked file.ts",
+      " padded.ts ",
+    ]);
+  });
+  test("fails when tagged file output is malformed", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "ls-files -t -co --exclude-standard -z -- .": "src/index.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listFiles("/repo"))).rejects.toThrow(
+      "Git returned an invalid tagged file entry",
+    );
+  });
   test("parses porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "status --porcelain=v1 --untracked-files=all": [
+        "status --porcelain=v1 -z --untracked-files=all": [
           " M src/unstaged.ts",
           "A  src/staged.ts",
           "?? src/new.ts",
@@ -79,6 +104,98 @@ describe("createGitCliAdapter", () => {
       { path: "dist/ignored.js", status: "ignored", staged: false },
       { path: "src/conflict.ts", status: "unmerged", staged: true },
       { path: "src/add-add-conflict.ts", status: "unmerged", staged: true },
+    ]);
+  });
+  test("prefers worktree deletions in mixed porcelain status rows", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "status --porcelain=v1 -z --untracked-files=all":
+          "AD src/added.ts\0MD src/modified.ts\0RD src/renamed.ts\0src/original.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
+      { path: "src/added.ts", status: "deleted", staged: false },
+      { path: "src/modified.ts", status: "deleted", staged: false },
+      {
+        path: "src/renamed.ts",
+        originalPath: "src/original.ts",
+        status: "deleted",
+        staged: false,
+      },
+    ]);
+  });
+  test("resolves the repository root for a nested working directory", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "rev-parse --show-toplevel": "/repo\n",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getRepositoryRoot("/repo/packages/host"))).resolves.toBe(
+      "/repo",
+    );
+  });
+
+  test("preserves repository root whitespace while removing the line terminator", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "rev-parse --show-toplevel": " /repo with spaces/ \r\n",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getRepositoryRoot(" /repo with spaces/ "))).resolves.toBe(
+      " /repo with spaces/ ",
+    );
+  });
+  test("uses the destination path for NUL-delimited rename status rows", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "status --porcelain=v1 -z --untracked-files=all":
+          "R  src/new name.ts\0src/old name.ts\0 M src/other.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
+      {
+        path: "src/new name.ts",
+        originalPath: "src/old name.ts",
+        status: "renamed",
+        staged: true,
+      },
+      { path: "src/other.ts", status: "modified", staged: false },
+    ]);
+  });
+  test("consumes original paths for unstaged NUL-delimited rename rows", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "status --porcelain=v1 -z --untracked-files=all":
+          " R src/new.ts\0src/old.ts\0 M src/other.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
+      {
+        path: "src/new.ts",
+        originalPath: "src/old.ts",
+        status: "renamed",
+        staged: false,
+      },
+      { path: "src/other.ts", status: "modified", staged: false },
+    ]);
+  });
+  test("lists changed destination paths without loading patch content", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "merge-base --end-of-options origin/main HEAD": "base123\n",
+        "diff --name-status -z --end-of-options base123":
+          "M\0src/modified.ts\0R084\0src/old.ts\0src/new.ts\0",
+      }),
+    });
+
+    await expect(Effect.runPromise(git.listChangedFiles("/repo", "origin/main"))).resolves.toEqual([
+      { path: "src/modified.ts", status: "modified" },
+      { path: "src/new.ts", originalPath: "src/old.ts", status: "renamed" },
     ]);
   });
   test("returns sorted file diffs with additions and deletions", async () => {
@@ -104,7 +221,7 @@ describe("createGitCliAdapter", () => {
       runner: createRunner({
         "diff --numstat --end-of-options HEAD": "2\t0\tsrc/b.ts\n1\t0\tsrc/a.ts\n",
         "diff --end-of-options HEAD": fullDiff,
-        "status --porcelain=v1 --untracked-files=all": "",
+        "status --porcelain=v1 -z --untracked-files=all": "",
       }),
     });
     await expect(Effect.runPromise(git.getDiff("/repo"))).resolves.toEqual([
@@ -141,7 +258,7 @@ describe("createGitCliAdapter", () => {
         "branch --show-current": "feature/electron\n",
         "rev-parse HEAD": "abc123\n",
         "for-each-ref --format=%(refname) refs/remotes": "",
-        "status --porcelain=v1 --untracked-files=all": " M src/main.ts\n",
+        "status --porcelain=v1 -z --untracked-files=all": " M src/main.ts\n",
         "merge-base --end-of-options origin/main HEAD": "base123\n",
         "diff --numstat --end-of-options base123": "2\t0\tsrc/main.ts\n",
         "diff --end-of-options base123": fullDiff,
@@ -502,7 +619,7 @@ describe("createGitCliAdapter", () => {
                   : "after\n",
               "config --get branch.feature/electron.remote": "origin\n",
               "config --get branch.feature/electron.merge": "refs/heads/feature/electron\n",
-              "status --porcelain=v1 --untracked-files=all": "",
+              "status --porcelain=v1 -z --untracked-files=all": "",
               "fetch --prune -- origin +refs/heads/feature/electron:refs/remotes/origin/feature/electron":
                 "Fetched origin\n",
               "rev-list --count --left-right --end-of-options refs/remotes/origin/feature/electron...HEAD":
@@ -543,7 +660,9 @@ describe("createGitCliAdapter", () => {
               "rev-parse HEAD": "before\n",
               "config --get branch.feature/electron.remote": "origin\n",
               "config --get branch.feature/electron.merge": "refs/heads/main\n",
-              "status --porcelain=v1 --untracked-files=all": rebaseFailed ? "UU src/main.ts\n" : "",
+              "status --porcelain=v1 -z --untracked-files=all": rebaseFailed
+                ? "UU src/main.ts\n"
+                : "",
               "fetch --prune -- origin +refs/heads/main:refs/remotes/origin/main":
                 "Fetched origin\n",
               "rev-list --count --left-right --end-of-options refs/remotes/origin/main...HEAD":
@@ -678,7 +797,7 @@ describe("createGitCliAdapter", () => {
             {
               "branch --show-current": "feature/electron\n",
               "rev-parse HEAD": "abc123\n",
-              "status --porcelain=v1 --untracked-files=all": "",
+              "status --porcelain=v1 -z --untracked-files=all": "",
               "merge-base --is-ancestor origin/main HEAD": "",
               "rebase --end-of-options origin/main": "Successfully rebased\n",
             }[command] ?? "",
@@ -693,7 +812,7 @@ describe("createGitCliAdapter", () => {
     expect(calls).toEqual([
       "branch --show-current",
       "rev-parse HEAD",
-      "status --porcelain=v1 --untracked-files=all",
+      "status --porcelain=v1 -z --untracked-files=all",
       "merge-base --is-ancestor origin/main HEAD",
       "rebase --end-of-options origin/main",
     ]);
@@ -703,7 +822,7 @@ describe("createGitCliAdapter", () => {
       runner: createRunner({
         "branch --show-current": "feature/electron\n",
         "rev-parse HEAD": "abc123\n",
-        "status --porcelain=v1 --untracked-files=all": "",
+        "status --porcelain=v1 -z --untracked-files=all": "",
         "merge-base --is-ancestor origin/main HEAD": "",
       }),
     });
@@ -733,7 +852,7 @@ describe("createGitCliAdapter", () => {
             {
               "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)|%(refname:short)|%(refname) refs/heads refs/remotes":
                 "1|main|refs/heads/main\n0|origin/main|refs/remotes/origin/main\n0|odt/task-1|refs/heads/odt/task-1\n",
-              "status --porcelain=v1 --untracked-files=all": "",
+              "status --porcelain=v1 -z --untracked-files=all": "",
               "switch --end-of-options main": "",
               "branch --show-current": "main\n",
               "merge --no-ff --end-of-options odt/task-1": "Merge made by recursive.\n",
@@ -756,7 +875,7 @@ describe("createGitCliAdapter", () => {
     });
     expect(calls).toEqual([
       "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)|%(refname:short)|%(refname) refs/heads refs/remotes",
-      "status --porcelain=v1 --untracked-files=all",
+      "status --porcelain=v1 -z --untracked-files=all",
       "switch --end-of-options main",
       "branch --show-current",
       "rev-parse HEAD",
@@ -784,7 +903,9 @@ describe("createGitCliAdapter", () => {
             {
               "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)|%(refname:short)|%(refname) refs/heads refs/remotes":
                 "1|main|refs/heads/main\n0|odt/task-1|refs/heads/odt/task-1\n",
-              "status --porcelain=v1 --untracked-files=all": mergeFailed ? "UU src/main.ts\n" : "",
+              "status --porcelain=v1 -z --untracked-files=all": mergeFailed
+                ? "UU src/main.ts\n"
+                : "",
               "switch --end-of-options main": "",
               "branch --show-current": "main\n",
               "rev-parse HEAD": "before\n",
@@ -830,7 +951,9 @@ describe("createGitCliAdapter", () => {
             {
               "branch --show-current": "feature/electron\n",
               "rev-parse HEAD": "abc123\n",
-              "status --porcelain=v1 --untracked-files=all": rebaseFailed ? "AA src/main.ts\n" : "",
+              "status --porcelain=v1 -z --untracked-files=all": rebaseFailed
+                ? "AA src/main.ts\n"
+                : "",
             }[command] ?? "",
           stderr: "",
         });

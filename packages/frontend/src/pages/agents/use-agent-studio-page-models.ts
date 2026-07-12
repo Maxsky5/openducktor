@@ -6,7 +6,7 @@ import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions"
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
   buildAgentStudioTaskTabsModel,
-  buildAgentStudioWorkspaceSidebarModel,
+  buildTaskExecutionDocumentPanelModel,
 } from "./agents-page-view-model";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {
@@ -57,7 +57,7 @@ export function useAgentStudioPageModels({
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioHeaderModel>;
-  agentStudioWorkspaceSidebarModel: ReturnType<typeof buildAgentStudioWorkspaceSidebarModel>;
+  taskExecutionDocumentPanelModel: ReturnType<typeof buildTaskExecutionDocumentPanelModel>;
   agentChatModel: ReturnType<typeof useAgentStudioChatModel>;
 } {
   const agentStudioReady = selectedSession.selectedSession.runtimeReadiness.state === "ready";
@@ -120,9 +120,9 @@ export function useAgentStudioPageModels({
     },
   });
 
-  const agentStudioWorkspaceSidebarModel = useMemo(
+  const taskExecutionDocumentPanelModel = useMemo(
     () =>
-      buildAgentStudioWorkspaceSidebarModel({
+      buildTaskExecutionDocumentPanelModel({
         activeDocument: selectedSession.documents.activeDocument,
       }),
     [selectedSession.documents.activeDocument],
@@ -140,7 +140,7 @@ export function useAgentStudioPageModels({
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
-    agentStudioWorkspaceSidebarModel,
+    taskExecutionDocumentPanelModel,
     agentChatModel,
   };
 }

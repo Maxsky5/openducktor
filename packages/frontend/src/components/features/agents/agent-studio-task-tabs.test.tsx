@@ -125,7 +125,7 @@ describe("AgentStudioTaskTabs", () => {
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           rightPanelToggleModel: {
-            kind: "documents",
+            kind: "task_execution",
             isOpen: true,
             onToggle: () => {},
           },
@@ -133,7 +133,7 @@ describe("AgentStudioTaskTabs", () => {
       ),
     );
 
-    expect(html).toContain("Hide documents panel");
+    expect(html).toContain("Hide task execution panel");
 
     const { unmount } = render(
       createElement(
@@ -142,7 +142,7 @@ describe("AgentStudioTaskTabs", () => {
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           rightPanelToggleModel: {
-            kind: "documents",
+            kind: "task_execution",
             isOpen: true,
             onToggle: () => {},
           },
@@ -151,7 +151,7 @@ describe("AgentStudioTaskTabs", () => {
     );
 
     const newTabButton = screen.getByRole("button", { name: "Open new task tab" });
-    const rightPanelToggle = screen.getByRole("button", { name: "Hide documents panel" });
+    const rightPanelToggle = screen.getByRole("button", { name: "Hide task execution panel" });
 
     expect(
       newTabButton.compareDocumentPosition(rightPanelToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -205,7 +205,7 @@ describe("AgentStudioTaskTabs", () => {
         createElement(AgentStudioTaskTabs, {
           model: buildModel(),
           rightPanelToggleModel: {
-            kind: "documents",
+            kind: "task_execution",
             isOpen: true,
             onToggle: () => {},
           },
@@ -216,7 +216,7 @@ describe("AgentStudioTaskTabs", () => {
     const tabList = screen.getByRole("tablist", { name: "Agent Studio task tabs" });
     const scrollRegion = tabList.parentElement?.parentElement;
     const newTabButton = screen.getByRole("button", { name: "Open new task tab" });
-    const rightPanelToggle = screen.getByRole("button", { name: "Hide documents panel" });
+    const rightPanelToggle = screen.getByRole("button", { name: "Hide task execution panel" });
 
     expect(scrollRegion).not.toBeNull();
     expect(scrollRegion?.contains(newTabButton)).toBeFalse();

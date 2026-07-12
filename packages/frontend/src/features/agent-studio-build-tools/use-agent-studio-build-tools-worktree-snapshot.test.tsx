@@ -177,8 +177,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceRepoPath: "/repo",
   activeBranch: { name: "main", detached: false },
   selectedView: createSelectedView(),
-  panelKind: "build_tools",
-  isPanelOpen: true,
+  isGitTabActive: true,
+  isRightPanelOpen: true,
   repoSettings: null,
   ...overrides,
 });
@@ -198,7 +198,9 @@ beforeEach(async () => {
 
 describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("disables the snapshot when the build-tools panel is closed", async () => {
-    const harness = createHookHarness(createBaseArgs({ isPanelOpen: false }));
+    const harness = createHookHarness(
+      createBaseArgs({ isGitTabActive: false, isRightPanelOpen: false }),
+    );
 
     try {
       await harness.mount();
@@ -210,6 +212,70 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         taskId: null,
         enabled: false,
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps cached task worktree context while the git tab is inactive", async () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      taskWorktreeQueryKeys.taskWorktree({
+        repoPath: "/repo",
+        taskId: "task-25",
+        taskVersion: "2026-02-22T12:00:00.000Z",
+      }),
+      { workingDirectory: "/repo/.worktrees/task-25" },
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        isGitTabActive: false,
+        selectedView: createSelectedView({
+          taskId: "task-25",
+          selectedTask: createTaskCardFixture({
+            id: "task-25",
+            updatedAt: "2026-02-22T12:00:00.000Z",
+          }),
+        }),
+      }),
+      { queryClient },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().isEnabled).toBe(false);
+      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-25",
+        status: "resolved",
+        shouldBlockDiffLoading: true,
+      });
+      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        repoPath: "/repo",
+        worktreePath: "/repo/.worktrees/task-25",
+        worktreeResolutionTaskId: "task-25",
+        shouldBlockDiffLoading: true,
+      });
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("resolves the task worktree while another task panel tab is active", async () => {
+    const harness = createHookHarness(createBaseArgs({ isGitTabActive: false }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-24",
+        status: "resolved",
+      });
+      expect(harness.getLatest().isEnabled).toBe(false);
     } finally {
       await harness.unmount();
     }
@@ -245,6 +311,112 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         worktreeResolutionTaskId: null,
         shouldBlockDiffLoading: false,
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the task worktree for QA session build tools", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          role: "qa",
+          loadedSession: createAgentSessionFixture({
+            role: "qa",
+            status: "running",
+            workingDirectory: "/repo/.worktrees/task-24",
+          }),
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().gitPanelContextMode).toBe("worktree");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-24",
+        status: "resolved",
+        error: null,
+        shouldBlockDiffLoading: false,
+      });
+      expect(harness.getLatest().openInTarget).toEqual({
+        path: "/repo/.worktrees/task-24",
+        disabledReason: null,
+      });
+      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        repoPath: "/repo",
+        worktreePath: "/repo/.worktrees/task-24",
+        worktreeResolutionTaskId: null,
+        shouldBlockDiffLoading: false,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("normalizes repository path variants before resolving the QA worktree", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          role: "qa",
+          loadedSession: createAgentSessionFixture({
+            role: "qa",
+            status: "running",
+            workingDirectory: "/repo/",
+          }),
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-24",
+        status: "resolved",
+        error: null,
+      });
+      expect(harness.getLatest().openInTarget).toEqual({
+        path: "/repo/.worktrees/task-24",
+        disabledReason: null,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects queried repository root path variants as task worktrees", async () => {
+    taskWorktreeGetMock.mockResolvedValue({ workingDirectory: "/repo/" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({
+          role: "qa",
+          loadedSession: createAgentSessionFixture({
+            role: "qa",
+            status: "running",
+            workingDirectory: "/repo/",
+          }),
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.status === "failed");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: null,
+        status: "failed",
+      });
+      expect(harness.getLatest().worktree.error).toContain(
+        "Task worktree resolved to the repository root.",
+      );
+      expect(harness.getLatest().openInTarget.path).toBeNull();
     } finally {
       await harness.unmount();
     }

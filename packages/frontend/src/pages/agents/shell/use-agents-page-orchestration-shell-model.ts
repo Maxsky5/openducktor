@@ -15,6 +15,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     typeof useAgentStudioOrchestrationController
   >[0]["runtimeDefinitions"];
   repoSettings: RepoSettingsInput | null;
+  githubIntegrationEnabled: boolean;
   workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
@@ -51,6 +52,7 @@ export function useAgentsPageOrchestrationShellModel({
   branches,
   runtimeDefinitions,
   repoSettings,
+  githubIntegrationEnabled,
   workspaceRepoPath,
   isForegroundLoadingTasks,
   routeSession,
@@ -96,6 +98,7 @@ export function useAgentsPageOrchestrationShellModel({
     branches,
     runtimeDefinitions,
     repoSettings,
+    githubIntegrationEnabled,
     workspaceRepoPath,
     selection: orchestrationSelection,
     hasActiveGitConflict,

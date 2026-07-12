@@ -394,6 +394,36 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
+  test("keeps loaded empty state visible while refreshing in the background", async () => {
+    let renderer: RenderResult | null = null;
+    await act(async () => {
+      renderer = render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            fileDiffs: [],
+            fileStatuses: [],
+            uncommittedFileCount: 0,
+            isLoading: true,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(hasVisibleText(root, "No changes detected")).toBe(true);
+    expect(hasVisibleText(root, "Scanning for changes...")).toBe(false);
+    expect(findByTestId(root, "agent-studio-git-refresh-button").element.innerHTML).toContain(
+      "animate-spin",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
   test("shows an invalid task target branch banner without falling back to a repo target label", async () => {
     let renderer: RenderResult | null = null;
     await act(async () => {
@@ -489,7 +519,7 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("renders a pull request link badge when the selected task has a linked PR", async () => {
+  test("does not render a pull request link badge inside the Git tab", async () => {
     let renderer: RenderResult | null = null;
 
     await act(async () => {
@@ -517,7 +547,7 @@ describe("AgentStudioGitPanel", () => {
     const prLinks = root.findAll(
       (node) => node.type === "button" && getNodeText(node).includes("PR #110"),
     );
-    expect(prLinks.length).toBe(1);
+    expect(prLinks.length).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -635,7 +665,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(hasVisibleText(root, "Repository context")).toBe(true);
+    expect(hasVisibleText(root, "Repository context")).toBe(false);
     expect(hasVisibleText(root, "Repository branch")).toBe(true);
     expect(countByTestId(root, "agent-studio-git-target-branch")).toBe(0);
     expect(countByTestId(root, "agent-studio-git-target-ahead-count")).toBe(0);

@@ -410,7 +410,7 @@ const emptyTreeOid = (
       ),
     );
   });
-const resolveBranchDiffBase = (
+export const resolveBranchDiffBase = (
   runner: GitCommandRunner,
   workingDirectory: string,
   targetBranch: string,

@@ -8,7 +8,7 @@ import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { hasLabeledCodeFence } from "@/lib/markdown-utils";
 
-export type AgentStudioWorkspaceDocument = {
+export type TaskExecutionDocument = {
   title: string;
   description: string;
   emptyState: string;
@@ -33,8 +33,8 @@ const formatDocumentUpdatedAt = (iso: string | null): string | null => {
   return DOCUMENT_UPDATED_AT_FORMATTER.format(value);
 };
 
-export type AgentStudioWorkspaceSidebarModel = {
-  activeDocument: AgentStudioWorkspaceDocument | null;
+export type TaskExecutionDocumentPanelModel = {
+  activeDocument: TaskExecutionDocument | null;
 };
 
 type DocumentSectionProps = {
@@ -43,33 +43,38 @@ type DocumentSectionProps = {
 };
 
 function DocumentSection({ emptyState, document }: DocumentSectionProps): ReactElement {
-  return (
-    <div className="relative p-4">
-      {document.markdown.trim().length > 0 ? (
-        <>
-          <MarkdownRenderer
-            markdown={document.markdown}
-            variant="document"
-            premiumCodeBlocks={hasLabeledCodeFence(document.markdown)}
-          />
-          <DocumentCopyButton
-            markdown={document.markdown}
-            dataTestId="copy-agent-studio-document-content"
-            errorLogContext="AgentStudioWorkspaceSidebar"
-            className="absolute top-2 right-2 z-10"
-          />
-        </>
-      ) : (
-        <p className="text-sm text-muted-foreground">{emptyState}</p>
-      )}
-    </div>
-  );
+  let content: ReactElement;
+  if (document.isLoading && !document.loaded) {
+    content = <p className="text-sm text-muted-foreground">Loading document...</p>;
+  } else if (document.error) {
+    content = <p className="text-sm text-destructive">{document.error}</p>;
+  } else if (document.markdown.trim().length > 0) {
+    content = (
+      <>
+        <MarkdownRenderer
+          markdown={document.markdown}
+          variant="document"
+          premiumCodeBlocks={hasLabeledCodeFence(document.markdown)}
+        />
+        <DocumentCopyButton
+          markdown={document.markdown}
+          dataTestId="copy-agent-studio-document-content"
+          errorLogContext="TaskExecutionDocumentPanel"
+          className="absolute top-2 right-2 z-10"
+        />
+      </>
+    );
+  } else {
+    content = <p className="text-sm text-muted-foreground">{emptyState}</p>;
+  }
+
+  return <div className="relative p-4">{content}</div>;
 }
 
-export function AgentStudioWorkspaceSidebar({
+export function TaskExecutionDocumentPanel({
   model,
 }: {
-  model: AgentStudioWorkspaceSidebarModel;
+  model: TaskExecutionDocumentPanelModel;
 }): ReactElement {
   const [modalSnapshot, setModalSnapshot] = useState<{
     markdown: string;

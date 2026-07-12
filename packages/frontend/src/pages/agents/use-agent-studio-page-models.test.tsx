@@ -868,7 +868,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
     await harness.mount();
-    expect(harness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+    expect(harness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
       "Specification",
     );
     await harness.unmount();
@@ -891,7 +891,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
     await plannerHarness.mount();
-    expect(plannerHarness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+    expect(plannerHarness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
       "Implementation Plan",
     );
     await plannerHarness.unmount();
@@ -914,7 +914,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
     await qaHarness.mount();
-    expect(qaHarness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+    expect(qaHarness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
       "QA Report",
     );
     await qaHarness.unmount();
@@ -935,7 +935,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
     await buildHarness.mount();
-    expect(buildHarness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument).toBeNull();
+    expect(buildHarness.getLatest().taskExecutionDocumentPanelModel.activeDocument).toBeNull();
     await buildHarness.unmount();
   });
 
@@ -959,7 +959,7 @@ describe("useAgentStudioPageModels", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+    expect(harness.getLatest().taskExecutionDocumentPanelModel.activeDocument?.title).toBe(
       "Implementation Plan",
     );
     await harness.unmount();
@@ -985,7 +985,7 @@ describe("useAgentStudioPageModels", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument).toBeNull();
+    expect(harness.getLatest().taskExecutionDocumentPanelModel.activeDocument).toBeNull();
     await harness.unmount();
   });
 

@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { memo, type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
-import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Button } from "@/components/ui/button";
 import {
   segmentedControlRootClassName,
@@ -23,7 +22,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
 import { DIFF_SCOPE_OPTIONS } from "./constants";
-import { OpenInMenu } from "./open-in-menu";
 import type { AgentStudioGitPanelModel } from "./types";
 
 const TARGET_BRANCH_LABEL_ID = "agent-studio-git-target-branch-label";
@@ -32,8 +30,6 @@ type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
   | "contextMode"
   | "pullRequest"
-  | "openInTargetPath"
-  | "openInDisabledReason"
   | "branch"
   | "targetBranch"
   | "commitsAheadBehind"
@@ -53,7 +49,6 @@ type GitInfoHeaderProps = Pick<
   | "targetBranchOptions"
   | "targetBranchSelectionValue"
   | "onUpdateTargetBranch"
-  | "openDirectoryInTool"
   | "setDiffScope"
 > & {
   uncommittedFileCount: number;
@@ -135,39 +130,6 @@ function GitActionIconButton({
         </TooltipContent>
       </Tooltip>
     </>
-  );
-}
-
-type GitInfoHeaderSummaryRowProps = {
-  isRepositoryMode: boolean;
-  pullRequest: GitInfoHeaderProps["pullRequest"];
-  openInTargetPath: string | null;
-  openInDisabledReason: string | null;
-  onOpenInTool: GitInfoHeaderProps["openDirectoryInTool"];
-};
-
-function GitInfoHeaderSummaryRow({
-  isRepositoryMode,
-  pullRequest,
-  openInTargetPath,
-  openInDisabledReason,
-  onOpenInTool,
-}: GitInfoHeaderSummaryRowProps): ReactElement {
-  return (
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
-      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-        {isRepositoryMode ? "Repository context" : "Branch context"}
-      </span>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {pullRequest ? <TaskPullRequestLink pullRequest={pullRequest} /> : null}
-        <OpenInMenu
-          contextMode={isRepositoryMode ? "repository" : "worktree"}
-          targetPath={openInTargetPath}
-          disabledReason={openInDisabledReason}
-          onOpenInTool={onOpenInTool}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -351,7 +313,7 @@ function GitBranchContextRow({
   return (
     <div
       className={cn(
-        "mb-2 grid gap-2 px-3",
+        "my-2 grid gap-2 px-3",
         isRepositoryMode
           ? "sm:grid-cols-[minmax(0,1fr)]"
           : "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center",
@@ -628,8 +590,6 @@ function GitInfoHeaderErrors({
 export const GitInfoHeader = memo(function GitInfoHeader({
   contextMode = "worktree",
   pullRequest,
-  openInTargetPath,
-  openInDisabledReason,
   branch,
   targetBranch,
   commitsAheadBehind,
@@ -656,7 +616,6 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   targetBranchOptions = [],
   targetBranchSelectionValue = "",
   onUpdateTargetBranch,
-  openDirectoryInTool,
 }: GitInfoHeaderProps): ReactElement {
   const showDetectPullRequest = pullRequest == null && onDetectPullRequest != null;
   const isRepositoryMode = contextMode === "repository";
@@ -746,14 +705,6 @@ export const GitInfoHeader = memo(function GitInfoHeader({
 
   return (
     <div className="flex flex-col border-b border-border">
-      <GitInfoHeaderSummaryRow
-        isRepositoryMode={isRepositoryMode}
-        pullRequest={pullRequest}
-        openInTargetPath={openInTargetPath ?? null}
-        openInDisabledReason={openInDisabledReason ?? null}
-        onOpenInTool={openDirectoryInTool}
-      />
-
       <GitBranchContextRow
         currentBranchLabel={currentBranchLabel}
         branchState={{

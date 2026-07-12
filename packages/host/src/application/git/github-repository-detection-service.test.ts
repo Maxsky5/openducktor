@@ -50,6 +50,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    getRepositoryRoot(path) {
+      return Effect.succeed(path);
+    },
     shareGitCommonDirectory() {
       return Effect.tryPromise({
         try: async () => {
@@ -92,6 +95,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    listFiles() {
+      return Effect.succeed([]);
+    },
     getCurrentBranch() {
       return Effect.tryPromise({
         try: async () => {
@@ -117,6 +123,9 @@ const createFakeGitPort = ({
             cause: cause,
           }),
       });
+    },
+    listChangedFiles() {
+      return Effect.succeed([]);
     },
     getDiff() {
       return Effect.tryPromise({

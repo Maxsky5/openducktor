@@ -13,6 +13,7 @@ import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import { useAgentStudioGitConflictQuickActionState } from "./use-agent-studio-git-conflict-quick-action-state";
 import {
   type AgentStudioRightPanelBridgeModel,
+  type AgentStudioSelectedFileRefreshModel,
   useAgentStudioRightPanelBridge,
 } from "./use-agent-studio-right-panel-bridge";
 import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";
@@ -38,8 +39,12 @@ type AgentsPageShellModel = {
     typeof useAgentStudioOrchestrationController
   >["agentStudioHeaderModel"];
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
+  taskExecutionSelectedFilePreviewModel: ReturnType<
+    typeof useAgentStudioOrchestrationController
+  >["taskExecutionSelectedFilePreviewModel"];
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
+  selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
 };
 
@@ -48,9 +53,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const { repoSettings, isLoadingRepoSettings } = useAgentStudioRepoSettings({
-    activeWorkspaceId,
-  });
+  const { repoSettings, githubIntegrationEnabled, isLoadingRepoSettings } =
+    useAgentStudioRepoSettings({
+      activeWorkspaceId,
+    });
   const {
     isForegroundLoadingTasks,
     tasks,
@@ -120,6 +126,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     branches: branches ?? [],
     runtimeDefinitions,
     repoSettings,
+    githubIntegrationEnabled,
     workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,
@@ -139,20 +146,24 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     setTaskTargetBranch,
   });
 
-  const { isRightPanelVisible, rightPanelBridge } = useAgentStudioRightPanelBridge({
-    activeWorkspace,
-    branches: branches ?? [],
-    activeBranch,
-    selection: orchestrationSelection,
-    panel: orchestration.rightPanel,
-    documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
-    repoSettings: orchestration.repoSettings,
-    setTaskTargetBranch,
-    detectingPullRequestTaskId,
-    onDetectPullRequest: taskActions.onDetectPullRequest,
-    onResolveGitConflict: handleResolveRebaseConflict,
-    onGitConflictQuickActionContextChange,
-  });
+  const { isRightPanelVisible, rightPanelBridge, selectedFileRefresh } =
+    useAgentStudioRightPanelBridge({
+      activeWorkspace,
+      branches: branches ?? [],
+      activeBranch,
+      selection: orchestrationSelection,
+      panel: orchestration.rightPanel,
+      documentsModel: orchestration.taskExecutionDocumentPanelModel,
+      selectedFile: orchestration.taskExecutionSelectedFilePreviewModel.selectedFile,
+      onSelectFile: orchestration.onSelectTaskExecutionFile,
+      onClearSelectedFile: orchestration.taskExecutionSelectedFilePreviewModel.onClose,
+      repoSettings: orchestration.repoSettings,
+      setTaskTargetBranch,
+      detectingPullRequestTaskId,
+      onDetectPullRequest: taskActions.onDetectPullRequest,
+      onResolveGitConflict: handleResolveRebaseConflict,
+      onGitConflictQuickActionContextChange,
+    });
 
   const modalContent = useMemo<AgentsPageModalContentModel>(
     () => ({
@@ -182,8 +193,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasSelectedTask: Boolean(selection.view.taskId),
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
+    taskExecutionSelectedFilePreviewModel: orchestration.taskExecutionSelectedFilePreviewModel,
     isRightPanelVisible,
     rightPanelBridge,
+    selectedFileRefresh,
     modalContent,
   };
 }

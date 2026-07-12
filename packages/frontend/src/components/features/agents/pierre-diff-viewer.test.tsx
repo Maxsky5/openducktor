@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   withCapturedConsoleMethods,
   withCapturedOutputStreams,
@@ -11,6 +11,7 @@ let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
 let workerPoolMock: {
   getDiffResultCache: ReturnType<typeof mock>;
   primeDiffHighlightCache: ReturnType<typeof mock>;
+  subscribeToStatChanges?: ReturnType<typeof mock>;
 } | null = null;
 
 const OMITTED_SELECTED_LINES_LABEL = "__omitted__";
@@ -163,6 +164,60 @@ afterEach(async () => {
 });
 
 describe("PierreDiffViewer", () => {
+  test("preloads a diff rendered immediately without a separate preload queue", async () => {
+    const { PierrePreloadedDiffViewer } = pierreViewerModule;
+    const primeDiffHighlightCache = mock();
+    workerPoolMock = {
+      getDiffResultCache: mock(() => null),
+      primeDiffHighlightCache,
+      subscribeToStatChanges: mock(() => () => undefined),
+    };
+
+    render(<PierrePreloadedDiffViewer patch={selectionPatch} filePath="src/app.ts" />);
+
+    expect(screen.getByTestId("pierre-file-diff")).not.toBeNull();
+    await waitFor(
+      () => {
+        expect(primeDiffHighlightCache).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 },
+    );
+  });
+
+  test("observes the worker cache until an immediately rendered diff is highlighted", async () => {
+    const { PierrePreloadedDiffViewer } = pierreViewerModule;
+    let cachedHighlight: object | undefined;
+    let notifyStatsChanged: (() => void) | undefined;
+    const getDiffResultCache = mock(() => cachedHighlight);
+    const subscribeToStatChanges = mock((callback: () => void) => {
+      notifyStatsChanged = callback;
+      return () => undefined;
+    });
+    workerPoolMock = {
+      getDiffResultCache,
+      primeDiffHighlightCache: mock(),
+      subscribeToStatChanges,
+    };
+
+    render(<PierrePreloadedDiffViewer patch={selectionPatch} filePath="src/app.ts" />);
+
+    await waitFor(
+      () => {
+        expect(subscribeToStatChanges).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 },
+    );
+    cachedHighlight = {};
+    act(() => notifyStatsChanged?.());
+
+    await waitFor(
+      () => {
+        expect(getDiffResultCache.mock.calls.length).toBeGreaterThan(1);
+      },
+      { timeout: 1000 },
+    );
+  });
+
   test("preloads parsed diffs by priming the worker cache", async () => {
     const { PierreDiffPreloader } = pierreViewerModule;
     const primeDiffHighlightCache = mock();
@@ -298,7 +353,7 @@ describe("PierreDiffViewer", () => {
         { lineNumber: 4, text: "three", isSelected: false },
         { lineNumber: 5, text: "four", isSelected: false },
       ],
-      language: null,
+      language: "typescript",
     });
   });
 
@@ -468,12 +523,13 @@ describe("getRenderableFileDiff", () => {
 
   test("normalizes hunk-only patches with the current file path", async () => {
     const { getRenderableFileDiff } = pierreViewerModelModule;
-    const result = getRenderableFileDiff("@@ -1 +1 @@\n-old\n+new\n", "src/hunk.ts");
+    const result = getRenderableFileDiff("@@ -1 +1 @@\n-old\n+new\n", "src/hunk.tsx");
 
     expect(result.normalizedPatch).toBe(
-      "--- a/src/hunk.ts\n+++ b/src/hunk.ts\n@@ -1 +1 @@\n-old\n+new\n",
+      "--- a/src/hunk.tsx\n+++ b/src/hunk.tsx\n@@ -1 +1 @@\n-old\n+new\n",
     );
-    expect(result.fileDiff?.name.endsWith("src/hunk.ts")).toBe(true);
+    expect(result.fileDiff?.name.endsWith("src/hunk.tsx")).toBe(true);
+    expect(result.fileDiff?.lang).toBe("tsx");
   });
 
   test("assigns stable cache keys to parsed diffs for worker preloading", async () => {
@@ -654,7 +710,7 @@ describe("getRenderableFileDiff", () => {
         { lineNumber: 4, text: "three", isSelected: false },
         { lineNumber: 5, text: "four", isSelected: false },
       ],
-      language: null,
+      language: "typescript",
     });
   });
 
@@ -696,7 +752,7 @@ describe("getRenderableFileDiff", () => {
         { lineNumber: 10, text: "ten", isSelected: true },
         { lineNumber: 11, text: "eleven", isSelected: false },
       ],
-      language: null,
+      language: "typescript",
     });
   });
 

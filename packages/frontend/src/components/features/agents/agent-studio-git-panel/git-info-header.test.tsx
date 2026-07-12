@@ -1,10 +1,9 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { PullRequest, SystemOpenInToolInfo } from "@openducktor/contracts";
+import { afterEach, describe, expect, test } from "bun:test";
+import type { PullRequest } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ComponentProps } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/lib/query-provider";
-import { host } from "@/state/operations/host";
 import { GitInfoHeader } from "./git-info-header";
 
 (
@@ -27,8 +26,6 @@ const createGitInfoHeaderProps = (
 ): GitInfoHeaderTestProps => ({
   contextMode: "worktree",
   pullRequest: null,
-  openInTargetPath: null,
-  openInDisabledReason: null,
   branch: "feature/task-24",
   targetBranch: "origin/main",
   commitsAheadBehind: null,
@@ -53,7 +50,6 @@ const createGitInfoHeaderProps = (
   pullFromUpstream: async () => {},
   setDiffScope: () => {},
   onRefresh: () => {},
-  openDirectoryInTool: async () => {},
   ...overrides,
 });
 
@@ -79,65 +75,18 @@ describe("GitInfoHeader", () => {
     }
   });
 
-  test("replaces the duplicate changed-files badge with the Open In trigger while keeping the PR badge", async () => {
-    const originalSystemListOpenInTools = host.systemListOpenInTools;
-    host.systemListOpenInTools = mock(
-      async () =>
-        [
-          { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-        ] satisfies SystemOpenInToolInfo[],
+  test("keeps git context controls without rendering a duplicate PR badge", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        pullRequest,
+        uncommittedFileCount: 3,
+      }),
     );
 
-    try {
-      rendered = render(
-        <QueryProvider useIsolatedClient>
-          <TooltipProvider>
-            <GitInfoHeader
-              contextMode="worktree"
-              pullRequest={pullRequest}
-              openInTargetPath="/tmp/worktrees/task-24"
-              openInDisabledReason={null}
-              branch="feature/task-24"
-              targetBranch="origin/main"
-              commitsAheadBehind={null}
-              upstreamAheadBehind={null}
-              upstreamStatus="tracking"
-              diffScope="target"
-              uncommittedFileCount={3}
-              isLoading={false}
-              isCommitting={false}
-              isPushing={false}
-              isRebasing={false}
-              isDetectingPullRequest={false}
-              isGitActionsLocked={false}
-              gitActionsLockReason={null}
-              showLockReasonBanner={false}
-              pushError={null}
-              rebaseError={null}
-              pushBranch={async () => {}}
-              rebaseOntoTarget={async () => {}}
-              pullFromUpstream={async () => {}}
-              setDiffScope={() => {}}
-              onRefresh={() => {}}
-              openDirectoryInTool={async () => {}}
-            />
-          </TooltipProvider>
-        </QueryProvider>,
-      );
-
-      await screen.findByTestId("agent-studio-git-open-in-icon-finder");
-
-      expect(screen.getByTestId("agent-studio-git-open-in-default-button").textContent).toContain(
-        "Finder",
-      );
-      expect(screen.queryByTestId("agent-studio-git-open-in-trigger")).toBeNull();
-      expect(screen.getByText("PR #42")).toBeTruthy();
-      expect(screen.queryByText("3 files changed")).toBeNull();
-
-      expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();
-    } finally {
-      host.systemListOpenInTools = originalSystemListOpenInTools;
-    }
+    expect(screen.queryByText("PR #42")).toBeNull();
+    expect(screen.queryByText("3 files changed")).toBeNull();
+    expect(screen.queryByTestId("agent-studio-git-open-in-actions")).toBeNull();
+    expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();
   });
 
   test("closes the target branch editor when editing becomes unavailable", async () => {

@@ -1,17 +1,24 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
-import type { GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict, GitDiffRefresh } from "@/features/agent-studio-git";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
+import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
+import {
+  type PullRequestReviewContextQueryInput,
+  prefetchPullRequestReviewContextFromQuery,
+} from "@/state/queries/pull-request-review";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
-import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
+import { buildTaskExecutionPanelModel } from "./use-agent-studio-right-panel";
 
 export type AgentStudioGitConflictQuickActionContext = {
   conflict: GitConflict;
@@ -24,9 +31,14 @@ export type UseAgentsPageRightPanelModelArgs = {
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   selectedView: BuildToolsSelectedView;
-  panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
+  tabs: Parameters<typeof buildTaskExecutionPanelModel>[0]["tabs"];
+  activeTabId: Parameters<typeof buildTaskExecutionPanelModel>[0]["activeTabId"];
+  onActiveTabChange: Parameters<typeof buildTaskExecutionPanelModel>[0]["onActiveTabChange"];
   isPanelOpen: boolean;
-  documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
+  documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
+  selectedFile: TaskExecutionSelectedFile | null;
+  onSelectFile: (file: TaskExecutionSelectedFile) => void;
+  onClearSelectedFile: () => void;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
@@ -55,6 +67,11 @@ type BuildAgentsPageDiffModelArgs = {
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
   openDirectoryInTool?: (path: string, toolId: SystemOpenInToolId) => Promise<void>;
+};
+
+type FileExplorerRoot = {
+  rootPath: string | null;
+  unavailableReason: string | null;
 };
 
 function collectUnmergedFilePaths(
@@ -149,14 +166,89 @@ export function buildAgentsPageDiffModel({
   };
 }
 
+export const resolveTaskExecutionFileExplorerRoot = ({
+  workspaceRepoPath,
+  contextMode,
+  worktreePath,
+  isWorktreeResolving,
+  worktreeError,
+  targetBranchValidationError,
+}: {
+  workspaceRepoPath: string | null;
+  contextMode: ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>["gitPanelContextMode"];
+  worktreePath: string | null;
+  isWorktreeResolving: boolean;
+  worktreeError: string | null;
+  targetBranchValidationError: string | null;
+}): FileExplorerRoot => {
+  if (contextMode === "worktree") {
+    if (targetBranchValidationError) {
+      return { rootPath: null, unavailableReason: targetBranchValidationError };
+    }
+    if (worktreePath) {
+      return { rootPath: worktreePath, unavailableReason: null };
+    }
+    if (isWorktreeResolving) {
+      return { rootPath: null, unavailableReason: "Resolving task worktree..." };
+    }
+    return {
+      rootPath: null,
+      unavailableReason: worktreeError ?? "Task worktree is unavailable.",
+    };
+  }
+
+  if (workspaceRepoPath) {
+    return {
+      rootPath: workspaceRepoPath,
+      unavailableReason: null,
+    };
+  }
+
+  return {
+    rootPath: null,
+    unavailableReason: "No repository is selected.",
+  };
+};
+
+export const resolveTaskExecutionFileExplorerTargetBranch = ({
+  contextMode,
+  targetBranch,
+  upstreamStatus,
+  hasLoadedRepositoryStatus,
+  targetBranchValidationError,
+}: {
+  contextMode: ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>["gitPanelContextMode"];
+  targetBranch: string | null;
+  upstreamStatus: ReturnType<
+    typeof useAgentStudioBuildToolsWorktreeSnapshot
+  >["diffData"]["upstreamStatus"];
+  hasLoadedRepositoryStatus: boolean;
+  targetBranchValidationError: string | null;
+}): string | null => {
+  if (targetBranchValidationError) {
+    return null;
+  }
+  if (contextMode === "repository") {
+    if (!hasLoadedRepositoryStatus || upstreamStatus !== "tracking") {
+      return null;
+    }
+  }
+  return targetBranch;
+};
+
 export function useAgentsPageRightPanelModel({
   activeWorkspace,
   branches = [],
   activeBranch,
   selectedView,
-  panelKind,
+  tabs,
+  activeTabId,
+  onActiveTabChange,
   isPanelOpen,
   documentsModel,
+  selectedFile,
+  onSelectFile,
+  onClearSelectedFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -164,13 +256,15 @@ export function useAgentsPageRightPanelModel({
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
+  const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const isGitTabActive = activeTabId === "git" && isPanelOpen;
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
     workspaceRepoPath,
     activeBranch,
     selectedView,
-    panelKind,
-    isPanelOpen,
+    isGitTabActive,
+    isRightPanelOpen: isPanelOpen,
     repoSettings,
   });
   const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
@@ -249,20 +343,134 @@ export function useAgentsPageRightPanelModel({
     ],
   );
 
+  const fileExplorerRoot = useMemo(
+    () =>
+      resolveTaskExecutionFileExplorerRoot({
+        workspaceRepoPath,
+        contextMode: buildToolsSnapshot.gitPanelContextMode,
+        worktreePath: buildToolsSnapshot.worktree.path,
+        isWorktreeResolving: buildToolsSnapshot.worktree.isResolving,
+        worktreeError: buildToolsSnapshot.worktree.error,
+        targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
+      }),
+    [
+      buildToolsSnapshot.gitPanelContextMode,
+      buildToolsSnapshot.worktree.error,
+      buildToolsSnapshot.worktree.isResolving,
+      buildToolsSnapshot.worktree.path,
+      buildToolsSnapshot.targetBranchState.validationError,
+      workspaceRepoPath,
+    ],
+  );
+  const fileExplorerTargetBranch = resolveTaskExecutionFileExplorerTargetBranch({
+    contextMode: buildToolsSnapshot.gitPanelContextMode,
+    targetBranch: diffData.targetBranch ?? null,
+    upstreamStatus: diffData.upstreamStatus,
+    hasLoadedRepositoryStatus: diffData.loadedScopesByScope[diffData.diffScope],
+    targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
+  });
+  const fileExplorerModel = useMemo(
+    () => ({
+      ...fileExplorerRoot,
+      targetBranch: fileExplorerTargetBranch,
+      isActive: activeTabId === "file_explorer" && isPanelOpen,
+      selectedFile,
+      onSelectFile,
+      onClearSelectedFile,
+    }),
+    [
+      activeTabId,
+      fileExplorerRoot,
+      fileExplorerTargetBranch,
+      isPanelOpen,
+      onSelectFile,
+      onClearSelectedFile,
+      selectedFile,
+    ],
+  );
+  const visibleDevServerModel = selectedView.role === "build" ? devServerModel : null;
+  const hasCiChecksTab = tabs.some((tab) => tab.id === "ci_checks");
+  const linkedPullRequestProviderId = selectedView.selectedTask?.pullRequest?.providerId ?? null;
+  const linkedPullRequestNumber = selectedView.selectedTask?.pullRequest?.number ?? null;
+  const ciReviewQueryInput = useMemo<PullRequestReviewContextQueryInput | null>(
+    () =>
+      workspaceRepoPath &&
+      selectedView.taskId &&
+      linkedPullRequestProviderId &&
+      linkedPullRequestNumber
+        ? {
+            repoPath: workspaceRepoPath,
+            taskId: selectedView.taskId,
+            pullRequest: {
+              providerId: linkedPullRequestProviderId,
+              number: linkedPullRequestNumber,
+            },
+          }
+        : null,
+    [linkedPullRequestNumber, linkedPullRequestProviderId, selectedView.taskId, workspaceRepoPath],
+  );
+  const hasLinkedPullRequest =
+    linkedPullRequestProviderId !== null && linkedPullRequestNumber !== null;
+  useEffect(() => {
+    if (!hasCiChecksTab || !hasLinkedPullRequest || !ciReviewQueryInput) {
+      return;
+    }
+
+    void prefetchPullRequestReviewContextFromQuery(queryClient, ciReviewQueryInput);
+  }, [ciReviewQueryInput, hasCiChecksTab, hasLinkedPullRequest, queryClient]);
+
+  const ciChecksModel = useMemo(
+    () =>
+      hasCiChecksTab
+        ? {
+            isActive: activeTabId === "ci_checks" && isPanelOpen,
+            queryInput: ciReviewQueryInput,
+          }
+        : null,
+    [activeTabId, ciReviewQueryInput, hasCiChecksTab, isPanelOpen],
+  );
   const rightPanelModel = useMemo(
     () =>
-      buildAgentStudioRightPanelModel({
-        panelKind,
-        documentsModel,
+      buildTaskExecutionPanelModel({
+        tabs,
+        activeTabId,
+        documentModel: documentsModel,
         diffModel,
-        devServerModel,
+        fileExplorerModel,
+        ciChecksModel,
+        devServerModel: visibleDevServerModel,
+        onActiveTabChange,
       }),
-    [panelKind, documentsModel, diffModel, devServerModel],
+    [
+      activeTabId,
+      ciChecksModel,
+      diffModel,
+      documentsModel,
+      fileExplorerModel,
+      onActiveTabChange,
+      tabs,
+      visibleDevServerModel,
+    ],
+  );
+  const refreshWorktree = useCallback<GitDiffRefresh>(
+    async (mode): Promise<void> => {
+      const refreshes: Promise<unknown>[] = [buildToolsSnapshot.refreshWorktree(mode)];
+      const fileQueryRoots = new Set(
+        [fileExplorerRoot.rootPath, selectedFile?.rootPath ?? null].filter(
+          (rootPath): rootPath is string => rootPath !== null,
+        ),
+      );
+      for (const rootPath of fileQueryRoots) {
+        refreshes.push(invalidateWorkspaceFileQueries(queryClient, rootPath));
+      }
+      await Promise.all(refreshes);
+    },
+    [buildToolsSnapshot.refreshWorktree, fileExplorerRoot.rootPath, queryClient, selectedFile],
   );
 
   return {
-    isRightPanelVisible: Boolean(panelKind && isPanelOpen),
+    isRightPanelVisible: Boolean(activeTabId && isPanelOpen),
     rightPanelModel,
-    refreshWorktree: buildToolsSnapshot.refreshWorktree,
+    refreshWorktree,
   };
 }

@@ -15,6 +15,16 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
 };
 
 describe("createSystemCommandRunner", () => {
+  test("preserves a nonzero process exit code", async () => {
+    const port = createSystemCommandRunner({ env: process.env, platform: process.platform });
+
+    const result = await Effect.runPromise(
+      port.runCommandAllowFailure("bun", ["-e", "process.exit(8)"]),
+    );
+
+    expect(result).toMatchObject({ ok: false, exitCode: 8 });
+  });
+
   test("passes the explicit environment to spawned commands", async () => {
     const port = createSystemCommandRunner({
       env: {

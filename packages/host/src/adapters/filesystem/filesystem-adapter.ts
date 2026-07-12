@@ -1,9 +1,10 @@
-import { access, readdir, realpath, stat } from "node:fs/promises";
+import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { toHostOperationError, toHostPathStatError } from "../../effect/host-errors";
 import type { FilesystemDirectoryEntry, FilesystemPort } from "../../ports/filesystem-port";
+import { readBoundedFileBytes } from "./bounded-file-read";
 
 export const createFilesystemAdapter = (): FilesystemPort => ({
   homeDirectory() {
@@ -34,10 +35,27 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       );
     });
   },
-  stat(inputPath) {
+  readFileBytes(inputPath, maxBytes) {
+    return Effect.tryPromise({
+      try: async () => {
+        const file = await open(inputPath, "r");
+        try {
+          return await readBoundedFileBytes(file, maxBytes);
+        } finally {
+          await file.close();
+        }
+      },
+      catch: (cause) =>
+        toHostOperationError(cause, "filesystem.readFileBytes", {
+          path: inputPath,
+          maxBytes,
+        }),
+    });
+  },
+  stat(inputPath, options) {
     return Effect.gen(function* () {
       const metadata = yield* Effect.tryPromise({
-        try: () => stat(inputPath),
+        try: () => (options?.followSymbolicLinks === false ? lstat(inputPath) : stat(inputPath)),
         catch: (cause) =>
           toHostOperationError(cause, "filesystem.stat", {
             path: inputPath,
@@ -45,6 +63,9 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       });
       return {
         isDirectory: metadata.isDirectory(),
+        isFile: metadata.isFile(),
+        size: metadata.size,
+        mtimeMs: metadata.mtimeMs,
       };
     });
   },
@@ -59,6 +80,9 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
   },
   join(...paths) {
     return path.join(...paths);
+  },
+  relative(from, to) {
+    return path.relative(from, to);
   },
   parent(inputPath) {
     const parentPath = path.dirname(inputPath);

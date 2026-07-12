@@ -38,6 +38,14 @@ export type GitRemote = {
   name: string;
   url: string;
 };
+export type GitChangedFile = {
+  path: string;
+  originalPath?: string;
+  status: string;
+};
+export type GitFileStatus = FileStatus & {
+  originalPath?: string;
+};
 export type GitWorktreeStatusData = {
   currentBranch: GitCurrentBranch;
   fileStatuses: FileStatus[];
@@ -86,6 +94,7 @@ export type GitBranchUpstreamSetup = {
 export type GitPort = {
   canonicalizePath(path: string): Effect.Effect<string, HostOperationError>;
   isGitRepository(path: string): Effect.Effect<boolean, GitPortError>;
+  getRepositoryRoot(workingDirectory: string): Effect.Effect<string, GitPortError>;
   shareGitCommonDirectory(
     repoPath: string,
     workingDir: string,
@@ -93,8 +102,13 @@ export type GitPort = {
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
+  listFiles(workingDir: string): Effect.Effect<string[], GitPortError>;
   getCurrentBranch(workingDir: string): Effect.Effect<GitCurrentBranch, GitPortError>;
-  getStatus(workingDir: string): Effect.Effect<FileStatus[], GitPortError>;
+  getStatus(workingDir: string): Effect.Effect<GitFileStatus[], GitPortError>;
+  listChangedFiles(
+    workingDir: string,
+    targetBranch: string,
+  ): Effect.Effect<GitChangedFile[], GitPortError>;
   getDiff(workingDir: string, targetBranch?: string): Effect.Effect<FileDiff[], GitPortError>;
   getWorktreeStatusData(
     workingDir: string,

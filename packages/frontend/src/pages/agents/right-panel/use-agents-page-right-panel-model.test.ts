@@ -9,7 +9,11 @@ import {
   resolveTaskTargetBranchState,
 } from "@/lib/target-branch";
 import { createTaskCardFixture } from "../agent-studio-test-utils";
-import { buildAgentsPageDiffModel } from "./use-agents-page-right-panel-model";
+import {
+  buildAgentsPageDiffModel,
+  resolveTaskExecutionFileExplorerRoot,
+  resolveTaskExecutionFileExplorerTargetBranch,
+} from "./use-agents-page-right-panel-model";
 
 type BuildDiffModelArgs = Parameters<typeof buildAgentsPageDiffModel>[0];
 
@@ -84,6 +88,112 @@ describe("resolveBuildToolsSelectedTaskId", () => {
         viewSelectedTaskId: createTaskCardFixture({ id: "task-24-hydrated" }).id,
       }),
     ).toBe("task-24-hydrated");
+  });
+});
+
+describe("resolveTaskExecutionFileExplorerRoot", () => {
+  test("uses the canonical task worktree in worktree mode", () => {
+    expect(
+      resolveTaskExecutionFileExplorerRoot({
+        workspaceRepoPath: "/repo",
+        contextMode: "worktree",
+        worktreePath: "/repo/.worktrees/task-24",
+        isWorktreeResolving: false,
+        worktreeError: null,
+        targetBranchValidationError: null,
+      }),
+    ).toEqual({ rootPath: "/repo/.worktrees/task-24", unavailableReason: null });
+  });
+
+  test("does not fall back to the repository while the task worktree is resolving", () => {
+    expect(
+      resolveTaskExecutionFileExplorerRoot({
+        workspaceRepoPath: "/repo",
+        contextMode: "worktree",
+        worktreePath: null,
+        isWorktreeResolving: true,
+        worktreeError: null,
+        targetBranchValidationError: null,
+      }),
+    ).toEqual({ rootPath: null, unavailableReason: "Resolving task worktree..." });
+  });
+
+  test("uses the repository root in repository mode", () => {
+    expect(
+      resolveTaskExecutionFileExplorerRoot({
+        workspaceRepoPath: "/repo",
+        contextMode: "repository",
+        worktreePath: "/repo/.worktrees/task-24",
+        isWorktreeResolving: false,
+        worktreeError: null,
+        targetBranchValidationError: null,
+      }),
+    ).toEqual({ rootPath: "/repo", unavailableReason: null });
+  });
+
+  test("surfaces invalid task target branches before resolving a worktree", () => {
+    const validationError = "Invalid openducktor.targetBranch metadata.";
+
+    expect(
+      resolveTaskExecutionFileExplorerRoot({
+        workspaceRepoPath: "/repo",
+        contextMode: "worktree",
+        worktreePath: "/repo/.worktrees/task-24",
+        isWorktreeResolving: false,
+        worktreeError: null,
+        targetBranchValidationError: validationError,
+      }),
+    ).toEqual({ rootPath: null, unavailableReason: validationError });
+  });
+});
+
+describe("resolveTaskExecutionFileExplorerTargetBranch", () => {
+  test("omits the upstream comparison when the repository branch is not tracking", () => {
+    expect(
+      resolveTaskExecutionFileExplorerTargetBranch({
+        contextMode: "repository",
+        targetBranch: "@{upstream}",
+        upstreamStatus: "untracked",
+        hasLoadedRepositoryStatus: true,
+        targetBranchValidationError: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("omits the upstream comparison until repository tracking has loaded", () => {
+    expect(
+      resolveTaskExecutionFileExplorerTargetBranch({
+        contextMode: "repository",
+        targetBranch: "@{upstream}",
+        upstreamStatus: "tracking",
+        hasLoadedRepositoryStatus: false,
+        targetBranchValidationError: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("keeps the task target branch in worktree mode", () => {
+    expect(
+      resolveTaskExecutionFileExplorerTargetBranch({
+        contextMode: "worktree",
+        targetBranch: "origin/main",
+        upstreamStatus: "untracked",
+        hasLoadedRepositoryStatus: false,
+        targetBranchValidationError: null,
+      }),
+    ).toBe("origin/main");
+  });
+
+  test("omits comparisons for invalid worktree target branches", () => {
+    expect(
+      resolveTaskExecutionFileExplorerTargetBranch({
+        contextMode: "worktree",
+        targetBranch: "origin/main",
+        upstreamStatus: "untracked",
+        hasLoadedRepositoryStatus: false,
+        targetBranchValidationError: "Invalid task target branch.",
+      }),
+    ).toBeNull();
   });
 });
 

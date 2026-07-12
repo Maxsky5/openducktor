@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
@@ -11,7 +12,12 @@ import {
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
-import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
+import {
+  buildAgentStudioPageModelsArgs,
+  clearTaskExecutionFilePreviewState,
+  createTaskExecutionFilePreviewState,
+  selectTaskExecutionFilePreviewState,
+} from "./use-agent-studio-orchestration-controller";
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
 
@@ -165,6 +171,59 @@ const baseArgs: BuildArgs = {
     },
   },
 };
+
+const firstPreviewFile: TaskExecutionSelectedFile = {
+  rootPath: "/repo",
+  relativePath: "src/first.ts",
+};
+const secondPreviewFile: TaskExecutionSelectedFile = {
+  rootPath: "/repo",
+  relativePath: "src/second.ts",
+};
+
+describe("task execution file preview state", () => {
+  test("starts a new preview session when selecting from a closed preview", () => {
+    const initialState = createTaskExecutionFilePreviewState();
+    const openedState = selectTaskExecutionFilePreviewState(initialState, firstPreviewFile);
+    const closedState = clearTaskExecutionFilePreviewState(openedState);
+    const reopenedState = selectTaskExecutionFilePreviewState(closedState, secondPreviewFile);
+
+    expect(openedState).toEqual({
+      selectedFile: firstPreviewFile,
+      previewSessionKey: 1,
+      preservePreviousSnapshot: false,
+    });
+    expect(closedState).toEqual({
+      selectedFile: null,
+      previewSessionKey: 2,
+      preservePreviousSnapshot: false,
+    });
+    expect(reopenedState).toEqual({
+      selectedFile: secondPreviewFile,
+      previewSessionKey: 3,
+      preservePreviousSnapshot: false,
+    });
+  });
+
+  test("keeps the preview session stable while switching between open files", () => {
+    const openedState = selectTaskExecutionFilePreviewState(
+      createTaskExecutionFilePreviewState(),
+      firstPreviewFile,
+    );
+    const switchedState = selectTaskExecutionFilePreviewState(openedState, secondPreviewFile);
+
+    expect(switchedState.selectedFile).toBe(secondPreviewFile);
+    expect(switchedState.previewSessionKey).toBe(openedState.previewSessionKey);
+    expect(switchedState.preservePreviousSnapshot).toBe(true);
+  });
+
+  test("does not churn preview sessions when already closed", () => {
+    const initialState = createTaskExecutionFilePreviewState();
+    const closedState = clearTaskExecutionFilePreviewState(initialState);
+
+    expect(closedState).toBe(initialState);
+  });
+});
 
 describe("buildAgentStudioPageModelsArgs", () => {
   test("maps grouped orchestration context into page-model contracts", () => {

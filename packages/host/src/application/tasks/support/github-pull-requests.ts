@@ -23,6 +23,7 @@ import {
   type ResolvedPullRequest,
   repositoryKey,
 } from "./github-pull-request-model";
+import { runGithubRepositoryCommandAllowFailure } from "./github-repository-command";
 
 export {
   GITHUB_PROVIDER_ID,
@@ -170,7 +171,7 @@ export const githubProviderStatus = (
       available: true,
     };
   });
-const runGithubCommand = (
+export const runGithubCommand = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
   host: string,
@@ -195,6 +196,30 @@ const runGithubCommand = (
         field: "gh",
         message: combinedCommandOutput(result.stdout, result.stderr) || "gh command failed.",
         details: { repoPath },
+      }),
+    );
+  });
+export const runGithubRepositoryCommand = (
+  dependencies: GithubCommandDependencies,
+  repoPath: string,
+  repository: GitProviderRepository,
+  args: string[],
+) =>
+  Effect.gen(function* () {
+    const result = yield* runGithubRepositoryCommandAllowFailure(
+      dependencies,
+      repoPath,
+      repository,
+      args,
+    );
+    if (result.ok) {
+      return result.stdout;
+    }
+    return yield* Effect.fail(
+      new HostValidationError({
+        field: "gh",
+        message: combinedCommandOutput(result.stdout, result.stderr) || "gh command failed.",
+        details: { repoPath, repository: repositoryKey(repository) },
       }),
     );
   });
@@ -261,8 +286,8 @@ const probeResolvedGithubAuthOrThrow = (
       }),
     );
   });
-export const requireGithubPullRequestContext = (
-  dependencies: GithubRepositoryDependencies,
+export const requireGithubPullRequestReadRepository = (
+  dependencies: GithubCommandDependencies,
   repoPath: string,
   repoConfig: RepoConfig,
 ) =>
@@ -289,6 +314,20 @@ export const requireGithubPullRequestContext = (
     }
     const githubCommand = yield* resolveRequiredGithubCommandDependencies(dependencies, repoPath);
     yield* probeResolvedGithubAuthOrThrow(githubCommand, repository.host);
+    return repository;
+  });
+
+export const requireGithubPullRequestContext = (
+  dependencies: GithubRepositoryDependencies,
+  repoPath: string,
+  repoConfig: RepoConfig,
+) =>
+  Effect.gen(function* () {
+    const repository = yield* requireGithubPullRequestReadRepository(
+      dependencies,
+      repoPath,
+      repoConfig,
+    );
     const remoteName = yield* requireSingleGithubRemoteName(
       dependencies.gitPort,
       repoPath,

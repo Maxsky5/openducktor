@@ -1,32 +1,32 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
-  AgentStudioRightPanelKind,
-  AgentStudioRightPanelModel,
-  AgentStudioRightPanelToggleModel,
+  TaskExecutionFileExplorerPanelModel,
+  TaskExecutionPanelModel,
+  TaskExecutionPanelTab,
+  TaskExecutionPanelTabId,
+  TaskExecutionPanelToggleModel,
 } from "@/components/features/agents";
 import type { AgentStudioDevServerPanelModel } from "@/components/features/agents/agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
-import type { AgentStudioWorkspaceSidebarModel } from "@/components/features/agents/agent-studio-workspace-sidebar";
+import type { TaskExecutionCiChecksPanelModel } from "@/components/features/agents/task-execution-ci-checks-panel";
+import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
 import { toRightPanelStorageKey } from "../agents-page-selection";
 
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
   hasDocumentPanel: boolean;
+  hasGithubIntegration: boolean;
+  hasLinkedGithubPullRequest: boolean;
   hasTaskContext?: boolean;
 };
 
 type UseAgentStudioRightPanelState = {
-  panelKind: AgentStudioRightPanelKind | null;
+  activeTabId: TaskExecutionPanelTabId | null;
+  tabs: TaskExecutionPanelTab[];
   isPanelOpen: boolean;
-  rightPanelToggleModel: AgentStudioRightPanelToggleModel | null;
-};
-
-const PANEL_KIND_BY_ROLE: Record<AgentRole, AgentStudioRightPanelKind> = {
-  spec: "documents",
-  planner: "documents",
-  build: "build_tools",
-  qa: "documents",
+  onActiveTabChange: (tabId: TaskExecutionPanelTabId) => void;
+  rightPanelToggleModel: TaskExecutionPanelToggleModel | null;
 };
 
 const DEFAULT_OPEN_BY_ROLE: Record<AgentRole, boolean> = {
@@ -37,6 +37,12 @@ const DEFAULT_OPEN_BY_ROLE: Record<AgentRole, boolean> = {
 };
 
 const RIGHT_PANEL_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
+const DEFAULT_ACTIVE_TAB_BY_ROLE: Record<AgentRole, TaskExecutionPanelTabId> = {
+  spec: "document",
+  planner: "document",
+  build: "git",
+  qa: "document",
+};
 
 const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> => ({
   ...DEFAULT_OPEN_BY_ROLE,
@@ -86,43 +92,80 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
   }
 };
 
-const isRightPanelKindAvailable = (
-  kind: AgentStudioRightPanelKind,
-  availability: { hasDocumentPanel: boolean },
-): boolean => {
-  if (kind === "documents") {
-    return availability.hasDocumentPanel;
+const buildTaskExecutionTabs = ({
+  hasDocumentPanel,
+  hasGithubIntegration,
+  hasLinkedGithubPullRequest,
+}: {
+  hasDocumentPanel: boolean;
+  hasGithubIntegration: boolean;
+  hasLinkedGithubPullRequest: boolean;
+}): TaskExecutionPanelTab[] => {
+  const tabs: TaskExecutionPanelTab[] = [];
+  if (hasDocumentPanel) {
+    tabs.push({ id: "document", label: "Document" });
   }
-  return true;
+  tabs.push({ id: "git", label: "Git" });
+  tabs.push({ id: "file_explorer", label: "File explorer" });
+  if (hasGithubIntegration && hasLinkedGithubPullRequest) {
+    tabs.push({ id: "ci_checks", label: "CI Checks" });
+  }
+  return tabs;
 };
 
-type BuildAgentStudioRightPanelModelInput = {
-  panelKind: AgentStudioRightPanelKind | null;
-  documentsModel: AgentStudioWorkspaceSidebarModel;
+const resolveActiveTab = ({
+  role,
+  requestedTab,
+  tabs,
+}: {
+  role: AgentRole;
+  requestedTab: TaskExecutionPanelTabId;
+  tabs: TaskExecutionPanelTab[];
+}): TaskExecutionPanelTabId | null => {
+  if (tabs.length === 0) {
+    return null;
+  }
+  if (tabs.some((tab) => tab.id === requestedTab)) {
+    return requestedTab;
+  }
+  const roleDefault = DEFAULT_ACTIVE_TAB_BY_ROLE[role];
+  const fallbackTab = tabs.find((tab) => tab.id === roleDefault) ?? tabs[0];
+  return fallbackTab?.id ?? null;
+};
+
+type BuildTaskExecutionPanelModelInput = {
+  tabs: TaskExecutionPanelTab[];
+  activeTabId: TaskExecutionPanelTabId | null;
+  documentModel: TaskExecutionDocumentPanelModel | null;
   diffModel: AgentStudioGitPanelModel;
-  devServerModel: AgentStudioDevServerPanelModel;
+  fileExplorerModel: TaskExecutionFileExplorerPanelModel;
+  ciChecksModel: TaskExecutionCiChecksPanelModel | null;
+  devServerModel: AgentStudioDevServerPanelModel | null;
+  onActiveTabChange: (tabId: TaskExecutionPanelTabId) => void;
 };
 
-export const buildAgentStudioRightPanelModel = ({
-  panelKind,
-  documentsModel,
+export const buildTaskExecutionPanelModel = ({
+  tabs,
+  activeTabId,
+  documentModel,
   diffModel,
+  fileExplorerModel,
+  ciChecksModel,
   devServerModel,
-}: BuildAgentStudioRightPanelModelInput): AgentStudioRightPanelModel | null => {
-  if (!panelKind) {
+  onActiveTabChange,
+}: BuildTaskExecutionPanelModelInput): TaskExecutionPanelModel | null => {
+  if (!activeTabId || tabs.length === 0) {
     return null;
   }
 
-  if (panelKind === "documents") {
-    return {
-      kind: "documents",
-      documentsModel,
-    };
-  }
-
   return {
-    kind: "build_tools",
-    diffModel,
+    tabs,
+    activeTabId,
+    onActiveTabChange,
+    documentModel,
+    gitModel: diffModel,
+    fileExplorerModel,
+    ciChecksModel,
     devServerModel,
   };
 };
@@ -130,6 +173,8 @@ export const buildAgentStudioRightPanelModel = ({
 export function useAgentStudioRightPanel({
   role,
   hasDocumentPanel,
+  hasGithubIntegration,
+  hasLinkedGithubPullRequest,
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
@@ -157,14 +202,28 @@ export function useAgentStudioRightPanel({
     }
   }, [isOpenByRole]);
 
-  const panelKindForRole = PANEL_KIND_BY_ROLE[role];
-  const panelAvailable =
-    hasTaskContext &&
-    isRightPanelKindAvailable(panelKindForRole, {
-      hasDocumentPanel,
-    });
-  const panelKind = panelAvailable ? panelKindForRole : null;
-  const isPanelOpen = panelKind ? isOpenByRole[role] : false;
+  const [requestedTabByRole, setRequestedTabByRole] = useState<
+    Record<AgentRole, TaskExecutionPanelTabId>
+  >(() => ({
+    ...DEFAULT_ACTIVE_TAB_BY_ROLE,
+  }));
+  const tabs = useMemo(
+    () =>
+      hasTaskContext
+        ? buildTaskExecutionTabs({
+            hasDocumentPanel,
+            hasGithubIntegration,
+            hasLinkedGithubPullRequest,
+          })
+        : [],
+    [hasDocumentPanel, hasGithubIntegration, hasLinkedGithubPullRequest, hasTaskContext],
+  );
+  const activeTabId = resolveActiveTab({
+    role,
+    requestedTab: requestedTabByRole[role],
+    tabs,
+  });
+  const isPanelOpen = activeTabId ? isOpenByRole[role] : false;
 
   const handleTogglePanel = useCallback(() => {
     setIsOpenByRole((current) => ({
@@ -173,21 +232,33 @@ export function useAgentStudioRightPanel({
     }));
   }, [role]);
 
-  const rightPanelToggleModel = useMemo<AgentStudioRightPanelToggleModel | null>(() => {
-    if (!panelKind) {
+  const handleActiveTabChange = useCallback(
+    (tabId: TaskExecutionPanelTabId) => {
+      setRequestedTabByRole((current) => ({
+        ...current,
+        [role]: tabId,
+      }));
+    },
+    [role],
+  );
+
+  const rightPanelToggleModel = useMemo<TaskExecutionPanelToggleModel | null>(() => {
+    if (!activeTabId) {
       return null;
     }
 
     return {
-      kind: panelKind,
+      kind: "task_execution",
       isOpen: isPanelOpen,
       onToggle: handleTogglePanel,
     };
-  }, [handleTogglePanel, isPanelOpen, panelKind]);
+  }, [activeTabId, handleTogglePanel, isPanelOpen]);
 
   return {
-    panelKind,
+    activeTabId,
+    tabs,
     isPanelOpen,
     rightPanelToggleModel,
+    onActiveTabChange: handleActiveTabChange,
   };
 }

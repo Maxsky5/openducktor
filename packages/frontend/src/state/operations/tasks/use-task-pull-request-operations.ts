@@ -1,8 +1,9 @@
 import type { PullRequest } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { invalidatePullRequestReviewContextQueries } from "@/state/queries/pull-request-review";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
@@ -56,9 +57,7 @@ export function useTaskPullRequestOperations({
   const [pendingMergedPullRequestState, setPendingMergedPullRequestState] =
     useState<PendingMergedPullRequestState | null>(null);
   const activeRepoPathRef = useRef(activeRepoPath);
-  const [previousActiveRepoPath, setPreviousActiveRepoPath] = useState(activeRepoPath);
-
-  activeRepoPathRef.current = activeRepoPath;
+  const linkingMergedPullRequestTaskIdRef = useRef<string | null>(null);
 
   const detectingPullRequestTaskId =
     detectingPullRequestState?.repoPath === activeRepoPath
@@ -80,12 +79,13 @@ export function useTaskPullRequestOperations({
     setLinkingMergedPullRequestTaskId(null);
     setUnlinkingPullRequestTaskId(null);
     setPendingMergedPullRequestState(null);
+    linkingMergedPullRequestTaskIdRef.current = null;
   }, []);
 
-  if (previousActiveRepoPath !== activeRepoPath) {
-    setPreviousActiveRepoPath(activeRepoPath);
+  useEffect(() => {
+    activeRepoPathRef.current = activeRepoPath;
     clearPullRequestState();
-  }
+  }, [activeRepoPath, clearPullRequestState]);
 
   const syncPullRequests = useCallback(
     async (taskId: string): Promise<void> => {
@@ -97,6 +97,7 @@ export function useTaskPullRequestOperations({
         if (activeRepoPathRef.current === repoPath) {
           if (result.outcome === "linked") {
             await refreshTaskData(repoPath, taskId);
+            await invalidatePullRequestReviewContextQueries(queryClient);
             toast.success("Pull request linked", {
               description: `PR #${result.pullRequest.number}`,
             });
@@ -118,15 +119,15 @@ export function useTaskPullRequestOperations({
         );
       }
     },
-    [activeRepoPath, refreshTaskData],
+    [activeRepoPath, queryClient, refreshTaskData],
   );
 
   const cancelLinkMergedPullRequest = useCallback((): void => {
-    if (linkingMergedPullRequestTaskId != null) {
+    if (linkingMergedPullRequestTaskIdRef.current != null) {
       return;
     }
     setPendingMergedPullRequestState(null);
-  }, [linkingMergedPullRequestTaskId]);
+  }, []);
 
   const linkMergedPullRequest = useCallback(async (): Promise<void> => {
     if (
@@ -141,6 +142,7 @@ export function useTaskPullRequestOperations({
     }
 
     const { repoPath, taskId, pullRequest } = pendingMergedPullRequestState;
+    linkingMergedPullRequestTaskIdRef.current = taskId;
     setLinkingMergedPullRequestTaskId(taskId);
     try {
       await runTaskMutationWithChatDraftCleanup({
@@ -156,12 +158,16 @@ export function useTaskPullRequestOperations({
         current?.repoPath === repoPath && current.taskId === taskId ? null : current,
       );
       await refreshTaskData(repoPath, taskId);
+      await invalidatePullRequestReviewContextQueries(queryClient);
       toast.success("Merged pull request linked", {
         description: `PR #${pullRequest.number}; task moved to Done.`,
       });
     } catch (error) {
       toast.error("Failed to link merged pull request", { description: errorMessage(error) });
     } finally {
+      if (linkingMergedPullRequestTaskIdRef.current === taskId) {
+        linkingMergedPullRequestTaskIdRef.current = null;
+      }
       setLinkingMergedPullRequestTaskId((currentTaskId) =>
         currentTaskId === taskId ? null : currentTaskId,
       );
@@ -172,24 +178,27 @@ export function useTaskPullRequestOperations({
     async (taskId: string): Promise<void> => {
       setUnlinkingPullRequestTaskId(taskId);
       try {
-        await runTaskMutation({
-          refreshStrategy: { kind: "task", taskId },
-          run: async (repoPath) => {
-            await host.taskPullRequestUnlink(repoPath, taskId);
-          },
-          successTitle: "Pull request unlinked",
-          successDescription: taskId,
-          failureTitle: "Failed to unlink pull request",
-        }).catch(() => {
+        try {
+          await runTaskMutation({
+            refreshStrategy: { kind: "task", taskId },
+            run: async (repoPath) => {
+              await host.taskPullRequestUnlink(repoPath, taskId);
+            },
+            successTitle: "Pull request unlinked",
+            successDescription: taskId,
+            failureTitle: "Failed to unlink pull request",
+          });
+          await invalidatePullRequestReviewContextQueries(queryClient);
+        } catch {
           // runTaskMutation already surfaced the actionable error to the user.
-        });
+        }
       } finally {
         setUnlinkingPullRequestTaskId((currentTaskId) =>
           currentTaskId === taskId ? null : currentTaskId,
         );
       }
     },
-    [runTaskMutation],
+    [queryClient, runTaskMutation],
   );
 
   return {

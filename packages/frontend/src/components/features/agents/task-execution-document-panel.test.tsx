@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { AgentStudioWorkspaceSidebar } from "./agent-studio-workspace-sidebar";
+import { TaskExecutionDocumentPanel } from "./task-execution-document-panel";
 
 enableReactActEnvironment();
 
@@ -17,10 +17,10 @@ const emptyDoc = {
   loaded: true,
 };
 
-describe("AgentStudioWorkspaceSidebar", () => {
+describe("TaskExecutionDocumentPanel", () => {
   test("renders active document content", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioWorkspaceSidebar, {
+      createElement(TaskExecutionDocumentPanel, {
         model: {
           activeDocument: {
             title: "Specification",
@@ -46,7 +46,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
 
   test("renders active document placeholder when document is empty", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioWorkspaceSidebar, {
+      createElement(TaskExecutionDocumentPanel, {
         model: {
           activeDocument: {
             title: "QA Report",
@@ -66,9 +66,45 @@ describe("AgentStudioWorkspaceSidebar", () => {
     expect(html).not.toContain('data-testid="expand-agent-studio-document"');
   });
 
-  test("renders empty sidebar for Builder role documents", () => {
+  test("renders loading state before an empty document has loaded", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioWorkspaceSidebar, {
+      createElement(TaskExecutionDocumentPanel, {
+        model: {
+          activeDocument: {
+            title: "Specification",
+            description: "Current specification document.",
+            emptyState: "No spec document yet.",
+            document: { ...emptyDoc, loaded: false, isLoading: true },
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("Loading document...");
+    expect(html).not.toContain("No spec document yet.");
+  });
+
+  test("renders an actionable document load error", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskExecutionDocumentPanel, {
+        model: {
+          activeDocument: {
+            title: "Specification",
+            description: "Current specification document.",
+            emptyState: "No spec document yet.",
+            document: { ...emptyDoc, error: "Unable to load specification." },
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("Unable to load specification.");
+    expect(html).not.toContain("No spec document yet.");
+  });
+
+  test("renders empty panel when no role document is available", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskExecutionDocumentPanel, {
         model: {
           activeDocument: null,
         },
@@ -80,7 +116,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
 
   test("expand button is hidden when document markdown is empty", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioWorkspaceSidebar, {
+      createElement(TaskExecutionDocumentPanel, {
         model: {
           activeDocument: {
             title: "Specification",
@@ -99,7 +135,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
   });
 });
 
-describe("AgentStudioWorkspaceSidebar snapshot persistence", () => {
+describe("TaskExecutionDocumentPanel snapshot persistence", () => {
   const writeClipboardMock = mock(async (_value: string) => {});
   let restoreClipboard: (() => void) | null = null;
 
@@ -129,7 +165,7 @@ describe("AgentStudioWorkspaceSidebar snapshot persistence", () => {
 
   test("modal retains original content when activeDocument becomes null", () => {
     const { rerender } = render(
-      createElement(AgentStudioWorkspaceSidebar, {
+      createElement(TaskExecutionDocumentPanel, {
         model: { activeDocument: activeDoc },
       }),
     );
@@ -139,21 +175,21 @@ describe("AgentStudioWorkspaceSidebar snapshot persistence", () => {
     expect(screen.getByTestId("markdown-preview-modal-copy")).toBeDefined();
 
     rerender(
-      createElement(AgentStudioWorkspaceSidebar, {
+      createElement(TaskExecutionDocumentPanel, {
         model: { activeDocument: null },
       }),
     );
 
     expect(screen.getByTestId("markdown-preview-modal-copy")).toBeDefined();
-    // After sidebar becomes null, only the modal snapshot has the content (sidebar is empty)
-    const matching = screen.getAllByText((c) => c.includes("Active spec content"));
+    // After the panel becomes null, only the modal snapshot has the content.
+    const matching = screen.getAllByText((content) => content.includes("Active spec content"));
     expect(matching.length).toBe(1);
   });
 
   test("copy button in modal copies snapshot markdown after activeDocument becomes null", async () => {
     await withMockedToast(async () => {
       const { rerender } = render(
-        createElement(AgentStudioWorkspaceSidebar, {
+        createElement(TaskExecutionDocumentPanel, {
           model: { activeDocument: activeDoc },
         }),
       );
@@ -161,7 +197,7 @@ describe("AgentStudioWorkspaceSidebar snapshot persistence", () => {
       fireEvent.click(screen.getByTestId("expand-agent-studio-document"));
 
       rerender(
-        createElement(AgentStudioWorkspaceSidebar, {
+        createElement(TaskExecutionDocumentPanel, {
           model: { activeDocument: null },
         }),
       );

@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
+import type { GitFileStatus } from "../../ports/git-port";
 import { type GitCommandRunner, runGit, runGitAllowFailure } from "./git-command-runner";
 
 const unmergedStatusPairs = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
@@ -87,31 +88,66 @@ const isUnmergedStatusPair = (index: string, worktree: string): boolean => {
   return unmergedStatusPairs.has(pair);
 };
 
-const parseStatusPorcelain = (output: string): FileStatus[] =>
-  output.split(/\r?\n/).flatMap((line): FileStatus[] => {
-    if (line.length < 4) {
-      return [];
-    }
-    const index = line.at(0) ?? "";
-    const worktree = line.at(1) ?? "";
-    const filePath = line.slice(3);
-    if (index === "?" && worktree === "?") {
-      return [{ path: filePath, status: "untracked", staged: false }];
-    }
-    if (index === "!" && worktree === "!") {
-      return [{ path: filePath, status: "ignored", staged: false }];
-    }
-    if (isUnmergedStatusPair(index, worktree)) {
-      return [{ path: filePath, status: "unmerged", staged: true }];
-    }
-    if (index !== " " && worktree === " ") {
-      return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
-    }
-    if (index === " " && worktree !== " ") {
-      return [{ path: filePath, status: porcelainCharToStatus(worktree), staged: false }];
-    }
+const parseStatusRecord = (line: string): GitFileStatus[] => {
+  if (line.length < 4) {
+    return [];
+  }
+  const index = line.at(0) ?? "";
+  const worktree = line.at(1) ?? "";
+  const filePath = line.slice(3);
+  if (index === "?" && worktree === "?") {
+    return [{ path: filePath, status: "untracked", staged: false }];
+  }
+  if (index === "!" && worktree === "!") {
+    return [{ path: filePath, status: "ignored", staged: false }];
+  }
+  if (isUnmergedStatusPair(index, worktree)) {
+    return [{ path: filePath, status: "unmerged", staged: true }];
+  }
+  if (worktree === "D") {
+    return [{ path: filePath, status: "deleted", staged: false }];
+  }
+  if (index !== " " && worktree === " ") {
     return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
-  });
+  }
+  if (index === " " && worktree !== " ") {
+    return [{ path: filePath, status: porcelainCharToStatus(worktree), staged: false }];
+  }
+  return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
+};
+
+const parseStatusPorcelain = (output: string): GitFileStatus[] => {
+  if (!output.includes("\0")) {
+    return output.split(/\r?\n/).flatMap(parseStatusRecord);
+  }
+
+  const records = output.split("\0");
+  const statuses: GitFileStatus[] = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index] ?? "";
+    const indexStatus = record.at(0);
+    const worktreeStatus = record.at(1);
+    const hasOriginalPath =
+      indexStatus === "R" ||
+      indexStatus === "C" ||
+      worktreeStatus === "R" ||
+      worktreeStatus === "C";
+    const parsedStatuses = parseStatusRecord(record);
+    if (hasOriginalPath) {
+      const originalPath = records[index + 1] ?? "";
+      statuses.push(
+        ...parsedStatuses.map((status) => ({
+          ...status,
+          ...(originalPath ? { originalPath } : {}),
+        })),
+      );
+      index += 1;
+      continue;
+    }
+    statuses.push(...parsedStatuses);
+  }
+  return statuses;
+};
 export const fileStatusCounts = (fileStatuses: FileStatus[]): GitFileStatusCounts => {
   const total = fileStatuses.length;
   const staged = fileStatuses.filter((status) => status.staged).length;
@@ -145,6 +181,7 @@ export const getStatusUnchecked = (runner: GitCommandRunner, workingDirectory: s
     const output = yield* runGit(runner, workingDirectory, [
       "status",
       "--porcelain=v1",
+      "-z",
       "--untracked-files=all",
     ]);
     return parseStatusPorcelain(output);

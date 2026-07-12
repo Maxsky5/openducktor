@@ -4,8 +4,8 @@ import type {
   AgentRoleOption,
   AgentStudioHeaderModel,
   AgentStudioTaskTabsModel,
-  AgentStudioWorkspaceDocument,
-  AgentStudioWorkspaceSidebarModel,
+  TaskExecutionDocument,
+  TaskExecutionDocumentPanelModel,
 } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -99,8 +99,8 @@ export const buildAgentStudioHeaderModel = (args: {
   agentStudioReady: args.agentStudioReady,
 });
 
-export const buildAgentStudioWorkspaceSidebarModel = (args: {
-  activeDocument: AgentStudioWorkspaceDocument | null;
-}): AgentStudioWorkspaceSidebarModel => ({
+export const buildTaskExecutionDocumentPanelModel = (args: {
+  activeDocument: TaskExecutionDocument | null;
+}): TaskExecutionDocumentPanelModel => ({
   activeDocument: args.activeDocument,
 });

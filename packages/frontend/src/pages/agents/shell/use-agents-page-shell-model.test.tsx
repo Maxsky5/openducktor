@@ -113,13 +113,24 @@ type OrchestrationState = {
   activeTabValue: string;
   agentStudioTaskTabsModel: { tabs: [] };
   agentStudioHeaderModel: { title: string };
-  agentStudioWorkspaceSidebarModel: { activeDocument: null };
+  taskExecutionDocumentPanelModel: { activeDocument: null };
   agentChatModel: { kind: string };
   rightPanel: {
-    panelKind: "documents";
+    tabs: [
+      { id: "document"; label: "Document" },
+      { id: "git"; label: "Git" },
+      { id: "file_explorer"; label: "File explorer" },
+    ];
+    activeTabId: "document";
+    onActiveTabChange: (tabId: "document" | "git" | "file_explorer" | "ci_checks") => void;
     isPanelOpen: boolean;
     rightPanelToggleModel: { label: string };
   };
+  taskExecutionSelectedFilePreviewModel: {
+    selectedFile: null;
+    onClose: () => void;
+  };
+  onSelectTaskExecutionFile: (file: { rootPath: string; relativePath: string }) => void;
 };
 type OrchestrationControllerArgs = {
   selection: SelectionState & { isLoadingTasks: boolean };
@@ -309,13 +320,24 @@ let orchestrationState: OrchestrationState = {
   activeTabValue: "task-1",
   agentStudioTaskTabsModel: { tabs: [] },
   agentStudioHeaderModel: { title: "Task 1" },
-  agentStudioWorkspaceSidebarModel: { activeDocument: null },
+  taskExecutionDocumentPanelModel: { activeDocument: null },
   agentChatModel: { kind: "chat" },
   rightPanel: {
-    panelKind: "documents",
+    tabs: [
+      { id: "document", label: "Document" },
+      { id: "git", label: "Git" },
+      { id: "file_explorer", label: "File explorer" },
+    ],
+    activeTabId: "document",
+    onActiveTabChange: mock(() => {}),
     isPanelOpen: true,
     rightPanelToggleModel,
   },
+  taskExecutionSelectedFilePreviewModel: {
+    selectedFile: null,
+    onClose: mock(() => {}),
+  },
+  onSelectTaskExecutionFile: mock(() => {}),
 };
 let orchestrationControllerArgs: OrchestrationControllerArgs[] = [];
 let lastOrchestrationSelectionSource: SelectionState | null = null;
@@ -473,15 +495,21 @@ const registerModuleMocks = (): void => {
       selection,
       panel,
       documentsModel,
+      selectedFile,
+      onSelectFile,
+      onClearSelectedFile,
     }: {
       selection: OrchestrationControllerArgs["selection"];
       panel: OrchestrationState["rightPanel"];
-      documentsModel: OrchestrationState["agentStudioWorkspaceSidebarModel"];
+      documentsModel: OrchestrationState["taskExecutionDocumentPanelModel"];
+      selectedFile: OrchestrationState["taskExecutionSelectedFilePreviewModel"]["selectedFile"];
+      onSelectFile: OrchestrationState["onSelectTaskExecutionFile"];
+      onClearSelectedFile: OrchestrationState["taskExecutionSelectedFilePreviewModel"]["onClose"];
     }) => ({
       isRightPanelVisible: panel.isPanelOpen,
       rightPanelBridge: {
         buildWorktreeRefresh: {
-          panelKind: panel.panelKind,
+          activeTabId: panel.activeTabId,
           isPanelOpen: panel.isPanelOpen,
           selectedView: {
             role: selection.view.role,
@@ -493,9 +521,14 @@ const registerModuleMocks = (): void => {
           branches: workspaceState.branches,
           activeBranch: workspaceState.activeBranch,
           selectedView: selection.view,
-          panelKind: panel.panelKind,
+          tabs: panel.tabs,
+          activeTabId: panel.activeTabId,
+          onActiveTabChange: panel.onActiveTabChange,
           isPanelOpen: panel.isPanelOpen,
           documentsModel,
+          selectedFile,
+          onSelectFile,
+          onClearSelectedFile,
           repoSettings: orchestrationState.repoSettings,
           setTaskTargetBranch: tasksState.setTaskTargetBranch,
           detectingPullRequestTaskId: tasksState.detectingPullRequestTaskId,
@@ -504,6 +537,7 @@ const registerModuleMocks = (): void => {
           onGitConflictQuickActionContextChange: mock(() => {}),
         },
       } satisfies AgentStudioRightPanelBridgeModel,
+      selectedFileRefresh: null,
     }),
   }));
 };
@@ -638,13 +672,24 @@ beforeEach(async () => {
     activeTabValue: "task-1",
     agentStudioTaskTabsModel: { tabs: [] },
     agentStudioHeaderModel: { title: "Task 1" },
-    agentStudioWorkspaceSidebarModel: { activeDocument: null },
+    taskExecutionDocumentPanelModel: { activeDocument: null },
     agentChatModel: { kind: "chat" },
     rightPanel: {
-      panelKind: "documents",
+      tabs: [
+        { id: "document", label: "Document" },
+        { id: "git", label: "Git" },
+        { id: "file_explorer", label: "File explorer" },
+      ],
+      activeTabId: "document",
+      onActiveTabChange: mock(() => {}),
       isPanelOpen: true,
       rightPanelToggleModel,
     },
+    taskExecutionSelectedFilePreviewModel: {
+      selectedFile: null,
+      onClose: mock(() => {}),
+    },
+    onSelectTaskExecutionFile: mock(() => {}),
   };
   orchestrationControllerArgs = [];
   lastOrchestrationSelectionSource = null;
@@ -697,7 +742,7 @@ describe("useAgentsPageShellModel", () => {
         selectionState.view.taskId,
       );
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(
-        orchestrationState.agentStudioWorkspaceSidebarModel,
+        orchestrationState.taskExecutionDocumentPanelModel,
       );
       expect(state.modalContent.sessionStartModal).toBe(orchestrationState.sessionStartModal);
       expect(state.modalContent.humanReviewFeedbackModal).toBe(

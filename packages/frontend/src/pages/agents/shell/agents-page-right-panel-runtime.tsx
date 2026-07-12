@@ -1,11 +1,17 @@
-import { memo, type ReactElement, useEffect } from "react";
-import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
+import { useQueryClient } from "@tanstack/react-query";
+import { memo, type ReactElement, useCallback, useEffect } from "react";
+import { MemoizedTaskExecutionPanel } from "@/components/features/agents/task-execution-panel";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
+import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
 } from "../use-agents-page-right-panel-model";
-import type { AgentStudioBuildWorktreeRefreshModel } from "./use-agent-studio-right-panel-bridge";
+import type {
+  AgentStudioBuildWorktreeRefreshModel,
+  AgentStudioSelectedFileRefreshModel,
+} from "./use-agent-studio-right-panel-bridge";
 import {
   useForwardedWorktreeRefresh,
   type WorktreeRefreshRef,
@@ -28,16 +34,15 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
     };
   }, [refreshWorktree, refreshWorktreeRef]);
 
-  return rightPanelModel ? <MemoizedAgentStudioRightPanel model={rightPanelModel} /> : null;
+  return rightPanelModel ? <MemoizedTaskExecutionPanel model={rightPanelModel} /> : null;
 });
 
 export function AgentsPageBuildWorktreeRefreshRuntime({
-  panelKind,
   isPanelOpen,
   selectedView,
   refreshWorktreeRef,
 }: {
-  panelKind: "documents" | "build_tools" | null;
+  activeTabId: AgentStudioBuildWorktreeRefreshModel["activeTabId"];
   isPanelOpen: boolean;
   selectedView: AgentStudioBuildWorktreeRefreshModel["selectedView"];
   refreshWorktreeRef: WorktreeRefreshRef;
@@ -46,10 +51,29 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
 
   useAgentStudioBuildWorktreeRefresh({
     selectedView: {
-      role: panelKind === "build_tools" && isPanelOpen ? selectedView.role : null,
+      role: isPanelOpen ? selectedView.role : null,
       loadedSession: selectedView.loadedSession,
     },
     refreshWorktree,
+  });
+
+  return null;
+}
+
+export function AgentsPageSelectedFileRefreshRuntime({
+  selectedFile,
+  selectedView,
+}: AgentStudioSelectedFileRefreshModel): null {
+  const queryClient = useQueryClient();
+  const refreshSelectedFile = useCallback<GitDiffRefresh>(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: filesystemQueryKeys.textFile(selectedFile.rootPath, selectedFile.relativePath),
+    });
+  }, [queryClient, selectedFile.relativePath, selectedFile.rootPath]);
+
+  useAgentStudioBuildWorktreeRefresh({
+    selectedView,
+    refreshWorktree: refreshSelectedFile,
   });
 
   return null;

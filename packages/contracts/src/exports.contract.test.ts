@@ -83,6 +83,16 @@ import type {
   PlanSubtaskInput,
   PlanSubtaskIssueType,
   PlanSubtaskPriority,
+  PullRequestReviewAggregateStatus,
+  PullRequestReviewCheck,
+  PullRequestReviewCheckConclusion,
+  PullRequestReviewCheckStatus,
+  PullRequestReviewComment,
+  PullRequestReviewContext,
+  PullRequestReviewProviderId,
+  PullRequestReviewPullRequest,
+  PullRequestReviewState,
+  PullRequestReviewThreadsSummary,
   QaReportVerdict,
   QaWorkflowVerdict,
   RepoAgentDefaults,
@@ -161,7 +171,11 @@ import type {
   TaskWorktreeSummary,
   ToolExecutableProvenance,
   ToolExecutableSourceCategory,
+  WorkspaceFileGitStatus,
+  WorkspaceFileTree,
+  WorkspaceFileTreeEntry,
   WorkspaceRecord,
+  WorkspaceTextFileReadResult,
 } from "./index";
 import * as contracts from "./index";
 
@@ -374,6 +388,16 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseGitProviderRepositoryFromRemoteUrl",
   "publicTaskSchema",
   "publicTaskSummaryTaskSchema",
+  "pullRequestReviewAggregateStatusSchema",
+  "pullRequestReviewCheckConclusionSchema",
+  "pullRequestReviewCheckSchema",
+  "pullRequestReviewCheckStatusSchema",
+  "pullRequestReviewCommentSchema",
+  "pullRequestReviewContextSchema",
+  "pullRequestReviewProviderIdSchema",
+  "pullRequestReviewPullRequestSchema",
+  "pullRequestReviewStateSchema",
+  "pullRequestReviewThreadsSummarySchema",
   "QaApprovedInputSchema",
   "qaApprovedResultSchema",
   "QaRejectedInputSchema",
@@ -513,9 +537,13 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "validatePromptTemplatePlaceholders",
   "validateSpecMarkdown",
   "WORKSPACE_ID_PATTERN",
+  "workspaceFileGitStatusSchema",
+  "workspaceFileTreeEntrySchema",
+  "workspaceFileTreeSchema",
   "workspaceIdSchema",
   "workspaceNameSchema",
   "workspaceRecordSchema",
+  "workspaceTextFileReadResultSchema",
 ] as const;
 
 type ExportedTypeContract = {
@@ -605,6 +633,16 @@ type ExportedTypeContract = {
   PlanSubtaskInput: PlanSubtaskInput;
   PlanSubtaskIssueType: PlanSubtaskIssueType;
   PlanSubtaskPriority: PlanSubtaskPriority;
+  PullRequestReviewAggregateStatus: PullRequestReviewAggregateStatus;
+  PullRequestReviewCheck: PullRequestReviewCheck;
+  PullRequestReviewCheckConclusion: PullRequestReviewCheckConclusion;
+  PullRequestReviewCheckStatus: PullRequestReviewCheckStatus;
+  PullRequestReviewComment: PullRequestReviewComment;
+  PullRequestReviewContext: PullRequestReviewContext;
+  PullRequestReviewProviderId: PullRequestReviewProviderId;
+  PullRequestReviewPullRequest: PullRequestReviewPullRequest;
+  PullRequestReviewState: PullRequestReviewState;
+  PullRequestReviewThreadsSummary: PullRequestReviewThreadsSummary;
   QaReportVerdict: QaReportVerdict;
   QaWorkflowVerdict: QaWorkflowVerdict;
   RepoAgentDefaults: RepoAgentDefaults;
@@ -680,7 +718,11 @@ type ExportedTypeContract = {
   TaskUpdatePatch: TaskUpdatePatch;
   ToolExecutableProvenance: ToolExecutableProvenance;
   ToolExecutableSourceCategory: ToolExecutableSourceCategory;
+  WorkspaceFileGitStatus: WorkspaceFileGitStatus;
+  WorkspaceFileTree: WorkspaceFileTree;
+  WorkspaceFileTreeEntry: WorkspaceFileTreeEntry;
   WorkspaceRecord: WorkspaceRecord;
+  WorkspaceTextFileReadResult: WorkspaceTextFileReadResult;
 };
 
 describe("contracts exports contract", () => {

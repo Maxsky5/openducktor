@@ -1,3 +1,4 @@
+import { normalizePathForComparison } from "@openducktor/path-support";
 import { errorMessage } from "@/lib/errors";
 
 export type AgentStudioGitPanelContextMode = "repository" | "worktree";
@@ -29,7 +30,8 @@ const isNonRepoWorktreePath = (repoPath: string | null, path: string | null): bo
     return false;
   }
 
-  return repoPath == null || repoPath.trim().length === 0 || path !== repoPath;
+  const normalizedRepoPath = normalizePathForComparison(repoPath ?? "");
+  return normalizedRepoPath.length === 0 || normalizePathForComparison(path) !== normalizedRepoPath;
 };
 
 export const resolveDirectBuildWorktreePath = ({
@@ -69,7 +71,7 @@ export const resolveQueriedBuildWorktreePath = ({
     };
   }
 
-  if (queriedWorkingDirectory === repoPath) {
+  if (!isNonRepoWorktreePath(repoPath, queriedWorkingDirectory)) {
     return {
       path: null,
       error: buildWorktreeResolutionError(taskId, "Task worktree resolved to the repository root."),

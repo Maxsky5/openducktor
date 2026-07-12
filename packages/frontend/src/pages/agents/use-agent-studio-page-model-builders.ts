@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
+import type { TaskExecutionDocument } from "@/components/features/agents";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -146,7 +146,7 @@ export const buildActiveDocumentForRole = ({
   specDoc,
   planDoc,
   qaDoc,
-}: BuildActiveDocumentForRoleArgs): AgentStudioWorkspaceDocument | null => {
+}: BuildActiveDocumentForRoleArgs): TaskExecutionDocument | null => {
   if (activeRole === "spec") {
     return {
       title: "Specification",

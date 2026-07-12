@@ -1,6 +1,11 @@
 import { realpath } from "node:fs/promises";
 import { Effect } from "effect";
-import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
+import { loadChangedFiles } from "../../infrastructure/git/git-changed-files";
 import {
   createDefaultGitRunner,
   type GitCommandRunner,
@@ -59,6 +64,31 @@ export type CreateGitCliAdapterInput = (
   processEnv?: NodeJS.ProcessEnv;
 };
 
+const parseMaterializedGitFilePaths = (
+  output: string,
+): Effect.Effect<string[], HostOperationError> =>
+  Effect.gen(function* () {
+    const filePaths: string[] = [];
+    for (const entry of output.split("\0")) {
+      if (entry.length === 0) {
+        continue;
+      }
+      if (entry.length < 3 || entry[1] !== " ") {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "git.listFiles",
+            message: "Git returned an invalid tagged file entry.",
+            details: { entry },
+          }),
+        );
+      }
+      if (entry[0] !== "S") {
+        filePaths.push(entry.slice(2));
+      }
+    }
+    return filePaths;
+  });
+
 export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort => {
   const processEnv = input.processEnv ?? process.env;
   const runner =
@@ -81,6 +111,21 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
           "--is-inside-work-tree",
         ]);
         return result.ok && result.stdout.trim() === "true";
+      });
+    },
+    getRepositoryRoot(workingDirectory) {
+      return Effect.gen(function* () {
+        const output = yield* runGit(runner, workingDirectory, ["rev-parse", "--show-toplevel"]);
+        const repositoryRoot = output.replace(/\r?\n$/u, "");
+        if (!repositoryRoot) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "git.rev-parse.show-toplevel",
+              message: "Git returned an empty repository root.",
+            }),
+          );
+        }
+        return repositoryRoot;
       });
     },
     shareGitCommonDirectory(repoPath, workingDir) {
@@ -126,11 +171,28 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         return parseBranchRows(output);
       });
     },
+    listFiles(workingDirectory) {
+      return Effect.gen(function* () {
+        const output = yield* runGit(runner, workingDirectory, [
+          "ls-files",
+          "-t",
+          "-co",
+          "--exclude-standard",
+          "-z",
+          "--",
+          ".",
+        ]);
+        return yield* parseMaterializedGitFilePaths(output);
+      });
+    },
     getCurrentBranch(workingDirectory) {
       return getCurrentBranchUnchecked(runner, workingDirectory);
     },
     getStatus(workingDirectory) {
       return getStatusUnchecked(runner, workingDirectory);
+    },
+    listChangedFiles(workingDirectory, targetBranch) {
+      return loadChangedFiles(runner, workingDirectory, targetBranch);
     },
     getDiff(workingDirectory, targetBranch) {
       return Effect.gen(function* () {

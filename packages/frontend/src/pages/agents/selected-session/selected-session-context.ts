@@ -1,6 +1,6 @@
 import type { RuntimeApprovalReplyOutcome, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
+import type { TaskExecutionDocument } from "@/components/features/agents";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   getAgentSessionWaitingInputPlaceholder,
@@ -42,7 +42,7 @@ type SelectedSessionApprovalsContext = {
 };
 
 export type SelectedSessionDocumentsContext = {
-  activeDocument: AgentStudioWorkspaceDocument | null;
+  activeDocument: TaskExecutionDocument | null;
 };
 
 export type SelectedSessionPendingInputContext = {

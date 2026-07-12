@@ -6,6 +6,7 @@ import {
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
+import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-requests/github-pull-request-review-adapter";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
@@ -13,9 +14,11 @@ import { createLocalAttachmentService } from "../../application/attachments/loca
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
+import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import { createGitService } from "../../application/git/git-service";
 import { createGithubRepositoryDetectionService } from "../../application/git/github-repository-detection-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
+import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import {
   type CodexAppServerService,
   createCodexAppServerService,
@@ -23,6 +26,7 @@ import {
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
+import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import {
   createTaskSyncService,
   type TaskSyncLoopHandle,
@@ -39,12 +43,14 @@ import { createGitCommandHandlers } from "../../interface/commands/git-command-h
 import { createGithubRepositoryDetectionCommandHandlers } from "../../interface/commands/github-repository-detection-command-handlers";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
 import { createOpenInToolsCommandHandlers } from "../../interface/commands/open-in-tools-command-handlers";
+import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
 import { createRuntimeDefinitionsCommandHandlers } from "../../interface/commands/runtime-definitions-command-handlers";
 import { createRuntimeOrchestratorCommandHandlers } from "../../interface/commands/runtime-orchestrator-command-handlers";
 import { createSystemDiagnosticsCommandHandlers } from "../../interface/commands/system-diagnostics-command-handlers";
 import { createSystemPlatformCommandHandlers } from "../../interface/commands/system-platform-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
+import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/workspace-files-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import {
   createEffectHostCommandRouter,
@@ -108,6 +114,7 @@ export const createNodeEffectHostCommandRouter = (
   const codexAppServerService: CodexAppServerService =
     createCodexAppServerService(effectiveCodexAppServer);
   const filesystemService = createFilesystemService(filesystem);
+  const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
   const githubRepositoryDetectionService = createGithubRepositoryDetectionService(git);
   const localAttachmentService = createLocalAttachmentService(localAttachments);
@@ -241,6 +248,19 @@ export const createNodeEffectHostCommandRouter = (
     ...(taskSyncService ? { taskSyncService } : {}),
     workspaceSettingsService,
   });
+  const githubCommandDependencies = createGithubCommandDependencies({
+    systemCommands,
+    toolDiscovery,
+  });
+  const pullRequestReviewService = createPullRequestReviewService({
+    providers: [
+      createGithubPullRequestReviewAdapter({
+        githubDependencies: githubCommandDependencies,
+      }),
+    ],
+    taskReader: taskStore,
+    workspaceSettingsService,
+  });
   resolvedMcpHostBridge ??= createMcpHostBridgeServer({
     bridgeService: odtMcpBridgeService,
     discoveryPath: resolveMcpBridgeDiscoveryPath(processEnv),
@@ -307,10 +327,12 @@ export const createNodeEffectHostCommandRouter = (
         logger: lifecycleLogger,
       }),
       ...createFilesystemCommandHandlers(filesystemService),
+      ...createWorkspaceFilesCommandHandlers(workspaceFilesService),
       ...createGitCommandHandlers(gitService),
       ...createGithubRepositoryDetectionCommandHandlers(githubRepositoryDetectionService),
       ...createLocalAttachmentCommandHandlers(localAttachmentService),
       ...createOpenInToolsCommandHandlers(openInToolsService),
+      ...createPullRequestReviewCommandHandlers(pullRequestReviewService),
       ...createRuntimeDefinitionsCommandHandlers(runtimeDefinitionsService),
       ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorWithEffectiveRegistry),
       ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),

@@ -12,8 +12,8 @@ import type {
 import {
   buildAgentStudioHeaderModel,
   buildAgentStudioTaskTabsModel,
-  buildAgentStudioWorkspaceSidebarModel,
   buildRoleLabelByRole,
+  buildTaskExecutionDocumentPanelModel,
 } from "./agents-page-view-model";
 
 const createTaskCard = (id: string): TaskCard => ({
@@ -274,10 +274,10 @@ describe("agents-page-view-model", () => {
     expect(model.onOpenTaskDetails).toBeNull();
   });
 
-  test("buildAgentStudioWorkspaceSidebarModel forwards active document state", () => {
+  test("buildTaskExecutionDocumentPanelModel forwards active document state", () => {
     const onReplyApproval = mock(() => {});
 
-    const model = buildAgentStudioWorkspaceSidebarModel({
+    const model = buildTaskExecutionDocumentPanelModel({
       activeDocument: {
         title: "Specification",
         description: "Current specification document for this task.",

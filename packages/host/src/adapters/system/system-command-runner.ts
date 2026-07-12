@@ -175,6 +175,7 @@ export const createSystemCommandRunner = ({
           finish(
             Effect.succeed({
               ok: code === 0,
+              exitCode: code,
               stdout: Buffer.concat(stdoutChunks).toString("utf8"),
               stderr: Buffer.concat(stderrChunks).toString("utf8"),
             }),

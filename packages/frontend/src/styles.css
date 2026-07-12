@@ -59,7 +59,7 @@
   --success-surface: oklch(0.962 0.044 166.961); /* ~emerald-50 */
   --success-surface-foreground: oklch(0.266 0.065 152.934); /* ~emerald-900 */
   --success-border: oklch(0.748 0.15 164.295); /* ~emerald-300 */
-  --success-muted: oklch(0.448 0.119 151.328); /* ~emerald-700 */
+  --success-muted: oklch(0.448 0.119 151.328); /* ~emerald-800 */
   --success-accent: oklch(0.596 0.145 163.225); /* ~emerald-500 */
   --success-ring: oklch(0.692 0.138 162.345); /* ~emerald-400 */
 
@@ -188,7 +188,7 @@
   --success-accent: oklch(0.596 0.145 163.225); /* ~emerald-500 */
   --success-ring: oklch(0.596 0.145 163.225); /* same as accent in dark */
 
-  --warning-surface: oklch(0.216 0.052 56.043 / 0.5); /* ~amber-950/50 */
+  --warning-surface: oklch(41.4% 0.112 45.904 / 0.5); /* ~amber-900/50 */
   --warning-surface-foreground: oklch(0.863 0.109 84.071); /* ~amber-200 */
   --warning-border: oklch(0.448 0.119 55); /* ~amber-700 */
   --warning-muted: oklch(0.666 0.179 58.318); /* ~amber-400 */
