@@ -73,6 +73,7 @@ export const createBunPtyPort = ({
         let cleanupVerified = false;
         let terminationRequested = false;
         let terminationComplete = false;
+        let naturalFinalizationStarted = false;
         const subprocessExitWaiters = new Set<() => void>();
         const terminalEofWaiters = new Set<() => void>();
         let startNaturalFinalization = (): void => undefined;
@@ -217,7 +218,8 @@ export const createBunPtyPort = ({
           yield* waitForEofAfterCleanup();
         });
         startNaturalFinalization = (): void => {
-          if (!subprocessExit || exitPublished) return;
+          if (!subprocessExit || exitPublished || naturalFinalizationStarted) return;
+          naturalFinalizationStarted = true;
           Effect.runFork(
             waitForEofAfterCleanup().pipe(
               Effect.tapError((failure) => Effect.sync(() => handlers.onFailure(failure))),

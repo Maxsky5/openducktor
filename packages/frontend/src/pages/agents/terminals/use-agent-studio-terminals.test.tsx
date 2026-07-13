@@ -76,6 +76,71 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
+  test("restores a remembered non-first active terminal before persisting host state", async () => {
+    const firstTerminal = summaryForTask("task-a");
+    const secondTerminal: TerminalSummary = {
+      ...firstTerminal,
+      terminalId: "terminal-task-a-2",
+      label: "Shell 2",
+      createdAt: "2026-07-13T00:01:00.000Z",
+    };
+    localStorage.setItem(
+      "openducktor:agent-studio-terminals:/repo:task-a",
+      JSON.stringify({
+        hostInstanceId: "host-1",
+        visible: true,
+        activeTerminalId: secondTerminal.terminalId,
+        terminals: [firstTerminal, secondTerminal].map((terminal) => ({
+          terminalId: terminal.terminalId,
+          label: terminal.label,
+          initialWorkingDir: terminal.initialWorkingDir,
+        })),
+      }),
+    );
+    const baseDependencies = createTerminalTestDependencies();
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({
+          hostInstanceId: "host-1",
+          terminals: [firstTerminal, secondTerminal],
+        }),
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(
+        () => {
+          expect(getLatest().isLoading).toBe(false);
+          expect(getLatest().activeTabId).toBe("tab:terminal-task-a-2");
+        },
+        { timeout: 2_000 },
+      );
+      const stored = JSON.parse(
+        localStorage.getItem("openducktor:agent-studio-terminals:/repo:task-a") ?? "null",
+      ) as { activeTerminalId?: string } | null;
+      expect(stored?.activeTerminalId).toBe("terminal-task-a-2");
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("hides the previous task synchronously and does not reuse its focus request", async () => {
     rememberVisibleTerminal("task-a");
     rememberVisibleTerminal("task-b");

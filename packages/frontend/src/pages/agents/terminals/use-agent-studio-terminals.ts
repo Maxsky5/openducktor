@@ -57,6 +57,7 @@ type ScopeState = {
   scopeKey: string | null;
   tabs: AgentStudioTerminalTab[];
   activeTabId: string | null;
+  reconciledTerminalDataUpdatedAt: number;
 };
 
 type TerminalUiPreferences = {
@@ -166,6 +167,7 @@ export const useAgentStudioTerminals = (
     scopeKey,
     tabs: [],
     activeTabId: null,
+    reconciledTerminalDataUpdatedAt: 0,
   });
   const [visibility, setVisibility] = useState({ scopeKey, value: false });
   const [connectionState, setConnectionState] = useState<"connected" | "disconnected">(
@@ -205,7 +207,12 @@ export const useAgentStudioTerminals = (
   });
 
   useLayoutEffect(() => {
-    setScopeState({ scopeKey, tabs: [], activeTabId: null });
+    setScopeState({
+      scopeKey,
+      tabs: [],
+      activeTabId: null,
+      reconciledTerminalDataUpdatedAt: 0,
+    });
     setVisibility({ scopeKey, value: false });
     setFocusState({ scopeKey, request: 0 });
   }, [scopeKey]);
@@ -249,21 +256,31 @@ export const useAgentStudioTerminals = (
         scopeKey,
         tabs,
         activeTabId: resolveActiveTabId(tabs, current.activeTabId, preferredActiveTabId),
+        reconciledTerminalDataUpdatedAt: terminalQuery.dataUpdatedAt,
       };
     });
     const preferences = readPreferences(repoPath, taskId);
     if (preferences?.hostInstanceId === terminalQuery.data.hostInstanceId) {
       setVisibility({ scopeKey, value: preferences.visible });
     }
-  }, [repoPath, scopeKey, taskId, terminalQuery.data]);
+  }, [repoPath, scopeKey, taskId, terminalQuery.data, terminalQuery.dataUpdatedAt]);
 
   const visibleState =
-    scopeState.scopeKey === scopeKey ? scopeState : { scopeKey, tabs: [], activeTabId: null };
+    scopeState.scopeKey === scopeKey
+      ? scopeState
+      : { scopeKey, tabs: [], activeTabId: null, reconciledTerminalDataUpdatedAt: 0 };
   const isVisible = visibility.scopeKey === scopeKey && visibility.value;
   const focusRequest = focusState.scopeKey === scopeKey ? focusState.request : 0;
 
   useEffect(() => {
-    if (!repoPath || !taskId || !terminalQuery.data || visibleState.scopeKey !== scopeKey) return;
+    if (
+      !repoPath ||
+      !taskId ||
+      !terminalQuery.data ||
+      visibleState.scopeKey !== scopeKey ||
+      visibleState.reconciledTerminalDataUpdatedAt !== terminalQuery.dataUpdatedAt
+    )
+      return;
     const terminals = visibleState.tabs.flatMap((tab) =>
       tab.summary
         ? [
@@ -286,7 +303,15 @@ export const useAgentStudioTerminals = (
         terminals,
       } satisfies TerminalUiPreferences),
     );
-  }, [isVisible, repoPath, scopeKey, taskId, terminalQuery.data, visibleState]);
+  }, [
+    isVisible,
+    repoPath,
+    scopeKey,
+    taskId,
+    terminalQuery.data,
+    terminalQuery.dataUpdatedAt,
+    visibleState,
+  ]);
 
   const togglePanel = useCallback((): void => {
     const currentlyVisible = visibility.scopeKey === scopeKey && visibility.value;

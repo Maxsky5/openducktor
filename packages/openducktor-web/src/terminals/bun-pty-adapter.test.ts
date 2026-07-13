@@ -161,7 +161,7 @@ describe("createBunPtyPort", () => {
     expect(terminalCloseCalls).toBe(1);
   });
 
-  test("surfaces natural-finalization cleanup failure and allows explicit retry", async () => {
+  test("publishes one convergent natural-finalization failure and allows explicit retry", async () => {
     const captured: { options: BunPtySpawnOptions | null } = { options: null };
     const failures: string[] = [];
     let reportFailure: (() => void) | null = null;
@@ -213,7 +213,13 @@ describe("createBunPtyPort", () => {
 
     options.onExit({ pid: 42, terminal, kill: () => undefined }, 0, null);
     await failureReported;
+    await Bun.sleep(0);
+
+    options.terminal.exit(terminal, 0, null);
+    await Bun.sleep(0);
     expect(failures).toEqual(["Bun terminal process-tree termination failed."]);
+    expect(cleanupCalls).toBe(1);
+    expect(exits).toEqual([]);
 
     await Effect.runPromise(handle.terminate());
 
