@@ -2,10 +2,10 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
-import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageModels } from "./kanban-page-model-types";
+import { isActiveSessionUsingImplementationWorktree } from "./task-reset-session-guard";
 
 type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
 type ResetImplementationOptions = {
@@ -15,12 +15,9 @@ type ResetImplementationOptions = {
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
+  taskWorktreeBasePath: string | null;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: () => void;
-};
-
-const isActiveTaskSession = (session: AgentSessionSummary): boolean => {
-  return isAgentSessionActivityActive(session.activityState);
 };
 
 const deriveRollbackLabel = (task: TaskCard): string => {
@@ -36,6 +33,7 @@ const deriveRollbackLabel = (task: TaskCard): string => {
 export function useTaskResetFlow({
   tasks,
   sessions,
+  taskWorktreeBasePath,
   resetTaskImplementation,
   closeTaskDetails,
 }: UseTaskResetFlowArgs): {
@@ -75,7 +73,9 @@ export function useTaskResetFlow({
       }
 
       const hasActiveSession = sessions.some(
-        (session) => session.taskId === nextTaskId && isActiveTaskSession(session),
+        (session) =>
+          session.taskId === nextTaskId &&
+          isActiveSessionUsingImplementationWorktree(session, taskWorktreeBasePath),
       );
       if (hasActiveSession) {
         toast.error("Stop active work first", {
@@ -89,7 +89,7 @@ export function useTaskResetFlow({
       setCloseDetailsAfterReset(options?.closeDetailsAfterReset ?? false);
       return true;
     },
-    [sessions, tasks],
+    [sessions, taskWorktreeBasePath, tasks],
   );
 
   const confirmReset = useCallback((): void => {

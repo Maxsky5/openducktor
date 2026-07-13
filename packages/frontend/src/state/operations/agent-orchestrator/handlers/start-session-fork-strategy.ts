@@ -22,6 +22,7 @@ import {
   stopSessionOnStaleAndThrow,
 } from "./start-session-rollback";
 import { loadStartSystemPrompt } from "./start-session-runtime";
+import { acquireTaskSessionStartupLease } from "./task-session-startup-lease";
 
 // Match the requested-history loading cap so newly forked child sessions load
 // enough history to render immediately without pulling an unbounded transcript.
@@ -84,11 +85,14 @@ export const executeForkStart = async ({
     );
   }
 
-  const leaseId = await deps.runtime.prepareTaskSessionStartupLease(
-    ctx.repoPath,
-    ctx.taskId,
-    ctx.role,
-  );
+  const lease = await acquireTaskSessionStartupLease({
+    repoPath: ctx.repoPath,
+    taskId: ctx.taskId,
+    role: ctx.role,
+    prepare: deps.runtime.prepareTaskSessionStartupLease,
+    complete: deps.runtime.completeTaskSessionStartupLease,
+    abort: deps.runtime.abortTaskSessionStartupLease,
+  });
   try {
     const systemPrompt = await loadStartSystemPrompt({
       ctx,
@@ -177,11 +181,7 @@ export const executeForkStart = async ({
     const forkedRuntime = {
       runtimeKind: summary.runtimeKind,
       workingDirectory: summary.workingDirectory,
-      bootstrap: {
-        complete: () =>
-          deps.runtime.completeTaskSessionStartupLease(ctx.repoPath, ctx.taskId, leaseId),
-        abort: () => deps.runtime.abortTaskSessionStartupLease(ctx.repoPath, ctx.taskId, leaseId),
-      },
+      bootstrap: lease.bootstrap,
     };
 
     return await registerStartedSession({
@@ -196,14 +196,6 @@ export const executeForkStart = async ({
       taskCard,
     });
   } catch (error) {
-    try {
-      await deps.runtime.abortTaskSessionStartupLease(ctx.repoPath, ctx.taskId, leaseId);
-    } catch (abortError) {
-      throw new Error(
-        `${error instanceof Error ? error.message : String(error)} Failed to release the task session startup lease: ${abortError instanceof Error ? abortError.message : String(abortError)}`,
-        error instanceof Error ? { cause: error } : undefined,
-      );
-    }
-    throw error;
+    return lease.abortAfter(error);
   }
 };

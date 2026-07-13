@@ -1419,7 +1419,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   kanbanTest(
-    "reset implementation is blocked while any task role is waiting for input",
+    "reset implementation is blocked while a task role is active in a worktree",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
@@ -1432,6 +1432,7 @@ describe("KanbanPage session start modal flow", () => {
           externalSessionId: "session-build-waiting",
           taskId: "TASK-123",
           role: "spec",
+          workingDirectory: "/tmp/default-worktrees/TASK-123",
           status: "idle",
           startedAt: "2026-01-02T00:00:00.000Z",
           pendingApprovals: [],
@@ -1465,6 +1466,55 @@ describe("KanbanPage session start modal flow", () => {
           "A task session is still active for TASK-123. Stop the active session before resetting the implementation.",
       });
       expect(resetTaskImplementationMock).not.toHaveBeenCalled();
+
+      await act(async () => {
+        renderer.unmount();
+      });
+    },
+  );
+
+  kanbanTest(
+    "reset implementation allows a legacy root-backed Spec session to remain active",
+    async () => {
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "in_progress",
+        availableActions: ["reset_implementation"],
+      });
+      currentSessionsFixture = [
+        createAgentSessionFixture({
+          runtimeKind: "opencode",
+          externalSessionId: "legacy-root-spec",
+          taskId: "TASK-123",
+          role: "spec",
+          workingDirectory: "/repo/",
+          status: "idle",
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Decision",
+                  question: "Can reset continue?",
+                  options: [{ label: "No", description: "Keep waiting" }],
+                },
+              ],
+            },
+          ],
+        }),
+      ];
+      const renderer = await renderPage();
+
+      await act(async () => {
+        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
+          "TASK-123",
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(renderer.getResetImplementationModalModel()).not.toBeNull();
+      expect(toastErrorMock).not.toHaveBeenCalledWith("Stop active work first", expect.anything());
 
       await act(async () => {
         renderer.unmount();
