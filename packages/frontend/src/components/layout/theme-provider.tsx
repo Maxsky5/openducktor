@@ -1,6 +1,6 @@
 import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, use, useEffect, useMemo } from "react";
+import { createContext, use, useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
@@ -18,54 +18,98 @@ type ThemeProviderState = {
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
+const SETTINGS_SNAPSHOT_QUERY_KEY = settingsSnapshotQueryOptions().queryKey;
+const replaceTheme = (_currentTheme: Theme, nextTheme: Theme): Theme => nextTheme;
 
 export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
   const queryClient = useQueryClient();
   const { data: settingsSnapshot } = useQuery(settingsSnapshotQueryOptions());
   const fallbackTheme = useMemo(() => readDocumentTheme(defaultTheme), [defaultTheme]);
-  const theme =
+  const loadedTheme =
     settingsSnapshot?.theme === "dark" ? "dark" : (settingsSnapshot?.theme ?? fallbackTheme);
+  const [theme, selectOptimisticTheme] = useReducer(replaceTheme, loadedTheme);
+  const persistedThemeRef = useRef(theme);
+  const pendingThemeRef = useRef<Theme | null>(null);
+  const isPersistingRef = useRef(false);
 
   useEffect(() => {
     applyThemeToDocument(theme);
   }, [theme]);
 
-  const value = useMemo(
-    () => ({
-      theme,
-      setTheme: (newTheme: Theme) => {
-        const previousTheme = theme;
-        const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(
-          settingsSnapshotQueryOptions().queryKey,
-        );
-        applyThemeToDocument(newTheme);
-        queryClient.setQueryData(
-          settingsSnapshotQueryOptions().queryKey,
-          (current: SettingsSnapshot | undefined) => {
-            if (!current) {
-              return current;
-            }
+  useEffect(() => {
+    if (isPersistingRef.current) {
+      return;
+    }
 
-            return {
-              ...current,
-              theme: newTheme,
-            };
-          },
-        );
-        void hostBridge.client.setTheme(newTheme).catch((error) => {
+    persistedThemeRef.current = loadedTheme;
+    selectOptimisticTheme(loadedTheme);
+  }, [loadedTheme]);
+
+  const writeThemeToCache = useCallback(
+    (newTheme: Theme): void => {
+      queryClient.setQueryData(
+        SETTINGS_SNAPSHOT_QUERY_KEY,
+        (current: SettingsSnapshot | undefined) => {
+          if (!current) {
+            return current;
+          }
+
+          return {
+            ...current,
+            theme: newTheme,
+          };
+        },
+      );
+    },
+    [queryClient],
+  );
+
+  const persistPendingThemes = useCallback(async (): Promise<void> => {
+    if (isPersistingRef.current) {
+      return;
+    }
+
+    isPersistingRef.current = true;
+    try {
+      while (pendingThemeRef.current !== null) {
+        const nextTheme = pendingThemeRef.current;
+        pendingThemeRef.current = null;
+
+        if (nextTheme === persistedThemeRef.current) {
+          continue;
+        }
+
+        try {
+          await hostBridge.client.setTheme(nextTheme);
+          persistedThemeRef.current = nextTheme;
+          writeThemeToCache(nextTheme);
+        } catch (error) {
           console.error("Failed to persist theme change.", error);
-          applyThemeToDocument(previousTheme);
-          if (previousSnapshot) {
-            queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, previousSnapshot);
+          if (pendingThemeRef.current === null) {
+            applyThemeToDocument(persistedThemeRef.current);
+            selectOptimisticTheme(persistedThemeRef.current);
           }
           toast.error("Theme change failed", {
             description: errorMessage(error),
           });
-        });
-      },
-    }),
-    [queryClient, theme],
+        }
+      }
+    } finally {
+      isPersistingRef.current = false;
+    }
+  }, [writeThemeToCache]);
+
+  const selectTheme = useCallback(
+    (newTheme: Theme): void => {
+      pendingThemeRef.current = newTheme;
+      applyThemeToDocument(newTheme);
+      selectOptimisticTheme(newTheme);
+      void persistPendingThemes();
+    },
+    [persistPendingThemes],
   );
+
+  const value = useMemo(() => ({ theme, setTheme: selectTheme }), [selectTheme, theme]);
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>
