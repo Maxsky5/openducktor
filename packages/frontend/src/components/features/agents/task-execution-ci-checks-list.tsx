@@ -12,28 +12,34 @@ import { aggregateLabel } from "./task-execution-ci-presentation";
 const AGGREGATE_STATUS_PRESENTATION = {
   failure: {
     badgeVariant: "danger",
+    badgeClassName: "",
     textClassName: "text-destructive-muted",
   },
   neutral: {
     badgeVariant: "secondary",
+    badgeClassName: "",
     textClassName: "text-muted-foreground",
   },
   pending: {
-    badgeVariant: "warning",
-    textClassName: "text-warning-muted",
+    badgeVariant: "secondary",
+    badgeClassName: "bg-info-surface text-info-surface-foreground",
+    textClassName: "text-info-muted",
   },
   success: {
     badgeVariant: "success",
+    badgeClassName: "",
     textClassName: "text-success-muted",
   },
   unknown: {
     badgeVariant: "secondary",
+    badgeClassName: "",
     textClassName: "text-muted-foreground",
   },
 } as const satisfies Record<
   PullRequestReviewAggregateStatus,
   {
-    badgeVariant: "danger" | "secondary" | "success" | "warning";
+    badgeVariant: "danger" | "secondary" | "success";
+    badgeClassName: string;
     textClassName: string;
   }
 >;
@@ -60,7 +66,10 @@ export function TaskExecutionCiChecksList({
             {summaryLabel}
           </span>
         </div>
-        <Badge variant={statusPresentation.badgeVariant} className="shrink-0">
+        <Badge
+          variant={statusPresentation.badgeVariant}
+          className={cn("shrink-0", statusPresentation.badgeClassName)}
+        >
           {aggregateLabel(aggregateStatus)}
         </Badge>
       </summary>

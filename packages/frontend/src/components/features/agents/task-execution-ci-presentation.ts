@@ -22,19 +22,14 @@ export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string
 
 export const checkBadgeVariant = (
   check: PullRequestReviewCheck,
-): "success" | "danger" | "warning" | "secondary" => {
-  if (check.status !== "completed") {
-    return "warning";
+): "success" | "danger" | "info" | "secondary" => {
+  if (isPendingCheck(check)) {
+    return "info";
   }
-  if (check.conclusion === "success" || check.conclusion === "skipped") {
+  if (isPassingCheck(check)) {
     return "success";
   }
-  if (
-    check.conclusion === "failure" ||
-    check.conclusion === "cancelled" ||
-    check.conclusion === "timed_out" ||
-    check.conclusion === "action_required"
-  ) {
+  if (isFailingCheck(check)) {
     return "danger";
   }
   return "secondary";

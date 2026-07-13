@@ -14,16 +14,16 @@ import { TaskExecutionCiTimestampLine } from "./task-execution-ci-timestamp-line
 
 const CHECK_ICON_BY_VARIANT = {
   danger: CircleX,
+  info: Clock,
   secondary: CircleDashed,
   success: CircleCheck,
-  warning: Clock,
 } as const;
 
 const CHECK_TEXT_CLASS_BY_VARIANT = {
   danger: "text-destructive-muted",
+  info: "text-info-muted",
   secondary: "text-muted-foreground",
   success: "text-success-muted",
-  warning: "text-warning-muted",
 } as const;
 
 export function TaskExecutionCiCheckCard({

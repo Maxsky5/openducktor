@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
 import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 import { isBotCommentAuthor } from "./task-execution-ci-presentation";
@@ -95,6 +96,51 @@ const renderLoadedPanel = (): string => {
 
   return renderPanel(queryClient);
 };
+
+const renderPendingPanel = (): string => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), {
+    ...loadedContext,
+    aggregateStatus: "pending",
+    comments: [],
+    checks: [
+      {
+        name: "Unit tests",
+        workflow: "CI",
+        status: "in_progress",
+        conclusion: null,
+        url: "https://github.com/openai/openducktor/actions/runs/1",
+        details: null,
+        startedAt: "2026-07-08T10:00:00Z",
+        completedAt: null,
+      },
+    ],
+    reviewThreads: {
+      openCount: 0,
+    },
+  } satisfies PullRequestReviewContext);
+
+  return renderPanel(queryClient);
+};
+
+const renderCheckCard = (
+  status: "queued" | "in_progress" | "unknown",
+  conclusion: "failure" | "success" | null = null,
+): string =>
+  renderToStaticMarkup(
+    <TaskExecutionCiCheckCard
+      check={{
+        name: `${status} check`,
+        workflow: "CI",
+        status,
+        conclusion,
+        url: null,
+        details: null,
+        startedAt: null,
+        completedAt: null,
+      }}
+    />,
+  );
 
 describe("TaskExecutionCiChecksPanel", () => {
   test("renders a useful loading state while review data is pending", () => {
@@ -196,6 +242,35 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).not.toContain("PR #42");
     expect(html).not.toContain(">GitHub<");
     expect(html).not.toContain("Open pull request #42");
+  });
+
+  test("renders pending check icons and labels as informational blue", () => {
+    const html = renderPendingPanel();
+
+    expect(html).toContain("1 pending");
+    expect(html).toContain("in progress");
+    expect(html).toContain("bg-info-surface");
+    expect(html).toContain("text-info-surface-foreground");
+    expect(html).toContain("text-info-muted");
+  });
+
+  test("colors only queued and in-progress check rows as informational blue", () => {
+    for (const status of ["queued", "in_progress"] as const) {
+      const html = renderCheckCard(status);
+
+      expect(html).toContain("lucide-clock");
+      expect(html.match(/text-info-muted/g)?.length).toBe(2);
+    }
+
+    for (const conclusion of [null, "success", "failure"] as const) {
+      const unknownHtml = renderCheckCard("unknown", conclusion);
+
+      expect(unknownHtml).toContain("lucide-circle-dashed");
+      expect(unknownHtml).toContain("text-muted-foreground");
+      expect(unknownHtml).not.toContain("text-info-muted");
+      expect(unknownHtml).not.toContain("text-success-muted");
+      expect(unknownHtml).not.toContain("text-destructive-muted");
+    }
   });
 
   test("classifies common automation authors as bots", () => {
