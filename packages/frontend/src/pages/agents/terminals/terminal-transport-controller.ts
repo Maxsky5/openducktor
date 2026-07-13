@@ -21,14 +21,25 @@ export const createTerminalTransportController = (
   const listeners = new Map<string, Set<TerminalFrameListener>>();
   const consumedSequences = new Map<string, number>();
   let connection: TerminalTransportConnection | null = null;
+  let pendingConnection: Promise<TerminalTransportConnection> | null = null;
   const emptyPayload: Uint8Array = new Uint8Array(0);
+
+  const getConnection = async (): Promise<TerminalTransportConnection> => {
+    if (connection) return connection;
+    const pending = pendingConnection;
+    if (!pending) throw new Error("Terminal transport is disconnected.");
+    const connected = await pending;
+    if (pendingConnection !== pending && connection !== connected)
+      throw new Error("Terminal transport is disconnected.");
+    return connected;
+  };
 
   const send = async (
     message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"],
     payload: Uint8Array = emptyPayload,
   ): Promise<void> => {
-    if (!connection) throw new Error("Terminal transport is disconnected.");
-    await connection.send(encodeTerminalProtocolFrame({ message, payload }));
+    const activeConnection = await getConnection();
+    await activeConnection.send(encodeTerminalProtocolFrame({ message, payload }));
   };
 
   const attach = async (terminalId: string): Promise<void> => {
@@ -43,7 +54,8 @@ export const createTerminalTransportController = (
 
   const connect = async (): Promise<void> => {
     connection?.close();
-    connection = await bridge.connect((frame) => {
+    connection = null;
+    const pending = bridge.connect((frame) => {
       const decoded = decodeTerminalProtocolFrame(frame);
       if (
         decoded.message.type === "attach" ||
@@ -58,6 +70,14 @@ export const createTerminalTransportController = (
         listener(decoded.message, decoded.payload);
       }
     }, onStateChange);
+    pendingConnection = pending;
+    const connected = await pending;
+    if (pendingConnection !== pending) {
+      connected.close();
+      return;
+    }
+    connection = connected;
+    pendingConnection = null;
     for (const terminalId of listeners.keys()) await attach(terminalId);
   };
 
@@ -112,6 +132,7 @@ export const createTerminalTransportController = (
     dispose(): void {
       connection?.close();
       connection = null;
+      pendingConnection = null;
       listeners.clear();
       onStateChange("disconnected");
     },

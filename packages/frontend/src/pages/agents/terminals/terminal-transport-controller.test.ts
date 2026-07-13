@@ -4,12 +4,49 @@ import {
   encodeTerminalProtocolFrame,
   TERMINAL_PROTOCOL_VERSION,
 } from "@openducktor/contracts";
-import type { TerminalBridge } from "@/lib/shell-bridge";
+import type { TerminalBridge, TerminalTransportConnection } from "@/lib/shell-bridge";
 import { createTerminalTransportController } from "./terminal-transport-controller";
 
 const terminalId = "terminal-1";
 
 describe("createTerminalTransportController", () => {
+  test("waits for an in-flight connection before sending the initial resize", async () => {
+    const sent: Uint8Array[] = [];
+    let resolveConnection = (_connection: TerminalTransportConnection): void => {
+      throw new Error("Terminal bridge connection was not requested.");
+    };
+    const bridge: TerminalBridge = {
+      connect: () =>
+        new Promise((resolve) => {
+          resolveConnection = resolve;
+        }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+
+    const connecting = controller.connect();
+    const resizing = controller.resize(terminalId, 120, 40);
+    await Promise.resolve();
+    expect(sent).toHaveLength(0);
+
+    resolveConnection({
+      send: async (frame) => {
+        sent.push(frame);
+      },
+      close: () => {},
+    });
+    await Promise.all([connecting, resizing]);
+
+    const resizeFrame = sent[0];
+    if (!resizeFrame) throw new Error("Expected the initial resize frame.");
+    expect(decodeTerminalProtocolFrame(resizeFrame).message).toEqual({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "resize",
+      terminalId,
+      columns: 120,
+      rows: 40,
+    });
+  });
+
   test("attaches once, preserves consumed sequence on reconnect, and detaches the last listener", async () => {
     const sent: Uint8Array[] = [];
     const closeCalls: number[] = [];
