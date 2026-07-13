@@ -86,17 +86,21 @@ class ChildThreadListTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
+      const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
+      const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
       return {
-        data: [
-          {
-            id: "child-thread",
-            cwd: "/repo",
-            createdAt: 1_778_112_020,
-            preview: "Child subagent",
-            status: { type: "idle" },
-            parentThreadId: "parent-thread",
-          },
-        ],
+        data: includesSubagents
+          ? [
+              {
+                id: "child-thread",
+                cwd: "/repo",
+                createdAt: 1_778_112_020,
+                preview: "Child subagent",
+                status: { type: "idle" },
+                parentThreadId: "parent-thread",
+              },
+            ]
+          : [],
         nextCursor: null,
         backwardsCursor: null,
       } as Response;
@@ -109,6 +113,8 @@ class ParentWithChildThreadListTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
+      const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
+      const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
       return {
         data: [
           {
@@ -118,14 +124,18 @@ class ParentWithChildThreadListTransport extends RecordingTransport {
             preview: "Parent session",
             status: { type: "active", activeFlags: [] },
           },
-          {
-            id: "child-thread",
-            cwd: "/repo",
-            createdAt: 1_778_112_020,
-            preview: "Child subagent",
-            status: { type: "active", activeFlags: [] },
-            parentThreadId: "parent-thread",
-          },
+          ...(includesSubagents
+            ? [
+                {
+                  id: "child-thread",
+                  cwd: "/repo",
+                  createdAt: 1_778_112_020,
+                  preview: "Child subagent",
+                  status: { type: "active", activeFlags: [] },
+                  parentThreadId: "parent-thread",
+                },
+              ]
+            : []),
         ],
         nextCursor: null,
         backwardsCursor: null,
@@ -139,6 +149,8 @@ class IdleParentWithActiveChildThreadListTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
+      const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
+      const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
       return {
         data: [
           {
@@ -148,14 +160,18 @@ class IdleParentWithActiveChildThreadListTransport extends RecordingTransport {
             preview: "Idle parent session",
             status: { type: "idle" },
           },
-          {
-            id: "child-thread",
-            cwd: "/repo",
-            createdAt: 1_778_112_020,
-            preview: "Running child subagent",
-            status: { type: "active", activeFlags: [] },
-            parentThreadId: "parent-thread",
-          },
+          ...(includesSubagents
+            ? [
+                {
+                  id: "child-thread",
+                  cwd: "/repo",
+                  createdAt: 1_778_112_020,
+                  preview: "Running child subagent",
+                  status: { type: "active", activeFlags: [] },
+                  parentThreadId: "parent-thread",
+                },
+              ]
+            : []),
         ],
         nextCursor: null,
         backwardsCursor: null,
@@ -1046,6 +1062,28 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     );
     expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
     unsubscribe();
+  });
+
+  test("lists a completed unloaded child after reload", async () => {
+    const transport = new ChildThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      transportFactory: mock(() => transport),
+    });
+
+    await expect(
+      adapter.listSessionRuntimeSnapshots({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        directories: ["/repo"],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        availability: "runtime",
+        classification: "idle",
+        parentExternalSessionId: "parent-thread",
+        ref: expect.objectContaining({ externalSessionId: "child-thread" }),
+      }),
+    ]);
   });
 
   test("streams child transcript events for a learned subagent route absent from inventory", async () => {

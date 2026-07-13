@@ -292,7 +292,11 @@ export class CodexThreadInventoryReader {
       if (cursor) {
         seenCursors.add(cursor);
       }
-      const response = await client.threadList({ cursor, limit: 100 });
+      const response = await client.threadList({
+        cursor,
+        limit: 100,
+        sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
+      });
       threads.push(...codexThreadList(response));
       cursor = isPlainObject(response)
         ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)

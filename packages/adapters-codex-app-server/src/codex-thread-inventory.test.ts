@@ -43,6 +43,28 @@ const threadReadResponse = (
 });
 
 describe("CodexThreadInventoryReader", () => {
+  test("requests interactive and subagent thread sources from Codex", async () => {
+    const threadListCalls: Array<Record<string, unknown>> = [];
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: [], nextCursor: null }),
+      threadList: async (params: Record<string, unknown>) => {
+        threadListCalls.push(params);
+        return { data: [], nextCursor: null };
+      },
+    } as unknown as CodexAppServerClient;
+
+    await reader.refresh(client, "runtime-1");
+
+    expect(threadListCalls).toEqual([
+      {
+        cursor: null,
+        limit: 100,
+        sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
+      },
+    ]);
+  });
+
   test("reads every parent turn id with summary-only pagination", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const reader = new CodexThreadInventoryReader();
