@@ -64,7 +64,7 @@ describe("Codex session runtime snapshot reader", () => {
     });
   });
 
-  test("lists a completed unloaded child so hydration can settle its parent card", async () => {
+  test("preserves completed unloaded child inventory metadata", async () => {
     const child = {
       ...createChildThread(),
       status: codexThreadStatusSnapshot("notLoaded"),

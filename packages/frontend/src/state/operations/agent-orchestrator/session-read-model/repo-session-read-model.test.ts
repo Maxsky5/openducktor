@@ -1040,7 +1040,7 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("restores completed subagents from runtime snapshots after reload", async () => {
+  test("does not synthesize transcript messages from completed child runtime snapshots", async () => {
     const parentRecord = createRecord({
       externalSessionId: "parent-session",
       runtimeKind: "codex",
@@ -1078,17 +1078,7 @@ describe("repo session read model", () => {
     const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
     expect(
       sessionMessagesToArray(parentSession).filter((message) => message.meta?.kind === "subagent"),
-    ).toEqual([
-      expect.objectContaining({
-        role: "system",
-        meta: expect.objectContaining({
-          kind: "subagent",
-          externalSessionId: "child-session",
-          status: "completed",
-          prompt: "codex session",
-        }),
-      }),
-    ]);
+    ).toEqual([]);
     expect(getReadModelSession(readModel, "child-session")).toBeNull();
     expect(readModel.liveSessionRefs).toEqual([]);
   });
@@ -1096,6 +1086,24 @@ describe("repo session read model", () => {
   test("observes a persisted parent while an unmaterialized child is running", async () => {
     const parentRecord = createRecord({ externalSessionId: "parent-session" });
     const tasks = createTaskSessionRecords([parentRecord]);
+    const currentSession = {
+      ...createAgentSessionFixture({
+        externalSessionId: parentRecord.externalSessionId,
+        taskId: "task-1",
+        runtimeKind: parentRecord.runtimeKind,
+        role: parentRecord.role,
+        startedAt: parentRecord.startedAt,
+        workingDirectory: parentRecord.workingDirectory,
+      }),
+      messages: createSessionMessagesState(parentRecord.externalSessionId, [
+        {
+          id: "existing-parent-message",
+          role: "assistant",
+          content: "The subagent is running.",
+          timestamp: "2026-06-11T08:00:01.000Z",
+        },
+      ]),
+    };
     const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
@@ -1121,19 +1129,16 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots,
       resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
+    expect(parentSession.messages).toBe(currentSession.messages);
     expect(
-      sessionMessagesToArray(parentSession).find((message) => message.meta?.kind === "subagent")
-        ?.meta,
-    ).toMatchObject({
-      kind: "subagent",
-      externalSessionId: "child-session",
-      status: "running",
-    });
+      sessionMessagesToArray(parentSession).filter((message) => message.meta?.kind === "subagent"),
+    ).toEqual([]);
     expect(readModel.liveSessionRefs).toEqual([
       expectedRuntimeRef({
         externalSessionId: parentRecord.externalSessionId,

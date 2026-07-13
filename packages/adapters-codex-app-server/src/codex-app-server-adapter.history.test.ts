@@ -24,6 +24,82 @@ const restoredTokenUsageNotification = (threadId: string, turnId = "turn-1") => 
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("keeps a hydrated subagent at its exact thread item position", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "parent-thread",
+              cwd: "/repo",
+              createdAt: 1_783_715_500,
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "parent-turn",
+                  startedAt: 1_783_715_500,
+                  completedAt: 1_783_715_620,
+                  status: "completed",
+                  items: [
+                    {
+                      id: "parent-user",
+                      type: "userMessage",
+                      content: [{ type: "text", text: "Delegate this work" }],
+                    },
+                    {
+                      id: "parent-delegating",
+                      type: "agentMessage",
+                      phase: "commentary",
+                      text: "I am delegating this now.",
+                    },
+                    {
+                      id: "parent-spawn",
+                      type: "collabToolCall",
+                      tool: "spawnAgent",
+                      status: "completed",
+                      senderThreadId: "parent-thread",
+                      receiverThreadIds: ["child-thread"],
+                      prompt: "Inspect the repository",
+                      agentsStates: {
+                        "child-thread": { status: "completed", message: "Done" },
+                      },
+                    },
+                    {
+                      id: "parent-waiting",
+                      type: "agentMessage",
+                      phase: "commentary",
+                      text: "The subagent is running.",
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "parent-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(history.map((message) => message.messageId)).toEqual([
+      "parent-user",
+      "parent-delegating",
+      "codex-subagent:parent-thread:parent-spawn",
+      "parent-waiting",
+    ]);
+  });
+
   test("marks hydrated item timestamps approximate when Codex only reports a turn boundary", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
