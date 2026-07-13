@@ -536,7 +536,7 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(prompt, [
-      "Resolve these git conflicts and complete the interrupted operation.",
+      "Resolve the conflicts below and finish the interrupted git operation.",
       "Git context:",
       "- Operation: direct merge (rebase)",
       "- Current branch: feature/task-1",
@@ -545,13 +545,13 @@ describe("kickoff and permission prompts", () => {
       "- src/main.ts",
       "- src/lib.ts",
       "inspect the live git state and relevant history",
-      "Understand why both sides changed",
-      "preserve compatible intent",
-      "do not invent unrelated behavior",
-      "Resolve only what is necessary, finish the interrupted operation, and run the relevant repository checks",
-      "If completion is unsafe or blocked, surface the blocker",
-      "instead of aborting or hiding it with a fallback",
-      "concise, evidence-based summary of the resolution and verification",
+      "Understand the intent of both sides",
+      "preserve compatible changes",
+      "avoid unrelated edits",
+      "Make only the changes needed to resolve the conflicts, then run the relevant checks",
+      "If you cannot finish safely, explain the blocker and stop",
+      "Do not abort the git operation unless explicitly asked",
+      "summarize what you resolved and which checks passed",
       "Use taskId task-1 for any odt_* tool calls.",
     ]);
     expect(prompt).not.toContain("CONFLICT (content)");

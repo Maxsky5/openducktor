@@ -485,7 +485,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
     purpose: "message",
     builtinVersion: 3,
     template: joinPromptBlocks(
-      "Resolve these git conflicts and complete the interrupted operation.",
+      "Resolve the conflicts below and finish the interrupted git operation.",
       lineSection("Git context", [
         "- Operation: {{git.operationLabel}}",
         "- Current branch: {{git.currentBranch}}",
@@ -493,9 +493,9 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "- Conflicted files:",
         "{{git.conflictedFiles}}",
       ]),
-      "Before editing, inspect the live git state and relevant history. Understand why both sides changed, preserve compatible intent, and do not invent unrelated behavior.",
-      "Resolve only what is necessary, finish the interrupted operation, and run the relevant repository checks. If completion is unsafe or blocked, surface the blocker instead of aborting or hiding it with a fallback.",
-      "Reply with a concise, evidence-based summary of the resolution and verification.",
+      "Before editing, inspect the live git state and relevant history. Understand the intent of both sides, preserve compatible changes, and avoid unrelated edits.",
+      "Make only the changes needed to resolve the conflicts, then run the relevant checks. If you cannot finish safely, explain the blocker and stop. Do not abort the git operation unless explicitly asked.",
+      "When finished, summarize what you resolved and which checks passed.",
       "Use taskId {{task.id}} for any odt_* tool calls.",
     ),
   },
