@@ -51,12 +51,12 @@
     "undici": "^7.28.0"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.0",
+    "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
-    "@biomejs/biome": "^2.5.2",
-    "@types/node": "^26.1.0",
+    "@biomejs/biome": "^2.5.3",
+    "@types/node": "^26.1.1",
     "husky": "^9.1.7",
-    "knip": "^6.24.0",
+    "knip": "^6.26.0",
     "typescript": "^5.7.3",
     "yaml": "^2.9.0"
   }
