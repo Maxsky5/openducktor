@@ -106,6 +106,9 @@ export const createTerminalTransportController = (
         sequenceEnd,
       });
     },
+    releaseEmulator(terminalId: string): void {
+      if ((listeners.get(terminalId)?.size ?? 0) <= 1) consumedSequences.delete(terminalId);
+    },
     dispose(): void {
       connection?.close();
       connection = null;

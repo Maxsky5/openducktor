@@ -62,6 +62,13 @@ export {
   type OpenDucktorLogSurface,
 } from "./infrastructure/logging/openducktor-daily-log-writer";
 export {
+  type ProcessTreeTerminator,
+  processIsAlive,
+  processTreeIsAlive,
+  terminateProcessTree,
+  waitForObservedState,
+} from "./infrastructure/process/process-tree";
+export {
   HOST_COMMAND_NAMES,
   type HostCommandName,
   isHostCommandName,
@@ -114,5 +121,10 @@ export type {
 export type { WorktreeFilePort } from "./ports/worktree-file-port";
 export {
   assertTerminalPtyConformance,
+  type LiveTerminalPtyConformanceObservation,
+  observeLiveTerminalPtyConformance,
   type TerminalPtyConformanceObservation,
+  verifyLiveTerminalPtyInterrupt,
+  verifyLiveTerminalPtyNaturalExitCleanup,
+  verifyLiveTerminalPtyProcessTreeTermination,
 } from "./testing/terminal-pty-conformance";

@@ -16,6 +16,7 @@
     "build:main": "bun build --target=node --external electron --external node-pty --splitting --outdir dist --entry-naming 'main.[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts",
     "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
+    "verify:terminal-adapter": "bun run scripts/verify-node-pty-adapter.ts",
     "builder": "electron-builder",
     "dev": "bun run scripts/dev.ts",
     "dev:electron": "bun run scripts/dev.ts",

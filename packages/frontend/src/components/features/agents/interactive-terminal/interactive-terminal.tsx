@@ -8,6 +8,11 @@ import { FitAddon } from "@xterm/addon-fit";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
+import {
+  createLatestResizeScheduler,
+  enqueueParsedTerminalWrite,
+  resolveTerminalKeyAction,
+} from "./interactive-terminal-policy";
 
 const readCssVariable = (element: HTMLElement, name: string): string =>
   getComputedStyle(element).getPropertyValue(name).trim();
@@ -43,14 +48,17 @@ export function InteractiveTerminal({
 }): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const callbacksRef = useRef({ onAttention, onConnectionState, onLifecycle });
   const [interactionError, setInteractionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    callbacksRef.current = { onAttention, onConnectionState, onLifecycle };
+  }, [onAttention, onConnectionState, onLifecycle]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let generation = 0;
-    let pendingResize: { columns: number; rows: number } | null = null;
-    let resizeScheduled = false;
     let writeQueue = Promise.resolve();
     const terminal = new Terminal({
       allowTransparency: true,
@@ -67,71 +75,61 @@ export function InteractiveTerminal({
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     terminalRef.current = terminal;
-    const flushResize = (): void => {
-      resizeScheduled = false;
-      const grid = pendingResize;
-      pendingResize = null;
-      if (grid) void controller.resize(terminalId, grid.columns, grid.rows);
+    const reportInteractionFailure = (cause: unknown): void => {
+      setInteractionError(cause instanceof Error ? cause.message : String(cause));
     };
+    const resizeScheduler = createLatestResizeScheduler((columns, rows) => {
+      void controller.resize(terminalId, columns, rows).catch(reportInteractionFailure);
+    });
     const resizeSubscription = terminal.onResize(({ cols, rows }) => {
-      pendingResize = { columns: cols, rows };
-      if (!resizeScheduled) {
-        resizeScheduled = true;
-        queueMicrotask(flushResize);
-      }
+      resizeScheduler.schedule(cols, rows);
     });
     const dataSubscription = terminal.onData((data) => {
-      if (pendingResize) flushResize();
-      void controller.write(terminalId, new TextEncoder().encode(data));
+      resizeScheduler.flush();
+      void controller
+        .write(terminalId, new TextEncoder().encode(data))
+        .catch(reportInteractionFailure);
     });
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
       const isMac = navigator.platform.toLowerCase().includes("mac");
-      const copy =
-        (isMac && event.metaKey && event.key.toLowerCase() === "c") ||
-        (!isMac && event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "c") ||
-        (!isMac && event.ctrlKey && event.key.toLowerCase() === "c" && terminal.hasSelection());
-      if (copy && terminal.hasSelection()) {
-        void navigator.clipboard.writeText(terminal.getSelection()).catch((cause: unknown) => {
-          setInteractionError(cause instanceof Error ? cause.message : String(cause));
-        });
+      const action = resolveTerminalKeyAction(event, isMac, terminal.hasSelection());
+      if (action === "copy") {
+        void navigator.clipboard.writeText(terminal.getSelection()).catch(reportInteractionFailure);
         return false;
       }
-      const paste =
-        (isMac && event.metaKey && event.key.toLowerCase() === "v") ||
-        (!isMac && event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "v");
-      if (paste) {
+      if (action === "paste") {
         void navigator.clipboard
           .readText()
           .then((text) => controller.write(terminalId, new TextEncoder().encode(text)))
-          .catch((cause: unknown) => {
-            setInteractionError(cause instanceof Error ? cause.message : String(cause));
-          });
+          .catch(reportInteractionFailure);
         return false;
       }
-      if (event.ctrlKey && event.key.toLowerCase() === "c" && !terminal.hasSelection()) {
-        void controller.write(terminalId, new Uint8Array([3]));
+      if (action === "interrupt") {
+        void controller.write(terminalId, new Uint8Array([3])).catch(reportInteractionFailure);
         return false;
       }
       return true;
     });
     const handleFrame = (message: TerminalServerMessage, payload: Uint8Array): void => {
       if (message.type === "snapshot") {
-        onConnectionState(message.complete ? "connected" : "incomplete_replay");
-        onLifecycle(message.lifecycle, null);
+        callbacksRef.current.onConnectionState(
+          message.complete ? "connected" : "incomplete_replay",
+        );
+        callbacksRef.current.onLifecycle(message.lifecycle, null);
         return;
       }
       if (message.type === "replay_gap") {
         terminal.reset();
-        onConnectionState("incomplete_replay");
-        onAttention(
+        callbacksRef.current.onConnectionState("incomplete_replay");
+        callbacksRef.current.onAttention(
           `Incomplete replay: output ${message.missingSequenceStart}–${message.missingSequenceEnd} is unavailable.`,
         );
         return;
       }
       if (message.type === "output_overflow") {
-        onAttention("Output overflow stopped this terminal.");
+        callbacksRef.current.onAttention("Output overflow stopped this terminal.");
         return;
       }
       if (message.type === "lifecycle") {
@@ -139,30 +137,32 @@ export function InteractiveTerminal({
           message.lifecycle === "exited"
             ? `Exited with code ${message.exitCode ?? "unknown"}${message.signal ? ` (${message.signal})` : ""}.`
             : null;
-        onLifecycle(message.lifecycle, exitText);
+        callbacksRef.current.onLifecycle(message.lifecycle, exitText);
         return;
       }
       if (message.type !== "output") return;
       const expectedGeneration = generation;
-      writeQueue = writeQueue.then(
-        () =>
-          new Promise<void>((resolve) => {
-            terminal.write(payload, () => {
-              if (generation === expectedGeneration) {
-                void controller.acknowledge(terminalId, message.sequenceEnd);
-              }
-              resolve();
-            });
-          }),
+      writeQueue = enqueueParsedTerminalWrite(
+        writeQueue,
+        (bytes, parsed) => terminal.write(bytes, parsed),
+        payload,
+        () => {
+          if (generation === expectedGeneration) {
+            void controller
+              .acknowledge(terminalId, message.sequenceEnd)
+              .catch(reportInteractionFailure);
+          }
+        },
       );
     };
-    onConnectionState("attaching");
+    callbacksRef.current.onConnectionState("attaching");
     const unsubscribe = controller.subscribe(terminalId, handleFrame);
     const observer = new ResizeObserver(() => fitAddon.fit());
     observer.observe(container);
     fitAddon.fit();
     return () => {
       generation += 1;
+      controller.releaseEmulator(terminalId);
       unsubscribe();
       observer.disconnect();
       oscClipboardSubscription.dispose();
@@ -172,7 +172,7 @@ export function InteractiveTerminal({
       terminal.dispose();
       terminalRef.current = null;
     };
-  }, [controller, onAttention, onConnectionState, onLifecycle, terminalId]);
+  }, [controller, terminalId]);
 
   useEffect(() => {
     if (active && focusRequest > 0) terminalRef.current?.focus();
@@ -188,7 +188,7 @@ export function InteractiveTerminal({
       />
       {interactionError ? (
         <p className="absolute inset-x-2 bottom-2 rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground">
-          Clipboard failed: {interactionError}
+          Terminal interaction failed: {interactionError}
         </p>
       ) : null}
     </div>

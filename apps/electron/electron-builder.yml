@@ -34,6 +34,7 @@ extraMetadata:
     node-pty: 1.1.0
 
 afterPack: scripts/verify-packaged-node-pty.cjs
+afterSign: scripts/verify-signed-node-pty.cjs
 
 mac:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}

@@ -10,10 +10,16 @@ describe("createNodePtyPort", () => {
     let exitListener: (event: { exitCode: number; signal?: number }) => void = () => undefined;
     const disposable = () => ({ dispose: () => calls.push("dispose") });
     const port = createNodePtyPort({
+      processTreeTerminator: (input) =>
+        Effect.sync(() => {
+          calls.push(`terminate-tree:${input.pid}`);
+          exitListener({ exitCode: 0, signal: 15 });
+        }),
       nodePty: {
         spawn: ((_shell: string, _args: string[], options: { encoding?: string | null }) => {
           expect(options.encoding).toBeNull();
           return {
+            pid: 42,
             onData: (listener: (data: string) => void) => {
               dataListener = listener;
               return disposable();
@@ -55,9 +61,9 @@ describe("createNodePtyPort", () => {
     await Effect.runPromise(handle.resize({ columns: 120, rows: 40 }));
     await Effect.runPromise(handle.pauseOutput());
     await Effect.runPromise(handle.resumeOutput());
-    exitListener({ exitCode: 3, signal: 15 });
+    await Effect.runPromise(handle.terminate());
     expect(output).toEqual([[1, 2]]);
-    expect(exits).toEqual([{ exitCode: 3, signal: "15" }]);
+    expect(exits).toEqual([{ exitCode: 0, signal: "15" }]);
     expect(calls).toContain("write:A");
     expect(calls).toContain("resize:120x40");
     expect(calls).toContain("pause");
@@ -69,14 +75,21 @@ describe("createNodePtyPort", () => {
       supportsOutputPause: handle.supportsOutputPause,
       expectedOutputPause: true,
     });
+    expect(calls).toContain("terminate-tree:42");
   });
 
   test("surfaces an invalid raw-output contract before terminating the PTY", async () => {
     let dataListener: (data: string) => void = () => undefined;
     const calls: string[] = [];
     const port = createNodePtyPort({
+      processTreeTerminator: (input) =>
+        Effect.sync(() => {
+          calls.push(`terminate-tree:${input.pid}`);
+          exitListener({ exitCode: 1, signal: 15 });
+        }),
       nodePty: {
         spawn: (() => ({
+          pid: 42,
           onData: (listener: (data: string) => void) => {
             dataListener = listener;
             return { dispose: () => undefined };
@@ -103,6 +116,7 @@ describe("createNodePtyPort", () => {
     );
     dataListener("unexpected text");
     expect(failures).toEqual(["node-pty emitted text despite raw-buffer mode."]);
-    expect(calls).toEqual(["kill"]);
+    await Bun.sleep(0);
+    expect(calls).toEqual(["terminate-tree:42"]);
   });
 });

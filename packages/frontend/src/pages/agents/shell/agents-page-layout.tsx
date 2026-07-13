@@ -4,9 +4,12 @@ import {
   type ReactElement,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
@@ -97,7 +100,7 @@ export function AgentsPageWorkspacePanes({
   );
 }
 
-function AgentsPageWorkspace({
+export function AgentsPageWorkspace({
   hasSelectedTask,
   chatContent,
   hasSelectedFilePreview,
@@ -107,6 +110,7 @@ function AgentsPageWorkspace({
   terminalPanel,
 }: AgentsPageWorkspaceProps): ReactElement {
   const [isNarrow, setIsNarrow] = useState(false);
+  const terminalPanelRef = useRef<PanelImperativeHandle | null>(null);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
     const sync = () => setIsNarrow(media.matches);
@@ -114,6 +118,11 @@ function AgentsPageWorkspace({
     media.addEventListener("change", sync);
     return () => media.removeEventListener("change", sync);
   }, []);
+  useLayoutEffect(() => {
+    if (isNarrow) return;
+    if (terminalPanel.isVisible) terminalPanelRef.current?.expand();
+    else terminalPanelRef.current?.collapse();
+  }, [isNarrow, terminalPanel.isVisible]);
   if (!hasSelectedTask) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
@@ -131,24 +140,43 @@ function AgentsPageWorkspace({
       rightPanelContent={rightPanelContent}
     />
   );
-  if (isNarrow && terminalPanel.isVisible) {
-    return <AgentStudioTerminalPanel model={terminalPanel} />;
+  if (isNarrow) {
+    return (
+      <DiffWorkerProvider>
+        <div className="relative h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0" hidden={terminalPanel.isVisible}>
+            {workspacePanes}
+          </div>
+          <div className="h-full min-h-0" hidden={!terminalPanel.isVisible}>
+            <AgentStudioTerminalPanel model={terminalPanel} />
+          </div>
+        </div>
+      </DiffWorkerProvider>
+    );
   }
   return (
     <DiffWorkerProvider>
-      {terminalPanel.isVisible ? (
-        <ResizablePanelGroup direction="vertical" className="h-full min-h-0 overflow-hidden">
-          <ResizablePanel defaultSize={68} minSize={30}>
-            {workspacePanes}
-          </ResizablePanel>
-          <ResizableHandle withHandle aria-label="Resize terminal panel" />
-          <ResizablePanel defaultSize={32} minSize={20}>
+      <ResizablePanelGroup direction="vertical" className="h-full min-h-0 overflow-hidden">
+        <ResizablePanel defaultSize="68%" minSize="30%">
+          {workspacePanes}
+        </ResizablePanel>
+        <ResizableHandle
+          withHandle
+          aria-label="Resize terminal panel"
+          className={terminalPanel.isVisible ? undefined : "hidden"}
+        />
+        <ResizablePanel
+          panelRef={terminalPanelRef}
+          collapsible
+          collapsedSize="0%"
+          defaultSize="32%"
+          minSize="20%"
+        >
+          <div className="h-full min-h-0" hidden={!terminalPanel.isVisible}>
             <AgentStudioTerminalPanel model={terminalPanel} />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      ) : (
-        workspacePanes
-      )}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </DiffWorkerProvider>
   );
 }

@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { encodeTerminalProtocolFrame, TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
-import type { TerminalService } from "@openducktor/host";
+import {
+  decodeTerminalProtocolFrame,
+  encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_VERSION,
+} from "@openducktor/contracts";
+import { type TerminalService, TerminalServiceError } from "@openducktor/host";
 import { Effect } from "effect";
 import { type TerminalWebSocketData, terminalWebSocketHandler } from "./terminal-websocket-handler";
 
-const makeSocket = (terminalService: TerminalService) => {
+const makeSocket = (
+  terminalService: TerminalService,
+  sendStatus?: (frame: Uint8Array) => number,
+) => {
   const sent: Uint8Array[] = [];
   const closed: Array<[number, string]> = [];
   const socket = {
@@ -25,7 +32,7 @@ const makeSocket = (terminalService: TerminalService) => {
     } satisfies TerminalWebSocketData,
     send: (frame: Uint8Array) => {
       sent.push(frame);
-      return frame.byteLength;
+      return sendStatus?.(frame) ?? frame.byteLength;
     },
     close: (code: number, reason: string) => closed.push([code, reason]),
   };
@@ -33,6 +40,161 @@ const makeSocket = (terminalService: TerminalService) => {
 };
 
 describe("terminalWebSocketHandler", () => {
+  test("multiplexes attach, input, resize, ACK, and detach by opaque terminal id", async () => {
+    const operations: string[] = [];
+    const service = {
+      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+        Effect.sync(() => {
+          operations.push(`attach:${input.terminalId}:${input.attachmentId}`);
+          input.sink(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "snapshot",
+              terminalId: input.terminalId,
+              earliestRetainedSequence: 0,
+              snapshotSequenceEnd: 0,
+              lifecycle: "running",
+              complete: true,
+            },
+            new Uint8Array(),
+          );
+        }),
+      write: (terminalId: string, payload: Uint8Array) =>
+        Effect.sync(() => operations.push(`write:${terminalId}:${payload[0]}`)),
+      resize: (terminalId: string, grid: { columns: number; rows: number }) =>
+        Effect.sync(() => operations.push(`resize:${terminalId}:${grid.columns}x${grid.rows}`)),
+      acknowledge: (terminalId: string, attachmentId: string, sequenceEnd: number) =>
+        Effect.sync(() => operations.push(`ack:${terminalId}:${attachmentId}:${sequenceEnd}`)),
+      detach: (terminalId: string, attachmentId: string) =>
+        Effect.sync(() => operations.push(`detach:${terminalId}:${attachmentId}`)),
+    } as unknown as TerminalService;
+    const harness = makeSocket(service);
+    const send = (
+      message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"],
+      payload = new Uint8Array(),
+    ) =>
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(encodeTerminalProtocolFrame({ message, payload })),
+      );
+    for (const terminalId of ["terminal-1", "terminal-2"]) {
+      send({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "attach",
+        terminalId,
+        lastConsumedSequence: null,
+      });
+    }
+    send(
+      { version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId: "terminal-1" },
+      new Uint8Array([65]),
+    );
+    send({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "resize",
+      terminalId: "terminal-2",
+      columns: 120,
+      rows: 40,
+    });
+    send({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "ack",
+      terminalId: "terminal-1",
+      sequenceEnd: 0,
+    });
+    send({ version: TERMINAL_PROTOCOL_VERSION, type: "detach", terminalId: "terminal-2" });
+    await Bun.sleep(0);
+
+    expect(operations).toEqual([
+      "attach:terminal-1:browser:connection-1:terminal-1",
+      "attach:terminal-2:browser:connection-1:terminal-2",
+      "write:terminal-1:65",
+      "resize:terminal-2:120x40",
+      "ack:terminal-1:browser:connection-1:terminal-1:0",
+      "detach:terminal-2:browser:connection-1:terminal-2",
+    ]);
+    expect(
+      harness.sent.map((frame) => decodeTerminalProtocolFrame(frame).message.terminalId),
+    ).toEqual(["terminal-1", "terminal-2"]);
+  });
+
+  test("reports unknown terminal ids and rejects oversized frames", async () => {
+    const service = {
+      write: (terminalId: string) =>
+        Effect.fail(
+          new TerminalServiceError({
+            code: "terminal_not_found",
+            operation: "write",
+            message: `Terminal not found: ${terminalId}`,
+            terminalId,
+          }),
+        ),
+    } as unknown as TerminalService;
+    const unknown = makeSocket(service);
+    terminalWebSocketHandler.message(
+      unknown.socket,
+      Buffer.from(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "input",
+            terminalId: "missing",
+          },
+          payload: new Uint8Array([1]),
+        }),
+      ),
+    );
+    await Bun.sleep(0);
+    expect(decodeTerminalProtocolFrame(unknown.sent[0] ?? new Uint8Array()).message).toMatchObject({
+      type: "protocol_error",
+      terminalId: "missing",
+      failure: { code: "terminal_not_found" },
+    });
+
+    const oversized = makeSocket(service);
+    terminalWebSocketHandler.message(oversized.socket, Buffer.alloc(1024 * 1024 + 1));
+    expect(oversized.closed).toEqual([[1009, "Invalid terminal frame."]]);
+  });
+
+  test("closes instead of growing the outbound queue past its byte bound", async () => {
+    const payload = new Uint8Array(700 * 1024);
+    const service = {
+      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+        Effect.sync(() => {
+          for (let index = 0; index < 3; index += 1) {
+            input.sink(
+              {
+                version: TERMINAL_PROTOCOL_VERSION,
+                type: "output",
+                terminalId: input.terminalId,
+                sequenceStart: index * payload.byteLength,
+                sequenceEnd: (index + 1) * payload.byteLength,
+                replay: false,
+              },
+              payload,
+            );
+          }
+        }),
+    } as unknown as TerminalService;
+    const harness = makeSocket(service, () => -1);
+    terminalWebSocketHandler.message(
+      harness.socket,
+      Buffer.from(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "attach",
+            terminalId: "terminal-1",
+            lastConsumedSequence: null,
+          },
+          payload: new Uint8Array(),
+        }),
+      ),
+    );
+    await Bun.sleep(10);
+    expect(harness.closed).toContainEqual([1013, "Terminal outbound queue limit exceeded."]);
+    expect(harness.data.pendingBytes).toBeLessThanOrEqual(700 * 1024 + 256);
+  });
   test("rejects text and server-directed frames", () => {
     const harness = makeSocket({} as TerminalService);
     terminalWebSocketHandler.message(harness.socket, "text");

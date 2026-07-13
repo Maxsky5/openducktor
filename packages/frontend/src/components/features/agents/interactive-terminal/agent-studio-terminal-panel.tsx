@@ -45,18 +45,17 @@ function TerminalViewport({
     (message: string | null) => onAttention(tab.tabId, message),
     [onAttention, tab.tabId],
   );
-  const terminalId = tab.terminalId;
   const handleConnectionState = useCallback(
     (state: TerminalConnectionState) => {
-      if (terminalId) onConnectionState(terminalId, state);
+      if (tab.terminalId) onConnectionState(tab.terminalId, state);
     },
-    [onConnectionState, terminalId],
+    [onConnectionState, tab.terminalId],
   );
   const handleLifecycle = useCallback(
     (lifecycle: TerminalLifecycle, exitText: string | null) => {
-      if (terminalId) onLifecycle(terminalId, lifecycle, exitText);
+      if (tab.terminalId) onLifecycle(tab.terminalId, lifecycle, exitText);
     },
-    [onLifecycle, terminalId],
+    [onLifecycle, tab.terminalId],
   );
   if (tab.error) {
     return (
@@ -70,7 +69,7 @@ function TerminalViewport({
       </div>
     );
   }
-  if (!terminalId || !model.controller) {
+  if (!tab.terminalId || !model.controller) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center text-sm text-muted-foreground">
         Creating terminal…
@@ -79,7 +78,7 @@ function TerminalViewport({
   }
   return (
     <InteractiveTerminal
-      terminalId={terminalId}
+      terminalId={tab.terminalId}
       controller={model.controller}
       active={active}
       focusRequest={model.focusRequest}

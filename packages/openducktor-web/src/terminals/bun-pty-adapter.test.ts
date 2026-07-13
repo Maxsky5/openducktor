@@ -1,9 +1,38 @@
 import { describe, expect, test } from "bun:test";
-import { assertTerminalPtyConformance } from "@openducktor/host";
+import {
+  assertTerminalPtyConformance,
+  observeLiveTerminalPtyConformance,
+  verifyLiveTerminalPtyInterrupt,
+  verifyLiveTerminalPtyNaturalExitCleanup,
+  verifyLiveTerminalPtyProcessTreeTermination,
+} from "@openducktor/host";
 import { Effect } from "effect";
 import { type BunPtySpawn, type BunPtySpawnOptions, createBunPtyPort } from "./bun-pty-adapter";
 
 describe("createBunPtyPort", () => {
+  test("satisfies the shared contract with a real Bun terminal process", async () => {
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    const observation = await observeLiveTerminalPtyConformance(createBunPtyPort());
+    expect(observation.transcript).toContain("INPUT:terminal-conformance");
+    expect(observation.transcript).toMatch(/40\s+120/);
+    expect(observation.eventOrder.at(-1)).toBe("exit");
+    expect(observation.exit.exitCode).toBe(0);
+  }, 7_000);
+  test("terminates a real Bun PTY descendant process tree", async () => {
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    const childPid = await verifyLiveTerminalPtyProcessTreeTermination(createBunPtyPort());
+    expect(childPid).toBeGreaterThan(0);
+  }, 7_000);
+  test("cleans a real Bun PTY descendant after natural shell exit", async () => {
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    const childPid = await verifyLiveTerminalPtyNaturalExitCleanup(createBunPtyPort());
+    expect(childPid).toBeGreaterThan(0);
+  }, 7_000);
+  test("interrupts a real Bun PTY foreground process with Ctrl+C input", async () => {
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    const exit = await verifyLiveTerminalPtyInterrupt(createBunPtyPort());
+    expect(exit.exitCode).toBe(130);
+  }, 7_000);
   test("reports no output pause and orders process exit after terminal EOF", async () => {
     const calls: string[] = [];
     const captured: { options: BunPtySpawnOptions | null } = { options: null };
@@ -14,10 +43,23 @@ describe("createBunPtyPort", () => {
         return data.byteLength;
       },
       resize: (columns: number, rows: number) => calls.push(`resize:${columns}x${rows}`),
-      close: () => calls.push("close"),
+      close: () => {
+        calls.push("close");
+        const options = captured.options;
+        if (options) options.terminal.exit(terminal, 0, null);
+      },
     };
     const port = createBunPtyPort({
       platform: "win32",
+      processTreeTerminator: (input) =>
+        Effect.sync(() => {
+          if (input.isClosed()) return;
+          calls.push(`terminate-tree:${input.pid}`);
+          const currentOptions = captured.options;
+          if (!currentOptions) throw new Error("Expected Bun spawn options before termination.");
+          currentOptions.onExit({ pid: 42, terminal, kill: () => undefined }, 0, 15);
+          currentOptions.terminal.exit(terminal, 0, null);
+        }),
       spawn: ((_command, value) => {
         captured.options = value;
         return { pid: 42, terminal, kill: () => calls.push("kill") };
@@ -51,6 +93,7 @@ describe("createBunPtyPort", () => {
     options.onExit({ pid: 42, terminal, kill: () => undefined }, 7, null);
     expect(exits).toEqual([]);
     options.terminal.exit(terminal, 0, null);
+    await Bun.sleep(0);
     expect(exits).toEqual([{ exitCode: 7, signal: null }]);
     assertTerminalPtyConformance({
       output,
@@ -60,6 +103,7 @@ describe("createBunPtyPort", () => {
       expectedOutputPause: false,
     });
     await Effect.runPromise(handle.terminate());
-    expect(calls.slice(-2)).toEqual(["kill", "close"]);
+    expect(calls.at(-1)).toBe("close");
+    expect(calls).not.toContain("terminate-tree:42");
   });
 });

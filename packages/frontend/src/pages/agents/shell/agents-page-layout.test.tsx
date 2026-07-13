@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { createElement } from "react";
-import { AgentsPageWorkspacePanes } from "./agents-page-layout";
+import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
+import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
 
 const renderWorkspacePanes = (hasSelectedFilePreview: boolean) =>
   render(
@@ -34,5 +35,103 @@ describe("AgentsPageWorkspacePanes", () => {
 
     expect(view.queryByTestId("mock-file-preview")).toBeNull();
     expect(view.getByTestId("agent-studio-chat-pane").hasAttribute("hidden")).toBe(false);
+  });
+});
+
+describe("AgentsPageWorkspace terminal visibility", () => {
+  test("keeps the terminal panel mounted while hiding and reopening it", () => {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => true,
+    })) as typeof window.matchMedia;
+    const terminalPanel: AgentStudioTerminalPanelModel = {
+      scopeKey: "repo:task-1",
+      taskId: "task-1",
+      tabs: [],
+      activeTabId: null,
+      isVisible: true,
+      isLoading: false,
+      isCreating: false,
+      connectionState: "connected",
+      focusRequest: 1,
+      controller: null,
+      onToggle: () => undefined,
+      onBackToChat: () => undefined,
+      onSelectTab: () => undefined,
+      onCreate: () => undefined,
+      onRetryCreate: () => undefined,
+      onClose: async () => undefined,
+      onReconnect: () => undefined,
+    };
+    const renderWorkspace = (isVisible: boolean) =>
+      createElement(AgentsPageWorkspace, {
+        hasSelectedTask: true,
+        chatContent: createElement("div", null, "Chat"),
+        hasSelectedFilePreview: false,
+        selectedFilePreviewContent: null,
+        isRightPanelVisible: false,
+        rightPanelContent: null,
+        terminalPanel: { ...terminalPanel, isVisible },
+      });
+    const view = render(renderWorkspace(true));
+    const panel = view.getByText("No terminals for this task.");
+
+    view.rerender(renderWorkspace(false));
+    expect(view.getByText("No terminals for this task.")).toBe(panel);
+    view.rerender(renderWorkspace(true));
+    expect(view.getByText("No terminals for this task.")).toBe(panel);
+  });
+
+  test("uses terminal mode at 767px and keeps a path back to chat", () => {
+    window.matchMedia = ((query: string) => ({
+      matches: query === "(max-width: 767px)",
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => true,
+    })) as typeof window.matchMedia;
+    const onBackToChat = () => undefined;
+    const terminalPanel: AgentStudioTerminalPanelModel = {
+      scopeKey: "repo:task-1",
+      taskId: "task-1",
+      tabs: [],
+      activeTabId: null,
+      isVisible: true,
+      isLoading: false,
+      isCreating: false,
+      connectionState: "connected",
+      focusRequest: 1,
+      controller: null,
+      onToggle: () => undefined,
+      onBackToChat,
+      onSelectTab: () => undefined,
+      onCreate: () => undefined,
+      onRetryCreate: () => undefined,
+      onClose: async () => undefined,
+      onReconnect: () => undefined,
+    };
+    const view = render(
+      createElement(AgentsPageWorkspace, {
+        hasSelectedTask: true,
+        chatContent: createElement("div", { "data-testid": "narrow-chat" }, "Chat"),
+        hasSelectedFilePreview: false,
+        selectedFilePreviewContent: null,
+        isRightPanelVisible: false,
+        rightPanelContent: null,
+        terminalPanel,
+      }),
+    );
+    expect(view.getByRole("button", { name: "Back to chat" })).toBeTruthy();
+    expect(view.getByTestId("narrow-chat").closest("[hidden]")).toBeTruthy();
+    expect(view.getByText("No terminals for this task.").closest("[hidden]")).toBeNull();
   });
 });

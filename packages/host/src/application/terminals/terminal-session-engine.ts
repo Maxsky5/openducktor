@@ -161,10 +161,13 @@ export const createTerminalSessionEngine = ({ now }: { now: () => Date }) => {
       });
     }
     if (session.handle) {
+      session.summary.lifecycle = "closing";
+      emitLifecycle(session);
       Effect.runFork(
-        session.handle
-          .terminate()
-          .pipe(Effect.tapError(() => Effect.sync(() => handleFailure(session)))),
+        session.handle.terminate().pipe(
+          Effect.tap(() => Effect.sync(() => handleExit(session, null, "output_overflow"))),
+          Effect.tapError(() => Effect.sync(() => handleFailure(session))),
+        ),
       );
     }
   };

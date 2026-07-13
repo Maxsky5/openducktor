@@ -5,6 +5,7 @@ import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import { terminalListQueryOptions, terminalQueryKeys } from "@/state/queries/terminals";
+import { isTerminalToggleShortcut, toggleTerminalPanel } from "./terminal-panel-policy";
 import {
   createTerminalTransportController,
   type TerminalTransportController,
@@ -262,14 +263,14 @@ export const useAgentStudioTerminals = ({
 
   const togglePanel = useCallback((): void => {
     const currentlyVisible = visibility.scopeKey === scopeKey && visibility.value;
-    const next = !currentlyVisible;
-    setVisibility({ scopeKey, value: next });
-    if (next) setFocusRequest((value) => value + 1);
+    const transition = toggleTerminalPanel(currentlyVisible);
+    setVisibility({ scopeKey, value: transition.visible });
+    if (transition.requestFocus) setFocusRequest((value) => value + 1);
   }, [scopeKey, visibility]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent): void => {
-      if (event.ctrlKey && event.key === "`") {
+      if (isTerminalToggleShortcut(event)) {
         event.preventDefault();
         togglePanel();
       }
@@ -363,6 +364,14 @@ export const useAgentStudioTerminals = ({
           return;
         }
         await host.terminalClose({ terminalId: tab.terminalId, confirmTerminate });
+        setScopeState((current) => {
+          const tabs = current.tabs.filter((candidate) => candidate.tabId !== tab.tabId);
+          return {
+            ...current,
+            tabs,
+            activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
+          };
+        });
         if (repoPath && taskId) forgetRememberedTerminal(repoPath, taskId, tab.terminalId);
         if (repoPath && taskId)
           await queryClient.invalidateQueries({

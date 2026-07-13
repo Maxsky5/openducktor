@@ -62,7 +62,7 @@ const makePty = (supportsOutputPause = true) => {
   };
 };
 
-const makeService = async (pty = makePty()) => ({
+const makeService = async (pty = makePty(), idFactory: () => string = () => "terminal-1") => ({
   pty,
   service: await Effect.runPromise(
     createTerminalService({
@@ -72,7 +72,7 @@ const makeService = async (pty = makePty()) => ({
         processEnv: { SHELL: "/bin/zsh", PATH: "/usr/bin" },
         platform: "darwin",
       }),
-      idFactory: () => "terminal-1",
+      idFactory,
       hostInstanceIdFactory: () => "host-1",
       now: () => new Date("2026-07-12T00:00:00.000Z"),
     }),
@@ -201,8 +201,38 @@ describe("TerminalService", () => {
     expect(pty.operations).toContain("resume");
   });
 
+  test("resumes output when the pressure-causing attachment detaches", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "slow-renderer",
+        lastConsumedSequence: 0,
+        sink: () => undefined,
+      }),
+    );
+    pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes));
+    await Bun.sleep(0);
+
+    await Effect.runPromise(service.detach("terminal-1", "slow-renderer"));
+
+    expect(pty.operations).toEqual(["pause", "resume"]);
+    const replayed: string[] = [];
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "replacement-renderer",
+        lastConsumedSequence: TERMINAL_LIMITS.pendingOutputBytes,
+        sink: (event) => replayed.push(event.type),
+      }),
+    );
+    expect(replayed).toEqual(["snapshot"]);
+  });
+
   test("terminates with overflow when output pause is unsupported", async () => {
-    const { service, pty } = await makeService(makePty(false));
+    let id = 0;
+    const { service, pty } = await makeService(makePty(false), () => `terminal-${++id}`);
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const events: string[] = [];
     await Effect.runPromise(
@@ -217,6 +247,14 @@ describe("TerminalService", () => {
     await Bun.sleep(0);
     expect(events).toContain("output_overflow");
     expect(pty.operations).toContain("terminate");
+    const listed = await Effect.runPromise(service.list({ kind: "all" }));
+    expect(listed.terminals[0]?.lifecycle).toBe("exited");
+    expect(listed.terminals[0]?.attentionState).toBe("overflow");
+    for (let index = 0; index < TERMINAL_LIMITS.livePerHost; index += 1) {
+      await Effect.runPromise(
+        service.create({ workingDir: "/repo", context: { taskId: `replacement-${index}` } }),
+      );
+    }
   });
 
   test("requires confirmation and keeps close failures retryable", async () => {

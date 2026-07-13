@@ -96,6 +96,39 @@ export const createTerminalService = ({
     });
     let accepting = true;
 
+    const resumeOutputIfUnblocked = (
+      session: TerminalSession,
+      operation: "ack" | "detach",
+    ): Effect.Effect<void, TerminalServiceError> =>
+      Effect.gen(function* () {
+        if (
+          !session.paused ||
+          ![...session.attachments.values()].every(
+            (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
+          )
+        ) {
+          return;
+        }
+        if (session.handle) {
+          yield* session.handle
+            .resumeOutput()
+            .pipe(
+              Effect.mapError((cause) =>
+                terminalFailure(
+                  "output_overflow",
+                  operation,
+                  cause.message,
+                  session.summary.terminalId,
+                  cause,
+                ),
+              ),
+            );
+        }
+        session.paused = false;
+        for (const candidate of session.attachments.values())
+          flushAttachment(session, candidate, false);
+      });
+
     const service: TerminalService = {
       hostInstanceId,
       create: (rawInput) =>
@@ -351,30 +384,17 @@ export const createTerminalService = ({
             );
           attachment.acknowledgedSequence = sequenceEnd;
           attachment.pendingBytes = attachment.deliveredSequence - sequenceEnd;
-          if (
-            session.paused &&
-            [...session.attachments.values()].every(
-              (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
-            )
-          ) {
-            session.paused = false;
-            if (session.handle)
-              yield* session.handle
-                .resumeOutput()
-                .pipe(
-                  Effect.mapError((cause) =>
-                    terminalFailure("output_overflow", "ack", cause.message, terminalId, cause),
-                  ),
-                );
-            for (const candidate of session.attachments.values())
-              flushAttachment(session, candidate, false);
-          }
+          yield* resumeOutputIfUnblocked(session, "ack");
         }),
       detach: (terminalId, attachmentId) =>
-        Effect.sync(() => {
-          const session = getSession(terminalId, "detach");
+        Effect.gen(function* () {
+          const session = yield* Effect.try({
+            try: () => getSession(terminalId, "detach"),
+            catch: (cause) => terminalOperationFailure(cause, "detach"),
+          });
           session.attachments.delete(attachmentId);
           if (session.attachments.size === 0) session.summary.connectionState = "disconnected";
+          yield* resumeOutputIfUnblocked(session, "detach");
         }),
       close: (rawInput) =>
         Effect.gen(function* () {

@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, mock, test } from "bun:test";
+import type { TerminalSummary } from "@openducktor/contracts";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AgentStudioTerminalPanelModel } from "@/pages/agents/terminals/use-agent-studio-terminals";
 import { AgentStudioTerminalPanel } from "./agent-studio-terminal-panel";
 
@@ -39,5 +40,112 @@ describe("AgentStudioTerminalPanel", () => {
     expect(screen.getByText("Lifecycle: Lost after host restart")).toBeTruthy();
     expect(screen.getByText("Connection: disconnected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry terminal creation" })).toBeNull();
+  });
+
+  test("enforces the eight-terminal tab limit", () => {
+    render(
+      <AgentStudioTerminalPanel
+        model={{
+          ...model,
+          tabs: Array.from({ length: 8 }, (_, index) => ({
+            tabId: `lost:${index}`,
+            terminalId: null,
+            summary: null,
+            label: `Shell ${index + 1}`,
+            error: "This terminal belonged to a previous host session.",
+            requestState: "lost" as const,
+          })),
+        }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
+  test("requires terminate-and-close confirmation for a running terminal", async () => {
+    const onClose = mock(async () => undefined);
+    const summary: TerminalSummary = {
+      terminalId: "terminal-running",
+      hostInstanceId: "host-1",
+      label: "Shell 1",
+      context: { taskId: "task-1" },
+      initialWorkingDir: "/repo",
+      initialWorkingDirAvailable: true,
+      createdAt: "2026-07-12T00:00:00.000Z",
+      lifecycle: "running",
+      connectionState: "connected",
+      attentionState: "none",
+      exit: null,
+    };
+    render(
+      <AgentStudioTerminalPanel
+        model={{
+          ...model,
+          connectionState: "connected",
+          tabs: [
+            {
+              tabId: "tab:terminal-running",
+              terminalId: summary.terminalId,
+              summary,
+              label: summary.label,
+              error: null,
+              requestState: "ready",
+            },
+          ],
+          activeTabId: "tab:terminal-running",
+          onClose,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close Shell 1" }));
+    expect(screen.getByText("Terminate and close Shell 1?")).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Terminate and close" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), true));
+  });
+
+  test("closes an exited terminal without termination confirmation", async () => {
+    const onClose = mock(async () => undefined);
+    const summary: TerminalSummary = {
+      terminalId: "terminal-exited",
+      hostInstanceId: "host-1",
+      label: "Shell 1",
+      context: { taskId: "task-1" },
+      initialWorkingDir: "/repo",
+      initialWorkingDirAvailable: true,
+      createdAt: "2026-07-12T00:00:00.000Z",
+      lifecycle: "exited",
+      connectionState: "disconnected",
+      attentionState: "exited",
+      exit: {
+        exitCode: 0,
+        signal: null,
+        finalSequence: 10,
+        exitedAt: "2026-07-12T00:01:00.000Z",
+      },
+    };
+    render(
+      <AgentStudioTerminalPanel
+        model={{
+          ...model,
+          tabs: [
+            {
+              tabId: "tab:terminal-exited",
+              terminalId: summary.terminalId,
+              summary,
+              label: summary.label,
+              error: null,
+              requestState: "ready",
+            },
+          ],
+          activeTabId: "tab:terminal-exited",
+          onClose,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close Shell 1" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), false));
+    expect(screen.queryByText("Terminate and close Shell 1?")).toBeNull();
   });
 });

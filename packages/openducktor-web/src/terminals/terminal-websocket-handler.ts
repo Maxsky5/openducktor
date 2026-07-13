@@ -144,23 +144,27 @@ const runClientMessage = (
     socket.close(1002, "Invalid terminal message direction.");
     return;
   }
-  void Effect.runPromise(handleClientMessage(socket, decoded.message, decoded.payload)).catch(
-    (cause: unknown) => {
-      const terminalId = decoded.message.terminalId;
-      const parsedCode =
-        typeof cause === "object" && cause !== null && "code" in cause
-          ? terminalFailureCodeSchema.safeParse(cause.code)
-          : null;
-      sendProtocolError(
-        socket,
-        {
-          code: parsedCode?.success ? parsedCode.data : "protocol_error",
-          message: cause instanceof Error ? cause.message : String(cause),
-          terminalId,
-        },
-        terminalId,
-      );
-    },
+  Effect.runFork(
+    handleClientMessage(socket, decoded.message, decoded.payload).pipe(
+      Effect.catchAll((cause: unknown) =>
+        Effect.sync(() => {
+          const terminalId = decoded.message.terminalId;
+          const parsedCode =
+            typeof cause === "object" && cause !== null && "code" in cause
+              ? terminalFailureCodeSchema.safeParse(cause.code)
+              : null;
+          sendProtocolError(
+            socket,
+            {
+              code: parsedCode?.success ? parsedCode.data : "protocol_error",
+              message: cause instanceof Error ? cause.message : String(cause),
+              terminalId,
+            },
+            terminalId,
+          );
+        }),
+      ),
+    ),
   );
 };
 

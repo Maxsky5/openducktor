@@ -5,6 +5,7 @@ import { cleanDirectory, runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
+import { prepareNodePtyEffect } from "./prepare-node-pty";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
@@ -65,6 +66,7 @@ const runBuildCommandEffect = (
 
 export const buildElectronPackageEffect = (): Effect.Effect<void, ElectronOperationError> =>
   Effect.gen(function* () {
+    yield* prepareNodePtyEffect();
     yield* Effect.tryPromise({
       try: () => cleanDirectory(join(packageRoot, "dist")),
       catch: (cause) =>
@@ -89,6 +91,11 @@ export const buildElectronPackageEffect = (): Effect.Effect<void, ElectronOperat
         workspaceRoot,
       }),
     );
+    yield* runBuildCommandEffect("Node PTY adapter conformance", [
+      "bun",
+      "run",
+      "verify:terminal-adapter",
+    ]);
   });
 
 export const buildElectronPackage = (): Promise<void> =>

@@ -35,6 +35,39 @@ export type ProcessTreeTerminator = (
   input: TerminateProcessTreeInput,
 ) => Effect.Effect<void, HostOperationError>;
 
+export type ObservedStateSubscription = (listener: () => void) => () => void;
+
+export const waitForObservedState = ({
+  isComplete,
+  subscribe,
+  timeoutMs,
+}: {
+  isComplete: () => boolean;
+  subscribe: ObservedStateSubscription;
+  timeoutMs: number;
+}): Effect.Effect<boolean> => {
+  if (isComplete()) return Effect.succeed(true);
+  return Effect.async<boolean>((resume, signal) => {
+    let settled = false;
+    const finish = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      resume(Effect.succeed(value));
+    };
+    const onObserved = () => {
+      if (isComplete()) finish(true);
+    };
+    const onAbort = () => finish(false);
+    const unsubscribe = subscribe(onObserved);
+    const timeout = setTimeout(() => finish(isComplete()), timeoutMs);
+    signal.addEventListener("abort", onAbort, { once: true });
+    onObserved();
+  });
+};
+
 const defaultSignalProcessTreeDependencies = (): SignalProcessTreeDependencies => {
   const kill: KillProcess = process.kill;
   return {
@@ -45,7 +78,7 @@ const defaultSignalProcessTreeDependencies = (): SignalProcessTreeDependencies =
   };
 };
 
-const processIsAlive = (pid: number, kill: KillProcess = process.kill): boolean => {
+export const processIsAlive = (pid: number, kill: KillProcess = process.kill): boolean => {
   try {
     kill(pid, 0);
     return true;
@@ -53,6 +86,12 @@ const processIsAlive = (pid: number, kill: KillProcess = process.kill): boolean 
     return false;
   }
 };
+
+export const processTreeIsAlive = (
+  pid: number,
+  platform: ProcessTreePlatform = process.platform,
+  kill: KillProcess = process.kill,
+): boolean => processIsAlive(platform === "win32" ? pid : -pid, kill);
 
 const isAlreadyExitedError = (error: unknown): boolean =>
   error instanceof Error && "code" in error && error.code === "ESRCH";

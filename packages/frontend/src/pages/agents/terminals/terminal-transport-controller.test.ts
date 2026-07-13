@@ -102,4 +102,36 @@ describe("createTerminalTransportController", () => {
       ),
     ).toThrow("client-directed");
   });
+
+  test("reattaches from the beginning when the terminal emulator is replaced", async () => {
+    const sent: Uint8Array[] = [];
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          sent.push(frame);
+        },
+        close: () => {},
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    await controller.connect();
+    const unsubscribe = controller.subscribe(terminalId, () => {});
+    await Promise.resolve();
+    await controller.acknowledge(terminalId, 41);
+
+    controller.releaseEmulator(terminalId);
+    unsubscribe();
+    controller.subscribe(terminalId, () => {});
+    await Promise.resolve();
+
+    const attachFrames = sent
+      .map((frame) => decodeTerminalProtocolFrame(frame).message)
+      .filter((message) => message.type === "attach");
+    expect(attachFrames.at(-1)).toEqual({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "attach",
+      terminalId,
+      lastConsumedSequence: null,
+    });
+  });
 });
