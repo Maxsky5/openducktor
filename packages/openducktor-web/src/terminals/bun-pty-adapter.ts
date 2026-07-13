@@ -70,6 +70,9 @@ export const createBunPtyPort = ({
         let subprocess: BunPtySubprocess | null = null;
         let subprocessClosed = false;
         let cleanupPromise: Promise<void> | null = null;
+        let cleanupVerified = false;
+        let terminationRequested = false;
+        let terminationComplete = false;
         const subprocessExitWaiters = new Set<() => void>();
         const terminalEofWaiters = new Set<() => void>();
         let startNaturalFinalization = (): void => undefined;
@@ -110,7 +113,6 @@ export const createBunPtyPort = ({
           subprocess.kill();
           throw unsupported();
         }
-        let terminated = false;
         const processTreeClosed = (): boolean =>
           subprocessClosed && !processTreeIsAlive(subprocess?.pid ?? 0, platform);
         const waitForExit = (timeoutMs: number): Effect.Effect<boolean> =>
@@ -152,8 +154,12 @@ export const createBunPtyPort = ({
         const ensureProcessTreeTerminated = (): Effect.Effect<void, TerminalPtyError> =>
           Effect.tryPromise({
             try: () => {
+              if (cleanupVerified) return Promise.resolve();
               cleanupPromise ??= Promise.resolve()
                 .then(() => Effect.runPromise(terminateProcessTreeEffect()))
+                .then(() => {
+                  cleanupVerified = true;
+                })
                 .catch((cause) => {
                   cleanupPromise = null;
                   throw cause;
@@ -182,6 +188,34 @@ export const createBunPtyPort = ({
             }
             publishExit();
           });
+        const closeTerminal = (): Effect.Effect<void, TerminalPtyError> =>
+          Effect.try({
+            try: () => {
+              if (!terminal.closed) terminal.close();
+            },
+            catch: (cause) =>
+              new TerminalPtyError({
+                code: "operation_failed",
+                operation: "terminate",
+                message: "Bun terminal close failed.",
+                cause,
+              }),
+          });
+        const completeTermination = Effect.gen(function* () {
+          const pid = subprocess?.pid;
+          if (!pid) {
+            return yield* Effect.fail(
+              new TerminalPtyError({
+                code: "operation_failed",
+                operation: "terminate",
+                message: "Bun terminal process id is unavailable.",
+              }),
+            );
+          }
+          yield* ensureProcessTreeTerminated();
+          yield* closeTerminal();
+          yield* waitForEofAfterCleanup();
+        });
         startNaturalFinalization = (): void => {
           if (!subprocessExit || exitPublished) return;
           Effect.runFork(
@@ -193,7 +227,7 @@ export const createBunPtyPort = ({
         const ensureOpen = (operation: TerminalPtyError["operation"], run: () => void) =>
           Effect.try({
             try: () => {
-              if (terminated || subprocessClosed || terminal.closed)
+              if (terminationRequested || subprocessClosed || terminal.closed)
                 throw new Error("The terminal is already closed.");
               run();
             },
@@ -230,24 +264,17 @@ export const createBunPtyPort = ({
                 message: "Bun terminal output resume is unsupported.",
               }),
             ),
-          terminate: () =>
-            Effect.gen(function* () {
-              if (terminated || terminal.closed) return;
-              const pid = subprocess?.pid;
-              if (!pid) {
-                return yield* Effect.fail(
-                  new TerminalPtyError({
-                    code: "operation_failed",
-                    operation: "terminate",
-                    message: "Bun terminal process id is unavailable.",
-                  }),
-                );
-              }
-              terminated = true;
-              yield* ensureProcessTreeTerminated();
-              terminal.close();
-              yield* waitForEofAfterCleanup();
-            }),
+          terminate: () => {
+            terminationRequested = true;
+            if (terminationComplete) return Effect.void;
+            return completeTermination.pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  terminationComplete = true;
+                }),
+              ),
+            );
+          },
         };
         return handle;
       },

@@ -10,8 +10,10 @@ import { type ReactElement, useEffect, useRef, useState } from "react";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
 import {
   createLatestResizeScheduler,
+  createTerminalInputSequencer,
+  createTerminalKeyEventHandler,
   enqueueParsedTerminalWrite,
-  resolveTerminalKeyAction,
+  handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
 
 const readCssVariable = (element: HTMLElement, name: string): string =>
@@ -78,6 +80,10 @@ export function InteractiveTerminal({
     const reportInteractionFailure = (cause: unknown): void => {
       setInteractionError(cause instanceof Error ? cause.message : String(cause));
     };
+    const enqueueInput = createTerminalInputSequencer({
+      writeInput: (data) => controller.write(terminalId, data),
+      reportFailure: reportInteractionFailure,
+    });
     const resizeScheduler = createLatestResizeScheduler((columns, rows) => {
       void controller.resize(terminalId, columns, rows).catch(reportInteractionFailure);
     });
@@ -86,61 +92,30 @@ export function InteractiveTerminal({
     });
     const dataSubscription = terminal.onData((data) => {
       resizeScheduler.flush();
-      void controller
-        .write(terminalId, new TextEncoder().encode(data))
-        .catch(reportInteractionFailure);
+      void enqueueInput(() => new TextEncoder().encode(data));
     });
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown") return true;
-      const isMac = navigator.platform.toLowerCase().includes("mac");
-      const action = resolveTerminalKeyAction(event, isMac, terminal.hasSelection());
-      if (action === "copy") {
-        void navigator.clipboard.writeText(terminal.getSelection()).catch(reportInteractionFailure);
-        return false;
-      }
-      if (action === "paste") {
-        void navigator.clipboard
-          .readText()
-          .then((text) => controller.write(terminalId, new TextEncoder().encode(text)))
-          .catch(reportInteractionFailure);
-        return false;
-      }
-      if (action === "interrupt") {
-        void controller.write(terminalId, new Uint8Array([3])).catch(reportInteractionFailure);
-        return false;
-      }
-      return true;
-    });
+    terminal.attachCustomKeyEventHandler(
+      createTerminalKeyEventHandler({
+        isMac: navigator.platform.toLowerCase().includes("mac"),
+        hasSelection: () => terminal.hasSelection(),
+        getSelection: () => terminal.getSelection(),
+        writeClipboard: (text) => navigator.clipboard.writeText(text),
+        readClipboard: () => navigator.clipboard.readText(),
+        enqueueInput,
+        reportFailure: reportInteractionFailure,
+      }),
+    );
     const handleFrame = (message: TerminalServerMessage, payload: Uint8Array): void => {
-      if (message.type === "snapshot") {
-        callbacksRef.current.onConnectionState(
-          message.complete ? "connected" : "incomplete_replay",
-        );
-        callbacksRef.current.onLifecycle(message.lifecycle, null);
+      if (
+        handleTerminalMetadataFrame(message, {
+          reset: () => terminal.reset(),
+          onAttention: callbacksRef.current.onAttention,
+          onConnectionState: callbacksRef.current.onConnectionState,
+          onLifecycle: callbacksRef.current.onLifecycle,
+        })
+      )
         return;
-      }
-      if (message.type === "replay_gap") {
-        terminal.reset();
-        callbacksRef.current.onConnectionState("incomplete_replay");
-        callbacksRef.current.onAttention(
-          `Incomplete replay: output ${message.missingSequenceStart}–${message.missingSequenceEnd} is unavailable.`,
-        );
-        return;
-      }
-      if (message.type === "output_overflow") {
-        callbacksRef.current.onAttention("Output overflow stopped this terminal.");
-        return;
-      }
-      if (message.type === "lifecycle") {
-        const exitText =
-          message.lifecycle === "exited"
-            ? `Exited with code ${message.exitCode ?? "unknown"}${message.signal ? ` (${message.signal})` : ""}.`
-            : null;
-        callbacksRef.current.onLifecycle(message.lifecycle, exitText);
-        return;
-      }
-      if (message.type !== "output") return;
       const expectedGeneration = generation;
       writeQueue = enqueueParsedTerminalWrite(
         writeQueue,

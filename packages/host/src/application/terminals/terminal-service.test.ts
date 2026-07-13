@@ -28,6 +28,7 @@ const makePty = (supportsOutputPause = true) => {
   const operations: string[] = [];
   let handlers: TerminalPtyHandlers | null = null;
   let terminateFails = false;
+  let terminateFailuresRemaining = 0;
   const port: TerminalPtyPort = {
     start: (_plan, nextHandlers) => {
       handlers = nextHandlers;
@@ -39,15 +40,19 @@ const makePty = (supportsOutputPause = true) => {
         pauseOutput: () => Effect.sync(() => operations.push("pause")),
         resumeOutput: () => Effect.sync(() => operations.push("resume")),
         terminate: () =>
-          terminateFails
-            ? Effect.fail(
+          Effect.suspend(() => {
+            if (terminateFails || terminateFailuresRemaining > 0) {
+              if (terminateFailuresRemaining > 0) terminateFailuresRemaining -= 1;
+              return Effect.fail(
                 new TerminalPtyError({
                   code: "operation_failed",
                   operation: "terminate",
                   message: "busy",
                 }),
-              )
-            : Effect.sync(() => operations.push("terminate")),
+              );
+            }
+            return Effect.sync(() => operations.push("terminate"));
+          }),
       });
     },
   };
@@ -58,6 +63,9 @@ const makePty = (supportsOutputPause = true) => {
     exit: (exitCode: number | null = 0) => handlers?.onExit({ exitCode, signal: null }),
     failTerminate: () => {
       terminateFails = true;
+    },
+    failNextTerminate: () => {
+      terminateFailuresRemaining += 1;
     },
   };
 };
@@ -269,5 +277,23 @@ describe("TerminalService", () => {
     ).rejects.toThrow();
     const listed = await Effect.runPromise(service.list({ kind: "all" }));
     expect(listed.terminals[0]?.lifecycle).toBe("close_failed");
+  });
+
+  test("removes a close-failed session after its PTY cleanup retry succeeds", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    pty.failNextTerminate();
+
+    await expect(
+      Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true })),
+    ).rejects.toThrow();
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals[0]?.lifecycle).toBe(
+      "close_failed",
+    );
+
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true }));
+
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
+    expect(pty.operations).toContain("terminate");
   });
 });

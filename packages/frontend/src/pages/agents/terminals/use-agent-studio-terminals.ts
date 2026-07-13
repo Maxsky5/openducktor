@@ -11,6 +11,19 @@ import {
   type TerminalTransportController,
 } from "./terminal-transport-controller";
 
+type AgentStudioTerminalDependencies = {
+  hostClient: Pick<
+    typeof host,
+    "taskWorktreeGet" | "terminalClose" | "terminalCreate" | "terminalList"
+  >;
+  terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
+};
+
+const defaultDependencies = (): AgentStudioTerminalDependencies => ({
+  hostClient: host,
+  terminalBridge: getShellBridge().terminals,
+});
+
 export type AgentStudioTerminalTab = {
   tabId: string;
   terminalId: string | null;
@@ -135,15 +148,18 @@ const beginTerminalCreation = (
   ];
 };
 
-export const useAgentStudioTerminals = ({
-  repoPath,
-  taskId,
-  taskVersion,
-}: {
-  repoPath: string | null;
-  taskId: string | null;
-  taskVersion?: string | null;
-}): AgentStudioTerminalPanelModel => {
+export const useAgentStudioTerminals = (
+  {
+    repoPath,
+    taskId,
+    taskVersion,
+  }: {
+    repoPath: string | null;
+    taskId: string | null;
+    taskVersion?: string | null;
+  },
+  dependencies = defaultDependencies(),
+): AgentStudioTerminalPanelModel => {
   const scopeKey = repoPath && taskId ? `${repoPath}:${taskId}` : null;
   const queryClient = useQueryClient();
   const [scopeState, setScopeState] = useState<ScopeState>({
@@ -155,21 +171,30 @@ export const useAgentStudioTerminals = ({
   const [connectionState, setConnectionState] = useState<"connected" | "disconnected">(
     "disconnected",
   );
-  const [focusRequest, setFocusRequest] = useState(0);
+  const [focusState, setFocusState] = useState({ scopeKey, request: 0 });
   const controllerRef = useRef<{ scopeKey: string; value: TerminalTransportController } | null>(
     null,
   );
   const enabled = repoPath !== null && taskId !== null;
   const terminalOptions = enabled
-    ? terminalListQueryOptions({ repoPath, taskId })
-    : terminalListQueryOptions({ repoPath: "disabled", taskId: "disabled" });
+    ? terminalListQueryOptions({ repoPath, taskId, hostClient: dependencies.hostClient })
+    : terminalListQueryOptions({
+        repoPath: "disabled",
+        taskId: "disabled",
+        hostClient: dependencies.hostClient,
+      });
   const worktreeOptions = enabled
     ? taskWorktreeQueryOptions({
         repoPath,
         taskId,
+        hostClient: dependencies.hostClient,
         ...(taskVersion !== undefined ? { taskVersion } : {}),
       })
-    : taskWorktreeQueryOptions({ repoPath: "disabled", taskId: "disabled" });
+    : taskWorktreeQueryOptions({
+        repoPath: "disabled",
+        taskId: "disabled",
+        hostClient: dependencies.hostClient,
+      });
   const terminalQuery = useQuery({
     ...terminalOptions,
     enabled,
@@ -182,6 +207,7 @@ export const useAgentStudioTerminals = ({
   useLayoutEffect(() => {
     setScopeState({ scopeKey, tabs: [], activeTabId: null });
     setVisibility({ scopeKey, value: false });
+    setFocusState({ scopeKey, request: 0 });
   }, [scopeKey]);
 
   useEffect(() => {
@@ -189,13 +215,13 @@ export const useAgentStudioTerminals = ({
     controllerRef.current = null;
     if (!scopeKey) return;
     const controller = createTerminalTransportController(
-      getShellBridge().terminals,
+      dependencies.terminalBridge,
       setConnectionState,
     );
     controllerRef.current = { scopeKey, value: controller };
     void controller.connect().catch(() => setConnectionState("disconnected"));
     return () => controller.dispose();
-  }, [scopeKey]);
+  }, [dependencies.terminalBridge, scopeKey]);
 
   useEffect(() => {
     if (!scopeKey || !repoPath || !taskId || !terminalQuery.data) return;
@@ -234,6 +260,7 @@ export const useAgentStudioTerminals = ({
   const visibleState =
     scopeState.scopeKey === scopeKey ? scopeState : { scopeKey, tabs: [], activeTabId: null };
   const isVisible = visibility.scopeKey === scopeKey && visibility.value;
+  const focusRequest = focusState.scopeKey === scopeKey ? focusState.request : 0;
 
   useEffect(() => {
     if (!repoPath || !taskId || !terminalQuery.data || visibleState.scopeKey !== scopeKey) return;
@@ -265,7 +292,12 @@ export const useAgentStudioTerminals = ({
     const currentlyVisible = visibility.scopeKey === scopeKey && visibility.value;
     const transition = toggleTerminalPanel(currentlyVisible);
     setVisibility({ scopeKey, value: transition.visible });
-    if (transition.requestFocus) setFocusRequest((value) => value + 1);
+    if (transition.requestFocus) {
+      setFocusState((current) => ({
+        scopeKey,
+        request: current.scopeKey === scopeKey ? current.request + 1 : 1,
+      }));
+    }
   }, [scopeKey, visibility]);
 
   useEffect(() => {
@@ -305,7 +337,7 @@ export const useAgentStudioTerminals = ({
         return;
       }
       try {
-        await host.terminalCreate({ workingDir, context: { taskId } });
+        await dependencies.hostClient.terminalCreate({ workingDir, context: { taskId } });
         setScopeState((current) => ({
           ...current,
           tabs: current.tabs.filter((tab) => tab.tabId !== tabId),
@@ -334,7 +366,7 @@ export const useAgentStudioTerminals = ({
         }));
       }
     },
-    [queryClient, repoPath, taskId, worktreeQuery.data?.workingDirectory],
+    [dependencies.hostClient, queryClient, repoPath, taskId, worktreeQuery.data?.workingDirectory],
   );
 
   return useMemo(
@@ -363,7 +395,10 @@ export const useAgentStudioTerminals = ({
           }));
           return;
         }
-        await host.terminalClose({ terminalId: tab.terminalId, confirmTerminate });
+        await dependencies.hostClient.terminalClose({
+          terminalId: tab.terminalId,
+          confirmTerminate,
+        });
         setScopeState((current) => {
           const tabs = current.tabs.filter((candidate) => candidate.tabId !== tab.tabId);
           return {
@@ -386,6 +421,7 @@ export const useAgentStudioTerminals = ({
     [
       connectionState,
       createTerminal,
+      dependencies.hostClient,
       focusRequest,
       isVisible,
       queryClient,

@@ -105,6 +105,51 @@ describe("AgentStudioTerminalPanel", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), true));
   });
 
+  test("exposes task, started-in path, lifecycle, connection, and semantic theme surfaces", () => {
+    const summary: TerminalSummary = {
+      terminalId: "terminal-running",
+      hostInstanceId: "host-1",
+      label: "Shell 1",
+      context: { taskId: "task-1" },
+      initialWorkingDir: "/repo/worktrees/task-1",
+      initialWorkingDirAvailable: true,
+      createdAt: "2026-07-12T00:00:00.000Z",
+      lifecycle: "running",
+      connectionState: "connected",
+      attentionState: "none",
+      exit: null,
+    };
+    const view = render(
+      <div className="dark">
+        <AgentStudioTerminalPanel
+          model={{
+            ...model,
+            connectionState: "connected",
+            tabs: [
+              {
+                tabId: "tab:terminal-running",
+                terminalId: summary.terminalId,
+                summary,
+                label: summary.label,
+                error: null,
+                requestState: "ready",
+              },
+            ],
+            activeTabId: "tab:terminal-running",
+          }}
+        />
+      </div>,
+    );
+
+    expect(screen.getByRole("tab", { name: /Shell 1 Running/ })).toBeTruthy();
+    expect(screen.getByText("Task: task-1")).toBeTruthy();
+    expect(screen.getByText("Started in: /repo/worktrees/task-1")).toBeTruthy();
+    expect(screen.getByText("Lifecycle: Running")).toBeTruthy();
+    expect(screen.getByText("Connection: attaching")).toBeTruthy();
+    const panel = view.container.querySelector(".bg-card");
+    expect(panel?.className).toContain("border-border");
+  });
+
   test("closes an exited terminal without termination confirmation", async () => {
     const onClose = mock(async () => undefined);
     const summary: TerminalSummary = {

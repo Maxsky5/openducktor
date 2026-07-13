@@ -2,12 +2,22 @@ import { describe, expect, test } from "bun:test";
 import {
   assertTerminalPtyConformance,
   observeLiveTerminalPtyConformance,
+  terminateProcessTree,
   verifyLiveTerminalPtyInterrupt,
   verifyLiveTerminalPtyNaturalExitCleanup,
   verifyLiveTerminalPtyProcessTreeTermination,
 } from "@openducktor/host";
 import { Effect } from "effect";
 import { type BunPtySpawn, type BunPtySpawnOptions, createBunPtyPort } from "./bun-pty-adapter";
+
+const injectedCleanupFailure = () =>
+  terminateProcessTree({
+    pid: 0,
+    label: "injected terminal cleanup",
+    isClosed: () => false,
+    waitForExit: () => Effect.succeed(false),
+    stopTimeoutMs: 0,
+  });
 
 describe("createBunPtyPort", () => {
   test("satisfies the shared contract with a real Bun terminal process", async () => {
@@ -106,4 +116,155 @@ describe("createBunPtyPort", () => {
     expect(calls.at(-1)).toBe("close");
     expect(calls).not.toContain("terminate-tree:42");
   });
+
+  test("retries process-tree cleanup after a failed termination", async () => {
+    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    let cleanupCalls = 0;
+    let terminalCloseCalls = 0;
+    let terminalClosed = false;
+    const terminal = {
+      get closed() {
+        return terminalClosed;
+      },
+      write: (data: Uint8Array) => data.byteLength,
+      resize: () => undefined,
+      close: () => {
+        terminalCloseCalls += 1;
+        terminalClosed = true;
+        captured.options?.terminal.exit(terminal, 0, null);
+      },
+    };
+    const port = createBunPtyPort({
+      platform: "win32",
+      processTreeTerminator: () => {
+        cleanupCalls += 1;
+        return cleanupCalls === 1 ? injectedCleanupFailure() : Effect.void;
+      },
+      spawn: ((_command, options) => {
+        captured.options = options;
+        return { pid: 42, terminal, kill: () => undefined };
+      }) satisfies BunPtySpawn,
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: ["-l"], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+      ),
+    );
+
+    await expect(Effect.runPromise(handle.terminate())).rejects.toThrow(
+      "Bun terminal process-tree termination failed.",
+    );
+    await Effect.runPromise(handle.terminate());
+
+    expect(cleanupCalls).toBe(2);
+    expect(terminalCloseCalls).toBe(1);
+  });
+
+  test("surfaces natural-finalization cleanup failure and allows explicit retry", async () => {
+    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    const failures: string[] = [];
+    let reportFailure: (() => void) | null = null;
+    const failureReported = new Promise<void>((resolve) => {
+      reportFailure = resolve;
+    });
+    const exits: unknown[] = [];
+    let cleanupCalls = 0;
+    let terminalCloseCalls = 0;
+    let terminalClosed = false;
+    const terminal = {
+      get closed() {
+        return terminalClosed;
+      },
+      write: (data: Uint8Array) => data.byteLength,
+      resize: () => undefined,
+      close: () => {
+        terminalCloseCalls += 1;
+        terminalClosed = true;
+        captured.options?.terminal.exit(terminal, 0, null);
+      },
+    };
+    const port = createBunPtyPort({
+      platform: "win32",
+      processTreeTerminator: () => {
+        cleanupCalls += 1;
+        return cleanupCalls === 1 ? injectedCleanupFailure() : Effect.void;
+      },
+      spawn: ((_command, options) => {
+        captured.options = options;
+        return { pid: 42, terminal, kill: () => undefined };
+      }) satisfies BunPtySpawn,
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: ["-l"], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        {
+          onOutput: () => undefined,
+          onFailure: (failure) => {
+            failures.push(failure.message);
+            reportFailure?.();
+          },
+          onExit: (exit) => exits.push(exit),
+        },
+      ),
+    );
+    const options = captured.options;
+    if (!options) throw new Error("Expected Bun spawn options to be captured.");
+
+    options.onExit({ pid: 42, terminal, kill: () => undefined }, 0, null);
+    await failureReported;
+    expect(failures).toEqual(["Bun terminal process-tree termination failed."]);
+
+    await Effect.runPromise(handle.terminate());
+
+    expect(cleanupCalls).toBe(2);
+    expect(terminalCloseCalls).toBe(1);
+    expect(exits).toEqual([{ exitCode: 0, signal: null }]);
+  });
+
+  test("does not report success after EOF timeout when Bun already marks the terminal closed", async () => {
+    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    let cleanupCalls = 0;
+    let terminalCloseCalls = 0;
+    let terminalClosed = false;
+    const terminal = {
+      get closed() {
+        return terminalClosed;
+      },
+      write: (data: Uint8Array) => data.byteLength,
+      resize: () => undefined,
+      close: () => {
+        terminalCloseCalls += 1;
+        terminalClosed = true;
+      },
+    };
+    const port = createBunPtyPort({
+      platform: "win32",
+      processTreeTerminator: () => {
+        cleanupCalls += 1;
+        return Effect.void;
+      },
+      spawn: ((_command, options) => {
+        captured.options = options;
+        return { pid: 42, terminal, kill: () => undefined };
+      }) satisfies BunPtySpawn,
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: ["-l"], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+      ),
+    );
+
+    await expect(Effect.runPromise(handle.terminate())).rejects.toThrow(
+      "Bun terminal did not publish EOF after process-tree termination.",
+    );
+    expect(cleanupCalls).toBe(1);
+    expect(terminalCloseCalls).toBe(1);
+
+    captured.options?.terminal.exit(terminal, 0, null);
+    await Effect.runPromise(handle.terminate());
+    expect(cleanupCalls).toBe(1);
+    expect(terminalCloseCalls).toBe(1);
+  }, 2_000);
 });
