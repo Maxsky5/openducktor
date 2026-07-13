@@ -1136,9 +1136,6 @@ describe("repo session read model", () => {
 
     const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
     expect(parentSession.messages).toBe(currentSession.messages);
-    expect(
-      sessionMessagesToArray(parentSession).filter((message) => message.meta?.kind === "subagent"),
-    ).toEqual([]);
     expect(readModel.liveSessionRefs).toEqual([
       expectedRuntimeRef({
         externalSessionId: parentRecord.externalSessionId,

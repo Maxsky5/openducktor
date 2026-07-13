@@ -126,16 +126,13 @@ export const buildRepoSessionReadModel = ({
       runtimeChildSnapshots,
     });
     const session = projectedPendingInput.session;
-    const hasActiveRuntimeChild = runtimeChildSnapshots.some(
-      shouldObserveAgentSessionRuntimeSnapshot,
-    );
-    sessionCollection = replaceAgentSession(sessionCollection, session);
-
-    if (
+    const shouldObserveSession =
       shouldObserveAgentSessionRuntimeSnapshot(snapshot) ||
       projectedPendingInput.hasProjectedChildPendingInput ||
-      hasActiveRuntimeChild
-    ) {
+      runtimeChildSnapshots.some(shouldObserveAgentSessionRuntimeSnapshot);
+    sessionCollection = replaceAgentSession(sessionCollection, session);
+
+    if (shouldObserveSession) {
       liveSessionRefs.push(policyBoundSessionRefForSession(session));
     }
   }
