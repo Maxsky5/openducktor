@@ -12,7 +12,11 @@ export const createTaskQueryUseCases = ({
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<
   TaskService,
-  "listTasks" | "getTaskMetadata" | "agentSessionsList" | "agentSessionUpsert"
+  | "listTasks"
+  | "getTaskMetadata"
+  | "agentSessionsList"
+  | "agentSessionUpsert"
+  | "agentSessionDelete"
 > => ({
   listTasks(input) {
     return Effect.gen(function* () {
@@ -53,5 +57,9 @@ export const createTaskQueryUseCases = ({
 
       return true;
     });
+  },
+
+  agentSessionDelete({ repoPath, taskId, identity }) {
+    return taskStore.deleteAgentSession({ repoPath, taskId, identity });
   },
 });

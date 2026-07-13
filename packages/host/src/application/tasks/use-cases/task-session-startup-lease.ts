@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -23,27 +22,7 @@ export const createTaskSessionStartupLeaseUseCase = ({
         return gitPort;
       });
       const canonicalRepoPath = yield* git.canonicalizePath(input.repoPath);
-      const terminal = coordinator.terminalOutcome(input.leaseId);
-      if (terminal) {
-        if (terminal.repoPath === canonicalRepoPath && terminal.taskId === input.taskId)
-          return true;
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "leaseId",
-            message: `Unknown or mismatched task session startup lease for task ${input.taskId}.`,
-          }),
-        );
-      }
-      if (!coordinator.ownsBootstrap(canonicalRepoPath, input.taskId, input.leaseId)) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "leaseId",
-            message: `Unknown or mismatched task session startup lease for task ${input.taskId}.`,
-          }),
-        );
-      }
-      coordinator.delete(canonicalRepoPath, input.taskId);
-      coordinator.recordTerminal(input.leaseId, outcome, canonicalRepoPath, input.taskId);
+      yield* coordinator.finishBootstrap(canonicalRepoPath, input.taskId, input.leaseId, outcome);
       return true;
     });
   return {

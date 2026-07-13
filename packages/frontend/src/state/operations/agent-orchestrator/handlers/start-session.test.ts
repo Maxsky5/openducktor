@@ -517,6 +517,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
   test("stops and removes the started session when initial persistence fails", async () => {
     const stoppedSessionIds: string[] = [];
+    const deletedSessionIds: string[] = [];
     const listenedSessionIds: string[] = [];
     const sessionsRef = { current: emptyAgentSessionCollection() };
     const adapter = new OpencodeSdkAdapter();
@@ -550,6 +551,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       persistSessionRecord: async () => {
         throw new Error("persist failed");
       },
+      deleteSessionRecord: async (_taskId, identity) => {
+        deletedSessionIds.push(identity.externalSessionId);
+      },
     });
 
     await withCapturedConsole("error", async (calls) => {
@@ -561,7 +565,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: PLANNER_SELECTION,
         }),
       ).rejects.toThrow(
-        'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and removed locally.',
+        'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and removed locally. The durable session record was deleted.',
       );
       expect(calls).toHaveLength(1);
       expect(calls[0]?.[0]).toBe("[agent-orchestrator]");
@@ -569,8 +573,60 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     expect(stoppedSessionIds).toEqual(["external-session-persist-fail"]);
+    expect(deletedSessionIds).toEqual(["external-session-persist-fail"]);
     expect(listenedSessionIds).toEqual([]);
     expect(getSession(sessionsRef.current, "external-session-persist-fail")).toBeUndefined();
+  });
+
+  test("deletes the durable record when observer attachment fails after persistence", async () => {
+    const deletedSessionIds: string[] = [];
+    let abortCalls = 0;
+    let stopCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-observer-fail",
+      role: "planner",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      observeAgentSession: async () => {
+        throw new Error("observer failed");
+      },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {},
+          abort: async () => {
+            abortCalls += 1;
+          },
+        },
+      }),
+      deleteSessionRecord: async (_taskId, identity) => {
+        deletedSessionIds.push(identity.externalSessionId);
+      },
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow("observer failed");
+    expect(stopCalls).toBe(1);
+    expect(deletedSessionIds).toEqual(["external-observer-fail"]);
+    expect(abortCalls).toBe(1);
   });
 
   test("throws when task is missing after reuse checks", async () => {

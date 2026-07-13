@@ -35,6 +35,7 @@ const taskStoreWithTasks = (
     clearQaReports: () => Effect.dieMessage("unexpected clearQaReports"),
     clearWorkflowDocuments: () => Effect.dieMessage("unexpected clearWorkflowDocuments"),
     createTask: () => Effect.dieMessage("unexpected createTask"),
+    deleteAgentSession: () => Effect.dieMessage("unexpected deleteAgentSession"),
     deleteTask: () => Effect.dieMessage("unexpected deleteTask"),
     diagnoseRepoStore: () => Effect.dieMessage("unexpected diagnoseRepoStore"),
     getTask: () => Effect.dieMessage("unexpected getTask"),

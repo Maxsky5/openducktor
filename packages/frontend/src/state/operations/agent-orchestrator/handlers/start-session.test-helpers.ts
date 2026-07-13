@@ -217,6 +217,7 @@ export const toStartSessionDependencies = (
       loadSourceSession: deps.loadSourceSession,
       loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => null),
       persistSessionRecord: deps.persistSessionRecord,
+      deleteSessionRecord: deps.deleteSessionRecord,
       observeAgentSession: deps.observeAgentSession,
     },
     runtime: {
@@ -271,6 +272,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory = async () => null,
     persistSessionRecord = async () => {},
+    deleteSessionRecord = async () => {},
     resolveTaskWorktree = async () => ({
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run" as const,
@@ -317,6 +319,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       loadSourceSession,
       loadAgentSessionHistory,
       persistSessionRecord,
+      deleteSessionRecord,
       resolveTaskWorktree,
       canonicalizePath,
       prepareTaskSessionStartupLease,

@@ -29,7 +29,6 @@ export const createTaskImplementationResetUseCase = ({
   taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "resetImplementation"> => ({
   resetImplementation(input) {
-    let releaseLifecycle = () => {};
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
@@ -43,7 +42,7 @@ export const createTaskImplementationResetUseCase = ({
       const storeDependencies = requireImplementationResetStoreDependencies(taskStore);
       if (taskSessionBootstrapCoordinator) {
         const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-        releaseLifecycle = yield* taskSessionBootstrapCoordinator.beginLifecycle(
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
           canonicalInputRepo,
           [taskId],
           "reset implementation",
@@ -192,6 +191,6 @@ export const createTaskImplementationResetUseCase = ({
           ),
         ),
       );
-    }).pipe(Effect.ensuring(Effect.sync(() => releaseLifecycle())));
+    }).pipe(Effect.scoped);
   },
 });

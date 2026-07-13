@@ -176,7 +176,7 @@ export const collectRelatedTaskBranches = (
     }
     return [...names].sort();
   });
-export const collectDeleteWorktreePaths = (
+const collectManagedTaskWorktreePaths = (
   dependencies: {
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
@@ -184,20 +184,21 @@ export const collectDeleteWorktreePaths = (
   repoPath: string,
   managedWorktreeBasePath: string,
   branchPrefix: string,
-  targetTaskSessions: TaskSessionRecords[],
+  targetTaskSessions: Array<TaskSessionRecords & { sessionRoles: Set<string> }>,
+  operationLabel: "delete" | "reset implementation" | "reset task",
 ) =>
   Effect.gen(function* () {
     const normalizedRepo = normalizePathForComparison(repoPath);
     const seen = new Set<string>();
     const paths: string[] = [];
-    for (const { taskId, sessions } of targetTaskSessions) {
+    for (const { taskId, sessions, sessionRoles } of targetTaskSessions) {
       const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
       const normalizedCanonical = normalizePathForComparison(canonicalWorktree);
       if (normalizedCanonical === normalizedRepo) {
         return yield* Effect.fail(
           new HostValidationError({
             field: "taskId",
-            message: `Cannot delete task ${taskId} because its canonical worktree resolves to the repository root.`,
+            message: `Cannot ${operationLabel} task ${taskId} because its canonical worktree resolves to the repository root.`,
             details: { repoPath, taskId, canonicalWorktree },
           }),
         );
@@ -209,13 +210,13 @@ export const collectDeleteWorktreePaths = (
           canonicalWorktree,
           branchPrefix,
           taskId,
-          "delete",
+          operationLabel,
         );
         seen.add(normalizePathForComparison(validated));
         paths.push(validated);
       }
       for (const session of sessions) {
-        if (!workflowCleanupSessionRoles.has(session.role.trim())) {
+        if (!sessionRoles.has(session.role.trim())) {
           continue;
         }
         const workingDirectory = session.workingDirectory.trim();
@@ -236,7 +237,7 @@ export const collectDeleteWorktreePaths = (
             workingDirectory,
             branchPrefix,
             taskId,
-            "delete",
+            operationLabel,
           );
           const normalizedValidated = normalizePathForComparison(validated);
           if (seen.has(normalizedValidated)) continue;
@@ -250,6 +251,29 @@ export const collectDeleteWorktreePaths = (
     }
     return paths;
   });
+
+export const collectDeleteWorktreePaths = (
+  dependencies: {
+    gitPort: GitPort;
+    settingsConfig: SettingsConfigPort;
+  },
+  repoPath: string,
+  managedWorktreeBasePath: string,
+  branchPrefix: string,
+  targetTaskSessions: TaskSessionRecords[],
+) =>
+  collectManagedTaskWorktreePaths(
+    dependencies,
+    repoPath,
+    managedWorktreeBasePath,
+    branchPrefix,
+    targetTaskSessions.map((target) => ({
+      ...target,
+      sessionRoles: workflowCleanupSessionRoles,
+    })),
+    "delete",
+  );
+
 export const collectResetWorktreePaths = (
   dependencies: {
     gitPort: GitPort;
@@ -263,68 +287,14 @@ export const collectResetWorktreePaths = (
   sessionRoles: Set<string>,
   operationLabel: "reset implementation" | "reset task",
 ) =>
-  Effect.gen(function* () {
-    const normalizedRepo = normalizePathForComparison(repoPath);
-    const seen = new Set<string>();
-    const paths: string[] = [];
-    const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
-    const normalizedCanonical = normalizePathForComparison(canonicalWorktree);
-    if (normalizedCanonical === normalizedRepo) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Cannot ${operationLabel} task ${taskId} because its canonical worktree resolves to the repository root.`,
-          details: { repoPath, taskId, canonicalWorktree },
-        }),
-      );
-    }
-    if (yield* dependencies.settingsConfig.pathExists(canonicalWorktree)) {
-      const validated = yield* validateExistingTaskWorktreeCandidate(
-        dependencies.gitPort,
-        repoPath,
-        canonicalWorktree,
-        branchPrefix,
-        taskId,
-        operationLabel,
-      );
-      seen.add(normalizePathForComparison(validated));
-      paths.push(validated);
-    }
-    for (const session of sessions) {
-      if (!sessionRoles.has(session.role.trim())) {
-        continue;
-      }
-      const workingDirectory = session.workingDirectory.trim();
-      if (!workingDirectory) {
-        continue;
-      }
-      const normalizedWorktree = normalizePathForComparison(workingDirectory);
-      if (normalizedWorktree === normalizedRepo) {
-        continue;
-      }
-      if (seen.has(normalizedWorktree)) {
-        continue;
-      }
-      if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
-        const validated = yield* validateExistingTaskWorktreeCandidate(
-          dependencies.gitPort,
-          repoPath,
-          workingDirectory,
-          branchPrefix,
-          taskId,
-          operationLabel,
-        );
-        const normalizedValidated = normalizePathForComparison(validated);
-        if (seen.has(normalizedValidated)) continue;
-        seen.add(normalizedValidated);
-        paths.push(validated);
-        continue;
-      }
-      seen.add(normalizedWorktree);
-      paths.push(workingDirectory);
-    }
-    return paths;
-  });
+  collectManagedTaskWorktreePaths(
+    dependencies,
+    repoPath,
+    managedWorktreeBasePath,
+    branchPrefix,
+    [{ taskId, sessions, sessionRoles }],
+    operationLabel,
+  );
 const taskCleanupProgressCopy = {
   task_close: { label: "Close", retryVerb: "close" },
   task_delete: { label: "Delete", retryVerb: "delete" },

@@ -1,10 +1,10 @@
 import type { PolicyBoundSessionRef } from "@openducktor/core";
 import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type {
-  RuntimeDependencies,
   SessionDependencies,
   StartAgentSessionInput,
   StartAgentSessionResult,
@@ -17,10 +17,8 @@ import { executeForkStart } from "./start-session-fork-strategy";
 import { executeFreshStart } from "./start-session-fresh-strategy";
 import { resolveStartTask } from "./start-session-policies";
 import { executeReuseStart } from "./start-session-reuse-strategy";
-import {
-  resolveFreshStartTargetWorkingDirectoryForStart,
-  serializeSelectedModelKey,
-} from "./start-session-runtime";
+import { rollbackRegisteredStartedSession } from "./start-session-rollback";
+import { serializeSelectedModelKey } from "./start-session-runtime";
 
 export type {
   StartAgentSessionInput,
@@ -28,26 +26,15 @@ export type {
   StartSessionDependencies,
 } from "./start-session.types";
 
-const resolveFreshStartTarget = async ({
-  input,
-  ctx,
-  runtime,
-}: {
-  input: StartAgentSessionInput;
-  ctx: StartSessionContext;
-  runtime: RuntimeDependencies;
-}) => {
+const resolveFreshStartTarget = ({ input }: { input: StartAgentSessionInput }) => {
   if (input.startMode !== "fresh") {
     return null;
   }
 
-  return resolveFreshStartTargetWorkingDirectoryForStart({
-    ctx,
-    runtime,
-    ...(input.targetWorkingDirectory !== undefined
-      ? { targetWorkingDirectory: input.targetWorkingDirectory }
-      : {}),
-  });
+  return {
+    targetWorkingDirectory: input.targetWorkingDirectory,
+    normalizedTargetWorkingDirectory: normalizeWorkingDirectory(input.targetWorkingDirectory),
+  };
 };
 
 const observeAgentSessionAndGuard = async ({
@@ -112,10 +99,8 @@ export const createStartAgentSession = ({
     }
     const sourceSessionKey =
       input.startMode === "fresh" ? "" : agentSessionIdentityKey(input.sourceSession);
-    const freshStartTarget = await resolveFreshStartTarget({
+    const freshStartTarget = resolveFreshStartTarget({
       input,
-      ctx: startCtx,
-      runtime,
     });
     const normalizedTargetWorkingDirectory =
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
@@ -172,31 +157,18 @@ export const createStartAgentSession = ({
           runtimeKind: startResult.runtimeInfo.runtimeKind,
           workingDirectory: startResult.runtimeInfo.workingDirectory,
         };
-        session.removeSession(identity);
-        let stopError: unknown;
-        try {
-          await runtime.adapter.stopSession({ ...identity, repoPath });
-        } catch (error) {
-          stopError = error;
-        }
-        let abortError: unknown;
-        try {
-          await startResult.runtimeInfo.bootstrap?.abort();
-        } catch (error) {
-          abortError = error;
-        }
-        const progress = [
-          stopError
-            ? `Failed to stop the started session: ${stopError instanceof Error ? stopError.message : String(stopError)}`
-            : "The started session was stopped and removed locally.",
-          abortError
-            ? `Failed to roll back task worktree bootstrap: ${abortError instanceof Error ? abortError.message : String(abortError)}`
-            : "The task worktree bootstrap was rolled back.",
-        ].join(" ");
-        throw new Error(
-          `${cause instanceof Error ? cause.message : String(cause)} ${progress}`,
-          cause instanceof Error ? { cause } : undefined,
-        );
+        await rollbackRegisteredStartedSession({
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+          startedCtx: startResult.ctx,
+          identity,
+          session,
+          runtime,
+          stopReason: "start-session-stop-after-observer-or-bootstrap-failure",
+          ...(startResult.runtimeInfo.bootstrap
+            ? { bootstrap: startResult.runtimeInfo.bootstrap }
+            : {}),
+        });
       }
 
       return {

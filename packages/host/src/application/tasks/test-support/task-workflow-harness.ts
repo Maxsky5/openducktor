@@ -183,6 +183,7 @@ const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
     clearQaReports: unexpectedTaskStoreCall("clearQaReports"),
     clearWorkflowDocuments: unexpectedTaskStoreCall("clearWorkflowDocuments"),
     createTask: unexpectedTaskStoreCall("createTask"),
+    deleteAgentSession: unexpectedTaskStoreCall("deleteAgentSession"),
     deleteTask: unexpectedTaskStoreCall("deleteTask"),
     diagnoseRepoStore: unexpectedTaskStoreCall("diagnoseRepoStore"),
     getTask: unexpectedTaskStoreCall("getTask"),

@@ -1,6 +1,7 @@
 import type { TaskService } from "../../application/tasks/task-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import {
+  parseAgentSessionDeleteInput,
   parseAgentSessionUpsertInput,
   parseBuildBlockedInput,
   parseBuildCompletedInput,
@@ -26,6 +27,8 @@ import {
 } from "./task-command-inputs";
 
 export const createTaskCommandHandlers = (taskService: TaskService): HostCommandHandlers => ({
+  agent_session_delete: (args) =>
+    taskService.agentSessionDelete(parseAgentSessionDeleteInput(args)),
   agent_session_upsert: (args) =>
     taskService.agentSessionUpsert(parseAgentSessionUpsertInput(args)),
   agent_sessions_list: (args) =>

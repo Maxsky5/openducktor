@@ -1,4 +1,5 @@
 import type {
+  AgentSessionIdentity,
   AgentSessionRecord,
   DirectMergeRecord,
   PullRequest,
@@ -106,6 +107,11 @@ export type AgentSessionRepository = {
     repoPath: string;
     taskId: string;
     session: AgentSessionRecord;
+  }): Effect.Effect<boolean, TaskStoreError>;
+  deleteAgentSession(input: {
+    repoPath: string;
+    taskId: string;
+    identity: AgentSessionIdentity;
   }): Effect.Effect<boolean, TaskStoreError>;
 };
 export type PullRequestRepository = {

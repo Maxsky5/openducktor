@@ -35,6 +35,7 @@ export const createTestDependencies = (
     },
   }),
   hostPort: {
+    agentSessionDelete: async () => undefined,
     agentSessionUpsert: async () => undefined,
     agentSessionStop: async () => undefined,
     taskWorktreeGet: async () => ({
@@ -44,6 +45,17 @@ export const createTestDependencies = (
     ...hostOverrides,
   },
   runtimeHostPort: {
+    runtimeEnsure: async (repoPath, runtimeKind) => ({
+      kind: runtimeKind,
+      runtimeId: `${runtimeKind}:${repoPath}`,
+      repoPath,
+      taskId: null,
+      role: "workspace",
+      workingDirectory: repoPath,
+      runtimeRoute: { type: "stdio", identity: `${runtimeKind}:${repoPath}` },
+      startedAt: "2026-01-01T00:00:00.000Z",
+      descriptor: runtimeKind === "codex" ? CODEX_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR,
+    }),
     taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind) => ({
       bootstrapId: "bootstrap-1",
       role,

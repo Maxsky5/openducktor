@@ -1,5 +1,6 @@
 import type {
   AgentRole,
+  AgentSessionIdentity,
   AgentSessionRecord,
   PlanSubtaskInput,
   PullRequest,
@@ -23,6 +24,10 @@ export type ListTasksInput = RepoPathInput & {
 
 export type AgentSessionUpsertInput = TaskIdInput & {
   session: AgentSessionRecord;
+};
+
+export type AgentSessionDeleteInput = TaskIdInput & {
+  identity: AgentSessionIdentity;
 };
 
 export type PullRequestNumberInput = TaskIdInput & {

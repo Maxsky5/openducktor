@@ -1,4 +1,5 @@
 import {
+  type AgentSessionIdentity,
   type AgentSessionRecord,
   type PlanSubtaskInput,
   type TaskCard,
@@ -311,6 +312,19 @@ export class HostTaskClient {
       repoPath,
       taskId,
       session,
+    });
+    this.invalidateTaskMetadata(repoPath, taskId);
+  }
+
+  async agentSessionDelete(
+    repoPath: string,
+    taskId: string,
+    identity: AgentSessionIdentity,
+  ): Promise<void> {
+    await this.invokeFn("agent_session_delete", {
+      repoPath,
+      taskId,
+      identity,
     });
     this.invalidateTaskMetadata(repoPath, taskId);
   }

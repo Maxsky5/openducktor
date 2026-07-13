@@ -1,6 +1,7 @@
 import { HostValidationError } from "../../effect/host-errors";
 
 export const HOST_COMMAND_NAMES = [
+  "agent_session_delete",
   "agent_session_stop",
   "agent_session_upsert",
   "agent_sessions_list",

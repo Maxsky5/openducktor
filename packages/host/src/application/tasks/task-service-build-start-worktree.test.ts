@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createBuildSettingsConfig,
@@ -28,6 +28,25 @@ const taskStoreEffect = <Success>(run: () => Promise<Success>) =>
   });
 
 describe("createTaskService build start worktree handling", () => {
+  test("rejects bootstrap reservations that do not match the acquired startup role", async () => {
+    const coordinator = createTaskSessionBootstrapCoordinator();
+    await Effect.runPromise(coordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "spec"));
+
+    await expect(
+      Effect.runPromise(
+        coordinator.attachBootstrapReservation({
+          bootstrapId: "bootstrap-1",
+          canonicalRepoPath: "/repo",
+          taskId: "task-1",
+          role: "qa",
+          preparedStatus: "ready_for_dev",
+          cleanup: () => Effect.succeed(""),
+        }),
+      ),
+    ).rejects.toThrow("does not match the active spec startup");
+    await Effect.runPromise(coordinator.releaseBootstrap("/repo", "task-1", "bootstrap-1"));
+  });
+
   test("supports Planner and QA as the first worktree creator", async () => {
     for (const role of ["planner", "qa"] as const) {
       const calls: unknown[] = [];
@@ -99,7 +118,9 @@ describe("createTaskService build start worktree handling", () => {
       }),
     );
     await expect(
-      Effect.runPromise(coordinator.beginLifecycle("/repo", ["task-1"], "reset task")),
+      Effect.runPromise(
+        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
+      ),
     ).rejects.toThrow("bootstrap is in progress");
     updatedAt = "2026-01-02T00:00:00.000Z";
     await expect(
@@ -110,14 +131,16 @@ describe("createTaskService build start worktree handling", () => {
           bootstrapId: bootstrap.bootstrapId,
         }),
       ),
-    ).rejects.toThrow("changed from ready_for_dev to ready_for_dev");
-    await Effect.runPromise(
-      service.taskSessionBootstrapAbort({
-        repoPath: "/repo",
-        taskId: "task-1",
-        bootstrapId: bootstrap.bootstrapId,
-      }),
-    );
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapComplete({
+          repoPath: "/repo",
+          taskId: "task-1",
+          bootstrapId: bootstrap.bootstrapId,
+        }),
+      ),
+    ).resolves.toBe(true);
     await expect(
       Effect.runPromise(
         service.taskSessionBootstrapAbort({
@@ -136,9 +159,17 @@ describe("createTaskService build start worktree handling", () => {
         }),
       ),
     ).rejects.toThrow("Unknown or mismatched");
-    const releaseLifecycle = await Effect.runPromise(
-      coordinator.beginLifecycle("/repo", ["task-1"], "close task"),
+    const lifecycleAcquired = Effect.runSync(Deferred.make<void>());
+    const lifecycleFiber = Effect.runFork(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* coordinator.acquireLifecycle("/repo", ["task-1"], "close task");
+          yield* Deferred.succeed(lifecycleAcquired, undefined);
+          yield* Effect.never;
+        }),
+      ),
     );
+    await Effect.runPromise(Deferred.await(lifecycleAcquired));
     await expect(
       Effect.runPromise(
         service.taskSessionBootstrapPrepare({
@@ -149,7 +180,7 @@ describe("createTaskService build start worktree handling", () => {
         }),
       ),
     ).rejects.toThrow("close task is in progress");
-    releaseLifecycle();
+    await Effect.runPromise(Fiber.interrupt(lifecycleFiber));
   });
 
   test("coordinates fork startup leases with destructive task lifecycle operations", async () => {
@@ -178,16 +209,26 @@ describe("createTaskService build start worktree handling", () => {
     );
     for (const operation of ["reset implementation", "reset task", "close task", "delete task"]) {
       await expect(
-        Effect.runPromise(coordinator.beginLifecycle("/repo", ["task-1"], operation)),
+        Effect.runPromise(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], operation)),
+        ),
       ).rejects.toThrow("bootstrap is in progress");
     }
     await Effect.runPromise(
       service.taskSessionStartupLeaseComplete({ repoPath: "/repo", taskId: "task-1", leaseId }),
     );
 
-    const releaseLifecycle = await Effect.runPromise(
-      coordinator.beginLifecycle("/repo", ["task-1"], "full reset"),
+    const lifecycleAcquired = Effect.runSync(Deferred.make<void>());
+    const lifecycleFiber = Effect.runFork(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* coordinator.acquireLifecycle("/repo", ["task-1"], "full reset");
+          yield* Deferred.succeed(lifecycleAcquired, undefined);
+          yield* Effect.never;
+        }),
+      ),
     );
+    await Effect.runPromise(Deferred.await(lifecycleAcquired));
     await expect(
       Effect.runPromise(
         service.taskSessionStartupLeasePrepare({
@@ -197,7 +238,7 @@ describe("createTaskService build start worktree handling", () => {
         }),
       ),
     ).rejects.toThrow("full reset is in progress");
-    releaseLifecycle();
+    await Effect.runPromise(Fiber.interrupt(lifecycleFiber));
   });
   test("prepares the same canonical worktree for non-Builder roles without transitioning", async () => {
     const calls: unknown[] = [];

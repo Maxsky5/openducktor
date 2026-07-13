@@ -57,11 +57,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "codex",
-        runtimeKind: "codex",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -137,11 +133,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -197,11 +189,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -265,11 +253,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -335,11 +319,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -408,11 +388,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         sessionsRef.current = replaceAgentSession(sessionsRef.current, next);
         return next;
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -450,7 +426,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => {
+      ensureExistingSessionRuntime: async () => {
         throw new Error("runtime unavailable");
       },
     });
@@ -479,7 +455,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => {
+      ensureExistingSessionRuntime: async () => {
         throw new Error("runtime unavailable");
       },
     });
@@ -516,11 +492,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
       loadSourceSession: async () => {
         callOrder.push("load");
         return null;
@@ -567,11 +539,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -614,11 +582,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           }),
         ],
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
     });
 
     try {
@@ -646,11 +610,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureExistingSessionRuntime: async () => {},
       sessionTurnState: sessionTurnState.sessionTurnState,
     });
 
@@ -723,7 +683,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           readTurnUserMessageStartedAtMs: () => 1234,
         },
       },
-      ensureRuntime: async () => {
+      ensureExistingSessionRuntime: async () => {
         throw new Error("running sessions must send without preparation");
       },
     });
@@ -787,7 +747,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           readTurnUserMessageStartedAtMs: () => 1234,
         },
       },
-      ensureRuntime: async () => {
+      ensureExistingSessionRuntime: async () => {
         throw new Error("running sessions must send without preparation");
       },
     });

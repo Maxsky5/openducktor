@@ -19,7 +19,12 @@ import {
 import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
-import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
+import {
+  createEnsureExistingSessionRuntime,
+  createEnsureRuntime,
+  loadRepoPromptOverrides,
+  loadTaskDocuments,
+} from "./runtime/runtime";
 import { createLoadSourceSession } from "./session-read-model/source-session-loader";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
@@ -85,7 +90,8 @@ export function useAgentOrchestratorOperations({
     () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
     [workspaceRepoPath, queryClient, hostPort],
   );
-  const { persistSessionRecord, invalidateSessionStopQueries } = sessionCacheEffects;
+  const { deleteSessionRecord, persistSessionRecord, invalidateSessionStopQueries } =
+    sessionCacheEffects;
   const updateSession = useCallback<UpdateSession>(
     (identity, updater, options) => {
       const shouldPersist = options?.persist === true;
@@ -225,6 +231,10 @@ export function useAgentOrchestratorOperations({
       }),
     [queryClient, refreshTaskData, runtimeHostPort],
   );
+  const ensureExistingSessionRuntime = useMemo(
+    () => createEnsureExistingSessionRuntime(runtimeHostPort),
+    [runtimeHostPort],
+  );
   const sessionActions = useMemo(
     () =>
       createAgentSessionActions({
@@ -244,6 +254,7 @@ export function useAgentOrchestratorOperations({
         observeAgentSession,
         resolveTaskWorktree: hostPort.taskWorktreeGet,
         ensureRuntime,
+        ensureExistingSessionRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
@@ -251,6 +262,7 @@ export function useAgentOrchestratorOperations({
         loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
         refreshTaskData,
         persistSessionRecord,
+        deleteSessionRecord,
         stopAuthoritativeSession: hostPort.agentSessionStop,
         invalidateSessionStopQueries,
       }),
@@ -258,11 +270,13 @@ export function useAgentOrchestratorOperations({
       agentEngine,
       currentWorkspaceRepoPathRef,
       ensureRuntime,
+      ensureExistingSessionRuntime,
       hostPort,
       invalidateSessionStopQueries,
       loadSourceSession,
       observeAgentSession,
       persistSessionRecord,
+      deleteSessionRecord,
       queryBackedPromptOverrides,
       queryClient,
       repoEpochRef,

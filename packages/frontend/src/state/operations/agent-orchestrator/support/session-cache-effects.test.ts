@@ -30,7 +30,7 @@ describe("createSessionCacheEffects", () => {
     const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
-      hostPort: { agentSessionUpsert: upsert },
+      hostPort: { agentSessionDelete: async () => undefined, agentSessionUpsert: upsert },
     });
 
     await effects.persistSessionRecord("task-1", sessionRecord);
@@ -47,7 +47,7 @@ describe("createSessionCacheEffects", () => {
     const effects = createSessionCacheEffects({
       workspaceRepoPath: null,
       queryClient,
-      hostPort: { agentSessionUpsert: upsert },
+      hostPort: { agentSessionDelete: async () => undefined, agentSessionUpsert: upsert },
     });
 
     await expect(effects.persistSessionRecord("task-1", sessionRecord)).rejects.toThrow(
@@ -70,7 +70,10 @@ describe("createSessionCacheEffects", () => {
     const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
-      hostPort: { agentSessionUpsert: async () => undefined },
+      hostPort: {
+        agentSessionDelete: async () => undefined,
+        agentSessionUpsert: async () => undefined,
+      },
     });
 
     await effects.invalidateSessionStopQueries({
@@ -80,5 +83,27 @@ describe("createSessionCacheEffects", () => {
 
     expect(invalidatedKeys).toContainEqual(taskQueryKeys.repoDataPrefix("/repo"));
     expect(invalidatedKeys).toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
+  });
+
+  test("deletes through the injected host port and removes only the matching cache record", async () => {
+    const queryClient = createQueryClient();
+    const deleteSession = mock(async () => undefined);
+    const otherSession = { ...sessionRecord, externalSessionId: "session-2" };
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
+      sessionRecord,
+      otherSession,
+    ]);
+    const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
+      queryClient,
+      hostPort: { agentSessionDelete: deleteSession, agentSessionUpsert: async () => undefined },
+    });
+
+    await effects.deleteSessionRecord("task-1", sessionRecord);
+
+    expect(deleteSession).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toEqual([otherSession]);
   });
 });

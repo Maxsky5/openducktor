@@ -147,6 +147,53 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     }
   });
 
+  test("aborts worktree bootstrap when the workspace becomes stale after runtime preparation", async () => {
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    let abortCalls = 0;
+    let startCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => {
+      startCalls += 1;
+      return originalStartSession(input);
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      taskRef: { current: [taskFixture] },
+      currentWorkspaceRepoPathRef,
+      ensureRuntime: async () => {
+        currentWorkspaceRepoPathRef.current = "/tmp/other";
+        return {
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          bootstrap: {
+            complete: async () => {},
+            abort: async () => {
+              abortCalls += 1;
+            },
+          },
+        };
+      },
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
+        }),
+      ).rejects.toThrow("Workspace changed while starting session.");
+      expect(abortCalls).toBe(1);
+      expect(startCalls).toBe(0);
+    } finally {
+      adapter.startSession = originalStartSession;
+    }
+  });
+
   test("rolls back started remote session when workspace becomes stale after observer start", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     let stopCalls = 0;

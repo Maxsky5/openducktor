@@ -139,6 +139,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo",
     }),
+    ensureExistingSessionRuntime: async () => {},
     loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     loadRepoPromptOverrides: async () => ({}),
     loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
@@ -147,6 +148,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     loadAgentSessionHistory: async () => null,
     refreshTaskData: async () => {},
     persistSessionRecord: async () => {},
+    deleteSessionRecord: async () => {},
     stopAuthoritativeSession: async () => {},
     invalidateSessionStopQueries: async () => {},
   };

@@ -28,6 +28,7 @@ export type SessionDependencies = {
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
+  deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
   observeAgentSession: ObserveAgentSession;
 };
 

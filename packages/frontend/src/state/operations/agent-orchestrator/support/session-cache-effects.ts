@@ -1,7 +1,8 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionIdentity, AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   invalidateAgentSessionListQuery,
+  removeAgentSessionRecordFromQuery,
   upsertAgentSessionRecordInQuery,
 } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
@@ -11,7 +12,7 @@ import { requireWorkspaceRepoPath } from "./session-invariants";
 type CreateSessionCacheEffectsArgs = {
   workspaceRepoPath: string | null;
   queryClient: QueryClient;
-  hostPort: Pick<AgentOrchestratorHostPort, "agentSessionUpsert">;
+  hostPort: Pick<AgentOrchestratorHostPort, "agentSessionDelete" | "agentSessionUpsert">;
 };
 
 export const createSessionCacheEffects = ({
@@ -28,6 +29,15 @@ export const createSessionCacheEffects = ({
     upsertAgentSessionRecordInQuery(queryClient, repoPath, taskId, record);
   };
 
+  const deleteSessionRecord = async (
+    taskId: string,
+    identity: AgentSessionIdentity,
+  ): Promise<void> => {
+    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
+    await hostPort.agentSessionDelete(repoPath, taskId, identity);
+    removeAgentSessionRecordFromQuery(queryClient, repoPath, taskId, identity);
+  };
+
   const invalidateSessionStopQueries = async ({
     repoPath,
     taskId,
@@ -41,5 +51,5 @@ export const createSessionCacheEffects = ({
     ]);
   };
 
-  return { persistSessionRecord, invalidateSessionStopQueries };
+  return { deleteSessionRecord, persistSessionRecord, invalidateSessionStopQueries };
 };

@@ -1,11 +1,9 @@
 import type { RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import type {
   FreshStartRuntimeContext,
-  RuntimeDependencies,
   StartSessionContext,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
@@ -54,50 +52,22 @@ export const resolveFreshStartRuntimeContext = async ({
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     runtimeKind: requestedRuntimeKind,
   });
-  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+  if (ctx.isStaleRepoOperation()) {
+    try {
+      await runtime.bootstrap?.abort();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${STALE_START_ERROR} Failed to roll back task worktree bootstrap: ${message}`,
+        error instanceof Error ? { cause: error } : undefined,
+      );
+    }
+    throw new Error(STALE_START_ERROR);
+  }
 
   return {
     runtime,
     systemPrompt,
-  };
-};
-
-export const resolveFreshStartTargetWorkingDirectory = async ({
-  ctx: _ctx,
-  resolveTaskWorktree: _resolveTaskWorktree,
-}: {
-  ctx: StartSessionContext;
-  resolveTaskWorktree: StartSessionExecutionDependencies["runtime"]["resolveTaskWorktree"];
-}): Promise<string | null | undefined> => {
-  return undefined;
-};
-
-export const resolveFreshStartTargetWorkingDirectoryForStart = async ({
-  ctx,
-  runtime,
-  targetWorkingDirectory,
-}: {
-  ctx: StartSessionContext;
-  runtime: RuntimeDependencies;
-  targetWorkingDirectory?: string | null;
-}): Promise<{
-  targetWorkingDirectory: string | null | undefined;
-  normalizedTargetWorkingDirectory: string;
-}> => {
-  if (targetWorkingDirectory !== undefined) {
-    return {
-      targetWorkingDirectory,
-      normalizedTargetWorkingDirectory: normalizeWorkingDirectory(targetWorkingDirectory),
-    };
-  }
-
-  const targetWorkingDirectoryForStart = await resolveFreshStartTargetWorkingDirectory({
-    ctx,
-    resolveTaskWorktree: runtime.resolveTaskWorktree,
-  });
-  return {
-    targetWorkingDirectory: targetWorkingDirectoryForStart,
-    normalizedTargetWorkingDirectory: normalizeWorkingDirectory(targetWorkingDirectoryForStart),
   };
 };
 

@@ -1,7 +1,8 @@
 import type { AgentRole, TaskStatus } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
-import type { rollbackFailedBuildWorktree } from "../support/builder-worktree-cleanup";
+import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
+
+export type TaskSessionBootstrapCleanup = () => Effect.Effect<string>;
 
 export type TaskSessionBootstrapReservation = {
   bootstrapId: string;
@@ -9,11 +10,10 @@ export type TaskSessionBootstrapReservation = {
   taskId: string;
   role: AgentRole;
   preparedStatus: TaskStatus;
-  preparedUpdatedAt: string;
-  cleanup: () => ReturnType<typeof rollbackFailedBuildWorktree>;
+  cleanup: TaskSessionBootstrapCleanup;
 };
 
-type TerminalOutcome = {
+export type TaskSessionBootstrapTerminalOutcome = {
   outcome: "aborted" | "abort_failed" | "completed";
   repoPath: string;
   taskId: string;
@@ -28,38 +28,125 @@ export const createTaskSessionBootstrapCoordinator = () => {
   const reservations = new Map<string, TaskSessionBootstrapReservation>();
   const bootstrapLocks = new Map<string, { bootstrapId: string; role: AgentRole }>();
   const lifecycleLocks = new Map<string, string>();
-  const terminalOutcomes = new Map<string, TerminalOutcome>();
+  const terminalOutcomes = new Map<string, TaskSessionBootstrapTerminalOutcome>();
   const key = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
   const recordTerminal = (
     bootstrapId: string,
-    outcome: TerminalOutcome["outcome"],
+    outcome: TaskSessionBootstrapTerminalOutcome["outcome"],
     repoPath: string,
     taskId: string,
     failureMessage?: string,
-  ): void => {
-    terminalOutcomes.set(bootstrapId, {
+  ): TaskSessionBootstrapTerminalOutcome => {
+    const terminal = {
       outcome,
       repoPath,
       taskId,
       ...(failureMessage ? { failureMessage } : {}),
-    });
+    };
+    terminalOutcomes.set(bootstrapId, terminal);
     if (terminalOutcomes.size > 128) {
       const oldest = terminalOutcomes.keys().next().value;
       if (oldest) terminalOutcomes.delete(oldest);
     }
+    return terminal;
+  };
+
+  const inspectBootstrap = (repoPath: string, taskId: string, bootstrapId: string) => {
+    const terminal = terminalOutcomes.get(bootstrapId);
+    if (terminal) {
+      if (terminal.repoPath === repoPath && terminal.taskId === taskId) {
+        return Effect.succeed({ state: "terminal" as const, terminal });
+      }
+      return Effect.fail(
+        new HostValidationError({
+          field: "bootstrapId",
+          message: `Unknown or mismatched task session bootstrap for task ${taskId}.`,
+        }),
+      );
+    }
+    const taskKey = key(repoPath, taskId);
+    const lock = bootstrapLocks.get(taskKey);
+    if (lock?.bootstrapId !== bootstrapId) {
+      return Effect.fail(
+        new HostValidationError({
+          field: "bootstrapId",
+          message: `Unknown or mismatched task session bootstrap for task ${taskId}.`,
+          details: { repoPath, taskId, bootstrapId },
+        }),
+      );
+    }
+    return Effect.succeed({
+      state: "active" as const,
+      role: lock.role,
+      reservation: reservations.get(taskKey),
+    });
+  };
+
+  const releaseActiveBootstrap = (repoPath: string, taskId: string): void => {
+    const taskKey = key(repoPath, taskId);
+    reservations.delete(taskKey);
+    bootstrapLocks.delete(taskKey);
+  };
+
+  const beginLifecycle = (repoPath: string, taskIds: string[], operation: string) => {
+    const existingLifecycle = taskIds.find((taskId) => lifecycleLocks.has(key(repoPath, taskId)));
+    if (existingLifecycle) {
+      return Effect.fail(
+        new HostOperationError({
+          operation: `task.${operation}.lifecycle_guard`,
+          message: `Cannot ${operation} while another lifecycle operation is in progress for task ${existingLifecycle}.`,
+          details: { repoPath, taskIds },
+        }),
+      );
+    }
+    const active = taskIds
+      .map((taskId) => ({ taskId, lock: bootstrapLocks.get(key(repoPath, taskId)) }))
+      .filter((entry) => Boolean(entry.lock));
+    if (active.length > 0) {
+      return Effect.fail(
+        new HostOperationError({
+          operation: `task.${operation}.bootstrap_guard`,
+          message: `Cannot ${operation} while task session bootstrap is in progress for ${active
+            .map((entry) => `${entry.taskId} (${entry.lock?.role})`)
+            .join(", ")}.`,
+          details: {
+            repoPath,
+            taskIds,
+            activeBootstrapIds: active.map((entry) => entry.lock?.bootstrapId),
+          },
+        }),
+      );
+    }
+    for (const taskId of taskIds) lifecycleLocks.set(key(repoPath, taskId), operation);
+    return Effect.succeed(() => {
+      for (const taskId of taskIds) lifecycleLocks.delete(key(repoPath, taskId));
+    });
   };
 
   return {
-    get(repoPath: string, taskId: string) {
-      return reservations.get(key(repoPath, taskId));
-    },
-    set(reservation: TaskSessionBootstrapReservation) {
-      reservations.set(key(reservation.canonicalRepoPath, reservation.taskId), reservation);
-    },
-    delete(repoPath: string, taskId: string) {
-      const taskKey = key(repoPath, taskId);
-      reservations.delete(taskKey);
-      bootstrapLocks.delete(taskKey);
+    attachBootstrapReservation(reservation: TaskSessionBootstrapReservation) {
+      return Effect.gen(function* () {
+        const current = yield* inspectBootstrap(
+          reservation.canonicalRepoPath,
+          reservation.taskId,
+          reservation.bootstrapId,
+        );
+        if (current.state !== "active" || current.role !== reservation.role) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "bootstrapId",
+              message: `Task session bootstrap reservation does not match the active ${current.state === "active" ? current.role : reservation.role} startup for task ${reservation.taskId}.`,
+              details: {
+                repoPath: reservation.canonicalRepoPath,
+                taskId: reservation.taskId,
+                bootstrapId: reservation.bootstrapId,
+                role: reservation.role,
+              },
+            }),
+          );
+        }
+        reservations.set(key(reservation.canonicalRepoPath, reservation.taskId), reservation);
+      });
     },
     acquireBootstrap(repoPath: string, taskId: string, bootstrapId: string, role: AgentRole) {
       const taskKey = key(repoPath, taskId);
@@ -79,45 +166,31 @@ export const createTaskSessionBootstrapCoordinator = () => {
       bootstrapLocks.set(taskKey, { bootstrapId, role });
       return Effect.succeed(undefined);
     },
-    terminalOutcome(bootstrapId: string) {
-      return terminalOutcomes.get(bootstrapId);
-    },
-    ownsBootstrap(repoPath: string, taskId: string, bootstrapId: string) {
-      return bootstrapLocks.get(key(repoPath, taskId))?.bootstrapId === bootstrapId;
-    },
-    recordTerminal,
-    beginLifecycle(repoPath: string, taskIds: string[], operation: string) {
-      const existingLifecycle = taskIds.find((taskId) => lifecycleLocks.has(key(repoPath, taskId)));
-      if (existingLifecycle) {
-        return Effect.fail(
-          new HostOperationError({
-            operation: `task.${operation}.lifecycle_guard`,
-            message: `Cannot ${operation} while another lifecycle operation is in progress for task ${existingLifecycle}.`,
-            details: { repoPath, taskIds },
-          }),
-        );
-      }
-      const active = taskIds
-        .map((taskId) => ({ taskId, lock: bootstrapLocks.get(key(repoPath, taskId)) }))
-        .filter((entry) => Boolean(entry.lock));
-      if (active.length > 0)
-        return Effect.fail(
-          new HostOperationError({
-            operation: `task.${operation}.bootstrap_guard`,
-            message: `Cannot ${operation} while task session bootstrap is in progress for ${active
-              .map((entry) => `${entry.taskId} (${entry.lock?.role})`)
-              .join(", ")}.`,
-            details: {
-              repoPath,
-              taskIds,
-              activeBootstrapIds: active.map((entry) => entry.lock?.bootstrapId),
-            },
-          }),
-        );
-      for (const taskId of taskIds) lifecycleLocks.set(key(repoPath, taskId), operation);
-      return Effect.succeed(() => {
-        for (const taskId of taskIds) lifecycleLocks.delete(key(repoPath, taskId));
+    inspectBootstrap,
+    finishBootstrap(
+      repoPath: string,
+      taskId: string,
+      bootstrapId: string,
+      outcome: TaskSessionBootstrapTerminalOutcome["outcome"],
+      failureMessage?: string,
+    ) {
+      return Effect.gen(function* () {
+        const current = yield* inspectBootstrap(repoPath, taskId, bootstrapId);
+        if (current.state === "terminal") return current.terminal;
+        releaseActiveBootstrap(repoPath, taskId);
+        return recordTerminal(bootstrapId, outcome, repoPath, taskId, failureMessage);
       });
+    },
+    releaseBootstrap(repoPath: string, taskId: string, bootstrapId: string) {
+      return Effect.gen(function* () {
+        const current = yield* inspectBootstrap(repoPath, taskId, bootstrapId);
+        if (current.state === "active") releaseActiveBootstrap(repoPath, taskId);
+      });
+    },
+    acquireLifecycle(repoPath: string, taskIds: string[], operation: string) {
+      return Effect.acquireRelease(beginLifecycle(repoPath, taskIds, operation), (release) =>
+        Effect.sync(release),
+      ).pipe(Effect.asVoid);
     },
   };
 };

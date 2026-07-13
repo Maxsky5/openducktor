@@ -28,7 +28,6 @@ export const createTaskDeleteUseCase = ({
   taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "deleteTask"> => ({
   deleteTask(input) {
-    let releaseLifecycle = () => {};
     return Effect.gen(function* () {
       const { repoPath, taskId, deleteSubtasks } = input;
       const dependencies = yield* requireDependencies(() =>
@@ -41,7 +40,7 @@ export const createTaskDeleteUseCase = ({
       );
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
       if (taskSessionBootstrapCoordinator) {
-        releaseLifecycle = yield* taskSessionBootstrapCoordinator.beginLifecycle(
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
           canonicalInputRepo,
           [taskId],
           "delete tasks",
@@ -76,16 +75,11 @@ export const createTaskDeleteUseCase = ({
       const targetTaskIds = targetTasks.map((task) => task.id);
       const additionalTaskIds = targetTaskIds.filter((targetTaskId) => targetTaskId !== taskId);
       if (taskSessionBootstrapCoordinator && additionalTaskIds.length > 0) {
-        const releaseSubtasks = yield* taskSessionBootstrapCoordinator.beginLifecycle(
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
           canonicalInputRepo,
           additionalTaskIds,
           "delete tasks",
         );
-        const releaseParent = releaseLifecycle;
-        releaseLifecycle = () => {
-          releaseSubtasks();
-          releaseParent();
-        };
       }
       const targetTaskSessions: TaskSessionRecords[] = [];
       for (const targetTask of targetTasks) {
@@ -176,6 +170,6 @@ export const createTaskDeleteUseCase = ({
           ),
         ),
       );
-    }).pipe(Effect.ensuring(Effect.sync(() => releaseLifecycle())));
+    }).pipe(Effect.scoped);
   },
 });

@@ -34,7 +34,6 @@ export const createTaskCloseUseCase = ({
   taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
-    let releaseLifecycle = () => {};
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       let currentTasks = yield* taskStore.listTasks({ repoPath });
@@ -55,7 +54,7 @@ export const createTaskCloseUseCase = ({
       yield* validateManualCloseTaskEffect(current, currentTasks);
       if (taskSessionBootstrapCoordinator && gitPort) {
         const canonicalInputRepo = yield* gitPort.canonicalizePath(repoPath);
-        releaseLifecycle = yield* taskSessionBootstrapCoordinator.beginLifecycle(
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
           canonicalInputRepo,
           [taskId],
           "close task",
@@ -173,6 +172,6 @@ export const createTaskCloseUseCase = ({
           ),
         ),
       );
-    }).pipe(Effect.ensuring(Effect.sync(() => releaseLifecycle())));
+    }).pipe(Effect.scoped);
   },
 });

@@ -1,5 +1,6 @@
 import { agentRoleSchema } from "@openducktor/contracts";
 import type {
+  AgentSessionDeleteInput,
   AgentSessionUpsertInput,
   BuildBlockedInput,
   BuildCompletedInput,
@@ -27,6 +28,7 @@ import {
   compactAgentSessionForStorage,
   optionalBoolean,
   optionalNonNegativeInteger,
+  parseAgentSessionIdentity,
   parseAgentSessionRecord,
   parseCreateInput,
   parseOptionalNote,
@@ -67,6 +69,15 @@ export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsert
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     session: compactAgentSessionForStorage(parseAgentSessionRecord(record.session)),
+  };
+};
+
+export const parseAgentSessionDeleteInput = (input: unknown): AgentSessionDeleteInput => {
+  const record = requireRecord(input, "agent_session_delete input");
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    identity: parseAgentSessionIdentity(record.identity),
   };
 };
 

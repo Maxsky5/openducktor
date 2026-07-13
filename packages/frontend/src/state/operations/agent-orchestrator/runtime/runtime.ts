@@ -3,7 +3,6 @@ import type {
   RepoPromptOverrides,
   RuntimeKind,
   SettingsSnapshot,
-  TaskSessionBootstrap,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
@@ -36,6 +35,11 @@ export type EnsureRuntime = (
   options?: EnsureRuntimeOptions,
 ) => Promise<RuntimeInfo>;
 
+export type EnsureExistingSessionRuntime = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+) => Promise<void>;
+
 export type TaskDocuments = {
   specMarkdown: string;
   planMarkdown: string;
@@ -53,24 +57,10 @@ type EnsureRuntimeDependencies = {
   repoConfigLoader?: RepoConfigLoader;
 };
 
-type RuntimeStartupHost = {
-  taskSessionBootstrapPrepare?(
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-    runtimeKind: RuntimeKind,
-    targetWorkingDirectory?: string,
-  ): Promise<TaskSessionBootstrap>;
-  taskSessionBootstrapComplete?(
-    repoPath: string,
-    taskId: string,
-    bootstrapId: string,
-  ): Promise<void>;
-  taskSessionBootstrapAbort?(repoPath: string, taskId: string, bootstrapId: string): Promise<void>;
-  buildStart?: typeof host.buildStart;
-  runtimeEnsure?: typeof host.runtimeEnsure;
-  taskWorktreeGet?: typeof host.taskWorktreeGet;
-};
+type RuntimeStartupHost = Pick<
+  typeof host,
+  "taskSessionBootstrapPrepare" | "taskSessionBootstrapComplete" | "taskSessionBootstrapAbort"
+>;
 
 type RuntimeWorkspaceQueryHost = Pick<
   typeof host,
@@ -198,13 +188,6 @@ export const createEnsureRuntime = ({
       }
       runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, role, repoConfigLoader);
     }
-    if (
-      !hostClient.taskSessionBootstrapPrepare ||
-      !hostClient.taskSessionBootstrapComplete ||
-      !hostClient.taskSessionBootstrapAbort
-    ) {
-      throw new Error("Task session bootstrap commands are unavailable.");
-    }
     const prepareBootstrap = hostClient.taskSessionBootstrapPrepare;
     const completeBootstrap = hostClient.taskSessionBootstrapComplete;
     const abortBootstrap = hostClient.taskSessionBootstrapAbort;
@@ -240,5 +223,13 @@ export const createEnsureRuntime = ({
         },
       },
     };
+  };
+};
+
+export const createEnsureExistingSessionRuntime = (
+  hostClient: Pick<typeof host, "runtimeEnsure"> = host,
+): EnsureExistingSessionRuntime => {
+  return async (repoPath, runtimeKind): Promise<void> => {
+    await hostClient.runtimeEnsure(repoPath, runtimeKind);
   };
 };

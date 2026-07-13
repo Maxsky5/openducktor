@@ -26,12 +26,12 @@ const createPrepareSend = (
   overrides: Partial<Parameters<typeof createPrepareSessionSend>[0]> = {},
 ) => {
   const observedRefs: PolicyBoundSessionRef[] = [];
-  const ensureRuntimeCalls: unknown[] = [];
+  const ensureExistingRuntimeCalls: unknown[] = [];
   const sessionObserversRef = overrides.sessionObserversRef ?? createSessionObserversRefFixture();
 
   return {
     observedRefs,
-    ensureRuntimeCalls,
+    ensureExistingRuntimeCalls,
     sessionObserversRef,
     prepareSend: createPrepareSessionSend({
       workspaceRepoPath: "/tmp/repo",
@@ -56,12 +56,8 @@ const createPrepareSend = (
           return () => {};
         });
       },
-      ensureRuntime: async (...args) => {
-        ensureRuntimeCalls.push(args);
-        return {
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        };
+      ensureExistingSessionRuntime: async (...args) => {
+        ensureExistingRuntimeCalls.push(args);
       },
       loadRepoPromptOverrides: async () => ({}),
       loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
@@ -72,25 +68,14 @@ const createPrepareSend = (
 
 describe("prepare session send", () => {
   test("ensures the session runtime and observes the exact durable session ref", async () => {
-    const { ensureRuntimeCalls, observedRefs, prepareSend, sessionObserversRef } =
+    const { ensureExistingRuntimeCalls, observedRefs, prepareSend, sessionObserversRef } =
       createPrepareSend();
 
     const result = await prepareSend(buildWorkflowSession({ status: "idle" }));
 
     expect(result.repoPath).toBe("/tmp/repo");
     expect(result.systemPrompt).toContain("Build login");
-    expect(ensureRuntimeCalls).toEqual([
-      [
-        "/tmp/repo",
-        "task-1",
-        "build",
-        {
-          workspaceId: "workspace-1",
-          targetWorkingDirectory: "/tmp/repo/worktree",
-          runtimeKind: "opencode",
-        },
-      ],
-    ]);
+    expect(ensureExistingRuntimeCalls).toEqual([["/tmp/repo", "opencode"]]);
     expect(observedRefs).toEqual([
       {
         repoPath: "/tmp/repo",
