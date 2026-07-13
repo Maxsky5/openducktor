@@ -37,11 +37,11 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
   }, [theme]);
 
   useEffect(() => {
+    persistedThemeRef.current = loadedTheme;
     if (isPersistingRef.current) {
       return;
     }
 
-    persistedThemeRef.current = loadedTheme;
     selectOptimisticTheme(loadedTheme);
   }, [loadedTheme]);
 

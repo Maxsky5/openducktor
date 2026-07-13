@@ -7,6 +7,7 @@ import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { ThemeToggle } from "./sidebar/theme-toggle";
 import { ThemeProvider, useTheme } from "./theme-provider";
 
 enableReactActEnvironment();
@@ -23,6 +24,7 @@ const ThemeHarness = (): ReactElement => {
       <button type="button" onClick={() => setTheme("light")}>
         Light
       </button>
+      <ThemeToggle />
     </div>
   );
 };
@@ -216,6 +218,45 @@ describe("ThemeProvider", () => {
       await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
         timeout: 1_000,
       });
+    } finally {
+      consoleError.mockRestore();
+      hostBridge.client.setTheme = originalSetTheme;
+    }
+  });
+
+  test("keeps an authoritative theme that loads before a pending request fails", async () => {
+    const persistence = createDeferred<void>();
+    const setTheme = mock(async () => persistence.promise);
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = setTheme;
+    const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const queryClient = renderThemeProvider({ withSettingsSnapshot: false });
+
+      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+      await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
+        timeout: 1_000,
+      });
+
+      await act(async () => {
+        queryClient.setQueryData(
+          settingsSnapshotQueryOptions().queryKey,
+          createSettingsSnapshotFixture({ theme: "dark" }),
+        );
+        await flushQueryUpdates();
+      });
+
+      await act(async () => {
+        persistence.reject(new Error("disk write failed"));
+        await flushQueryUpdates();
+      });
+
+      expect(screen.getByLabelText("Current theme").textContent).toBe("dark");
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(
+        screen.getByRole("switch", { name: "Toggle dark mode" }).getAttribute("aria-checked"),
+      ).toBe("true");
     } finally {
       consoleError.mockRestore();
       hostBridge.client.setTheme = originalSetTheme;
