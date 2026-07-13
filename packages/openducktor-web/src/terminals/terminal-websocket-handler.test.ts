@@ -4,7 +4,13 @@ import {
   encodeTerminalProtocolFrame,
   TERMINAL_PROTOCOL_VERSION,
 } from "@openducktor/contracts";
-import { type TerminalService, TerminalServiceError } from "@openducktor/host";
+import {
+  createTerminalService,
+  type FilesystemPort,
+  type TerminalPtyPort,
+  type TerminalService,
+  TerminalServiceError,
+} from "@openducktor/host";
 import { Effect } from "effect";
 import { type TerminalWebSocketData, terminalWebSocketHandler } from "./terminal-websocket-handler";
 
@@ -198,6 +204,43 @@ describe("terminalWebSocketHandler", () => {
         return message.type === "protocol_error" && message.failure.code === "terminal_forgotten";
       }),
     ).toBe(true);
+  });
+
+  test("reports a stale attach from the real terminal service as forgotten", async () => {
+    const service = await Effect.runPromise(
+      createTerminalService({
+        filesystem: {} as FilesystemPort,
+        ptyPort: {} as TerminalPtyPort,
+        resolveLaunchEnvironment: () =>
+          Effect.succeed({ shell: "/bin/sh", args: [], env: { PATH: "/usr/bin" } }),
+        hostInstanceIdFactory: () => "host-1",
+      }),
+    );
+    const harness = makeSocket(service);
+
+    terminalWebSocketHandler.message(
+      harness.socket,
+      Buffer.from(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "attach",
+            terminalId: "missing",
+            lastConsumedSequence: null,
+          },
+          payload: new Uint8Array(),
+        }),
+      ),
+    );
+    await Bun.sleep(0);
+
+    expect(harness.data.attachments.size).toBe(0);
+    expect(harness.sent).toHaveLength(1);
+    expect(decodeTerminalProtocolFrame(harness.sent[0] ?? new Uint8Array()).message).toMatchObject({
+      type: "protocol_error",
+      terminalId: "missing",
+      failure: { code: "terminal_forgotten" },
+    });
   });
 
   test("closes instead of growing the outbound queue past its byte bound", async () => {

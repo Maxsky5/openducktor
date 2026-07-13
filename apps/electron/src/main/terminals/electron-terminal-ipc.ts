@@ -1,6 +1,7 @@
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_VERSION,
   type TerminalClientMessage,
 } from "@openducktor/contracts";
 import type { TerminalService, TerminalServiceError } from "@openducktor/host";
@@ -75,22 +76,48 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
       const message = frame.message;
       const id = attachmentId(sender.id, message.terminalId);
       if (message.type === "attach") {
+        const result = yield* Effect.either(
+          terminalService.attach({
+            terminalId: message.terminalId,
+            attachmentId: id,
+            lastConsumedSequence: message.lastConsumedSequence,
+            sink: (event, payload) => {
+              if (!sender.isDestroyed()) {
+                sender.send(
+                  ELECTRON_TERMINAL_EVENT_CHANNEL,
+                  encodeTerminalProtocolFrame({ message: event, payload }),
+                );
+              }
+            },
+          }),
+        );
+        if (result._tag === "Left") {
+          if (!sender.isDestroyed()) {
+            const code =
+              result.left.code === "terminal_not_found" ? "terminal_forgotten" : result.left.code;
+            sender.send(
+              ELECTRON_TERMINAL_EVENT_CHANNEL,
+              encodeTerminalProtocolFrame({
+                message: {
+                  version: TERMINAL_PROTOCOL_VERSION,
+                  type: "protocol_error",
+                  terminalId: message.terminalId,
+                  failure: {
+                    code,
+                    message: result.left.message,
+                    terminalId: message.terminalId,
+                  },
+                },
+                payload: new Uint8Array(),
+              }),
+            );
+          }
+          return;
+        }
         const attached = attachedBySender.get(sender.id) ?? new Set<string>();
         attached.add(message.terminalId);
         attachedBySender.set(sender.id, attached);
-        return yield* terminalService.attach({
-          terminalId: message.terminalId,
-          attachmentId: id,
-          lastConsumedSequence: message.lastConsumedSequence,
-          sink: (event, payload) => {
-            if (!sender.isDestroyed()) {
-              sender.send(
-                ELECTRON_TERMINAL_EVENT_CHANNEL,
-                encodeTerminalProtocolFrame({ message: event, payload }),
-              );
-            }
-          },
-        });
+        return;
       }
       if (message.type === "input") {
         return yield* terminalService.write(message.terminalId, frame.payload);

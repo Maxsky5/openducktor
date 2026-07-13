@@ -174,6 +174,49 @@ describe("createTerminalTransportController", () => {
     expect(states).toContain("disconnected");
   });
 
+  test("delivers a terminal-scoped stale attach failure to its subscriber", async () => {
+    let receive = (_frame: Uint8Array): void => {
+      throw new Error("Terminal bridge did not connect.");
+    };
+    const bridge: TerminalBridge = {
+      connect: async (onFrame) => {
+        receive = onFrame;
+        return {
+          send: async (frame) => {
+            const message = decodeTerminalProtocolFrame(frame).message;
+            if (message.type !== "attach") return;
+            receive(
+              encodeTerminalProtocolFrame({
+                message: {
+                  version: TERMINAL_PROTOCOL_VERSION,
+                  type: "protocol_error",
+                  terminalId: message.terminalId,
+                  failure: {
+                    code: "terminal_forgotten",
+                    message: "Terminal ended when the host restarted.",
+                    terminalId: message.terminalId,
+                  },
+                },
+                payload: new Uint8Array(),
+              }),
+            );
+          },
+          close: () => {},
+        };
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    const failures: string[] = [];
+    await controller.connect();
+
+    controller.subscribe(terminalId, (message) => {
+      if (message.type === "protocol_error") failures.push(message.failure.code);
+    });
+    await Promise.resolve();
+
+    expect(failures).toEqual(["terminal_forgotten"]);
+  });
+
   test("reattaches from the beginning when the terminal emulator is replaced", async () => {
     const sent: Uint8Array[] = [];
     const bridge: TerminalBridge = {

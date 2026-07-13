@@ -245,52 +245,59 @@ export const createTerminalService = ({
           return { hostInstanceId, terminals };
         }),
       attach: (input) =>
-        Effect.sync(() => {
-          const session = getSession(input.terminalId, "attach");
-          const requested = input.lastConsumedSequence ?? 0;
-          if (requested > session.nextSequence) {
-            throw terminalFailure(
-              "protocol_error",
-              "attach",
-              `Terminal replay position ${requested} is beyond the published sequence ${session.nextSequence}.`,
-              input.terminalId,
-            );
-          }
-          const earliest = session.replay[0]?.sequenceStart ?? session.nextSequence;
-          const complete = requested >= earliest;
-          const attachment: TerminalAttachment = {
-            attachmentId: input.attachmentId,
-            sink: input.sink,
-            acknowledgedSequence: requested,
-            deliveredSequence: requested,
-            pendingBytes: 0,
-          };
-          const previousAttachment = session.attachments.get(input.attachmentId);
-          const previousConnectionState = session.summary.connectionState;
-          const previousAttentionState = session.summary.attentionState;
-          session.attachments.set(input.attachmentId, attachment);
-          session.summary.connectionState = complete ? "connected" : "incomplete_replay";
-          try {
-            publish(attachment, {
-              version: TERMINAL_PROTOCOL_VERSION,
-              type: "snapshot",
-              terminalId: input.terminalId,
-              earliestRetainedSequence: earliest,
-              snapshotSequenceEnd: session.nextSequence,
-              lifecycle: session.summary.lifecycle,
-              complete,
-            });
-            flushAttachment(session, attachment, true);
-          } catch (cause) {
-            if (previousAttachment) {
-              session.attachments.set(input.attachmentId, previousAttachment);
-            } else {
-              session.attachments.delete(input.attachmentId);
+        Effect.try({
+          try: () => {
+            const session = getSession(input.terminalId, "attach");
+            const requested = input.lastConsumedSequence ?? 0;
+            if (requested > session.nextSequence) {
+              throw terminalFailure(
+                "protocol_error",
+                "attach",
+                `Terminal replay position ${requested} is beyond the published sequence ${session.nextSequence}.`,
+                input.terminalId,
+              );
             }
-            session.summary.connectionState = previousConnectionState;
-            session.summary.attentionState = previousAttentionState;
-            throw cause;
-          }
+            const earliest = session.replay[0]?.sequenceStart ?? session.nextSequence;
+            const complete = requested >= earliest;
+            const attachment: TerminalAttachment = {
+              attachmentId: input.attachmentId,
+              sink: input.sink,
+              acknowledgedSequence: requested,
+              deliveredSequence: requested,
+              pendingBytes: 0,
+            };
+            const previousAttachment = session.attachments.get(input.attachmentId);
+            const previousConnectionState = session.summary.connectionState;
+            const previousAttentionState = session.summary.attentionState;
+            session.attachments.set(input.attachmentId, attachment);
+            session.summary.connectionState = complete ? "connected" : "incomplete_replay";
+            try {
+              publish(attachment, {
+                version: TERMINAL_PROTOCOL_VERSION,
+                type: "snapshot",
+                terminalId: input.terminalId,
+                earliestRetainedSequence: earliest,
+                snapshotSequenceEnd: session.nextSequence,
+                lifecycle: session.summary.lifecycle,
+                complete,
+              });
+              flushAttachment(session, attachment, true);
+            } catch (cause) {
+              if (previousAttachment) {
+                session.attachments.set(input.attachmentId, previousAttachment);
+              } else {
+                session.attachments.delete(input.attachmentId);
+              }
+              session.summary.connectionState = previousConnectionState;
+              session.summary.attentionState = previousAttentionState;
+              throw cause;
+            }
+          },
+          catch: (cause) => {
+            if (cause instanceof TerminalServiceError) return cause;
+            const message = cause instanceof Error ? cause.message : String(cause);
+            return terminalFailure("protocol_error", "attach", message, input.terminalId, cause);
+          },
         }),
       write: (terminalId, data) =>
         Effect.gen(function* () {

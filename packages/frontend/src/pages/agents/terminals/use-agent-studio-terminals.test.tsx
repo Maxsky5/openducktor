@@ -291,10 +291,12 @@ describe("useAgentStudioTerminals", () => {
       chatInput.focus();
       expect(document.activeElement).toBe(chatInput);
 
-      view.rerender(
-        <QueryProvider useIsolatedClient>
-          <Harness taskId="task-b" />
-        </QueryProvider>,
+      await act(async () =>
+        view.rerender(
+          <QueryProvider useIsolatedClient>
+            <Harness taskId="task-b" />
+          </QueryProvider>,
+        ),
       );
       expect(getLatest().scopeKey).toBe("/repo:task-b");
       expect(getLatest().tabs).toEqual([]);
@@ -310,10 +312,12 @@ describe("useAgentStudioTerminals", () => {
       expect(getLatest().focusRequest).toBe(0);
       expect(document.activeElement).toBe(chatInput);
 
-      view.rerender(
-        <QueryProvider useIsolatedClient>
-          <Harness taskId="task-a" />
-        </QueryProvider>,
+      await act(async () =>
+        view.rerender(
+          <QueryProvider useIsolatedClient>
+            <Harness taskId="task-a" />
+          </QueryProvider>,
+        ),
       );
       await waitFor(
         () => {
