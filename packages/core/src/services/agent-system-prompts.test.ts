@@ -3,6 +3,7 @@ import {
   buildAgentKickoffPrompt,
   buildAgentKickoffPromptBundle,
   buildAgentMessagePrompt,
+  buildAgentMessagePromptBundle,
   buildAgentSystemPrompt,
   buildAgentSystemPromptBundle,
   buildReadOnlyPermissionRejectionMessage,
@@ -518,7 +519,7 @@ describe("kickoff and permission prompts", () => {
     );
   });
 
-  test("builds git conflict resolution message with git context", () => {
+  test("builds a concise git conflict resolution message with useful conflict context", () => {
     const prompt = buildAgentMessagePrompt({
       role: "build",
       templateId: "message.build_rebase_conflict_resolution",
@@ -535,16 +536,104 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(prompt, [
-      "Resolve the current git conflict in this worktree without losing intended behavior.",
+      "Resolve the conflicts below and finish the interrupted git operation.",
       "Git context:",
-      "Conflict workflow:",
-      "Understand both sides of the conflict and the interrupted operation before editing.",
-      "Use taskId task-1",
+      "- Operation: direct merge (rebase)",
+      "- Current branch: feature/task-1",
+      "- Target branch: origin/main",
+      "- Conflicted files:",
+      "- src/main.ts",
+      "- src/lib.ts",
+      "inspect the live git state and relevant history",
+      "Understand the intent of both sides",
+      "preserve compatible changes",
+      "avoid unrelated edits",
+      "Make only the changes needed to resolve the conflicts, then run the relevant checks",
+      "If you cannot finish safely, explain the blocker and stop",
+      "Do not abort the git operation unless explicitly asked",
+      "summarize what you resolved and which checks passed",
+      "Use taskId task-1 for any odt_* tool calls.",
     ]);
-    expect(prompt).toContain("direct merge (rebase)");
-    expect(prompt).toContain("feature/task-1");
-    expect(prompt).toContain("origin/main");
-    expect(prompt).toContain("- src/main.ts");
+    expect(prompt).not.toContain("CONFLICT (content)");
+  });
+
+  test("omits raw git output while retaining conflict metadata", () => {
+    const buildPrompt = (conflictOutput: string) =>
+      buildAgentMessagePrompt({
+        role: "build",
+        templateId: "message.build_rebase_conflict_resolution",
+        task: {
+          taskId: "task-bounded",
+        },
+        git: {
+          operationLabel: "rebase",
+          currentBranch: "feature/task-bounded",
+          targetBranch: "origin/main",
+          conflictedFiles: ["src/conflict-a.ts", "src/conflict-b.ts"],
+          conflictOutput,
+        },
+      });
+    const smallPrompt = buildPrompt("SMALL_OUTPUT_SENTINEL");
+    const largePrompt = buildPrompt(`LARGE_OUTPUT_SENTINEL_${"x".repeat(10_000)}`);
+
+    expect(largePrompt).toBe(smallPrompt);
+    expectPromptToContainAll(smallPrompt, [
+      "Operation: rebase",
+      "Current branch: feature/task-bounded",
+      "Target branch: origin/main",
+      "src/conflict-a.ts",
+      "src/conflict-b.ts",
+      "task-bounded",
+      "odt_*",
+    ]);
+
+    for (const sentinel of ["SMALL_OUTPUT_SENTINEL", "LARGE_OUTPUT_SENTINEL"]) {
+      expect(smallPrompt).not.toContain(sentinel);
+      expect(largePrompt).not.toContain(sentinel);
+    }
+  });
+
+  test("keeps git placeholders available to a stale enabled override", () => {
+    const result = buildAgentMessagePromptBundle({
+      role: "build",
+      templateId: "message.build_rebase_conflict_resolution",
+      task: {
+        taskId: "OVERRIDE_TASK_SENTINEL",
+      },
+      git: {
+        operationLabel: "OVERRIDE_OPERATION_SENTINEL",
+        currentBranch: "OVERRIDE_CURRENT_BRANCH_SENTINEL",
+        targetBranch: "OVERRIDE_TARGET_BRANCH_SENTINEL",
+        conflictedFiles: ["OVERRIDE_FILE_SENTINEL.ts"],
+        conflictOutput: "OVERRIDE_OUTPUT_SENTINEL",
+      },
+      overrides: {
+        "message.build_rebase_conflict_resolution": {
+          template:
+            "{{git.operationLabel}}\n{{git.currentBranch}}\n{{git.targetBranch}}\n{{git.conflictedFiles}}\n{{git.conflictOutput}}\n{{task.id}}",
+          baseVersion: 2,
+          enabled: true,
+        },
+      },
+    });
+
+    expectPromptToContainAll(result.prompt, [
+      "OVERRIDE_OPERATION_SENTINEL",
+      "OVERRIDE_CURRENT_BRANCH_SENTINEL",
+      "OVERRIDE_TARGET_BRANCH_SENTINEL",
+      "OVERRIDE_FILE_SENTINEL.ts",
+      "OVERRIDE_OUTPUT_SENTINEL",
+      "OVERRIDE_TASK_SENTINEL",
+    ]);
+    expect(result.templates[0]?.source).toBe("override");
+    expect(result.warnings).toEqual([
+      {
+        type: "override_base_version_mismatch",
+        templateId: "message.build_rebase_conflict_resolution",
+        builtinVersion: 3,
+        overrideBaseVersion: 2,
+      },
+    ]);
   });
 
   test("rejects git conflict resolution message when required git context is missing", () => {
