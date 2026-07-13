@@ -19,6 +19,10 @@ type RuntimeTranscriptLiveState = {
   error: string | null;
 };
 
+type RuntimeTranscriptLiveStateUpdater = (
+  current: RuntimeTranscriptLiveState | null,
+) => RuntimeTranscriptLiveState | null;
+
 type RuntimeTranscriptLiveOverlay = {
   session: AgentSessionState | null;
   interactionSession: AgentSessionState | null;
@@ -109,36 +113,44 @@ export function useRuntimeTranscriptLiveOverlay({
   const replyAgentApprovalRef = useRef(replyAgentApproval);
   const answerAgentQuestionRef = useRef(answerAgentQuestion);
   const subscribeSessionEventsRef = useRef(subscribeSessionEvents);
-  baseSessionRef.current = baseSession;
-  replyAgentApprovalRef.current = replyAgentApproval;
-  answerAgentQuestionRef.current = answerAgentQuestion;
-  subscribeSessionEventsRef.current = subscribeSessionEvents;
+
+  const commitLiveState = useCallback((nextState: RuntimeTranscriptLiveState | null): void => {
+    liveStateRef.current = nextState;
+    setLiveState(nextState);
+  }, []);
+
+  const updateLiveState = useCallback(
+    (updater: RuntimeTranscriptLiveStateUpdater): void => {
+      commitLiveState(updater(liveStateRef.current));
+    },
+    [commitLiveState],
+  );
 
   useEffect(() => {
-    liveStateRef.current = liveState;
-  }, [liveState]);
+    baseSessionRef.current = baseSession;
+    replyAgentApprovalRef.current = replyAgentApproval;
+    answerAgentQuestionRef.current = answerAgentQuestion;
+    subscribeSessionEventsRef.current = subscribeSessionEvents;
+  }, [answerAgentQuestion, baseSession, replyAgentApproval, subscribeSessionEvents]);
 
   useEffect(() => {
     if (!baseSession || target === null) {
       return;
     }
-    setLiveState((current) => {
+    updateLiveState((current) => {
       if (!current?.hasRuntimeEvents || !matchesAgentSessionIdentity(current.session, target)) {
         return current;
       }
-      const nextState = {
+      return {
         ...current,
         session: mergeBaseSessionIntoLiveOverlay(baseSession, current.session),
       };
-      liveStateRef.current = nextState;
-      return nextState;
     });
-  }, [baseSession, target]);
+  }, [baseSession, target, updateLiveState]);
 
   useEffect(() => {
     if (!shouldObserve || repoPath === null || target === null || sessionRef === null) {
-      liveStateRef.current = null;
-      setLiveState(null);
+      commitLiveState(null);
       return;
     }
 
@@ -157,12 +169,7 @@ export function useRuntimeTranscriptLiveOverlay({
       return createEmptyReadonlyRuntimeSessionState(target);
     };
 
-    const setNextState = (nextState: RuntimeTranscriptLiveState): void => {
-      liveStateRef.current = nextState;
-      setLiveState(nextState);
-    };
-
-    setNextState({
+    commitLiveState({
       session: ensureSession(),
       hasRuntimeEvents: false,
       error: null,
@@ -175,7 +182,7 @@ export function useRuntimeTranscriptLiveOverlay({
       readSession: () => liveStateRef.current?.session ?? null,
       applySessionEvent: (updater) => {
         const nextSession = updater(ensureSession());
-        setNextState({
+        commitLiveState({
           session: nextSession,
           hasRuntimeEvents: true,
           error: null,
@@ -194,7 +201,7 @@ export function useRuntimeTranscriptLiveOverlay({
         if (isCancelled) {
           return;
         }
-        setNextState({
+        commitLiveState({
           session: ensureSession(),
           hasRuntimeEvents: false,
           error: errorMessageFromUnknown(error, "Failed to subscribe to transcript updates."),
@@ -205,27 +212,25 @@ export function useRuntimeTranscriptLiveOverlay({
       isCancelled = true;
       unsubscribe?.();
     };
-  }, [repoPath, sessionRef, shouldObserve, target]);
+  }, [commitLiveState, repoPath, sessionRef, shouldObserve, target]);
 
   useEffect(() => {
     if (!shouldMergeHistory || target === null || !history) {
       return;
     }
 
-    setLiveState((current) => {
+    updateLiveState((current) => {
       const currentSession =
         current?.session && matchesAgentSessionIdentity(current.session, target)
           ? current.session
           : createEmptyReadonlyRuntimeSessionState(target);
-      const nextState: RuntimeTranscriptLiveState = {
+      return {
         session: mergeReadonlyRuntimeHistory(currentSession, history),
         hasRuntimeEvents: current?.hasRuntimeEvents ?? false,
         error: current?.error ?? null,
       };
-      liveStateRef.current = nextState;
-      return nextState;
     });
-  }, [history, shouldMergeHistory, target]);
+  }, [history, shouldMergeHistory, target, updateLiveState]);
 
   const replyOverlayApproval = useCallback<AgentOperationsContextValue["replyAgentApproval"]>(
     async (_identity, request, outcome, message) => {
@@ -233,11 +238,11 @@ export function useRuntimeTranscriptLiveOverlay({
         throw new Error("Cannot reply to a transcript approval without a runtime session ref.");
       }
       await replyAgentApprovalRef.current(sessionRef, request, outcome, message);
-      setLiveState((current) => {
+      updateLiveState((current) => {
         if (!current || !matchesAgentSessionIdentity(current.session, sessionRef)) {
           return current;
         }
-        const nextState = {
+        return {
           ...current,
           session: {
             ...current.session,
@@ -246,11 +251,9 @@ export function useRuntimeTranscriptLiveOverlay({
             ),
           },
         };
-        liveStateRef.current = nextState;
-        return nextState;
       });
     },
-    [sessionRef],
+    [sessionRef, updateLiveState],
   );
 
   const answerOverlayQuestion = useCallback<AgentOperationsContextValue["answerAgentQuestion"]>(
@@ -259,11 +262,11 @@ export function useRuntimeTranscriptLiveOverlay({
         throw new Error("Cannot answer a transcript question without a runtime session ref.");
       }
       await answerAgentQuestionRef.current(sessionRef, request, answers);
-      setLiveState((current) => {
+      updateLiveState((current) => {
         if (!current || !matchesAgentSessionIdentity(current.session, sessionRef)) {
           return current;
         }
-        const nextState = {
+        return {
           ...current,
           session: {
             ...current.session,
@@ -272,11 +275,9 @@ export function useRuntimeTranscriptLiveOverlay({
             ),
           },
         };
-        liveStateRef.current = nextState;
-        return nextState;
       });
     },
-    [sessionRef],
+    [sessionRef, updateLiveState],
   );
 
   if (
