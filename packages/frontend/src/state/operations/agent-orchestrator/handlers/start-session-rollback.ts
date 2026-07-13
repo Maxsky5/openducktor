@@ -29,6 +29,17 @@ const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTa
   externalSessionId: startedCtx.summary.externalSessionId,
 });
 
+const describeRollbackStep = (
+  error: unknown,
+  failurePrefix: string,
+  successMessage: string,
+): string => {
+  if (error) {
+    return `${failurePrefix}: ${errorMessage(error)}.`;
+  }
+  return successMessage;
+};
+
 export const stopSessionOnStaleAndThrow = async ({
   reason,
   runtime,
@@ -128,22 +139,31 @@ export const rollbackRegisteredStartedSession = async ({
   }
 
   const progress = [
-    stopError
-      ? `Failed to stop the started session during rollback: ${errorMessage(stopError)}.`
-      : "The started session was stopped and removed locally.",
-    deleteError
-      ? `Failed to delete the durable session record: ${errorMessage(deleteError)}.`
-      : "The durable session record was deleted.",
-    ...(bootstrap
-      ? [
-          abortError
-            ? `Failed to roll back task worktree bootstrap: ${errorMessage(abortError)}.`
-            : "The task worktree bootstrap was rolled back.",
-        ]
-      : []),
-  ].join(" ");
+    describeRollbackStep(
+      stopError,
+      "Failed to stop the started session during rollback",
+      "The started session was stopped and removed locally.",
+    ),
+    describeRollbackStep(
+      deleteError,
+      "Failed to delete the durable session record",
+      "The durable session record was deleted.",
+    ),
+  ];
+  if (bootstrap) {
+    progress.push(
+      describeRollbackStep(
+        abortError,
+        "Failed to roll back task worktree bootstrap",
+        "The task worktree bootstrap was rolled back.",
+      ),
+    );
+  }
 
-  throw new Error(`${message} ${progress}`, cause instanceof Error ? { cause } : undefined);
+  throw new Error(
+    `${message} ${progress.join(" ")}`,
+    cause instanceof Error ? { cause } : undefined,
+  );
 };
 
 export const rollbackStartedSessionBeforeRegistration = async ({

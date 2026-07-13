@@ -20,13 +20,18 @@ export type TaskSessionBootstrapTerminalOutcome = {
   failureMessage?: string;
 };
 
+type TaskSessionBootstrapLock = {
+  bootstrapId: string;
+  role: AgentRole;
+};
+
 export type TaskSessionBootstrapCoordinator = ReturnType<
   typeof createTaskSessionBootstrapCoordinator
 >;
 
 export const createTaskSessionBootstrapCoordinator = () => {
   const reservations = new Map<string, TaskSessionBootstrapReservation>();
-  const bootstrapLocks = new Map<string, { bootstrapId: string; role: AgentRole }>();
+  const bootstrapLocks = new Map<string, TaskSessionBootstrapLock>();
   const lifecycleLocks = new Map<string, string>();
   const terminalOutcomes = new Map<string, TaskSessionBootstrapTerminalOutcome>();
   const key = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
@@ -99,20 +104,22 @@ export const createTaskSessionBootstrapCoordinator = () => {
         }),
       );
     }
-    const active = taskIds
-      .map((taskId) => ({ taskId, lock: bootstrapLocks.get(key(repoPath, taskId)) }))
-      .filter((entry) => Boolean(entry.lock));
-    if (active.length > 0) {
+    const activeBootstraps: Array<{ taskId: string; lock: TaskSessionBootstrapLock }> = [];
+    for (const taskId of taskIds) {
+      const lock = bootstrapLocks.get(key(repoPath, taskId));
+      if (lock) activeBootstraps.push({ taskId, lock });
+    }
+    if (activeBootstraps.length > 0) {
       return Effect.fail(
         new HostOperationError({
           operation: `task.${operation}.bootstrap_guard`,
-          message: `Cannot ${operation} while task session bootstrap is in progress for ${active
-            .map((entry) => `${entry.taskId} (${entry.lock?.role})`)
+          message: `Cannot ${operation} while task session bootstrap is in progress for ${activeBootstraps
+            .map((entry) => `${entry.taskId} (${entry.lock.role})`)
             .join(", ")}.`,
           details: {
             repoPath,
             taskIds,
-            activeBootstrapIds: active.map((entry) => entry.lock?.bootstrapId),
+            activeBootstrapIds: activeBootstraps.map((entry) => entry.lock.bootstrapId),
           },
         }),
       );
@@ -132,10 +139,12 @@ export const createTaskSessionBootstrapCoordinator = () => {
           reservation.bootstrapId,
         );
         if (current.state !== "active" || current.role !== reservation.role) {
+          let activeRole = reservation.role;
+          if (current.state === "active") activeRole = current.role;
           return yield* Effect.fail(
             new HostValidationError({
               field: "bootstrapId",
-              message: `Task session bootstrap reservation does not match the active ${current.state === "active" ? current.role : reservation.role} startup for task ${reservation.taskId}.`,
+              message: `Task session bootstrap reservation does not match the active ${activeRole} startup for task ${reservation.taskId}.`,
               details: {
                 repoPath: reservation.canonicalRepoPath,
                 taskId: reservation.taskId,
@@ -153,12 +162,14 @@ export const createTaskSessionBootstrapCoordinator = () => {
       const lifecycle = lifecycleLocks.get(taskKey);
       const active = bootstrapLocks.get(taskKey);
       if (lifecycle || active) {
+        let message = `Task session bootstrap is already in progress for task ${taskId} (${active?.role}).`;
+        if (lifecycle) {
+          message = `Cannot start task session bootstrap while ${lifecycle} is in progress for task ${taskId}.`;
+        }
         return Effect.fail(
           new HostOperationError({
             operation: "task.session_bootstrap.prepare",
-            message: lifecycle
-              ? `Cannot start task session bootstrap while ${lifecycle} is in progress for task ${taskId}.`
-              : `Task session bootstrap is already in progress for task ${taskId} (${active?.role}).`,
+            message,
             details: { repoPath, taskId, role, bootstrapId },
           }),
         );
