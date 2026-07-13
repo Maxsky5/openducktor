@@ -7,6 +7,7 @@ import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
 } from "./codex-session-runtime-snapshot-reader";
+import type { CodexSessionState } from "./types";
 
 const createChildThread = (): CodexThreadSnapshot => ({
   id: "child-thread",
@@ -26,7 +27,10 @@ const createInventory = (thread: CodexThreadSnapshot): CodexThreadInventory => (
   threadsById: new Map([[thread.id, thread]]),
 });
 
-const createDeps = (inventory: CodexThreadInventory): CodexSessionRuntimeSnapshotReaderDeps => ({
+const createDeps = (
+  inventory: CodexThreadInventory,
+  sessions: CodexSessionState[] = [],
+): CodexSessionRuntimeSnapshotReaderDeps => ({
   runtimeClients: {
     clientForRuntime: () => ({}) as never,
     resolve: async () => ({ runtimeId: "runtime-1", client: {} as never }),
@@ -36,9 +40,9 @@ const createDeps = (inventory: CodexThreadInventory): CodexSessionRuntimeSnapsho
     refresh: async () => inventory,
   } as never,
   sessions: {
-    get: () => undefined,
+    get: (threadId) => sessions.find((session) => session.threadId === threadId),
     values: function* () {
-      yield* [];
+      yield* sessions;
     },
   },
   pendingInput: new CodexPendingInputState(),
@@ -88,6 +92,49 @@ describe("Codex session runtime snapshot reader", () => {
     ).resolves.toEqual([
       expect.objectContaining({
         availability: "runtime",
+        classification: "idle",
+        parentExternalSessionId: "parent-thread",
+        ref: expect.objectContaining({ externalSessionId: "child-thread" }),
+      }),
+    ]);
+  });
+
+  test("settles a previously materialized child during repository hydration", async () => {
+    const child = {
+      ...createChildThread(),
+      status: codexThreadStatusSnapshot("notLoaded"),
+    };
+    const inventory = {
+      ...createInventory(child),
+      loadedIds: new Set<string>(),
+    };
+    const localChild: CodexSessionState = {
+      summary: {
+        externalSessionId: child.id,
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        role: null,
+        startedAt: child.startedAt,
+        status: "running",
+      },
+      systemPrompt: "",
+      role: null,
+      runtimeId: "runtime-1",
+      repoPath: "/repo",
+      threadId: child.id,
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      liveStatus: codexThreadStatusSnapshot("active"),
+    };
+
+    await expect(
+      listCodexSessionRuntimeSnapshots(createDeps(inventory, [localChild]), {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        directories: ["/repo"],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
         classification: "idle",
         parentExternalSessionId: "parent-thread",
         ref: expect.objectContaining({ externalSessionId: "child-thread" }),

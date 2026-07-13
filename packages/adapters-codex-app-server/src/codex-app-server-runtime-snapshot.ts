@@ -29,6 +29,17 @@ const resolveCodexRuntimeSnapshotSource = ({
   hasPendingInput,
   hasActiveTurn,
 }: ResolveCodexRuntimeSnapshotSourceInput): CodexRuntimeSnapshotSource => {
+  if (
+    thread &&
+    !threadIsLoaded &&
+    thread.cwd === session.workingDirectory &&
+    thread.status.classification === "idle" &&
+    (thread.parentThreadId ?? thread.subAgentSource?.parentThreadId) &&
+    !hasPendingInput &&
+    !hasActiveTurn
+  ) {
+    return { type: "thread", thread };
+  }
   if (!thread || !threadIsLoaded) {
     return session.liveStatus || hasPendingInput || hasActiveTurn
       ? { type: "local" }
