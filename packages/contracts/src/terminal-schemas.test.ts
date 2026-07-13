@@ -1,12 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import {
+  TERMINAL_ID_MAX_LENGTH,
   terminalCloseRequestSchema,
+  terminalIdSchema,
   terminalLaunchSpecSchema,
   terminalListFilterSchema,
   terminalSummarySchema,
 } from "./terminal-schemas";
 
 describe("terminal schemas", () => {
+  test("bounds opaque terminal ids", () => {
+    expect(terminalIdSchema.parse("a".repeat(TERMINAL_ID_MAX_LENGTH))).toHaveLength(
+      TERMINAL_ID_MAX_LENGTH,
+    );
+    expect(() => terminalIdSchema.parse("a".repeat(TERMINAL_ID_MAX_LENGTH + 1))).toThrow();
+  });
+
   test("requires a nonblank initial directory and explicit context", () => {
     expect(terminalLaunchSpecSchema.parse({ workingDir: "/repo", context: {} })).toEqual({
       workingDir: "/repo",

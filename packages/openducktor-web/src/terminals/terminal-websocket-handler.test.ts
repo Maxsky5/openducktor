@@ -156,6 +156,50 @@ describe("terminalWebSocketHandler", () => {
     expect(oversized.closed).toEqual([[1009, "Invalid terminal frame."]]);
   });
 
+  test("does not retain failed terminal attachments", async () => {
+    const service = {
+      attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
+        Effect.fail(
+          new TerminalServiceError({
+            code: "terminal_not_found",
+            operation: "attach",
+            message: `Terminal not found: ${terminalId}`,
+            terminalId,
+          }),
+        ),
+    } as unknown as TerminalService;
+    const harness = makeSocket(service);
+
+    for (let index = 0; index < 100; index += 1) {
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(
+          encodeTerminalProtocolFrame({
+            message: {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "attach",
+              terminalId: `missing-${index}`,
+              lastConsumedSequence: null,
+            },
+            payload: new Uint8Array(),
+          }),
+        ),
+      );
+    }
+    await Bun.sleep(10);
+
+    expect(harness.data.attachments.size).toBe(0);
+    expect(harness.sent.map((frame) => decodeTerminalProtocolFrame(frame).message)).toHaveLength(
+      100,
+    );
+    expect(
+      harness.sent.every((frame) => {
+        const message = decodeTerminalProtocolFrame(frame).message;
+        return message.type === "protocol_error" && message.failure.code === "terminal_forgotten";
+      }),
+    ).toBe(true);
+  });
+
   test("closes instead of growing the outbound queue past its byte bound", async () => {
     const payload = new Uint8Array(700 * 1024);
     const service = {

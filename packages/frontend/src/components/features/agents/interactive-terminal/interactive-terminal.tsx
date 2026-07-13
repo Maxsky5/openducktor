@@ -39,6 +39,7 @@ export function InteractiveTerminal({
   onAttention,
   onConnectionState,
   onLifecycle,
+  onForgotten,
 }: {
   terminalId: string;
   controller: TerminalTransportController;
@@ -47,15 +48,16 @@ export function InteractiveTerminal({
   onAttention: (message: string | null) => void;
   onConnectionState: (state: TerminalConnectionState) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
+  onForgotten: (message: string) => void;
 }): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
-  const callbacksRef = useRef({ onAttention, onConnectionState, onLifecycle });
+  const callbacksRef = useRef({ onAttention, onConnectionState, onLifecycle, onForgotten });
   const [interactionError, setInteractionError] = useState<string | null>(null);
 
   useEffect(() => {
-    callbacksRef.current = { onAttention, onConnectionState, onLifecycle };
-  }, [onAttention, onConnectionState, onLifecycle]);
+    callbacksRef.current = { onAttention, onConnectionState, onLifecycle, onForgotten };
+  }, [onAttention, onConnectionState, onForgotten, onLifecycle]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -113,6 +115,8 @@ export function InteractiveTerminal({
           onAttention: callbacksRef.current.onAttention,
           onConnectionState: callbacksRef.current.onConnectionState,
           onLifecycle: callbacksRef.current.onLifecycle,
+          onForgotten: callbacksRef.current.onForgotten,
+          onFailure: callbacksRef.current.onAttention,
         })
       )
         return;

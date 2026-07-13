@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const terminalIdSchema = z.string().trim().min(1);
+export const TERMINAL_ID_MAX_LENGTH = 128;
+export const terminalIdSchema = z.string().trim().min(1).max(TERMINAL_ID_MAX_LENGTH);
 export const terminalTaskIdSchema = z.string().trim().min(1);
 
 export const terminalContextSchema = z

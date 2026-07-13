@@ -58,7 +58,9 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       isVisible: true,
       isLoading: false,
       isCreating: false,
+      runningCount: 0,
       connectionState: "connected",
+      transportError: null,
       focusRequest: 1,
       controller: null,
       onToggle: () => undefined,
@@ -68,6 +70,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onRetryCreate: () => undefined,
       onClose: async () => undefined,
       onReconnect: () => undefined,
+      onLifecycle: () => undefined,
+      onForgotten: () => undefined,
     };
     const renderWorkspace = (isVisible: boolean) =>
       createElement(AgentsPageWorkspace, {
@@ -113,7 +117,9 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       isVisible: true,
       isLoading: false,
       isCreating: false,
+      runningCount: 0,
       connectionState: "connected",
+      transportError: null,
       focusRequest: 1,
       controller: null,
       onToggle: () => undefined,
@@ -123,6 +129,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onRetryCreate: () => undefined,
       onClose: async () => undefined,
       onReconnect: () => undefined,
+      onLifecycle: () => undefined,
+      onForgotten: () => undefined,
     };
     const view = render(
       createElement(AgentsPageWorkspace, {

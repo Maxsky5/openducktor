@@ -179,6 +179,29 @@ describe("TerminalService", () => {
     ).rejects.toThrow("beyond the published sequence");
   });
 
+  test("rolls back an attachment when its initial sink throws", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    let sinkCalls = 0;
+
+    await expect(
+      Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId: "broken-renderer",
+          lastConsumedSequence: 0,
+          sink: () => {
+            sinkCalls += 1;
+            throw new Error("socket closed");
+          },
+        }),
+      ),
+    ).rejects.toThrow("socket closed");
+
+    pty.emit(new Uint8Array([1]));
+    expect(sinkCalls).toBe(1);
+  });
+
   test("updates started-directory availability without replacing the terminal", async () => {
     directoryAvailable = true;
     const { service } = await makeService();

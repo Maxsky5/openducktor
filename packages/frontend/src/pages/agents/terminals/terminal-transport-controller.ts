@@ -2,6 +2,7 @@ import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
   TERMINAL_PROTOCOL_VERSION,
+  type TerminalFailure,
   type TerminalServerMessage,
 } from "@openducktor/contracts";
 import type {
@@ -17,6 +18,7 @@ export type TerminalTransportController = ReturnType<typeof createTerminalTransp
 export const createTerminalTransportController = (
   bridge: TerminalBridge,
   onStateChange: (state: TerminalTransportState) => void,
+  onProtocolFailure: (failure: TerminalFailure) => void = () => undefined,
 ) => {
   const listeners = new Map<string, Set<TerminalFrameListener>>();
   const consumedSequences = new Map<string, number>();
@@ -65,6 +67,14 @@ export const createTerminalTransportController = (
         decoded.message.type === "detach"
       ) {
         throw new Error("Terminal transport received a client-directed frame.");
+      }
+      if (decoded.message.type === "protocol_error" && !decoded.message.terminalId) {
+        connection?.close();
+        connection = null;
+        pendingConnection = null;
+        onStateChange("disconnected");
+        onProtocolFailure(decoded.message.failure);
+        return;
       }
       for (const listener of listeners.get(decoded.message.terminalId ?? "") ?? []) {
         listener(decoded.message, decoded.payload);

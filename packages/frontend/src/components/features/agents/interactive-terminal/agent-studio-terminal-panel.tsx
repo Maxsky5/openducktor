@@ -23,7 +23,20 @@ const lifecycleText = (tab: AgentStudioTerminalTab): string => {
   if (tab.requestState === "unsupported_runtime") return "Unsupported runtime";
   if (tab.requestState === "creation_failed") return "Creation failed";
   if (tab.requestState === "lost") return "Lost after host restart";
-  return tab.summary?.lifecycle === "exited" ? "Exited" : "Running";
+  if (tab.lifecycle === "starting") return "Starting";
+  if (tab.lifecycle === "closing") return "Closing";
+  if (tab.lifecycle === "close_failed") return "Close failed";
+  if (tab.lifecycle === "exited") return "Exited";
+  return "Running";
+};
+
+const connectionText = (
+  tab: AgentStudioTerminalTab,
+  model: AgentStudioTerminalPanelModel,
+  connectionByTerminal: Record<string, TerminalConnectionState>,
+): TerminalConnectionState => {
+  if (model.connectionState === "disconnected" || !tab.terminalId) return "disconnected";
+  return connectionByTerminal[tab.terminalId] ?? "attaching";
 };
 
 function TerminalViewport({
@@ -33,6 +46,7 @@ function TerminalViewport({
   onAttention,
   onConnectionState,
   onLifecycle,
+  onForgotten,
 }: {
   tab: AgentStudioTerminalTab;
   model: AgentStudioTerminalPanelModel;
@@ -40,6 +54,7 @@ function TerminalViewport({
   onAttention: (tabId: string, message: string | null) => void;
   onConnectionState: (terminalId: string, state: TerminalConnectionState) => void;
   onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle, exitText: string | null) => void;
+  onForgotten: (terminalId: string, message: string) => void;
 }): ReactElement {
   const handleAttention = useCallback(
     (message: string | null) => onAttention(tab.tabId, message),
@@ -56,6 +71,12 @@ function TerminalViewport({
       if (tab.terminalId) onLifecycle(tab.terminalId, lifecycle, exitText);
     },
     [onLifecycle, tab.terminalId],
+  );
+  const handleForgotten = useCallback(
+    (message: string) => {
+      if (tab.terminalId) onForgotten(tab.terminalId, message);
+    },
+    [onForgotten, tab.terminalId],
   );
   if (tab.error) {
     return (
@@ -85,6 +106,7 @@ function TerminalViewport({
       onAttention={handleAttention}
       onConnectionState={handleConnectionState}
       onLifecycle={handleLifecycle}
+      onForgotten={handleForgotten}
     />
   );
 }
@@ -100,9 +122,6 @@ export function AgentStudioTerminalPanel({
   const [connectionByTerminal, setConnectionByTerminal] = useState<
     Record<string, TerminalConnectionState>
   >({});
-  const [lifecycleByTerminal, setLifecycleByTerminal] = useState<Record<string, TerminalLifecycle>>(
-    {},
-  );
   const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
   const setTabAttention = useCallback((tabId: string, message: string | null): void => {
     setAttentionByTab((current) => ({ ...current, [tabId]: message }));
@@ -115,21 +134,16 @@ export function AgentStudioTerminalPanel({
   );
   const setTerminalLifecycle = useCallback(
     (terminalId: string, lifecycle: TerminalLifecycle, exitText: string | null): void => {
-      setLifecycleByTerminal((current) => ({ ...current, [terminalId]: lifecycle }));
+      model.onLifecycle(terminalId, lifecycle);
       const tab = model.tabs.find((candidate) => candidate.terminalId === terminalId);
       if (tab && exitText) setTabAttention(tab.tabId, exitText);
     },
-    [model.tabs, setTabAttention],
+    [model, setTabAttention],
   );
   const closeTab = async (tab: AgentStudioTerminalTab): Promise<void> => {
     try {
       setCloseError(null);
-      const lifecycle = tab.terminalId ? lifecycleByTerminal[tab.terminalId] : undefined;
-      if (
-        lifecycle === "exited" ||
-        tab.summary?.lifecycle === "exited" ||
-        tab.terminalId === null
-      ) {
+      if (tab.lifecycle === "exited" || tab.terminalId === null) {
         await model.onClose(tab, false);
         return;
       }
@@ -190,9 +204,7 @@ export function AgentStudioTerminalPanel({
             <p className="text-xs text-muted-foreground">No terminals for this task.</p>
           )}
         </div>
-        <Badge variant="secondary">
-          {model.tabs.filter((tab) => tab.summary?.lifecycle === "running").length} running
-        </Badge>
+        <Badge variant="secondary">{model.runningCount} running</Badge>
         {model.connectionState === "disconnected" ? (
           <Button type="button" size="sm" variant="outline" onClick={model.onReconnect}>
             <RotateCw data-icon="inline-start" />
@@ -219,19 +231,9 @@ export function AgentStudioTerminalPanel({
             <span className="min-w-0 truncate text-muted-foreground">
               Started in: {activeTab.summary?.initialWorkingDir ?? "Not started"}
             </span>
+            <Badge variant="outline">Lifecycle: {lifecycleText(activeTab)}</Badge>
             <Badge variant="outline">
-              Lifecycle:{" "}
-              {activeTab.terminalId
-                ? (lifecycleByTerminal[activeTab.terminalId] ?? lifecycleText(activeTab))
-                : lifecycleText(activeTab)}
-            </Badge>
-            <Badge variant="outline">
-              Connection:{" "}
-              {model.connectionState === "disconnected"
-                ? "disconnected"
-                : activeTab.terminalId
-                  ? (connectionByTerminal[activeTab.terminalId] ?? "attaching")
-                  : "disconnected"}
+              Connection: {connectionText(activeTab, model, connectionByTerminal)}
             </Badge>
             {activeTab.summary && !activeTab.summary.initialWorkingDirAvailable ? (
               <Badge variant="danger">Started-in directory unavailable</Badge>
@@ -256,6 +258,7 @@ export function AgentStudioTerminalPanel({
                   onAttention={setTabAttention}
                   onConnectionState={setTerminalConnection}
                   onLifecycle={setTerminalLifecycle}
+                  onForgotten={model.onForgotten}
                 />
               </TabsContent>
             ))}
@@ -276,6 +279,11 @@ export function AgentStudioTerminalPanel({
           Create a terminal in this task worktree.
         </div>
       )}
+      {model.transportError ? (
+        <p className="border-t border-border px-3 py-1.5 text-xs text-destructive">
+          Terminal connection failed: {model.transportError}
+        </p>
+      ) : null}
 
       <Dialog
         open={closeCandidate !== null}

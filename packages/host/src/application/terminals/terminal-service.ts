@@ -265,18 +265,32 @@ export const createTerminalService = ({
             deliveredSequence: requested,
             pendingBytes: 0,
           };
+          const previousAttachment = session.attachments.get(input.attachmentId);
+          const previousConnectionState = session.summary.connectionState;
+          const previousAttentionState = session.summary.attentionState;
           session.attachments.set(input.attachmentId, attachment);
           session.summary.connectionState = complete ? "connected" : "incomplete_replay";
-          publish(attachment, {
-            version: TERMINAL_PROTOCOL_VERSION,
-            type: "snapshot",
-            terminalId: input.terminalId,
-            earliestRetainedSequence: earliest,
-            snapshotSequenceEnd: session.nextSequence,
-            lifecycle: session.summary.lifecycle,
-            complete,
-          });
-          flushAttachment(session, attachment, true);
+          try {
+            publish(attachment, {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "snapshot",
+              terminalId: input.terminalId,
+              earliestRetainedSequence: earliest,
+              snapshotSequenceEnd: session.nextSequence,
+              lifecycle: session.summary.lifecycle,
+              complete,
+            });
+            flushAttachment(session, attachment, true);
+          } catch (cause) {
+            if (previousAttachment) {
+              session.attachments.set(input.attachmentId, previousAttachment);
+            } else {
+              session.attachments.delete(input.attachmentId);
+            }
+            session.summary.connectionState = previousConnectionState;
+            session.summary.attentionState = previousAttentionState;
+            throw cause;
+          }
         }),
       write: (terminalId, data) =>
         Effect.gen(function* () {

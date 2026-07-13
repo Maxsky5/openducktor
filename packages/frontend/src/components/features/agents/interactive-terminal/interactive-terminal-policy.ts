@@ -109,6 +109,8 @@ export const handleTerminalMetadataFrame = (
     onAttention: (message: string | null) => void;
     onConnectionState: (state: TerminalConnectionState) => void;
     onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
+    onForgotten: (message: string) => void;
+    onFailure: (message: string) => void;
   },
 ): message is Exclude<TerminalServerMessage, { type: "output" }> => {
   if (message.type === "snapshot") {
@@ -135,6 +137,20 @@ export const handleTerminalMetadataFrame = (
       exitText = `Exited with code ${message.exitCode ?? "unknown"}${signalText}.`;
     }
     handlers.onLifecycle(message.lifecycle, exitText);
+    return true;
+  }
+  if (message.type === "terminal_forgotten") {
+    handlers.onConnectionState("disconnected");
+    handlers.onForgotten("This terminal is no longer available from the host.");
+    return true;
+  }
+  if (message.type === "protocol_error") {
+    if (message.failure.code === "terminal_forgotten") {
+      handlers.onConnectionState("disconnected");
+      handlers.onForgotten(message.failure.message);
+      return true;
+    }
+    handlers.onFailure(message.failure.message);
     return true;
   }
   return message.type !== "output";

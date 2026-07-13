@@ -628,6 +628,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "TERMINAL_PROTOCOL_MAX_ROWS",
   "TERMINAL_PROTOCOL_SUBPROTOCOL",
   "TERMINAL_PROTOCOL_VERSION",
+  "TERMINAL_ID_MAX_LENGTH",
   "decodeTerminalProtocolFrame",
   "encodeTerminalProtocolFrame",
   "terminalAttentionStateSchema",

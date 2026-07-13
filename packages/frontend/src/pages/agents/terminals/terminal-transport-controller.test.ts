@@ -140,6 +140,40 @@ describe("createTerminalTransportController", () => {
     ).toThrow("client-directed");
   });
 
+  test("reports connection-global protocol errors instead of dropping them", async () => {
+    let receive = (_frame: Uint8Array): void => {
+      throw new Error("Terminal bridge did not connect.");
+    };
+    const states: string[] = [];
+    const failures: string[] = [];
+    const bridge: TerminalBridge = {
+      connect: async (onFrame) => {
+        receive = onFrame;
+        return { send: async () => {}, close: () => {} };
+      },
+    };
+    const controller = createTerminalTransportController(
+      bridge,
+      (state) => states.push(state),
+      (failure) => failures.push(failure.message),
+    );
+    await controller.connect();
+
+    receive(
+      encodeTerminalProtocolFrame({
+        message: {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "protocol_error",
+          failure: { code: "protocol_error", message: "Connection protocol failed." },
+        },
+        payload: new Uint8Array(),
+      }),
+    );
+
+    expect(failures).toEqual(["Connection protocol failed."]);
+    expect(states).toContain("disconnected");
+  });
+
   test("reattaches from the beginning when the terminal emulator is replaced", async () => {
     const sent: Uint8Array[] = [];
     const bridge: TerminalBridge = {

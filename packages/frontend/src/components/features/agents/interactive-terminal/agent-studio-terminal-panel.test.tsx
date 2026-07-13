@@ -12,6 +12,8 @@ const model: AgentStudioTerminalPanelModel = {
       tabId: "lost:terminal-1",
       terminalId: null,
       summary: null,
+      lifecycle: null,
+      lifecycleFromEvent: false,
       label: "Shell 1",
       error: "This terminal belonged to a previous host session.",
       requestState: "lost",
@@ -21,7 +23,9 @@ const model: AgentStudioTerminalPanelModel = {
   isVisible: true,
   isLoading: false,
   isCreating: false,
+  runningCount: 0,
   connectionState: "disconnected",
+  transportError: null,
   focusRequest: 0,
   controller: null,
   onToggle: () => undefined,
@@ -31,6 +35,8 @@ const model: AgentStudioTerminalPanelModel = {
   onRetryCreate: () => undefined,
   onClose: async () => undefined,
   onReconnect: () => undefined,
+  onLifecycle: () => undefined,
+  onForgotten: () => undefined,
 };
 
 describe("AgentStudioTerminalPanel", () => {
@@ -42,6 +48,17 @@ describe("AgentStudioTerminalPanel", () => {
     expect(screen.queryByRole("button", { name: "Retry terminal creation" })).toBeNull();
   });
 
+  test("shows connection-global protocol failures", () => {
+    render(
+      <AgentStudioTerminalPanel
+        model={{ ...model, transportError: "Unsupported terminal protocol version." }}
+      />,
+    );
+    expect(
+      screen.getByText("Terminal connection failed: Unsupported terminal protocol version."),
+    ).toBeTruthy();
+  });
+
   test("enforces the eight-terminal tab limit", () => {
     render(
       <AgentStudioTerminalPanel
@@ -51,6 +68,8 @@ describe("AgentStudioTerminalPanel", () => {
             tabId: `lost:${index}`,
             terminalId: null,
             summary: null,
+            lifecycle: null,
+            lifecycleFromEvent: false,
             label: `Shell ${index + 1}`,
             error: "This terminal belonged to a previous host session.",
             requestState: "lost" as const,
@@ -83,11 +102,14 @@ describe("AgentStudioTerminalPanel", () => {
         model={{
           ...model,
           connectionState: "connected",
+          runningCount: 1,
           tabs: [
             {
               tabId: "tab:terminal-running",
               terminalId: summary.terminalId,
               summary,
+              lifecycle: "running",
+              lifecycleFromEvent: false,
               label: summary.label,
               error: null,
               requestState: "ready",
@@ -125,11 +147,14 @@ describe("AgentStudioTerminalPanel", () => {
           model={{
             ...model,
             connectionState: "connected",
+            runningCount: 1,
             tabs: [
               {
                 tabId: "tab:terminal-running",
                 terminalId: summary.terminalId,
                 summary,
+                lifecycle: "running",
+                lifecycleFromEvent: false,
                 label: summary.label,
                 error: null,
                 requestState: "ready",
@@ -150,7 +175,7 @@ describe("AgentStudioTerminalPanel", () => {
     expect(panel?.className).toContain("border-border");
   });
 
-  test("closes an exited terminal without termination confirmation", async () => {
+  test("uses an exited lifecycle frame across every surface despite a stale running summary", async () => {
     const onClose = mock(async () => undefined);
     const summary: TerminalSummary = {
       terminalId: "terminal-exited",
@@ -160,15 +185,10 @@ describe("AgentStudioTerminalPanel", () => {
       initialWorkingDir: "/repo",
       initialWorkingDirAvailable: true,
       createdAt: "2026-07-12T00:00:00.000Z",
-      lifecycle: "exited",
-      connectionState: "disconnected",
-      attentionState: "exited",
-      exit: {
-        exitCode: 0,
-        signal: null,
-        finalSequence: 10,
-        exitedAt: "2026-07-12T00:01:00.000Z",
-      },
+      lifecycle: "running",
+      connectionState: "connected",
+      attentionState: "none",
+      exit: null,
     };
     render(
       <AgentStudioTerminalPanel
@@ -179,6 +199,8 @@ describe("AgentStudioTerminalPanel", () => {
               tabId: "tab:terminal-exited",
               terminalId: summary.terminalId,
               summary,
+              lifecycle: "exited",
+              lifecycleFromEvent: true,
               label: summary.label,
               error: null,
               requestState: "ready",
@@ -189,6 +211,9 @@ describe("AgentStudioTerminalPanel", () => {
         }}
       />,
     );
+    expect(screen.getByRole("tab", { name: /Shell 1 Exited/ })).toBeTruthy();
+    expect(screen.getByText("0 running")).toBeTruthy();
+    expect(screen.getByText("Lifecycle: Exited")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close Shell 1" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), false));
     expect(screen.queryByText("Terminate and close Shell 1?")).toBeNull();

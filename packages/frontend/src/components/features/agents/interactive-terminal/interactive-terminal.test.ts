@@ -154,6 +154,8 @@ describe("InteractiveTerminal policies", () => {
       onAttention: (message: string | null) => events.push(`attention:${message}`),
       onConnectionState: (state: string) => events.push(`connection:${state}`),
       onLifecycle: (lifecycle: string) => events.push(`lifecycle:${lifecycle}`),
+      onForgotten: () => undefined,
+      onFailure: () => undefined,
     };
     expect(
       handleTerminalMetadataFrame(
@@ -201,6 +203,75 @@ describe("InteractiveTerminal policies", () => {
       "connection:incomplete_replay",
       "attention:Incomplete replay: output 0–10 is unavailable.",
       "output",
+    ]);
+  });
+
+  test("routes forgotten and protocol failure frames to visible failure handlers", () => {
+    const events: string[] = [];
+    const handlers = {
+      reset: () => undefined,
+      onAttention: (message: string | null) => events.push(`attention:${message}`),
+      onConnectionState: (state: string) => events.push(`connection:${state}`),
+      onLifecycle: () => undefined,
+      onForgotten: (message: string) => events.push(`forgotten:${message}`),
+      onFailure: (message: string) => events.push(`failure:${message}`),
+    };
+
+    handleTerminalMetadataFrame(
+      {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "terminal_forgotten",
+        terminalId: "terminal-1",
+      },
+      handlers,
+    );
+    handleTerminalMetadataFrame(
+      {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "protocol_error",
+        terminalId: "terminal-1",
+        failure: {
+          code: "terminal_forgotten",
+          message: "Terminal was lost during host restart.",
+          terminalId: "terminal-1",
+        },
+      },
+      handlers,
+    );
+    handleTerminalMetadataFrame(
+      {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "protocol_error",
+        terminalId: "terminal-1",
+        failure: {
+          code: "invalid_input",
+          message: "Terminal input was rejected.",
+          terminalId: "terminal-1",
+        },
+      },
+      handlers,
+    );
+    handleTerminalMetadataFrame(
+      {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "protocol_error",
+        terminalId: "terminal-1",
+        failure: {
+          code: "terminal_not_found",
+          message: "Terminal attachment was not found.",
+          terminalId: "terminal-1",
+        },
+      },
+      handlers,
+    );
+
+    expect(events).toEqual([
+      "connection:disconnected",
+      "forgotten:This terminal is no longer available from the host.",
+      "connection:disconnected",
+      "forgotten:Terminal was lost during host restart.",
+      "failure:Terminal input was rejected.",
+      "failure:Terminal attachment was not found.",
     ]);
   });
 

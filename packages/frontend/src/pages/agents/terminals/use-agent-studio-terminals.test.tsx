@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { TerminalSummary } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -76,6 +77,103 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
+  test("keeps a lifecycle frame authoritative over a stale terminal-list snapshot", async () => {
+    rememberVisibleTerminal("task-a");
+    const baseDependencies = createTerminalTestDependencies();
+    let terminalListCalls = 0;
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async (input) => {
+          terminalListCalls += 1;
+          return baseDependencies.hostClient.terminalList(input);
+        },
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    let refetchTerminalList = async (): Promise<void> => {
+      throw new Error("Query client is not ready.");
+    };
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      const queryClient = useQueryClient();
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      refetchTerminalList = async () => {
+        await queryClient.invalidateQueries();
+      };
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a"), {
+        timeout: 2_000,
+      });
+      expect(getLatest().tabs[0]).toHaveProperty("lifecycle", "running");
+
+      act(() => getLatest().onLifecycle("terminal-task-a", "exited"));
+      await act(refetchTerminalList);
+
+      expect(terminalListCalls).toBeGreaterThanOrEqual(2);
+      expect(getLatest().tabs[0]).toHaveProperty("lifecycle", "exited");
+      expect(getLatest().runningCount).toBe(0);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("turns a forgotten terminal into an explicit non-recoverable tab", async () => {
+    rememberVisibleTerminal("task-a");
+    const dependencies = createTerminalTestDependencies();
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a"), {
+        timeout: 2_000,
+      });
+
+      act(() =>
+        getLatest().onForgotten("terminal-task-a", "Terminal terminal-task-a was forgotten."),
+      );
+
+      expect(getLatest().tabs).toHaveLength(1);
+      expect(getLatest().tabs[0]).toMatchObject({
+        tabId: "lost:terminal-task-a",
+        terminalId: null,
+        lifecycle: null,
+        requestState: "lost",
+      });
+      expect(getLatest().tabs[0]?.error).toContain(
+        "cannot be recovered or recreated automatically",
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("restores a remembered non-first active terminal before persisting host state", async () => {
     const firstTerminal = summaryForTask("task-a");
     const secondTerminal: TerminalSummary = {

@@ -1,4 +1,4 @@
-import type { TerminalSummary } from "@openducktor/contracts";
+import type { TerminalLifecycle, TerminalSummary } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -28,6 +28,8 @@ export type AgentStudioTerminalTab = {
   tabId: string;
   terminalId: string | null;
   summary: TerminalSummary | null;
+  lifecycle: TerminalLifecycle | null;
+  lifecycleFromEvent: boolean;
   label: string;
   error: string | null;
   requestState: "ready" | "creating" | "creation_failed" | "unsupported_runtime" | "lost";
@@ -41,7 +43,9 @@ export type AgentStudioTerminalPanelModel = {
   isVisible: boolean;
   isLoading: boolean;
   isCreating: boolean;
+  runningCount: number;
   connectionState: "connected" | "disconnected";
+  transportError: string | null;
   focusRequest: number;
   controller: TerminalTransportController | null;
   onToggle: () => void;
@@ -51,6 +55,8 @@ export type AgentStudioTerminalPanelModel = {
   onRetryCreate: (tabId: string) => void;
   onClose: (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => Promise<void>;
   onReconnect: () => void;
+  onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) => void;
+  onForgotten: (terminalId: string, message: string) => void;
 };
 
 type ScopeState = {
@@ -107,14 +113,23 @@ const forgetRememberedTerminal = (repoPath: string, taskId: string, terminalId: 
   );
 };
 
-const toHostTab = (summary: TerminalSummary): AgentStudioTerminalTab => ({
-  tabId: `tab:${summary.terminalId}`,
-  terminalId: summary.terminalId,
-  summary,
-  label: summary.label,
-  error: null,
-  requestState: "ready",
-});
+const toHostTab = (
+  summary: TerminalSummary,
+  previous?: AgentStudioTerminalTab,
+): AgentStudioTerminalTab => {
+  const lifecycleFromEvent =
+    previous?.lifecycleFromEvent === true && previous.lifecycle !== summary.lifecycle;
+  return {
+    tabId: `tab:${summary.terminalId}`,
+    terminalId: summary.terminalId,
+    summary,
+    lifecycle: lifecycleFromEvent ? previous.lifecycle : summary.lifecycle,
+    lifecycleFromEvent,
+    label: summary.label,
+    error: null,
+    requestState: "ready",
+  };
+};
 
 const resolveActiveTabId = (
   tabs: AgentStudioTerminalTab[],
@@ -142,6 +157,8 @@ const beginTerminalCreation = (
       tabId,
       terminalId: null,
       summary: null,
+      lifecycle: null,
+      lifecycleFromEvent: false,
       label: "New shell",
       error: null,
       requestState: "creating",
@@ -170,9 +187,19 @@ export const useAgentStudioTerminals = (
     reconciledTerminalDataUpdatedAt: 0,
   });
   const [visibility, setVisibility] = useState({ scopeKey, value: false });
-  const [connectionState, setConnectionState] = useState<"connected" | "disconnected">(
-    "disconnected",
-  );
+  const [transportState, setTransportState] = useState<{
+    connection: "connected" | "disconnected";
+    error: string | null;
+  }>({ connection: "disconnected", error: null });
+  const handleTransportState = useCallback((state: "connected" | "disconnected"): void => {
+    setTransportState((current) => ({
+      connection: state,
+      error: state === "connected" ? null : current.error,
+    }));
+  }, []);
+  const handleProtocolFailure = useCallback((failure: { message: string }): void => {
+    setTransportState({ connection: "disconnected", error: failure.message });
+  }, []);
   const [focusState, setFocusState] = useState({ scopeKey, request: 0 });
   const controllerRef = useRef<{ scopeKey: string; value: TerminalTransportController } | null>(
     null,
@@ -215,6 +242,7 @@ export const useAgentStudioTerminals = (
     });
     setVisibility({ scopeKey, value: false });
     setFocusState({ scopeKey, request: 0 });
+    setTransportState((current) => ({ ...current, error: null }));
   }, [scopeKey]);
 
   useEffect(() => {
@@ -223,19 +251,25 @@ export const useAgentStudioTerminals = (
     if (!scopeKey) return;
     const controller = createTerminalTransportController(
       dependencies.terminalBridge,
-      setConnectionState,
+      handleTransportState,
+      handleProtocolFailure,
     );
     controllerRef.current = { scopeKey, value: controller };
-    void controller.connect().catch(() => setConnectionState("disconnected"));
+    void controller.connect().catch(() => handleTransportState("disconnected"));
     return () => controller.dispose();
-  }, [dependencies.terminalBridge, scopeKey]);
+  }, [dependencies.terminalBridge, handleProtocolFailure, handleTransportState, scopeKey]);
 
   useEffect(() => {
     if (!scopeKey || !repoPath || !taskId || !terminalQuery.data) return;
     setScopeState((current) => {
       if (current.scopeKey !== scopeKey) return current;
       const transient = current.tabs.filter((tab) => tab.terminalId === null);
-      const hostTabs = terminalQuery.data.terminals.map(toHostTab);
+      const currentTabsByTerminalId = new Map(
+        current.tabs.flatMap((tab) => (tab.terminalId ? [[tab.terminalId, tab] as const] : [])),
+      );
+      const hostTabs = terminalQuery.data.terminals.map((summary) =>
+        toHostTab(summary, currentTabsByTerminalId.get(summary.terminalId)),
+      );
       const preferences = readPreferences(repoPath, taskId);
       const hostTerminalIds = new Set(hostTabs.map((tab) => tab.terminalId));
       const lostTabs = (preferences?.terminals ?? [])
@@ -244,6 +278,8 @@ export const useAgentStudioTerminals = (
           tabId: `lost:${entry.terminalId}`,
           terminalId: null,
           summary: null,
+          lifecycle: null,
+          lifecycleFromEvent: false,
           label: entry.label,
           error: `This terminal is no longer available from host ${preferences?.hostInstanceId ?? "unknown"}. It cannot be recovered or recreated automatically. It started in ${entry.initialWorkingDir}.`,
           requestState: "lost",
@@ -403,7 +439,9 @@ export const useAgentStudioTerminals = (
       isVisible,
       isLoading: terminalQuery.isLoading || worktreeQuery.isLoading,
       isCreating: visibleState.tabs.some((tab) => tab.requestState === "creating"),
-      connectionState,
+      runningCount: visibleState.tabs.filter((tab) => tab.lifecycle === "running").length,
+      connectionState: transportState.connection,
+      transportError: transportState.error,
       focusRequest,
       controller: controllerRef.current?.scopeKey === scopeKey ? controllerRef.current.value : null,
       onToggle: togglePanel,
@@ -438,22 +476,60 @@ export const useAgentStudioTerminals = (
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),
           });
       },
-      onReconnect: () =>
+      onReconnect: () => {
+        setTransportState((current) => ({ ...current, error: null }));
         void controllerRef.current?.value
           .reconnect()
-          .catch(() => setConnectionState("disconnected")),
+          .catch(() => handleTransportState("disconnected"));
+      },
+      onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) =>
+        setScopeState((current) => ({
+          ...current,
+          tabs: current.tabs.map((tab) =>
+            tab.terminalId === terminalId ? { ...tab, lifecycle, lifecycleFromEvent: true } : tab,
+          ),
+        })),
+      onForgotten: (terminalId: string, message: string) => {
+        setScopeState((current) => {
+          const forgottenTab = current.tabs.find((tab) => tab.terminalId === terminalId);
+          if (!forgottenTab) return current;
+          const lostTabId = `lost:${terminalId}`;
+          return {
+            ...current,
+            tabs: current.tabs.map((tab) =>
+              tab.terminalId === terminalId
+                ? {
+                    ...tab,
+                    tabId: lostTabId,
+                    terminalId: null,
+                    summary: null,
+                    lifecycle: null,
+                    lifecycleFromEvent: false,
+                    error: `${message} It cannot be recovered or recreated automatically.`,
+                    requestState: "lost",
+                  }
+                : tab,
+            ),
+            activeTabId:
+              current.activeTabId === forgottenTab.tabId ? lostTabId : current.activeTabId,
+          };
+        });
+        if (repoPath && taskId) forgetRememberedTerminal(repoPath, taskId, terminalId);
+      },
     }),
     [
-      connectionState,
       createTerminal,
       dependencies.hostClient,
       focusRequest,
+      handleTransportState,
       isVisible,
       queryClient,
       repoPath,
       scopeKey,
       taskId,
       terminalQuery.isLoading,
+      transportState.connection,
+      transportState.error,
       togglePanel,
       visibleState.activeTabId,
       visibleState.tabs,

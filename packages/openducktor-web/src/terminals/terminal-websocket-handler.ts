@@ -1,6 +1,7 @@
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalClientMessage,
   type TerminalFailure,
@@ -89,13 +90,14 @@ const handleClientMessage = (
   const service = socket.data.terminalService;
   const id = attachmentId(socket.data, message.terminalId);
   if (message.type === "attach") {
-    socket.data.attachments.add(message.terminalId);
-    return service.attach({
-      terminalId: message.terminalId,
-      attachmentId: id,
-      lastConsumedSequence: message.lastConsumedSequence,
-      sink: (event, eventPayload) => sendMessage(socket, event, eventPayload),
-    });
+    return service
+      .attach({
+        terminalId: message.terminalId,
+        attachmentId: id,
+        lastConsumedSequence: message.lastConsumedSequence,
+        sink: (event, eventPayload) => sendMessage(socket, event, eventPayload),
+      })
+      .pipe(Effect.tap(() => Effect.sync(() => socket.data.attachments.add(message.terminalId))));
   }
   if (message.type === "input") return service.write(message.terminalId, payload);
   if (message.type === "resize") {
@@ -130,10 +132,16 @@ const runClientMessage = (
     );
   } catch (cause) {
     sendProtocolError(socket, {
-      code: raw.byteLength > 1024 * 1024 ? "message_too_large" : "protocol_error",
+      code:
+        raw.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES
+          ? "message_too_large"
+          : "protocol_error",
       message: cause instanceof Error ? cause.message : String(cause),
     });
-    socket.close(raw.byteLength > 1024 * 1024 ? 1009 : 1002, "Invalid terminal frame.");
+    socket.close(
+      raw.byteLength > TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES ? 1009 : 1002,
+      "Invalid terminal frame.",
+    );
     return;
   }
   if (!isClientMessage(decoded.message)) {
@@ -153,10 +161,15 @@ const runClientMessage = (
             typeof cause === "object" && cause !== null && "code" in cause
               ? terminalFailureCodeSchema.safeParse(cause.code)
               : null;
+          const code = parsedCode?.success ? parsedCode.data : "protocol_error";
+          const clientCode =
+            decoded.message.type === "attach" && code === "terminal_not_found"
+              ? "terminal_forgotten"
+              : code;
           sendProtocolError(
             socket,
             {
-              code: parsedCode?.success ? parsedCode.data : "protocol_error",
+              code: clientCode,
               message: cause instanceof Error ? cause.message : String(cause),
               terminalId,
             },
@@ -170,7 +183,7 @@ const runClientMessage = (
 
 export const terminalWebSocketHandler: Bun.WebSocketHandler<TerminalWebSocketData> = {
   perMessageDeflate: false,
-  maxPayloadLength: 1024 * 1024,
+  maxPayloadLength: TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   message: runClientMessage,
   drain(socket) {
     const data = socket.data;

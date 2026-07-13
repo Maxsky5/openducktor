@@ -246,8 +246,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
         terminalPanelToggleModel={{
           isVisible: terminalPanel.isVisible,
-          runningCount: terminalPanel.tabs.filter((tab) => tab.summary?.lifecycle === "running")
-            .length,
+          runningCount: terminalPanel.runningCount,
           disabled: terminalPanel.taskId === null,
           onToggle: terminalPanel.onToggle,
         }}
