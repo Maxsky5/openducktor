@@ -25,8 +25,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
   const queryClient = useQueryClient();
   const { data: settingsSnapshot } = useQuery(settingsSnapshotQueryOptions());
   const fallbackTheme = useMemo(() => readDocumentTheme(defaultTheme), [defaultTheme]);
-  const loadedTheme =
-    settingsSnapshot?.theme === "dark" ? "dark" : (settingsSnapshot?.theme ?? fallbackTheme);
+  const loadedTheme = settingsSnapshot?.theme ?? fallbackTheme;
   const [theme, selectOptimisticTheme] = useReducer(replaceTheme, loadedTheme);
   const persistedThemeRef = useRef(theme);
   const pendingThemeRef = useRef<Theme | null>(null);
