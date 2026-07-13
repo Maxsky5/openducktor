@@ -14,7 +14,7 @@ import {
   HOST_EVENT_CHANNELS,
   type HostRuntimeDistribution,
 } from "@openducktor/host";
-import { Effect } from "effect";
+import { Effect, Either } from "effect";
 import type {
   BrowserWindow as ElectronBrowserWindow,
   NativeImage as ElectronNativeImage,
@@ -48,6 +48,7 @@ import {
   type ElectronAppUpdateService,
 } from "./app-updates/electron-app-update-service";
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
+import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import {
@@ -607,17 +608,36 @@ const disposeActiveHostEffect = (reason: string): Effect.Effect<void, ElectronLi
   return disposeHostEffect(activeHostCommandRouter, reason);
 };
 
-const disposeActiveAppUpdateService = (): void => {
-  activeAppUpdateService?.dispose();
+const disposeActiveAppUpdateService = async (): Promise<void> => {
+  const service = activeAppUpdateService;
   activeAppUpdateService = null;
+  await service?.dispose();
 };
 
 const disposeActiveElectronRuntimeEffect = (
   reason: string,
 ): Effect.Effect<void, ElectronLifecycleError> =>
-  Effect.sync(disposeActiveAppUpdateService).pipe(
-    Effect.flatMap(() => disposeActiveHostEffect(reason)),
-  );
+  Effect.gen(function* () {
+    const updaterResult = yield* Effect.either(
+      Effect.tryPromise({
+        try: disposeActiveAppUpdateService,
+        catch: (cause) =>
+          new ElectronLifecycleError({
+            operation: "electron.main.dispose-app-updater",
+            message: errorMessage(cause),
+            reason,
+            cause,
+          }),
+      }),
+    );
+    const hostResult = yield* Effect.either(disposeActiveHostEffect(reason));
+    if (Either.isLeft(updaterResult)) {
+      return yield* Effect.fail(updaterResult.left);
+    }
+    if (Either.isLeft(hostResult)) {
+      return yield* Effect.fail(hostResult.left);
+    }
+  });
 
 const disposeActiveElectronRuntimeForShutdownEffect = (
   reason: string,
@@ -672,10 +692,23 @@ const configureElectronReadyRuntimeEffect = ({
   Effect.try({
     try: () => {
       const rendererSession = session.fromPartition(ELECTRON_RENDERER_SESSION_PARTITION);
+      if (activeAppUpdateService) {
+        throw new ElectronLifecycleError({
+          operation: "electron.main.configure-app-updater",
+          message: "Electron app updater is already configured.",
+        });
+      }
+      const currentVersion = app.getVersion();
+      const releaseSource = createGitHubReleaseSource({
+        fetch: globalThis.fetch,
+        owner: "Maxsky5",
+        repo: "openducktor",
+      });
+      const appUpdateAdapter = createElectronUpdaterAdapter({ currentVersion, releaseSource });
       const appUpdateService = createElectronAppUpdateService({
-        adapter: createElectronUpdaterAdapter(),
+        adapter: appUpdateAdapter,
         appImagePath: process.env.APPIMAGE,
-        currentVersion: app.getVersion(),
+        currentVersion,
         installDownloadedUpdate: (runInstall) =>
           shutdownController.shutdownHostAndRun({
             reason: "update-install",
@@ -686,7 +719,6 @@ const configureElectronReadyRuntimeEffect = ({
         platform: process.platform,
         resourcesPath: process.resourcesPath,
       });
-      disposeActiveAppUpdateService();
       activeAppUpdateService = appUpdateService;
       configureElectronLoopbackCorsPolicy(
         rendererSession,

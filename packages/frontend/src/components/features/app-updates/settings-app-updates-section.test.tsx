@@ -122,11 +122,11 @@ describe("SettingsAppUpdatesSection", () => {
     render(<SettingsAppUpdatesSection disabled={false} />);
 
     expect(await screen.findByText("67% downloaded")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("progressbar", { name: "Update download progress" })
-        .getAttribute("aria-valuetext"),
-    ).toBe("67% downloaded");
+    const progressbar = screen.getByRole("progressbar", { name: "Update download progress" });
+    expect(progressbar.getAttribute("aria-valuetext")).toBe("67% downloaded");
+    expect(progressbar.firstElementChild?.className).toContain("bg-sidebar-accent");
+    expect(progressbar.firstElementChild?.className).toContain("duration-150");
+    expect(progressbar.firstElementChild?.className).toContain("motion-reduce:transition-none");
 
     act(() => {
       appUpdates.emit({
@@ -174,7 +174,7 @@ describe("SettingsAppUpdatesSection", () => {
     configureShellBridge(createTestShellBridge(appUpdates));
     render(<SettingsAppUpdatesSection disabled={false} />);
 
-    expect(await screen.findByText("Relaunch required")).toBeTruthy();
+    expect(await screen.findByText("Install needs attention")).toBeTruthy();
     expect(screen.getByText("Quit and reopen OpenDucktor before trying again.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
   });

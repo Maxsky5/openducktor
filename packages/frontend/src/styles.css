@@ -5,7 +5,9 @@
 
 /* ── Shadcn Slate theme tokens ─────────────────────────────────────────── */
 
-:root {
+:root,
+.light {
+  color-scheme: light;
   --radius: 0.75rem;
 
   /* surfaces */
@@ -139,6 +141,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0.017 265.755); /* ~slate-950 */
   --foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
 

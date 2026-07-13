@@ -1,12 +1,13 @@
-import { Download, RefreshCw, RotateCw, X } from "lucide-react";
-import type { ReactElement } from "react";
+import { CircleAlert, Download, ExternalLink, RefreshCw, RotateCw, X } from "lucide-react";
+import type { MouseEvent, ReactElement } from "react";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { errorMessage as readErrorMessage } from "@/lib/errors";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
 import {
-  appUpdateErrorPanelClassName,
   canDownloadUpdate,
   canInstallUpdate,
   getAppUpdateAvailableVersion,
@@ -17,8 +18,50 @@ import {
   isActionableUpdateError,
   isManualUpdateCheckState,
 } from "./app-update-display";
+import { AppUpdateProgress } from "./app-update-progress";
 
 const promptStatuses = new Set(["available", "downloading", "downloaded"]);
+const RELEASES_URL = "https://github.com/Maxsky5/openducktor/releases";
+
+const openReleaseUrl = (url: string, failureMessage: string): void => {
+  void openExternalUrl(url).catch((cause) => {
+    toast.error(failureMessage, {
+      description: readErrorMessage(cause),
+    });
+  });
+};
+
+const releaseNotesUrl = (version: string): string =>
+  `${RELEASES_URL}/tag/v${encodeURIComponent(version)}`;
+
+const openLatestRelease = (): void => {
+  openReleaseUrl(`${RELEASES_URL}/latest`, "Failed to open the latest release");
+};
+
+function ReleaseNotesLink({ version }: { version: string }): ReactElement {
+  const url = releaseNotesUrl(version);
+  const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
+    event.preventDefault();
+    openReleaseUrl(url, "Failed to open release notes");
+  };
+  const openLinkFromAuxiliaryClick = (event: MouseEvent<HTMLAnchorElement>): void => {
+    if (event.button === 1) {
+      openLink(event);
+    }
+  };
+
+  return (
+    <a
+      href={url}
+      onClick={openLink}
+      onAuxClick={openLinkFromAuxiliaryClick}
+      className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+    >
+      Release note
+      <ExternalLink className="size-3.5" aria-hidden="true" />
+    </a>
+  );
+}
 
 const joinLiveRegionParts = (parts: Array<string | undefined>): string =>
   parts
@@ -61,86 +104,55 @@ export function AppUpdatePrompt(): ReactElement | null {
   const availableVersion = getAppUpdateAvailableVersion(state);
   const error = getAppUpdateError(state);
   const errorMessage = controller.commandError?.message ?? error?.message;
+  const installNeedsAttention =
+    state.status === "downloaded" && state.installRetryDisabled === true;
+  const releaseNotesVersion = promptStatuses.has(state.status) ? availableVersion : undefined;
+  const showDescription = state.status !== "available";
   const visibleVersionText = `Current ${state.currentVersion}${
     availableVersion ? ` · New ${availableVersion}` : ""
   }`;
   const liveRegionText = joinLiveRegionParts([
     display.label,
-    display.description,
+    showDescription ? display.description : undefined,
     visibleVersionText,
     errorMessage,
   ]);
 
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(420px,calc(100vw-2rem))]">
-      <Card className="pointer-events-auto rounded-lg border-border bg-card p-4 shadow-lg">
+    <div className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(360px,calc(100vw-2rem))]">
+      <Card className="light pointer-events-auto overflow-hidden border-border bg-popover shadow-lg backdrop-blur-none supports-[backdrop-filter]:bg-popover">
         <p role="status" aria-live="polite" className="sr-only">
           {liveRegionText}
         </p>
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={display.badgeVariant}>{display.label}</Badge>
-              {state.status === "checking" && <RefreshCw className="size-4 animate-spin" />}
+        <CardHeader className="flex-row items-center gap-3 px-4 pt-4">
+          <div
+            className={
+              errorMessage
+                ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive-surface text-destructive-surface-foreground"
+                : "flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground"
+            }
+          >
+            {errorMessage ? <CircleAlert /> : <Download />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-foreground">{display.label}</p>
+              {state.status === "checking" && <RefreshCw className="animate-spin" />}
             </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">{display.description}</p>
-              <p className="text-xs text-muted-foreground">{visibleVersionText}</p>
-            </div>
-            {showProgress && (
-              <div className="space-y-1.5">
-                <div
-                  className="h-2 overflow-hidden rounded-full bg-muted"
-                  role="progressbar"
-                  aria-label="Update download progress"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={progressPercent}
-                  aria-valuetext={`${progressPercent}% downloaded`}
-                >
-                  <div
-                    className="h-full bg-primary transition-[width]"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">{progressPercent}% downloaded</p>
-              </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {availableVersion
+                ? `${state.currentVersion} → ${availableVersion}`
+                : state.currentVersion}
+            </p>
+            {showDescription && (
+              <p className="mt-1 text-sm leading-5 text-muted-foreground">{display.description}</p>
             )}
-            {errorMessage && <p className={appUpdateErrorPanelClassName}>{errorMessage}</p>}
-            <div className="flex flex-wrap gap-2">
-              {canDownloadUpdate(state) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={isBusy}
-                  onClick={() => {
-                    void controller.download();
-                  }}
-                >
-                  <Download />
-                  Download Update
-                </Button>
-              )}
-              {canInstallUpdate(state) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={isBusy}
-                  onClick={() => {
-                    void controller.install();
-                  }}
-                >
-                  <RotateCw />
-                  Restart to Install
-                </Button>
-              )}
-            </div>
           </div>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8"
+            className="-mt-1 -mr-1 size-8 shrink-0"
             aria-label="Dismiss update prompt"
             onClick={() => {
               setDismissedKey(promptKey);
@@ -148,7 +160,63 @@ export function AppUpdatePrompt(): ReactElement | null {
           >
             <X />
           </Button>
-        </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 px-4 pt-3 pb-4">
+          {releaseNotesVersion && <ReleaseNotesLink version={releaseNotesVersion} />}
+          {showProgress && <AppUpdateProgress percent={progressPercent} />}
+          {errorMessage && (
+            <div className="flex items-start gap-2.5 rounded-md border border-destructive/30 bg-destructive-surface px-3 py-2.5 text-sm leading-5 text-destructive-surface-foreground">
+              <CircleAlert className="mt-0.5 shrink-0" />
+              <p className="max-h-32 min-w-0 overflow-y-auto break-words whitespace-pre-wrap">
+                {errorMessage}
+              </p>
+            </div>
+          )}
+          <div className="grid gap-2">
+            {canDownloadUpdate(state) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="accent"
+                className="w-full"
+                disabled={isBusy}
+                onClick={() => {
+                  void controller.download();
+                }}
+              >
+                <Download />
+                Download Update
+              </Button>
+            )}
+            {canInstallUpdate(state) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="accent"
+                className="w-full"
+                disabled={isBusy}
+                onClick={() => {
+                  void controller.install();
+                }}
+              >
+                <RotateCw />
+                Restart to Install
+              </Button>
+            )}
+            {installNeedsAttention && (
+              <Button
+                type="button"
+                size="sm"
+                variant="accent"
+                className="w-full"
+                onClick={openLatestRelease}
+              >
+                <ExternalLink data-icon="inline-start" />
+                Download Latest Release
+              </Button>
+            )}
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

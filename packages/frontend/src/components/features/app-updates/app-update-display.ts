@@ -15,7 +15,7 @@ export type AppUpdateBadgeVariant =
 
 export type AppUpdateStatusDisplay = {
   badgeVariant: AppUpdateBadgeVariant;
-  description: string;
+  description?: string;
   label: string;
 };
 
@@ -96,35 +96,32 @@ export const getAppUpdateStatusDisplay = (state: AppUpdateState): AppUpdateStatu
     return {
       badgeVariant: "warning",
       label: "Update available",
-      description: "Download starts only when you choose it.",
     };
   }
   if (state.status === "downloading") {
     return {
       badgeVariant: "secondary",
       label: "Downloading update",
-      description: "The update is downloading. Restart waits for your confirmation.",
     };
   }
   if (state.status === "downloaded") {
     if (state.installRetryDisabled === true) {
       return {
         badgeVariant: "danger",
-        label: "Relaunch required",
-        description: "Quit and reopen OpenDucktor before trying to install this update again.",
+        label: "Install needs attention",
+        description: "Automatic installation stopped.",
       };
     }
     if (state.installRequested === true) {
       return {
         badgeVariant: "secondary",
         label: "Installing update",
-        description: "OpenDucktor is handing off to the updater. Keep the app open.",
+        description: "Installing... Keep the app open.",
       };
     }
     return {
       badgeVariant: "success",
       label: "Ready to install",
-      description: "Restart OpenDucktor when you are ready to install the update.",
     };
   }
   if (state.status === "error") {

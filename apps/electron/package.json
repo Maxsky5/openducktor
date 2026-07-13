@@ -13,7 +13,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:main": "bun build --target=node --external electron --outfile dist/main.js src/main/main.ts",
+    "build:main": "bun run scripts/build-main.ts",
     "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
     "builder": "electron-builder",
@@ -35,6 +35,7 @@
     "@openducktor/host-client": "workspace:*",
     "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^26.1.0",
+    "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^6.0.3",
     "bun-types": "^1.3.14",
     "effect": "^3.21.4",
@@ -46,6 +47,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
+    "semver": "7.7.4",
     "yaml": "^2.9.0"
   }
 }

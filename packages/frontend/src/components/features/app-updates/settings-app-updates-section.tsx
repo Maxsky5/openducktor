@@ -13,29 +13,7 @@ import {
   getAppUpdateProgressPercent,
   getAppUpdateStatusDisplay,
 } from "./app-update-display";
-
-type AppUpdateProgressProps = {
-  percent: number;
-};
-
-function AppUpdateProgress({ percent }: AppUpdateProgressProps): ReactElement {
-  return (
-    <div className="space-y-1.5">
-      <div
-        className="h-2 overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-label="Update download progress"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(percent)}
-        aria-valuetext={`${Math.round(percent)}% downloaded`}
-      >
-        <div className="h-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
-      </div>
-      <p className="text-xs text-muted-foreground">{Math.round(percent)}% downloaded</p>
-    </div>
-  );
-}
+import { AppUpdateProgress } from "./app-update-progress";
 
 type VersionRowsProps = {
   state: AppUpdateState;
@@ -97,7 +75,9 @@ function SettingsAppUpdatesContent({
             <h3 className="text-sm font-semibold text-foreground">Desktop Updates</h3>
             <Badge variant={display.badgeVariant}>{display.label}</Badge>
           </div>
-          <p className="text-xs text-muted-foreground">{display.description}</p>
+          {display.description && (
+            <p className="text-xs text-muted-foreground">{display.description}</p>
+          )}
         </div>
         <Button
           type="button"

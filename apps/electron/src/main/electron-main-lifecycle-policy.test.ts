@@ -70,11 +70,22 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("appUpdateService.startBackgroundChecks()");
   });
 
+  test("startup does not initialize the native updater on the main-process path", () => {
+    const mainSource = readRepoFile("apps/electron/src/main/main.ts");
+    const nativeAdapterSource = readRepoFile(
+      "apps/electron/src/main/app-updates/electron-updater-adapter.ts",
+    );
+
+    expect(mainSource).toContain("createElectronUpdaterAdapter({ currentVersion, releaseSource })");
+    expect(nativeAdapterSource).not.toContain('import { autoUpdater } from "electron-updater"');
+    expect(nativeAdapterSource).toContain('await import("electron-updater")');
+  });
+
   test("app update service is disposed with the active Electron runtime", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
     expect(source).toContain("let activeAppUpdateService: ElectronAppUpdateService | null = null");
-    expect(source).toContain("activeAppUpdateService?.dispose()");
+    expect(source).toContain("await service?.dispose()");
     expect(source).toContain("disposeActiveElectronRuntimeEffect");
     expect(source).toContain(
       'cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure")',
@@ -359,7 +370,7 @@ describe("Electron main lifecycle policy", () => {
     await expect(
       controller.shutdownHostAndRun({
         reason: "update-install",
-        runAfterShutdown: () => {
+        runAfterShutdown: async () => {
           installCalls.push("install");
         },
       }),
@@ -371,7 +382,7 @@ describe("Electron main lifecycle policy", () => {
     await expect(
       controller.shutdownHostAndRun({
         reason: "update-install",
-        runAfterShutdown: () => {
+        runAfterShutdown: async () => {
           installCalls.push("install");
         },
       }),
@@ -382,5 +393,31 @@ describe("Electron main lifecycle policy", () => {
 
     expect(disposeCalls).toBe(1);
     expect(installCalls).toEqual([]);
+  });
+
+  test("shutdown controller marks a failed post-shutdown action as terminal", async () => {
+    const installError = new Error("updater handoff failed");
+    const controller = createElectronMainShutdownController({
+      disposeHost: () => Effect.void,
+      exitProcess: () => {},
+      logger: {
+        error() {},
+        info() {},
+      },
+      quitApp: () => {},
+    });
+
+    await expect(
+      controller.shutdownHostAndRun({
+        reason: "update-install",
+        runAfterShutdown: async () => {
+          throw installError;
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "ElectronLifecycleError",
+      cause: installError,
+      operation: "electron.main.run-after-shutdown",
+    });
   });
 });

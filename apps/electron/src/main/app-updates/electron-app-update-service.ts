@@ -25,6 +25,12 @@ import {
   markUpToDate,
   updateErrorCodeForOperation,
 } from "./app-update-state-machine";
+import type {
+  ElectronAppUpdaterAdapter,
+  ElectronInstallHandoff,
+  ElectronUpdaterDownloadProgress,
+  ElectronUpdaterUpdateInfo,
+} from "./electron-app-updater-adapter";
 
 type ElectronAppUpdateLogger = {
   error(message: string, error?: unknown): void;
@@ -32,50 +38,9 @@ type ElectronAppUpdateLogger = {
   warn(message: string, details?: unknown): void;
 };
 
-export type ElectronUpdaterConfigureOptions = {
-  allowPrerelease: boolean;
-  autoDownload: false;
-  autoInstallOnAppQuit: false;
-  channel: string | null;
-  logger: ElectronAppUpdateLogger;
-};
-
-export type ElectronUpdaterUpdateInfo = {
-  version?: unknown;
-};
-
-export type ElectronUpdaterCheckResult = {
-  isUpdateAvailable?: boolean;
-  updateInfo?: ElectronUpdaterUpdateInfo;
-  versionInfo?: ElectronUpdaterUpdateInfo;
-};
-
-export type ElectronUpdaterDownloadProgress = {
-  percent?: unknown;
-};
-
-export type ElectronUpdaterEventMap = {
-  error: unknown;
-  "update-available": ElectronUpdaterUpdateInfo;
-  "update-not-available": ElectronUpdaterUpdateInfo;
-  "download-progress": ElectronUpdaterDownloadProgress;
-  "update-downloaded": ElectronUpdaterUpdateInfo;
-};
-
-export type ElectronAppUpdaterAdapter = {
-  checkForUpdates(): Promise<ElectronUpdaterCheckResult | null>;
-  configure(options: ElectronUpdaterConfigureOptions): void;
-  downloadUpdate(): Promise<readonly string[]>;
-  on<EventName extends keyof ElectronUpdaterEventMap>(
-    eventName: EventName,
-    listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
-  ): () => void;
-  quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
-};
-
 export type ElectronAppUpdateService = {
   check(input: { initiator: AppUpdateCheckInitiator }): Promise<AppUpdateCommandResult>;
-  dispose(): void;
+  dispose(): Promise<void>;
   download(): Promise<AppUpdateCommandResult>;
   getState(): AppUpdateState;
   install(): Promise<AppUpdateCommandResult>;
@@ -85,7 +50,9 @@ export type ElectronAppUpdateService = {
 
 export type ElectronAppUpdateScheduler = {
   clearInterval(handle: unknown): void;
+  clearTimeout(handle: unknown): void;
   setInterval(callback: () => void, intervalMs: number): unknown;
+  setTimeout(callback: () => void, timeoutMs: number): unknown;
 };
 
 export type ElectronAppUpdateServiceOptions = {
@@ -94,7 +61,7 @@ export type ElectronAppUpdateServiceOptions = {
   appUpdateConfigPath?: string | undefined;
   backgroundCheckIntervalMs?: number;
   currentVersion: string;
-  installDownloadedUpdate(runInstall: () => void): Promise<void>;
+  installDownloadedUpdate(installHandoff: ElectronInstallHandoff): Promise<void>;
   isPackaged: boolean;
   logger: ElectronAppUpdateLogger;
   now?: () => string;
@@ -105,8 +72,8 @@ export type ElectronAppUpdateServiceOptions = {
 };
 
 const DEFAULT_APP_UPDATE_CONFIG_FILE = "app-update.yml";
-const HOST_SHUTDOWN_BEFORE_RUN_OPERATION = "electron.main.shutdown-host-before-run";
 const INSTALL_RELAUNCH_GUIDANCE = "Quit and reopen OpenDucktor before trying again.";
+const APP_UPDATE_PROGRESS_INTERVAL_MS = 500;
 export const DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 const releaseVersionPattern =
@@ -119,7 +86,11 @@ const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {
   clearInterval: (handle) => {
     clearInterval(handle as ReturnType<typeof setInterval>);
   },
+  clearTimeout: (handle) => {
+    clearTimeout(handle as ReturnType<typeof setTimeout>);
+  },
   setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),
+  setTimeout: (callback, timeoutMs) => setTimeout(callback, timeoutMs),
 };
 
 const defaultReadUpdateConfig = (path: string): string | null => {
@@ -142,7 +113,7 @@ const readStringProperty = (value: unknown, property: string): string | undefine
   if (typeof value !== "object" || value === null) {
     return undefined;
   }
-  const propertyValue = (value as Record<string, unknown>)[property];
+  const propertyValue = Reflect.get(value, property);
   return typeof propertyValue === "string" ? propertyValue : undefined;
 };
 
@@ -197,12 +168,6 @@ const appUpdateErrorMessage = (operation: AppUpdateOperation, cause: unknown): s
   return truncateMessage(stripTechnicalDetails(message));
 };
 
-const isObjectWithOperation = (cause: unknown): cause is { operation: unknown } =>
-  typeof cause === "object" && cause !== null && "operation" in cause;
-
-const isHostShutdownInstallFailure = (cause: unknown): boolean =>
-  isObjectWithOperation(cause) && cause.operation === HOST_SHUTDOWN_BEFORE_RUN_OPERATION;
-
 const installTerminalFailureMessage = (cause: unknown): string => {
   const message = appUpdateErrorMessage("install", cause);
   return message.includes(INSTALL_RELAUNCH_GUIDANCE)
@@ -215,20 +180,14 @@ const hasUpdateProviderConfig = (rawConfig: string | null): boolean => {
     return false;
   }
 
-  const parsedConfig = parseYaml(rawConfig) as unknown;
+  const parsedConfig: unknown = parseYaml(rawConfig);
   if (typeof parsedConfig !== "object" || parsedConfig === null || Array.isArray(parsedConfig)) {
     return false;
   }
 
-  const provider = (parsedConfig as { provider?: unknown }).provider;
+  const provider = Reflect.get(parsedConfig, "provider");
   return typeof provider === "string" && provider.trim().length > 0;
 };
-
-const readUpdateVersion = (info: ElectronUpdaterUpdateInfo | undefined): string | undefined =>
-  typeof info?.version === "string" && info.version.trim() ? info.version.trim() : undefined;
-
-const readResultUpdateVersion = (result: ElectronUpdaterCheckResult): string | undefined =>
-  readUpdateVersion(result.updateInfo) ?? readUpdateVersion(result.versionInfo);
 
 type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;
 
@@ -259,6 +218,10 @@ export const createElectronAppUpdateService = ({
     appUpdateConfigPath ?? join(resourcesPath, DEFAULT_APP_UPDATE_CONFIG_FILE);
   let activeOperation: AppUpdateOperation | null = null;
   let backgroundCheckIntervalHandle: unknown = null;
+  let downloadProgressThrottleHandle: unknown = null;
+  let initialBackgroundCheckHandle: unknown = null;
+  let installHandoffStarted = false;
+  let pendingDownloadProgress: number | null = null;
   let disposed = false;
   let updaterReady = false;
   let state: AppUpdateState = { status: "idle", currentVersion };
@@ -270,8 +233,6 @@ export const createElectronAppUpdateService = ({
     }
     return state;
   };
-
-  const getCurrentState = (): AppUpdateState => state;
 
   const commandAccepted = (): AppUpdateCommandResult => ({ accepted: true, state });
 
@@ -373,35 +334,64 @@ export const createElectronAppUpdateService = ({
       }),
     );
 
-  const applyDownloadProgress = (progress: ElectronUpdaterDownloadProgress): void => {
-    if (typeof progress.percent !== "number" || !Number.isFinite(progress.percent)) {
-      return;
-    }
-    if (state.status !== "downloading") {
-      return;
-    }
+  const publishDownloadProgress = (
+    previousState: Extract<AppUpdateState, { status: "downloading" }>,
+    percent: number,
+  ): void => {
     publishState(
       markDownloadProgress({
         currentVersion,
-        percent: progress.percent,
-        previousState: state,
+        percent,
+        previousState,
       }),
     );
+  };
+
+  const clearDownloadProgressThrottle = (): void => {
+    pendingDownloadProgress = null;
+    if (downloadProgressThrottleHandle !== null) {
+      scheduler.clearTimeout(downloadProgressThrottleHandle);
+      downloadProgressThrottleHandle = null;
+    }
+  };
+
+  const flushDownloadProgress = (): void => {
+    downloadProgressThrottleHandle = null;
+    if (pendingDownloadProgress === null || state.status !== "downloading") {
+      pendingDownloadProgress = null;
+      return;
+    }
+
+    const percent = pendingDownloadProgress;
+    pendingDownloadProgress = null;
+    publishDownloadProgress(state, percent);
+    downloadProgressThrottleHandle = scheduler.setTimeout(
+      flushDownloadProgress,
+      APP_UPDATE_PROGRESS_INTERVAL_MS,
+    );
+  };
+
+  const applyDownloadProgress = (progress: ElectronUpdaterDownloadProgress): void => {
+    if (state.status !== "downloading") {
+      return;
+    }
+    if (downloadProgressThrottleHandle === null) {
+      publishDownloadProgress(state, progress.percent);
+      downloadProgressThrottleHandle = scheduler.setTimeout(
+        flushDownloadProgress,
+        APP_UPDATE_PROGRESS_INTERVAL_MS,
+      );
+      return;
+    }
+    pendingDownloadProgress = progress.percent;
   };
 
   const applyDownloaded = (info: ElectronUpdaterUpdateInfo): void => {
     if (state.status !== "downloading") {
       return;
     }
-    const downloadedVersion = readUpdateVersion(info) ?? availableVersionFromState(state);
-    if (!downloadedVersion) {
-      setErrorState({
-        code: "download_failed",
-        message: "The update download completed without a version.",
-        operation: "download",
-      });
-      return;
-    }
+    clearDownloadProgressThrottle();
+    const downloadedVersion = info.version;
     publishState(
       markDownloaded({
         availableVersion: downloadedVersion,
@@ -411,34 +401,46 @@ export const createElectronAppUpdateService = ({
     );
   };
 
+  const applyInstallFailure = (
+    cause: unknown,
+    previousState: Extract<AppUpdateState, { status: "downloaded" }>,
+  ): void => {
+    if (installHandoffStarted) {
+      publishState(
+        markDownloadedInstallRetryDisabled({
+          cause,
+          message: installTerminalFailureMessage(cause),
+          previousState,
+        }),
+      );
+      return;
+    }
+
+    publishState(
+      markDownloadedInstallError({
+        cause,
+        message: appUpdateErrorMessage("install", cause),
+        previousState,
+      }),
+    );
+  };
+
   const applyAdapterError = (cause: unknown): void => {
     const previousState = state;
-    const installHandoffStarted =
-      previousState.status === "downloaded" &&
-      (previousState.installRequested === true || previousState.installRetryDisabled === true);
-    const operation = activeOperation ?? (installHandoffStarted ? "install" : "check");
+    if (previousState.status === "downloading") {
+      clearDownloadProgressThrottle();
+    }
+    const installInProgressOrBlocked =
+      installHandoffStarted ||
+      (previousState.status === "downloaded" &&
+        (previousState.installRequested === true || previousState.installRetryDisabled === true));
+    const operation = activeOperation ?? (installInProgressOrBlocked ? "install" : "check");
     const availableVersion = availableVersionFromState(previousState);
     const checkedAt = operation === "check" ? now() : checkedAtFromState(previousState);
     const message = appUpdateErrorMessage(operation, cause);
     if (operation === "install" && previousState.status === "downloaded") {
       activeOperation = null;
-      if (platform === "darwin" || isHostShutdownInstallFailure(cause)) {
-        publishState(
-          markDownloadedInstallRetryDisabled({
-            cause,
-            message: installTerminalFailureMessage(cause),
-            previousState,
-          }),
-        );
-        return;
-      }
-      publishState(
-        markDownloadedInstallError({
-          cause,
-          message,
-          previousState,
-        }),
-      );
+      applyInstallFailure(cause, previousState);
       return;
     }
     setErrorState({
@@ -453,24 +455,7 @@ export const createElectronAppUpdateService = ({
 
   const registerAdapterEvents = (): void => {
     unsubscribeAdapterListeners.push(
-      adapter.on("update-available", (info) => {
-        const availableVersion = readUpdateVersion(info);
-        if (!availableVersion) {
-          setErrorState({
-            checkedAt: now(),
-            code: "check_failed",
-            message: "The update feed reported an available update without a version.",
-            operation: "check",
-          });
-          return;
-        }
-        applyAvailable(availableVersion);
-      }),
-      adapter.on("update-not-available", () => {
-        applyUpToDate();
-      }),
       adapter.on("download-progress", applyDownloadProgress),
-      adapter.on("update-downloaded", applyDownloaded),
       adapter.on("error", applyAdapterError),
     );
   };
@@ -591,7 +576,9 @@ export const createElectronAppUpdateService = ({
       }
       const checkBlockedByDownloadedState =
         state.status === "downloaded" &&
-        (state.installRequested === true || initiator === "background");
+        (state.installRequested === true ||
+          state.installRetryDisabled === true ||
+          initiator === "background");
       if (
         activeOperation !== null ||
         state.status === "downloading" ||
@@ -601,32 +588,13 @@ export const createElectronAppUpdateService = ({
       }
 
       activeOperation = "check";
+      installHandoffStarted = false;
       publishState(markChecking({ currentVersion, initiator, previousState: currentState }));
       try {
         const result = await adapter.checkForUpdates();
-        if (result === null || result === undefined) {
-          setErrorState({
-            checkedAt: now(),
-            code: "updater_unavailable",
-            message: "Electron updater returned no update result. Check packaged update metadata.",
-            operation: "check",
-          });
-          return commandAccepted();
-        }
-
         if (state.status === "checking") {
-          const availableVersion = readResultUpdateVersion(result);
           if (result.isUpdateAvailable) {
-            if (!availableVersion) {
-              setErrorState({
-                checkedAt: now(),
-                code: "check_failed",
-                message: "The update feed reported an available update without a version.",
-                operation: "check",
-              });
-            } else {
-              applyAvailable(availableVersion);
-            }
+            applyAvailable(result.updateInfo.version);
           } else {
             applyUpToDate();
           }
@@ -647,16 +615,25 @@ export const createElectronAppUpdateService = ({
         activeOperation = null;
       }
     },
-    dispose: () => {
+    dispose: async () => {
+      if (disposed) {
+        return;
+      }
       disposed = true;
       if (backgroundCheckIntervalHandle !== null) {
         scheduler.clearInterval(backgroundCheckIntervalHandle);
         backgroundCheckIntervalHandle = null;
       }
+      if (initialBackgroundCheckHandle !== null) {
+        scheduler.clearTimeout(initialBackgroundCheckHandle);
+        initialBackgroundCheckHandle = null;
+      }
+      clearDownloadProgressThrottle();
       listeners.clear();
       for (const unsubscribe of unsubscribeAdapterListeners.splice(0)) {
         unsubscribe();
       }
+      await adapter.dispose();
     },
     download: async () => {
       if (state.status === "disabled") {
@@ -676,6 +653,7 @@ export const createElectronAppUpdateService = ({
       }
 
       activeOperation = "download";
+      clearDownloadProgressThrottle();
       const availableVersion = state.availableVersion;
       publishState(
         markDownloading({
@@ -685,13 +663,12 @@ export const createElectronAppUpdateService = ({
         }),
       );
       try {
-        await adapter.downloadUpdate();
-        if (getCurrentState().status === "downloading") {
-          applyDownloaded({ version: availableVersion });
-        }
+        const result = await adapter.downloadUpdate();
+        applyDownloaded(result);
         logger.info("OpenDucktor update download completed");
         return commandAccepted();
       } catch (cause) {
+        clearDownloadProgressThrottle();
         logger.error("OpenDucktor update download failed", cause);
         const checkedAt = checkedAtFromState(state);
         setErrorState({
@@ -727,33 +704,17 @@ export const createElectronAppUpdateService = ({
       }
 
       activeOperation = "install";
+      installHandoffStarted = false;
       publishState(markDownloadedInstallRequested(downloadedState));
       try {
-        await installDownloadedUpdate(() => {
-          activeOperation = null;
-          adapter.quitAndInstall(false, true);
-        });
+        const installHandoff = await adapter.prepareInstall();
+        installHandoffStarted = true;
+        await installDownloadedUpdate(installHandoff);
         return commandAccepted();
       } catch (cause) {
         logger.error("OpenDucktor update install failed", cause);
         const previousState = state.status === "downloaded" ? state : downloadedState;
-        if (platform === "darwin" || isHostShutdownInstallFailure(cause)) {
-          publishState(
-            markDownloadedInstallRetryDisabled({
-              cause,
-              message: installTerminalFailureMessage(cause),
-              previousState,
-            }),
-          );
-          return commandAccepted();
-        }
-        publishState(
-          markDownloadedInstallError({
-            cause,
-            message: appUpdateErrorMessage("install", cause),
-            previousState,
-          }),
-        );
+        applyInstallFailure(cause, previousState);
         return commandAccepted();
       } finally {
         activeOperation = null;
@@ -763,7 +724,10 @@ export const createElectronAppUpdateService = ({
       if (disposed || !updaterReady || backgroundCheckIntervalHandle !== null) {
         return;
       }
-      runBackgroundCheck();
+      initialBackgroundCheckHandle = scheduler.setTimeout(() => {
+        initialBackgroundCheckHandle = null;
+        runBackgroundCheck();
+      }, 0);
       backgroundCheckIntervalHandle = scheduler.setInterval(
         runBackgroundCheck,
         backgroundCheckIntervalMs,

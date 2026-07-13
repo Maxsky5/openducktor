@@ -70,9 +70,10 @@ describe("AppUpdatePrompt", () => {
     const [errorMessage] = errorMessages;
     expect(errorMessage).toBeTruthy();
     if (!errorMessage) return;
-    expect(errorMessage.className).toContain("max-h-40");
+    expect(errorMessage.className).toContain("max-h-32");
     expect(errorMessage.className).toContain("overflow-y-auto");
     expect(errorMessage.className).toContain("break-words");
+    expect(errorMessage.parentElement?.className).toContain("border-destructive/30");
   });
 
   test("resurfaces dismissed manual check errors from later checks", async () => {
@@ -105,7 +106,6 @@ describe("AppUpdatePrompt", () => {
         error: repeatedError,
       });
     });
-
     expect(await screen.findByText("Update error")).toBeTruthy();
     expect(screen.getByText(repeatedError.message)).toBeTruthy();
   });
@@ -149,7 +149,7 @@ describe("AppUpdatePrompt", () => {
     });
 
     expect(screen.getByText("Update available")).toBeTruthy();
-    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
+    expect(screen.getByText("0.4.2 → 0.4.3")).toBeTruthy();
   });
 
   test("keeps downloadable background check errors visible", async () => {
@@ -171,7 +171,7 @@ describe("AppUpdatePrompt", () => {
 
     expect(await screen.findByText("Update error")).toBeTruthy();
     expect(screen.getByText("OpenDucktor could not complete the update check.")).toBeTruthy();
-    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
+    expect(screen.getByText("0.4.2 → 0.4.3")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
   });
 
@@ -190,12 +190,20 @@ describe("AppUpdatePrompt", () => {
     expect(await screen.findByText("Update available")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("Update available");
     expect(screen.getByRole("status").textContent).toContain("Current 0.4.2");
-    expect(screen.getByRole("status").textContent).toContain("New 0.4.3");
-    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
-
+    expect(screen.getByText("0.4.2 → 0.4.3")).toBeTruthy();
+    expect(screen.queryByText("Download starts only when you choose it.")).toBeNull();
+    const downloadButton = screen.getByRole("button", { name: "Download Update" });
+    expect(downloadButton.className).toContain("w-full");
+    expect(downloadButton.className).toContain("bg-sidebar-accent");
+    expect(screen.getByText("Update available").closest("[data-slot='card']")?.className).toContain(
+      "light",
+    );
+    const releaseNoteLink = screen.getByRole("link", { name: "Release note" });
+    expect(releaseNoteLink.getAttribute("href")).toBe(
+      "https://github.com/Maxsky5/openducktor/releases/tag/v0.4.3",
+    );
+    expect(fireEvent.click(releaseNoteLink)).toBe(false);
     fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
-
     expect(screen.queryByText("Update available")).toBeNull();
   });
 
@@ -222,11 +230,15 @@ describe("AppUpdatePrompt", () => {
 
     await waitFor(() => expect(appUpdates.download).toHaveBeenCalled());
     expect(await screen.findByText("40% downloaded")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("progressbar", { name: "Update download progress" })
-        .getAttribute("aria-valuetext"),
-    ).toBe("40% downloaded");
+    const progressbar = screen.getByRole("progressbar", { name: "Update download progress" });
+    expect(progressbar.getAttribute("aria-valuetext")).toBe("40% downloaded");
+    expect(progressbar.firstElementChild?.className).toContain("bg-sidebar-accent");
+    expect(progressbar.firstElementChild?.className).toContain("transition-[width]");
+    expect(progressbar.firstElementChild?.className).toContain("duration-150");
+    expect(progressbar.firstElementChild?.className).toContain("motion-reduce:transition-none");
+    expect(screen.getByRole("link", { name: "Release note" }).getAttribute("href")).toBe(
+      "https://github.com/Maxsky5/openducktor/releases/tag/v0.4.3",
+    );
   });
 
   test("keeps an available update visible when download command transport fails", async () => {
@@ -245,7 +257,7 @@ describe("AppUpdatePrompt", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Download Update" }));
 
     expect(await screen.findAllByText("bridge download failed")).toHaveLength(1);
-    expect(screen.getByText("Current 0.4.2 · New 0.4.3")).toBeTruthy();
+    expect(screen.getByText("0.4.2 → 0.4.3")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("bridge download failed");
     expect(screen.getByRole("button", { name: "Download Update" })).toBeTruthy();
   });
@@ -261,6 +273,9 @@ describe("AppUpdatePrompt", () => {
     configureShellBridge(createTestShellBridge(appUpdates));
     render(<AppUpdatePrompt />);
 
+    expect((await screen.findByRole("link", { name: "Release note" })).getAttribute("href")).toBe(
+      "https://github.com/Maxsky5/openducktor/releases/tag/v0.4.3",
+    );
     fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
 
     await waitFor(() => expect(appUpdates.install).toHaveBeenCalled());
@@ -369,8 +384,9 @@ describe("AppUpdatePrompt", () => {
     configureShellBridge(createTestShellBridge(appUpdates));
     render(<AppUpdatePrompt />);
 
-    expect(await screen.findByText("Relaunch required")).toBeTruthy();
+    expect(await screen.findByText("Install needs attention")).toBeTruthy();
     expect(screen.getByText("Quit and reopen OpenDucktor before trying again.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download Latest Release" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
   });
 
@@ -403,7 +419,7 @@ describe("AppUpdatePrompt", () => {
         },
       });
     });
-
     expect(await screen.findByText("shutdown failed")).toBeTruthy();
+    expect(screen.getByText("Ready to install")).toBeTruthy();
   });
 });
