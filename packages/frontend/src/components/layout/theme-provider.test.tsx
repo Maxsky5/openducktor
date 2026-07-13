@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Theme } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act, type ReactElement } from "react";
+import { act, type ReactElement, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { hostBridge } from "@/lib/host-client";
-import { createQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -31,26 +31,58 @@ const ThemeHarness = (): ReactElement => {
   );
 };
 
-const renderThemeProvider = ({ withSettingsSnapshot = true } = {}) => {
-  const queryClient = createQueryClient();
-  if (withSettingsSnapshot) {
-    queryClient.setQueryData(
-      settingsSnapshotQueryOptions().queryKey,
-      createSettingsSnapshotFixture({ theme: "light" }),
-    );
-  } else {
-    queryClient.setQueryDefaults(settingsSnapshotQueryOptions().queryKey, { enabled: false });
+const ThemeProviderQueryHarness = ({
+  onQueryClient,
+  withSettingsSnapshot,
+}: {
+  onQueryClient: (queryClient: QueryClient) => void;
+  withSettingsSnapshot: boolean;
+}): ReactElement | null => {
+  const queryClient = useQueryClient();
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useLayoutEffect(() => {
+    if (withSettingsSnapshot) {
+      queryClient.setQueryData(
+        settingsSnapshotQueryOptions().queryKey,
+        createSettingsSnapshotFixture({ theme: "light" }),
+      );
+    } else {
+      queryClient.setQueryDefaults(settingsSnapshotQueryOptions().queryKey, { enabled: false });
+    }
+    onQueryClient(queryClient);
+    setIsInitialized(true);
+  }, [onQueryClient, queryClient, withSettingsSnapshot]);
+
+  if (!isInitialized) {
+    return null;
   }
 
+  return (
+    <ThemeProvider>
+      <ThemeHarness />
+    </ThemeProvider>
+  );
+};
+
+const renderThemeProvider = ({ withSettingsSnapshot = true } = {}) => {
+  const queryClientRef: { current: QueryClient | null } = { current: null };
+
   render(
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <ThemeHarness />
-      </ThemeProvider>
-    </QueryClientProvider>,
+    <QueryProvider useIsolatedClient>
+      <ThemeProviderQueryHarness
+        onQueryClient={(client) => {
+          queryClientRef.current = client;
+        }}
+        withSettingsSnapshot={withSettingsSnapshot}
+      />
+    </QueryProvider>,
   );
 
-  return queryClient;
+  if (queryClientRef.current === null) {
+    throw new Error("Query client was not initialized");
+  }
+  return queryClientRef.current;
 };
 
 const selectThemesRapidly = (): void => {
