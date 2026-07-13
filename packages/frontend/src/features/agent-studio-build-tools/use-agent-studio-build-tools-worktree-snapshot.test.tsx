@@ -549,8 +549,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(snapshot.worktree.shouldBlockDiffLoading).toBe(true);
       expect(snapshot.openInTarget).toEqual({
         path: null,
-        disabledReason:
-          "Builder worktree path is unavailable. Refresh the Git panel and try again.",
+        disabledReason: "Task worktree path is unavailable. Refresh the Git panel and try again.",
       });
       expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
         shouldBlockDiffLoading: true,
@@ -577,14 +576,47 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
-  test("repository mode intentionally uses the repo root for Open In", async () => {
-    const repoSession = createAgentSessionFixture({ role: "spec", workingDirectory: "/repo" });
+  test.each([
+    "spec",
+    "planner",
+  ] as const)("uses a fresh %s session worktree for Git context and Open In", async (role) => {
+    const specSession = createAgentSessionFixture({
+      role,
+      workingDirectory: "/repo/.worktrees/task-24",
+    });
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({
-          role: "spec",
-          loadedSession: repoSession,
+          role,
+          loadedSession: specSession,
         }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().gitPanelContextMode).toBe("worktree");
+      expect(harness.getLatest().worktree.path).toBe("/repo/.worktrees/task-24");
+      expect(harness.getLatest().openInTarget).toEqual({
+        path: "/repo/.worktrees/task-24",
+        disabledReason: null,
+      });
+      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        repoPath: "/repo",
+        worktreePath: "/repo/.worktrees/task-24",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a legacy root-backed Spec session in repository context", async () => {
+    const specSession = createAgentSessionFixture({ role: "spec", workingDirectory: "/repo" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        selectedView: createSelectedView({ role: "spec", loadedSession: specSession }),
       }),
     );
 

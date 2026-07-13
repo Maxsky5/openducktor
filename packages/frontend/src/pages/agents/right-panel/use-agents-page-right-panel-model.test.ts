@@ -214,7 +214,7 @@ describe("resolveBuildToolsOpenInTarget", () => {
     });
   });
 
-  test("uses the builder worktree in worktree mode", () => {
+  test("uses the task worktree in worktree mode", () => {
     expect(
       resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
@@ -258,7 +258,7 @@ describe("resolveBuildToolsOpenInTarget", () => {
       }),
     ).toEqual({
       path: null,
-      disabledReason: "Builder worktree path is unavailable. Refresh the Git panel and try again.",
+      disabledReason: "Task worktree path is unavailable. Refresh the Git panel and try again.",
     });
   });
 
@@ -278,7 +278,7 @@ describe("resolveBuildToolsOpenInTarget", () => {
     });
   });
 
-  test("does not treat the repo root as a valid builder worktree path", () => {
+  test("does not treat the repo root as a valid task worktree path", () => {
     expect(
       resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
@@ -290,7 +290,7 @@ describe("resolveBuildToolsOpenInTarget", () => {
       }),
     ).toEqual({
       path: null,
-      disabledReason: "Builder worktree path is unavailable. Refresh the Git panel and try again.",
+      disabledReason: "Task worktree path is unavailable. Refresh the Git panel and try again.",
     });
   });
 
@@ -322,7 +322,7 @@ describe("resolveBuildToolsOpenInTarget", () => {
       }),
     ).toEqual({
       path: null,
-      disabledReason: "Resolving builder worktree path...",
+      disabledReason: "Resolving task worktree path...",
     });
   });
 

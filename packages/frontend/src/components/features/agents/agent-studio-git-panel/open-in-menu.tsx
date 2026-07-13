@@ -109,7 +109,7 @@ function defaultUnavailableReason(contextMode: "repository" | "worktree"): strin
     return "Repository path is unavailable. Select a repository and try again.";
   }
 
-  return "Builder worktree path is unavailable. Refresh the Git panel and try again.";
+  return "Task worktree path is unavailable. Refresh the Git panel and try again.";
 }
 
 function resolveOpenInDisabledReason({
@@ -195,7 +195,7 @@ export function OpenInMenu({
   const [isRefreshingTools, setIsRefreshingTools] = useState(false);
   const queryClient = useQueryClient();
   const toolsQuery = useQuery(openInToolsQueryOptions());
-  const targetLabel = contextMode === "repository" ? "repository root" : "builder worktree";
+  const targetLabel = contextMode === "repository" ? "repository root" : "task worktree";
 
   const defaultTool = useMemo(() => {
     const tools = toolsQuery.data ?? [];
