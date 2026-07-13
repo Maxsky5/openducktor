@@ -4,6 +4,7 @@ import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { observeTransientAgentSessionEvents } from "@/state/operations/agent-orchestrator/events/transient-session-events";
 import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
+import { applyQuestionAnswerToSession } from "@/state/operations/agent-orchestrator/support/question-messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
@@ -266,13 +267,17 @@ export function useRuntimeTranscriptLiveOverlay({
         if (!current || !matchesAgentSessionIdentity(current.session, sessionRef)) {
           return current;
         }
+        const { pendingQuestions, messages } = applyQuestionAnswerToSession(
+          current.session,
+          request.requestId,
+          answers,
+        );
         return {
           ...current,
           session: {
             ...current.session,
-            pendingQuestions: current.session.pendingQuestions.filter(
-              (entry) => entry.requestId !== request.requestId,
-            ),
+            pendingQuestions,
+            messages,
           },
         };
       });

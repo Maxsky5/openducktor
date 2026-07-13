@@ -225,17 +225,18 @@ export const loadCodexSessionHistory = async ({
   }
   rememberTodos(input.externalSessionId, codexTodosFromThreadRead(response));
   const forkedFromThreadId = codexForkedFromThreadId(response);
-  const tokenUsageByTurnId = await collectThreadReadTokenUsage(runtimeId, input.externalSessionId);
-  let parentTurnIds: ReadonlySet<string> | null = null;
-  if (forkedFromThreadId) {
-    try {
-      parentTurnIds = await threadInventory.readThreadTurnIds(client, forkedFromThreadId);
-    } catch (error) {
-      if (!isCodexThreadNotLoadedError(error)) {
+  const parentTurnIdsPromise: Promise<ReadonlySet<string> | null> = forkedFromThreadId
+    ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((error: unknown) => {
+        if (isCodexThreadNotLoadedError(error)) {
+          return null;
+        }
         throw error;
-      }
-    }
-  }
+      })
+    : Promise.resolve(null);
+  const [tokenUsageByTurnId, parentTurnIds] = await Promise.all([
+    collectThreadReadTokenUsage(runtimeId, input.externalSessionId),
+    parentTurnIdsPromise,
+  ]);
   const forkBoundary = parentTurnIds ? resolveCodexForkBoundary(response, parentTurnIds) : null;
   return projectCodexThreadReadToHistory({
     input,

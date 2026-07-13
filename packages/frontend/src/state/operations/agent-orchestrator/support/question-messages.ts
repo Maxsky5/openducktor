@@ -51,3 +51,34 @@ export const annotateQuestionToolMessage = (
     },
   );
 };
+
+export const applyQuestionAnswerToSession = (
+  session: AgentSessionState,
+  requestId: string,
+  answers: string[][],
+): Pick<AgentSessionState, "pendingQuestions" | "messages"> => {
+  const answeredRequest = session.pendingQuestions.find((entry) => entry.requestId === requestId);
+  const pendingQuestions = session.pendingQuestions.filter(
+    (entry) => entry.requestId !== requestId,
+  );
+  if (!answeredRequest || answeredRequest.questions.length === 0) {
+    return {
+      pendingQuestions,
+      messages: session.messages,
+    };
+  }
+
+  const answeredQuestionsWithAnswers = answeredRequest.questions.map((question, index) => ({
+    ...question,
+    answers: answers[index] ?? [],
+  }));
+  return {
+    pendingQuestions,
+    messages: annotateQuestionToolMessage(
+      session,
+      requestId,
+      answeredQuestionsWithAnswers,
+      answers,
+    ),
+  };
+};

@@ -61,6 +61,35 @@ describe("CodexSubagentLinkState", () => {
     expect(restarted).toMatchObject({ status: "running", startedAtMs: 200 });
   });
 
+  test("does not restart untimed failed or cancelled children", () => {
+    for (const status of ["error", "cancelled"] as const) {
+      const subagents = new CodexSubagentLinkState();
+      subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId: "parent-thread",
+        childThreadId: "child-thread",
+        itemId: "spawn-1",
+        status,
+        ...(status === "error" ? { error: "First turn failed" } : {}),
+      });
+
+      const staleRunning = subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId: "parent-thread",
+        childThreadId: "child-thread",
+        itemId: "resume-1",
+        status: "running",
+        allowStatusRestart: true,
+        startedAtMs: 200,
+      });
+
+      expect(staleRunning.status).toBe(status);
+      if (status === "error") {
+        expect(staleRunning.error).toBe("First turn failed");
+      }
+    }
+  });
+
   test("clears links for one runtime without deleting matching thread ids in another runtime", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({

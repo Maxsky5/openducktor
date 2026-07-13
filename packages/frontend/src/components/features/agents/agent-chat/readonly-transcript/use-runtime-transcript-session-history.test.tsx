@@ -11,6 +11,7 @@ import { AgentOperationsContext } from "@/state/app-state-contexts";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -521,7 +522,87 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         await harness.getLatest().replyAgentApproval(createTarget(), approval, "approve_once");
       });
 
-      expect(replyAgentApproval).toHaveBeenCalledWith(createTarget(), approval, "approve_once");
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        {
+          repoPath: "/repo-a",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a/worktree",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+          runtimePolicy: { kind: "opencode" },
+        },
+        approval,
+        "approve_once",
+        undefined,
+      );
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("annotates a question answered through the live transcript overlay", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const answerAgentQuestion = mock(async () => undefined);
+    answerAgentQuestionRef.current = answerAgentQuestion;
+    const harness = createHookHarness(
+      createBaseArgs({
+        liveSession: createAgentSessionFixture({
+          externalSessionId: "session-1",
+          status: "running",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a/worktree",
+          messages: [
+            {
+              id: "tool-question-live",
+              role: "tool",
+              content: "Question requested",
+              timestamp: "2026-02-22T12:01:00.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-question-live",
+                callId: "call-question-live",
+                tool: "question",
+                toolType: "question",
+                status: "completed",
+                metadata: {},
+              },
+            },
+          ],
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(createLiveQuestionEvent()));
+      await harness.waitFor((state) => state.interactionSession?.pendingQuestions.length === 1);
+      const question = harness.getLatest().interactionSession?.pendingQuestions[0];
+      if (!question) {
+        throw new Error("Expected overlay question.");
+      }
+
+      await harness.run(async () => {
+        await harness.getLatest().answerAgentQuestion(createTarget(), question, [["yes"]]);
+      });
+
+      expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
+      const interactionSession = harness.getLatest().interactionSession;
+      if (!interactionSession) {
+        throw new Error("Expected overlay interaction session.");
+      }
+      const message = sessionMessageAt(interactionSession, 0);
+      if (message?.meta?.kind !== "tool") {
+        throw new Error("Expected question tool message metadata.");
+      }
+      expect(message.meta.metadata?.requestId).toBe("question-live");
+      expect(message.meta.metadata?.answers).toEqual([["yes"]]);
     } finally {
       await harness.unmount();
     }

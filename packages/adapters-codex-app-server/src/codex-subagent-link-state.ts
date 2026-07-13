@@ -103,7 +103,8 @@ const isExplicitRunningRestart = (
   existing !== undefined &&
   isTerminalStatus(existing.status) &&
   typeof input.startedAtMs === "number" &&
-  (typeof existing.endedAtMs !== "number" || input.startedAtMs > existing.endedAtMs);
+  ((existing.status === "completed" && typeof existing.endedAtMs !== "number") ||
+    (typeof existing.endedAtMs === "number" && input.startedAtMs > existing.endedAtMs));
 
 const resolveStatus = (
   existing: CodexStoredSubagentLink | undefined,
