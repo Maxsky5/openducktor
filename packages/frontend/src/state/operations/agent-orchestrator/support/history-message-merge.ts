@@ -84,6 +84,33 @@ const timestampMs = (timestamp: string): number | null => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
+const mergeUnmatchedCurrentMessage = (
+  mergedMessages: AgentChatMessage[],
+  message: AgentChatMessage,
+): void => {
+  if (!isSubagentMessage(message)) {
+    mergedMessages.push(message);
+    return;
+  }
+
+  const messageTimestampMs = timestampMs(message.timestamp);
+  if (messageTimestampMs === null) {
+    mergedMessages.push(message);
+    return;
+  }
+
+  const insertionIndex = mergedMessages.findIndex((candidate) => {
+    const candidateTimestampMs = timestampMs(candidate.timestamp);
+    return candidateTimestampMs !== null && candidateTimestampMs > messageTimestampMs;
+  });
+  if (insertionIndex < 0) {
+    mergedMessages.push(message);
+    return;
+  }
+
+  mergedMessages.splice(insertionIndex, 0, message);
+};
+
 const confirmsLocalAcceptedUserMessage = (
   loadedMessage: AgentChatMessage,
   currentMessage: AgentChatMessage,
@@ -303,7 +330,7 @@ export const mergeHistoryMessages = (
     if (isSessionSystemPromptMessage(message)) {
       return;
     }
-    mergedMessages.push(message);
+    mergeUnmatchedCurrentMessage(mergedMessages, message);
   });
 
   return createSessionMessagesState(externalSessionId, mergedMessages, currentMessages.version + 1);

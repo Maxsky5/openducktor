@@ -379,6 +379,64 @@ describe("CodexAppServerAdapter history loading", () => {
     ).rejects.toThrow("parent turn lookup failed");
   });
 
+  test("rejects forked history with inherited turns when its parent is no longer readable", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 10,
+              status: { type: "idle" },
+              forkedFromId: "missing-parent",
+              parentThreadId: "missing-parent",
+              turns: [
+                {
+                  id: "inherited-turn",
+                  startedAt: 5,
+                  status: "completed",
+                  items: [{ id: "parent-answer", type: "agentMessage", text: "Parent result" }],
+                },
+                {
+                  id: "child-turn",
+                  startedAt: 11,
+                  status: "completed",
+                  items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          const params = request.params as { threadId: string };
+          if (params.threadId === "missing-parent") {
+            throw new Error("thread not loaded: missing-parent");
+          }
+          return {
+            data: [
+              { id: "inherited-turn", startedAt: 5, status: "completed", items: [] },
+              { id: "child-turn", startedAt: 11, status: "completed", items: [] },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await expect(
+      adapter.loadSessionHistory({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "child-thread",
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      }),
+    ).rejects.toThrow("thread not loaded: missing-parent");
+  });
+
   test("loads Codex history and diff from App Server reads", async () => {
     const { adapter, takeBufferedEvents, transports } = createHarness();
 

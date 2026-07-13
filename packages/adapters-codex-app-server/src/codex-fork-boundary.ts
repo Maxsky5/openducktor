@@ -23,6 +23,25 @@ export const codexForkedFromThreadId = (response: unknown): string | null => {
   return extractStringField(thread, ["forkedFromId", "forked_from_id"]);
 };
 
+export const codexForkHistoryIsChildOwned = (response: unknown): boolean => {
+  const thread = threadFromReadResponse(response);
+  const turns = arrayFromUnknown(thread.turns);
+  if (turns.length === 0) {
+    return true;
+  }
+  const createdAt = thread.createdAt ?? thread.created_at;
+  if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
+    return false;
+  }
+  return turns.every((turn) => {
+    if (!isPlainObject(turn)) {
+      return false;
+    }
+    const startedAt = turn.startedAt ?? turn.started_at;
+    return typeof startedAt === "number" && Number.isFinite(startedAt) && startedAt > createdAt;
+  });
+};
+
 const timestampFromSeconds = (value: unknown, context: string): string => {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`Codex ${context} is missing a valid timestamp.`);

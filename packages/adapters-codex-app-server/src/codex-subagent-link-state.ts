@@ -97,14 +97,25 @@ const isPreviousRunTerminalUpdate = (
 const isExplicitRunningRestart = (
   existing: CodexStoredSubagentLink | undefined,
   input: CodexSubagentLinkInput,
-): boolean =>
-  input.allowStatusRestart === true &&
-  input.status === "running" &&
-  existing !== undefined &&
-  isTerminalStatus(existing.status) &&
-  typeof input.startedAtMs === "number" &&
-  ((existing.status === "completed" && typeof existing.endedAtMs !== "number") ||
-    (typeof existing.endedAtMs === "number" && input.startedAtMs > existing.endedAtMs));
+): boolean => {
+  if (
+    input.allowStatusRestart !== true ||
+    input.status !== "running" ||
+    !existing ||
+    !isTerminalStatus(existing.status) ||
+    typeof input.startedAtMs !== "number"
+  ) {
+    return false;
+  }
+  const startsAfterKnownStart =
+    typeof existing.startedAtMs !== "number" || input.startedAtMs > existing.startedAtMs;
+  return (
+    (existing.status === "completed" &&
+      typeof existing.endedAtMs !== "number" &&
+      startsAfterKnownStart) ||
+    (typeof existing.endedAtMs === "number" && input.startedAtMs > existing.endedAtMs)
+  );
+};
 
 const resolveStatus = (
   existing: CodexStoredSubagentLink | undefined,
@@ -276,9 +287,11 @@ export class CodexSubagentLinkState {
     const agent = input.agent ?? existing?.agent;
     const metadata = mergeDefined(existing?.metadata, input.metadata);
     const executionMode = input.executionMode ?? existing?.executionMode;
-    let startedAtMs = isPreviousRunUpdate
-      ? existing?.startedAtMs
-      : (input.startedAtMs ?? existing?.startedAtMs);
+    const isRejectedRunningTransition = input.status === "running" && status !== "running";
+    let startedAtMs =
+      isPreviousRunUpdate || isRejectedRunningTransition
+        ? existing?.startedAtMs
+        : (input.startedAtMs ?? existing?.startedAtMs);
     if (
       status === "running" &&
       existing?.status === "running" &&

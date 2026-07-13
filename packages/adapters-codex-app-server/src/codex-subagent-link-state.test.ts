@@ -36,29 +36,52 @@ describe("CodexSubagentLinkState", () => {
     expect(restarted).not.toHaveProperty("error");
   });
 
-  test("restarts a child completed by a snapshot without terminal timing", () => {
+  test("restarts a child completed by a snapshot only for newer activity", () => {
     const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+      startedAtMs: 200,
+    });
     subagents.recordThread(
       {
         id: "child-thread",
         cwd: "/repo",
+        startedAt: "1970-01-01T00:00:00.200Z",
+        title: "Child thread",
         parentThreadId: "parent-thread",
-        status: { classification: "idle", rawType: "idle" },
+        status: { classification: "idle" },
+        agentNickname: null,
+        agentRole: null,
+        subAgentSource: null,
       },
       "runtime-1",
     );
 
+    const staleRestart = subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "stale-resume",
+      status: "running",
+      allowStatusRestart: true,
+      startedAtMs: 100,
+    });
     const restarted = subagents.upsertLink({
       runtimeId: "runtime-1",
       parentThreadId: "parent-thread",
       childThreadId: "child-thread",
-      itemId: "resume-1",
+      itemId: "new-resume",
       status: "running",
       allowStatusRestart: true,
-      startedAtMs: 200,
+      startedAtMs: 300,
     });
 
-    expect(restarted).toMatchObject({ status: "running", startedAtMs: 200 });
+    expect(staleRestart).toMatchObject({ status: "completed", startedAtMs: 200 });
+    expect(restarted).toMatchObject({ status: "running", startedAtMs: 300 });
   });
 
   test("does not restart untimed failed or cancelled children", () => {
