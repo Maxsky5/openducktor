@@ -1,8 +1,8 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { GlobalConfig } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { parsePersistedGlobalConfig } from "../../config/global-config";
 import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
 import {
@@ -128,9 +128,10 @@ export const createSettingsConfigAdapter = ({
           ),
         );
 
+        const now = yield* Clock.currentTimeMillis;
         const tempPath = path.join(
           baseDir,
-          `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${randomUUID()}`,
+          `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${now}`,
         );
         const payload = `${JSON.stringify(config, null, 2)}\n`;
 

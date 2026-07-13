@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { Theme } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ReactElement } from "react";
+import { toast } from "sonner";
 import { hostBridge } from "@/lib/host-client";
 import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -62,6 +64,14 @@ const flushQueryUpdates = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+const expectThemeState = (theme: Theme): void => {
+  expect(screen.getByLabelText("Current theme").textContent).toBe(theme);
+  expect(document.documentElement.classList.contains(theme)).toBe(true);
+  expect(
+    screen.getByRole("switch", { name: "Toggle dark mode" }).getAttribute("aria-checked"),
+  ).toBe(String(theme === "dark"));
+};
+
 afterEach(() => {
   cleanup();
   document.documentElement.classList.remove("light", "dark");
@@ -75,13 +85,28 @@ describe("ThemeProvider", () => {
 
     try {
       renderThemeProvider({ withSettingsSnapshot: false });
+      expectThemeState("light");
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
-      await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
-        timeout: 1_000,
-      });
-      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
+    } finally {
+      hostBridge.client.setTheme = originalSetTheme;
+    }
+  });
+
+  test("skips persistence when the selected theme is already authoritative", () => {
+    const setTheme = mock(async () => undefined);
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = setTheme;
+
+    try {
+      renderThemeProvider();
+
+      fireEvent.click(screen.getByRole("button", { name: "Light" }));
+
+      expect(setTheme).not.toHaveBeenCalled();
+      expectThemeState("light");
     } finally {
       hostBridge.client.setTheme = originalSetTheme;
     }
@@ -102,9 +127,7 @@ describe("ThemeProvider", () => {
       });
 
       expect(setTheme).toHaveBeenCalledTimes(1);
-      await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
-        timeout: 1_000,
-      });
+      await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
 
       await act(async () => {
         persistence.resolve(undefined);
@@ -128,6 +151,7 @@ describe("ThemeProvider", () => {
     const originalSetTheme = hostBridge.client.setTheme;
     hostBridge.client.setTheme = setTheme;
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
+    const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     try {
       renderThemeProvider();
@@ -136,9 +160,8 @@ describe("ThemeProvider", () => {
         selectThemesRapidly();
         await Promise.resolve();
       });
-      await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
-        timeout: 1_000,
-      });
+      expect(setTheme).toHaveBeenCalledTimes(1);
+      await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
 
       await act(async () => {
         persistenceRequests[0]?.reject(new Error("disk write failed"));
@@ -153,9 +176,13 @@ describe("ThemeProvider", () => {
         await flushQueryUpdates();
       });
 
-      expect(screen.getByLabelText("Current theme").textContent).toBe("dark");
-      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(setTheme).toHaveBeenCalledTimes(2);
+      expect(
+        toastError.mock.calls.filter(([message]) => message === "Theme change failed"),
+      ).toHaveLength(0);
+      expectThemeState("dark");
     } finally {
+      toastError.mockRestore();
       consoleError.mockRestore();
       hostBridge.client.setTheme = originalSetTheme;
     }
@@ -167,6 +194,7 @@ describe("ThemeProvider", () => {
     const originalSetTheme = hostBridge.client.setTheme;
     hostBridge.client.setTheme = setTheme;
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
+    const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     try {
       renderThemeProvider();
@@ -181,12 +209,12 @@ describe("ThemeProvider", () => {
         await Promise.resolve();
       });
 
-      await waitFor(
-        () => expect(screen.getByLabelText("Current theme").textContent).toBe("light"),
-        { timeout: 1_000 },
-      );
-      expect(document.documentElement.classList.contains("light")).toBe(true);
+      await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
+      expect(toastError).toHaveBeenCalledWith("Theme change failed", {
+        description: "disk write failed",
+      });
     } finally {
+      toastError.mockRestore();
       consoleError.mockRestore();
       hostBridge.client.setTheme = originalSetTheme;
     }
@@ -215,9 +243,7 @@ describe("ThemeProvider", () => {
         );
       });
 
-      await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
-        timeout: 1_000,
-      });
+      await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
     } finally {
       consoleError.mockRestore();
       hostBridge.client.setTheme = originalSetTheme;
@@ -252,11 +278,7 @@ describe("ThemeProvider", () => {
         await flushQueryUpdates();
       });
 
-      expect(screen.getByLabelText("Current theme").textContent).toBe("dark");
-      expect(document.documentElement.classList.contains("dark")).toBe(true);
-      expect(
-        screen.getByRole("switch", { name: "Toggle dark mode" }).getAttribute("aria-checked"),
-      ).toBe("true");
+      expectThemeState("dark");
     } finally {
       consoleError.mockRestore();
       hostBridge.client.setTheme = originalSetTheme;
@@ -283,10 +305,7 @@ describe("ThemeProvider", () => {
         );
       });
 
-      await waitFor(
-        () => expect(screen.getByLabelText("Current theme").textContent).toBe("light"),
-        { timeout: 1_000 },
-      );
+      await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
     } finally {
       hostBridge.client.setTheme = originalSetTheme;
     }

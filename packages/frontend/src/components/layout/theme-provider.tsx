@@ -87,10 +87,10 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
           if (pendingThemeRef.current === null) {
             applyThemeToDocument(persistedThemeRef.current);
             selectOptimisticTheme(persistedThemeRef.current);
+            toast.error("Theme change failed", {
+              description: errorMessage(error),
+            });
           }
-          toast.error("Theme change failed", {
-            description: errorMessage(error),
-          });
         }
       }
     } finally {
