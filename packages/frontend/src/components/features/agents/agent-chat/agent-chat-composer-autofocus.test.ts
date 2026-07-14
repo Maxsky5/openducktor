@@ -116,6 +116,32 @@ describe("resolveComposerAutofocus", () => {
     expect(result.nextState).toEqual(focusedResult.nextState);
   });
 
+  test("focuses each newly displayed session once", () => {
+    const firstSessionResult = resolveComposerAutofocus(createComposerAutofocusState(), {
+      displayedSessionKey: "session-1",
+      isComposerInteractive: true,
+      activeElement: document.body,
+      focusInsideComposer: false,
+    });
+    const secondSessionResult = resolveComposerAutofocus(firstSessionResult.nextState, {
+      displayedSessionKey: "session-2",
+      isComposerInteractive: true,
+      activeElement: document.body,
+      focusInsideComposer: false,
+    });
+    const secondSessionRerenderResult = resolveComposerAutofocus(secondSessionResult.nextState, {
+      displayedSessionKey: "session-2",
+      isComposerInteractive: true,
+      activeElement: document.createElement("button"),
+      focusInsideComposer: false,
+    });
+
+    expect(firstSessionResult.shouldFocus).toBe(true);
+    expect(secondSessionResult.shouldFocus).toBe(true);
+    expect(secondSessionRerenderResult.shouldFocus).toBe(false);
+    expect(secondSessionRerenderResult.nextState).toEqual(secondSessionResult.nextState);
+  });
+
   test("clears pending autofocus when no session is displayed", () => {
     const pendingResult = resolveComposerAutofocus(createComposerAutofocusState(), {
       displayedSessionKey: "session-1",

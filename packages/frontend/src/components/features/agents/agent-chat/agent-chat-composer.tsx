@@ -453,7 +453,6 @@ function useAgentChatComposerFocus({
   if (composerAutofocusStateRef.current === null) {
     composerAutofocusStateRef.current = createComposerAutofocusState();
   }
-  const composerAutofocusState = composerAutofocusStateRef.current;
 
   const focusComposerEditor = useCallback(() => {
     const editor = composerEditorRef.current;
@@ -498,6 +497,11 @@ function useAgentChatComposerFocus({
   );
 
   useLayoutEffect(() => {
+    const composerAutofocusState = composerAutofocusStateRef.current;
+    if (composerAutofocusState === null) {
+      throw new Error("Composer autofocus state was not initialized.");
+    }
+
     const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
     const activeElement = globalThis.document?.activeElement ?? null;
     const focusInsideComposer = isFocusInsideComposer(activeElement);
@@ -518,7 +522,6 @@ function useAgentChatComposerFocus({
     isFocusInsideComposer,
     isSubmitting,
     scheduleComposerFocus,
-    composerAutofocusState,
   ]);
 
   return scheduleComposerFocus;
@@ -677,9 +680,11 @@ export function AgentChatComposer({
     !hasComposerSendContent(draft, pendingInlineCommentCount) ||
     !isInteractionEnabled;
 
-  latestDraftRef.current = draft;
-  latestOnSendRef.current = onSend;
-  latestSendDisabledRef.current = sendDisabled;
+  useLayoutEffect(() => {
+    latestDraftRef.current = draft;
+    latestOnSendRef.current = onSend;
+    latestSendDisabledRef.current = sendDisabled;
+  }, [draft, onSend, sendDisabled]);
 
   useLayoutEffect(() => {
     if (previousAttachmentLayoutKeyRef.current === attachmentLayoutKey) {

@@ -85,7 +85,9 @@ export function useAgentChatComposerDraftState({
   const latestStateRef = useRef(state);
   const nextStateKey = toComposerDraftStateKey(draftStateKey, persistenceIdentity);
 
-  latestStateRef.current = state;
+  useLayoutEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
 
   useLayoutEffect(() => {
     const current = latestStateRef.current;

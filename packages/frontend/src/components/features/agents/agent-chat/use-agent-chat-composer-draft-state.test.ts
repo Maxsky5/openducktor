@@ -69,20 +69,23 @@ describe("useAgentChatComposerDraftState", () => {
     const storage = createMemoryStorage();
     setAgentChatDraftStorageForTests(storage);
     const harness = await mountHarness();
+    const stableCommitDraft = harness.getLatest().commitDraft;
 
-    await harness.run((value) => {
-      value.commitDraft(buildDraft("same session"));
-    });
     await harness.update({
       draftStateKey: "composer-key",
       persistenceIdentity: identity,
       taskId: "task-2",
     });
+    await harness.run(() => {
+      stableCommitDraft(buildDraft("rehydrated task"));
+    });
     await flushAgentChatDraft(identity);
 
     const raw = storage.getItem(toAgentChatDraftStorageKey(identity));
     expect(raw).not.toBeNull();
-    expect(JSON.parse(raw ?? "{}")).toEqual(expect.objectContaining({ taskId: "task-2" }));
+    expect(JSON.parse(raw ?? "{}")).toEqual(
+      expect.objectContaining({ taskId: "task-2", draft: buildDraft("rehydrated task") }),
+    );
     await harness.unmount();
   });
 
