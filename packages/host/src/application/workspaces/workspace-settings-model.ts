@@ -8,6 +8,7 @@ import {
   repoConfigSchema,
   repoHooksSchema,
   type SettingsSnapshot,
+  type SettingsSnapshotUpdate,
   settingsSnapshotSchema,
   type Theme,
   type WorkspaceRecord,
@@ -43,7 +44,7 @@ export type WorkspaceSettingsService = {
   ): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
   getSettingsSnapshot(): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   saveSettingsSnapshot(
-    snapshot: SettingsSnapshot,
+    snapshot: SettingsSnapshotUpdate,
   ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
   setTheme(theme: Theme): Effect.Effect<void, WorkspaceSettingsError>;
   updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;

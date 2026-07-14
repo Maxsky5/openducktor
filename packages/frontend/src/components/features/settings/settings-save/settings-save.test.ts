@@ -344,6 +344,7 @@ describe("settings save transforms", () => {
     );
 
     expect(snapshot.workspaces["repo-a"]?.hooks.preStart).toEqual(["npm ci"]);
+    expect("theme" in snapshot).toBe(false);
     expect(snapshot.workspaces["repo-a"]?.devServers).toEqual([
       {
         id: "frontend",
@@ -371,6 +372,5 @@ describe("settings save transforms", () => {
         enabled: false,
       },
     });
-    expect(snapshot.theme).toBe("light");
   });
 });

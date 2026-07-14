@@ -1,11 +1,13 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot, SettingsSnapshotUpdate } from "@openducktor/contracts";
 import { prepareReusablePromptsForSave } from "@/state/read-models/settings-read-model";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { prepareGlobalGitSettingsForSave } from "./global-git-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
 
-export const prepareSettingsSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSnapshot => {
+export const prepareSettingsSnapshotForSave = (
+  snapshot: SettingsSnapshot,
+): SettingsSnapshotUpdate => {
   const workspaces = Object.fromEntries(
     Object.entries(snapshot.workspaces).map(([workspaceId, repoConfig]) => [
       workspaceId,
@@ -14,7 +16,6 @@ export const prepareSettingsSnapshotForSave = (snapshot: SettingsSnapshot): Sett
   );
 
   return {
-    theme: snapshot.theme,
     git: prepareGlobalGitSettingsForSave(snapshot.git),
     general: snapshot.general,
     appearance: snapshot.appearance,

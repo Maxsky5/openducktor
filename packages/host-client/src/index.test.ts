@@ -722,7 +722,6 @@ describe("HostClient", () => {
     });
 
     const result = await client.workspaceSaveSettingsSnapshot({
-      theme: "light",
       git: {
         defaultMergeMethod: "merge_commit",
       },
@@ -762,7 +761,6 @@ describe("HostClient", () => {
         command: "workspace_save_settings_snapshot",
         args: {
           snapshot: {
-            theme: "light",
             git: {
               defaultMergeMethod: "merge_commit",
             },

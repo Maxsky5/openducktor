@@ -1,7 +1,7 @@
 import {
   globalGitConfigSchema,
   repoHooksSchema,
-  settingsSnapshotSchema,
+  settingsSnapshotUpdateSchema,
   themeSchema,
 } from "@openducktor/contracts";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -116,7 +116,7 @@ export const createWorkspaceSettingsCommandHandlers = (
   },
   workspace_save_settings_snapshot: (args) =>
     workspaceSettingsService.saveSettingsSnapshot(
-      settingsSnapshotSchema.parse(
+      settingsSnapshotUpdateSchema.parse(
         requireObjectArg("workspace_save_settings_snapshot", args, "snapshot"),
       ),
     ),

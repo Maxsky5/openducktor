@@ -537,3 +537,6 @@ export const settingsSnapshotSchema = z.object({
 });
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = ParsedSettingsSnapshot;
+
+export const settingsSnapshotUpdateSchema = settingsSnapshotSchema.omit({ theme: true });
+export type SettingsSnapshotUpdate = z.infer<typeof settingsSnapshotUpdateSchema>;

@@ -143,6 +143,7 @@ import type {
   RuntimeSupportedScope,
   RuntimeWorkflowCapabilities,
   SettingsSnapshot,
+  SettingsSnapshotUpdate,
   SlashCommandCatalog,
   SlashCommandDescriptor,
   SlashCommandSource,
@@ -496,6 +497,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "optionalRuntimeCapabilityKeys",
   "softGuardrailsSchema",
   "settingsSnapshotSchema",
+  "settingsSnapshotUpdateSchema",
   "specTemplateSections",
   "systemCheckSchema",
   "systemListOpenInToolsRequestSchema",
@@ -697,6 +699,7 @@ type ExportedTypeContract = {
   RuntimeSubagentExecutionMode: RuntimeSubagentExecutionMode;
   RuntimeSupportedScope: RuntimeSupportedScope;
   SettingsSnapshot: SettingsSnapshot;
+  SettingsSnapshotUpdate: SettingsSnapshotUpdate;
   SystemCheck: SystemCheck;
   SystemListOpenInToolsRequest: SystemListOpenInToolsRequest;
   SystemOpenInToolId: SystemOpenInToolId;

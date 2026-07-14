@@ -62,10 +62,12 @@ const createFakeSettingsConfig = ({
   config = null,
   existingPaths = new Set<string>(),
   canonicalPaths = {},
+  beforeWrite,
 }: {
   config?: GlobalConfig | null;
   existingPaths?: Set<string>;
   canonicalPaths?: Record<string, string>;
+  beforeWrite?: (nextConfig: GlobalConfig) => Promise<void>;
 } = {}): FakeSettingsConfigPort => {
   const writtenConfigs: GlobalConfig[] = [];
   let currentConfig = config;
@@ -89,6 +91,7 @@ const createFakeSettingsConfig = ({
     writeConfig(nextConfig: GlobalConfig) {
       return Effect.tryPromise({
         try: async () => {
+          await beforeWrite?.(nextConfig);
           writtenConfigs.push(nextConfig);
           currentConfig = nextConfig;
         },
@@ -333,7 +336,7 @@ describe("createWorkspaceSettingsService", () => {
       Effect.runPromise(service.reorderWorkspaces(["repo-a", "repo-a"])),
     ).rejects.toThrow("Workspace reorder included duplicate workspace id: repo-a");
   });
-  test("saves settings snapshots and preserves durable workspace metadata", async () => {
+  test("saves settings snapshots without changing theme and preserves workspace metadata", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
         activeWorkspace: "repo",
@@ -368,7 +371,6 @@ describe("createWorkspaceSettingsService", () => {
     const records = await Effect.runPromise(
       service.saveSettingsSnapshot({
         ...snapshot,
-        theme: "dark",
         appearance: explicitAppearanceSettings,
         chat: explicitChatSettings,
         agentRuntimes: {
@@ -410,7 +412,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
       version: 2,
       activeWorkspace: "repo",
-      theme: "dark",
+      theme: "light",
       workspaceOrder: ["repo"],
       workspaces: {
         repo: {
@@ -443,6 +445,46 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(settingsConfig.writtenConfigs[0]?.chat).toEqual(explicitChatSettings);
     expect(settingsConfig.writtenConfigs[0]?.appearance).toEqual(explicitAppearanceSettings);
+  });
+  test("does not let a failed theme write escape through a concurrent settings save", async () => {
+    let rejectThemeWrite: ((reason: Error) => void) | undefined;
+    let markThemeWriteStarted: (() => void) | undefined;
+    const themeWriteStarted = new Promise<void>((resolve) => {
+      markThemeWriteStarted = resolve;
+    });
+    const themeWriteResult = new Promise<void>((_resolve, reject) => {
+      rejectThemeWrite = reject;
+    });
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig(),
+      beforeWrite: async (nextConfig) => {
+        if (
+          nextConfig.theme === "dark" &&
+          nextConfig.general.openAgentStudioTabOnBackgroundSessionStart
+        ) {
+          markThemeWriteStarted?.();
+          await themeWriteResult;
+        }
+      },
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    const themeWrite = Effect.runPromise(service.setTheme("dark"));
+    await themeWriteStarted;
+    const settingsWrite = Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...snapshot,
+        general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      }),
+    );
+    rejectThemeWrite?.(new Error("theme write failed"));
+
+    await expect(themeWrite).rejects.toThrow("theme write failed");
+    await settingsWrite;
+    const persisted = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(persisted.theme).toBe("light");
+    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
   });
   test("rejects invalid appearance snapshot settings without writing config", async () => {
     const settingsConfig = createFakeSettingsConfig({

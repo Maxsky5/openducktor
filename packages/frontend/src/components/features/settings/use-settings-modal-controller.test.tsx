@@ -548,11 +548,13 @@ describe("useSettingsModalController", () => {
     });
 
     const expectedSnapshot = createSettingsSnapshot();
+    const { theme: expectedTheme, ...expectedSnapshotUpdate } = expectedSnapshot;
     expect(didSave).toBe(true);
+    expect(expectedTheme).toBe("light");
     expect(saveGlobalGitConfig).toHaveBeenCalledTimes(0);
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     expect(saveSettingsSnapshot).toHaveBeenCalledWith({
-      ...expectedSnapshot,
+      ...expectedSnapshotUpdate,
       chat: {
         ...expectedSnapshot.chat,
         showThinkingMessages: true,
