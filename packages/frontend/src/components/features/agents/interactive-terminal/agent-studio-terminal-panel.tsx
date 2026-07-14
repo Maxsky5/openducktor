@@ -148,7 +148,7 @@ export function AgentStudioTerminalPanel({
             >
               <TabsList
                 aria-label="Task terminal tabs"
-                className="h-9 w-full max-w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0"
+                className="h-10 w-full max-w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0"
               >
                 {model.tabs.map((tab) => {
                   const active = tab.tabId === model.activeTabId;
@@ -159,17 +159,15 @@ export function AgentStudioTerminalPanel({
                     <div
                       key={tab.tabId}
                       className={cn(
-                        "relative flex h-8 shrink-0 items-center rounded-md border transition-colors",
-                        active
-                          ? "border-border bg-card text-foreground"
-                          : "border-transparent text-muted-foreground hover:bg-muted",
+                        "group relative flex h-full shrink-0 items-center border-r border-border/70",
+                        active ? "text-foreground" : "text-muted-foreground",
                       )}
                     >
                       <TabsTrigger
                         value={tab.tabId}
                         aria-label={`${tab.label}, ${lifecycleText(tab)}`}
                         title={detail}
-                        className="h-full max-w-48 flex-none rounded-md border-0 bg-transparent py-1 pl-2.5 pr-7 shadow-none data-[state=active]:border-0 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                        className="relative h-full max-w-48 flex-none justify-start rounded-none border-0 bg-transparent py-1 pl-3 pr-8 text-xs font-medium shadow-none transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-t-sm after:bg-transparent hover:bg-muted/50 hover:text-foreground focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/60 data-[state=active]:border-0 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-selected-accent"
                       >
                         <span className="truncate">{tab.label}</span>
                       </TabsTrigger>
@@ -178,7 +176,7 @@ export function AgentStudioTerminalPanel({
                         size="icon"
                         variant="ghost"
                         aria-label={`Close ${tab.label}`}
-                        className="absolute right-0.5 size-6 rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                        className="absolute right-1 z-20 size-6 rounded-sm text-muted-foreground/80 opacity-70 hover:bg-accent/60 hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100"
                         onClick={(event) => {
                           event.stopPropagation();
                           void closeTab(tab);
@@ -207,8 +205,9 @@ export function AgentStudioTerminalPanel({
               <Button
                 type="button"
                 size="icon"
+                variant="ghost"
                 aria-label="New terminal"
-                className="size-7 shadow-none"
+                className="size-8 text-muted-foreground shadow-none hover:text-foreground"
                 onClick={model.onCreate}
                 disabled={model.isLoading || model.isCreating || model.tabs.length >= 8}
               >

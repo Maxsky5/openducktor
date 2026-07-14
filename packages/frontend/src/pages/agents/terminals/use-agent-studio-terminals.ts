@@ -106,13 +106,19 @@ const readPreferences = (repoPath: string, taskId: string): TerminalUiPreference
   }
 };
 
-const forgetRememberedTerminal = (repoPath: string, taskId: string, terminalId: string): void => {
+const forgetRememberedTerminal = (
+  repoPath: string,
+  taskId: string,
+  terminalId: string,
+  hidePanel = false,
+): void => {
   const preferences = readPreferences(repoPath, taskId);
   if (!preferences) return;
   localStorage.setItem(
     preferenceKey(repoPath, taskId),
     JSON.stringify({
       ...preferences,
+      visible: hidePanel ? false : preferences.visible,
       activeTerminalId:
         preferences.activeTerminalId === terminalId ? null : preferences.activeTerminalId,
       terminals: preferences.terminals.filter((entry) => entry.terminalId !== terminalId),
@@ -481,11 +487,20 @@ export const useAgentStudioTerminals = (
       onCreate: () => void createTerminal(),
       onRetryCreate: (tabId: string) => void createTerminal(tabId),
       onClose: async (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => {
+        const closesLastTab =
+          visibleState.tabs.length === 1 && visibleState.tabs[0]?.tabId === tab.tabId;
+        const hidePanelAfterClose = (): void => {
+          if (!closesLastTab) return;
+          setVisibility((current) =>
+            current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
+          );
+        };
         if (!tab.terminalId) {
           setScopeState((current) => ({
             ...current,
             tabs: current.tabs.filter((candidate) => candidate.tabId !== tab.tabId),
           }));
+          hidePanelAfterClose();
           return { closed: true };
         }
         const terminalId = tab.terminalId;
@@ -508,7 +523,9 @@ export const useAgentStudioTerminals = (
             activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
           };
         });
-        if (repoPath && taskId) forgetRememberedTerminal(repoPath, taskId, terminalId);
+        hidePanelAfterClose();
+        if (repoPath && taskId)
+          forgetRememberedTerminal(repoPath, taskId, terminalId, closesLastTab);
         if (repoPath && taskId)
           await queryClient.invalidateQueries({
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),

@@ -135,6 +135,95 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
+  test("hides the panel after closing its final live terminal", async () => {
+    rememberVisibleTerminal("task-a");
+    const baseDependencies = createTerminalTestDependencies();
+    const terminals = [summaryForTask("task-a")];
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalClose: async () => {
+          terminals.splice(0, terminals.length);
+          return { closed: true };
+        },
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().isVisible).toBe(true);
+        expect(getLatest().tabs).toHaveLength(1);
+      });
+
+      await act(async () => {
+        const tab = getLatest().tabs[0];
+        if (!tab) throw new Error("Expected the live terminal tab.");
+        await getLatest().onClose(tab, false);
+      });
+
+      expect(getLatest().tabs).toEqual([]);
+      expect(getLatest().isVisible).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("hides the panel after dismissing its final lost terminal", async () => {
+    rememberVisibleTerminal("task-a");
+    const dependencies = createTerminalTestDependencies();
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
+      act(() => {
+        getLatest().onForgotten("terminal-task-a", "Terminal host restarted.");
+      });
+      await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("lost"));
+
+      await act(async () => {
+        const tab = getLatest().tabs[0];
+        if (!tab) throw new Error("Expected the lost terminal tab.");
+        await getLatest().onClose(tab, false);
+      });
+
+      expect(getLatest().tabs).toEqual([]);
+      expect(getLatest().isVisible).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("keeps one stable tab while the authoritative list refreshes after creation", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const created = {
