@@ -486,6 +486,45 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     await harness.unmount();
   });
 
+  test("does not start a scheduled file search after the search implementation changes", async () => {
+    const firstSearchFiles = mock(async () => [buildFileSearchResult()]);
+    const secondSearchFiles = mock(async () => [buildFileSearchResult()]);
+    const harness = createHarness(firstSearchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@a"), {
+        segmentId: "segment-1",
+        offset: 2,
+      });
+    });
+
+    await harness.update(createAutocompleteProps(secondSearchFiles));
+
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
+    expect(firstSearchFiles).not.toHaveBeenCalled();
+    expect(secondSearchFiles).not.toHaveBeenCalled();
+    expect(harness.getLatest().referenceMenuState).toBeNull();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@a"), {
+        segmentId: "segment-1",
+        offset: 2,
+      });
+    });
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
+    expect(secondSearchFiles).toHaveBeenCalledTimes(1);
+    expect(secondSearchFiles).toHaveBeenCalledWith("a");
+
+    await harness.unmount();
+  });
+
   test("debounces rapid file search queries to the latest trigger", async () => {
     const searchFiles = mock(async () => [buildFileSearchResult()]);
     const harness = createHarness(searchFiles);
