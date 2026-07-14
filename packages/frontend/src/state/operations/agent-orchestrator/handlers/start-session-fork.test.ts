@@ -256,6 +256,13 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   test("aborts the task startup lease when fork persistence fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const abortedLeaseIds: string[] = [];
+    const stoppedSessionIds: string[] = [];
+    const sessionsRef = createSessionsRef([
+      sessionFixture({
+        externalSessionId: "source-persistence-failure",
+        historyLoadState: "loaded",
+      }),
+    ]);
     adapter.forkSession = async (input) => ({
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
@@ -265,15 +272,15 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [];
+    adapter.stopSession = async (sessionRef) => {
+      stoppedSessionIds.push(
+        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
+      );
+    };
 
     const { start } = createStartSessionTestHarness({
       adapter,
-      sessionsRef: createSessionsRef([
-        sessionFixture({
-          externalSessionId: "source-persistence-failure",
-          historyLoadState: "loaded",
-        }),
-      ]),
+      sessionsRef,
       taskRef: { current: [taskFixture] },
       prepareTaskSessionStartupLease: async () => "persistence-failure-lease",
       persistSessionRecord: async () => {
@@ -298,6 +305,8 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       }),
     ).rejects.toThrow("session store unavailable");
     expect(abortedLeaseIds).toEqual(["persistence-failure-lease"]);
+    expect(stoppedSessionIds).toEqual(["fork-persistence-failure"]);
+    expect(getSession(sessionsRef.current, "fork-persistence-failure")).toBeUndefined();
   });
 
   test("loads stopped source session history before forking so inherited history is available immediately", async () => {

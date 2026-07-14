@@ -9,6 +9,7 @@ import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 type TaskCleanupImpact = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
+  legacyWorktreeCount: number;
   impactError: string | null;
   isLoadingImpact: boolean;
 };
@@ -30,6 +31,7 @@ type TaskWorktreeImpactQuerySnapshot = {
 const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
   hasManagedSessionCleanup: false,
   managedWorktreeCount: 0,
+  legacyWorktreeCount: 0,
   impactError: null,
   isLoadingImpact: false,
 };
@@ -60,6 +62,7 @@ export const getManagedTaskCleanupImpact = (
   return {
     hasManagedSessionCleanup: managedWorktrees.size > 0,
     managedWorktreeCount: managedWorktrees.size,
+    legacyWorktreeCount: managedWorktrees.size,
     impactError: null,
     isLoadingImpact: false,
   };
@@ -89,6 +92,7 @@ export const getTaskCleanupImpactFromSessionQueries = (
     return {
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: TASK_CLEANUP_IMPACT_ERROR_MESSAGE,
       isLoadingImpact: false,
     };
@@ -110,12 +114,15 @@ export const getTaskCleanupImpactFromSessionQueries = (
     taskSessionQueries.map((query) => query.data ?? []),
   );
   const managedPaths = new Set<string>();
+  const canonicalPaths = new Set<string>();
+  const legacyWorktreePaths = new Set<string>();
   for (const query of taskWorktreeQueries) {
     const path = query.data?.workingDirectory
       ? normalizePathForComparison(query.data.workingDirectory)
       : "";
     if (path && path !== normalizePathForComparison(repoPath)) {
       managedPaths.add(path);
+      canonicalPaths.add(path);
     }
   }
   for (const sessions of taskSessionQueries) {
@@ -123,6 +130,9 @@ export const getTaskCleanupImpactFromSessionQueries = (
       const path = normalizePathForComparison(session.workingDirectory);
       if (path && path !== normalizePathForComparison(repoPath)) {
         managedPaths.add(path);
+        if ((session.role === "build" || session.role === "qa") && !canonicalPaths.has(path)) {
+          legacyWorktreePaths.add(path);
+        }
       }
     }
   }
@@ -130,6 +140,7 @@ export const getTaskCleanupImpactFromSessionQueries = (
     ...sessionImpact,
     hasManagedSessionCleanup: managedPaths.size > 0,
     managedWorktreeCount: managedPaths.size,
+    legacyWorktreeCount: legacyWorktreePaths.size,
   };
 };
 

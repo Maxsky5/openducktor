@@ -226,7 +226,7 @@ describe("createTaskService build start worktree handling", () => {
     const coordinator = createTaskSessionBootstrapCoordinator();
     const service = createTaskService({
       taskStore: {
-        getTask: () => Effect.succeed(task({ status: "in_progress" })),
+        getTask: () => Effect.succeed(task({ status: "ai_review" })),
       } as TaskStorePort,
       taskSessionBootstrapCoordinator: coordinator,
       gitPort: createBuildStartGitPort({ calls }),
@@ -278,6 +278,38 @@ describe("createTaskService build start worktree handling", () => {
     ).rejects.toThrow("full reset is in progress");
     await Effect.runPromise(Fiber.interrupt(lifecycleFiber));
   });
+
+  test.each([
+    { role: "spec", task: task({ status: "closed" }) },
+    { role: "planner", task: task({ issueType: "feature", status: "open" }) },
+    { role: "build", task: task({ issueType: "feature", status: "spec_ready" }) },
+    { role: "qa", task: task({ status: "ready_for_dev" }) },
+  ] as const)("rejects an unavailable $role fork lease before locking the task", async (entry) => {
+    const coordinator = createTaskSessionBootstrapCoordinator();
+    const service = createTaskService({
+      taskStore: {
+        getTask: () => Effect.succeed(entry.task),
+      } as TaskStorePort,
+      taskSessionBootstrapCoordinator: coordinator,
+      gitPort: createBuildStartGitPort({ calls: [] }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.taskSessionStartupLeasePrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: entry.role,
+        }),
+      ),
+    ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
+    await expect(
+      Effect.runPromise(
+        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   test("prepares the same canonical worktree for non-Builder roles without transitioning", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

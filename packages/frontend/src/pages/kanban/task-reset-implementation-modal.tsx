@@ -17,6 +17,14 @@ type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"
 const formatManagedCleanupMessage = (): string =>
   "The canonical task worktree and branch are retained. Tracked content is reset to the latest locally available base, ordinary untracked files are removed, and ignored files are preserved.";
 
+const formatLegacyCleanupMessage = (legacyWorktreeCount: number): string => {
+  if (legacyWorktreeCount === 1) {
+    return "1 legacy implementation worktree and its related local branch will be deleted. Any uncommitted changes in that worktree will be lost.";
+  }
+
+  return `${legacyWorktreeCount} legacy implementation worktrees and their related local branches will be deleted. Any uncommitted changes in those worktrees will be lost.`;
+};
+
 export function TaskResetImplementationModal({
   model,
 }: {
@@ -59,6 +67,9 @@ export function TaskResetImplementationModal({
               This action removes Builder and QA session history for this task.
             </p>
             <p>{formatManagedCleanupMessage()}</p>
+            {model.legacyWorktreeCount > 0 ? (
+              <p>{formatLegacyCleanupMessage(model.legacyWorktreeCount)}</p>
+            ) : null}
             <p>QA reports and linked pull request metadata will be cleared.</p>
             <p>
               Specs and implementation plans are kept. The task status will move back to{" "}

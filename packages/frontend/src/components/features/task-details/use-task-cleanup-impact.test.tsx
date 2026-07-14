@@ -50,6 +50,7 @@ describe("getManagedTaskCleanupImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 2,
+      legacyWorktreeCount: 2,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -69,6 +70,7 @@ describe("getManagedTaskCleanupImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -93,6 +95,7 @@ describe("getManagedTaskCleanupImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 1,
+      legacyWorktreeCount: 1,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -107,6 +110,7 @@ describe("getManagedTaskCleanupImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 1,
+      legacyWorktreeCount: 1,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -140,8 +144,55 @@ describe("getManagedTaskCleanupImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: true,
+    });
+  });
+
+  test("distinguishes the retained canonical worktree from legacy session worktrees", () => {
+    const impact = getTaskCleanupImpactFromSessionQueries(
+      "/repo",
+      ["task-1"],
+      [
+        {
+          data: [
+            makeSession({
+              externalSessionId: "canonical-build",
+              workingDirectory: "/worktrees/task-1",
+            }),
+            makeSession({
+              externalSessionId: "legacy-qa",
+              role: "qa",
+              workingDirectory: "/legacy/task-1-qa",
+            }),
+            makeSession({
+              externalSessionId: "legacy-planner",
+              role: "planner",
+              workingDirectory: "/legacy/task-1-planner",
+            }),
+          ],
+          error: null,
+          isLoading: false,
+          isFetching: false,
+        },
+      ],
+      [
+        {
+          data: { workingDirectory: "/worktrees/task-1" },
+          error: null,
+          isLoading: false,
+          isFetching: false,
+        },
+      ],
+    );
+
+    expect(impact).toEqual({
+      hasManagedSessionCleanup: true,
+      managedWorktreeCount: 3,
+      legacyWorktreeCount: 1,
+      impactError: null,
+      isLoadingImpact: false,
     });
   });
 });

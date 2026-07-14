@@ -163,6 +163,7 @@ export type KanbanPageModels = {
     isLoadingImpact: boolean;
     hasManagedSessionCleanup: boolean;
     managedWorktreeCount: number;
+    legacyWorktreeCount: number;
     impactError: string | null;
     errorMessage: string | null;
     onOpenChange: (open: boolean) => void;

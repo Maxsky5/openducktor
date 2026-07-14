@@ -1,9 +1,12 @@
 import { Effect } from "effect";
+import { deriveAgentWorkflows } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskSessionStartupLeaseUseCase = ({
   gitPort,
+  taskStore,
   taskSessionBootstrapCoordinator: coordinator,
 }: CreateTaskServiceInput): Pick<
   TaskService,
@@ -33,6 +36,26 @@ export const createTaskSessionStartupLeaseUseCase = ({
           return gitPort;
         });
         const canonicalRepoPath = yield* git.canonicalizePath(input.repoPath);
+        const task = yield* taskStore.getTask({
+          repoPath: canonicalRepoPath,
+          taskId: input.taskId,
+        });
+        const workflows = deriveAgentWorkflows(task);
+        const workflow = input.role === "build" ? workflows.builder : workflows[input.role];
+        if (!workflow.available) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "role",
+              message: `${input.role} workflow is not available for task ${input.taskId}.`,
+              details: {
+                repoPath: canonicalRepoPath,
+                taskId: input.taskId,
+                role: input.role,
+                status: task.status,
+              },
+            }),
+          );
+        }
         const leaseId = crypto.randomUUID();
         yield* coordinator.acquireBootstrap(canonicalRepoPath, input.taskId, leaseId, input.role);
         return leaseId;

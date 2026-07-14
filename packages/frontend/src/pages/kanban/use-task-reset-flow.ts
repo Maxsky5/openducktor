@@ -50,8 +50,13 @@ export function useTaskResetFlow({
     [taskId, tasks],
   );
   const open = task !== null;
-  const { hasManagedSessionCleanup, managedWorktreeCount, impactError, isLoadingImpact } =
-    useTaskCleanupImpact(taskId ? [taskId] : [], open);
+  const {
+    hasManagedSessionCleanup,
+    managedWorktreeCount,
+    legacyWorktreeCount,
+    impactError,
+    isLoadingImpact,
+  } = useTaskCleanupImpact(taskId ? [taskId] : [], open);
 
   const closeModal = useCallback((): void => {
     if (isSubmitting) {
@@ -133,6 +138,7 @@ export function useTaskResetFlow({
       isLoadingImpact,
       hasManagedSessionCleanup,
       managedWorktreeCount,
+      legacyWorktreeCount,
       impactError,
       errorMessage: modalError,
       onOpenChange: (nextOpen) => {
