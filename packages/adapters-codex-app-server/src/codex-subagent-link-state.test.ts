@@ -178,6 +178,32 @@ describe("CodexSubagentLinkState", () => {
     }
   });
 
+  test("does not restart failed or cancelled children without a known end", () => {
+    for (const status of ["error", "cancelled"] as const) {
+      const subagents = new CodexSubagentLinkState();
+      subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId: "parent-thread",
+        childThreadId: "child-thread",
+        itemId: "spawn-1",
+        status,
+        startedAtMs: 100,
+      });
+
+      const staleRunning = subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId: "parent-thread",
+        childThreadId: "child-thread",
+        itemId: "resume-1",
+        status: "running",
+        allowStatusRestart: true,
+        startedAtMs: 200,
+      });
+
+      expect(staleRunning.status).toBe(status);
+    }
+  });
+
   test("clears links for one runtime without deleting matching thread ids in another runtime", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({

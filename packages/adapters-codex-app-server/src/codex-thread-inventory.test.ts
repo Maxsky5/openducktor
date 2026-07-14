@@ -49,6 +49,35 @@ describe("CodexThreadInventoryReader", () => {
     expect(codexThreadList(threadListResponse("thread-1", "Thread"))[0]?.updatedAtMs).toBe(2_000);
   });
 
+  test("rejects malformed or overflowing Codex thread update timestamps", () => {
+    expect(() =>
+      codexThreadList(
+        threadListResponse(
+          "thread-1",
+          "Thread",
+          "/repo",
+          { type: "idle" },
+          {
+            updatedAt: "invalid",
+          },
+        ),
+      ),
+    ).toThrow("Codex thread updatedAt must be a finite number.");
+    expect(() =>
+      codexThreadList(
+        threadListResponse(
+          "thread-1",
+          "Thread",
+          "/repo",
+          { type: "idle" },
+          {
+            updatedAt: Number.MAX_VALUE,
+          },
+        ),
+      ),
+    ).toThrow("Codex thread updatedAt exceeds the supported timestamp range.");
+  });
+
   test("requests interactive and subagent thread sources from Codex", async () => {
     const threadListCalls: Array<Record<string, unknown>> = [];
     const reader = new CodexThreadInventoryReader();

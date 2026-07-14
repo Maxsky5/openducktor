@@ -107,7 +107,10 @@ const isExplicitRunningRestart = (
   ) {
     return false;
   }
-  const lifecycleBoundaryMs = existing.endedAtMs ?? existing.startedAtMs;
+  let lifecycleBoundaryMs = existing.endedAtMs;
+  if (typeof lifecycleBoundaryMs !== "number" && existing.status === "completed") {
+    lifecycleBoundaryMs = existing.startedAtMs;
+  }
   return typeof lifecycleBoundaryMs === "number" && input.startedAtMs > lifecycleBoundaryMs;
 };
 

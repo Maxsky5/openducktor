@@ -70,8 +70,19 @@ export type CodexSubAgentSourceMetadata = {
 const codexTimestampFromUnknownSeconds = (value: unknown): string =>
   typeof value === "number" ? new Date(value * 1000).toISOString() : new Date().toISOString();
 
-const codexTimestampMsFromUnknownSeconds = (value: unknown): number | null =>
-  typeof value === "number" && Number.isFinite(value) ? value * 1000 : null;
+const codexTimestampMsFromUnknownSeconds = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error("Codex thread updatedAt must be a finite number.");
+  }
+  const timestampMs = value * 1000;
+  if (!Number.isFinite(timestampMs)) {
+    throw new Error("Codex thread updatedAt exceeds the supported timestamp range.");
+  }
+  return timestampMs;
+};
 
 export const codexThreadStatusSnapshot = (status: unknown): CodexThreadStatusSnapshot => {
   const type = isPlainObject(status)
