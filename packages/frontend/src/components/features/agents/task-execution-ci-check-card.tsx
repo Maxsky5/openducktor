@@ -7,7 +7,10 @@ import {
   Clock,
   ExternalLink,
 } from "lucide-react";
-import type { ReactElement } from "react";
+import type { MouseEvent, ReactElement } from "react";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import { checkBadgeVariant, checkLabel } from "./task-execution-ci-presentation";
 import { TaskExecutionCiTimestampLine } from "./task-execution-ci-timestamp-line";
@@ -26,6 +29,14 @@ const CHECK_TEXT_CLASS_BY_VARIANT = {
   success: "text-success-muted",
 } as const;
 
+const openCheckUrl = (url: string): void => {
+  void openExternalUrl(url).catch((error) => {
+    toast.error("Failed to open check", {
+      description: errorMessage(error),
+    });
+  });
+};
+
 export function TaskExecutionCiCheckCard({
   check,
 }: {
@@ -34,6 +45,20 @@ export function TaskExecutionCiCheckCard({
   const variant = checkBadgeVariant(check);
   const StatusIcon = CHECK_ICON_BY_VARIANT[variant];
   const label = checkLabel(check);
+  const openCheckLink = (event: MouseEvent<HTMLAnchorElement>): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (check.url) {
+      openCheckUrl(check.url);
+    }
+  };
+  const openCheckLinkFromAuxiliaryClick = (event: MouseEvent<HTMLAnchorElement>): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.button === 1 && check.url) {
+      openCheckUrl(check.url);
+    }
+  };
 
   return (
     <details className="group/check">
@@ -52,11 +77,12 @@ export function TaskExecutionCiCheckCard({
         {check.url ? (
           <a
             href={check.url}
-            target="_blank"
-            rel="noreferrer"
             className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
             aria-label={`Open ${check.name} check`}
-            onClick={(event) => {
+            onClick={openCheckLink}
+            onAuxClick={openCheckLinkFromAuxiliaryClick}
+            onContextMenu={(event) => {
+              event.preventDefault();
               event.stopPropagation();
             }}
           >
