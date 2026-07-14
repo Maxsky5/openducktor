@@ -151,16 +151,11 @@ export function useRepoSettingsOperations({
   const saveGlobalGitConfig = useCallback(
     async (git: GlobalGitConfig): Promise<void> => {
       await host.workspaceUpdateGlobalGitConfig(git);
-      queryClient.setQueryData(
-        settingsSnapshotQueryKey,
-        (current: SettingsSnapshot | undefined): SettingsSnapshot | undefined =>
-          current
-            ? {
-                ...current,
-                git,
-              }
-            : current,
-      );
+      queryClient.removeQueries({
+        queryKey: settingsSnapshotQueryKey,
+        exact: true,
+      });
+      await loadSettingsSnapshotFromQuery(queryClient);
     },
     [queryClient, settingsSnapshotQueryKey],
   );
