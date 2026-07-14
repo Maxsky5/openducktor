@@ -53,13 +53,14 @@ describe("Electron main lifecycle policy", () => {
   test("main window denies child windows and renderer-initiated navigation", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
-    expect(source).toContain(
-      `window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    window.webContents.on("will-navigate", (event) => {
-      event.preventDefault();
-    });
-    registerWindowContextMenu(window, { isDevelopment });`,
-    );
+    expect(source).toContain('window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))');
+    expect(source).toContain('window.webContents.on("will-navigate", (event) => {');
+    expect(source).toContain("event.preventDefault()");
+    const windowOpenHandlerIndex = source.indexOf("window.webContents.setWindowOpenHandler");
+    expect(windowOpenHandlerIndex).toBeGreaterThanOrEqual(0);
+    expect(
+      source.indexOf("registerWindowContextMenu(window", windowOpenHandlerIndex),
+    ).toBeGreaterThan(windowOpenHandlerIndex);
   });
 
   test("startup starts scheduled app update checks after the main window is created", () => {

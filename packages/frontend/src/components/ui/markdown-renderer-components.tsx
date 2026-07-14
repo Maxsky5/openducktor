@@ -31,10 +31,14 @@ const SHARED_COMPONENTS: Components = {
         target={undefined}
         onClick={openLink}
         onAuxClick={(event) => {
+          event.preventDefault();
           if (event.button === 1) {
-            openLink(event);
+            if (href) {
+              openMarkdownUrl(href);
+            }
           }
         }}
+        onContextMenu={(event) => event.preventDefault()}
         className={cn(
           "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
           className,

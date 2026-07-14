@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
+import { toast } from "sonner";
 import * as externalUrl from "@/lib/open-external-url";
 import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
 
@@ -41,6 +42,49 @@ test("opens rendered links through the shell bridge on middle click", () => {
     expect(fireEvent(link, event)).toBe(false);
     expect(openExternalUrlSpy).toHaveBeenCalledWith(markdownUrl);
   } finally {
+    openExternalUrlSpy.mockRestore();
+  }
+});
+
+test("prevents unsupported auxiliary and context-menu navigation", () => {
+  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+
+  try {
+    const view = renderMarkdownLink("https://example.com/context-menu", "Open link");
+    const link = view.getByRole("link", { name: "Open link" });
+
+    const auxiliaryEvent = new MouseEvent("auxclick", {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+    });
+    expect(fireEvent(link, auxiliaryEvent)).toBe(false);
+    expect(fireEvent.contextMenu(link)).toBe(false);
+    expect(openExternalUrlSpy).not.toHaveBeenCalled();
+  } finally {
+    openExternalUrlSpy.mockRestore();
+  }
+});
+
+test("shows an actionable error without falling back when the shell rejects a link", async () => {
+  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockRejectedValue(
+    new Error("Shell rejected the URL"),
+  );
+  const toastErrorSpy = spyOn(toast, "error").mockImplementation(() => "toast-id");
+
+  try {
+    const view = renderMarkdownLink("https://example.com/rejected", "Open link");
+    const link = view.getByRole("link", { name: "Open link" });
+
+    expect(fireEvent.click(link)).toBe(false);
+    await waitFor(() => {
+      expect(toastErrorSpy).toHaveBeenCalledWith("Failed to open link", {
+        description: "Shell rejected the URL",
+      });
+    });
+    expect(openExternalUrlSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    toastErrorSpy.mockRestore();
     openExternalUrlSpy.mockRestore();
   }
 });
