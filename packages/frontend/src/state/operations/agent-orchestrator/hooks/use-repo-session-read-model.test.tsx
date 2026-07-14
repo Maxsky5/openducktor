@@ -404,14 +404,30 @@ describe("useRepoSessionReadModel", () => {
     const unsubscribe = mock(() => undefined);
     const observeAgentSessionLive = mock(async () => deferredObservation.promise);
     state.props.liveSessionPort.observeAgentSessionLive = observeAgentSessionLive;
+    let observationResolved = false;
+    let harnessUnmounted = false;
 
-    await state.harness.mount();
-    await state.harness.waitFor(() => observeAgentSessionLive.mock.calls.length === 1);
-    await state.harness.unmount();
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => observeAgentSessionLive.mock.calls.length === 1);
+      await state.harness.unmount();
+      harnessUnmounted = true;
 
-    expect(unsubscribe).not.toHaveBeenCalled();
-    deferredObservation.resolve(unsubscribe);
-    await waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1), { timeout: 1_000 });
+      expect(unsubscribe).not.toHaveBeenCalled();
+      deferredObservation.resolve(unsubscribe);
+      observationResolved = true;
+      await waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1), { timeout: 1_000 });
+    } finally {
+      try {
+        if (!harnessUnmounted) {
+          await state.harness.unmount();
+        }
+      } finally {
+        if (!observationResolved) {
+          deferredObservation.resolve(unsubscribe);
+        }
+      }
+    }
   });
 
   test("derives the waiting counter from the same initial snapshot collection commit", async () => {
