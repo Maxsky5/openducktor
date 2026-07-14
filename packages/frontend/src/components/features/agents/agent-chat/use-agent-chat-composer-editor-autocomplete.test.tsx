@@ -121,6 +121,8 @@ const wait = (ms: number): Promise<void> => {
   });
 };
 
+const FILE_SEARCH_DEBOUNCE_WAIT_MS = 200;
+
 describe("useAgentChatComposerEditorAutocomplete", () => {
   test("filters slash commands from the current selection target", async () => {
     const searchFiles = mock(async () => []);
@@ -284,13 +286,21 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
     await harness.run(async () => {
-      await wait(650);
+      await wait(450);
+    });
+
+    expect(harness.getLatest().isFileSearchLoading).toBe(false);
+
+    await harness.run(async () => {
+      await wait(100);
     });
 
     expect(harness.getLatest().isFileSearchLoading).toBe(true);
 
     slowSearch.resolve([buildFileSearchResult({ path: "src/slow.ts", name: "slow.ts" })]);
-    await harness.waitFor((state) => state.isFileSearchLoading === false);
+    await harness.waitFor((state) => {
+      return state.fileSearchResults.some((result) => result.path === "src/slow.ts");
+    });
 
     expect(harness.getLatest().fileSearchResults.map((result) => result.path)).toEqual([
       "src/slow.ts",
@@ -314,7 +324,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
       });
     });
 
-    await harness.waitFor((state) => state.isFileSearchLoading === false);
+    await harness.waitFor((state) => state.referenceMenuItems.some((item) => item.kind === "file"));
 
     expect(harness.getLatest().showReferenceMenu).toBe(true);
     expect(harness.getLatest().filteredSubagents.map((subagent) => subagent.name)).toEqual([
@@ -372,12 +382,22 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
       });
     });
 
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
     await harness.run((state) => {
       state.syncMenusForSelectionTarget(buildDraft("@ab"), {
         segmentId: "segment-1",
         offset: 3,
       });
     });
+
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
+    expect(searchFiles).toHaveBeenCalledTimes(2);
 
     secondSearch.resolve([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
     await harness.waitFor((state) => {
@@ -410,6 +430,12 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     expect(harness.getLatest().showReferenceMenu).toBe(true);
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
+    expect(searchFiles).toHaveBeenCalledTimes(1);
+
     await harness.update(
       createAutocompleteProps(searchFiles, {
         supportsFileSearch: false,
@@ -433,6 +459,109 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     await harness.unmount();
   });
 
+  test("does not start a scheduled file search after file search support is disabled", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@a"), {
+        segmentId: "segment-1",
+        offset: 2,
+      });
+    });
+
+    await harness.update(
+      createAutocompleteProps(searchFiles, {
+        supportsFileSearch: false,
+      }),
+    );
+
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
+    expect(searchFiles).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("debounces rapid file search queries to the latest trigger", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@a"), {
+        segmentId: "segment-1",
+        offset: 2,
+      });
+    });
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@ab"), {
+        segmentId: "segment-1",
+        offset: 3,
+      });
+    });
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@abc"), {
+        segmentId: "segment-1",
+        offset: 4,
+      });
+    });
+
+    expect(searchFiles).not.toHaveBeenCalled();
+
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
+    expect(searchFiles).toHaveBeenCalledTimes(1);
+    expect(searchFiles).toHaveBeenCalledWith("abc");
+
+    await harness.unmount();
+  });
+
+  test("does not start a scheduled file search after the reference menu closes", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@a"), {
+        segmentId: "segment-1",
+        offset: 2,
+      });
+      state.closeReferenceMenu();
+    });
+
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+    });
+
+    expect(searchFiles).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("does not start a scheduled file search after unmount", async () => {
+    const searchFiles = mock(async () => [buildFileSearchResult()]);
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@a"), {
+        segmentId: "segment-1",
+        offset: 2,
+      });
+    });
+
+    await harness.unmount();
+    await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
+
+    expect(searchFiles).not.toHaveBeenCalled();
+  });
+
   test("does not repeat the same file search request for an unchanged trigger", async () => {
     const firstSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
     const searchFiles = mock(() => firstSearch.promise);
@@ -447,7 +576,7 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
       });
     });
 
-    expect(searchFiles).toHaveBeenCalledTimes(1);
+    expect(searchFiles).not.toHaveBeenCalled();
     expect(harness.getLatest().isFileSearchLoading).toBe(false);
 
     await harness.run((state) => {
@@ -455,6 +584,12 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
         segmentId: "segment-1",
         offset: 3,
       });
+    });
+
+    expect(searchFiles).not.toHaveBeenCalled();
+
+    await harness.run(async () => {
+      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
     });
 
     expect(searchFiles).toHaveBeenCalledTimes(1);
