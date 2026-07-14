@@ -3,6 +3,7 @@ import {
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
   type PullRequest,
+  type TaskAgentSessions,
   type TaskApprovalContextLoadResult,
   type TaskCard,
   type TaskDirectMergeResult,
@@ -49,6 +50,7 @@ import type {
   CreateTaskUseCaseInput,
   DeleteTaskInput,
   DirectMergeInput,
+  ListAgentSessionsForTasksInput,
   ListTasksInput,
   MarkdownDocumentInput,
   OptionalNoteInput,
@@ -109,6 +111,9 @@ export type TaskService = {
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
   agentSessionsList(input: TaskIdInput): Effect.Effect<AgentSessionRecord[], TaskServiceError>;
+  agentSessionsListForTasks(
+    input: ListAgentSessionsForTasksInput,
+  ): Effect.Effect<TaskAgentSessions[], TaskServiceError>;
   agentSessionUpsert(input: AgentSessionUpsertInput): Effect.Effect<boolean, TaskServiceError>;
   agentSessionDelete(input: AgentSessionDeleteInput): Effect.Effect<boolean, TaskServiceError>;
   getApprovalContext(
@@ -285,6 +290,8 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
   return {
     agentSessionDelete: (input) => mapTaskServiceErrors(service.agentSessionDelete(input)),
     agentSessionsList: (input) => mapTaskServiceErrors(service.agentSessionsList(input)),
+    agentSessionsListForTasks: (input) =>
+      mapTaskServiceErrors(service.agentSessionsListForTasks(input)),
     agentSessionUpsert: (input) => mapTaskServiceErrors(service.agentSessionUpsert(input)),
     buildBlocked: (input) => mapTaskServiceErrors(service.buildBlocked(input)),
     buildCompleted: (input) => mapTaskServiceErrors(service.buildCompleted(input)),

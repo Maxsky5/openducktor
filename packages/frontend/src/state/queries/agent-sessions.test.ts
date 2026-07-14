@@ -3,7 +3,9 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { host } from "../operations/host";
 import {
+  agentSessionListsQueryOptions,
   agentSessionQueryKeys,
+  invalidateAgentSessionListQuery,
   loadAgentSessionListsFromQuery,
   upsertAgentSessionRecordInQuery,
 } from "./agent-sessions";
@@ -25,6 +27,36 @@ describe("agent session query cache helpers", () => {
     variant: "latest",
     profileId: "work",
   };
+
+  test("batch query keys normalize task ordering, whitespace, duplicates, and empty IDs", () => {
+    expect(
+      agentSessionQueryKeys.listForTasks("/repo", [" task-2 ", "", "task-1", "task-2"]),
+    ).toEqual(["agent-sessions", "list-for-tasks", "/repo", ["task-1", "task-2"]]);
+  });
+
+  test("agentSessionListsQueryOptions makes one normalized host call and defaults missing tasks", async () => {
+    const queryClient = new QueryClient();
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    const calls: unknown[] = [];
+    host.agentSessionsListForTasks = async (repoPath, taskIds) => {
+      calls.push({ repoPath, taskIds });
+      return [{ taskId: "task-1", agentSessions: [sessionFixture] }];
+    };
+
+    try {
+      const result = await queryClient.fetchQuery(
+        agentSessionListsQueryOptions("/repo", [" task-2 ", "task-1", "task-2"]),
+      );
+
+      expect(result).toEqual({
+        "task-1": [sessionFixture],
+        "task-2": [],
+      });
+      expect(calls).toEqual([{ repoPath: "/repo", taskIds: ["task-1", "task-2"] }]);
+    } finally {
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+    }
+  });
 
   test("upsertAgentSessionRecordInQuery inserts a missing session record", () => {
     const queryClient = new QueryClient();
@@ -127,6 +159,43 @@ describe("agent session query cache helpers", () => {
     );
 
     expect(sessions).toEqual([sessionFixture, otherRuntimeSession]);
+  });
+
+  test("upsertAgentSessionRecordInQuery updates repository batch caches containing the task", () => {
+    const queryClient = new QueryClient();
+    const batchKey = agentSessionQueryKeys.listForTasks("/repo", ["task-1", "task-2"]);
+    queryClient.setQueryData(batchKey, { "task-1": [], "task-2": [] });
+    queryClient.setQueryData(agentSessionQueryKeys.listForTasks("/other", ["task-1"]), {
+      "task-1": [],
+    });
+
+    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", sessionFixture);
+
+    expect(queryClient.getQueryData<Record<string, AgentSessionRecord[]>>(batchKey)).toEqual({
+      "task-1": [sessionFixture],
+      "task-2": [],
+    });
+    expect(
+      queryClient.getQueryData<Record<string, AgentSessionRecord[]>>(
+        agentSessionQueryKeys.listForTasks("/other", ["task-1"]),
+      ),
+    ).toEqual({ "task-1": [] });
+  });
+
+  test("invalidateAgentSessionListQuery invalidates per-task and repository batch caches", async () => {
+    const queryClient = new QueryClient();
+    const listKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const batchKey = agentSessionQueryKeys.listForTasks("/repo", ["task-1", "task-2"]);
+    const otherBatchKey = agentSessionQueryKeys.listForTasks("/other", ["task-1"]);
+    queryClient.setQueryData(listKey, []);
+    queryClient.setQueryData(batchKey, { "task-1": [], "task-2": [] });
+    queryClient.setQueryData(otherBatchKey, { "task-1": [] });
+
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
+
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(batchKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(otherBatchKey)?.isInvalidated).toBe(false);
   });
 
   test("loadAgentSessionListsFromQuery reads the per-task session cache", async () => {

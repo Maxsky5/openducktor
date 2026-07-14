@@ -5,6 +5,7 @@ import type {
   PullRequest,
   QaReportVerdict,
   RepoStoreHealth,
+  TaskAgentSessions,
   TaskCard,
   TaskCreateInput,
   TaskMetadataDocument,
@@ -98,6 +99,10 @@ export type WorkflowDocumentRepository = {
   }): Effect.Effect<TaskMetadataDocument, TaskStoreError>;
 };
 export type AgentSessionRepository = {
+  listAgentSessionsForTasks(input: {
+    repoPath: string;
+    taskIds: string[];
+  }): Effect.Effect<TaskAgentSessions[], TaskStoreError>;
   clearAgentSessionsByRoles(input: {
     repoPath: string;
     taskId: string;

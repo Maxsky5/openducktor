@@ -15,6 +15,7 @@ export const createTaskQueryUseCases = ({
   | "listTasks"
   | "getTaskMetadata"
   | "agentSessionsList"
+  | "agentSessionsListForTasks"
   | "agentSessionUpsert"
   | "agentSessionDelete"
 > => ({
@@ -36,6 +37,10 @@ export const createTaskQueryUseCases = ({
 
       return metadata.agentSessions;
     });
+  },
+
+  agentSessionsListForTasks(input) {
+    return taskStore.listAgentSessionsForTasks(input);
   },
 
   agentSessionUpsert(input) {

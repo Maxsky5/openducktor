@@ -5,10 +5,17 @@ import { host } from "../operations/host";
 
 const AGENT_SESSION_LIST_STALE_TIME_MS = 30_000;
 
+const normalizeTaskIds = (taskIds: string[]): string[] =>
+  Array.from(new Set(taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort();
+
 export const agentSessionQueryKeys = {
   all: ["agent-sessions"] as const,
   list: (repoPath: string, taskId: string) =>
     [...agentSessionQueryKeys.all, "list", repoPath, taskId] as const,
+  batches: (repoPath: string) =>
+    [...agentSessionQueryKeys.all, "list-for-tasks", repoPath] as const,
+  listForTasks: (repoPath: string, taskIds: string[]) =>
+    [...agentSessionQueryKeys.batches(repoPath), normalizeTaskIds(taskIds)] as const,
 };
 
 export const agentSessionListQueryOptions = (repoPath: string, taskId: string) =>
@@ -17,6 +24,24 @@ export const agentSessionListQueryOptions = (repoPath: string, taskId: string) =
     queryFn: (): Promise<AgentSessionRecord[]> => host.agentSessionsList(repoPath, taskId),
     staleTime: AGENT_SESSION_LIST_STALE_TIME_MS,
   });
+
+export const agentSessionListsQueryOptions = (repoPath: string, taskIds: string[]) => {
+  const normalizedTaskIds = normalizeTaskIds(taskIds);
+  return queryOptions({
+    queryKey: agentSessionQueryKeys.listForTasks(repoPath, normalizedTaskIds),
+    queryFn: async (): Promise<Record<string, AgentSessionRecord[]>> => {
+      const sessionsByTaskId = Object.fromEntries(
+        normalizedTaskIds.map((taskId) => [taskId, [] as AgentSessionRecord[]]),
+      );
+      const taskSessions = await host.agentSessionsListForTasks(repoPath, normalizedTaskIds);
+      for (const taskSession of taskSessions) {
+        sessionsByTaskId[taskSession.taskId] = taskSession.agentSessions;
+      }
+      return sessionsByTaskId;
+    },
+    staleTime: AGENT_SESSION_LIST_STALE_TIME_MS,
+  });
+};
 
 export const loadAgentSessionListFromQuery = (
   queryClient: QueryClient,
@@ -58,11 +83,17 @@ export const invalidateAgentSessionListQuery = (
     refetchActive?: boolean;
   },
 ): Promise<void> =>
-  queryClient.invalidateQueries({
-    queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-    exact: true,
-    refetchType: options?.refetchActive === true ? "active" : "none",
-  });
+  Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: agentSessionQueryKeys.list(repoPath, taskId),
+      exact: true,
+      refetchType: options?.refetchActive === true ? "active" : "none",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: agentSessionQueryKeys.batches(repoPath),
+      refetchType: options?.refetchActive === true ? "active" : "none",
+    }),
+  ]).then(() => undefined);
 
 const areSelectedModelsEquivalent = (
   left: AgentSessionRecord["selectedModel"],
@@ -94,6 +125,32 @@ const areAgentSessionRecordsEquivalent = (
   left.workingDirectory === right.workingDirectory &&
   areSelectedModelsEquivalent(left.selectedModel, right.selectedModel);
 
+const upsertAgentSessionRecord = (
+  current: AgentSessionRecord[] | undefined,
+  session: AgentSessionRecord,
+): AgentSessionRecord[] | undefined => {
+  if (!current) {
+    return current;
+  }
+
+  const sessionKey = agentSessionIdentityKey(session);
+  const existingIndex = current.findIndex((entry) => agentSessionIdentityKey(entry) === sessionKey);
+  if (existingIndex === -1) {
+    return [...current, session];
+  }
+
+  const existingSession = current[existingIndex];
+  if (!existingSession || existingSession === session) {
+    return current;
+  }
+
+  if (areAgentSessionRecordsEquivalent(existingSession, session)) {
+    return current;
+  }
+
+  return current.map((entry, index) => (index === existingIndex ? session : entry));
+};
+
 export const upsertAgentSessionRecordInQuery = (
   queryClient: QueryClient,
   repoPath: string,
@@ -102,29 +159,20 @@ export const upsertAgentSessionRecordInQuery = (
 ): void => {
   queryClient.setQueryData<AgentSessionRecord[] | undefined>(
     agentSessionQueryKeys.list(repoPath, taskId),
-    (current): AgentSessionRecord[] | undefined => {
-      if (!current) {
+    (current) => upsertAgentSessionRecord(current, session),
+  );
+  queryClient.setQueriesData<Record<string, AgentSessionRecord[]> | undefined>(
+    { queryKey: agentSessionQueryKeys.batches(repoPath) },
+    (current) => {
+      if (!current || !(taskId in current)) {
         return current;
       }
-
-      const sessionKey = agentSessionIdentityKey(session);
-      const existingIndex = current.findIndex(
-        (entry) => agentSessionIdentityKey(entry) === sessionKey,
-      );
-      if (existingIndex === -1) {
-        return [...current, session];
-      }
-
-      const existingSession = current[existingIndex];
-      if (!existingSession || existingSession === session) {
+      const currentSessions = current[taskId];
+      const nextSessions = upsertAgentSessionRecord(currentSessions, session);
+      if (nextSessions === currentSessions || !nextSessions) {
         return current;
       }
-
-      if (areAgentSessionRecordsEquivalent(existingSession, session)) {
-        return current;
-      }
-
-      return current.map((entry, index) => (index === existingIndex ? session : entry));
+      return { ...current, [taskId]: nextSessions };
     },
   );
 };

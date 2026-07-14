@@ -39,6 +39,7 @@ import {
   runtimeInstanceSummarySchema,
   runtimeTransportSchema,
   slashCommandCatalogSchema,
+  taskAgentSessionsSchema,
   taskCardSchema,
   taskWorktreeSummarySchema,
   toOpencodeExposedOdtToolIds,
@@ -1606,6 +1607,43 @@ describe("runtime schemas", () => {
     expect(parsed.externalSessionId).toBe("session-opencode-1");
     expect(parsed.runtimeKind).toBe("opencode");
     expect(parsed.selectedModel?.modelId).toBe("gpt-5");
+  });
+
+  test("task agent sessions parses a batch session response", () => {
+    const parsed = taskAgentSessionsSchema.parse({
+      taskId: "task-1",
+      agentSessions: [
+        {
+          externalSessionId: "session-opencode-1",
+          role: "spec",
+          startedAt: "2026-02-18T17:11:00.000Z",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+          selectedModel: null,
+        },
+      ],
+    });
+
+    expect(parsed.taskId).toBe("task-1");
+    expect(parsed.agentSessions).toHaveLength(1);
+  });
+
+  test("task agent sessions rejects invalid nested session records", () => {
+    expect(() =>
+      taskAgentSessionsSchema.parse({
+        taskId: "task-1",
+        agentSessions: [
+          {
+            externalSessionId: "session-opencode-1",
+            role: "invalid-role",
+            startedAt: "2026-02-18T17:11:00.000Z",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+            selectedModel: null,
+          },
+        ],
+      }),
+    ).toThrow();
   });
 
   test("agent session record parses compact persisted payload with explicit runtime kind", () => {
