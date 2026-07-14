@@ -34,7 +34,7 @@ import {
   useRequiredContext,
   useWorkspaceBranchStateContext,
   useWorkspacePresenceContext,
-  WorkspaceStateContext,
+  useWorkspaceStateContext,
 } from "./app-state-contexts";
 import { AgentStudioStateProvider } from "./providers/agent-studio-state-provider";
 import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
@@ -87,8 +87,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   );
 }
 
-export const useWorkspaceState = (): WorkspaceStateContextValue =>
-  useRequiredContext(WorkspaceStateContext, "useWorkspaceState");
+export const useWorkspaceState = (): WorkspaceStateContextValue => useWorkspaceStateContext();
 
 export const useWorkspaceBranchState = (): WorkspaceBranchStateContextValue =>
   useWorkspaceBranchStateContext();

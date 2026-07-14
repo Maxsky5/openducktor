@@ -6,8 +6,8 @@ import {
   useDelegationState,
   useSpecState,
   useTasksState,
-  useWorkspaceState,
 } from "./app-state-provider";
+import { useWorkspaceState } from "./index";
 
 const HookProbe = ({ hook }: { hook: () => unknown }): ReactElement => {
   hook();
