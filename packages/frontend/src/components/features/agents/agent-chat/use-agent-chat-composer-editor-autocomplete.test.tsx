@@ -486,9 +486,11 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     await harness.unmount();
   });
 
-  test("does not start a scheduled file search after the search implementation changes", async () => {
+  test("keeps a scheduled file search when the search callback identity changes", async () => {
     const firstSearchFiles = mock(async () => [buildFileSearchResult()]);
-    const secondSearchFiles = mock(async () => [buildFileSearchResult()]);
+    const secondSearchFiles = mock(async () => [
+      buildFileSearchResult({ path: "src/latest.ts", name: "latest.ts" }),
+    ]);
     const harness = createHarness(firstSearchFiles);
     await harness.mount();
 
@@ -501,26 +503,21 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
 
     await harness.update(createAutocompleteProps(secondSearchFiles));
 
+    expect(harness.getLatest().showReferenceMenu).toBe(true);
+    expect(harness.getLatest().referenceMenuState).not.toBeNull();
+
     await harness.run(async () => {
       await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
     });
 
     expect(firstSearchFiles).not.toHaveBeenCalled();
-    expect(secondSearchFiles).not.toHaveBeenCalled();
-    expect(harness.getLatest().referenceMenuState).toBeNull();
-
-    await harness.run((state) => {
-      state.syncMenusForSelectionTarget(buildDraft("@a"), {
-        segmentId: "segment-1",
-        offset: 2,
-      });
-    });
-    await harness.run(async () => {
-      await wait(FILE_SEARCH_DEBOUNCE_WAIT_MS);
-    });
-
     expect(secondSearchFiles).toHaveBeenCalledTimes(1);
     expect(secondSearchFiles).toHaveBeenCalledWith("a");
+    await harness.waitFor((state) => {
+      return state.fileSearchResults.some((result) => result.path === "src/latest.ts");
+    });
+
+    expect(harness.getLatest().showReferenceMenu).toBe(true);
 
     await harness.unmount();
   });

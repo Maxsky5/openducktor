@@ -73,7 +73,6 @@ type InternalSlashMenuState = SlashMenuState & {
 type InternalReferenceMenuState = ReferenceMenuState & {
   availabilityContext: AutocompleteAvailabilityContext;
   requestId: number;
-  searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   showLoadingIndicator: boolean;
 };
 
@@ -259,6 +258,10 @@ export const useAgentChatComposerEditorAutocomplete = ({
   const fileSearchRequestIdRef = useRef(0);
   const fileSearchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileSearchLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchFilesRef = useRef(searchFiles);
+  useEffect(() => {
+    searchFilesRef.current = searchFiles;
+  }, [searchFiles]);
   const availabilityContext = useMemo<AutocompleteAvailabilityContext>(
     () => ({
       disabled,
@@ -285,8 +288,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
   const effectiveReferenceMenuState =
     disabled ||
     (!supportsFileSearch && !supportsSubagentReferences) ||
-    referenceMenuState?.availabilityContext !== availabilityContext ||
-    referenceMenuState?.searchFiles !== searchFiles
+    referenceMenuState?.availabilityContext !== availabilityContext
       ? null
       : referenceMenuState;
   const effectiveSkillMenuState =
@@ -352,11 +354,8 @@ export const useAgentChatComposerEditorAutocomplete = ({
     clearFileSearchLoadingTimer();
   }, [clearFileSearchDebounceTimer, clearFileSearchLoadingTimer]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Context changes must run cleanup to invalidate queued work.
-  useEffect(
-    () => invalidateFileSearchRequest,
-    [availabilityContext, invalidateFileSearchRequest, searchFiles],
-  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Availability changes must invalidate queued work.
+  useEffect(() => invalidateFileSearchRequest, [availabilityContext, invalidateFileSearchRequest]);
 
   const closeReferenceMenu = useCallback(() => {
     invalidateFileSearchRequest();
@@ -428,7 +427,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
       }
 
       const requestAvailabilityContext = availabilityContext;
-      const requestSearchFiles = searchFiles;
       invalidateFileSearchRequest();
       const requestId = fileSearchRequestIdRef.current;
       setActiveReferenceIndex(0);
@@ -440,8 +438,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
         results:
           previousState &&
           previousState.textSegmentId === segmentId &&
-          previousState.availabilityContext === requestAvailabilityContext &&
-          previousState.searchFiles === requestSearchFiles
+          previousState.availabilityContext === requestAvailabilityContext
             ? previousState.results
             : [],
         isLoading: true,
@@ -449,7 +446,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
         error: null,
         availabilityContext: requestAvailabilityContext,
         requestId,
-        searchFiles: requestSearchFiles,
       }));
 
       if (!supportsFileSearch) {
@@ -464,7 +460,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
           error: null,
           availabilityContext: requestAvailabilityContext,
           requestId,
-          searchFiles: requestSearchFiles,
         });
         return;
       }
@@ -492,7 +487,8 @@ export const useAgentChatComposerEditorAutocomplete = ({
           return;
         }
 
-        void requestSearchFiles(match.query)
+        void searchFilesRef
+          .current(match.query)
           .then((results) => {
             if (fileSearchRequestIdRef.current !== requestId) {
               return;
@@ -509,7 +505,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
               error: null,
               availabilityContext: requestAvailabilityContext,
               requestId,
-              searchFiles: requestSearchFiles,
             });
           })
           .catch((error) => {
@@ -528,7 +523,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
               error: error instanceof Error ? error.message : FILE_SEARCH_FAILED_MESSAGE,
               availabilityContext: requestAvailabilityContext,
               requestId,
-              searchFiles: requestSearchFiles,
             }));
           });
       }, FILE_SEARCH_DEBOUNCE_MS);
@@ -540,7 +534,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
       disabled,
       effectiveReferenceMenuState,
       invalidateFileSearchRequest,
-      searchFiles,
       supportsFileSearch,
       supportsSubagentReferences,
     ],
