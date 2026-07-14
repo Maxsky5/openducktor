@@ -2,6 +2,7 @@ import {
   type BaseDiffOptions,
   type DiffLineAnnotation,
   type FileContents,
+  type FileDiffMetadata,
   getFiletypeFromFileName,
   type SelectedLineRange,
 } from "@pierre/diffs";
@@ -23,6 +24,8 @@ import {
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { cn } from "@/lib/utils";
 import type { HunkResetAnnotationMetadata, PierreDiffSelection } from "./pierre-diff-viewer-model";
 import {
@@ -78,6 +81,8 @@ type PierreFileViewerProps = {
   className?: string;
 };
 
+type PierreHighlightState = "ready" | "pending" | "unavailable";
+
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const DIFF_WRAPPER_STYLE = {
   "--diffs-font-size": "12px",
@@ -92,6 +97,14 @@ const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
 const HUNK_RESET_BUTTON_CLASS_NAME =
   "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
 const PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(50vh,32rem)] overflow-auto";
+const PIERRE_HIGHLIGHT_SKELETON_WIDTHS = [
+  "w-3/5",
+  "w-4/5",
+  "w-2/3",
+  "w-5/6",
+  "w-1/2",
+  "w-3/4",
+] as const;
 const HUNK_RESET_FLOATING_CSS = `
 [data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]),
 [data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) {
@@ -121,13 +134,65 @@ const getRawDiffFallbackClassName = (lineOverflow: PierreLineOverflow): string =
     lineOverflow === "wrap" ? "whitespace-pre-wrap break-words" : "overflow-x-auto whitespace-pre",
   );
 
-const contentHash = (value: string): string => {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
+const getPierreFileHighlightState = (
+  workerPool: ReturnType<typeof useWorkerPool>,
+  file: FileContents,
+  requiresHighlight: boolean,
+): PierreHighlightState => {
+  if (!requiresHighlight) {
+    return "ready";
   }
-  return (hash >>> 0).toString(36);
+  if (workerPool == null || !workerPool.isWorkingPool()) {
+    return "unavailable";
+  }
+  return workerPool.getFileResultCache(file) == null ? "pending" : "ready";
+};
+
+const getPierreDiffHighlightState = (
+  workerPool: ReturnType<typeof useWorkerPool>,
+  fileDiff: FileDiffMetadata | null,
+  requiresHighlight: boolean,
+): PierreHighlightState => {
+  if (!requiresHighlight) {
+    return "ready";
+  }
+  if (workerPool == null || !workerPool.isWorkingPool()) {
+    return "unavailable";
+  }
+  return fileDiff != null && workerPool.getDiffResultCache(fileDiff) != null ? "ready" : "pending";
+};
+
+const PierreHighlightSkeleton = ({
+  filePath,
+  testId,
+}: {
+  filePath: string;
+  testId: string;
+}): ReactElement => (
+  <div
+    className="col-start-1 row-start-1 space-y-2 overflow-hidden bg-background px-3 py-3"
+    data-testid={testId}
+    role="status"
+    aria-label={`Highlighting ${filePath}`}
+  >
+    {PIERRE_HIGHLIGHT_SKELETON_WIDTHS.map((widthClassName) => (
+      <Skeleton key={widthClassName} className={cn("h-3 rounded-sm", widthClassName)} />
+    ))}
+  </div>
+);
+
+const getContentMetrics = (value: string): { hash: string; lineCount: number } => {
+  let hash = 0x811c9dc5;
+  let lineCount = 1;
+  for (let index = 0; index < value.length; index += 1) {
+    const charCode = value.charCodeAt(index);
+    hash ^= charCode;
+    hash = Math.imul(hash, 0x01000193);
+    if (charCode === 10) {
+      lineCount += 1;
+    }
+  }
+  return { hash: (hash >>> 0).toString(36), lineCount };
 };
 
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
@@ -158,42 +223,44 @@ export const PierreFileViewer = memo(function PierreFileViewer({
 }: PierreFileViewerProps): ReactElement {
   const { theme } = useTheme();
   const workerPool = useWorkerPool();
-  const file = useMemo<FileContents>(
-    () => ({
-      name: filePath,
-      contents: content,
-      lang: getFiletypeFromFileName(filePath),
-      cacheKey: `${filePath}:${content.length}:${contentHash(content)}`,
-    }),
-    [content, filePath],
+  const { file, lineCount } = useMemo<{ file: FileContents; lineCount: number }>(() => {
+    const metrics = getContentMetrics(content);
+    return {
+      file: {
+        name: filePath,
+        contents: content,
+        lang: getFiletypeFromFileName(filePath),
+        cacheKey: `${filePath}:${content.length}:${metrics.hash}`,
+      },
+      lineCount: metrics.lineCount,
+    };
+  }, [content, filePath]);
+  const requiresHighlight =
+    content.length > 0 && file.lang !== "text" && lineCount <= PIERRE_HIGHLIGHT_LINE_LIMIT;
+  const highlightStateBeforeSubscription = getPierreFileHighlightState(
+    workerPool,
+    file,
+    requiresHighlight,
   );
-  const requiresHighlight = file.lang !== "text";
+  const shouldSubscribeToHighlightCache = highlightStateBeforeSubscription === "pending";
   const subscribeToHighlightCache = useCallback(
     (onStoreChange: () => void) => {
-      if (workerPool == null || !requiresHighlight) {
+      if (!shouldSubscribeToHighlightCache || workerPool == null) {
         return () => undefined;
       }
       return workerPool.subscribeToStatChanges(onStoreChange);
     },
-    [requiresHighlight, workerPool],
+    [shouldSubscribeToHighlightCache, workerPool],
   );
   const getHighlightCacheSnapshot = useCallback(
-    () => workerPool == null || !requiresHighlight || workerPool.getFileResultCache(file) != null,
+    () => getPierreFileHighlightState(workerPool, file, requiresHighlight),
     [file, requiresHighlight, workerPool],
   );
-  const isHighlightReady = useSyncExternalStore(
+  const highlightState = useSyncExternalStore(
     subscribeToHighlightCache,
     getHighlightCacheSnapshot,
-    () => false,
+    () => (requiresHighlight ? "pending" : "ready"),
   );
-
-  useEffect(() => {
-    if (workerPool == null || !requiresHighlight || isHighlightReady) {
-      return;
-    }
-    workerPool.primeFileHighlightCache(file);
-  }, [file, isHighlightReady, requiresHighlight, workerPool]);
-
   const options = useMemo(
     () => ({
       theme: DIFF_THEME,
@@ -203,12 +270,38 @@ export const PierreFileViewer = memo(function PierreFileViewer({
     }),
     [theme],
   );
+  const isHighlightReady = highlightState === "ready";
   const renderPhase = isHighlightReady ? "highlighted" : "pending";
+
+  if (highlightState === "unavailable") {
+    return (
+      <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
+        <div
+          className="px-3 py-4 text-sm text-destructive"
+          role="alert"
+        >{`Syntax highlighting is unavailable for ${filePath}.`}</div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
       <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>
-        <PierreReactFile key={`${file.cacheKey}:${renderPhase}`} file={file} options={options} />
+        <div className="grid min-w-0">
+          <div
+            className={cn("col-start-1 row-start-1 min-w-0", !isHighlightReady && "invisible")}
+            aria-hidden={!isHighlightReady || undefined}
+          >
+            <PierreReactFile
+              key={`${file.cacheKey}:${renderPhase}`}
+              file={file}
+              options={options}
+            />
+          </div>
+          {!isHighlightReady ? (
+            <PierreHighlightSkeleton filePath={filePath} testId="pierre-file-highlight-skeleton" />
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -388,39 +481,72 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
 export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer(
   props: PierreDiffViewerProps,
 ): ReactElement {
+  const { className, ...viewerProps } = props;
   const workerPool = useWorkerPool();
   const { fileDiff } = useMemo(
     () => getRenderableFileDiff(props.patch, props.filePath),
     [props.filePath, props.patch],
   );
   const fileDiffCacheKey = fileDiff?.cacheKey ?? null;
+  const diffLineCount =
+    fileDiff == null ? 0 : Math.max(fileDiff.additionLines.length, fileDiff.deletionLines.length);
+  const requiresHighlight =
+    fileDiff != null &&
+    diffLineCount > 0 &&
+    fileDiff.lang !== "text" &&
+    diffLineCount <= PIERRE_HIGHLIGHT_LINE_LIMIT;
+  const highlightStateBeforeSubscription = getPierreDiffHighlightState(
+    workerPool,
+    fileDiff,
+    requiresHighlight,
+  );
+  const shouldSubscribeToHighlightCache = highlightStateBeforeSubscription === "pending";
   const subscribeToHighlightCache = useCallback(
     (onStoreChange: () => void) => {
-      if (workerPool == null || fileDiff == null) {
+      if (!shouldSubscribeToHighlightCache || workerPool == null) {
         return () => undefined;
       }
       return workerPool.subscribeToStatChanges(onStoreChange);
     },
-    [fileDiff, workerPool],
+    [shouldSubscribeToHighlightCache, workerPool],
   );
   const getHighlightCacheSnapshot = useCallback(
-    () => workerPool != null && fileDiff != null && workerPool.getDiffResultCache(fileDiff) != null,
-    [fileDiff, workerPool],
+    () => getPierreDiffHighlightState(workerPool, fileDiff, requiresHighlight),
+    [fileDiff, requiresHighlight, workerPool],
   );
-  const isHighlightCached = useSyncExternalStore(
+  const highlightState = useSyncExternalStore(
     subscribeToHighlightCache,
     getHighlightCacheSnapshot,
-    () => false,
+    () => (requiresHighlight ? "pending" : "ready"),
   );
+  const isHighlightReady = highlightState === "ready";
+  const renderPhase = isHighlightReady ? "highlighted" : "pending";
 
-  useEffect(() => {
-    if (workerPool == null || fileDiff == null || isHighlightCached) {
-      return;
-    }
-    workerPool.primeDiffHighlightCache(fileDiff);
-  }, [fileDiff, isHighlightCached, workerPool]);
+  if (highlightState === "unavailable") {
+    return (
+      <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
+        <div
+          className="px-3 py-4 text-sm text-destructive"
+          role="alert"
+        >{`Syntax highlighting is unavailable for ${props.filePath}.`}</div>
+      </div>
+    );
+  }
 
-  const renderPhase = isHighlightCached ? "highlighted" : "pending";
-
-  return <PierreDiffViewer key={`${fileDiffCacheKey}:${renderPhase}`} {...props} />;
+  return (
+    <div className={cn("grid min-w-0", className)}>
+      <div
+        className={cn("col-start-1 row-start-1 min-w-0", !isHighlightReady && "invisible")}
+        aria-hidden={!isHighlightReady || undefined}
+      >
+        <PierreDiffViewer key={`${fileDiffCacheKey}:${renderPhase}`} {...viewerProps} />
+      </div>
+      {!isHighlightReady ? (
+        <PierreHighlightSkeleton
+          filePath={props.filePath}
+          testId="pierre-diff-highlight-skeleton"
+        />
+      ) : null}
+    </div>
+  );
 });

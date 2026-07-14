@@ -1,6 +1,7 @@
 import { preloadHighlighter, type SupportedLanguages } from "@pierre/diffs";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { type ReactElement, type ReactNode, useEffect, useMemo } from "react";
+import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { workerFactory } from "@/lib/diff/workerFactory";
 
 // ─── Pre-warm config ───────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ export function DiffWorkerProvider({ children }: { children: ReactNode }): React
         theme: { light: "pierre-light", dark: "pierre-dark" },
         langs: PRELOAD_LANGS,
         lineDiffType: "word-alt",
+        tokenizeMaxLineLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
       }}
     >
       {children}
