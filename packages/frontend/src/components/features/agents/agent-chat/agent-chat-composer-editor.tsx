@@ -506,6 +506,7 @@ export function AgentChatComposerEditor({
       <div
         ref={editorRef}
         role="textbox"
+        aria-label="Message composer"
         aria-multiline="true"
         tabIndex={disabled ? -1 : 0}
         contentEditable={!disabled}
