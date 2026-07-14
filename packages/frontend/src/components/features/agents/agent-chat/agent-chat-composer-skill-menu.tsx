@@ -4,6 +4,7 @@ import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 type AgentChatComposerSkillMenuProps = {
+  listboxId: string;
   skills: AgentSkillReference[];
   activeIndex: number;
   skillsError: string | null;
@@ -16,6 +17,7 @@ const skillLabel = (skill: AgentSkillReference): string => {
 };
 
 export function AgentChatComposerSkillMenu({
+  listboxId,
   skills,
   activeIndex,
   skillsError,
@@ -37,7 +39,12 @@ export function AgentChatComposerSkillMenu({
   }, [activeIndex, skills]);
 
   return (
-    <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
+    <div
+      id={listboxId}
+      role="listbox"
+      aria-label="Skills"
+      className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg"
+    >
       {isSkillsLoading ? (
         <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -59,9 +66,13 @@ export function AgentChatComposerSkillMenu({
             return (
               <button
                 key={skill.id}
+                id={`${listboxId}-option-${index}`}
                 ref={(element) => {
                   skillButtonRefs.current[skill.id] = element;
                 }}
+                role="option"
+                aria-selected={isActive}
+                tabIndex={-1}
                 type="button"
                 className={cn(
                   "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",

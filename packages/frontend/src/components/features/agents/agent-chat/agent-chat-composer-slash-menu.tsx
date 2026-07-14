@@ -4,6 +4,7 @@ import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 type AgentChatComposerSlashMenuProps = {
+  listboxId: string;
   commands: AgentSlashCommand[];
   activeIndex: number;
   slashCommandsError: string | null;
@@ -12,6 +13,7 @@ type AgentChatComposerSlashMenuProps = {
 };
 
 export function AgentChatComposerSlashMenu({
+  listboxId,
   commands,
   activeIndex,
   slashCommandsError,
@@ -33,7 +35,12 @@ export function AgentChatComposerSlashMenu({
   }, [activeIndex, commands]);
 
   return (
-    <div className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg">
+    <div
+      id={listboxId}
+      role="listbox"
+      aria-label="Slash commands"
+      className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg"
+    >
       {isSlashCommandsLoading ? (
         <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -55,9 +62,13 @@ export function AgentChatComposerSlashMenu({
             return (
               <button
                 key={command.id}
+                id={`${listboxId}-option-${index}`}
                 ref={(element) => {
                   commandButtonRefs.current[command.id] = element;
                 }}
+                role="option"
+                aria-selected={isActive}
+                tabIndex={-1}
                 type="button"
                 className={cn(
                   "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",

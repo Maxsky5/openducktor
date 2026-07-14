@@ -426,12 +426,162 @@ const createClipboardFileItem = (file: File) => ({
 });
 
 describe("AgentChatComposerEditor", () => {
-  test("names the message composer", () => {
-    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+  test("exposes the rich editor as a collapsed named combobox", () => {
+    render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
-    expect(screen.getByRole("textbox", { name: "Message composer" })).toBe(
-      getEditorRoot(rendered.container),
+    const editor = screen.getByRole("combobox", { name: "Message composer" });
+
+    expect(editor.getAttribute("contenteditable")).toBe("true");
+    expect(editor.getAttribute("aria-expanded")).toBe("false");
+    expect(editor.getAttribute("aria-autocomplete")).toBe("list");
+    expect(editor.getAttribute("aria-controls")).toBeNull();
+    expect(editor.getAttribute("aria-activedescendant")).toBeNull();
+    expect(editor.getAttribute("aria-multiline")).toBeNull();
+  });
+
+  test("owns reference popup state while focus stays on the editor", async () => {
+    let resolveSearch: ((results: AgentFileSearchResult[]) => void) | null = null;
+    const searchFiles = mock(
+      () =>
+        new Promise<AgentFileSearchResult[]>((resolve) => {
+          resolveSearch = resolve;
+        }),
     );
+    const onSend = mock(() => {});
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={searchFiles}
+        onSend={onSend}
+      />,
+    );
+    const editor = screen.getByRole("combobox", { name: "Message composer" });
+    editor.focus();
+
+    typeIntoEditor(rendered.container, "@");
+
+    await waitFor(() => {
+      expect(editor.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByRole("listbox", { name: "References" })).toBeNull();
+    });
+
+    if (!resolveSearch) {
+      throw new Error("Expected file search to be pending");
+    }
+    const finishSearch = resolveSearch as (results: AgentFileSearchResult[]) => void;
+    finishSearch([
+      buildFileSearchResult({ id: "alpha", path: "src/alpha.ts", name: "alpha.ts" }),
+      buildFileSearchResult({ id: "beta", path: "src/beta.ts", name: "beta.ts" }),
+    ]);
+
+    const listbox = await screen.findByRole("listbox", { name: "References" });
+    const firstOption = screen.getByRole("option", { name: /alpha\.ts/i });
+    const secondOption = screen.getByRole("option", { name: /beta\.ts/i });
+    expect(editor.getAttribute("aria-expanded")).toBe("true");
+    expect(editor.getAttribute("aria-controls")).toBe(listbox.id);
+    expect(editor.getAttribute("aria-activedescendant")).toBe(firstOption.id);
+    expect(document.activeElement).toBe(editor);
+
+    fireEvent.keyDown(editor, { key: "ArrowDown" });
+
+    await waitFor(() => {
+      expect(editor.getAttribute("aria-activedescendant")).toBe(secondOption.id);
+      expect(secondOption.getAttribute("aria-selected")).toBe("true");
+    });
+    expect(document.activeElement).toBe(editor);
+
+    fireEvent.keyDown(editor, { key: "Tab" });
+
+    await waitFor(() => {
+      expect(
+        rendered.container.querySelector("[data-file-reference-path='src/beta.ts']"),
+      ).toBeTruthy();
+      expect(editor.getAttribute("aria-expanded")).toBe("false");
+      expect(editor.getAttribute("aria-controls")).toBeNull();
+      expect(editor.getAttribute("aria-activedescendant")).toBeNull();
+    });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(editor);
+  });
+
+  test("owns slash popup state through escape and enter selection", async () => {
+    const onSend = mock(() => {});
+    const rendered = render(
+      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onSend={onSend} />,
+    );
+    const editor = screen.getByRole("combobox", { name: "Message composer" });
+    editor.focus();
+
+    typeIntoEditor(rendered.container, "/");
+
+    const initialListbox = await screen.findByRole("listbox", { name: "Slash commands" });
+    const initialOption = screen.getByRole("option", { name: /compact the current session/i });
+    expect(editor.getAttribute("aria-controls")).toBe(initialListbox.id);
+    expect(editor.getAttribute("aria-activedescendant")).toBe(initialOption.id);
+    expect(document.activeElement).toBe(editor);
+
+    fireEvent.keyDown(editor, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("listbox", { name: "Slash commands" })).toBeNull();
+      expect(editor.getAttribute("aria-expanded")).toBe("false");
+      expect(editor.getAttribute("aria-controls")).toBeNull();
+      expect(editor.getAttribute("aria-activedescendant")).toBeNull();
+    });
+
+    typeIntoEditor(rendered.container, "/c");
+    await screen.findByRole("listbox", { name: "Slash commands" });
+    fireEvent.keyDown(editor, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "/compact",
+      );
+      expect(editor.getAttribute("aria-expanded")).toBe("false");
+    });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(editor);
+  });
+
+  test("owns skill popup selection through arrow navigation and tab acceptance", async () => {
+    const onSend = mock(() => {});
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+        onSend={onSend}
+      />,
+    );
+    const editor = screen.getByRole("combobox", { name: "Message composer" });
+    editor.focus();
+
+    typeIntoEditor(rendered.container, "$");
+
+    const listbox = await screen.findByRole("listbox", { name: "Skills" });
+    const firstOption = screen.getByRole("option", { name: /analyze/i });
+    const secondOption = screen.getByRole("option", { name: /review/i });
+    expect(editor.getAttribute("aria-controls")).toBe(listbox.id);
+    expect(editor.getAttribute("aria-activedescendant")).toBe(firstOption.id);
+
+    fireEvent.keyDown(editor, { key: "ArrowDown" });
+
+    await waitFor(() => {
+      expect(editor.getAttribute("aria-activedescendant")).toBe(secondOption.id);
+      expect(secondOption.getAttribute("aria-selected")).toBe("true");
+    });
+    fireEvent.keyDown(editor, { key: "Tab" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-skill-reference-name='review']")).toBeTruthy();
+      expect(editor.getAttribute("aria-expanded")).toBe("false");
+      expect(editor.getAttribute("aria-controls")).toBeNull();
+      expect(editor.getAttribute("aria-activedescendant")).toBeNull();
+    });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(editor);
   });
 
   test("shows the slash-command error state after typing a slash trigger", async () => {
@@ -506,7 +656,7 @@ describe("AgentChatComposerEditor", () => {
       expect(screen.getByText("$analyze")).toBeDefined();
     });
     const skillButtons = screen
-      .getAllByRole("button")
+      .getAllByRole("option")
       .filter((button) => button.textContent?.startsWith("$"));
     expect(
       skillButtons.map((button) => button.querySelector(".text-foreground")?.textContent),
@@ -555,12 +705,12 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "$");
 
-    await screen.findByRole("button", { name: /\$review/i });
+    await screen.findByRole("option", { name: /\$review/i });
 
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /\$review/i })).toBeNull();
+      expect(screen.queryByRole("option", { name: /\$review/i })).toBeNull();
     });
   });
 
@@ -576,7 +726,7 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "$");
 
-    await screen.findByRole("button", { name: /\$review/i });
+    await screen.findByRole("option", { name: /\$review/i });
 
     fireEvent.paste(getEditorRoot(rendered.container), {
       clipboardData: createClipboardData({
@@ -585,7 +735,7 @@ describe("AgentChatComposerEditor", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /\$review/i })).toBeNull();
+      expect(screen.queryByRole("option", { name: /\$review/i })).toBeNull();
     });
   });
 
@@ -597,7 +747,7 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "/");
 
-    const commandButton = await screen.findByRole("button", {
+    const commandButton = await screen.findByRole("option", {
       name: /compact the current session/i,
     });
 
@@ -618,7 +768,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyUp(editable, { key: "/" });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /compact the current session/i })).toBeDefined();
     });
   });
 
@@ -1072,7 +1222,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyUp(editable, { key: "/" });
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /compact the current session/i })).toBeNull();
+      expect(screen.queryByRole("option", { name: /compact the current session/i })).toBeNull();
     });
   });
 
@@ -1697,7 +1847,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyUp(editable, { key: "/" });
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /compact the current session/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1723,7 +1873,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "/");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /compact the current session/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1773,7 +1923,7 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "/");
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+        expect(screen.getByRole("option", { name: /compact the current session/i })).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1817,7 +1967,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyUp(editorRoot, { key: "a" });
 
     expect(setCaretOffsetWithinElementMock).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /compact the current session/i })).toBeNull();
+    expect(screen.queryByRole("option", { name: /compact the current session/i })).toBeNull();
   });
 
   test("renders empty trailing text segments as inline blocks for caret placement after file chips", async () => {
@@ -2366,7 +2516,7 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "check $");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /analyze/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /analyze/i })).toBeDefined();
     });
     fireEvent.keyDown(editable, { key: "Enter" });
 

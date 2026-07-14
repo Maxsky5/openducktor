@@ -1,11 +1,13 @@
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
 import { Bot, ChevronRight, LoaderCircle } from "lucide-react";
-import { type ReactElement, useEffect, useId, useRef } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { shouldRenderAgentChatComposerReferenceMenu } from "./agent-chat-composer-menu-state";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
 import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
 
 type AgentChatComposerReferenceMenuProps = {
+  listboxId: string;
   items: ReferenceMenuItem[];
   activeIndex: number;
   fileSearchError: string | null;
@@ -19,6 +21,7 @@ type AgentChatComposerReferenceMenuProps = {
 };
 
 export function AgentChatComposerReferenceMenu({
+  listboxId,
   items,
   activeIndex,
   fileSearchError,
@@ -31,11 +34,6 @@ export function AgentChatComposerReferenceMenu({
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement | null {
   const hasResults = items.length > 0;
-  const listboxId = useId();
-  const activeOptionId =
-    activeIndex >= 0 && activeIndex < items.length
-      ? `${listboxId}-option-${activeIndex}`
-      : undefined;
   const showSubagentsLoading = isSubagentsLoading && !hasResults;
   const showFileSearchLoading = isFileSearchLoading && !hasResults;
   const showEmptyState =
@@ -44,20 +42,26 @@ export function AgentChatComposerReferenceMenu({
     !isSubagentsLoading &&
     !fileSearchError &&
     !subagentsError;
-  const shouldRenderMenu =
-    hasResults ||
-    showFileSearchLoading ||
-    showSubagentsLoading ||
-    Boolean(fileSearchError) ||
-    Boolean(subagentsError) ||
-    showEmptyState;
+  const shouldRenderMenu = shouldRenderAgentChatComposerReferenceMenu({
+    itemCount: items.length,
+    fileSearchError,
+    isFileSearchPending,
+    isFileSearchLoading,
+    subagentsError,
+    isSubagentsLoading,
+  });
 
   if (!shouldRenderMenu) {
     return null;
   }
 
   return (
-    <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
+    <div
+      id={listboxId}
+      role="listbox"
+      aria-label="References"
+      className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg"
+    >
       {showSubagentsLoading ? (
         <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -86,14 +90,7 @@ export function AgentChatComposerReferenceMenu({
         </div>
       ) : null}
       {hasResults ? (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label="References"
-          aria-activedescendant={activeOptionId}
-          tabIndex={0}
-          className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
-        >
+        <div className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl">
           {items.map((item, index) => {
             const isActive = index === activeIndex;
             if (item.kind === "subagent") {
@@ -155,6 +152,7 @@ function SubagentReferenceMenuRow({
       id={optionId}
       role="option"
       aria-selected={isActive}
+      tabIndex={-1}
       type="button"
       className={referenceMenuRowClassName(isActive)}
       onPointerDown={(event) => {
@@ -211,6 +209,7 @@ function FileReferenceMenuRow({
       id={optionId}
       role="option"
       aria-selected={isActive}
+      tabIndex={-1}
       type="button"
       className={referenceMenuRowClassName(isActive)}
       onPointerDown={(event) => {

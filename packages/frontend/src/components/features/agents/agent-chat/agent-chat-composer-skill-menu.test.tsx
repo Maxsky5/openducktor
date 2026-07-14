@@ -19,10 +19,13 @@ const SKILLS: AgentSkillReference[] = [
   },
 ];
 
+const LISTBOX_ID = "skill-listbox";
+
 describe("AgentChatComposerSkillMenu", () => {
   test("uses the selected surface token for the active skill row", () => {
     render(
       <AgentChatComposerSkillMenu
+        listboxId={LISTBOX_ID}
         skills={SKILLS}
         activeIndex={0}
         skillsError={null}
@@ -31,9 +34,14 @@ describe("AgentChatComposerSkillMenu", () => {
       />,
     );
 
-    const activeSkill = screen.getByRole("button", { name: /review current changes/i });
+    const listbox = screen.getByRole("listbox", { name: "Skills" });
+    const activeSkill = screen.getByRole("option", { name: /review current changes/i });
 
+    expect(listbox.id).toBe(LISTBOX_ID);
     expect(activeSkill.className).toContain("bg-selected-surface");
     expect(activeSkill.className).not.toContain("bg-primary/20");
+    expect(activeSkill.id).toBe(`${LISTBOX_ID}-option-0`);
+    expect(activeSkill.getAttribute("aria-selected")).toBe("true");
+    expect(activeSkill.getAttribute("tabindex")).toBe("-1");
   });
 });
