@@ -72,11 +72,28 @@ export const createTaskSessionBootstrapUseCase = ({
           ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
           : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
         const worktreePath = dependencies.settingsConfig.join(worktreeBase, taskId);
-        if (
-          input.targetWorkingDirectory &&
-          normalizePathForComparison(input.targetWorkingDirectory) !==
-            normalizePathForComparison(worktreePath)
-        ) {
+        let targetsCanonicalWorktree = !input.targetWorkingDirectory;
+        if (input.targetWorkingDirectory) {
+          targetsCanonicalWorktree =
+            normalizePathForComparison(input.targetWorkingDirectory) ===
+            normalizePathForComparison(worktreePath);
+          if (!targetsCanonicalWorktree) {
+            const [targetExists, worktreeExists] = yield* Effect.all([
+              dependencies.settingsConfig.pathExists(input.targetWorkingDirectory),
+              dependencies.settingsConfig.pathExists(worktreePath),
+            ]);
+            if (targetExists && worktreeExists) {
+              const [canonicalTargetPath, canonicalWorktreePath] = yield* Effect.all([
+                dependencies.gitPort.canonicalizePath(input.targetWorkingDirectory),
+                dependencies.gitPort.canonicalizePath(worktreePath),
+              ]);
+              targetsCanonicalWorktree =
+                normalizePathForComparison(canonicalTargetPath) ===
+                normalizePathForComparison(canonicalWorktreePath);
+            }
+          }
+        }
+        if (!targetsCanonicalWorktree) {
           return yield* Effect.fail(
             new HostValidationError({
               field: "targetWorkingDirectory",

@@ -556,6 +556,70 @@ describe("createTaskService build start worktree handling", () => {
       1,
     );
   });
+
+  test("accepts a canonical target worktree expressed through a symlinked base path", async () => {
+    const calls: unknown[] = [];
+    const configuredWorktreePath = "/configured/worktrees/task-1";
+    const realWorktreePath = "/real/worktrees/task-1";
+    const differentWorktreePath = "/real/worktrees/other-task";
+    const gitPort = {
+      ...createBuildStartGitPort({ calls }),
+      canonicalizePath(path: string) {
+        return Effect.succeed(
+          path === configuredWorktreePath || path === realWorktreePath ? realWorktreePath : path,
+        );
+      },
+    };
+    const service = createTaskService({
+      taskStore: {
+        getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+      } as TaskStorePort,
+      gitPort,
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+      settingsConfig: createBuildSettingsConfig(
+        new Set(["/repo", configuredWorktreePath, realWorktreePath, differentWorktreePath]),
+      ),
+      systemCommands: createBuildSystemCommands(calls),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        worktreeBasePath: "/configured/worktrees",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const bootstrap = await Effect.runPromise(
+      service.taskSessionBootstrapPrepare({
+        repoPath: "/repo",
+        taskId: "task-1",
+        role: "spec",
+        runtimeKind: "opencode",
+        targetWorkingDirectory: realWorktreePath,
+      }),
+    );
+
+    expect(bootstrap.workingDirectory).toBe(configuredWorktreePath);
+    await Effect.runPromise(
+      service.taskSessionBootstrapAbort({
+        repoPath: "/repo",
+        taskId: "task-1",
+        bootstrapId: bootstrap.bootstrapId,
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapPrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: "spec",
+          runtimeKind: "opencode",
+          targetWorkingDirectory: differentWorktreePath,
+        }),
+      ),
+    ).rejects.toThrow(`must use canonical task worktree ${configuredWorktreePath}`);
+  });
   test("starts a build from an existing task worktree while still transitioning the task", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
