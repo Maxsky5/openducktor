@@ -128,6 +128,10 @@ export const createAgentSessionActions = ({
       persistSessionRecord,
       deleteSessionRecord,
       observeAgentSession,
+      clearSessionObservationState: (identity) => {
+        sessionObserversRef.current.remove(identity);
+        sessionTurnState.clearSession(identity);
+      },
     },
     runtime: {
       adapter,

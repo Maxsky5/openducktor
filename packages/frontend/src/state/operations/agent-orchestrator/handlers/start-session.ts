@@ -151,6 +151,9 @@ export const createStartAgentSession = ({
           session,
         });
         await startResult.runtimeInfo.bootstrap?.complete();
+        if (startResult.ctx.isStaleRepoOperation()) {
+          throw new Error(STALE_START_ERROR);
+        }
       } catch (cause) {
         const identity = {
           externalSessionId: startResult.ctx.summary.externalSessionId,

@@ -219,6 +219,7 @@ export const toStartSessionDependencies = (
       persistSessionRecord: deps.persistSessionRecord,
       deleteSessionRecord: deps.deleteSessionRecord,
       observeAgentSession: deps.observeAgentSession,
+      clearSessionObservationState: deps.clearSessionObservationState,
     },
     runtime: {
       adapter: deps.adapter,
@@ -268,6 +269,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     repoEpochRef = { current: 1 },
     currentWorkspaceRepoPathRef = { current: "/tmp/repo" },
     observeAgentSession = async () => undefined,
+    clearSessionObservationState = () => undefined,
     loadSourceSession = async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory = async () => null,
@@ -316,6 +318,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       observeAgentSession,
+      clearSessionObservationState,
       loadSourceSession,
       loadAgentSessionHistory,
       persistSessionRecord,

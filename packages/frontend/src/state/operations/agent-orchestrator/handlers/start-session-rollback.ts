@@ -109,6 +109,7 @@ export const rollbackRegisteredStartedSession = async ({
   stopReason: string;
   bootstrap?: { abort: () => Promise<void> };
 }): Promise<never> => {
+  session.clearSessionObservationState(identity);
   session.removeSession(identity);
 
   let stopError: unknown;

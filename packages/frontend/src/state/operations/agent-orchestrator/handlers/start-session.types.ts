@@ -30,6 +30,7 @@ export type SessionDependencies = {
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
   observeAgentSession: ObserveAgentSession;
+  clearSessionObservationState: (identity: AgentSessionIdentity) => void;
 };
 
 export type RuntimeDependencies = {

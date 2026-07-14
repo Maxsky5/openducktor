@@ -19,6 +19,7 @@ import { withCapturedConsole } from "@/test-utils/console-capture";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
+import { createSessionObservers } from "../support/session-observers";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
 import {
   BUILD_SELECTION,
@@ -627,6 +628,119 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(stopCalls).toBe(1);
     expect(deletedSessionIds).toEqual(["external-observer-fail"]);
     expect(abortCalls).toBe(1);
+  });
+
+  test("rolls back a started session when the repository changes during bootstrap completion", async () => {
+    const completionStarted = createDeferred<void>();
+    const completion = createDeferred<void>();
+    const repoEpochRef = { current: 1 };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
+    const deletedSessionIds: string[] = [];
+    let abortCalls = 0;
+    let stopCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-stale-bootstrap",
+      role: "planner",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {
+            completionStarted.resolve();
+            await completion.promise;
+          },
+          abort: async () => {
+            abortCalls += 1;
+          },
+        },
+      }),
+      deleteSessionRecord: async (_taskId, identity) => {
+        deletedSessionIds.push(identity.externalSessionId);
+      },
+    });
+
+    const startPromise = start({
+      taskId: "task-1",
+      role: "planner",
+      startMode: "fresh",
+      selectedModel: PLANNER_SELECTION,
+    });
+    await completionStarted.promise;
+    repoEpochRef.current += 1;
+    currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
+    completion.resolve();
+
+    await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
+    expect(stopCalls).toBe(1);
+    expect(deletedSessionIds).toEqual(["external-stale-bootstrap"]);
+    expect(abortCalls).toBe(1);
+  });
+
+  test("removes the session observer when bootstrap completion fails", async () => {
+    const observers = createSessionObservers();
+    let unsubscribeCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-bootstrap-fail",
+      role: "planner",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {};
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      observeAgentSession: async (target) => {
+        await observers.ensureObserver(target, async () => {
+          return () => {
+            unsubscribeCalls += 1;
+          };
+        });
+      },
+      clearSessionObservationState: (identity) => {
+        observers.remove(identity);
+      },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {
+            throw new Error("bootstrap completion failed");
+          },
+          abort: async () => {},
+        },
+      }),
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow("bootstrap completion failed");
+    const identity = sessionIdentity("external-bootstrap-fail", "/tmp/repo/worktree");
+    expect(unsubscribeCalls).toBe(1);
+    expect(observers.has(identity)).toBe(false);
   });
 
   test("throws when task is missing after reuse checks", async () => {
