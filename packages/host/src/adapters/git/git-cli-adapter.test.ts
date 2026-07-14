@@ -592,7 +592,7 @@ describe("createGitCliAdapter", () => {
       expect(await readFile(join(worktree, "ignored", "state.txt"), "utf8")).toBe("preserve\n");
       expect(git("-C", worktree, "branch", "--show-current")).toBe("task");
       expect(git("worktree", "list", "--porcelain")).toContain(
-        `worktree ${await realpath(worktree)}`,
+        `worktree ${(await realpath(worktree)).replaceAll("\\", "/")}`,
       );
     } finally {
       await rm(root, { recursive: true, force: true });
