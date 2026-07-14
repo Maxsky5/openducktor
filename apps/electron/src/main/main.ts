@@ -339,6 +339,10 @@ const createMainWindowEffect = (
           cause,
         }),
     });
+    window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    window.webContents.on("will-navigate", (event) => {
+      event.preventDefault();
+    });
     registerWindowContextMenu(window, { isDevelopment });
     window.on("close", (event) => {
       if (shutdownController.isHostShutdownComplete()) {
