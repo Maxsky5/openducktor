@@ -538,16 +538,16 @@ export const settingsSnapshotSchema = z.object({
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = ParsedSettingsSnapshot;
 
-export const settingsSnapshotSaveInputSchema = settingsSnapshotSchema.pick({
-  git: true,
-  general: true,
-  appearance: true,
-  chat: true,
-  reusablePrompts: true,
-  kanban: true,
-  autopilot: true,
-  agentRuntimes: true,
-  workspaces: true,
-  globalPromptOverrides: true,
+export const settingsSnapshotSaveInputSchema = z.object({
+  git: globalGitConfigSchema,
+  general: generalSettingsSchema,
+  appearance: appearanceSettingsSchema,
+  chat: chatSettingsSchema,
+  reusablePrompts: reusablePromptsSchema.removeDefault(),
+  kanban: kanbanSettingsSchema,
+  autopilot: autopilotSettingsSchema,
+  agentRuntimes: agentRuntimesSchema.removeDefault(),
+  workspaces: z.record(workspaceIdSchema, repoConfigSchema),
+  globalPromptOverrides: repoPromptOverridesSchema,
 });
 export type SettingsSnapshotSaveInput = z.infer<typeof settingsSnapshotSaveInputSchema>;

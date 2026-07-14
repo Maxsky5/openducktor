@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
-import { isCancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ReactElement, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
@@ -32,9 +32,11 @@ const ThemeHarness = (): ReactElement => {
 };
 
 const ThemeProviderQueryHarness = ({
+  enableSettingsSnapshotQuery,
   onQueryClient,
   withSettingsSnapshot,
 }: {
+  enableSettingsSnapshotQuery: boolean;
   onQueryClient: (queryClient: QueryClient) => void;
   withSettingsSnapshot: boolean;
 }): ReactElement | null => {
@@ -47,12 +49,12 @@ const ThemeProviderQueryHarness = ({
         settingsSnapshotQueryOptions().queryKey,
         createSettingsSnapshotFixture({ theme: "light" }),
       );
-    } else {
+    } else if (!enableSettingsSnapshotQuery) {
       queryClient.setQueryDefaults(settingsSnapshotQueryOptions().queryKey, { enabled: false });
     }
     onQueryClient(queryClient);
     setIsInitialized(true);
-  }, [onQueryClient, queryClient, withSettingsSnapshot]);
+  }, [enableSettingsSnapshotQuery, onQueryClient, queryClient, withSettingsSnapshot]);
 
   if (!isInitialized) {
     return null;
@@ -65,12 +67,21 @@ const ThemeProviderQueryHarness = ({
   );
 };
 
-const renderThemeProvider = ({ withSettingsSnapshot = true } = {}) => {
+type RenderThemeProviderOptions = {
+  withSettingsSnapshot?: boolean;
+  enableSettingsSnapshotQuery?: boolean;
+};
+
+const renderThemeProvider = ({
+  withSettingsSnapshot = true,
+  enableSettingsSnapshotQuery = withSettingsSnapshot,
+}: RenderThemeProviderOptions = {}) => {
   const queryClientRef: { current: QueryClient | null } = { current: null };
 
   render(
     <QueryProvider useIsolatedClient>
       <ThemeProviderQueryHarness
+        enableSettingsSnapshotQuery={enableSettingsSnapshotQuery}
         onQueryClient={(client) => {
           queryClientRef.current = client;
         }}
@@ -117,7 +128,8 @@ afterEach(() => {
 
 describe("ThemeProvider", () => {
   test("updates the controlled theme before the settings snapshot is available", async () => {
-    const setTheme = mock(async () => undefined);
+    const persistence = createDeferred<void>();
+    const setTheme = mock(async () => persistence.promise);
     const originalSetTheme = hostBridge.client.setTheme;
     hostBridge.client.setTheme = setTheme;
 
@@ -128,6 +140,42 @@ describe("ThemeProvider", () => {
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
       await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
+    } finally {
+      hostBridge.client.setTheme = originalSetTheme;
+    }
+  });
+
+  test("keeps an initial snapshot load alive while theme persistence is pending", async () => {
+    const initialLoad = createDeferred<SettingsSnapshot>();
+    const persistence = createDeferred<void>();
+    const setTheme = mock(async () => persistence.promise);
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = setTheme;
+
+    try {
+      const queryClient = renderThemeProvider({ withSettingsSnapshot: false });
+      const awaitedLoad = queryClient
+        .fetchQuery(
+          settingsSnapshotQueryOptions({
+            workspaceGetSettingsSnapshot: async () => initialLoad.promise,
+          }),
+        )
+        .then(
+          (snapshot) => ({ snapshot, error: null }),
+          (error: unknown) => ({ snapshot: null, error }),
+        );
+
+      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+
+      await act(async () => {
+        initialLoad.resolve(createSettingsSnapshotFixture({ theme: "light" }));
+        await flushQueryUpdates();
+      });
+
+      const loadResult = await awaitedLoad;
+      expect(loadResult.error).toBeNull();
+      expect(loadResult.snapshot?.theme).toBe("light");
+      expectThemeState("dark");
     } finally {
       hostBridge.client.setTheme = originalSetTheme;
     }
@@ -179,6 +227,8 @@ describe("ThemeProvider", () => {
   test("discards a stale settings refresh when theme persistence succeeds", async () => {
     const persistence = createDeferred<void>();
     const staleRefresh = createDeferred<SettingsSnapshot>();
+    const authoritativeRefresh = createDeferred<SettingsSnapshot>();
+    const loadAuthoritativeSnapshot = mock(async () => authoritativeRefresh.promise);
     const setTheme = mock(async () => persistence.promise);
     const originalSetTheme = hostBridge.client.setTheme;
     hostBridge.client.setTheme = setTheme;
@@ -187,16 +237,12 @@ describe("ThemeProvider", () => {
       const queryClient = renderThemeProvider();
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
-      const refreshResult = queryClient
-        .fetchQuery({
-          ...settingsSnapshotQueryOptions({
-            workspaceGetSettingsSnapshot: async () => staleRefresh.promise,
-          }),
-          staleTime: 0,
-        })
-        .catch((error: unknown) => {
-          expect(isCancelledError(error)).toBe(true);
-        });
+      const refreshResult = queryClient.fetchQuery({
+        ...settingsSnapshotQueryOptions({
+          workspaceGetSettingsSnapshot: async () => staleRefresh.promise,
+        }),
+        staleTime: 0,
+      });
 
       await act(async () => {
         persistence.resolve(undefined);
@@ -210,9 +256,19 @@ describe("ThemeProvider", () => {
       await act(async () => {
         staleRefresh.resolve(createSettingsSnapshotFixture({ theme: "light" }));
         await refreshResult;
+        const authoritativeResult = queryClient.fetchQuery({
+          ...settingsSnapshotQueryOptions({
+            workspaceGetSettingsSnapshot: loadAuthoritativeSnapshot,
+          }),
+          staleTime: 0,
+        });
+        await flushQueryUpdates();
+        authoritativeRefresh.resolve(createSettingsSnapshotFixture({ theme: "dark" }));
+        await authoritativeResult;
         await flushQueryUpdates();
       });
 
+      expect(loadAuthoritativeSnapshot).toHaveBeenCalledTimes(1);
       expectCachedTheme(queryClient, "dark");
       expectThemeState("dark");
     } finally {

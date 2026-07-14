@@ -59,6 +59,12 @@ describe("config-schemas", () => {
       "workspaces",
       "globalPromptOverrides",
     ]);
+    expect(settingsSnapshotSaveInputSchema.safeParse({}).success).toBe(false);
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse({
+        git: { defaultMergeMethod: "merge_commit" },
+      }).success,
+    ).toBe(false);
   });
 
   test("defaults dev servers to an empty array", () => {
