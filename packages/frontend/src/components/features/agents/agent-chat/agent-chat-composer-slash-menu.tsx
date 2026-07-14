@@ -49,7 +49,9 @@ export function AgentChatComposerSlashMenu({
         </div>
       ) : null}
       {commands.length === 0 && !isSlashCommandsLoading && !slashCommandsError ? (
-        <div className="px-3 py-2 text-sm text-muted-foreground">No slash commands found.</div>
+        <div role="status" className="px-3 py-2 text-sm text-muted-foreground">
+          No slash commands found.
+        </div>
       ) : null}
       <div
         id={listboxId}

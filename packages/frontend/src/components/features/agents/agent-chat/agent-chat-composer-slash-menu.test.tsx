@@ -74,7 +74,8 @@ describe("AgentChatComposerSlashMenu", () => {
         />,
       );
 
-      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
     } finally {
       Element.prototype.scrollIntoView = original;
     }
@@ -102,5 +103,26 @@ describe("AgentChatComposerSlashMenu", () => {
     expect(listbox.contains(errorFeedback)).toBe(false);
     expect(screen.getByRole("option", { name: /first command/i })).toBeTruthy();
     expect(screen.getByText("custom")).toBeTruthy();
+  });
+
+  test("announces empty feedback outside the controlled listbox", () => {
+    render(
+      <AgentChatComposerSlashMenu
+        listboxId={LISTBOX_ID}
+        commands={[]}
+        activeIndex={0}
+        slashCommandsError={null}
+        isSlashCommandsLoading={false}
+        onSelectCommand={() => {}}
+      />,
+    );
+
+    const listbox = screen.getByRole("listbox", { name: "Slash commands" });
+    const emptyFeedback = screen.getByRole("status");
+
+    expect(listbox.id).toBe(LISTBOX_ID);
+    expect(listbox.children).toHaveLength(0);
+    expect(listbox.contains(emptyFeedback)).toBe(false);
+    expect(emptyFeedback.textContent).toBe("No slash commands found.");
   });
 });

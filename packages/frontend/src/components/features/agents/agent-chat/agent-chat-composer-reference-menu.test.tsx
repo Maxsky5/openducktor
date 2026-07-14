@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentChatComposerReferenceMenu } from "./agent-chat-composer-reference-menu";
 import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
 
@@ -149,15 +149,90 @@ describe("AgentChatComposerReferenceMenu", () => {
 
     const listbox = screen.getByRole("listbox", { name: "References" });
     const activeFile = screen.getByRole("option", { name: /styles\.css/i });
+    const inactiveFile = screen.getByRole("option", { name: /agent-chat-composer\.tsx/i });
 
     expect(activeFile.className).toContain("bg-selected-surface");
     expect(activeFile.className).not.toContain("bg-primary/20");
     expect(activeFile.id).toBe(`${LISTBOX_ID}-option-1`);
     expect(activeFile.getAttribute("aria-selected")).toBe("true");
     expect(activeFile.getAttribute("tabindex")).toBe("-1");
+    expect(inactiveFile.getAttribute("aria-selected")).toBe("false");
     expect(listbox.id).toBe(LISTBOX_ID);
     expect(listbox.getAttribute("aria-activedescendant")).toBeNull();
     expect(listbox.getAttribute("tabindex")).toBeNull();
+  });
+
+  test("scrolls active subagent and file rows into view as selection changes", () => {
+    const scrollIntoView = mock(() => {});
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const items = [...subagentItems(SUBAGENTS), ...fileItems(RESULTS)];
+
+    try {
+      const rendered = render(
+        <AgentChatComposerReferenceMenu
+          listboxId={LISTBOX_ID}
+          items={items}
+          activeIndex={0}
+          fileSearchError={null}
+          isFileSearchPending={false}
+          isFileSearchLoading={false}
+          supportsSubagentReferences={true}
+          subagentsError={null}
+          isSubagentsLoading={false}
+          onSelectFile={() => {}}
+          onSelectSubagent={() => {}}
+        />,
+      );
+
+      rendered.rerender(
+        <AgentChatComposerReferenceMenu
+          listboxId={LISTBOX_ID}
+          items={items}
+          activeIndex={1}
+          fileSearchError={null}
+          isFileSearchPending={false}
+          isFileSearchLoading={false}
+          supportsSubagentReferences={true}
+          subagentsError={null}
+          isSubagentsLoading={false}
+          onSelectFile={() => {}}
+          onSelectSubagent={() => {}}
+        />,
+      );
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest" });
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  test("selects subagent and file rows on pointer down", () => {
+    const onSelectFile = mock(() => {});
+    const onSelectSubagent = mock(() => {});
+
+    render(
+      <AgentChatComposerReferenceMenu
+        listboxId={LISTBOX_ID}
+        items={[...subagentItems(SUBAGENTS), ...fileItems(RESULTS)]}
+        activeIndex={0}
+        fileSearchError={null}
+        isFileSearchPending={false}
+        isFileSearchLoading={false}
+        supportsSubagentReferences={true}
+        subagentsError={null}
+        isSubagentsLoading={false}
+        onSelectFile={onSelectFile}
+        onSelectSubagent={onSelectSubagent}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByRole("option", { name: /@reviewer/i }));
+    fireEvent.pointerDown(screen.getByRole("option", { name: /agent-chat-composer\.tsx/i }));
+
+    expect(onSelectSubagent).toHaveBeenCalledWith(SUBAGENTS[0]);
+    expect(onSelectFile).toHaveBeenCalledWith(RESULTS[0]);
   });
 
   test("uses the selected surface token for the active subagent row", () => {
