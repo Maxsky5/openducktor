@@ -29,15 +29,39 @@ const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTa
   externalSessionId: startedCtx.summary.externalSessionId,
 });
 
+class StartedSessionStopError extends Error {}
+
 const describeRollbackStep = (
+  failed: boolean,
   error: unknown,
   failurePrefix: string,
   successMessage: string,
 ): string => {
-  if (error) {
+  if (failed) {
     return `${failurePrefix}: ${errorMessage(error)}.`;
   }
   return successMessage;
+};
+
+export const rollbackBootstrapAfterStartFailure = async ({
+  cause,
+  bootstrap,
+}: {
+  cause: unknown;
+  bootstrap: { abort: () => Promise<void> };
+}): Promise<never> => {
+  if (cause instanceof StartedSessionStopError) {
+    throw cause;
+  }
+  try {
+    await bootstrap.abort();
+  } catch (abortCause) {
+    throw new Error(
+      `${errorMessage(cause)}\nAlso failed to roll back task worktree bootstrap: ${errorMessage(abortCause)}`,
+      cause instanceof Error ? { cause } : undefined,
+    );
+  }
+  throw cause;
 };
 
 export const stopSessionOnStaleAndThrow = async ({
@@ -59,7 +83,7 @@ export const stopSessionOnStaleAndThrow = async ({
       },
     );
   } catch (error) {
-    throw new Error(
+    throw new StartedSessionStopError(
       `${STALE_START_ERROR} Failed to stop stale started session '${tags.externalSessionId}': ${errorMessage(error)}`,
       { cause: error },
     );
@@ -116,7 +140,7 @@ export const rollbackRegisteredStartedSession = async ({
       { tags: toStartedSessionTags(startedCtx) },
     );
   } catch (stopError) {
-    throw new Error(
+    throw new StartedSessionStopError(
       `${message} Failed to stop the started session during rollback: ${errorMessage(stopError)}. Cleanup was not continued.`,
       { cause: stopError },
     );
@@ -125,18 +149,22 @@ export const rollbackRegisteredStartedSession = async ({
   session.clearSessionObservationState(identity);
   session.removeSession(identity);
 
+  let deleteFailed = false;
   let deleteError: unknown;
   try {
     await session.deleteSessionRecord(startedCtx.taskId, identity);
   } catch (error) {
+    deleteFailed = true;
     deleteError = error;
   }
 
+  let abortFailed = false;
   let abortError: unknown;
   if (bootstrap) {
     try {
       await bootstrap.abort();
     } catch (error) {
+      abortFailed = true;
       abortError = error;
     }
   }
@@ -144,6 +172,7 @@ export const rollbackRegisteredStartedSession = async ({
   const progress = [
     "The started session was stopped and removed locally.",
     describeRollbackStep(
+      deleteFailed,
       deleteError,
       "Failed to delete the durable session record",
       "The durable session record was deleted.",
@@ -152,6 +181,7 @@ export const rollbackRegisteredStartedSession = async ({
   if (bootstrap) {
     progress.push(
       describeRollbackStep(
+        abortFailed,
         abortError,
         "Failed to roll back task worktree bootstrap",
         "The task worktree bootstrap was rolled back.",
@@ -187,7 +217,7 @@ export const rollbackStartedSessionBeforeRegistration = async ({
       },
     );
   } catch (stopError) {
-    throw new Error(
+    throw new StartedSessionStopError(
       `Failed to initialize started session "${externalSessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
       { cause: stopError },
     );

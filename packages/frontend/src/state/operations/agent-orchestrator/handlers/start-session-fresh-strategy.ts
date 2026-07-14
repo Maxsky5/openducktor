@@ -9,7 +9,10 @@ import type {
 } from "./start-session.types";
 import { registerStartedSession } from "./start-session-persistence";
 import { resolveStartTask } from "./start-session-policies";
-import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
+import {
+  rollbackBootstrapAfterStartFailure,
+  stopSessionOnStaleAndThrow,
+} from "./start-session-rollback";
 import { resolveFreshStartRuntimeContext } from "./start-session-runtime";
 
 type FreshStrategyInput = {
@@ -88,14 +91,9 @@ export const executeFreshStart = async ({
     if (!resolved.runtime.bootstrap) {
       throw cause;
     }
-    try {
-      await resolved.runtime.bootstrap.abort();
-    } catch (abortCause) {
-      throw new Error(
-        `${cause instanceof Error ? cause.message : String(cause)}\nAlso failed to roll back task worktree bootstrap: ${abortCause instanceof Error ? abortCause.message : String(abortCause)}`,
-        { cause },
-      );
-    }
-    throw cause;
+    return rollbackBootstrapAfterStartFailure({
+      cause,
+      bootstrap: resolved.runtime.bootstrap,
+    });
   }
 };

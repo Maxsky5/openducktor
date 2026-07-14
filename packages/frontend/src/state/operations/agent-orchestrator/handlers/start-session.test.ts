@@ -684,6 +684,98 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(abortCalls).toBe(0);
   });
 
+  test("preserves fresh bootstrap resources when stale-session cleanup cannot stop the runtime", async () => {
+    const repoEpochRef = { current: 1 };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
+    let abortCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => {
+      repoEpochRef.current += 1;
+      currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
+      return {
+        runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
+        externalSessionId: "external-stale-stop-fail",
+        role: "planner",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+      };
+    };
+    adapter.stopSession = async () => {
+      throw new Error("runtime unavailable");
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {},
+          abort: async () => {
+            abortCalls += 1;
+          },
+        },
+      }),
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow(
+      "Failed to stop stale started session 'external-stale-stop-fail': runtime unavailable",
+    );
+    expect(abortCalls).toBe(0);
+  });
+
+  test("reports falsy durable-record and bootstrap rollback rejections as failures", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-falsy-rollback-errors",
+      role: "planner",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {};
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      observeAgentSession: async () => {
+        throw new Error("observer failed");
+      },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {},
+          abort: () => Promise.reject(null),
+        },
+      }),
+      deleteSessionRecord: () => Promise.reject(undefined),
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow(
+      "Failed to delete the durable session record: Non-Error thrown: undefined. Failed to roll back task worktree bootstrap: null.",
+    );
+  });
+
   test("rolls back a started session when the repository changes during bootstrap completion", async () => {
     const completionStarted = createDeferred<void>();
     const completion = createDeferred<void>();
