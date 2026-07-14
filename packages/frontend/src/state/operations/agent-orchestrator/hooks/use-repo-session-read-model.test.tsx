@@ -27,6 +27,27 @@ const record: AgentSessionRecord = {
   selectedModel: null,
 };
 
+const readOnlyRepoConfig: RepoConfig = {
+  workspaceId: "/repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
+  defaultRuntimeKind: "codex",
+  branchPrefix: "odt/",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: { providers: {} },
+  hooks: { preStart: [], postComplete: [] },
+  devServers: [],
+  promptOverrides: {
+    "permission.read_only.reject": {
+      template: "Custom read-only rejection for {{role}}.",
+      baseVersion: 1,
+      enabled: true,
+    },
+  },
+  worktreeCopyPaths: [],
+  agentDefaults: {},
+};
+
 const createDeferred = <T,>() => {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -315,6 +336,66 @@ describe("useRepoSessionReadModel", () => {
     }
 
     expect(secondUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses the latest approval reply callback without restarting observation", async () => {
+    const mutatingApproval = {
+      requestId: "latest-mutating",
+      requestType: "file_change" as const,
+      title: "Edit file",
+      mutation: "mutating" as const,
+    };
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      { ...record, role: "spec" },
+    );
+    const refreshedReplyApproval = mock(
+      async (_input: AgentSessionLiveReplyApprovalInput) => undefined,
+    );
+    const refreshedProps = {
+      ...state.props,
+      liveSessionPort: {
+        ...state.props.liveSessionPort,
+        agentSessionLiveReplyApproval: refreshedReplyApproval,
+      },
+    };
+    state.queryClient.setQueryData(workspaceQueryKeys.repoConfig("/repo"), readOnlyRepoConfig);
+    state.queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture(),
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update(refreshedProps);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+
+      await state.harness.run(async () => {
+        state.emit({
+          type: "session_upsert",
+          session: snapshot({ pendingApprovals: [mutatingApproval] }),
+        });
+      });
+      await waitFor(() => expect(refreshedReplyApproval).toHaveBeenCalledTimes(1), {
+        timeout: 1_000,
+      });
+
+      expect(state.agentSessionLiveReplyApproval).not.toHaveBeenCalled();
+      expect(refreshedReplyApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: "latest-mutating",
+          outcome: "reject",
+          message: "Custom read-only rejection for spec.",
+        }),
+      );
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+    } finally {
+      await state.harness.unmount();
+    }
   });
 
   test("unsubscribes exactly once when repository observation resolves after unmount", async () => {
@@ -680,27 +761,7 @@ describe("useRepoSessionReadModel", () => {
       },
       { ...record, role: "spec" },
     );
-    const repoConfig: RepoConfig = {
-      workspaceId: "/repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "codex",
-      branchPrefix: "odt/",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      promptOverrides: {
-        "permission.read_only.reject": {
-          template: "Custom read-only rejection for {{role}}.",
-          baseVersion: 1,
-          enabled: true,
-        },
-      },
-      worktreeCopyPaths: [],
-      agentDefaults: {},
-    };
-    state.queryClient.setQueryData(workspaceQueryKeys.repoConfig("/repo"), repoConfig);
+    state.queryClient.setQueryData(workspaceQueryKeys.repoConfig("/repo"), readOnlyRepoConfig);
     state.queryClient.setQueryData(
       workspaceQueryKeys.settingsSnapshot(),
       createSettingsSnapshotFixture(),
