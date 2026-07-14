@@ -1,8 +1,8 @@
 import { ChevronDown, ChevronRight, FilePlus, FileText, FileX } from "lucide-react";
 import { memo, type ReactElement, useEffect, useRef, useState } from "react";
 import {
-  PierreDiffViewer,
   PierreFileViewer,
+  PierrePreloadedDiffViewer,
 } from "@/components/features/agents/pierre-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -112,7 +112,7 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
       </button>
 
       {isExpanded && data.kind === "diff" ? (
-        <PierreDiffViewer
+        <PierrePreloadedDiffViewer
           patch={data.diff}
           filePath={data.filePath}
           diffStyle={chatSettings.diffStyle}

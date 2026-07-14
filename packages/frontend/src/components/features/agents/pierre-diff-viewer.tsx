@@ -1,8 +1,10 @@
-import type {
-  BaseDiffOptions,
-  DiffLineAnnotation,
-  FileContents,
-  SelectedLineRange,
+import {
+  type BaseDiffOptions,
+  type DiffLineAnnotation,
+  type FileContents,
+  type FileDiffMetadata,
+  getFiletypeFromFileName,
+  type SelectedLineRange,
 } from "@pierre/diffs";
 import {
   File as PierreReactFile,
@@ -16,12 +18,15 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
   useSyncExternalStore,
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { cn } from "@/lib/utils";
 import type { HunkResetAnnotationMetadata, PierreDiffSelection } from "./pierre-diff-viewer-model";
 import {
@@ -77,6 +82,14 @@ type PierreFileViewerProps = {
   className?: string;
 };
 
+type PierreHighlightState = "ready" | "pending" | "unavailable";
+type PierreWorkerPool = NonNullable<ReturnType<typeof useWorkerPool>>;
+type PierreFileHighlightObserver = Parameters<PierreWorkerPool["highlightFileAST"]>[0];
+type PierreDiffHighlightObserver = Parameters<PierreWorkerPool["highlightDiffAST"]>[0];
+type PierreHighlightTarget =
+  | { kind: "file"; file: FileContents; taskKey: string }
+  | { kind: "diff"; fileDiff: FileDiffMetadata; taskKey: string };
+
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const DIFF_WRAPPER_STYLE = {
   "--diffs-font-size": "12px",
@@ -91,6 +104,14 @@ const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
 const HUNK_RESET_BUTTON_CLASS_NAME =
   "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
 const PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(50vh,32rem)] overflow-auto";
+const PIERRE_HIGHLIGHT_SKELETON_WIDTHS = [
+  "w-3/5",
+  "w-4/5",
+  "w-2/3",
+  "w-5/6",
+  "w-1/2",
+  "w-3/4",
+] as const;
 const HUNK_RESET_FLOATING_CSS = `
 [data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]),
 [data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) {
@@ -120,13 +141,115 @@ const getRawDiffFallbackClassName = (lineOverflow: PierreLineOverflow): string =
     lineOverflow === "wrap" ? "whitespace-pre-wrap break-words" : "overflow-x-auto whitespace-pre",
   );
 
-const contentHash = (value: string): string => {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
+const getPierreFileHighlightState = (
+  workerPool: ReturnType<typeof useWorkerPool>,
+  file: FileContents,
+  requiresHighlight: boolean,
+  didHighlightFail: boolean,
+): PierreHighlightState => {
+  if (!requiresHighlight) {
+    return "ready";
   }
-  return (hash >>> 0).toString(36);
+  if (workerPool == null || !workerPool.isWorkingPool()) {
+    return "unavailable";
+  }
+  if (workerPool.getFileResultCache(file) != null) {
+    return "ready";
+  }
+  return didHighlightFail ? "unavailable" : "pending";
+};
+
+const getPierreDiffHighlightState = (
+  workerPool: ReturnType<typeof useWorkerPool>,
+  fileDiff: FileDiffMetadata | null,
+  requiresHighlight: boolean,
+  didHighlightFail: boolean,
+): PierreHighlightState => {
+  if (!requiresHighlight) {
+    return "ready";
+  }
+  if (workerPool == null || !workerPool.isWorkingPool()) {
+    return "unavailable";
+  }
+  if (fileDiff != null && workerPool.getDiffResultCache(fileDiff) != null) {
+    return "ready";
+  }
+  return didHighlightFail ? "unavailable" : "pending";
+};
+
+const usePierreHighlightTaskFailure = ({
+  target,
+  workerPool,
+  shouldStart,
+}: {
+  target: PierreHighlightTarget | null;
+  workerPool: ReturnType<typeof useWorkerPool>;
+  shouldStart: boolean;
+}): boolean => {
+  const reactId = useId();
+  const [failedTaskKey, setFailedTaskKey] = useState<string | null>(null);
+  const didHighlightFail = target != null && failedTaskKey === target.taskKey;
+
+  useEffect(() => {
+    if (!shouldStart || workerPool == null || target == null || didHighlightFail) {
+      return;
+    }
+
+    const instanceId = `openducktor-highlight:${reactId}:${target.taskKey}`;
+    const onHighlightError = () => setFailedTaskKey(target.taskKey);
+    if (target.kind === "file") {
+      const observer: PierreFileHighlightObserver = {
+        __id: instanceId,
+        onHighlightSuccess: () => undefined,
+        onHighlightError,
+      };
+      workerPool.highlightFileAST(observer, target.file);
+      return () => workerPool.cleanUpTasks(observer);
+    }
+
+    const observer: PierreDiffHighlightObserver = {
+      __id: instanceId,
+      onHighlightSuccess: () => undefined,
+      onHighlightError,
+    };
+    workerPool.highlightDiffAST(observer, target.fileDiff);
+    return () => workerPool.cleanUpTasks(observer);
+  }, [didHighlightFail, reactId, shouldStart, target, workerPool]);
+
+  return didHighlightFail;
+};
+
+const PierreHighlightSkeleton = ({
+  filePath,
+  testId,
+}: {
+  filePath: string;
+  testId: string;
+}): ReactElement => (
+  <div
+    className="col-start-1 row-start-1 space-y-2 overflow-hidden bg-background px-3 py-3"
+    data-testid={testId}
+    role="status"
+    aria-label={`Highlighting ${filePath}`}
+  >
+    {PIERRE_HIGHLIGHT_SKELETON_WIDTHS.map((widthClassName) => (
+      <Skeleton key={widthClassName} className={cn("h-3 rounded-sm", widthClassName)} />
+    ))}
+  </div>
+);
+
+const getContentMetrics = (value: string): { hash: string; lineCount: number } => {
+  let hash = 0x811c9dc5;
+  let lineCount = 1;
+  for (let index = 0; index < value.length; index += 1) {
+    const charCode = value.charCodeAt(index);
+    hash ^= charCode;
+    hash = Math.imul(hash, 0x01000193);
+    if (charCode === 10) {
+      lineCount += 1;
+    }
+  }
+  return { hash: (hash >>> 0).toString(36), lineCount };
 };
 
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
@@ -137,7 +260,7 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   const { fileDiff } = useMemo(() => getRenderableFileDiff(patch, filePath), [filePath, patch]);
 
   useEffect(() => {
-    if (workerPool == null || fileDiff == null) {
+    if (workerPool == null || !workerPool.isWorkingPool() || fileDiff == null) {
       return;
     }
     if (workerPool.getDiffResultCache(fileDiff) != null) {
@@ -156,13 +279,61 @@ export const PierreFileViewer = memo(function PierreFileViewer({
   className,
 }: PierreFileViewerProps): ReactElement {
   const { theme } = useTheme();
-  const file = useMemo<FileContents>(
-    () => ({
-      name: filePath,
-      contents: content,
-      cacheKey: `${filePath}:${content.length}:${contentHash(content)}`,
-    }),
-    [content, filePath],
+  const workerPool = useWorkerPool();
+  const { file, fileCacheKey, lineCount } = useMemo<{
+    file: FileContents;
+    fileCacheKey: string;
+    lineCount: number;
+  }>(() => {
+    const metrics = getContentMetrics(content);
+    const fileCacheKey = `${filePath}:${content.length}:${metrics.hash}`;
+    return {
+      file: {
+        name: filePath,
+        contents: content,
+        lang: getFiletypeFromFileName(filePath),
+        cacheKey: fileCacheKey,
+      },
+      fileCacheKey,
+      lineCount: metrics.lineCount,
+    };
+  }, [content, filePath]);
+  const requiresHighlight =
+    content.length > 0 && file.lang !== "text" && lineCount <= PIERRE_HIGHLIGHT_LINE_LIMIT;
+  const highlightStateBeforeSubscription = getPierreFileHighlightState(
+    workerPool,
+    file,
+    requiresHighlight,
+    false,
+  );
+  const highlightTarget = useMemo<PierreHighlightTarget>(
+    () => ({ kind: "file", file, taskKey: fileCacheKey }),
+    [file, fileCacheKey],
+  );
+  const didHighlightFail = usePierreHighlightTaskFailure({
+    target: highlightTarget,
+    workerPool,
+    shouldStart: highlightStateBeforeSubscription === "pending",
+  });
+  const shouldSubscribeToHighlightCache =
+    highlightStateBeforeSubscription === "pending" && !didHighlightFail;
+  const subscribeToHighlightCache = useCallback(
+    (onStoreChange: () => void) => {
+      if (!shouldSubscribeToHighlightCache || workerPool == null) {
+        return () => undefined;
+      }
+      return workerPool.subscribeToStatChanges(onStoreChange);
+    },
+    [shouldSubscribeToHighlightCache, workerPool],
+  );
+  const getHighlightCacheSnapshot = useCallback(
+    () => getPierreFileHighlightState(workerPool, file, requiresHighlight, didHighlightFail),
+    [didHighlightFail, file, requiresHighlight, workerPool],
+  );
+  const highlightState = useSyncExternalStore(
+    subscribeToHighlightCache,
+    getHighlightCacheSnapshot,
+    () => (requiresHighlight ? "pending" : "ready"),
   );
   const options = useMemo(
     () => ({
@@ -170,14 +341,35 @@ export const PierreFileViewer = memo(function PierreFileViewer({
       themeType: theme,
       overflow: "wrap" as const,
       disableFileHeader: true,
+      tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
     }),
     [theme],
   );
+  const isHighlightReady = highlightState === "ready";
+
+  if (highlightState === "unavailable") {
+    return (
+      <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
+        <div
+          className="px-3 py-4 text-sm text-destructive"
+          role="alert"
+        >{`Syntax highlighting ${didHighlightFail ? "failed" : "is unavailable"} for ${filePath}. Reload the session to try again.`}</div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
       <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>
-        <PierreReactFile file={file} options={options} />
+        <div className="grid min-w-0">
+          {isHighlightReady ? (
+            <div className="col-start-1 row-start-1 min-w-0">
+              <PierreReactFile key={fileCacheKey} file={file} options={options} />
+            </div>
+          ) : (
+            <PierreHighlightSkeleton filePath={filePath} testId="pierre-file-highlight-skeleton" />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -263,6 +455,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       lineDiffType,
       overflow: lineOverflow,
       disableFileHeader: true,
+      tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
       enableLineSelection,
       enableGutterUtility: handleGutterUtilityClick != null,
       ...(handleLineSelectionChange
@@ -357,39 +550,83 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
 export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer(
   props: PierreDiffViewerProps,
 ): ReactElement {
+  const { className, ...viewerProps } = props;
   const workerPool = useWorkerPool();
   const { fileDiff } = useMemo(
     () => getRenderableFileDiff(props.patch, props.filePath),
     [props.filePath, props.patch],
   );
   const fileDiffCacheKey = fileDiff?.cacheKey ?? null;
+  const diffLineCount =
+    fileDiff == null ? 0 : Math.max(fileDiff.additionLines.length, fileDiff.deletionLines.length);
+  const requiresHighlight =
+    fileDiff != null &&
+    diffLineCount > 0 &&
+    fileDiff.lang !== "text" &&
+    diffLineCount <= PIERRE_HIGHLIGHT_LINE_LIMIT;
+  const highlightStateBeforeSubscription = getPierreDiffHighlightState(
+    workerPool,
+    fileDiff,
+    requiresHighlight,
+    false,
+  );
+  const highlightTarget = useMemo<PierreHighlightTarget | null>(
+    () =>
+      fileDiff == null || fileDiffCacheKey == null
+        ? null
+        : { kind: "diff", fileDiff, taskKey: fileDiffCacheKey },
+    [fileDiff, fileDiffCacheKey],
+  );
+  const didHighlightFail = usePierreHighlightTaskFailure({
+    target: highlightTarget,
+    workerPool,
+    shouldStart: highlightStateBeforeSubscription === "pending",
+  });
+  const shouldSubscribeToHighlightCache =
+    highlightStateBeforeSubscription === "pending" && !didHighlightFail;
   const subscribeToHighlightCache = useCallback(
     (onStoreChange: () => void) => {
-      if (workerPool == null || fileDiff == null) {
+      if (!shouldSubscribeToHighlightCache || workerPool == null) {
         return () => undefined;
       }
       return workerPool.subscribeToStatChanges(onStoreChange);
     },
-    [fileDiff, workerPool],
+    [shouldSubscribeToHighlightCache, workerPool],
   );
   const getHighlightCacheSnapshot = useCallback(
-    () => workerPool != null && fileDiff != null && workerPool.getDiffResultCache(fileDiff) != null,
-    [fileDiff, workerPool],
+    () => getPierreDiffHighlightState(workerPool, fileDiff, requiresHighlight, didHighlightFail),
+    [didHighlightFail, fileDiff, requiresHighlight, workerPool],
   );
-  const isHighlightCached = useSyncExternalStore(
+  const highlightState = useSyncExternalStore(
     subscribeToHighlightCache,
     getHighlightCacheSnapshot,
-    () => false,
+    () => (requiresHighlight ? "pending" : "ready"),
   );
+  const isHighlightReady = highlightState === "ready";
 
-  useEffect(() => {
-    if (workerPool == null || fileDiff == null || isHighlightCached) {
-      return;
-    }
-    workerPool.primeDiffHighlightCache(fileDiff);
-  }, [fileDiff, isHighlightCached, workerPool]);
+  if (highlightState === "unavailable") {
+    return (
+      <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
+        <div
+          className="px-3 py-4 text-sm text-destructive"
+          role="alert"
+        >{`Syntax highlighting ${didHighlightFail ? "failed" : "is unavailable"} for ${props.filePath}. Reload the session to try again.`}</div>
+      </div>
+    );
+  }
 
-  const renderPhase = isHighlightCached ? "highlighted" : "pending";
-
-  return <PierreDiffViewer key={`${fileDiffCacheKey}:${renderPhase}`} {...props} />;
+  return (
+    <div className={cn("grid min-w-0", className)}>
+      {isHighlightReady ? (
+        <div className="col-start-1 row-start-1 min-w-0">
+          <PierreDiffViewer key={fileDiffCacheKey} {...viewerProps} />
+        </div>
+      ) : (
+        <PierreHighlightSkeleton
+          filePath={props.filePath}
+          testId="pierre-diff-highlight-skeleton"
+        />
+      )}
+    </div>
+  );
 });

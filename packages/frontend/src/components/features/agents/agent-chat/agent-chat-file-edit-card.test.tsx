@@ -13,38 +13,41 @@ const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) =
   <div data-testid="pierre-diff-preloader">{filePath}</div>
 ));
 
-const viewerMock = mock(
-  ({
-    diffIndicators,
-    diffStyle,
-    filePath,
-    heightMode,
-    hunkSeparators,
-    lineOverflow,
-    patch,
-  }: {
-    patch: string;
-    filePath: string;
-    diffStyle?: string;
-    diffIndicators?: string;
-    heightMode?: string;
-    lineOverflow?: string;
-    hunkSeparators?: string;
-  }) => (
-    <div
-      data-testid="pierre-diff-viewer"
-      data-diff-indicators={diffIndicators ?? ""}
-      data-diff-style={diffStyle ?? ""}
-      data-file-path={filePath}
-      data-height-mode={heightMode ?? ""}
-      data-hunk-separators={hunkSeparators ?? ""}
-      data-line-overflow={lineOverflow ?? ""}
-      data-patch={patch}
-    >
-      {filePath}
-    </div>
-  ),
+type DiffViewerMockProps = {
+  patch: string;
+  filePath: string;
+  diffStyle?: string;
+  diffIndicators?: string;
+  heightMode?: string;
+  lineOverflow?: string;
+  hunkSeparators?: string;
+};
+
+const DiffViewerMock = ({
+  diffIndicators,
+  diffStyle,
+  filePath,
+  heightMode,
+  hunkSeparators,
+  lineOverflow,
+  patch,
+}: DiffViewerMockProps) => (
+  <div
+    data-testid="pierre-diff-viewer"
+    data-diff-indicators={diffIndicators ?? ""}
+    data-diff-style={diffStyle ?? ""}
+    data-file-path={filePath}
+    data-height-mode={heightMode ?? ""}
+    data-hunk-separators={hunkSeparators ?? ""}
+    data-line-overflow={lineOverflow ?? ""}
+    data-patch={patch}
+  >
+    {filePath}
+  </div>
 );
+
+const viewerMock = mock(DiffViewerMock);
+const preloadedViewerMock = mock(DiffViewerMock);
 
 const fileViewerMock = mock(
   ({ content, filePath }: { content: string; filePath: string; className?: string }) => (
@@ -118,6 +121,7 @@ beforeEach(async () => {
 
   mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
     PierreDiffPreloader: preloaderMock,
+    PierrePreloadedDiffViewer: preloadedViewerMock,
     PierreDiffViewer: viewerMock,
     PierreFileViewer: fileViewerMock,
   }));
@@ -129,6 +133,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup();
   preloaderMock.mockClear();
+  preloadedViewerMock.mockClear();
   viewerMock.mockClear();
   fileViewerMock.mockClear();
 });
@@ -151,12 +156,21 @@ afterEach(async () => {
 });
 
 describe("AgentChatFileEditCard", () => {
+  test("uses the cache-aware viewer for a newly displayed transcript diff", () => {
+    renderFileEditCard(buildFileEditData(), true);
+
+    expect(preloadedViewerMock).toHaveBeenCalledTimes(1);
+    expect(viewerMock).not.toHaveBeenCalled();
+    expect(fileViewerMock).not.toHaveBeenCalled();
+  });
+
   test("does not mount the hidden diff preloader while collapsed", () => {
     renderFileEditCard(buildFileEditData(), false);
 
     expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
     expect(preloaderMock).not.toHaveBeenCalled();
+    expect(preloadedViewerMock).not.toHaveBeenCalled();
     expect(viewerMock).not.toHaveBeenCalled();
   });
 
@@ -173,7 +187,8 @@ describe("AgentChatFileEditCard", () => {
     expect(viewer.getAttribute("data-hunk-separators")).toBe("line-info");
     expect(viewer.parentElement).toBe(screen.getByTestId("agent-chat-file-edit-card"));
     expect(preloaderMock).not.toHaveBeenCalled();
-    expect(viewerMock).toHaveBeenCalledTimes(1);
+    expect(preloadedViewerMock).toHaveBeenCalledTimes(1);
+    expect(viewerMock).not.toHaveBeenCalled();
   });
 
   test("renders the visible diff viewer after expansion with default chat diff settings", () => {
@@ -190,7 +205,8 @@ describe("AgentChatFileEditCard", () => {
     expect(viewer.getAttribute("data-line-overflow")).toBe("wrap");
     expect(viewer.getAttribute("data-hunk-separators")).toBe("line-info");
     expect(preloaderMock).not.toHaveBeenCalled();
-    expect(viewerMock).toHaveBeenCalledTimes(1);
+    expect(preloadedViewerMock).toHaveBeenCalledTimes(1);
+    expect(viewerMock).not.toHaveBeenCalled();
   });
 
   test("passes explicit chat diff display settings to expanded transcript diffs", () => {
@@ -224,6 +240,7 @@ describe("AgentChatFileEditCard", () => {
       "src/AuthContext.test.tsx",
     );
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+    expect(preloadedViewerMock).not.toHaveBeenCalled();
     expect(viewerMock).not.toHaveBeenCalled();
     expect(fileViewerMock).toHaveBeenCalledTimes(1);
   });
@@ -238,6 +255,8 @@ describe("AgentChatFileEditCard", () => {
 
     expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-content")).toBe("");
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+    expect(preloadedViewerMock).not.toHaveBeenCalled();
+    expect(viewerMock).not.toHaveBeenCalled();
   });
 
   test("uses full-file content change type for the status badge", () => {
@@ -325,6 +344,8 @@ describe("AgentChatFileEditCard", () => {
     expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
     expect(preloaderMock).not.toHaveBeenCalled();
+    expect(preloadedViewerMock).not.toHaveBeenCalled();
     expect(viewerMock).not.toHaveBeenCalled();
+    expect(fileViewerMock).not.toHaveBeenCalled();
   });
 });
