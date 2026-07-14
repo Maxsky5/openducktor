@@ -1,15 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import {
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskWorkflowActionGroup } from "./task-workflow-action-group";
 
-enableReactActEnvironment();
-
 function renderWorkflowActionGroup(compactMenuTrigger = false) {
-  return render(
+  render(
     <TaskWorkflowActionGroup
       task={createTaskCardFixture({
         status: "in_progress",
@@ -29,18 +24,14 @@ function renderWorkflowActionGroup(compactMenuTrigger = false) {
 
 describe("TaskWorkflowActionGroup", () => {
   test("names the compact workflow menu trigger", () => {
-    const { unmount } = renderWorkflowActionGroup(true);
+    renderWorkflowActionGroup(true);
 
-    expect(screen.getByRole("button", { name: "Open workflow actions menu" })).toBeDefined();
-
-    unmount();
+    screen.getByRole("button", { name: "Open workflow actions menu" });
   });
 
   test("keeps the noncompact workflow menu trigger named More", () => {
-    const { unmount } = renderWorkflowActionGroup();
+    renderWorkflowActionGroup();
 
-    expect(screen.getByRole("button", { name: "More" })).toBeDefined();
-
-    unmount();
+    screen.getByRole("button", { name: "More" });
   });
 });
