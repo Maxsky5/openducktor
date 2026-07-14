@@ -1,13 +1,17 @@
-import { describe, expect, test } from "bun:test";
-import type { PullRequestReviewContext } from "@openducktor/contracts";
+import { describe, expect, spyOn, test } from "bun:test";
+import type { PullRequestReviewCheck, PullRequestReviewContext } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import * as externalUrl from "@/lib/open-external-url";
 import { createQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
+import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
 import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
 import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 import { isBotCommentAuthor } from "./task-execution-ci-presentation";
@@ -17,6 +21,17 @@ const queryInput = {
   taskId: "task-12",
   workingDirectory: "/repo/worktree",
 };
+
+const loadedCheck = {
+  name: "Unit tests",
+  workflow: "CI",
+  status: "completed",
+  conclusion: "failure",
+  url: "https://github.com/openai/openducktor/actions/runs/1",
+  details: "1 suite failed",
+  startedAt: "2026-07-08T10:00:00Z",
+  completedAt: "2026-07-08T10:05:00Z",
+} satisfies PullRequestReviewCheck;
 
 const loadedContext = {
   status: "loaded",
@@ -29,18 +44,7 @@ const loadedContext = {
     state: "draft",
   },
   aggregateStatus: "failure",
-  checks: [
-    {
-      name: "Unit tests",
-      workflow: "CI",
-      status: "completed",
-      conclusion: "failure",
-      url: "https://github.com/openai/openducktor/actions/runs/1",
-      details: "1 suite failed",
-      startedAt: "2026-07-08T10:00:00Z",
-      completedAt: "2026-07-08T10:05:00Z",
-    },
-  ],
+  checks: [loadedCheck],
   comments: [
     {
       id: "thread-comment-1",
@@ -270,6 +274,57 @@ describe("TaskExecutionCiChecksPanel", () => {
       expect(unknownHtml).not.toContain("text-info-muted");
       expect(unknownHtml).not.toContain("text-success-muted");
       expect(unknownHtml).not.toContain("text-destructive-muted");
+    }
+  });
+
+  test("opens check links through the external URL shell bridge", () => {
+    const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+
+    try {
+      const view = render(
+        <TaskExecutionCiCheckCard
+          check={{
+            ...loadedCheck,
+            name: "Unit tests",
+          }}
+        />,
+      );
+      const link = view.getByRole("link", { name: "Open Unit tests check" });
+
+      expect(link.getAttribute("target")).toBeNull();
+      expect(fireEvent.click(link)).toBe(false);
+      expect(openExternalUrlSpy).toHaveBeenCalledWith(loadedCheck.url);
+      view.unmount();
+    } finally {
+      openExternalUrlSpy.mockRestore();
+    }
+  });
+
+  test("opens the pull request heading through the external URL shell bridge", () => {
+    const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+
+    try {
+      const view = render(
+        <QueryProvider useIsolatedClient>
+          <ThemeProvider defaultTheme="light">
+            <TooltipProvider>
+              <TaskExecutionCiLoaded
+                context={loadedContext}
+                onRefresh={() => undefined}
+                refreshState="idle"
+              />
+            </TooltipProvider>
+          </ThemeProvider>
+        </QueryProvider>,
+      );
+      const link = view.getByRole("link", { name: loadedContext.pullRequest.title });
+
+      expect(link.getAttribute("target")).toBeNull();
+      expect(fireEvent.click(link)).toBe(false);
+      expect(openExternalUrlSpy).toHaveBeenCalledWith(loadedContext.pullRequest.url);
+      view.unmount();
+    } finally {
+      openExternalUrlSpy.mockRestore();
     }
   });
 

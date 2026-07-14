@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, spyOn, test } from "bun:test";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import * as externalUrl from "@/lib/open-external-url";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
@@ -230,6 +231,30 @@ describe("TaskApprovalModal", () => {
     );
     expect(html).toContain("Start PR Generation");
     expect(html).not.toContain("generate the pull request title and description");
+  });
+
+  test("opens an existing pull request through the external URL shell bridge", () => {
+    const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+    const pullRequestUrl = "https://github.com/openai/openducktor/pull/42";
+
+    try {
+      const view = render(
+        createElement(TaskApprovalModalPanel, {
+          model: createApprovalModel({
+            mode: "pull_request",
+            pullRequestUrl,
+          }),
+        }),
+      );
+      const link = view.getByRole("link", { name: "Open existing pull request" });
+
+      expect(link.getAttribute("target")).toBeNull();
+      expect(fireEvent.click(link)).toBe(false);
+      expect(openExternalUrlSpy).toHaveBeenCalledWith(pullRequestUrl);
+      view.unmount();
+    } finally {
+      openExternalUrlSpy.mockRestore();
+    }
   });
 
   test("disables pull request confirmation when the provider is unavailable", () => {

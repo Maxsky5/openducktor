@@ -1,11 +1,14 @@
 import { AlertTriangle, ArrowRight, Check, LoaderCircle } from "lucide-react";
-import type { ReactElement } from "react";
+import type { MouseEvent, ReactElement } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
+import { errorMessage } from "@/lib/errors";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import { cn } from "@/lib/utils";
 import type {
@@ -71,6 +74,14 @@ const PULL_REQUEST_DRAFT_OPTIONS: Array<{
       "Choose a Builder session to fork, then let Builder create or update the pull request automatically.",
   },
 ];
+
+const openExistingPullRequestUrl = (url: string): void => {
+  void openExternalUrl(url).catch((error) => {
+    toast.error("Failed to open pull request", {
+      description: errorMessage(error),
+    });
+  });
+};
 
 function SegmentedTabs<TValue extends string>({
   ariaLabel,
@@ -435,6 +446,21 @@ function TaskApprovalPullRequestSection({
   model: TaskApprovalApprovalModalModel;
   sectionLabelClass: string;
 }): ReactElement {
+  const openExistingPullRequest = (event: MouseEvent<HTMLAnchorElement>): void => {
+    event.preventDefault();
+    if (model.pullRequestUrl) {
+      openExistingPullRequestUrl(model.pullRequestUrl);
+    }
+  };
+  const openExistingPullRequestFromAuxiliaryClick = (
+    event: MouseEvent<HTMLAnchorElement>,
+  ): void => {
+    event.preventDefault();
+    if (event.button === 1 && model.pullRequestUrl) {
+      openExistingPullRequestUrl(model.pullRequestUrl);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="space-y-3">
@@ -487,8 +513,9 @@ function TaskApprovalPullRequestSection({
       {model.pullRequestUrl ? (
         <a
           href={model.pullRequestUrl}
-          target="_blank"
-          rel="noreferrer"
+          onClick={openExistingPullRequest}
+          onAuxClick={openExistingPullRequestFromAuxiliaryClick}
+          onContextMenu={(event) => event.preventDefault()}
           className="text-sm text-primary underline underline-offset-4"
         >
           Open existing pull request
