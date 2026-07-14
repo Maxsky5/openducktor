@@ -53,22 +53,12 @@ export function useWorkspaceBranchOperations({
   }, [activeRepo]);
 
   const applyBranchState = useCallback(
-    (repoPath: string, current: GitCurrentBranch, allBranches: GitBranch[]): void => {
+    (repoPath: string, current: GitCurrentBranch, allBranches?: GitBranch[]): void => {
       setBranchDataRepoPath(repoPath);
       setActiveBranch(current);
-      setBranches(allBranches);
-      lastKnownBranchNameRef.current = current.name ?? null;
-      lastKnownDetachedRef.current = current.detached;
-      lastKnownRevisionRef.current = current.revision ?? null;
-      updateBranchSyncDegradedForRepo(repoPath, false);
-    },
-    [updateBranchSyncDegradedForRepo],
-  );
-
-  const applyCurrentBranchSnapshot = useCallback(
-    (repoPath: string, current: GitCurrentBranch): void => {
-      setBranchDataRepoPath(repoPath);
-      setActiveBranch(current);
+      if (allBranches) {
+        setBranches(allBranches);
+      }
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
       lastKnownRevisionRef.current = current.revision ?? null;
@@ -200,7 +190,7 @@ export function useWorkspaceBranchOperations({
           currentWorkspaceRepoPathRef.current === repoPath
         ) {
           queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
-          applyCurrentBranchSnapshot(repoPath, current);
+          applyBranchState(repoPath, current);
 
           try {
             await queryClient.invalidateQueries({
@@ -238,7 +228,7 @@ export function useWorkspaceBranchOperations({
         }
       }
     },
-    [activeBranchForCurrentRepo, activeRepo, applyCurrentBranchSnapshot, hostClient, queryClient],
+    [activeBranchForCurrentRepo, activeRepo, applyBranchState, hostClient, queryClient],
   );
 
   const branchProbeController = useMemo<WorkspaceBranchProbeController>(
