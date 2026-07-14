@@ -1,7 +1,7 @@
 import { taskSessionBootstrapSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
-import { buildBranchName } from "../../../domain/task";
+import { buildBranchName, deriveAgentWorkflows } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import { resolveRuntimeDescriptorForTaskSession } from "../support/builder-worktree-cleanup";
 import {
@@ -96,6 +96,17 @@ export const createTaskSessionBootstrapUseCase = ({
             const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
             if (role === "build") {
               yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
+            } else {
+              const workflow = deriveAgentWorkflows(task)[role];
+              if (!workflow.available) {
+                return yield* Effect.fail(
+                  new HostValidationError({
+                    field: "role",
+                    message: `${role} workflow is not available for task ${taskId}.`,
+                    details: { repoPath: canonicalRepoPath, taskId, role, status: task.status },
+                  }),
+                );
+              }
             }
             yield* coordinator.attachBootstrapReservation({
               bootstrapId,

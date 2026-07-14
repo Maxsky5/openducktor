@@ -334,12 +334,16 @@ export const restoreWorktreeToReference = (
 ) =>
   Effect.gen(function* () {
     const targetReference = yield* requireNonEmptyEffect(reference, "reference");
-    yield* runGit(runner, workingDirectory, [
-      "reset",
-      "--hard",
-      "--end-of-options",
-      targetReference,
-    ]);
+    const resolvedCommit = yield* requireNonEmptyEffect(
+      (yield* runGit(runner, workingDirectory, [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        `${targetReference}^{commit}`,
+      ])).trim(),
+      "resolved reference",
+    );
+    yield* runGit(runner, workingDirectory, ["reset", "--hard", resolvedCommit]);
     const cleanup = yield* runGitAllowFailure(runner, workingDirectory, ["clean", "-d", "-f"]);
     if (!cleanup.ok) {
       return yield* Effect.fail(

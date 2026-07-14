@@ -1178,8 +1178,14 @@ describe("createTaskService task mutations and reset", () => {
       createAgentSessionRecord({
         workingDirectory: "/worktrees/repo/task-1",
       }),
+      createAgentSessionRecord({
+        externalSessionId: "legacy-qa",
+        role: "qa",
+        workingDirectory: "/worktrees/repo/task-1-legacy",
+      }),
     ];
     const currentTask = task({
+      title: "Renamed Task",
       status: "ai_review",
       documentSummary: {
         spec: { has: true, updatedAt: "2026-05-01T00:00:00.000Z" },
@@ -1406,16 +1412,26 @@ describe("createTaskService task mutations and reset", () => {
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1-task-1", detached: false },
+              "/worktrees/repo/task-1": {
+                name: "odt/task-1-original-title",
+                detached: false,
+              },
+              "/worktrees/repo/task-1-legacy": {
+                name: "odt/task-1-legacy",
+                detached: false,
+              },
             },
             branches: {
               "/repo": [
                 { name: "main", isCurrent: true, isRemote: false },
-                { name: "odt/task-1", isCurrent: false, isRemote: false },
+                { name: "odt/task-1-original-title", isCurrent: false, isRemote: false },
+                { name: "odt/task-1-legacy", isCurrent: false, isRemote: false },
               ],
             },
           }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          settingsConfig: createBuildSettingsConfig(
+            new Set(["/repo", "/worktrees/repo/task-1", "/worktrees/repo/task-1-legacy"]),
+          ),
           taskActivityGuard,
           taskStore,
           worktreeFiles: createCleanupWorktreeFiles(calls),
@@ -1436,16 +1452,32 @@ describe("createTaskService task mutations and reset", () => {
           taskId: "task-1",
           sessions: currentSessions,
           operationLabel: "reset implementation",
-          sessionRoles: ["build"],
+          sessionRoles: ["build", "qa"],
         },
       },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1-legacy" },
+      { type: "listBranches", workingDir: "/repo" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "removeWorktree",
+        repoPath: "/repo",
+        worktreePath: "/worktrees/repo/task-1-legacy",
+        force: true,
+      },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1-legacy" },
+      {
+        type: "deleteLocalBranch",
+        repoPath: "/repo",
+        branch: "odt/task-1-legacy",
+        force: true,
+      },
       {
         type: "restoreWorktree",
         workingDirectory: "/worktrees/repo/task-1",
         reference: "origin/main",
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "clearAgentSessions",
         input: { repoPath: "/repo", taskId: "task-1", roles: ["build", "qa"] },

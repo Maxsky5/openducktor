@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
-import { appendTaskCleanupProgress } from "./task-cleanup-support";
+import {
+  createAgentSessionRecord,
+  createBuildSettingsConfig,
+  createDirectMergeGitPort,
+} from "../test-support/task-workflow-harness";
+import { appendTaskCleanupProgress, collectResetWorktreePaths } from "./task-cleanup-support";
 
 describe("task cleanup support", () => {
   test("reports reset implementation cleanup progress with the narrow operation label", () => {
@@ -18,5 +24,31 @@ describe("task cleanup support", () => {
     expect((error as Error).message).toContain(
       "Retry reset implementation to finish cleanup safely.",
     );
+  });
+
+  test("keeps legacy implementation worktrees as reset cleanup targets without a canonical worktree", async () => {
+    const legacyWorktree = "/legacy/repo/task-1";
+    const worktreePaths = await Effect.runPromise(
+      collectResetWorktreePaths(
+        {
+          gitPort: createDirectMergeGitPort({
+            calls: [],
+            currentBranches: {
+              [legacyWorktree]: { name: "odt/task-1-legacy", detached: false },
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", legacyWorktree])),
+        },
+        "/repo",
+        "/worktrees/repo",
+        "odt",
+        "task-1",
+        [createAgentSessionRecord({ workingDirectory: legacyWorktree })],
+        new Set(["build", "qa"]),
+        "reset implementation",
+      ),
+    );
+
+    expect(worktreePaths).toEqual([legacyWorktree]);
   });
 });

@@ -50,9 +50,10 @@ describe("createTaskService build start worktree handling", () => {
   test("supports Planner and QA as the first worktree creator", async () => {
     for (const role of ["planner", "qa"] as const) {
       const calls: unknown[] = [];
+      const status = role === "qa" ? "blocked" : "ready_for_dev";
       const service = createTaskService({
         taskStore: {
-          getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+          getTask: () => Effect.succeed(task({ status })),
         } as TaskStorePort,
         gitPort: createBuildStartGitPort({ calls }),
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
@@ -83,6 +84,43 @@ describe("createTaskService build start worktree handling", () => {
         }),
       );
     }
+  });
+
+  test.each([
+    { role: "spec", task: task({ status: "closed" }) },
+    { role: "planner", task: task({ issueType: "feature", status: "open" }) },
+    { role: "qa", task: task({ status: "ready_for_dev" }) },
+  ] as const)("rejects unavailable $role bootstrap before creating a worktree", async (entry) => {
+    const calls: unknown[] = [];
+    const service = createTaskService({
+      taskStore: {
+        getTask: () => Effect.succeed(entry.task),
+      } as TaskStorePort,
+      gitPort: createBuildStartGitPort({ calls }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      systemCommands: createBuildSystemCommands(calls),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapPrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: entry.role,
+          runtimeKind: "opencode",
+        }),
+      ),
+    ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "createWorktree" }));
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "ensureRuntime" }));
   });
 
   test("rejects lifecycle changes during Builder startup and replays terminal calls safely", async () => {

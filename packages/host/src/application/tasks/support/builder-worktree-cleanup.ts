@@ -4,6 +4,7 @@ import type {
   GitTargetBranch,
   TaskCard,
 } from "@openducktor/contracts";
+import { runtimeRequiredScopesByRole } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
@@ -263,49 +264,6 @@ export const rollbackFailedBuildWorktree = (
     }
     return cleanupErrors.length === 0 ? "" : `\n${cleanupErrors.join("\n")}`;
   });
-export const resolveRuntimeDescriptorForBuild = (
-  runtimeDefinitionsService: RuntimeDefinitionsService,
-  runtimeKind: string,
-): Effect.Effect<
-  ReturnType<RuntimeDefinitionsService["listRuntimeDefinitions"]>[number],
-  HostValidationError
-> =>
-  Effect.gen(function* () {
-    const descriptor = runtimeDefinitionsService
-      .listRuntimeDefinitions()
-      .find((definition) => definition.kind === runtimeKind);
-    if (!descriptor) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "runtimeKind",
-          message: `Unsupported runtime kind: ${runtimeKind}`,
-          details: { runtimeKind },
-        }),
-      );
-    }
-    if (!descriptor.capabilities.workflow.supportsOdtWorkflowTools) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "runtimeKind",
-          message: `${runtimeKind} runtime does not support OpenDucktor workflow tools.`,
-          details: { runtimeKind },
-        }),
-      );
-    }
-    const scopes = descriptor.capabilities.workflow.supportedScopes;
-    const requiredScopes = ["workspace", "task", "build"] as const;
-    const missingScopes = requiredScopes.filter((scope) => !scopes.includes(scope));
-    if (missingScopes.length > 0) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "runtimeKind",
-          message: `${runtimeKind} runtime is missing required workflow scopes: ${missingScopes.join(", ")}`,
-          details: { runtimeKind, missingScopes },
-        }),
-      );
-    }
-    return descriptor;
-  });
 export const resolveRuntimeDescriptorForTaskSession = (
   runtimeDefinitionsService: RuntimeDefinitionsService,
   runtimeKind: string,
@@ -333,10 +291,7 @@ export const resolveRuntimeDescriptorForTaskSession = (
         }),
       );
     }
-    const requiredScopes =
-      role === "build"
-        ? (["workspace", "task", "build"] as const)
-        : (["workspace", "task"] as const);
+    const requiredScopes = runtimeRequiredScopesByRole[role];
     const supportedScopes = descriptor.capabilities.workflow.supportedScopes;
     const missingScopes = requiredScopes.filter((scope) => !supportedScopes.includes(scope));
     if (missingScopes.length > 0) {

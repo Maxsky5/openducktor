@@ -511,21 +511,29 @@ describe("createGitCliAdapter", () => {
     const git = createGitCliAdapter({
       runner: (_workingDirectory, args) => {
         calls.push(args.join(" "));
-        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
+        return Effect.succeed({
+          ok: true,
+          stdout: args[0] === "rev-parse" ? "abc123\n" : "",
+          stderr: "",
+        });
       },
     });
 
     await expect(
       Effect.runPromise(git.restoreWorktreeToReference("/worktree", "origin/main")),
     ).resolves.toBeUndefined();
-    expect(calls).toEqual(["reset --hard --end-of-options origin/main", "clean -d -f"]);
+    expect(calls).toEqual([
+      "rev-parse --verify --end-of-options origin/main^{commit}",
+      "reset --hard abc123",
+      "clean -d -f",
+    ]);
   });
   test("reports partial progress when whole-worktree cleanup fails", async () => {
     const git = createGitCliAdapter({
       runner: (_workingDirectory, args) =>
         Effect.succeed({
           ok: args[0] !== "clean",
-          stdout: "",
+          stdout: args[0] === "rev-parse" ? "abc123\n" : "",
           stderr: args[0] === "clean" ? "permission denied" : "",
         }),
     });
@@ -560,6 +568,7 @@ describe("createGitCliAdapter", () => {
     try {
       await mkdir(repo);
       git("init", "-b", "main");
+      git("config", "core.autocrlf", "false");
       git("config", "user.email", "test@example.com");
       git("config", "user.name", "Test");
       await writeFile(join(repo, ".gitignore"), "ignored/\n");

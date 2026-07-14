@@ -20,14 +20,12 @@ import type { DevServerService } from "../../dev-servers/dev-server-service";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
 export const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
-export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
+const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
 export const workflowCleanupSessionRoles = new Set<string>(workflowCleanupSessionRoleNames);
 export type TaskSessionRecords = {
   taskId: string;
   sessions: AgentSessionRecord[];
 };
-export const taskHasImplementationSessions = (sessions: AgentSessionRecord[]): boolean =>
-  sessions.some((session) => implementationSessionRoles.has(session.role.trim()));
 export const collectSessionsUsingCanonicalWorktree = (
   gitPort: GitPort,
   settingsConfig: SettingsConfigPort,
@@ -81,11 +79,7 @@ export const collectTaskDeleteTargets = (
   }
   return tasks.filter((task) => targetIds.has(task.id));
 };
-export const isRelatedTaskBranch = (
-  branchName: string,
-  branchPrefix: string,
-  taskId: string,
-): boolean => {
+const isRelatedTaskBranch = (branchName: string, branchPrefix: string, taskId: string): boolean => {
   const cleanPrefix = branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
   const taskPrefix = `${cleanPrefix}/${taskId}`;
   return branchName === taskPrefix || branchName.startsWith(`${taskPrefix}-`);

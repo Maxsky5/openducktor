@@ -1,9 +1,12 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { buildBranchName, canResetImplementationFromStatus } from "../../../domain/task";
-import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
-import * as BuilderCleanup from "../support/builder-worktree-cleanup";
-import { validateExistingGitBuildWorktree } from "../support/builder-worktree-start";
+import { canResetImplementationFromStatus } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
+import {
+  ensureNoActiveImplementationResetActivity,
+  excludeCanonicalImplementationTargets,
+  resolveCanonicalImplementationResetTarget,
+} from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
   requireImplementationResetStoreDependencies,
@@ -11,11 +14,14 @@ import {
 } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
+  collectRelatedTaskBranches,
+  collectResetWorktreePaths,
   collectSessionsUsingCanonicalWorktree,
   createTaskCleanupProgressState,
   implementationSessionRoleNames,
   replaceTaskInList,
   resetImplementationRollbackStatus,
+  runTaskLocalCleanup,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -25,6 +31,7 @@ export const createTaskImplementationResetUseCase = ({
   taskStore,
   taskActivityGuard,
   settingsConfig,
+  worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "resetImplementation"> => ({
@@ -68,8 +75,8 @@ export const createTaskImplementationResetUseCase = ({
           }),
         );
       }
-      const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      const currentSessions = currentMetadata.agentSessions;
+      const currentSessions = (yield* taskStore.getTaskMetadata({ repoPath, taskId }))
+        .agentSessions;
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
@@ -87,72 +94,68 @@ export const createTaskImplementationResetUseCase = ({
           currentSessions,
           canonicalWorktreePath,
         );
-      if (guardedSessions.length > 0) {
-        if (!taskActivityGuard) {
-          return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "task_reset_implementation",
-              message:
-                "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath,
-          taskId,
-          sessions: guardedSessions,
-          operationLabel: "reset implementation",
-          sessionRoles: [...new Set(guardedSessions.map((session) => session.role.trim()))],
-        });
-      }
+      yield* ensureNoActiveImplementationResetActivity(
+        taskActivityGuard,
+        repoPath,
+        taskId,
+        guardedSessions,
+      );
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const rollbackStatus = resetImplementationRollbackStatus(current);
-      let restoreReference: string | null = null;
-      if (canonicalWorktreeExists) {
-        if (!(yield* dependencies.gitPort.isGitRepository(canonicalWorktreePath))) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Cannot reset implementation because canonical path is not a Git worktree: ${canonicalWorktreePath}`,
-              details: { repoPath: effectiveRepoPath, taskId, canonicalWorktreePath },
-            }),
-          );
-        }
-        const expectedBranch = buildBranchName(branchPrefix, taskId, current.title);
-        yield* validateExistingGitBuildWorktree(
-          dependencies,
-          effectiveRepoPath,
-          canonicalWorktreePath,
-          taskId,
-          expectedBranch,
-        );
-        const effectiveTarget = yield* BuilderCleanup.effectiveTargetBranchForTask(
-          dependencies.workspaceSettingsService,
-          current,
-          effectiveRepoPath,
-        );
-        restoreReference = (yield* BuilderCleanup.resolveBuildStartPoint(
-          dependencies,
-          effectiveRepoPath,
-          effectiveTarget,
-          current.targetBranch === undefined,
-        )).reference;
-      }
+      const worktreePaths = yield* collectResetWorktreePaths(
+        dependencies,
+        effectiveRepoPath,
+        managedWorktreeBasePath,
+        branchPrefix,
+        current.id,
+        currentSessions,
+        new Set<string>(implementationSessionRoleNames),
+        "reset implementation",
+      );
+      const relatedBranches = yield* collectRelatedTaskBranches(
+        dependencies.gitPort,
+        effectiveRepoPath,
+        branchPrefix,
+        [taskId],
+      );
+      const canonicalTarget = canonicalWorktreeExists
+        ? yield* resolveCanonicalImplementationResetTarget(
+            dependencies.gitPort,
+            dependencies.workspaceSettingsService,
+            current,
+            effectiveRepoPath,
+            canonicalWorktreePath,
+          )
+        : null;
+      const cleanupTargets = excludeCanonicalImplementationTargets(
+        worktreePaths,
+        relatedBranches,
+        canonicalTarget,
+      );
       const cleanupProgress = createTaskCleanupProgressState();
       return yield* Effect.gen(function* () {
-        if (restoreReference) {
+        yield* runTaskLocalCleanup({
+          branchNames: cleanupTargets.branchNames,
+          devServerService: dependencies.devServerService,
+          gitPort: dependencies.gitPort,
+          managedWorktreeBasePath,
+          progress: cleanupProgress,
+          repoPath: effectiveRepoPath,
+          settingsConfig: dependencies.settingsConfig,
+          taskIds: [taskId],
+          worktreeCleanupOperation: "task_reset_implementation",
+          worktreeFiles,
+          worktreePaths: cleanupTargets.worktreePaths,
+        });
+        if (canonicalTarget) {
           yield* dependencies.gitPort.restoreWorktreeToReference(
-            canonicalWorktreePath,
-            restoreReference,
+            canonicalTarget.worktreePath,
+            canonicalTarget.restoreReference,
           );
           cleanupProgress.completedSteps.push(
-            `Restored canonical worktree ${canonicalWorktreePath} to ${restoreReference}.`,
+            `Restored canonical worktree ${canonicalWorktreePath} to ${canonicalTarget.restoreReference}.`,
           );
         }
-        yield* dependencies.devServerService.stop({ repoPath: effectiveRepoPath, taskId });
-        cleanupProgress.completedSteps.push(`Stopped dev servers for task ${taskId}.`);
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
