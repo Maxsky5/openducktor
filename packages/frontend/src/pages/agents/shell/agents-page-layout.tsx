@@ -3,13 +3,14 @@ import {
   memo,
   type ReactElement,
   type ReactNode,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import type { GroupImperativeHandle, PanelImperativeHandle } from "react-resizable-panels";
+import type { GroupImperativeHandle } from "react-resizable-panels";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
@@ -38,6 +39,14 @@ const TERMINAL_GROUP_ID = "agent-studio-terminal-layout";
 const WORKSPACE_PANEL_ID = "agent-studio-workspace-panel";
 const TERMINAL_PANEL_ID = "agent-studio-terminal-panel";
 const TERMINAL_SEPARATOR_ID = "agent-studio-terminal-separator";
+const TERMINAL_HIDDEN_LAYOUT = {
+  [WORKSPACE_PANEL_ID]: 100,
+  [TERMINAL_PANEL_ID]: 0,
+};
+const TERMINAL_VISIBLE_LAYOUT = {
+  [WORKSPACE_PANEL_ID]: 72,
+  [TERMINAL_PANEL_ID]: 28,
+};
 
 type AgentsPageWorkspaceProps = {
   hasSelectedTask: boolean;
@@ -116,7 +125,7 @@ export function AgentsPageWorkspace({
   const [isNarrow, setIsNarrow] = useState(false);
   const terminalGroupRef = useRef<GroupImperativeHandle | null>(null);
   const terminalGroupElementRef = useRef<HTMLDivElement | null>(null);
-  const terminalPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const terminalPanelSizeRef = useRef(TERMINAL_VISIBLE_LAYOUT[TERMINAL_PANEL_ID]);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
     const sync = () => setIsNarrow(media.matches);
@@ -126,9 +135,18 @@ export function AgentsPageWorkspace({
   }, []);
   useLayoutEffect(() => {
     if (isNarrow) return;
-    if (terminalPanel.isVisible) terminalPanelRef.current?.expand();
-    else terminalPanelRef.current?.collapse();
+    const group = terminalGroupRef.current;
+    if (!group) return;
+    const terminalSize = terminalPanel.isVisible ? terminalPanelSizeRef.current : 0;
+    group.setLayout({
+      [WORKSPACE_PANEL_ID]: 100 - terminalSize,
+      [TERMINAL_PANEL_ID]: terminalSize,
+    });
   }, [isNarrow, terminalPanel.isVisible]);
+  const handleTerminalLayoutChanged = useCallback((layout: Record<string, number>): void => {
+    const terminalSize = layout[TERMINAL_PANEL_ID];
+    if (terminalSize !== undefined && terminalSize > 0) terminalPanelSizeRef.current = terminalSize;
+  }, []);
   useEffect(() => {
     if (!hasSelectedTask || isNarrow) return;
     const groupElement = terminalGroupElementRef.current;
@@ -209,8 +227,10 @@ export function AgentsPageWorkspace({
     <DiffWorkerProvider>
       <ResizablePanelGroup
         id={TERMINAL_GROUP_ID}
+        defaultLayout={terminalPanel.isVisible ? TERMINAL_VISIBLE_LAYOUT : TERMINAL_HIDDEN_LAYOUT}
         groupRef={terminalGroupRef}
         elementRef={terminalGroupElementRef}
+        onLayoutChanged={handleTerminalLayoutChanged}
         direction="vertical"
         className="h-full min-h-0 overflow-hidden"
       >
@@ -226,8 +246,6 @@ export function AgentsPageWorkspace({
         ) : null}
         <ResizablePanel
           id={TERMINAL_PANEL_ID}
-          panelRef={terminalPanelRef}
-          disabled={!terminalPanel.isVisible}
           collapsible
           collapsedSize="0%"
           defaultSize="28%"

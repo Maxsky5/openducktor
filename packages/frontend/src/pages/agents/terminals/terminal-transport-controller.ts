@@ -22,7 +22,7 @@ export const createTerminalTransportController = (
 ) => {
   const listeners = new Map<string, Set<TerminalFrameListener>>();
   const consumedSequences = new Map<string, number>();
-  const attachmentQueues = new Map<string, Promise<void>>();
+  const terminalOperationQueues = new Map<string, Promise<void>>();
   const closingTerminals = new Set<string>();
   let connection: TerminalTransportConnection | null = null;
   let pendingConnection: Promise<TerminalTransportConnection> | null = null;
@@ -46,22 +46,23 @@ export const createTerminalTransportController = (
     await activeConnection.send(encodeTerminalProtocolFrame({ message, payload }));
   };
 
-  const enqueueAttachmentOperation = (
+  const enqueueTerminalOperation = (
     terminalId: string,
     operation: () => Promise<void>,
   ): Promise<void> => {
-    const previous = attachmentQueues.get(terminalId);
+    const previous = terminalOperationQueues.get(terminalId);
     const pending = previous ? previous.then(operation) : operation();
-    attachmentQueues.set(terminalId, pending);
+    terminalOperationQueues.set(terminalId, pending);
     const clearCompletedOperation = (): void => {
-      if (attachmentQueues.get(terminalId) === pending) attachmentQueues.delete(terminalId);
+      if (terminalOperationQueues.get(terminalId) === pending)
+        terminalOperationQueues.delete(terminalId);
     };
     void pending.then(clearCompletedOperation, clearCompletedOperation);
     return pending;
   };
 
   const attach = (terminalId: string): Promise<void> =>
-    enqueueAttachmentOperation(terminalId, () =>
+    enqueueTerminalOperation(terminalId, () =>
       send({
         version: TERMINAL_PROTOCOL_VERSION,
         type: "attach",
@@ -126,7 +127,7 @@ export const createTerminalTransportController = (
           listeners.delete(terminalId);
           const isClosing = closingTerminals.delete(terminalId);
           if (connection && !isClosing) {
-            void enqueueAttachmentOperation(terminalId, () =>
+            void enqueueTerminalOperation(terminalId, () =>
               send({
                 version: TERMINAL_PROTOCOL_VERSION,
                 type: "detach",
@@ -138,20 +139,24 @@ export const createTerminalTransportController = (
       };
     },
     write: (terminalId: string, payload: Uint8Array) =>
-      send({ version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId }, payload),
+      enqueueTerminalOperation(terminalId, () =>
+        send({ version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId }, payload),
+      ),
     resize: (terminalId: string, columns: number, rows: number) =>
-      send({
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "resize",
-        terminalId,
-        columns,
-        rows,
-      }),
+      enqueueTerminalOperation(terminalId, () =>
+        send({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "resize",
+          terminalId,
+          columns,
+          rows,
+        }),
+      ),
     acknowledge: async (terminalId: string, sequenceEnd: number) => {
       const consumedSequence = consumedSequences.get(terminalId);
       if (consumedSequence !== undefined && sequenceEnd <= consumedSequence) return;
       consumedSequences.set(terminalId, sequenceEnd);
-      await enqueueAttachmentOperation(terminalId, () =>
+      await enqueueTerminalOperation(terminalId, () =>
         send({
           version: TERMINAL_PROTOCOL_VERSION,
           type: "ack",
@@ -163,7 +168,7 @@ export const createTerminalTransportController = (
     async closeTerminal(terminalId: string, closeHostTerminal: () => Promise<void>): Promise<void> {
       closingTerminals.add(terminalId);
       try {
-        await attachmentQueues.get(terminalId);
+        await terminalOperationQueues.get(terminalId);
         await closeHostTerminal();
         consumedSequences.delete(terminalId);
         if (!listeners.has(terminalId)) closingTerminals.delete(terminalId);
@@ -180,7 +185,7 @@ export const createTerminalTransportController = (
       connection = null;
       pendingConnection = null;
       listeners.clear();
-      attachmentQueues.clear();
+      terminalOperationQueues.clear();
       closingTerminals.clear();
       onStateChange("disconnected");
     },

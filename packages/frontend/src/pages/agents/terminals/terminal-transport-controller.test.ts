@@ -47,6 +47,38 @@ describe("createTerminalTransportController", () => {
     });
   });
 
+  test("waits for attach before sending resize or input", async () => {
+    let releaseAttach = (): void => {
+      throw new Error("The attach frame was not sent.");
+    };
+    const attachBlocked = new Promise<void>((resolve) => {
+      releaseAttach = resolve;
+    });
+    const operations: string[] = [];
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          const message = decodeTerminalProtocolFrame(frame).message;
+          operations.push(message.type);
+          if (message.type === "attach") await attachBlocked;
+        },
+        close: () => {},
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    await controller.connect();
+
+    controller.subscribe(terminalId, () => {});
+    const resizing = controller.resize(terminalId, 120, 40);
+    const writing = controller.write(terminalId, new Uint8Array([1]));
+    await Promise.resolve();
+    expect(operations).toEqual(["attach"]);
+
+    releaseAttach();
+    await Promise.all([resizing, writing]);
+    expect(operations).toEqual(["attach", "resize", "input"]);
+  });
+
   test("attaches once, preserves consumed sequence on reconnect, and detaches the last listener", async () => {
     const sent: Uint8Array[] = [];
     const closeCalls: number[] = [];

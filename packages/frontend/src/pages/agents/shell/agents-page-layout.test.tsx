@@ -85,10 +85,20 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       });
     const view = render(renderWorkspace(false));
     const panel = view.getByText("No terminals for this task.");
+    const workspacePanel = view.container.querySelector<HTMLElement>(
+      "#agent-studio-workspace-panel",
+    );
+    const hiddenTerminalPanel = view.container.querySelector<HTMLElement>(
+      "#agent-studio-terminal-panel",
+    );
+    expect(workspacePanel?.style.flexGrow).toBe("100");
+    expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
     expect(view.queryByRole("separator", { name: "Resize terminal panel" })).toBeNull();
 
     view.rerender(renderWorkspace(true));
     const separator = view.getByRole("separator", { name: "Resize terminal panel" });
+    expect(workspacePanel?.style.flexGrow).toBe("72");
+    expect(hiddenTerminalPanel?.style.flexGrow).toBe("28");
     expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
     expect(separator.tabIndex).toBe(0);
     expect(separator.querySelector("svg")).toBeNull();
@@ -100,6 +110,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     }
 
     view.rerender(renderWorkspace(false));
+    expect(workspacePanel?.style.flexGrow).toBe("100");
+    expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
     expect(view.getByText("No terminals for this task.")).toBe(panel);
     view.rerender(renderWorkspace(true));
     expect(view.getByText("No terminals for this task.")).toBe(panel);
