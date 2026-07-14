@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { codexForkBoundaryHistoryMessage, resolveCodexForkBoundary } from "./codex-fork-boundary";
+import {
+  codexForkBoundaryHistoryMessage,
+  codexForkHistoryIsChildOwned,
+  resolveCodexForkBoundary,
+} from "./codex-fork-boundary";
 
 const childThreadRead = ({
   childThreadIdField = "id",
@@ -153,5 +157,30 @@ describe("resolveCodexForkBoundary", () => {
     expect(() => resolveCodexForkBoundary(childThreadRead(), new Set(["other-turn"]))).toThrow(
       "shares no parent turn ids",
     );
+  });
+});
+
+describe("codexForkHistoryIsChildOwned", () => {
+  test("proves child-only history from turns strictly newer than thread creation", () => {
+    expect(
+      codexForkHistoryIsChildOwned(
+        childThreadRead({
+          turns: [{ id: "child-turn", startedAt: 30, status: "completed", items: [] }],
+        }),
+      ),
+    ).toBe(true);
+    expect(codexForkHistoryIsChildOwned(childThreadRead({ turns: [] }))).toBe(true);
+  });
+
+  test("does not claim inherited or ambiguous turns are child-owned", () => {
+    for (const startedAt of [20, 25, null]) {
+      expect(
+        codexForkHistoryIsChildOwned(
+          childThreadRead({
+            turns: [{ id: "ambiguous-turn", startedAt, status: "completed", items: [] }],
+          }),
+        ),
+      ).toBe(false);
+    }
   });
 });

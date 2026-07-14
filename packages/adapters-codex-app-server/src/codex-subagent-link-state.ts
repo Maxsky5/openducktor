@@ -97,14 +97,22 @@ const isPreviousRunTerminalUpdate = (
 const isExplicitRunningRestart = (
   existing: CodexStoredSubagentLink | undefined,
   input: CodexSubagentLinkInput,
-): boolean =>
-  input.allowStatusRestart === true &&
-  input.status === "running" &&
-  existing !== undefined &&
-  isTerminalStatus(existing.status) &&
-  typeof existing.endedAtMs === "number" &&
-  typeof input.startedAtMs === "number" &&
-  input.startedAtMs > existing.endedAtMs;
+): boolean => {
+  if (
+    input.allowStatusRestart !== true ||
+    input.status !== "running" ||
+    !existing ||
+    !isTerminalStatus(existing.status) ||
+    typeof input.startedAtMs !== "number"
+  ) {
+    return false;
+  }
+  let lifecycleBoundaryMs = existing.endedAtMs;
+  if (typeof lifecycleBoundaryMs !== "number" && existing.status === "completed") {
+    lifecycleBoundaryMs = existing.startedAtMs;
+  }
+  return typeof lifecycleBoundaryMs === "number" && input.startedAtMs > lifecycleBoundaryMs;
+};
 
 const resolveStatus = (
   existing: CodexStoredSubagentLink | undefined,
@@ -196,19 +204,25 @@ export class CodexSubagentLinkState {
     }
     const agent = preferredAgentLabel(thread);
     const existing = this.linkForChild(thread.id, runtimeId);
+    const isActive = thread.status.classification !== "idle";
+    let status: AgentSubagentStatus;
+    if (isActive) {
+      status = "running";
+    } else {
+      status = existing?.status === "cancelled" ? "cancelled" : "completed";
+    }
+    let timing: Pick<CodexSubagentLinkInput, "startedAtMs" | "endedAtMs"> = {};
+    if (typeof thread.updatedAtMs === "number") {
+      timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
+    }
     this.upsertLink({
       ...(runtimeId ? { runtimeId } : {}),
       parentThreadId,
       childThreadId: thread.id,
       itemId: thread.id,
-      status:
-        thread.status.classification === "running"
-          ? "running"
-          : thread.status.classification === "idle"
-            ? existing?.status === "cancelled"
-              ? "cancelled"
-              : "completed"
-            : "running",
+      status,
+      allowStatusRestart: isActive,
+      ...timing,
       ...(agent ? { agent } : {}),
       metadata: {
         codexThread: {
@@ -276,9 +290,11 @@ export class CodexSubagentLinkState {
     const agent = input.agent ?? existing?.agent;
     const metadata = mergeDefined(existing?.metadata, input.metadata);
     const executionMode = input.executionMode ?? existing?.executionMode;
-    let startedAtMs = isPreviousRunUpdate
-      ? existing?.startedAtMs
-      : (input.startedAtMs ?? existing?.startedAtMs);
+    const isRejectedRunningTransition = input.status === "running" && status !== "running";
+    let startedAtMs =
+      isPreviousRunUpdate || isRejectedRunningTransition
+        ? existing?.startedAtMs
+        : (input.startedAtMs ?? existing?.startedAtMs);
     if (
       status === "running" &&
       existing?.status === "running" &&

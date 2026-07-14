@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { PolicyBoundSessionRef } from "@openducktor/core";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
@@ -42,6 +43,22 @@ const missingApprovalRequest = (requestId: string): AgentApprovalRequest => ({
 const missingQuestionRequest = (requestId: string): AgentQuestionRequest => ({
   requestId,
   questions: [],
+});
+
+const questionToolMessage = () => ({
+  id: "tool-1",
+  role: "tool" as const,
+  content: "Question requested",
+  timestamp: "2026-02-22T08:00:01.000Z",
+  meta: {
+    kind: "tool" as const,
+    partId: "part-1",
+    callId: "call-1",
+    tool: "question",
+    toolType: "question" as const,
+    status: "completed" as const,
+    metadata: {},
+  },
 });
 
 describe("agent-orchestrator/handlers/session-actions pending input", () => {
@@ -224,7 +241,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     try {
       await expect(
         actions.replyAgentApproval(
-          buildSession({ externalSessionId: "session-transcript-1" }),
+          {
+            externalSessionId: "session-transcript-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo",
+          },
           missingApprovalRequest("perm-1"),
           "approve_once",
         ),
@@ -232,6 +253,86 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
       expect(replyCalls).toBe(0);
       expect(updateCalls).toBe(0);
+    } finally {
+      adapter.replyApproval = originalReplyApproval;
+    }
+  });
+
+  test("replies through a policy-bound transcript-only ref", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyApproval = adapter.replyApproval;
+    const replies: Array<{ requestId: string; outcome: string }> = [];
+    adapter.replyApproval = async (input) => {
+      replies.push({ requestId: input.requestId, outcome: input.outcome });
+    };
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef: createSessionsRef(),
+    });
+    const transcriptSessionRef = {
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-transcript-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo",
+      runtimePolicy: { kind: "opencode" as const },
+    };
+
+    try {
+      await actions.replyAgentApproval(
+        transcriptSessionRef,
+        missingApprovalRequest("perm-1"),
+        "approve_once",
+      );
+
+      expect(replies).toEqual([{ requestId: "perm-1", outcome: "approve_once" }]);
+    } finally {
+      adapter.replyApproval = originalReplyApproval;
+    }
+  });
+
+  test("routes a policy-bound subagent approval to its response session", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyApproval = adapter.replyApproval;
+    const childSession = {
+      externalSessionId: "session-child",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo/worktree",
+    };
+    const request: AgentApprovalRequest = {
+      ...missingApprovalRequest("perm-child"),
+      responseSession: childSession,
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "session-parent",
+        childExternalSessionId: childSession.externalSessionId,
+      },
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ externalSessionId: "session-parent", pendingApprovals: [request] }),
+      buildSession({
+        externalSessionId: childSession.externalSessionId,
+        pendingApprovals: [request],
+      }),
+    ]);
+    const replies: string[] = [];
+    adapter.replyApproval = async (input) => {
+      replies.push(input.externalSessionId);
+    };
+    const actions = createSessionActions({ adapter, sessionsRef });
+    const parentSessionRef: PolicyBoundSessionRef = {
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-parent",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
+      runtimePolicy: { kind: "opencode" },
+    };
+
+    try {
+      await actions.replyAgentApproval(parentSessionRef, request, "approve_once");
+
+      expect(replies).toEqual(["session-child"]);
+      expect(getSession(sessionsRef, "session-parent").pendingApprovals).toEqual([]);
+      expect(getSession(sessionsRef, "session-child").pendingApprovals).toEqual([]);
     } finally {
       adapter.replyApproval = originalReplyApproval;
     }
@@ -247,23 +348,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        messages: [
-          {
-            id: "tool-1",
-            role: "tool",
-            content: "Question requested",
-            timestamp: "2026-02-22T08:00:01.000Z",
-            meta: {
-              kind: "tool",
-              partId: "part-1",
-              callId: "call-1",
-              tool: "question",
-              toolType: "question" as const,
-              status: "completed",
-              metadata: {},
-            },
-          },
-        ],
+        messages: [questionToolMessage()],
         pendingQuestions: [
           {
             requestId: "question-1",
@@ -337,7 +422,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     try {
       await expect(
         actions.answerAgentQuestion(
-          buildSession({ externalSessionId: "session-transcript-1" }),
+          {
+            externalSessionId: "session-transcript-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo",
+          },
           missingQuestionRequest("question-1"),
           [["yes"]],
         ),
@@ -345,6 +434,108 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
       expect(replyCalls).toBe(0);
       expect(updateCalls).toBe(0);
+    } finally {
+      adapter.replyQuestion = originalReplyQuestion;
+    }
+  });
+
+  test("answers through a policy-bound transcript-only ref", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyQuestion = adapter.replyQuestion;
+    const replies: Array<{ requestId: string; answers: string[][] }> = [];
+    adapter.replyQuestion = async (input) => {
+      replies.push({ requestId: input.requestId, answers: input.answers });
+    };
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef: createSessionsRef(),
+    });
+    const transcriptSessionRef = {
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-transcript-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo",
+      runtimePolicy: { kind: "opencode" as const },
+    };
+
+    try {
+      await actions.answerAgentQuestion(
+        transcriptSessionRef,
+        missingQuestionRequest("question-1"),
+        [["yes"]],
+      );
+
+      expect(replies).toEqual([{ requestId: "question-1", answers: [["yes"]] }]);
+    } finally {
+      adapter.replyQuestion = originalReplyQuestion;
+    }
+  });
+
+  test("routes a policy-bound subagent answer and updates all loaded participants", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyQuestion = adapter.replyQuestion;
+    const childSession = {
+      externalSessionId: "session-child",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo/worktree",
+    };
+    const request: AgentQuestionRequest = {
+      requestId: "question-child",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Continue?",
+          options: [],
+          multiple: false,
+          custom: false,
+        },
+      ],
+      responseSession: childSession,
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "session-parent",
+        childExternalSessionId: childSession.externalSessionId,
+      },
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "session-parent",
+        messages: [questionToolMessage()],
+        pendingQuestions: [request],
+      }),
+      buildSession({
+        externalSessionId: childSession.externalSessionId,
+        messages: [questionToolMessage()],
+        pendingQuestions: [request],
+      }),
+    ]);
+    const replies: string[] = [];
+    adapter.replyQuestion = async (input) => {
+      replies.push(input.externalSessionId);
+    };
+    const actions = createSessionActions({ adapter, sessionsRef });
+    const parentSessionRef: PolicyBoundSessionRef = {
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-parent",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
+      runtimePolicy: { kind: "opencode" },
+    };
+
+    try {
+      await actions.answerAgentQuestion(parentSessionRef, request, [["yes"]]);
+
+      expect(replies).toEqual(["session-child"]);
+      for (const externalSessionId of ["session-parent", "session-child"]) {
+        const session = getSession(sessionsRef, externalSessionId);
+        expect(session.pendingQuestions).toEqual([]);
+        const message = sessionMessageAt(session, 0);
+        if (message?.meta?.kind !== "tool") {
+          throw new Error("Expected tool message metadata");
+        }
+        expect(message.meta.metadata?.requestId).toBe("question-child");
+        expect(message.meta.metadata?.answers).toEqual([["yes"]]);
+      }
     } finally {
       adapter.replyQuestion = originalReplyQuestion;
     }

@@ -24,6 +24,82 @@ const restoredTokenUsageNotification = (threadId: string, turnId = "turn-1") => 
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("keeps a hydrated subagent at its exact thread item position", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "parent-thread",
+              cwd: "/repo",
+              createdAt: 1_783_715_500,
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "parent-turn",
+                  startedAt: 1_783_715_500,
+                  completedAt: 1_783_715_620,
+                  status: "completed",
+                  items: [
+                    {
+                      id: "parent-user",
+                      type: "userMessage",
+                      content: [{ type: "text", text: "Delegate this work" }],
+                    },
+                    {
+                      id: "parent-delegating",
+                      type: "agentMessage",
+                      phase: "commentary",
+                      text: "I am delegating this now.",
+                    },
+                    {
+                      id: "parent-spawn",
+                      type: "collabToolCall",
+                      tool: "spawnAgent",
+                      status: "completed",
+                      senderThreadId: "parent-thread",
+                      receiverThreadIds: ["child-thread"],
+                      prompt: "Inspect the repository",
+                      agentsStates: {
+                        "child-thread": { status: "completed", message: "Done" },
+                      },
+                    },
+                    {
+                      id: "parent-waiting",
+                      type: "agentMessage",
+                      phase: "commentary",
+                      text: "The subagent is running.",
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "parent-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(history.map((message) => message.messageId)).toEqual([
+      "parent-user",
+      "parent-delegating",
+      "codex-subagent:parent-thread:parent-spawn",
+      "parent-waiting",
+    ]);
+  });
+
   test("marks hydrated item timestamps approximate when Codex only reports a turn boundary", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -309,6 +385,132 @@ describe("CodexAppServerAdapter history loading", () => {
           (call.params as { itemsView?: string }).itemsView === "summary",
       ),
     ).toBe(true);
+  });
+
+  test("loads child history when its fork parent is no longer readable", async () => {
+    let parentReadError = "thread not loaded: missing-parent";
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+              forkedFromId: "missing-parent",
+              parentThreadId: "missing-parent",
+              turns: [
+                {
+                  id: "child-turn",
+                  startedAt: 2,
+                  status: "completed",
+                  items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          const params = request.params as { threadId: string };
+          if (params.threadId === "missing-parent") {
+            throw new Error(parentReadError);
+          }
+          return {
+            data: [
+              {
+                id: "child-turn",
+                startedAt: 2,
+                status: "completed",
+                items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "child-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(history.map((message) => message.messageId)).toEqual(["child-answer"]);
+
+    parentReadError = "parent turn lookup failed";
+    await expect(
+      adapter.loadSessionHistory({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "child-thread",
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      }),
+    ).rejects.toThrow("parent turn lookup failed");
+  });
+
+  test("rejects forked history with inherited turns when its parent is no longer readable", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 10,
+              status: { type: "idle" },
+              forkedFromId: "missing-parent",
+              parentThreadId: "missing-parent",
+              turns: [
+                {
+                  id: "inherited-turn",
+                  startedAt: 5,
+                  status: "completed",
+                  items: [{ id: "parent-answer", type: "agentMessage", text: "Parent result" }],
+                },
+                {
+                  id: "child-turn",
+                  startedAt: 11,
+                  status: "completed",
+                  items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          const params = request.params as { threadId: string };
+          if (params.threadId === "missing-parent") {
+            throw new Error("thread not loaded: missing-parent");
+          }
+          return {
+            data: [
+              { id: "inherited-turn", startedAt: 5, status: "completed", items: [] },
+              { id: "child-turn", startedAt: 11, status: "completed", items: [] },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await expect(
+      adapter.loadSessionHistory({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "child-thread",
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      }),
+    ).rejects.toThrow("thread not loaded: missing-parent");
   });
 
   test("loads Codex history and diff from App Server reads", async () => {

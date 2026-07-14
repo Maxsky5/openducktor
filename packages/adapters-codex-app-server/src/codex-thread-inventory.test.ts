@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createDeferred } from "./codex-app-server-adapter.test-harness";
-import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
+import { codexThreadList, codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerClient } from "./types";
 
@@ -16,6 +16,7 @@ const threadListResponse = (
       id,
       cwd,
       createdAt: 1,
+      updatedAt: 2,
       preview,
       status,
       ...extra,
@@ -35,6 +36,7 @@ const threadReadResponse = (
     id,
     cwd,
     createdAt: 1,
+    updatedAt: 2,
     preview: "Stored thread",
     status,
     turns,
@@ -43,6 +45,61 @@ const threadReadResponse = (
 });
 
 describe("CodexThreadInventoryReader", () => {
+  test("preserves the Codex thread update timestamp as a lifecycle watermark", () => {
+    expect(codexThreadList(threadListResponse("thread-1", "Thread"))[0]?.updatedAtMs).toBe(2_000);
+  });
+
+  test("rejects malformed or overflowing Codex thread update timestamps", () => {
+    expect(() =>
+      codexThreadList(
+        threadListResponse(
+          "thread-1",
+          "Thread",
+          "/repo",
+          { type: "idle" },
+          {
+            updatedAt: "invalid",
+          },
+        ),
+      ),
+    ).toThrow("Codex thread updatedAt must be a finite number.");
+    expect(() =>
+      codexThreadList(
+        threadListResponse(
+          "thread-1",
+          "Thread",
+          "/repo",
+          { type: "idle" },
+          {
+            updatedAt: Number.MAX_VALUE,
+          },
+        ),
+      ),
+    ).toThrow("Codex thread updatedAt exceeds the supported timestamp range.");
+  });
+
+  test("requests interactive and subagent thread sources from Codex", async () => {
+    const threadListCalls: Array<Record<string, unknown>> = [];
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: [], nextCursor: null }),
+      threadList: async (params: Record<string, unknown>) => {
+        threadListCalls.push(params);
+        return { data: [], nextCursor: null };
+      },
+    } as unknown as CodexAppServerClient;
+
+    await reader.refresh(client, "runtime-1");
+
+    expect(threadListCalls).toEqual([
+      {
+        cursor: null,
+        limit: 100,
+        sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
+      },
+    ]);
+  });
+
   test("reads every parent turn id with summary-only pagination", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const reader = new CodexThreadInventoryReader();

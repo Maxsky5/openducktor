@@ -104,7 +104,11 @@ export const listCodexSessionRuntimeSnapshots = async (
   );
   const inventory = await deps.threadInventory.refresh(client, runtimeId);
   const remoteSnapshots = [...inventory.threadsById.values()]
-    .filter((thread) => inventory.loadedIds.has(thread.id))
+    .filter(
+      (thread) =>
+        inventory.loadedIds.has(thread.id) ||
+        Boolean(thread.parentThreadId ?? thread.subAgentSource?.parentThreadId),
+    )
     .filter((thread) => !localThreadIds.has(thread.id))
     .filter((thread) => threadMatchesDirectories(thread, directories))
     .map((thread) =>

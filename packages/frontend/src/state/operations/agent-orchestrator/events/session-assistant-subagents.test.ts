@@ -227,6 +227,93 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
   });
 
+  test("keeps an idle parent idle when a foreground subagent completes late", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
+    const recordedActivityTimestamps: Array<string | number> = [];
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      recordTurnActivityTimestamp: (_externalSessionId, timestamp) => {
+        recordedActivityTimestamps.push(timestamp);
+      },
+      resolveTurnDurationMs: () => 300,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-task",
+        partId: "subtask",
+        correlationKey: "part:assistant-task:subtask",
+        status: "running",
+        prompt: "Inspect the repository",
+        description: "Inspect the repository",
+        externalSessionId: "child-session",
+        startedAtMs: Date.parse("2026-02-22T08:00:02.000Z"),
+      },
+    });
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
+
+    handleEvent({
+      type: "session_status",
+      externalSessionId: "session-1",
+      status: { type: "idle" },
+      timestamp: "2026-02-22T08:00:05.000Z",
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:25.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-task-completed",
+        partId: "subtask-completed",
+        correlationKey: "part:assistant-task:subtask",
+        status: "completed",
+        description: "Inspection completed",
+        externalSessionId: "child-session",
+        endedAtMs: Date.parse("2026-02-22T08:00:25.000Z"),
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+    const subagentMessage = getSessionMessages(sessionsRef).find(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+    if (subagentMessage?.meta?.kind !== "subagent") {
+      throw new Error("Expected subagent message with subagent meta");
+    }
+    expect(subagentMessage.meta.status).toBe("completed");
+    expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
+  });
+
   test("handles session start and assistant parts matrix", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     let refreshCalls = 0;

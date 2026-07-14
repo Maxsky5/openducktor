@@ -7,6 +7,7 @@ import {
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import { codexTurnKey } from "./codex-app-server-requests";
+import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
 import {
   type CodexTokenUsageTotals,
   codexTodosFromThreadRead,
@@ -18,6 +19,7 @@ import {
   type CodexForkBoundary,
   codexForkBoundaryHistoryMessage,
   codexForkedFromThreadId,
+  codexForkHistoryIsChildOwned,
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
@@ -224,11 +226,17 @@ export const loadCodexSessionHistory = async ({
   }
   rememberTodos(input.externalSessionId, codexTodosFromThreadRead(response));
   const forkedFromThreadId = codexForkedFromThreadId(response);
-  const [parentTurnIds, tokenUsageByTurnId] = await Promise.all([
-    forkedFromThreadId
-      ? threadInventory.readThreadTurnIds(client, forkedFromThreadId)
-      : Promise.resolve(null),
+  const parentTurnIdsPromise: Promise<ReadonlySet<string> | null> = forkedFromThreadId
+    ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((error: unknown) => {
+        if (isCodexThreadNotLoadedError(error) && codexForkHistoryIsChildOwned(response)) {
+          return null;
+        }
+        throw error;
+      })
+    : Promise.resolve(null);
+  const [tokenUsageByTurnId, parentTurnIds] = await Promise.all([
     collectThreadReadTokenUsage(runtimeId, input.externalSessionId),
+    parentTurnIdsPromise,
   ]);
   const forkBoundary = parentTurnIds ? resolveCodexForkBoundary(response, parentTurnIds) : null;
   return projectCodexThreadReadToHistory({

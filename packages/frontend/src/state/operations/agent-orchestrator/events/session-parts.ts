@@ -26,6 +26,10 @@ const isBackgroundSubagentPart = (part: Extract<SessionPart, { kind: "subagent" 
   return part.executionMode === "background";
 };
 
+const isTerminalSubagentPart = (part: Extract<SessionPart, { kind: "subagent" }>): boolean => {
+  return part.status === "completed" || part.status === "cancelled" || part.status === "error";
+};
+
 const isInactiveSessionStatus = (status: AgentSessionState["status"]): boolean => {
   return status === "idle" || status === "stopped" || status === "error";
 };
@@ -34,20 +38,23 @@ const shouldPreserveInactiveStatusForSubagentPart = (
   session: AgentSessionState,
   part: Extract<SessionPart, { kind: "subagent" }>,
 ): boolean => {
-  return isInactiveSessionStatus(session.status) && isBackgroundSubagentPart(part);
+  return (
+    isInactiveSessionStatus(session.status) &&
+    (isBackgroundSubagentPart(part) || isTerminalSubagentPart(part))
+  );
 };
 
 const shouldRecordPartAsTurnActivity = (
   context: SessionPartEventContext,
   part: SessionPart,
 ): boolean => {
-  if (part.kind !== "subagent" || !isBackgroundSubagentPart(part)) {
+  if (part.kind !== "subagent") {
     return true;
   }
 
   const current = context.store.readSession(context.session.identity);
   // If the live session is unavailable, keep the existing activity path because inactivity cannot be proven.
-  return current ? !isInactiveSessionStatus(current.status) : true;
+  return current ? !shouldPreserveInactiveStatusForSubagentPart(current, part) : true;
 };
 
 const resolvePartModelSelection = (

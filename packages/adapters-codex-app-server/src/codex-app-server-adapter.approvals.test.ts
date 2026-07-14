@@ -5,12 +5,15 @@ import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
   codexUserMessageInput,
+  createAdapterWithTransport,
   createDeferred,
   createHarness,
   flushCodexAdapterWork,
+  RecordingTransport,
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
+import type { CodexJsonRpcRequest } from "./index";
 
 const CURL_NETWORK_COMMAND =
   "curl -I --max-time 5 https://example.com; curl -I --max-time 5 https://1.1.1.1";
@@ -37,7 +40,123 @@ const bufferedServerRequest = (message: unknown, receivedAt = runtimeEventReceiv
   message,
 });
 
+class ReloadedParentWithChildTransport extends RecordingTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/loaded/list") {
+      this.calls.push(request);
+      return { data: ["parent-thread", "child-thread"], nextCursor: null } as Response;
+    }
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
+      const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
+      return {
+        data: [
+          {
+            id: "parent-thread",
+            cwd: "/repo",
+            createdAt: 1,
+            preview: "Parent",
+            status: { type: "active", activeFlags: [] },
+          },
+          ...(includesSubagents
+            ? [
+                {
+                  id: "child-thread",
+                  cwd: "/repo",
+                  createdAt: 2,
+                  preview: "Child",
+                  status: { type: "active", activeFlags: ["waitingOnApproval"] },
+                  parentThreadId: "parent-thread",
+                  source: {
+                    subAgent: {
+                      thread_spawn: {
+                        parent_thread_id: "parent-thread",
+                        depth: 1,
+                        agent_path: "/root/explorer",
+                        agent_nickname: "Explorer",
+                        agent_role: "explorer",
+                      },
+                    },
+                  },
+                },
+              ]
+            : []),
+        ],
+        nextCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
 describe("CodexAppServerAdapter approvals", () => {
+  test("routes a child approval after reload discovers the subagent thread", async () => {
+    const streamListeners: RuntimeListener[] = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
+      return () => {};
+    });
+    const respondServerRequest = mock(async () => {});
+    const transport = new ReloadedParentWithChildTransport("runtime-live", false);
+    const adapter = createAdapterWithTransport(transport, {
+      subscribeEvents,
+      respondServerRequest,
+    });
+
+    const events: unknown[] = [];
+    await adapter.subscribeEvents(codexSessionRuntimeRef("parent-thread"), (event) =>
+      events.push(event),
+    );
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: 0,
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "child-thread",
+          turnId: "child-turn",
+          itemId: "child-command",
+          startedAtMs: 1,
+          command: "pwd",
+          cwd: "/repo",
+          commandActions: [{ type: "unknown", command: "pwd" }],
+        },
+      },
+    });
+
+    await expect(
+      waitForEvent(
+        events,
+        (event) =>
+          typeof event === "object" &&
+          event !== null &&
+          (event as { type?: unknown; requestId?: unknown }).type === "approval_required" &&
+          (event as { requestId?: unknown }).requestId === "0",
+      ),
+    ).resolves.toMatchObject({
+      externalSessionId: "parent-thread",
+      childExternalSessionId: "child-thread",
+      parentExternalSessionId: "parent-thread",
+      requestId: "0",
+    });
+
+    await adapter.replyApproval({
+      ...codexSessionRuntimeRef("parent-thread"),
+      requestId: "0",
+      outcome: "approve_once",
+    });
+
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      0,
+      { decision: "accept" },
+      undefined,
+    );
+  });
+
   test("emits a session error for streamed server requests missing a thread identifier", async () => {
     const streamListeners: RuntimeListener[] = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {

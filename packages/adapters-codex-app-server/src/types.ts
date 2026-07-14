@@ -6,6 +6,7 @@ import type {
   CodexAppServerRequestId,
   CodexAppServerSandboxMode,
   CodexAppServerSandboxPolicy,
+  CodexAppServerThreadListParams,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type {
@@ -300,7 +301,7 @@ export type CodexAppServerClient = {
     params: CodexAppServerFuzzyFileSearchParams,
   ): Promise<CodexAppServerFuzzyFileSearchResponse>;
   threadRead(params: { threadId: string; includeTurns?: boolean }): Promise<unknown>;
-  threadList(params?: { limit?: number; cursor?: string | null }): Promise<unknown>;
+  threadList(params?: CodexAppServerThreadListParams): Promise<unknown>;
   threadLoadedList(params?: { limit?: number; cursor?: string | null }): Promise<unknown>;
   threadTurnsList(params: {
     threadId: string;

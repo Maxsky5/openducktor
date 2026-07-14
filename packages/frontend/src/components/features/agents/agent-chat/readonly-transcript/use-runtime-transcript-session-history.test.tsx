@@ -11,6 +11,7 @@ import { AgentOperationsContext } from "@/state/app-state-contexts";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -36,7 +37,12 @@ const subscribeSessionEventsRef: {
   current: async () => () => undefined,
 };
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-const replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"] = async () => undefined;
+const replyAgentApprovalRef: {
+  current: AgentOperationsContextValue["replyAgentApproval"];
+} = { current: async () => undefined };
+const answerAgentQuestionRef: {
+  current: AgentOperationsContextValue["answerAgentQuestion"];
+} = { current: async () => undefined };
 
 const operationsValue = (): AgentOperationsContextValue => ({
   readSessionHistory: readSessionHistoryRef.current,
@@ -51,8 +57,8 @@ const operationsValue = (): AgentOperationsContextValue => ({
   sendAgentMessage: async () => undefined,
   stopAgentSession: async () => undefined,
   updateAgentSessionModel: () => undefined,
-  replyAgentApproval,
-  answerAgentQuestion: async () => undefined,
+  replyAgentApproval: replyAgentApprovalRef.current,
+  answerAgentQuestion: answerAgentQuestionRef.current,
 });
 
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
@@ -113,6 +119,14 @@ const createLiveApprovalEvent = (): Extract<AgentEvent, { type: "approval_requir
   timestamp: "2026-02-22T12:01:00.000Z",
 });
 
+const createLiveQuestionEvent = (): Extract<AgentEvent, { type: "question_required" }> => ({
+  type: "question_required",
+  externalSessionId: "session-1",
+  requestId: "question-live",
+  questions: [{ header: "Confirm", question: "Continue?", options: [] }],
+  timestamp: "2026-02-22T12:01:00.000Z",
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isOpen: true,
   repoPath: "/repo-a",
@@ -125,6 +139,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 describe("useRuntimeTranscriptSessionHistory", () => {
   beforeEach(() => {
     subscribeSessionEventsRef.current = async () => () => undefined;
+    replyAgentApprovalRef.current = async () => undefined;
+    answerAgentQuestionRef.current = async () => undefined;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
@@ -182,6 +198,98 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(harness.getLatest().interactionSession?.externalSessionId).toBe("session-1");
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("replies to transcript-only input through the bound runtime ref and clears resolved controls", async () => {
+    host.workspaceGetSettingsSnapshot = async () =>
+      createSettingsSnapshotFixture({
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          codex: {
+            enabled: true,
+            defaults: {
+              sandboxMode: "read-only",
+              approvalPolicy: "untrusted",
+              approvalsReviewer: "user",
+              commandNetworkAccess: false,
+            },
+            roleOverrides: {
+              spec: {
+                sandboxMode: "workspace-write",
+                approvalPolicy: "on-request",
+                approvalsReviewer: "auto_review",
+                commandNetworkAccess: true,
+              },
+            },
+          },
+        },
+      });
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "spec" as const };
+    let listener: ((event: AgentEvent) => void) | null = null;
+    subscribeSessionEventsRef.current = async (_sessionRef, nextListener) => {
+      listener = nextListener;
+      return () => undefined;
+    };
+    const replyAgentApproval = mock(async () => undefined);
+    const answerAgentQuestion = mock(async () => undefined);
+    replyAgentApprovalRef.current = replyAgentApproval;
+    answerAgentQuestionRef.current = answerAgentQuestion;
+    readSessionHistoryRef.current = async () => [createHistoryMessage()];
+    const target = createTarget({ runtimeKind: "codex", sessionScope });
+    const harness = createHookHarness(createBaseArgs({ target }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null && listener !== null);
+      await harness.run(async () => {
+        listener?.(createLiveApprovalEvent());
+        listener?.(createLiveQuestionEvent());
+      });
+      await harness.waitFor(
+        (state) =>
+          state.interactionSession?.pendingApprovals.length === 1 &&
+          state.interactionSession.pendingQuestions.length === 1,
+      );
+
+      const approval = harness.getLatest().interactionSession?.pendingApprovals[0];
+      const question = harness.getLatest().interactionSession?.pendingQuestions[0];
+      if (!approval || !question) {
+        throw new Error("Expected transcript-only pending input.");
+      }
+      await harness.run(async () => {
+        await harness.getLatest().replyAgentApproval(target, approval, "approve_once");
+        await harness.getLatest().answerAgentQuestion(target, question, [["yes"]]);
+      });
+
+      const expectedRef = {
+        repoPath: "/repo-a",
+        runtimeKind: "codex",
+        workingDirectory: "/repo-a/worktree",
+        externalSessionId: "session-1",
+        sessionScope,
+        runtimePolicy: {
+          kind: "codex",
+          policy: {
+            sandboxMode: "workspace-write",
+            approvalPolicy: "on-request",
+            approvalsReviewer: "auto_review",
+            approvalsReviewerApplies: true,
+            commandNetworkAccess: true,
+          },
+        },
+      };
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        expectedRef,
+        approval,
+        "approve_once",
+        undefined,
+      );
+      expect(answerAgentQuestion).toHaveBeenCalledWith(expectedRef, question, [["yes"]]);
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([]);
+      expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
     } finally {
       await harness.unmount();
     }
@@ -384,13 +492,15 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("uses overlay pending input when rendering over a matching projected session", async () => {
+  test("keeps loaded-session approval routing while clearing overlay pending input", async () => {
     const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
     subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
       subscribed.listener = listener;
       return () => undefined;
     };
     readSessionHistoryRef.current = async () => [];
+    const replyAgentApproval = mock(async () => undefined);
+    replyAgentApprovalRef.current = replyAgentApproval;
     const liveSession = createAgentSessionFixture({
       externalSessionId: "session-1",
       status: "running",
@@ -404,6 +514,89 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.waitFor(() => subscribed.listener !== null);
       await harness.run(async () => subscribed.listener?.(createLiveApprovalEvent()));
       await harness.waitFor((state) => state.interactionSession?.pendingApprovals.length === 1);
+      const approval = harness.getLatest().interactionSession?.pendingApprovals[0];
+      if (!approval) {
+        throw new Error("Expected overlay approval.");
+      }
+      await harness.run(async () => {
+        await harness.getLatest().replyAgentApproval(createTarget(), approval, "approve_once");
+      });
+
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        createTarget(),
+        approval,
+        "approve_once",
+        undefined,
+      );
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("annotates a question answered through the live transcript overlay", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const answerAgentQuestion = mock(async () => undefined);
+    answerAgentQuestionRef.current = answerAgentQuestion;
+    const harness = createHookHarness(
+      createBaseArgs({
+        liveSession: createAgentSessionFixture({
+          externalSessionId: "session-1",
+          status: "running",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a/worktree",
+          messages: [
+            {
+              id: "tool-question-live",
+              role: "tool",
+              content: "Question requested",
+              timestamp: "2026-02-22T12:01:00.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-question-live",
+                callId: "call-question-live",
+                tool: "question",
+                toolType: "question",
+                status: "completed",
+                metadata: {},
+              },
+            },
+          ],
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(createLiveQuestionEvent()));
+      await harness.waitFor((state) => state.interactionSession?.pendingQuestions.length === 1);
+      const question = harness.getLatest().interactionSession?.pendingQuestions[0];
+      if (!question) {
+        throw new Error("Expected overlay question.");
+      }
+
+      await harness.run(async () => {
+        await harness.getLatest().answerAgentQuestion(createTarget(), question, [["yes"]]);
+      });
+
+      expect(answerAgentQuestion).toHaveBeenCalledWith(createTarget(), question, [["yes"]]);
+      expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
+      const interactionSession = harness.getLatest().interactionSession;
+      if (!interactionSession) {
+        throw new Error("Expected overlay interaction session.");
+      }
+      const message = sessionMessageAt(interactionSession, 0);
+      if (message?.meta?.kind !== "tool") {
+        throw new Error("Expected question tool message metadata.");
+      }
+      expect(message.meta.metadata?.requestId).toBe("question-live");
+      expect(message.meta.metadata?.answers).toEqual([["yes"]]);
     } finally {
       await harness.unmount();
     }

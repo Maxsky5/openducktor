@@ -50,6 +50,7 @@ export type CodexThreadSnapshot = {
   id: string;
   cwd: string;
   startedAt: string;
+  updatedAtMs: number | null;
   title: string;
   status: CodexThreadStatusSnapshot;
   parentThreadId: string | null;
@@ -68,6 +69,20 @@ export type CodexSubAgentSourceMetadata = {
 
 const codexTimestampFromUnknownSeconds = (value: unknown): string =>
   typeof value === "number" ? new Date(value * 1000).toISOString() : new Date().toISOString();
+
+const codexTimestampMsFromUnknownSeconds = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error("Codex thread updatedAt must be a finite number.");
+  }
+  const timestampMs = value * 1000;
+  if (!Number.isFinite(timestampMs)) {
+    throw new Error("Codex thread updatedAt exceeds the supported timestamp range.");
+  }
+  return timestampMs;
+};
 
 export const codexThreadStatusSnapshot = (status: unknown): CodexThreadStatusSnapshot => {
   const type = isPlainObject(status)
@@ -108,6 +123,7 @@ const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
     id,
     cwd,
     startedAt: codexTimestampFromUnknownSeconds(thread.createdAt ?? thread.created_at),
+    updatedAtMs: codexTimestampMsFromUnknownSeconds(thread.updatedAt ?? thread.updated_at),
     title: extractStringField(thread, ["name", "preview"]) ?? `Codex ${id}`,
     status: codexThreadStatusSnapshot(thread.status),
     parentThreadId:

@@ -936,6 +936,7 @@ describe("Codex subagent event mapper", () => {
       id: "child-thread",
       cwd: "/repo",
       startedAt: "2026-05-09T00:00:00.000Z",
+      updatedAtMs: Date.parse("2026-05-09T00:01:00.000Z"),
       title: "Child",
       status: { classification: "idle" },
       parentThreadId: "parent-thread",

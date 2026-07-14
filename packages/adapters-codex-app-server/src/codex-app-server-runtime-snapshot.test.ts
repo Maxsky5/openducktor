@@ -33,6 +33,7 @@ const createThread = (status: "active" | "idle" = "active"): CodexThreadSnapshot
   title: "Codex thread",
   cwd: "/repo",
   startedAt: "2026-05-07T00:00:00.000Z",
+  updatedAtMs: Date.parse("2026-05-07T00:01:00.000Z"),
   status: codexThreadStatusSnapshot(status),
   parentThreadId: null,
   agentNickname: null,
@@ -196,6 +197,96 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
       classification: "running",
       title: "Codex thread",
     });
+  });
+
+  test("settles a materialized child from unloaded inventory after renderer reload", () => {
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session: createSession(codexThreadStatusSnapshot("active")),
+        inventory: createInventory({
+          thread: {
+            ...createThread("idle"),
+            parentThreadId: "parent-thread",
+          },
+          threadIsLoaded: false,
+        }),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        hasActiveTurn: false,
+      }),
+    ).toMatchObject({
+      availability: "runtime",
+      classification: "idle",
+      parentExternalSessionId: "parent-thread",
+      title: "Codex thread",
+    });
+  });
+
+  test("keeps unloaded materialized children live when current work proves activity", () => {
+    const session = createSession(codexThreadStatusSnapshot("active"));
+    const inventory = createInventory({
+      thread: {
+        ...createThread("idle"),
+        parentThreadId: "parent-thread",
+      },
+      threadIsLoaded: false,
+    });
+
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session,
+        inventory,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        hasActiveTurn: true,
+      }),
+    ).toMatchObject({ classification: "running", title: "Codex" });
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session,
+        inventory,
+        pendingApprovals: [],
+        pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        hasActiveTurn: false,
+      }),
+    ).toMatchObject({ classification: "waiting_for_question", title: "Codex" });
+  });
+
+  test("keeps a newly started main session local while unloaded inventory catches up", () => {
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session: createSession(codexThreadStatusSnapshot("active")),
+        inventory: createInventory({
+          thread: createThread("idle"),
+          threadIsLoaded: false,
+        }),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        hasActiveTurn: false,
+      }),
+    ).toMatchObject({
+      availability: "runtime",
+      classification: "running",
+      title: "Codex",
+    });
+  });
+
+  test("does not settle an unloaded child whose inventory status is still running", () => {
+    expect(
+      toRefreshedRuntimeSnapshot({
+        session: createSession(codexThreadStatusSnapshot("active")),
+        inventory: createInventory({
+          thread: {
+            ...createThread("active"),
+            parentThreadId: "parent-thread",
+          },
+          threadIsLoaded: false,
+        }),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        hasActiveTurn: false,
+      }),
+    ).toMatchObject({ classification: "running", title: "Codex" });
   });
 
   test("keeps active local turns visible while inventory catches up", () => {
