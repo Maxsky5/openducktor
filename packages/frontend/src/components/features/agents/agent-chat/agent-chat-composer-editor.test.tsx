@@ -1067,6 +1067,9 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.getByRole("option", { name: /alpha.ts/i })).toBeDefined();
     expect(screen.queryByText("Searching files...")).toBeNull();
 
+    await waitFor(() => {
+      expect(resolveSecondSearch).not.toBeNull();
+    });
     if (!resolveSecondSearch) {
       throw new Error("Expected second file search to be pending");
     }
@@ -1144,8 +1147,8 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /@reviewer/i })).toBeDefined();
+      expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     });
-    expect(screen.getByRole("option", { name: /main.ts/i })).toBeDefined();
     expect(
       screen.getByRole("option", { name: /@reviewer/i }).querySelector(".lucide-bot"),
     ).toBeDefined();
@@ -1178,7 +1181,7 @@ describe("AgentChatComposerEditor", () => {
     });
     expect(screen.getByTestId("draft-state").textContent).toContain('"kind":"subagent_reference"');
     expect(onSend).not.toHaveBeenCalled();
-    expect(searchFiles).toHaveBeenCalledWith("rev");
+    expect(searchFiles).not.toHaveBeenCalled();
   });
 
   test("shows subagents without searching files when only subagent references are supported", async () => {
