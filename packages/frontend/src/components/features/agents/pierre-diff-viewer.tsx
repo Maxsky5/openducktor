@@ -1,8 +1,9 @@
-import type {
-  BaseDiffOptions,
-  DiffLineAnnotation,
-  FileContents,
-  SelectedLineRange,
+import {
+  type BaseDiffOptions,
+  type DiffLineAnnotation,
+  type FileContents,
+  getFiletypeFromFileName,
+  type SelectedLineRange,
 } from "@pierre/diffs";
 import {
   File as PierreReactFile,
@@ -156,14 +157,43 @@ export const PierreFileViewer = memo(function PierreFileViewer({
   className,
 }: PierreFileViewerProps): ReactElement {
   const { theme } = useTheme();
+  const workerPool = useWorkerPool();
   const file = useMemo<FileContents>(
     () => ({
       name: filePath,
       contents: content,
+      lang: getFiletypeFromFileName(filePath),
       cacheKey: `${filePath}:${content.length}:${contentHash(content)}`,
     }),
     [content, filePath],
   );
+  const requiresHighlight = file.lang !== "text";
+  const subscribeToHighlightCache = useCallback(
+    (onStoreChange: () => void) => {
+      if (workerPool == null || !requiresHighlight) {
+        return () => undefined;
+      }
+      return workerPool.subscribeToStatChanges(onStoreChange);
+    },
+    [requiresHighlight, workerPool],
+  );
+  const getHighlightCacheSnapshot = useCallback(
+    () => workerPool == null || !requiresHighlight || workerPool.getFileResultCache(file) != null,
+    [file, requiresHighlight, workerPool],
+  );
+  const isHighlightReady = useSyncExternalStore(
+    subscribeToHighlightCache,
+    getHighlightCacheSnapshot,
+    () => false,
+  );
+
+  useEffect(() => {
+    if (workerPool == null || !requiresHighlight || isHighlightReady) {
+      return;
+    }
+    workerPool.primeFileHighlightCache(file);
+  }, [file, isHighlightReady, requiresHighlight, workerPool]);
+
   const options = useMemo(
     () => ({
       theme: DIFF_THEME,
@@ -173,11 +203,12 @@ export const PierreFileViewer = memo(function PierreFileViewer({
     }),
     [theme],
   );
+  const renderPhase = isHighlightReady ? "highlighted" : "pending";
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
       <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>
-        <PierreReactFile file={file} options={options} />
+        <PierreReactFile key={`${file.cacheKey}:${renderPhase}`} file={file} options={options} />
       </div>
     </div>
   );

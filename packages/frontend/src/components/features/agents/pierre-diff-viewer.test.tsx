@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import {
   withCapturedConsoleMethods,
   withCapturedOutputStreams,
@@ -10,9 +11,12 @@ let pierreViewerModule: typeof import("./pierre-diff-viewer");
 let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
 let workerPoolMock: {
   getDiffResultCache: ReturnType<typeof mock>;
+  getFileResultCache?: ReturnType<typeof mock>;
   primeDiffHighlightCache: ReturnType<typeof mock>;
+  primeFileHighlightCache?: ReturnType<typeof mock>;
   subscribeToStatChanges?: ReturnType<typeof mock>;
 } | null = null;
+let pierreFileMountCount = 0;
 
 const OMITTED_SELECTED_LINES_LABEL = "__omitted__";
 const mockedGutterSelection = {
@@ -36,6 +40,7 @@ const selectionPatch = [
 ].join("\n");
 
 beforeEach(async () => {
+  pierreFileMountCount = 0;
   await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
     await withCapturedConsoleMethods(
       ["debug", "error", "info", "log", "warn"],
@@ -48,17 +53,24 @@ beforeEach(async () => {
               overflow?: string;
               themeType?: string;
             };
-          }) => (
-            <div
-              data-testid="pierre-file"
-              data-cache-key={props.file.cacheKey ?? ""}
-              data-disable-file-header={String(props.options?.disableFileHeader ?? "")}
-              data-file-contents={props.file.contents}
-              data-file-name={props.file.name}
-              data-overflow={String(props.options?.overflow ?? "")}
-              data-theme-type={String(props.options?.themeType ?? "")}
-            />
-          ),
+          }) => {
+            const [mountId] = useState(() => {
+              pierreFileMountCount += 1;
+              return pierreFileMountCount;
+            });
+            return (
+              <div
+                data-testid="pierre-file"
+                data-cache-key={props.file.cacheKey ?? ""}
+                data-disable-file-header={String(props.options?.disableFileHeader ?? "")}
+                data-file-contents={props.file.contents}
+                data-file-name={props.file.name}
+                data-mount-id={String(mountId)}
+                data-overflow={String(props.options?.overflow ?? "")}
+                data-theme-type={String(props.options?.themeType ?? "")}
+              />
+            );
+          },
           FileDiff: (props: {
             options?: {
               diffIndicators?: string;
@@ -420,6 +432,48 @@ describe("PierreDiffViewer", () => {
     expect(screen.getByTestId("pierre-file").getAttribute("data-cache-key")).not.toBe(
       firstCacheKey,
     );
+  });
+
+  test("remounts plain file content when the worker finishes highlighting it", async () => {
+    const { PierreFileViewer } = pierreViewerModule;
+    let cachedHighlight: object | undefined;
+    let notifyStatsChanged: (() => void) | undefined;
+    const getFileResultCache = mock(() => cachedHighlight);
+    const primeFileHighlightCache = mock();
+    const subscribeToStatChanges = mock((callback: () => void) => {
+      notifyStatsChanged = callback;
+      return () => undefined;
+    });
+    workerPoolMock = {
+      getDiffResultCache: mock(() => null),
+      getFileResultCache,
+      primeDiffHighlightCache: mock(),
+      primeFileHighlightCache,
+      subscribeToStatChanges,
+    };
+
+    render(
+      <PierreFileViewer filePath="src/AuthContext.test.tsx" content="export const value = 1;" />,
+    );
+
+    expect(screen.getByTestId("pierre-file").getAttribute("data-mount-id")).toBe("1");
+    await waitFor(
+      () => {
+        expect(primeFileHighlightCache).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 },
+    );
+
+    cachedHighlight = {};
+    act(() => notifyStatsChanged?.());
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("pierre-file").getAttribute("data-mount-id")).toBe("2");
+      },
+      { timeout: 1000 },
+    );
+    expect(getFileResultCache.mock.calls.length).toBeGreaterThan(1);
   });
 
   test("keeps raw fallback diffs inside the Pierre scroll container", async () => {
