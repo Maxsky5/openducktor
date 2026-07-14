@@ -13,7 +13,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:main": "bun run scripts/build-main.ts",
+    "build:main": "bun build --target=node --external electron --splitting --outdir dist --entry-naming 'main.[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts",
     "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
     "builder": "electron-builder",
