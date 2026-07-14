@@ -7,6 +7,7 @@ import type {
   RepoConfig,
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
@@ -73,6 +74,7 @@ const createState = (
   const sessionStore = createAgentSessionsStore("/repo");
   let listener: ((payload: AgentSessionLiveEnvelope) => void) | null = null;
   const callOrder: string[] = [];
+  const unsubscribe = mock(() => undefined);
   const observeAgentSessionLive = mock(
     async (
       _input: { repoPath: string },
@@ -81,7 +83,7 @@ const createState = (
       callOrder.push("observe");
       listener = nextListener;
       duringObservation(nextListener, observeAgentSessionLive.mock.calls.length);
-      return mock(() => undefined);
+      return unsubscribe;
     },
   );
   const agentSessionLiveReplyApproval = mock(
@@ -123,6 +125,7 @@ const createState = (
     harness: createHookHarness(useRepoSessionReadModel, props),
     props,
     observeAgentSessionLive,
+    unsubscribe,
     agentSessionLiveReplyApproval,
     recoverTranscriptGap,
     transcriptEvents,
@@ -214,7 +217,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("uses refreshed stream callbacks without restarting repository observation", async () => {
+  test("keeps the active observation stable when stream callbacks refresh", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
@@ -271,11 +274,53 @@ describe("useRepoSessionReadModel", () => {
     expect(refreshedTranscriptEvents.close).toHaveBeenCalledTimes(1);
   });
 
+  test("uses the latest observe callback when stream identity changes", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const secondUnsubscribe = mock(() => undefined);
+    const secondObserveAgentSessionLive = mock(
+      async (
+        _input: { repoPath: string },
+        listener: (payload: AgentSessionLiveEnvelope) => void,
+      ) => {
+        listener({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        return secondUnsubscribe;
+      },
+    );
+    const refreshedProps = {
+      ...state.props,
+      liveSessionPort: {
+        ...state.props.liveSessionPort,
+        observeAgentSessionLive: secondObserveAgentSessionLive,
+      },
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update(refreshedProps);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(secondObserveAgentSessionLive).not.toHaveBeenCalled();
+      expect(state.unsubscribe).not.toHaveBeenCalled();
+
+      await state.harness.update({ ...refreshedProps, workspaceRepoPath: null });
+      expect(state.unsubscribe).toHaveBeenCalledTimes(1);
+
+      await state.harness.update(refreshedProps);
+      await state.harness.waitFor(() => secondObserveAgentSessionLive.mock.calls.length === 1);
+    } finally {
+      await state.harness.unmount();
+    }
+
+    expect(secondUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
   test("unsubscribes exactly once when repository observation resolves after unmount", async () => {
     const state = createState(() => undefined);
     const deferredObservation = createDeferred<() => void>();
-    const unsubscribed = createDeferred<void>();
-    const unsubscribe = mock(() => unsubscribed.resolve(undefined));
+    const unsubscribe = mock(() => undefined);
     const observeAgentSessionLive = mock(async () => deferredObservation.promise);
     state.props.liveSessionPort.observeAgentSessionLive = observeAgentSessionLive;
 
@@ -285,9 +330,7 @@ describe("useRepoSessionReadModel", () => {
 
     expect(unsubscribe).not.toHaveBeenCalled();
     deferredObservation.resolve(unsubscribe);
-    await unsubscribed.promise;
-
-    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1), { timeout: 1_000 });
   });
 
   test("derives the waiting counter from the same initial snapshot collection commit", async () => {
