@@ -129,8 +129,9 @@ describe("AgentChatComposerSkillMenu", () => {
     );
 
     const listbox = screen.getByRole("listbox", { name: "Skills" });
-    const emptyFeedback = screen.getByText("No skills found.");
+    const emptyFeedback = screen.getByRole("status");
     expect(listbox.id).toBe(LISTBOX_ID);
     expect(listbox.contains(emptyFeedback)).toBe(false);
+    expect(emptyFeedback.textContent).toBe("No skills found.");
   });
 });

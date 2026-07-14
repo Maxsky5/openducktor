@@ -53,7 +53,9 @@ export function AgentChatComposerSkillMenu({
         </div>
       ) : null}
       {skills.length === 0 && !isSkillsLoading && !skillsError ? (
-        <div className="px-3 py-2 text-sm text-muted-foreground">No skills found.</div>
+        <div role="status" className="px-3 py-2 text-sm text-muted-foreground">
+          No skills found.
+        </div>
       ) : null}
       <div
         id={listboxId}

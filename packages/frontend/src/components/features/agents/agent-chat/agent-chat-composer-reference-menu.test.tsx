@@ -305,8 +305,9 @@ describe("AgentChatComposerReferenceMenu", () => {
     );
 
     const listbox = screen.getByRole("listbox", { name: "References" });
-    const emptyFeedback = screen.getByText("No files found.");
+    const emptyFeedback = screen.getByRole("status");
     expect(listbox.id).toBe(LISTBOX_ID);
     expect(listbox.contains(emptyFeedback)).toBe(false);
+    expect(emptyFeedback.textContent).toBe("No files found.");
   });
 });

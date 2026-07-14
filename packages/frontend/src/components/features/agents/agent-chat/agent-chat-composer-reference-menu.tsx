@@ -80,7 +80,7 @@ export function AgentChatComposerReferenceMenu({
         </div>
       ) : null}
       {showEmptyState ? (
-        <div className="px-3 py-2 text-sm text-muted-foreground">
+        <div role="status" className="px-3 py-2 text-sm text-muted-foreground">
           {supportsSubagentReferences ? "No references found." : "No files found."}
         </div>
       ) : null}
