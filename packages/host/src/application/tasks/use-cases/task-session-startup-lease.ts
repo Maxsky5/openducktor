@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
 import { validateTaskSessionWorkflowAvailable } from "../support/task-session-workflow-validation";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -24,19 +25,34 @@ export const createTaskSessionStartupLeaseUseCase = ({
         return gitPort;
       });
       const canonicalRepoPath = yield* git.canonicalizePath(input.repoPath);
-      if (outcome === "completed") {
-        const current = yield* coordinator.inspectBootstrap(
-          canonicalRepoPath,
-          input.taskId,
-          input.leaseId,
-        );
-        if (current.state === "active") {
-          const task = yield* taskStore.getTask({
-            repoPath: canonicalRepoPath,
-            taskId: input.taskId,
-          });
-          yield* validateTaskSessionWorkflowAvailable(task, current.role, canonicalRepoPath);
+      const current = yield* coordinator.inspectBootstrap(
+        canonicalRepoPath,
+        input.taskId,
+        input.leaseId,
+      );
+      if (current.state === "terminal") {
+        if (current.terminal.outcome !== outcome) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "leaseId",
+              message: `Task session startup lease was already finalized as ${current.terminal.outcome}.`,
+              details: {
+                repoPath: canonicalRepoPath,
+                taskId: input.taskId,
+                leaseId: input.leaseId,
+                requestedOutcome: outcome,
+              },
+            }),
+          );
         }
+        return true;
+      }
+      if (outcome === "completed") {
+        const task = yield* taskStore.getTask({
+          repoPath: canonicalRepoPath,
+          taskId: input.taskId,
+        });
+        yield* validateTaskSessionWorkflowAvailable(task, current.role, canonicalRepoPath);
       }
       yield* coordinator.finishBootstrap(canonicalRepoPath, input.taskId, input.leaseId, outcome);
       return true;

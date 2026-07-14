@@ -473,6 +473,39 @@ describe("createTaskService build start worktree handling", () => {
     ).resolves.toBe(true);
   });
 
+  test("rejects completing an aborted fork lease while replaying abort", async () => {
+    const service = createTaskService({
+      taskStore: {
+        getTask: () => Effect.succeed(task({ status: "blocked" })),
+      } as TaskStorePort,
+      taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
+      gitPort: createBuildStartGitPort({ calls: [] }),
+    });
+    const leaseId = await Effect.runPromise(
+      service.taskSessionStartupLeasePrepare({
+        repoPath: "/repo",
+        taskId: "task-1",
+        role: "qa",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        service.taskSessionStartupLeaseAbort({ repoPath: "/repo", taskId: "task-1", leaseId }),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(
+        service.taskSessionStartupLeaseAbort({ repoPath: "/repo", taskId: "task-1", leaseId }),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(
+        service.taskSessionStartupLeaseComplete({ repoPath: "/repo", taskId: "task-1", leaseId }),
+      ),
+    ).rejects.toThrow("startup lease was already finalized as aborted");
+  });
+
   test("prepares the same canonical worktree for non-Builder roles without transitioning", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
