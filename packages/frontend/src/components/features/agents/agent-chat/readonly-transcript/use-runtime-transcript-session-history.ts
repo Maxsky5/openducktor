@@ -253,7 +253,7 @@ export function useRuntimeTranscriptSessionHistory({
     stableTarget,
   ]);
   const interactionSession = liveOverlay.interactionSession ?? matchingLiveSession;
-  const useTransientInteractionActions = liveOverlay.interactionSession !== null;
+  const useOverlayInteractionActions = liveOverlay.interactionSession !== null;
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };
@@ -297,11 +297,11 @@ export function useRuntimeTranscriptSessionHistory({
     interactionSession,
     transcriptState,
     replyAgentApproval:
-      useTransientInteractionActions && liveOverlay.replyAgentApproval
+      useOverlayInteractionActions && liveOverlay.replyAgentApproval
         ? liveOverlay.replyAgentApproval
         : replyAgentApproval,
     answerAgentQuestion:
-      useTransientInteractionActions && liveOverlay.answerAgentQuestion
+      useOverlayInteractionActions && liveOverlay.answerAgentQuestion
         ? liveOverlay.answerAgentQuestion
         : answerAgentQuestion,
   };

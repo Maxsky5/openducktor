@@ -234,11 +234,15 @@ export function useRuntimeTranscriptLiveOverlay({
   }, [history, shouldMergeHistory, target, updateLiveState]);
 
   const replyOverlayApproval = useCallback<AgentOperationsContextValue["replyAgentApproval"]>(
-    async (_identity, request, outcome, message) => {
+    async (identity, request, outcome, message) => {
       if (!sessionRef) {
         throw new Error("Cannot reply to a transcript approval without a runtime session ref.");
       }
-      await replyAgentApprovalRef.current(sessionRef, request, outcome, message);
+      const replySession =
+        baseSessionRef.current && matchesAgentSessionIdentity(baseSessionRef.current, sessionRef)
+          ? identity
+          : sessionRef;
+      await replyAgentApprovalRef.current(replySession, request, outcome, message);
       updateLiveState((current) => {
         if (!current || !matchesAgentSessionIdentity(current.session, sessionRef)) {
           return current;
@@ -258,11 +262,15 @@ export function useRuntimeTranscriptLiveOverlay({
   );
 
   const answerOverlayQuestion = useCallback<AgentOperationsContextValue["answerAgentQuestion"]>(
-    async (_identity, request, answers) => {
+    async (identity, request, answers) => {
       if (!sessionRef) {
         throw new Error("Cannot answer a transcript question without a runtime session ref.");
       }
-      await answerAgentQuestionRef.current(sessionRef, request, answers);
+      const replySession =
+        baseSessionRef.current && matchesAgentSessionIdentity(baseSessionRef.current, sessionRef)
+          ? identity
+          : sessionRef;
+      await answerAgentQuestionRef.current(replySession, request, answers);
       updateLiveState((current) => {
         if (!current || !matchesAgentSessionIdentity(current.session, sessionRef)) {
           return current;

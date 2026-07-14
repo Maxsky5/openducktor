@@ -203,7 +203,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("replies to transient input through the bound runtime ref and clears resolved controls", async () => {
+  test("replies to transcript-only input through the bound runtime ref and clears resolved controls", async () => {
     host.workspaceGetSettingsSnapshot = async () =>
       createSettingsSnapshotFixture({
         agentRuntimes: {
@@ -257,7 +257,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       const approval = harness.getLatest().interactionSession?.pendingApprovals[0];
       const question = harness.getLatest().interactionSession?.pendingQuestions[0];
       if (!approval || !question) {
-        throw new Error("Expected transient pending input.");
+        throw new Error("Expected transcript-only pending input.");
       }
       await harness.run(async () => {
         await harness.getLatest().replyAgentApproval(target, approval, "approve_once");
@@ -492,7 +492,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("uses overlay pending input when rendering over a matching projected session", async () => {
+  test("keeps loaded-session approval routing while clearing overlay pending input", async () => {
     const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
     subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
       subscribed.listener = listener;
@@ -523,14 +523,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       });
 
       expect(replyAgentApproval).toHaveBeenCalledWith(
-        {
-          repoPath: "/repo-a",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo-a/worktree",
-          externalSessionId: "session-1",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
-          runtimePolicy: { kind: "opencode" },
-        },
+        createTarget(),
         approval,
         "approve_once",
         undefined,
@@ -592,6 +585,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         await harness.getLatest().answerAgentQuestion(createTarget(), question, [["yes"]]);
       });
 
+      expect(answerAgentQuestion).toHaveBeenCalledWith(createTarget(), question, [["yes"]]);
       expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
       const interactionSession = harness.getLatest().interactionSession;
       if (!interactionSession) {

@@ -258,7 +258,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     }
   });
 
-  test("replies through a policy-bound transient transcript ref", async () => {
+  test("replies through a policy-bound transcript-only ref", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalReplyApproval = adapter.replyApproval;
     const replies: Array<{ requestId: string; outcome: string }> = [];
@@ -269,7 +269,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       adapter,
       sessionsRef: createSessionsRef(),
     });
-    const transientSessionRef = {
+    const transcriptSessionRef = {
       repoPath: "/tmp/repo",
       externalSessionId: "session-transcript-1",
       runtimeKind: "opencode" as const,
@@ -279,7 +279,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
 
     try {
       await actions.replyAgentApproval(
-        transientSessionRef,
+        transcriptSessionRef,
         missingApprovalRequest("perm-1"),
         "approve_once",
       );
@@ -439,7 +439,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     }
   });
 
-  test("answers through a policy-bound transient transcript ref", async () => {
+  test("answers through a policy-bound transcript-only ref", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalReplyQuestion = adapter.replyQuestion;
     const replies: Array<{ requestId: string; answers: string[][] }> = [];
@@ -450,7 +450,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       adapter,
       sessionsRef: createSessionsRef(),
     });
-    const transientSessionRef = {
+    const transcriptSessionRef = {
       repoPath: "/tmp/repo",
       externalSessionId: "session-transcript-1",
       runtimeKind: "opencode" as const,
@@ -459,9 +459,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     };
 
     try {
-      await actions.answerAgentQuestion(transientSessionRef, missingQuestionRequest("question-1"), [
-        ["yes"],
-      ]);
+      await actions.answerAgentQuestion(
+        transcriptSessionRef,
+        missingQuestionRequest("question-1"),
+        [["yes"]],
+      );
 
       expect(replies).toEqual([{ requestId: "question-1", answers: [["yes"]] }]);
     } finally {
