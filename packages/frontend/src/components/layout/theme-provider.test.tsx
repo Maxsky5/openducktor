@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { Theme } from "@openducktor/contracts";
+import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ReactElement, useLayoutEffect, useState } from "react";
@@ -104,6 +104,12 @@ const expectThemeState = (theme: Theme): void => {
   ).toBe(String(theme === "dark"));
 };
 
+const expectCachedTheme = (queryClient: QueryClient, theme: Theme): void => {
+  expect(
+    queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryOptions().queryKey)?.theme,
+  ).toBe(theme);
+};
+
 afterEach(() => {
   cleanup();
   document.documentElement.classList.remove("light", "dark");
@@ -139,6 +145,30 @@ describe("ThemeProvider", () => {
 
       expect(setTheme).not.toHaveBeenCalled();
       expectThemeState("light");
+    } finally {
+      hostBridge.client.setTheme = originalSetTheme;
+    }
+  });
+
+  test("keeps the settings snapshot cache aligned while persistence is in flight", async () => {
+    const persistence = createDeferred<void>();
+    const setTheme = mock(async () => persistence.promise);
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = setTheme;
+
+    try {
+      const queryClient = renderThemeProvider();
+
+      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+
+      expectCachedTheme(queryClient, "dark");
+      expectThemeState("dark");
+
+      await act(async () => {
+        persistence.resolve(undefined);
+        await persistence.promise;
+        await flushQueryUpdates();
+      });
     } finally {
       hostBridge.client.setTheme = originalSetTheme;
     }
@@ -186,7 +216,7 @@ describe("ThemeProvider", () => {
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     try {
-      renderThemeProvider();
+      const queryClient = renderThemeProvider();
 
       await act(async () => {
         selectThemesRapidly();
@@ -212,6 +242,7 @@ describe("ThemeProvider", () => {
       expect(
         toastError.mock.calls.filter(([message]) => message === "Theme change failed"),
       ).toHaveLength(0);
+      expectCachedTheme(queryClient, "dark");
       expectThemeState("dark");
     } finally {
       toastError.mockRestore();
@@ -229,7 +260,7 @@ describe("ThemeProvider", () => {
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     try {
-      renderThemeProvider();
+      const queryClient = renderThemeProvider();
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
       await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
@@ -242,6 +273,7 @@ describe("ThemeProvider", () => {
       });
 
       await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
+      expectCachedTheme(queryClient, "light");
       expect(toastError).toHaveBeenCalledWith("Theme change failed", {
         description: "disk write failed",
       });

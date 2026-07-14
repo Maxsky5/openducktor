@@ -28,25 +28,34 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
   const loadedTheme = settingsSnapshot?.theme ?? fallbackTheme;
   const [theme, selectOptimisticTheme] = useReducer(replaceTheme, loadedTheme);
   const persistedThemeRef = useRef(theme);
+  const selectedThemeRef = useRef(theme);
   const pendingThemeRef = useRef<Theme | null>(null);
   const isPersistingRef = useRef(false);
+  const optimisticSettingsSnapshotRef = useRef<SettingsSnapshot | null>(null);
 
   useEffect(() => {
     applyThemeToDocument(theme);
   }, [theme]);
 
   useEffect(() => {
+    if (settingsSnapshot === optimisticSettingsSnapshotRef.current) {
+      optimisticSettingsSnapshotRef.current = null;
+      return;
+    }
+
+    optimisticSettingsSnapshotRef.current = null;
     persistedThemeRef.current = loadedTheme;
     if (isPersistingRef.current) {
       return;
     }
 
+    selectedThemeRef.current = loadedTheme;
     selectOptimisticTheme(loadedTheme);
-  }, [loadedTheme]);
+  }, [loadedTheme, settingsSnapshot]);
 
   const writeThemeToCache = useCallback(
     (newTheme: Theme): void => {
-      queryClient.setQueryData(
+      const updatedSnapshot = queryClient.setQueryData(
         SETTINGS_SNAPSHOT_QUERY_KEY,
         (current: SettingsSnapshot | undefined) => {
           if (!current) {
@@ -59,6 +68,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
           };
         },
       );
+      optimisticSettingsSnapshotRef.current = updatedSnapshot ?? null;
     },
     [queryClient],
   );
@@ -81,10 +91,12 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
         try {
           await hostBridge.client.setTheme(nextTheme);
           persistedThemeRef.current = nextTheme;
-          writeThemeToCache(nextTheme);
+          writeThemeToCache(selectedThemeRef.current);
         } catch (error) {
           console.error("Failed to persist theme change.", error);
           if (pendingThemeRef.current === null) {
+            selectedThemeRef.current = persistedThemeRef.current;
+            writeThemeToCache(persistedThemeRef.current);
             applyThemeToDocument(persistedThemeRef.current);
             selectOptimisticTheme(persistedThemeRef.current);
             toast.error("Theme change failed", {
@@ -100,12 +112,14 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
 
   const selectTheme = useCallback(
     (newTheme: Theme): void => {
+      selectedThemeRef.current = newTheme;
       pendingThemeRef.current = newTheme;
+      writeThemeToCache(newTheme);
       applyThemeToDocument(newTheme);
       selectOptimisticTheme(newTheme);
       void persistPendingThemes();
     },
-    [persistPendingThemes],
+    [persistPendingThemes, writeThemeToCache],
   );
 
   const value = useMemo(() => ({ theme, setTheme: selectTheme }), [selectTheme, theme]);
