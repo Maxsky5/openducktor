@@ -24,6 +24,7 @@ import {
   resolveHorizontalScrollbarVisibility,
   reusablePromptSchema,
   reusablePromptsSchema,
+  settingsSnapshotSaveInputSchema,
   settingsSnapshotSchema,
 } from "./config-schemas";
 
@@ -45,6 +46,27 @@ const expectedDefaultChatSettings = {
 } as const;
 
 describe("config-schemas", () => {
+  test("limits bulk settings saves to explicitly owned fields", () => {
+    expect(settingsSnapshotSaveInputSchema.keyof().options).toEqual([
+      "git",
+      "general",
+      "appearance",
+      "chat",
+      "reusablePrompts",
+      "kanban",
+      "autopilot",
+      "agentRuntimes",
+      "workspaces",
+      "globalPromptOverrides",
+    ]);
+    expect(settingsSnapshotSaveInputSchema.safeParse({}).success).toBe(false);
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse({
+        git: { defaultMergeMethod: "merge_commit" },
+      }).success,
+    ).toBe(false);
+  });
+
   test("defaults dev servers to an empty array", () => {
     const parsed = repoConfigSchema.parse(baseRepoConfigInput);
     expect(parsed.devServers).toEqual([]);

@@ -299,7 +299,20 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       theme: "light",
     });
     await expect(
-      router.invoke("workspace_save_settings_snapshot", { snapshot: { theme: "light" } }),
+      router.invoke("workspace_save_settings_snapshot", {
+        snapshot: {
+          git: { defaultMergeMethod: "merge_commit" },
+          general: { openAgentStudioTabOnBackgroundSessionStart: true },
+          appearance: { horizontalScrollbarVisibility: "system" },
+          chat: { showThinkingMessages: false },
+          reusablePrompts: [],
+          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+          autopilot: { rules: [] },
+          agentRuntimes: { opencode: { enabled: true }, codex: { enabled: false } },
+          workspaces: {},
+          globalPromptOverrides: {},
+        },
+      }),
     ).resolves.toEqual([]);
     await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeUndefined();
     await expect(

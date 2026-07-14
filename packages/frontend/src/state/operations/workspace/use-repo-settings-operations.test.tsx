@@ -719,15 +719,27 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saveGlobalGitConfig uses the dedicated route without mutating workspace state", async () => {
+  test("saveGlobalGitConfig refreshes the authoritative snapshot without mutating workspace state", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceUpdateGlobalGitConfig = mock(async () => {});
+    const optimisticSnapshot = { ...createSettingsSnapshot(), theme: "dark" as const };
+    const authoritativeSnapshot = {
+      ...createSettingsSnapshot(),
+      git: { defaultMergeMethod: "squash" as const },
+    };
+    const workspaceGetSettingsSnapshot = mock(async () => {
+      return workspaceGetSettingsSnapshot.mock.calls.length === 1
+        ? optimisticSnapshot
+        : authoritativeSnapshot;
+    });
 
     const original = {
       workspaceUpdateGlobalGitConfig: host.workspaceUpdateGlobalGitConfig,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
     };
     host.workspaceUpdateGlobalGitConfig = workspaceUpdateGlobalGitConfig;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
@@ -737,6 +749,7 @@ describe("use-repo-settings-operations", () => {
 
     try {
       await harness.mount();
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(optimisticSnapshot);
       await harness.getLatest().saveGlobalGitConfig({
         defaultMergeMethod: "squash",
       });
@@ -745,9 +758,14 @@ describe("use-repo-settings-operations", () => {
       });
       expect(applyWorkspaceRecords).not.toHaveBeenCalled();
       expect(applyWorkspaceRecord).not.toHaveBeenCalled();
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
+        authoritativeSnapshot,
+      );
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
     } finally {
       await harness.unmount();
       host.workspaceUpdateGlobalGitConfig = original.workspaceUpdateGlobalGitConfig;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
     }
   });
 

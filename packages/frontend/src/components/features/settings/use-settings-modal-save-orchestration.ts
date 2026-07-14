@@ -1,4 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot, SettingsSnapshotSaveInput } from "@openducktor/contracts";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -34,7 +34,7 @@ type UseSettingsModalSaveOrchestrationArgs = {
   invalidRepoPathsWithDevServerErrors: string[];
   selectedWorkspaceId: string | null;
   saveGlobalGitConfig: (config: SettingsSnapshot["git"]) => Promise<void>;
-  saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
+  saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
 };
 
 type SettingsModalSaveOrchestration = {

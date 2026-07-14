@@ -2,7 +2,7 @@ import {
   globalConfigSchema,
   globalGitConfigSchema,
   repoConfigSchema,
-  settingsSnapshotSchema,
+  settingsSnapshotSaveInputSchema,
   themeSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -26,7 +26,29 @@ import {
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
-export const createWorkspaceSettingsService = (
+const withSerializedConfigWrites = (
+  service: WorkspaceSettingsService,
+): WorkspaceSettingsService => {
+  const semaphore = Effect.unsafeMakeSemaphore(1);
+  const serialize = semaphore.withPermits(1);
+
+  return {
+    ...service,
+    addWorkspace: (input) => serialize(service.addWorkspace(input)),
+    selectWorkspace: (workspaceId) => serialize(service.selectWorkspace(workspaceId)),
+    reorderWorkspaces: (workspaceOrder) => serialize(service.reorderWorkspaces(workspaceOrder)),
+    updateRepoConfig: (workspaceId, update) =>
+      serialize(service.updateRepoConfig(workspaceId, update)),
+    saveRepoSettings: (workspaceId, settings) =>
+      serialize(service.saveRepoSettings(workspaceId, settings)),
+    updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
+    saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
+    setTheme: (theme) => serialize(service.setTheme(theme)),
+    updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
+  };
+};
+
+const createUnserializedWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
 ): WorkspaceSettingsService => ({
   listWorkspaces() {
@@ -282,7 +304,7 @@ export const createWorkspaceSettingsService = (
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
       const snapshot = yield* Effect.try({
-        try: () => settingsSnapshotSchema.parse(rawSnapshot),
+        try: () => settingsSnapshotSaveInputSchema.parse(rawSnapshot),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -298,7 +320,6 @@ export const createWorkspaceSettingsService = (
         try: () =>
           globalConfigSchema.parse({
             ...config,
-            theme: snapshot.theme,
             git: snapshot.git,
             general: snapshot.general,
             appearance: snapshot.appearance,
@@ -365,3 +386,8 @@ export const createWorkspaceSettingsService = (
     });
   },
 });
+
+export const createWorkspaceSettingsService = (
+  settingsConfig: SettingsConfigPort,
+): WorkspaceSettingsService =>
+  withSerializedConfigWrites(createUnserializedWorkspaceSettingsService(settingsConfig));
