@@ -1,9 +1,8 @@
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   gitQueryKeys,
   loadCurrentBranchFromQuery,
@@ -18,7 +17,7 @@ import type {
 type UseWorkspaceBranchOperationsArgs = {
   activeRepo: string | null;
   hostClient: WorkspaceBranchOperationsHostClient;
-  clearBranchSyncDegraded: () => void;
+  clearBranchSyncDegraded: (repoPath: string | null) => void;
 };
 
 type UseWorkspaceBranchOperationsResult = {
@@ -48,25 +47,10 @@ export function useWorkspaceBranchOperations({
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const lastKnownRevisionRef = useRef<string | null>(null);
   const currentWorkspaceRepoPathRef = useRef(activeRepo);
-  const activeWorkspaceRef = useRef<ActiveWorkspace | null>(
-    activeRepo
-      ? {
-          workspaceId: "",
-          workspaceName: "",
-          repoPath: activeRepo,
-        }
-      : null,
-  );
 
-  currentWorkspaceRepoPathRef.current = activeRepo;
-  activeWorkspaceRef.current =
-    activeRepo === null
-      ? null
-      : {
-          workspaceId: "",
-          workspaceName: "",
-          repoPath: activeRepo,
-        };
+  useLayoutEffect(() => {
+    currentWorkspaceRepoPathRef.current = activeRepo;
+  }, [activeRepo]);
 
   const applyBranchState = useCallback(
     (repoPath: string, current: GitCurrentBranch, allBranches: GitBranch[]): void => {
@@ -76,19 +60,19 @@ export function useWorkspaceBranchOperations({
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
       lastKnownRevisionRef.current = current.revision ?? null;
-      clearBranchSyncDegraded();
+      clearBranchSyncDegraded(repoPath);
     },
     [clearBranchSyncDegraded],
   );
 
   const applyCurrentBranchSnapshot = useCallback(
-    (current: GitCurrentBranch): void => {
-      setBranchDataRepoPath(currentWorkspaceRepoPathRef.current);
+    (repoPath: string, current: GitCurrentBranch): void => {
+      setBranchDataRepoPath(repoPath);
       setActiveBranch(current);
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
       lastKnownRevisionRef.current = current.revision ?? null;
-      clearBranchSyncDegraded();
+      clearBranchSyncDegraded(repoPath);
     },
     [clearBranchSyncDegraded],
   );
@@ -104,7 +88,7 @@ export function useWorkspaceBranchOperations({
       setActiveBranch(null);
       setIsLoadingBranches(false);
       setIsSwitchingBranch(false);
-      clearBranchSyncDegraded();
+      clearBranchSyncDegraded(repoPath);
     },
     [clearBranchSyncDegraded],
   );
@@ -112,7 +96,7 @@ export function useWorkspaceBranchOperations({
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string): Promise<void> => {
       const requestVersion = ++branchRequestVersionRef.current;
-      setBranchDataRepoPath(repoPath);
+      setBranchDataRepoPath(() => repoPath);
       setBranches([]);
       setActiveBranch(null);
       setIsLoadingBranches(true);
@@ -216,7 +200,7 @@ export function useWorkspaceBranchOperations({
           currentWorkspaceRepoPathRef.current === repoPath
         ) {
           queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
-          applyCurrentBranchSnapshot(current);
+          applyCurrentBranchSnapshot(repoPath, current);
 
           try {
             await queryClient.invalidateQueries({
@@ -260,7 +244,6 @@ export function useWorkspaceBranchOperations({
   const branchProbeController = useMemo<WorkspaceBranchProbeController>(
     () => ({
       currentWorkspaceRepoPathRef,
-      activeWorkspaceRef,
       lastKnownBranchNameRef,
       lastKnownDetachedRef,
       lastKnownRevisionRef,

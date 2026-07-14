@@ -1,7 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { gitQueryKeys, loadCurrentBranchFromQuery } from "../../queries/git";
 import { createProbeGateController } from "./workspace-branch-probe-gate";
 import {
@@ -20,13 +19,13 @@ import type {
 } from "./workspace-operations-types";
 
 type UseWorkspaceBranchProbeArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeRepoPath: string | null;
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
   hostClient: WorkspaceBranchProbeHostClient;
   branchProbeController: WorkspaceBranchProbeController;
-  setBranchSyncDegraded: (value: boolean) => void;
+  setBranchSyncDegraded: (repoPath: string, value: boolean) => void;
 };
 
 type ProbeGates = {
@@ -36,7 +35,7 @@ type ProbeGates = {
 };
 
 export function useWorkspaceBranchProbe({
-  activeWorkspace,
+  activeRepoPath,
   isSwitchingWorkspace,
   isLoadingBranches,
   isSwitchingBranch,
@@ -44,14 +43,8 @@ export function useWorkspaceBranchProbe({
   branchProbeController,
   setBranchSyncDegraded,
 }: UseWorkspaceBranchProbeArgs): void {
-  const activeRepoPath =
-    activeWorkspace?.repoPath ?? branchProbeController.currentWorkspaceRepoPathRef.current;
   const queryClient = useQueryClient();
-  const probeGateRef = useRef<ReturnType<typeof createProbeGateController> | null>(null);
-  if (probeGateRef.current === null) {
-    probeGateRef.current = createProbeGateController();
-  }
-  const probeGate = probeGateRef.current;
+  const [probeGate] = useState(createProbeGateController);
   const lastProbeErrorToastAtRef = useRef<number | null>(null);
   const lastProbeErrorSignatureRef = useRef<string | null>(null);
   const previousWorkspaceRepoPathRef = useRef(activeRepoPath);
@@ -61,11 +54,15 @@ export function useWorkspaceBranchProbe({
     isSwitchingBranch,
   });
 
-  probeGatesRef.current.isSwitchingWorkspace = isSwitchingWorkspace;
-  probeGatesRef.current.isLoadingBranches = isLoadingBranches;
-  probeGatesRef.current.isSwitchingBranch = isSwitchingBranch;
+  useLayoutEffect(() => {
+    probeGatesRef.current = {
+      isSwitchingWorkspace,
+      isLoadingBranches,
+      isSwitchingBranch,
+    };
+  }, [isLoadingBranches, isSwitchingBranch, isSwitchingWorkspace]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previousWorkspaceRepoPathRef.current === activeRepoPath) {
       return;
     }
@@ -195,18 +192,28 @@ export function useWorkspaceBranchProbe({
   }, [branchProbeController, hostClient, probeGate, queryClient]);
 
   const syncExternalBranchChange = useCallback(async (): Promise<void> => {
+    const repoPath = branchProbeController.currentWorkspaceRepoPathRef.current;
+    if (!repoPath) {
+      return;
+    }
+
     const outcome = await probeExternalBranchChange();
 
     if (outcome.status === "degraded") {
-      setBranchSyncDegraded(true);
+      setBranchSyncDegraded(repoPath, true);
       reportBranchProbeError(outcome.error);
       return;
     }
 
     if (outcome.status === "synced" || outcome.status === "unchanged") {
-      setBranchSyncDegraded(false);
+      setBranchSyncDegraded(repoPath, false);
     }
-  }, [probeExternalBranchChange, reportBranchProbeError, setBranchSyncDegraded]);
+  }, [
+    branchProbeController,
+    probeExternalBranchChange,
+    reportBranchProbeError,
+    setBranchSyncDegraded,
+  ]);
 
   useEffect(() => {
     if (!activeRepoPath || typeof window === "undefined" || typeof document === "undefined") {
