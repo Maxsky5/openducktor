@@ -1,7 +1,7 @@
 import { taskSessionBootstrapSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
-import { buildBranchName, deriveAgentWorkflows } from "../../../domain/task";
+import { buildBranchName } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import { resolveRuntimeDescriptorForTaskSession } from "../support/builder-worktree-cleanup";
 import {
@@ -12,6 +12,7 @@ import {
   requireBuildStartDependencies,
   requireDependencies,
 } from "../support/required-task-dependencies";
+import { validateTaskSessionWorkflowAvailable } from "../support/task-session-workflow-validation";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 import type { TaskSessionBootstrapReservation } from "./task-session-bootstrap-coordinator";
@@ -97,16 +98,7 @@ export const createTaskSessionBootstrapUseCase = ({
             if (role === "build") {
               yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
             } else {
-              const workflow = deriveAgentWorkflows(task)[role];
-              if (!workflow.available) {
-                return yield* Effect.fail(
-                  new HostValidationError({
-                    field: "role",
-                    message: `${role} workflow is not available for task ${taskId}.`,
-                    details: { repoPath: canonicalRepoPath, taskId, role, status: task.status },
-                  }),
-                );
-              }
+              yield* validateTaskSessionWorkflowAvailable(task, role, canonicalRepoPath);
             }
             yield* coordinator.attachBootstrapReservation({
               bootstrapId,
@@ -235,8 +227,8 @@ export const createTaskSessionBootstrapUseCase = ({
             }),
           );
         }
+        const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
         if (reservation.role === "build") {
-          const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
           if (task.status !== reservation.preparedStatus) {
             return yield* Effect.fail(
               new HostOperationError({
@@ -252,6 +244,8 @@ export const createTaskSessionBootstrapUseCase = ({
             taskId,
             status: "in_progress",
           });
+        } else {
+          yield* validateTaskSessionWorkflowAvailable(task, reservation.role, canonicalRepoPath);
         }
         yield* coordinator.finishBootstrap(canonicalRepoPath, taskId, bootstrapId, "completed");
         return true;
