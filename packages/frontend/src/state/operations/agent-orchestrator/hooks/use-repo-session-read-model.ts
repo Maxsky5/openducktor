@@ -3,7 +3,7 @@ import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
@@ -75,9 +75,26 @@ export const useRepoSessionReadModel = ({
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const [reloadGeneration, setReloadGeneration] = useState(0);
-  const latestReloadGenerationRef = useRef(reloadGeneration);
   const retryAttemptRef = useRef(0);
-  latestReloadGenerationRef.current = reloadGeneration;
+  const readReloadGeneration = useEffectEvent(() => reloadGeneration);
+  const observeLiveSessions = useEffectEvent(
+    (
+      input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
+      listener: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[1],
+    ) => liveSessionPort.observeAgentSessionLive(input, listener),
+  );
+  const replyLiveApproval = useEffectEvent(
+    (input: Parameters<AgentSessionLiveFrontendPort["agentSessionLiveReplyApproval"]>[0]) =>
+      liveSessionPort.agentSessionLiveReplyApproval(input),
+  );
+  const handleTranscriptEvent = useEffectEvent(
+    (event: Parameters<AgentSessionTranscriptEventConsumer["handle"]>[0]) =>
+      transcriptEvents.handle(event),
+  );
+  const closeTranscriptEvents = useEffectEvent(() => transcriptEvents.close());
+  const recoverTranscriptHistory = useEffectEvent((message: string) =>
+    recoverTranscriptGap(message),
+  );
   const reloadSessionReadModel = useCallback(() => {
     const retryAttempt = retryAttemptRef.current + 1;
     retryAttemptRef.current = retryAttempt;
@@ -207,7 +224,7 @@ export const useRepoSessionReadModel = ({
       return current.records;
     };
     const isStaleRepoOperation = (): boolean =>
-      cancelled || isRepoStale() || latestReloadGenerationRef.current !== effectReloadGeneration;
+      cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
         setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
@@ -222,7 +239,7 @@ export const useRepoSessionReadModel = ({
         runOrchestratorSideEffect(
           "agent-session-live-auto-reject-mutating-approval",
           promptOverrides.then((overrides) =>
-            liveSessionPort.agentSessionLiveReplyApproval({
+            replyLiveApproval({
               ...action.input,
               message: buildReadOnlyPermissionRejectionMessage({
                 role: action.role,
@@ -299,11 +316,11 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "transcript_event") {
-        transcriptEvents.handle(envelope.event);
+        handleTranscriptEvent(envelope.event);
         return;
       }
       if (envelope.type === "transcript_gap") {
-        void recoverTranscriptGap(envelope.message).catch((error: unknown) => {
+        void recoverTranscriptHistory(envelope.message).catch((error: unknown) => {
           failObservation(
             `Failed to recover transcript history after a live-stream gap: ${errorMessage(error)}`,
           );
@@ -346,13 +363,12 @@ export const useRepoSessionReadModel = ({
     observedRepoPathRef.current = repoPath;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
-    void liveSessionPort
-      .observeAgentSessionLive({ repoPath }, (envelope) => {
-        if (isStaleRepoOperation()) {
-          return;
-        }
-        applyEnvelope(envelope);
-      })
+    void observeLiveSessions({ repoPath }, (envelope) => {
+      if (isStaleRepoOperation()) {
+        return;
+      }
+      applyEnvelope(envelope);
+    })
       .then((stopObserving) => {
         if (isStaleRepoOperation()) {
           stopObserving();
@@ -372,18 +388,15 @@ export const useRepoSessionReadModel = ({
         observedRepoPathRef.current = null;
       }
       unsubscribe?.();
-      transcriptEvents.close();
+      closeTranscriptEvents();
     };
   }, [
     canObserveRepo,
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
-    liveSessionPort,
     queryClient,
-    recoverTranscriptGap,
     reloadGeneration,
     repoEpochRef,
-    transcriptEvents,
     workspaceRepoPath,
   ]);
 

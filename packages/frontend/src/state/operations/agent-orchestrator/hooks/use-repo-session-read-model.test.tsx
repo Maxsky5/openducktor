@@ -214,6 +214,82 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("uses refreshed stream callbacks without restarting repository observation", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const refreshedTranscriptEvents: AgentSessionTranscriptEventConsumer = {
+      handle: mock(() => undefined),
+      close: mock(() => undefined),
+    };
+    const refreshedRecoverTranscriptGap = mock(async (_message: string) => undefined);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update({
+        ...state.props,
+        liveSessionPort: { ...state.props.liveSessionPort },
+        transcriptEvents: refreshedTranscriptEvents,
+        recoverTranscriptGap: refreshedRecoverTranscriptGap,
+      });
+
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(state.transcriptEvents.close).not.toHaveBeenCalled();
+
+      await state.harness.run(async () => {
+        state.emit({
+          type: "transcript_event",
+          event: {
+            type: "assistant_message",
+            externalSessionId: record.externalSessionId,
+            messageId: "message-after-callback-refresh",
+            message: "Still streaming",
+            timestamp: "2026-07-17T14:00:00.000Z",
+            sessionRef: snapshot().ref,
+          },
+        });
+        state.emit({
+          type: "transcript_gap",
+          repoPath: "/repo",
+          message: "Refresh history with the latest callback.",
+        });
+      });
+
+      expect(state.transcriptEvents.handle).not.toHaveBeenCalled();
+      expect(refreshedTranscriptEvents.handle).toHaveBeenCalledTimes(1);
+      expect(state.recoverTranscriptGap).not.toHaveBeenCalled();
+      expect(refreshedRecoverTranscriptGap).toHaveBeenCalledWith(
+        "Refresh history with the latest callback.",
+      );
+    } finally {
+      await state.harness.unmount();
+    }
+
+    expect(state.transcriptEvents.close).not.toHaveBeenCalled();
+    expect(refreshedTranscriptEvents.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("unsubscribes exactly once when repository observation resolves after unmount", async () => {
+    const state = createState(() => undefined);
+    const deferredObservation = createDeferred<() => void>();
+    const unsubscribed = createDeferred<void>();
+    const unsubscribe = mock(() => unsubscribed.resolve(undefined));
+    const observeAgentSessionLive = mock(async () => deferredObservation.promise);
+    state.props.liveSessionPort.observeAgentSessionLive = observeAgentSessionLive;
+
+    await state.harness.mount();
+    await state.harness.waitFor(() => observeAgentSessionLive.mock.calls.length === 1);
+    await state.harness.unmount();
+
+    expect(unsubscribe).not.toHaveBeenCalled();
+    deferredObservation.resolve(unsubscribe);
+    await unsubscribed.promise;
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
   test("derives the waiting counter from the same initial snapshot collection commit", async () => {
     const records = [
       record,
