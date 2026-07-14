@@ -32,16 +32,13 @@ export function useWorkspaceOperations({
     repoPath: activeRepo,
     value: false,
   });
-  const setBranchSyncDegraded = useCallback((repoPath: string | null, value: boolean): void => {
-    setBranchSyncDegradedState((current) =>
-      current.repoPath === repoPath && current.value === value ? current : { repoPath, value },
-    );
-  }, []);
-  const clearBranchSyncDegraded = useCallback(
-    (repoPath: string | null): void => {
-      setBranchSyncDegraded(repoPath, false);
+  const updateBranchSyncDegradedForRepo = useCallback(
+    (repoPath: string | null, value: boolean): void => {
+      setBranchSyncDegradedState((current) =>
+        current.repoPath === repoPath && current.value === value ? current : { repoPath, value },
+      );
     },
-    [setBranchSyncDegraded],
+    [],
   );
 
   const {
@@ -56,7 +53,7 @@ export function useWorkspaceOperations({
   } = useWorkspaceBranchOperations({
     activeRepo,
     hostClient,
-    clearBranchSyncDegraded,
+    updateBranchSyncDegradedForRepo,
   });
 
   const {
@@ -87,7 +84,7 @@ export function useWorkspaceOperations({
     isSwitchingBranch,
     hostClient,
     branchProbeController,
-    setBranchSyncDegraded,
+    setBranchSyncDegraded: updateBranchSyncDegradedForRepo,
   });
 
   return {

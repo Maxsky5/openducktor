@@ -17,7 +17,7 @@ import type {
 type UseWorkspaceBranchOperationsArgs = {
   activeRepo: string | null;
   hostClient: WorkspaceBranchOperationsHostClient;
-  clearBranchSyncDegraded: (repoPath: string | null) => void;
+  updateBranchSyncDegradedForRepo: (repoPath: string | null, value: boolean) => void;
 };
 
 type UseWorkspaceBranchOperationsResult = {
@@ -34,7 +34,7 @@ type UseWorkspaceBranchOperationsResult = {
 export function useWorkspaceBranchOperations({
   activeRepo,
   hostClient,
-  clearBranchSyncDegraded,
+  updateBranchSyncDegradedForRepo,
 }: UseWorkspaceBranchOperationsArgs): UseWorkspaceBranchOperationsResult {
   const queryClient = useQueryClient();
   const [branchDataRepoPath, setBranchDataRepoPath] = useState<string | null>(activeRepo);
@@ -60,9 +60,9 @@ export function useWorkspaceBranchOperations({
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
       lastKnownRevisionRef.current = current.revision ?? null;
-      clearBranchSyncDegraded(repoPath);
+      updateBranchSyncDegradedForRepo(repoPath, false);
     },
-    [clearBranchSyncDegraded],
+    [updateBranchSyncDegradedForRepo],
   );
 
   const applyCurrentBranchSnapshot = useCallback(
@@ -72,9 +72,9 @@ export function useWorkspaceBranchOperations({
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
       lastKnownRevisionRef.current = current.revision ?? null;
-      clearBranchSyncDegraded(repoPath);
+      updateBranchSyncDegradedForRepo(repoPath, false);
     },
-    [clearBranchSyncDegraded],
+    [updateBranchSyncDegradedForRepo],
   );
 
   const clearBranchData = useCallback(
@@ -88,9 +88,9 @@ export function useWorkspaceBranchOperations({
       setActiveBranch(null);
       setIsLoadingBranches(false);
       setIsSwitchingBranch(false);
-      clearBranchSyncDegraded(repoPath);
+      updateBranchSyncDegradedForRepo(repoPath, false);
     },
-    [clearBranchSyncDegraded],
+    [updateBranchSyncDegradedForRepo],
   );
 
   const refreshBranchesForRepo = useCallback(
