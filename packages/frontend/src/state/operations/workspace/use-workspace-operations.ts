@@ -32,21 +32,17 @@ export function useWorkspaceOperations({
     repoPath: activeRepo,
     value: false,
   });
-  const setBranchSyncDegraded = useCallback((repoPath: string, value: boolean): void => {
+  const setBranchSyncDegraded = useCallback((repoPath: string | null, value: boolean): void => {
     setBranchSyncDegradedState((current) =>
       current.repoPath === repoPath && current.value === value ? current : { repoPath, value },
     );
   }, []);
-  const clearBranchSyncDegraded = useCallback((repoPath: string | null): void => {
-    setBranchSyncDegradedState((current) =>
-      current.repoPath === repoPath && !current.value
-        ? current
-        : {
-            repoPath,
-            value: false,
-          },
-    );
-  }, []);
+  const clearBranchSyncDegraded = useCallback(
+    (repoPath: string | null): void => {
+      setBranchSyncDegraded(repoPath, false);
+    },
+    [setBranchSyncDegraded],
+  );
 
   const {
     branches,

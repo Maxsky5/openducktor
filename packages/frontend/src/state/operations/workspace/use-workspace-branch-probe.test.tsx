@@ -163,81 +163,6 @@ describe("use-workspace-branch-probe", () => {
     }
   });
 
-  test("keeps the new repo probe gate active when a stale repo probe finishes", async () => {
-    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
-    const repoAProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
-    const repoBProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
-    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const gitGetCurrentBranch = mock(async () => {
-      const callIndex = gitGetCurrentBranch.mock.calls.length;
-
-      if (callIndex === 1) {
-        return repoAProbe.promise;
-      }
-
-      if (callIndex === 2) {
-        return repoBProbe.promise;
-      }
-
-      return {
-        name: "main",
-        detached: false,
-      };
-    });
-
-    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
-
-    const rendered = render(
-      <ProbeHarness
-        activeRepoPath="/repo-a"
-        isSwitchingWorkspace={false}
-        isLoadingBranches={false}
-        isSwitchingBranch={false}
-        setBranchSyncDegraded={setBranchSyncDegraded}
-      />,
-      { wrapper: IsolatedQueryWrapper },
-    );
-
-    try {
-      await triggerFocus();
-      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(1);
-
-      rendered.rerender(
-        <ProbeHarness
-          activeRepoPath="/repo-b"
-          isSwitchingWorkspace={false}
-          isLoadingBranches={false}
-          isSwitchingBranch={false}
-          setBranchSyncDegraded={setBranchSyncDegraded}
-        />,
-      );
-
-      await triggerFocus();
-      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
-
-      repoAProbe.resolve({
-        name: "main",
-        detached: false,
-      });
-      await flush();
-
-      await triggerFocus();
-      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
-
-      repoBProbe.resolve({
-        name: "main",
-        detached: false,
-      });
-      await flush();
-
-      await triggerFocus();
-      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(3);
-    } finally {
-      rendered.unmount();
-      restoreBrowserGlobals();
-    }
-  });
-
   test("uses the committed repository without letting a stale probe release its gate", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const repoAProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
@@ -266,6 +191,7 @@ describe("use-workspace-branch-probe", () => {
 
     try {
       await triggerFocus();
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(1);
       expect(gitGetCurrentBranch).toHaveBeenNthCalledWith(1, "/repo-a");
 
       rendered.rerender(
@@ -277,7 +203,9 @@ describe("use-workspace-branch-probe", () => {
           setBranchSyncDegraded={setBranchSyncDegraded}
         />,
       );
+
       await triggerFocus();
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
       expect(gitGetCurrentBranch).toHaveBeenNthCalledWith(2, "/repo-b");
 
       repoAProbe.resolve({
@@ -289,9 +217,16 @@ describe("use-workspace-branch-probe", () => {
       expect(setBranchSyncDegraded).not.toHaveBeenCalled();
       await triggerFocus();
       expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
+
+      repoBProbe.resolve({
+        name: "main",
+        detached: false,
+      });
+      await flush();
+
+      await triggerFocus();
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(3);
     } finally {
-      repoAProbe.resolve({ name: "main", detached: false });
-      repoBProbe.resolve({ name: "main", detached: false });
       rendered.unmount();
       restoreBrowserGlobals();
     }
