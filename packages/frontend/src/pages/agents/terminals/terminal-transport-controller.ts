@@ -165,13 +165,21 @@ export const createTerminalTransportController = (
         }),
       );
     },
-    async closeTerminal(terminalId: string, closeHostTerminal: () => Promise<void>): Promise<void> {
+    async closeTerminal<Result extends { closed: boolean }>(
+      terminalId: string,
+      closeHostTerminal: () => Promise<Result>,
+    ): Promise<Result> {
       closingTerminals.add(terminalId);
       try {
         await terminalOperationQueues.get(terminalId);
-        await closeHostTerminal();
+        const result = await closeHostTerminal();
+        if (!result.closed) {
+          closingTerminals.delete(terminalId);
+          return result;
+        }
         consumedSequences.delete(terminalId);
         if (!listeners.has(terminalId)) closingTerminals.delete(terminalId);
+        return result;
       } catch (cause) {
         closingTerminals.delete(terminalId);
         throw cause;

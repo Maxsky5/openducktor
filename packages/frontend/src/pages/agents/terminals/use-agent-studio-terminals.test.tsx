@@ -125,11 +125,76 @@ describe("useAgentStudioTerminals", () => {
         () => {
           expect(createCalls).toBe(1);
           expect(getLatest().isVisible).toBe(true);
-          expect(getLatest().activeTabId).toBe("tab:terminal-created");
+          expect(getLatest().tabs[0]?.terminalId).toBe("terminal-created");
+          expect(getLatest().activeTabId).toBe(getLatest().tabs[0]?.tabId ?? null);
         },
         { timeout: 2_000 },
       );
     } finally {
+      view.unmount();
+    }
+  });
+
+  test("keeps one stable tab while the authoritative list refreshes after creation", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    const created = {
+      ...summaryForTask("task-a"),
+      terminalId: "terminal-created",
+    };
+    let terminalListCalls = 0;
+    let releaseRefresh = (): void => undefined;
+    const refreshBlocked = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => {
+          terminalListCalls += 1;
+          if (terminalListCalls > 1) await refreshBlocked;
+          return {
+            hostInstanceId: "host-1",
+            terminals: terminalListCalls > 1 ? [created] : [],
+          };
+        },
+        terminalCreate: async () => ({
+          ref: { terminalId: created.terminalId },
+          summary: created,
+        }),
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().isLoading).toBe(false));
+      act(() => getLatest().onCreate());
+      await waitFor(() => expect(terminalListCalls).toBe(2));
+
+      expect(getLatest().tabs).toHaveLength(1);
+      expect(getLatest().tabs[0]).toMatchObject({
+        terminalId: "terminal-created",
+        label: "Shell 1",
+        requestState: "ready",
+      });
+      expect(typeof getLatest().tabs[0]?.tabId).toBe("string");
+      expect(getLatest().activeTabId).toBe(getLatest().tabs[0]?.tabId ?? null);
+    } finally {
+      releaseRefresh();
       view.unmount();
     }
   });
@@ -174,9 +239,13 @@ describe("useAgentStudioTerminals", () => {
 
       act(() => getLatest().onCreate());
 
-      await waitFor(() => expect(getLatest().activeTabId).toBe("tab:terminal-created-second"), {
-        timeout: 2_000,
-      });
+      await waitFor(
+        () => {
+          const activeTab = getLatest().tabs.find((tab) => tab.tabId === getLatest().activeTabId);
+          expect(activeTab?.terminalId).toBe("terminal-created-second");
+        },
+        { timeout: 2_000 },
+      );
     } finally {
       view.unmount();
     }

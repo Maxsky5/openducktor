@@ -296,6 +296,7 @@ describe("createTerminalTransportController", () => {
     await ackStarted;
     const closing = controller.closeTerminal(terminalId, async () => {
       operations.push("close");
+      return { closed: true };
     });
     await Promise.resolve();
     expect(operations).toEqual(["attach", "ack"]);
@@ -306,6 +307,30 @@ describe("createTerminalTransportController", () => {
     await Promise.resolve();
 
     expect(operations).toEqual(["attach", "ack", "close"]);
+  });
+
+  test("keeps the attachment active when close requires confirmation", async () => {
+    const operations: string[] = [];
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          operations.push(decodeTerminalProtocolFrame(frame).message.type);
+        },
+        close: () => {},
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    await controller.connect();
+    const unsubscribe = controller.subscribe(terminalId, () => {});
+    await Promise.resolve();
+
+    await expect(
+      controller.closeTerminal(terminalId, async () => ({ closed: false })),
+    ).resolves.toEqual({ closed: false });
+    unsubscribe();
+    await Promise.resolve();
+
+    expect(operations).toEqual(["attach", "detach"]);
   });
 
   test("routes binary output and rejects client-directed frames from the host", async () => {

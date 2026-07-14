@@ -61,6 +61,11 @@ describe("createBunPtyPort", () => {
     };
     const port = createBunPtyPort({
       platform: "win32",
+      processTreeInspector: (pid) =>
+        Effect.sync(() => {
+          calls.push(`inspect-tree:${pid}`);
+          return false;
+        }),
       processTreeTerminator: (input) =>
         Effect.sync(() => {
           if (input.isClosed()) return;
@@ -95,6 +100,8 @@ describe("createBunPtyPort", () => {
       ),
     );
     expect(handle.supportsOutputPause).toBe(false);
+    expect(await Effect.runPromise(handle.hasChildProcesses())).toBe(false);
+    expect(calls).toContain("inspect-tree:42");
     const options = captured.options;
     if (!options) throw new Error("Expected Bun spawn options to be captured.");
     options.terminal.data(terminal, new Uint8Array([1, 2]));

@@ -27,13 +27,14 @@ export type TerminalPtyHandlers = {
 
 export class TerminalPtyError extends Data.TaggedError("TerminalPtyError")<{
   readonly code: "unsupported_runtime" | "spawn_failed" | "operation_failed";
-  readonly operation: "start" | "write" | "resize" | "pause" | "resume" | "terminate";
+  readonly operation: "start" | "write" | "resize" | "pause" | "resume" | "inspect" | "terminate";
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
 export type TerminalPtyHandle = {
   readonly supportsOutputPause: boolean;
+  hasChildProcesses(): Effect.Effect<boolean, TerminalPtyError>;
   write(data: Uint8Array): Effect.Effect<void, TerminalPtyError>;
   resize(grid: TerminalGrid): Effect.Effect<void, TerminalPtyError>;
   pauseOutput(): Effect.Effect<void, TerminalPtyError>;

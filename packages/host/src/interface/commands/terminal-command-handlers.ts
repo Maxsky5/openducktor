@@ -22,5 +22,11 @@ export const createTerminalCommandHandlers = (
   terminal_close: (args) =>
     terminalService
       .close(terminalCloseRequestSchema.parse(requireRecord(args, "terminal_close input")))
-      .pipe(Effect.as({ closed: true as const })),
+      .pipe(
+        Effect.as({ closed: true as const }),
+        Effect.catchIf(
+          (failure) => failure.code === "confirmation_required",
+          () => Effect.succeed({ closed: false as const, confirmationRequired: true as const }),
+        ),
+      ),
 });

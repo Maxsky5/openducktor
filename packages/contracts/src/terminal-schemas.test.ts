@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   TERMINAL_ID_MAX_LENGTH,
   terminalCloseRequestSchema,
+  terminalCloseResponseSchema,
   terminalIdSchema,
   terminalLaunchSpecSchema,
   terminalListFilterSchema,
@@ -39,6 +40,13 @@ describe("terminal schemas", () => {
 
   test("requires explicit termination confirmation input", () => {
     expect(() => terminalCloseRequestSchema.parse({ terminalId: "terminal-1" })).toThrow();
+  });
+
+  test("distinguishes a completed close from a required confirmation", () => {
+    expect(terminalCloseResponseSchema.parse({ closed: true })).toEqual({ closed: true });
+    expect(
+      terminalCloseResponseSchema.parse({ closed: false, confirmationRequired: true }),
+    ).toEqual({ closed: false, confirmationRequired: true });
   });
 
   test("rejects malformed summary state", () => {

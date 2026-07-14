@@ -11,6 +11,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type {
   AgentStudioTerminalPanelModel,
   AgentStudioTerminalTab,
@@ -29,21 +31,13 @@ const lifecycleText = (tab: AgentStudioTerminalTab): string => {
   return "Running";
 };
 
-const connectionText = (
-  tab: AgentStudioTerminalTab,
-  model: AgentStudioTerminalPanelModel,
-  connectionByTerminal: Record<string, TerminalConnectionState>,
-): TerminalConnectionState => {
-  if (model.connectionState === "disconnected" || !tab.terminalId) return "disconnected";
-  return connectionByTerminal[tab.terminalId] ?? "attaching";
-};
+const ignoreConnectionState = (_state: TerminalConnectionState): void => undefined;
 
 function TerminalViewport({
   tab,
   model,
   active,
   onAttention,
-  onConnectionState,
   onLifecycle,
   onForgotten,
 }: {
@@ -51,19 +45,12 @@ function TerminalViewport({
   model: AgentStudioTerminalPanelModel;
   active: boolean;
   onAttention: (tabId: string, message: string | null) => void;
-  onConnectionState: (terminalId: string, state: TerminalConnectionState) => void;
   onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle, exitText: string | null) => void;
   onForgotten: (terminalId: string, message: string) => void;
 }): ReactElement {
   const handleAttention = useCallback(
     (message: string | null) => onAttention(tab.tabId, message),
     [onAttention, tab.tabId],
-  );
-  const handleConnectionState = useCallback(
-    (state: TerminalConnectionState) => {
-      if (tab.terminalId) onConnectionState(tab.terminalId, state);
-    },
-    [onConnectionState, tab.terminalId],
   );
   const handleLifecycle = useCallback(
     (lifecycle: TerminalLifecycle, exitText: string | null) => {
@@ -103,7 +90,7 @@ function TerminalViewport({
       active={active}
       focusRequest={model.focusRequest}
       onAttention={handleAttention}
-      onConnectionState={handleConnectionState}
+      onConnectionState={ignoreConnectionState}
       onLifecycle={handleLifecycle}
       onForgotten={handleForgotten}
     />
@@ -118,19 +105,10 @@ export function AgentStudioTerminalPanel({
   const [closeCandidate, setCloseCandidate] = useState<AgentStudioTerminalTab | null>(null);
   const [attentionByTab, setAttentionByTab] = useState<Record<string, string | null>>({});
   const [closeError, setCloseError] = useState<string | null>(null);
-  const [connectionByTerminal, setConnectionByTerminal] = useState<
-    Record<string, TerminalConnectionState>
-  >({});
   const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
   const setTabAttention = useCallback((tabId: string, message: string | null): void => {
     setAttentionByTab((current) => ({ ...current, [tabId]: message }));
   }, []);
-  const setTerminalConnection = useCallback(
-    (terminalId: string, state: TerminalConnectionState): void => {
-      setConnectionByTerminal((current) => ({ ...current, [terminalId]: state }));
-    },
-    [],
-  );
   const setTerminalLifecycle = useCallback(
     (terminalId: string, lifecycle: TerminalLifecycle, exitText: string | null): void => {
       model.onLifecycle(terminalId, lifecycle);
@@ -142,11 +120,8 @@ export function AgentStudioTerminalPanel({
   const closeTab = async (tab: AgentStudioTerminalTab): Promise<void> => {
     try {
       setCloseError(null);
-      if (tab.lifecycle === "exited" || tab.terminalId === null) {
-        await model.onClose(tab, false);
-        return;
-      }
-      setCloseCandidate(tab);
+      const result = await model.onClose(tab, false);
+      if (!result.closed) setCloseCandidate(tab);
     } catch (cause) {
       setCloseError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -154,7 +129,7 @@ export function AgentStudioTerminalPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card">
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-1.5">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-2">
         <Button
           type="button"
           size="xs"
@@ -173,32 +148,47 @@ export function AgentStudioTerminalPanel({
             >
               <TabsList
                 aria-label="Task terminal tabs"
-                className="h-8 w-full max-w-full justify-start gap-0.5 overflow-x-auto rounded-none bg-transparent p-0"
+                className="h-9 w-full max-w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0"
               >
-                {model.tabs.map((tab) => (
-                  <div key={tab.tabId} className="flex h-7 shrink-0 items-center">
-                    <TabsTrigger
-                      value={tab.tabId}
-                      aria-label={`${tab.label}, ${lifecycleText(tab)}`}
-                      className="h-7 max-w-40 flex-none rounded-md border-0 bg-transparent px-2 py-1 shadow-none data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                {model.tabs.map((tab) => {
+                  const active = tab.tabId === model.activeTabId;
+                  const detail = tab.summary
+                    ? `${lifecycleText(tab)}. Started in ${tab.summary.initialWorkingDir}`
+                    : lifecycleText(tab);
+                  return (
+                    <div
+                      key={tab.tabId}
+                      className={cn(
+                        "relative flex h-8 shrink-0 items-center rounded-md border transition-colors",
+                        active
+                          ? "border-border bg-card text-foreground"
+                          : "border-transparent text-muted-foreground hover:bg-muted",
+                      )}
                     >
-                      <span className="truncate">{tab.label}</span>
-                    </TabsTrigger>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Close ${tab.label}`}
-                      className="size-7 text-muted-foreground hover:text-foreground"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void closeTab(tab);
-                      }}
-                    >
-                      <X />
-                    </Button>
-                  </div>
-                ))}
+                      <TabsTrigger
+                        value={tab.tabId}
+                        aria-label={`${tab.label}, ${lifecycleText(tab)}`}
+                        title={detail}
+                        className="h-full max-w-48 flex-none rounded-md border-0 bg-transparent py-1 pl-2.5 pr-7 shadow-none data-[state=active]:border-0 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                      >
+                        <span className="truncate">{tab.label}</span>
+                      </TabsTrigger>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Close ${tab.label}`}
+                        className="absolute right-0.5 size-6 rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void closeTab(tab);
+                        }}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
               </TabsList>
             </Tabs>
           ) : (
@@ -211,51 +201,26 @@ export function AgentStudioTerminalPanel({
             Reconnect
           </Button>
         ) : null}
-        <Button
-          type="button"
-          size="xs"
-          variant="ghost"
-          aria-label="New terminal"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={model.onCreate}
-          disabled={model.isLoading || model.isCreating || model.tabs.length >= 8}
-        >
-          <Plus data-icon="inline-start" />
-          New
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                aria-label="New terminal"
+                className="size-7 shadow-none"
+                onClick={model.onCreate}
+                disabled={model.isLoading || model.isCreating || model.tabs.length >= 8}
+              >
+                <Plus className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">New terminal</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
       {activeTab ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-2 text-xs">
-            <span
-              role="status"
-              aria-label={`Terminal status: ${lifecycleText(activeTab)}, ${connectionText(activeTab, model, connectionByTerminal)}`}
-              className="shrink-0 font-medium text-foreground"
-            >
-              {lifecycleText(activeTab)}
-              <span className="px-1 text-muted-foreground" aria-hidden="true">
-                ·
-              </span>
-              <span className="capitalize">
-                {connectionText(activeTab, model, connectionByTerminal)}
-              </span>
-            </span>
-            <span className="text-muted-foreground" aria-hidden="true">
-              /
-            </span>
-            <span
-              className="min-w-0 flex-1 truncate text-muted-foreground"
-              title={activeTab.summary?.initialWorkingDir ?? undefined}
-            >
-              Started in: {activeTab.summary?.initialWorkingDir ?? "Not started"}
-            </span>
-            <span className="sr-only">
-              Task association: {activeTab.summary?.context.taskId ?? model.taskId ?? "None"}
-            </span>
-            {activeTab.summary && !activeTab.summary.initialWorkingDirAvailable ? (
-              <span className="shrink-0 text-warning-muted">Started-in directory unavailable</span>
-            ) : null}
-          </div>
           <Tabs
             value={activeTab.tabId}
             onValueChange={model.onSelectTab}
@@ -273,7 +238,6 @@ export function AgentStudioTerminalPanel({
                   model={model}
                   active={tab.tabId === activeTab.tabId}
                   onAttention={setTabAttention}
-                  onConnectionState={setTerminalConnection}
                   onLifecycle={setTerminalLifecycle}
                   onForgotten={model.onForgotten}
                 />

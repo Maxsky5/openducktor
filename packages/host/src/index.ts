@@ -62,8 +62,10 @@ export {
   type OpenDucktorLogSurface,
 } from "./infrastructure/logging/openducktor-daily-log-writer";
 export {
+  type ProcessTreeInspector,
   type ProcessTreeTerminator,
   processIsAlive,
+  processTreeHasChildren,
   processTreeIsAlive,
   terminateProcessTree,
   waitForObservedState,

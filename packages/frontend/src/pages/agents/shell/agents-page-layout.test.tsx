@@ -68,7 +68,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onSelectTab: () => undefined,
       onCreate: () => undefined,
       onRetryCreate: () => undefined,
-      onClose: async () => undefined,
+      onClose: async () => ({ closed: true }),
       onReconnect: () => undefined,
       onLifecycle: () => undefined,
       onForgotten: () => undefined,
@@ -101,8 +101,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     expect(hiddenTerminalPanel?.style.flexGrow).toBe("28");
     expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
     expect(separator.tabIndex).toBe(0);
-    expect(separator.querySelector("svg")).toBeNull();
-    expect(separator.className).toContain("aria-[orientation=horizontal]:h-1");
+    expect(separator.querySelector("svg")).not.toBeNull();
+    expect(separator.className).toContain("aria-[orientation=horizontal]:h-3");
     act(() => separator.focus());
     expect(document.activeElement).toBe(separator);
     for (const key of ["ArrowUp", "ArrowDown", "Home", "End", "Enter"]) {
@@ -147,7 +147,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onSelectTab: () => undefined,
       onCreate: () => undefined,
       onRetryCreate: () => undefined,
-      onClose: async () => undefined,
+      onClose: async () => ({ closed: true }),
       onReconnect: () => undefined,
       onLifecycle: () => undefined,
       onForgotten: () => undefined,

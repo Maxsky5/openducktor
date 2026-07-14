@@ -282,15 +282,28 @@ export const createTerminalSessionEngine = ({ now }: { now: () => Date }) => {
   const closeSession = (session: TerminalSession, confirmTerminate: boolean) =>
     Effect.gen(function* () {
       const terminalId = session.summary.terminalId;
-      if (isLiveTerminal(session) && !confirmTerminate) {
-        return yield* Effect.fail(
-          terminalFailure(
-            "confirmation_required",
-            "close",
-            `Terminal ${session.summary.label} is still running.`,
-            terminalId,
-          ),
-        );
+      if (isLiveTerminal(session) && !confirmTerminate && session.handle) {
+        const inspection = yield* Effect.either(session.handle.hasChildProcesses());
+        if (inspection._tag === "Left") {
+          return yield* Effect.fail(
+            terminalFailure(
+              "close_failed",
+              "close",
+              `Failed to determine whether ${session.summary.label} has running commands.`,
+              terminalId,
+              inspection.left,
+            ),
+          );
+        }
+        if (inspection.right)
+          return yield* Effect.fail(
+            terminalFailure(
+              "confirmation_required",
+              "close",
+              `${session.summary.label} has a running command.`,
+              terminalId,
+            ),
+          );
       }
       if (session.handle) {
         session.summary.lifecycle = "closing";

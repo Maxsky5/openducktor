@@ -1,7 +1,9 @@
 import { Buffer } from "node:buffer";
 import { createRequire } from "node:module";
 import {
+  type ProcessTreeInspector,
   type ProcessTreeTerminator,
+  processTreeHasChildren,
   processTreeIsAlive,
   TerminalPtyError,
   type TerminalPtyHandle,
@@ -16,6 +18,7 @@ type NodePtyModule = Pick<typeof NodePty, "spawn">;
 
 type CreateNodePtyPortInput = {
   nodePty?: NodePtyModule;
+  processTreeInspector?: ProcessTreeInspector;
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
@@ -41,6 +44,7 @@ const operation = (
 
 export const createNodePtyPort = ({
   nodePty = loadNodePty(),
+  processTreeInspector = processTreeHasChildren,
   processTreeTerminator = terminateProcessTree,
 }: CreateNodePtyPortInput = {}): TerminalPtyPort => ({
   start: (plan, handlers) =>
@@ -155,6 +159,18 @@ export const createNodePtyPort = ({
           });
         const handle: TerminalPtyHandle = {
           supportsOutputPause: true,
+          hasChildProcesses: () =>
+            processTreeInspector(pty.pid).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new TerminalPtyError({
+                    code: "operation_failed",
+                    operation: "inspect",
+                    message: "node-pty child-process inspection failed.",
+                    cause,
+                  }),
+              ),
+            ),
           write: (data) => requireOpen("write", () => pty.write(Buffer.from(data))),
           resize: ({ columns, rows }) => requireOpen("resize", () => pty.resize(columns, rows)),
           pauseOutput: () => requireOpen("pause", () => pty.pause()),

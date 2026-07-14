@@ -10,6 +10,11 @@ describe("createNodePtyPort", () => {
     let exitListener: (event: { exitCode: number; signal?: number }) => void = () => undefined;
     const disposable = () => ({ dispose: () => calls.push("dispose") });
     const port = createNodePtyPort({
+      processTreeInspector: (pid) =>
+        Effect.sync(() => {
+          calls.push(`inspect-tree:${pid}`);
+          return true;
+        }),
       processTreeTerminator: (input) =>
         Effect.sync(() => {
           calls.push(`terminate-tree:${input.pid}`);
@@ -61,6 +66,7 @@ describe("createNodePtyPort", () => {
     await Effect.runPromise(handle.resize({ columns: 120, rows: 40 }));
     await Effect.runPromise(handle.pauseOutput());
     await Effect.runPromise(handle.resumeOutput());
+    expect(await Effect.runPromise(handle.hasChildProcesses())).toBe(true);
     await Effect.runPromise(handle.terminate());
     expect(output).toEqual([[1, 2]]);
     expect(exits).toEqual([{ exitCode: 0, signal: "15" }]);
@@ -68,6 +74,7 @@ describe("createNodePtyPort", () => {
     expect(calls).toContain("resize:120x40");
     expect(calls).toContain("pause");
     expect(calls).toContain("resume");
+    expect(calls).toContain("inspect-tree:42");
     assertTerminalPtyConformance({
       output,
       eventOrder,

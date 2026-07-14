@@ -151,5 +151,8 @@ export const terminalCloseRequestSchema = z
   .strict();
 export type TerminalCloseRequest = z.infer<typeof terminalCloseRequestSchema>;
 
-export const terminalCloseResponseSchema = z.object({ closed: z.literal(true) }).strict();
+export const terminalCloseResponseSchema = z.discriminatedUnion("closed", [
+  z.object({ closed: z.literal(true) }).strict(),
+  z.object({ closed: z.literal(false), confirmationRequired: z.literal(true) }).strict(),
+]);
 export type TerminalCloseResponse = z.infer<typeof terminalCloseResponseSchema>;

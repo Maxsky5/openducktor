@@ -241,7 +241,7 @@ export function AgentsPageWorkspace({
           <ResizableHandle
             id={TERMINAL_SEPARATOR_ID}
             aria-label="Resize terminal panel"
-            className="aria-[orientation=horizontal]:h-1 hover:bg-selected-accent"
+            withHandle
           />
         ) : null}
         <ResizablePanel

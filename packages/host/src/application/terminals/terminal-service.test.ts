@@ -24,7 +24,7 @@ const filesystem: FilesystemPort = {
   parent: (path) => (path === "/" ? null : posix.dirname(path)),
 };
 
-const makePty = (supportsOutputPause = true) => {
+const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
   const operations: string[] = [];
   let handlers: TerminalPtyHandlers | null = null;
   let terminateFails = false;
@@ -34,6 +34,11 @@ const makePty = (supportsOutputPause = true) => {
       handlers = nextHandlers;
       return Effect.succeed({
         supportsOutputPause,
+        hasChildProcesses: () =>
+          Effect.sync(() => {
+            operations.push("inspect-children");
+            return hasChildProcesses;
+          }),
         write: (data) =>
           Effect.sync(() => operations.push(`write:${new TextDecoder().decode(data)}`)),
         resize: (grid) => Effect.sync(() => operations.push(`resize:${grid.columns}x${grid.rows}`)),
@@ -300,6 +305,16 @@ describe("TerminalService", () => {
     ).rejects.toThrow();
     const listed = await Effect.runPromise(service.list({ kind: "all" }));
     expect(listed.terminals[0]?.lifecycle).toBe("close_failed");
+  });
+
+  test("closes an idle shell without confirmation", async () => {
+    const { service, pty } = await makeService(makePty(true, false));
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: false }));
+
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
+    expect(pty.operations).toEqual(["inspect-children", "terminate"]);
   });
 
   test("removes a close-failed session after its PTY cleanup retry succeeds", async () => {

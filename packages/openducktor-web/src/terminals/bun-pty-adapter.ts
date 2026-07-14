@@ -1,5 +1,7 @@
 import {
+  type ProcessTreeInspector,
   type ProcessTreeTerminator,
+  processTreeHasChildren,
   processTreeIsAlive,
   TerminalPtyError,
   type TerminalPtyHandle,
@@ -45,6 +47,7 @@ export type BunPtySpawn = (command: string[], options: BunPtySpawnOptions) => Bu
 type CreateBunPtyPortInput = {
   spawn?: BunPtySpawn;
   platform?: NodeJS.Platform;
+  processTreeInspector?: ProcessTreeInspector;
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
@@ -58,6 +61,7 @@ const unsupported = (): TerminalPtyError =>
 export const createBunPtyPort = ({
   spawn = Bun.spawn as BunPtySpawn,
   platform = process.platform,
+  processTreeInspector = processTreeHasChildren,
   processTreeTerminator = terminateProcessTree,
 }: CreateBunPtyPortInput = {}): TerminalPtyPort => ({
   start: (plan, handlers) =>
@@ -243,6 +247,18 @@ export const createBunPtyPort = ({
           });
         const handle: TerminalPtyHandle = {
           supportsOutputPause: false,
+          hasChildProcesses: () =>
+            processTreeInspector(subprocess?.pid ?? 0).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new TerminalPtyError({
+                    code: "operation_failed",
+                    operation: "inspect",
+                    message: "Bun terminal child-process inspection failed.",
+                    cause,
+                  }),
+              ),
+            ),
           write: (data) =>
             ensureOpen("write", () => {
               const written = terminal.write(data);

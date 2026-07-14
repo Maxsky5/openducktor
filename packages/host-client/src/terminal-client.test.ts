@@ -47,7 +47,18 @@ describe("HostTerminalClient", () => {
     });
     await expect(
       client.terminalClose({ terminalId: "terminal-1", confirmTerminate: true }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ closed: true });
+  });
+
+  test("preserves a typed close-confirmation outcome", async () => {
+    const client = new HostTerminalClient(async () => ({
+      closed: false,
+      confirmationRequired: true,
+    }));
+
+    await expect(
+      client.terminalClose({ terminalId: "terminal-1", confirmTerminate: false }),
+    ).resolves.toEqual({ closed: false, confirmationRequired: true });
   });
 
   test("rejects malformed host responses", async () => {

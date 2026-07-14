@@ -1,5 +1,6 @@
 import {
   type TerminalCloseRequest,
+  type TerminalCloseResponse,
   type TerminalCreateRequest,
   type TerminalCreateResponse,
   type TerminalListRequest,
@@ -26,8 +27,8 @@ export class HostTerminalClient {
     return terminalListResponseSchema.parse(await this.invokeFn("terminal_list", request));
   }
 
-  async terminalClose(input: TerminalCloseRequest): Promise<void> {
+  async terminalClose(input: TerminalCloseRequest): Promise<TerminalCloseResponse> {
     const request = terminalCloseRequestSchema.parse(input);
-    terminalCloseResponseSchema.parse(await this.invokeFn("terminal_close", request));
+    return terminalCloseResponseSchema.parse(await this.invokeFn("terminal_close", request));
   }
 }

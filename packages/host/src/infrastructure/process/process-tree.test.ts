@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import {
   type KillProcess,
+  processTreeHasChildren,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
 } from "./process-tree";
@@ -17,6 +18,60 @@ const noopSpawnSync = () => ({
 const processIsAlive = () => true;
 
 describe("process-tree", () => {
+  test("detects a Unix child process from the parent-process table", async () => {
+    const hasChildren = await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "darwin",
+        spawnSync: () => ({
+          ...noopSpawnSync(),
+          stdout: Buffer.from("   1\n1234\n  77\n"),
+        }),
+      }),
+    );
+
+    expect(hasChildren).toBe(true);
+  });
+
+  test("reports an idle Unix process when no child uses its pid", async () => {
+    const hasChildren = await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "linux",
+        spawnSync: () => ({
+          ...noopSpawnSync(),
+          stdout: Buffer.from("   1\n  42\n  77\n"),
+        }),
+      }),
+    );
+
+    expect(hasChildren).toBe(false);
+  });
+
+  test("uses one direct Windows process query", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const hasChildren = await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "win32",
+        spawnSync: (command, args) => {
+          calls.push({ command, args });
+          return { ...noopSpawnSync(), stdout: Buffer.from("4321\r\n") };
+        },
+      }),
+    );
+
+    expect(hasChildren).toBe(true);
+    expect(calls).toEqual([
+      {
+        command: "powershell.exe",
+        args: [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "(Get-CimInstance Win32_Process -Filter 'ParentProcessId = 1234' | Select-Object -First 1 -ExpandProperty ProcessId)",
+        ],
+      },
+    ]);
+  });
+
   test("selects taskkill for Windows process trees without negative pids", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
 

@@ -15,6 +15,13 @@ type SpawnSyncCommand = (
   options: SpawnSyncOptions,
 ) => SpawnSyncReturns<Buffer>;
 
+export type InspectProcessTreeDependencies = {
+  platform: ProcessTreePlatform;
+  spawnSync: SpawnSyncCommand;
+};
+
+export type ProcessTreeInspector = (pid: number) => Effect.Effect<boolean, HostOperationError>;
+
 type SignalProcessTreeDependencies = {
   platform: ProcessTreePlatform;
   kill: KillProcess;
@@ -92,6 +99,58 @@ export const processTreeIsAlive = (
   platform: ProcessTreePlatform = process.platform,
   kill: KillProcess = process.kill,
 ): boolean => processIsAlive(platform === "win32" ? pid : -pid, kill);
+
+const inspectProcessTree = (
+  pid: number,
+  { platform, spawnSync: spawnSyncCommand }: InspectProcessTreeDependencies,
+): boolean => {
+  assertValidPid(pid, "process tree");
+  const result =
+    platform === "win32"
+      ? spawnSyncCommand(
+          "powershell.exe",
+          [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${pid}' | Select-Object -First 1 -ExpandProperty ProcessId)`,
+          ],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        )
+      : spawnSyncCommand("ps", ["-Ao", "ppid="], {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+  if (result.error || result.status !== 0) {
+    throw new HostOperationError({
+      message: `Failed to inspect child processes for process ${pid}.`,
+      operation: "process-tree.inspect",
+      details: {
+        pid,
+        platform,
+        status: result.status,
+        stderr: result.stderr.toString("utf8").trim(),
+      },
+      ...(result.error ? { cause: result.error } : {}),
+    });
+  }
+  if (platform === "win32") return result.stdout.toString("utf8").trim().length > 0;
+  return result.stdout
+    .toString("utf8")
+    .split(/\s+/)
+    .some((parentPid) => Number(parentPid) === pid);
+};
+
+export const processTreeHasChildren = (
+  pid: number,
+  dependencies: InspectProcessTreeDependencies = {
+    platform: process.platform,
+    spawnSync,
+  },
+): Effect.Effect<boolean, HostOperationError> =>
+  Effect.try({
+    try: () => inspectProcessTree(pid, dependencies),
+    catch: (cause) => toHostOperationError(cause, "process-tree.inspect", { pid }),
+  });
 
 const isAlreadyExitedError = (error: unknown): boolean =>
   error instanceof Error && "code" in error && error.code === "ESRCH";

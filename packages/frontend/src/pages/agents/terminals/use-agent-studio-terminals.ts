@@ -1,4 +1,8 @@
-import type { TerminalLifecycle, TerminalSummary } from "@openducktor/contracts";
+import type {
+  TerminalCloseResponse,
+  TerminalLifecycle,
+  TerminalSummary,
+} from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -53,7 +57,10 @@ export type AgentStudioTerminalPanelModel = {
   onSelectTab: (tabId: string) => void;
   onCreate: () => void;
   onRetryCreate: (tabId: string) => void;
-  onClose: (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => Promise<void>;
+  onClose: (
+    tab: AgentStudioTerminalTab,
+    confirmTerminate: boolean,
+  ) => Promise<TerminalCloseResponse>;
   onReconnect: () => void;
   onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) => void;
   onForgotten: (terminalId: string, message: string) => void;
@@ -120,7 +127,7 @@ const toHostTab = (
   const lifecycleFromEvent =
     previous?.lifecycleFromEvent === true && previous.lifecycle !== summary.lifecycle;
   return {
-    tabId: `tab:${summary.terminalId}`,
+    tabId: previous?.tabId ?? `tab:${summary.terminalId}`,
     terminalId: summary.terminalId,
     summary,
     lifecycle: lifecycleFromEvent ? previous.lifecycle : summary.lifecycle,
@@ -141,6 +148,13 @@ const resolveActiveTabId = (
   return tabs[0]?.tabId ?? null;
 };
 
+const nextShellLabel = (tabs: AgentStudioTerminalTab[]): string => {
+  const usedLabels = new Set(tabs.map((tab) => tab.label));
+  let index = 1;
+  while (usedLabels.has(`Shell ${index}`)) index += 1;
+  return `Shell ${index}`;
+};
+
 const beginTerminalCreation = (
   tabs: AgentStudioTerminalTab[],
   tabId: string,
@@ -159,7 +173,7 @@ const beginTerminalCreation = (
       summary: null,
       lifecycle: null,
       lifecycleFromEvent: false,
-      label: "New shell",
+      label: nextShellLabel(tabs),
       error: null,
       requestState: "creating",
     },
@@ -381,8 +395,10 @@ export const useAgentStudioTerminals = (
         });
         setScopeState((current) => ({
           ...current,
-          tabs: current.tabs.filter((tab) => tab.tabId !== tabId),
-          activeTabId: `tab:${created.ref.terminalId}`,
+          tabs: current.tabs.map((tab) =>
+            tab.tabId === tabId ? toHostTab(created.summary, tab) : tab,
+          ),
+          activeTabId: tabId,
         }));
         await queryClient.invalidateQueries({
           queryKey: terminalQueryKeys.task({ repoPath, taskId }),
@@ -470,19 +486,20 @@ export const useAgentStudioTerminals = (
             ...current,
             tabs: current.tabs.filter((candidate) => candidate.tabId !== tab.tabId),
           }));
-          return;
+          return { closed: true };
         }
         const terminalId = tab.terminalId;
         const controller = controllerRef.current;
         if (!controller || controller.scopeKey !== scopeKey) {
           throw new Error("Terminal transport is unavailable for this task.");
         }
-        await controller.value.closeTerminal(terminalId, () =>
+        const closeResult = await controller.value.closeTerminal(terminalId, () =>
           dependencies.hostClient.terminalClose({
             terminalId,
             confirmTerminate,
           }),
         );
+        if (!closeResult.closed) return closeResult;
         setScopeState((current) => {
           const tabs = current.tabs.filter((candidate) => candidate.tabId !== tab.tabId);
           return {
@@ -496,6 +513,7 @@ export const useAgentStudioTerminals = (
           await queryClient.invalidateQueries({
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),
           });
+        return closeResult;
       },
       onReconnect: () => {
         setTransportState((current) => ({ ...current, error: null }));
