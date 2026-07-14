@@ -33,6 +33,7 @@ const createThread = (status: "active" | "idle" = "active"): CodexThreadSnapshot
   title: "Codex thread",
   cwd: "/repo",
   startedAt: "2026-05-07T00:00:00.000Z",
+  updatedAtMs: Date.parse("2026-05-07T00:01:00.000Z"),
   status: codexThreadStatusSnapshot(status),
   parentThreadId: null,
   agentNickname: null,

@@ -13,6 +13,7 @@ const createChildThread = (): CodexThreadSnapshot => ({
   id: "child-thread",
   cwd: "/repo",
   startedAt: "2026-06-26T08:00:00.000Z",
+  updatedAtMs: Date.parse("2026-06-26T08:01:00.000Z"),
   title: "Child thread",
   status: codexThreadStatusSnapshot("active"),
   parentThreadId: "parent-thread",

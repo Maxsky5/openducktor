@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createDeferred } from "./codex-app-server-adapter.test-harness";
-import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
+import { codexThreadList, codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerClient } from "./types";
 
@@ -16,6 +16,7 @@ const threadListResponse = (
       id,
       cwd,
       createdAt: 1,
+      updatedAt: 2,
       preview,
       status,
       ...extra,
@@ -35,6 +36,7 @@ const threadReadResponse = (
     id,
     cwd,
     createdAt: 1,
+    updatedAt: 2,
     preview: "Stored thread",
     status,
     turns,
@@ -43,6 +45,10 @@ const threadReadResponse = (
 });
 
 describe("CodexThreadInventoryReader", () => {
+  test("preserves the Codex thread update timestamp as a lifecycle watermark", () => {
+    expect(codexThreadList(threadListResponse("thread-1", "Thread"))[0]?.updatedAtMs).toBe(2_000);
+  });
+
   test("requests interactive and subagent thread sources from Codex", async () => {
     const threadListCalls: Array<Record<string, unknown>> = [];
     const reader = new CodexThreadInventoryReader();

@@ -94,6 +94,38 @@ describe("CodexSubagentLifecycleProjector", () => {
     expect(emittedStatuses(events)).toEqual(["completed"]);
   });
 
+  test("does not replay a buffered start older than completed inventory", () => {
+    const { events, projector, subagents } = createHarness();
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification("turn/started", "inProgress", undefined, 1_783_683_602),
+    );
+    subagents.recordThread(
+      {
+        id: "child-thread",
+        cwd: "/repo",
+        startedAt: "2026-07-10T12:00:00.000Z",
+        updatedAtMs: 1_783_683_604_000,
+        title: "Child thread",
+        status: { classification: "idle" },
+        parentThreadId: "parent-thread",
+        agentNickname: null,
+        agentRole: null,
+        subAgentSource: null,
+      },
+      "runtime-1",
+    );
+    const route = subagents.routeForChild("child-thread", "runtime-1");
+    if (!route) {
+      throw new Error("Expected inventory child route");
+    }
+
+    projector.projectBufferedRoute(route);
+
+    expect(events).toEqual([]);
+    expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("completed");
+  });
+
   test("projects only the latest lifecycle update buffered before the link", () => {
     const { events, projector, subagents } = createHarness();
     projector.projectNotification(

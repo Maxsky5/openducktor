@@ -51,6 +51,7 @@ describe("CodexSubagentLinkState", () => {
         id: "child-thread",
         cwd: "/repo",
         startedAt: "1970-01-01T00:00:00.200Z",
+        updatedAtMs: 250,
         title: "Child thread",
         parentThreadId: "parent-thread",
         status: { classification: "idle" },
@@ -82,6 +83,70 @@ describe("CodexSubagentLinkState", () => {
 
     expect(staleRestart).toMatchObject({ status: "completed", startedAtMs: 200 });
     expect(restarted).toMatchObject({ status: "running", startedAtMs: 300 });
+  });
+
+  test("keeps an inventory-completed child terminal for delayed restart evidence", () => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.recordThread(
+      {
+        id: "child-thread",
+        cwd: "/repo",
+        startedAt: "1970-01-01T00:00:00.100Z",
+        updatedAtMs: 200,
+        title: "Child thread",
+        parentThreadId: "parent-thread",
+        status: { classification: "idle" },
+        agentNickname: null,
+        agentRole: null,
+        subAgentSource: null,
+      },
+      "runtime-1",
+    );
+
+    const delayedRestart = subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "delayed-restart",
+      status: "running",
+      allowStatusRestart: true,
+      startedAtMs: 150,
+    });
+
+    expect(delayedRestart).toMatchObject({ status: "completed", endedAtMs: 200 });
+  });
+
+  test("lets newer active inventory reopen an inventory-completed child", () => {
+    const subagents = new CodexSubagentLinkState();
+    const thread = {
+      id: "child-thread",
+      cwd: "/repo",
+      startedAt: "1970-01-01T00:00:00.100Z",
+      title: "Child thread",
+      parentThreadId: "parent-thread",
+      agentNickname: null,
+      agentRole: null,
+      subAgentSource: null,
+    };
+    subagents.recordThread(
+      {
+        ...thread,
+        updatedAtMs: 200,
+        status: { classification: "idle" },
+      },
+      "runtime-1",
+    );
+
+    subagents.recordThread(
+      {
+        ...thread,
+        updatedAtMs: 300,
+        status: { classification: "running" },
+      },
+      "runtime-1",
+    );
+
+    expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
   });
 
   test("does not restart untimed failed or cancelled children", () => {

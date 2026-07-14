@@ -107,14 +107,8 @@ const isExplicitRunningRestart = (
   ) {
     return false;
   }
-  const startsAfterKnownStart =
-    typeof existing.startedAtMs !== "number" || input.startedAtMs > existing.startedAtMs;
-  return (
-    (existing.status === "completed" &&
-      typeof existing.endedAtMs !== "number" &&
-      startsAfterKnownStart) ||
-    (typeof existing.endedAtMs === "number" && input.startedAtMs > existing.endedAtMs)
-  );
+  const lifecycleBoundaryMs = existing.endedAtMs ?? existing.startedAtMs;
+  return typeof lifecycleBoundaryMs === "number" && input.startedAtMs > lifecycleBoundaryMs;
 };
 
 const resolveStatus = (
@@ -207,19 +201,25 @@ export class CodexSubagentLinkState {
     }
     const agent = preferredAgentLabel(thread);
     const existing = this.linkForChild(thread.id, runtimeId);
+    const isActive = thread.status.classification !== "idle";
+    let status: AgentSubagentStatus;
+    if (isActive) {
+      status = "running";
+    } else {
+      status = existing?.status === "cancelled" ? "cancelled" : "completed";
+    }
+    let timing: Pick<CodexSubagentLinkInput, "startedAtMs" | "endedAtMs"> = {};
+    if (typeof thread.updatedAtMs === "number") {
+      timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
+    }
     this.upsertLink({
       ...(runtimeId ? { runtimeId } : {}),
       parentThreadId,
       childThreadId: thread.id,
       itemId: thread.id,
-      status:
-        thread.status.classification === "running"
-          ? "running"
-          : thread.status.classification === "idle"
-            ? existing?.status === "cancelled"
-              ? "cancelled"
-              : "completed"
-            : "running",
+      status,
+      allowStatusRestart: isActive,
+      ...timing,
       ...(agent ? { agent } : {}),
       metadata: {
         codexThread: {
