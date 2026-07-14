@@ -35,7 +35,14 @@ export const listAgentSessionsForTasks = (
 ): Effect.Effect<TaskAgentSessions[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
-      (database) => database.select().from(tasks).where(inArray(tasks.id, input.taskIds)),
+      (database) =>
+        database
+          .select({
+            id: tasks.id,
+            agentSessionsJson: tasks.agentSessionsJson,
+          })
+          .from(tasks)
+          .where(inArray(tasks.id, input.taskIds)),
       "sqliteTaskRepository.listAgentSessionsForTasks.selectTasks",
       { taskIds: input.taskIds },
     );

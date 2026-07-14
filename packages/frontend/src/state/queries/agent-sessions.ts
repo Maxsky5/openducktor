@@ -6,7 +6,14 @@ import { host } from "../operations/host";
 const AGENT_SESSION_LIST_STALE_TIME_MS = 30_000;
 
 const normalizeTaskIds = (taskIds: string[]): string[] =>
-  Array.from(new Set(taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort();
+  Array.from(
+    new Set(
+      taskIds.flatMap((taskId) => {
+        const normalizedTaskId = taskId.trim();
+        return normalizedTaskId ? [normalizedTaskId] : [];
+      }),
+    ),
+  ).sort();
 
 export const agentSessionQueryKeys = {
   all: ["agent-sessions"] as const,
@@ -26,9 +33,10 @@ export const agentSessionListQueryOptions = (repoPath: string, taskId: string) =
   });
 
 export const agentSessionListsQueryOptions = (repoPath: string, taskIds: string[]) => {
-  const normalizedTaskIds = normalizeTaskIds(taskIds);
+  const queryKey = agentSessionQueryKeys.listForTasks(repoPath, taskIds);
+  const normalizedTaskIds = queryKey[3];
   return queryOptions({
-    queryKey: agentSessionQueryKeys.listForTasks(repoPath, normalizedTaskIds),
+    queryKey,
     queryFn: async (): Promise<Record<string, AgentSessionRecord[]>> => {
       const sessionsByTaskId = Object.fromEntries(
         normalizedTaskIds.map((taskId) => [taskId, [] as AgentSessionRecord[]]),
