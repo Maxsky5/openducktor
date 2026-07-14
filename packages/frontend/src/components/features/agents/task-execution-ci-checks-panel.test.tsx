@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import * as externalUrl from "@/lib/open-external-url";
 import { createQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
@@ -301,11 +302,10 @@ describe("TaskExecutionCiChecksPanel", () => {
 
   test("opens the pull request heading through the external URL shell bridge", () => {
     const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
-    const queryClient = createQueryClient();
 
     try {
       const view = render(
-        <QueryClientProvider client={queryClient}>
+        <QueryProvider useIsolatedClient>
           <ThemeProvider defaultTheme="light">
             <TooltipProvider>
               <TaskExecutionCiLoaded
@@ -315,7 +315,7 @@ describe("TaskExecutionCiChecksPanel", () => {
               />
             </TooltipProvider>
           </ThemeProvider>
-        </QueryClientProvider>,
+        </QueryProvider>,
       );
       const link = view.getByRole("link", { name: loadedContext.pullRequest.title });
 
