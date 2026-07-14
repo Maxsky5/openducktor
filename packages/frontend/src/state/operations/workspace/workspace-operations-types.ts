@@ -32,7 +32,7 @@ export type UseWorkspaceOperationsResult = {
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
-  clearBranchData: () => void;
+  clearBranchData: (repoPath?: string | null) => void;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
