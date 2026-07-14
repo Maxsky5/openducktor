@@ -691,6 +691,67 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(abortCalls).toBe(1);
   });
 
+  test("preserves a fresh Builder session when the repository changes after bootstrap commits", async () => {
+    const completionStarted = createDeferred<void>();
+    const completion = createDeferred<void>();
+    const repoEpochRef = { current: 1 };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
+    const deletedSessionIds: string[] = [];
+    let abortCalls = 0;
+    let stopCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-committed-builder",
+      role: "build",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {
+            completionStarted.resolve();
+            await completion.promise;
+          },
+          abort: async () => {
+            abortCalls += 1;
+          },
+        },
+      }),
+      deleteSessionRecord: async (_taskId, identity) => {
+        deletedSessionIds.push(identity.externalSessionId);
+      },
+    });
+
+    const startPromise = start({
+      taskId: "task-1",
+      role: "build",
+      startMode: "fresh",
+      selectedModel: BUILD_SELECTION,
+    });
+    await completionStarted.promise;
+    repoEpochRef.current += 1;
+    currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
+    completion.resolve();
+
+    await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
+    expect(stopCalls).toBe(0);
+    expect(deletedSessionIds).toEqual([]);
+    expect(abortCalls).toBe(0);
+  });
+
   test("removes the session observer when bootstrap completion fails", async () => {
     const observers = createSessionObservers();
     let unsubscribeCalls = 0;

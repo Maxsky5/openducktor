@@ -145,16 +145,22 @@ export const createStartAgentSession = ({
         return startResult.session;
       }
 
+      let freshBuilderBootstrapCommitted = false;
       try {
         await observeAgentSessionAndGuard({
           startResult,
           session,
         });
         await startResult.runtimeInfo.bootstrap?.complete();
+        freshBuilderBootstrapCommitted =
+          input.startMode === "fresh" && role === "build" && !!startResult.runtimeInfo.bootstrap;
         if (startResult.ctx.isStaleRepoOperation()) {
           throw new Error(STALE_START_ERROR);
         }
       } catch (cause) {
+        if (freshBuilderBootstrapCommitted) {
+          throw cause;
+        }
         const identity = {
           externalSessionId: startResult.ctx.summary.externalSessionId,
           runtimeKind: startResult.runtimeInfo.runtimeKind,
