@@ -4,7 +4,7 @@ import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   getComposerPopupOptionId,
-  shouldRenderAgentChatComposerReferenceMenu,
+  resolveAgentChatComposerReferenceMenuVisibility,
 } from "./agent-chat-composer-menu-state";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
 import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
@@ -36,16 +36,13 @@ export function AgentChatComposerReferenceMenu({
   onSelectFile,
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement | null {
-  const hasResults = items.length > 0;
-  const showSubagentsLoading = isSubagentsLoading && !hasResults;
-  const showFileSearchLoading = isFileSearchLoading && !hasResults;
-  const showEmptyState =
-    !hasResults &&
-    !isFileSearchPending &&
-    !isSubagentsLoading &&
-    !fileSearchError &&
-    !subagentsError;
-  const shouldRenderMenu = shouldRenderAgentChatComposerReferenceMenu({
+  const {
+    hasResults,
+    showSubagentsLoading,
+    showFileSearchLoading,
+    showEmptyState,
+    shouldRenderMenu,
+  } = resolveAgentChatComposerReferenceMenuVisibility({
     itemCount: items.length,
     fileSearchError,
     isFileSearchPending,

@@ -14,7 +14,7 @@ import {
 } from "./agent-chat-composer-draft";
 import {
   getComposerPopupOptionId,
-  shouldRenderAgentChatComposerReferenceMenu,
+  resolveAgentChatComposerReferenceMenuVisibility,
 } from "./agent-chat-composer-menu-state";
 import { AgentChatComposerReferenceMenu } from "./agent-chat-composer-reference-menu";
 import {
@@ -443,14 +443,14 @@ export function AgentChatComposerEditor({
   const draftSegments = draft.segments;
   const isReferenceMenuVisible =
     showReferenceMenu &&
-    shouldRenderAgentChatComposerReferenceMenu({
+    resolveAgentChatComposerReferenceMenuVisibility({
       itemCount: referenceMenuItems.length,
       fileSearchError,
       isFileSearchPending,
       isFileSearchLoading,
       subagentsError,
       isSubagentsLoading,
-    });
+    }).shouldRenderMenu;
   let activePopup: ActiveComposerPopup | null = null;
   if (isReferenceMenuVisible) {
     activePopup = buildActiveComposerPopup(

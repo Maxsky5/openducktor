@@ -461,10 +461,13 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "@");
 
-    await waitFor(() => {
-      expect(editor.getAttribute("aria-expanded")).toBe("false");
-      expect(screen.queryByRole("listbox", { name: "References" })).toBeNull();
-    });
+    await waitFor(
+      () => {
+        expect(editor.getAttribute("aria-expanded")).toBe("false");
+        expect(screen.queryByRole("listbox", { name: "References" })).toBeNull();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
 
     if (!resolveSearch) {
       throw new Error("Expected file search to be pending");
@@ -475,7 +478,13 @@ describe("AgentChatComposerEditor", () => {
       buildFileSearchResult({ id: "beta", path: "src/beta.ts", name: "beta.ts" }),
     ]);
 
-    const listbox = await screen.findByRole("listbox", { name: "References" });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("listbox", { name: "References" })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    const listbox = screen.getByRole("listbox", { name: "References" });
     const firstOption = screen.getByRole("option", { name: /alpha\.ts/i });
     const secondOption = screen.getByRole("option", { name: /beta\.ts/i });
     expect(editor.getAttribute("aria-expanded")).toBe("true");
@@ -485,22 +494,28 @@ describe("AgentChatComposerEditor", () => {
 
     fireEvent.keyDown(editor, { key: "ArrowDown" });
 
-    await waitFor(() => {
-      expect(editor.getAttribute("aria-activedescendant")).toBe(secondOption.id);
-      expect(secondOption.getAttribute("aria-selected")).toBe("true");
-    });
+    await waitFor(
+      () => {
+        expect(editor.getAttribute("aria-activedescendant")).toBe(secondOption.id);
+        expect(secondOption.getAttribute("aria-selected")).toBe("true");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     expect(document.activeElement).toBe(editor);
 
     fireEvent.keyDown(editor, { key: "Tab" });
 
-    await waitFor(() => {
-      expect(
-        rendered.container.querySelector("[data-file-reference-path='src/beta.ts']"),
-      ).toBeTruthy();
-      expect(editor.getAttribute("aria-expanded")).toBe("false");
-      expect(editor.getAttribute("aria-controls")).toBeNull();
-      expect(editor.getAttribute("aria-activedescendant")).toBeNull();
-    });
+    await waitFor(
+      () => {
+        expect(
+          rendered.container.querySelector("[data-file-reference-path='src/beta.ts']"),
+        ).toBeTruthy();
+        expect(editor.getAttribute("aria-expanded")).toBe("false");
+        expect(editor.getAttribute("aria-controls")).toBeNull();
+        expect(editor.getAttribute("aria-activedescendant")).toBeNull();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     expect(onSend).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editor);
   });
@@ -515,7 +530,13 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "/");
 
-    const initialListbox = await screen.findByRole("listbox", { name: "Slash commands" });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("listbox", { name: "Slash commands" })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    const initialListbox = screen.getByRole("listbox", { name: "Slash commands" });
     const initialOption = screen.getByRole("option", { name: /compact the current session/i });
     expect(editor.getAttribute("aria-controls")).toBe(initialListbox.id);
     expect(editor.getAttribute("aria-activedescendant")).toBe(initialOption.id);
@@ -523,23 +544,34 @@ describe("AgentChatComposerEditor", () => {
 
     fireEvent.keyDown(editor, { key: "Escape" });
 
-    await waitFor(() => {
-      expect(screen.queryByRole("listbox", { name: "Slash commands" })).toBeNull();
-      expect(editor.getAttribute("aria-expanded")).toBe("false");
-      expect(editor.getAttribute("aria-controls")).toBeNull();
-      expect(editor.getAttribute("aria-activedescendant")).toBeNull();
-    });
+    await waitFor(
+      () => {
+        expect(screen.queryByRole("listbox", { name: "Slash commands" })).toBeNull();
+        expect(editor.getAttribute("aria-expanded")).toBe("false");
+        expect(editor.getAttribute("aria-controls")).toBeNull();
+        expect(editor.getAttribute("aria-activedescendant")).toBeNull();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
 
     typeIntoEditor(rendered.container, "/c");
-    await screen.findByRole("listbox", { name: "Slash commands" });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("listbox", { name: "Slash commands" })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     fireEvent.keyDown(editor, { key: "Enter" });
 
-    await waitFor(() => {
-      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
-        "/compact",
-      );
-      expect(editor.getAttribute("aria-expanded")).toBe("false");
-    });
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "/compact",
+        );
+        expect(editor.getAttribute("aria-expanded")).toBe("false");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     expect(onSend).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editor);
   });
@@ -560,7 +592,13 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "$");
 
-    const listbox = await screen.findByRole("listbox", { name: "Skills" });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("listbox", { name: "Skills" })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    const listbox = screen.getByRole("listbox", { name: "Skills" });
     const firstOption = screen.getByRole("option", { name: /analyze/i });
     const secondOption = screen.getByRole("option", { name: /review/i });
     expect(editor.getAttribute("aria-controls")).toBe(listbox.id);
@@ -568,18 +606,26 @@ describe("AgentChatComposerEditor", () => {
 
     fireEvent.keyDown(editor, { key: "ArrowDown" });
 
-    await waitFor(() => {
-      expect(editor.getAttribute("aria-activedescendant")).toBe(secondOption.id);
-      expect(secondOption.getAttribute("aria-selected")).toBe("true");
-    });
+    await waitFor(
+      () => {
+        expect(editor.getAttribute("aria-activedescendant")).toBe(secondOption.id);
+        expect(secondOption.getAttribute("aria-selected")).toBe("true");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     fireEvent.keyDown(editor, { key: "Tab" });
 
-    await waitFor(() => {
-      expect(rendered.container.querySelector("[data-skill-reference-name='review']")).toBeTruthy();
-      expect(editor.getAttribute("aria-expanded")).toBe("false");
-      expect(editor.getAttribute("aria-controls")).toBeNull();
-      expect(editor.getAttribute("aria-activedescendant")).toBeNull();
-    });
+    await waitFor(
+      () => {
+        expect(
+          rendered.container.querySelector("[data-skill-reference-name='review']"),
+        ).toBeTruthy();
+        expect(editor.getAttribute("aria-expanded")).toBe("false");
+        expect(editor.getAttribute("aria-controls")).toBeNull();
+        expect(editor.getAttribute("aria-activedescendant")).toBeNull();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     expect(onSend).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editor);
   });
