@@ -97,7 +97,9 @@ describe("AgentChatComposerSlashMenu", () => {
       />,
     );
 
-    expect(screen.getByText("Runtime commands failed")).toBeTruthy();
+    const listbox = screen.getByRole("listbox", { name: "Slash commands" });
+    const errorFeedback = screen.getByText("Runtime commands failed");
+    expect(listbox.contains(errorFeedback)).toBe(false);
     expect(screen.getByRole("option", { name: /first command/i })).toBeTruthy();
     expect(screen.getByText("custom")).toBeTruthy();
   });

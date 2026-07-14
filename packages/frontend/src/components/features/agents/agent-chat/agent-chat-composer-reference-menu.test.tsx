@@ -83,8 +83,9 @@ describe("AgentChatComposerReferenceMenu", () => {
 
     const listbox = screen.getByRole("listbox", { name: "References" });
 
+    const loadingFeedback = screen.getByText("Searching files");
     expect(listbox.id).toBe(LISTBOX_ID);
-    expect(screen.getByText("Searching files")).toBeDefined();
+    expect(listbox.contains(loadingFeedback)).toBe(false);
   });
 
   test("does not render delayed file search loading when results are already visible", () => {
@@ -205,8 +206,10 @@ describe("AgentChatComposerReferenceMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("listbox", { name: "References" }).id).toBe(LISTBOX_ID);
-    expect(screen.getByText("File search unavailable.")).toBeDefined();
+    const listbox = screen.getByRole("listbox", { name: "References" });
+    const errorFeedback = screen.getByText("File search unavailable.");
+    expect(listbox.id).toBe(LISTBOX_ID);
+    expect(listbox.contains(errorFeedback)).toBe(false);
   });
 
   test("mounts a controlled listbox for the visible empty state", () => {
@@ -226,7 +229,9 @@ describe("AgentChatComposerReferenceMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("listbox", { name: "References" }).id).toBe(LISTBOX_ID);
-    expect(screen.getByText("No files found.")).toBeDefined();
+    const listbox = screen.getByRole("listbox", { name: "References" });
+    const emptyFeedback = screen.getByText("No files found.");
+    expect(listbox.id).toBe(LISTBOX_ID);
+    expect(listbox.contains(emptyFeedback)).toBe(false);
   });
 });

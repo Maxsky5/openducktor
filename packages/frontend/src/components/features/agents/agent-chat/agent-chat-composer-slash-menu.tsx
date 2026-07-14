@@ -2,6 +2,7 @@ import type { AgentSlashCommand } from "@openducktor/core";
 import { ChevronRight, LoaderCircle, Terminal } from "lucide-react";
 import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { getComposerPopupOptionId } from "./agent-chat-composer-menu-state";
 
 type AgentChatComposerSlashMenuProps = {
   listboxId: string;
@@ -35,12 +36,7 @@ export function AgentChatComposerSlashMenu({
   }, [activeIndex, commands]);
 
   return (
-    <div
-      id={listboxId}
-      role="listbox"
-      aria-label="Slash commands"
-      className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg"
-    >
+    <div className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg">
       {isSlashCommandsLoading ? (
         <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -55,54 +51,59 @@ export function AgentChatComposerSlashMenu({
       {commands.length === 0 && !isSlashCommandsLoading && !slashCommandsError ? (
         <div className="px-3 py-2 text-sm text-muted-foreground">No slash commands found.</div>
       ) : null}
-      {commands.length > 0 ? (
-        <div className="hide-scrollbar flex rounded-xl max-h-64 flex-col overflow-y-auto">
-          {commands.map((command, index) => {
-            const isActive = index === activeIndex;
-            return (
-              <button
-                key={command.id}
-                id={`${listboxId}-option-${index}`}
-                ref={(element) => {
-                  commandButtonRefs.current[command.id] = element;
-                }}
-                role="option"
-                aria-selected={isActive}
-                tabIndex={-1}
-                type="button"
-                className={cn(
-                  "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
-                  isActive ? "bg-selected-surface" : "hover:bg-muted/80",
-                )}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  onSelectCommand(command);
-                }}
-              >
-                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                  <Terminal className="size-3.5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <span className="truncate">/{command.trigger}</span>
-                    {command.source ? (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {command.source}
+      <div
+        id={listboxId}
+        role="listbox"
+        aria-label="Slash commands"
+        className="hide-scrollbar flex rounded-xl max-h-64 flex-col overflow-y-auto"
+      >
+        {commands.length > 0
+          ? commands.map((command, index) => {
+              const isActive = index === activeIndex;
+              return (
+                <button
+                  key={command.id}
+                  id={getComposerPopupOptionId(listboxId, index)}
+                  ref={(element) => {
+                    commandButtonRefs.current[command.id] = element;
+                  }}
+                  role="option"
+                  aria-selected={isActive}
+                  tabIndex={-1}
+                  type="button"
+                  className={cn(
+                    "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
+                    isActive ? "bg-selected-surface" : "hover:bg-muted/80",
+                  )}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    onSelectCommand(command);
+                  }}
+                >
+                  <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Terminal className="size-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <span className="truncate">/{command.trigger}</span>
+                      {command.source ? (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {command.source}
+                        </span>
+                      ) : null}
+                    </span>
+                    {command.description ? (
+                      <span className="line-clamp-2 text-xs text-muted-foreground">
+                        {command.description}
                       </span>
                     ) : null}
                   </span>
-                  {command.description ? (
-                    <span className="line-clamp-2 text-xs text-muted-foreground">
-                      {command.description}
-                    </span>
-                  ) : null}
-                </span>
-                <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+                  <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })
+          : null}
+      </div>
     </div>
   );
 }

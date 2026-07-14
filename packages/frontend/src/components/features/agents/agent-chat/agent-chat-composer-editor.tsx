@@ -12,7 +12,10 @@ import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
-import { shouldRenderAgentChatComposerReferenceMenu } from "./agent-chat-composer-menu-state";
+import {
+  getComposerPopupOptionId,
+  shouldRenderAgentChatComposerReferenceMenu,
+} from "./agent-chat-composer-menu-state";
 import { AgentChatComposerReferenceMenu } from "./agent-chat-composer-reference-menu";
 import {
   readEditableTextContent,
@@ -112,7 +115,7 @@ const buildActiveComposerPopup = (
 
   return {
     listboxId,
-    activeOptionId: `${listboxId}-option-${activeIndex}`,
+    activeOptionId: getComposerPopupOptionId(listboxId, activeIndex),
   };
 };
 

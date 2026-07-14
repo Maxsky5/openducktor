@@ -13,6 +13,10 @@ type ReferenceMenuVisibilityState = {
   isSubagentsLoading: boolean;
 };
 
+export const getComposerPopupOptionId = (listboxId: string, index: number): string => {
+  return `${listboxId}-option-${index}`;
+};
+
 export const shouldRenderAgentChatComposerReferenceMenu = ({
   itemCount,
   fileSearchError,

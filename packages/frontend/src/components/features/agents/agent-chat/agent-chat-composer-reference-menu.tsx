@@ -2,7 +2,10 @@ import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor
 import { Bot, ChevronRight, LoaderCircle } from "lucide-react";
 import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { shouldRenderAgentChatComposerReferenceMenu } from "./agent-chat-composer-menu-state";
+import {
+  getComposerPopupOptionId,
+  shouldRenderAgentChatComposerReferenceMenu,
+} from "./agent-chat-composer-menu-state";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
 import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
 
@@ -56,12 +59,7 @@ export function AgentChatComposerReferenceMenu({
   }
 
   return (
-    <div
-      id={listboxId}
-      role="listbox"
-      aria-label="References"
-      className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg"
-    >
+    <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
       {showSubagentsLoading ? (
         <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -89,33 +87,38 @@ export function AgentChatComposerReferenceMenu({
           {supportsSubagentReferences ? "No references found." : "No files found."}
         </div>
       ) : null}
-      {hasResults ? (
-        <div className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl">
-          {items.map((item, index) => {
-            const isActive = index === activeIndex;
-            if (item.kind === "subagent") {
+      <div
+        id={listboxId}
+        role="listbox"
+        aria-label="References"
+        className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
+      >
+        {hasResults
+          ? items.map((item, index) => {
+              const isActive = index === activeIndex;
+              if (item.kind === "subagent") {
+                return (
+                  <SubagentReferenceMenuRow
+                    key={item.id}
+                    optionId={getComposerPopupOptionId(listboxId, index)}
+                    subagent={item.subagent}
+                    isActive={isActive}
+                    onSelect={onSelectSubagent}
+                  />
+                );
+              }
               return (
-                <SubagentReferenceMenuRow
+                <FileReferenceMenuRow
                   key={item.id}
-                  optionId={`${listboxId}-option-${index}`}
-                  subagent={item.subagent}
+                  optionId={getComposerPopupOptionId(listboxId, index)}
+                  result={item.result}
                   isActive={isActive}
-                  onSelect={onSelectSubagent}
+                  onSelect={onSelectFile}
                 />
               );
-            }
-            return (
-              <FileReferenceMenuRow
-                key={item.id}
-                optionId={`${listboxId}-option-${index}`}
-                result={item.result}
-                isActive={isActive}
-                onSelect={onSelectFile}
-              />
-            );
-          })}
-        </div>
-      ) : null}
+            })
+          : null}
+      </div>
     </div>
   );
 }
