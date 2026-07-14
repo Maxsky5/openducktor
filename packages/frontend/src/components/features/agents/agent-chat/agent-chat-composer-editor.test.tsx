@@ -213,8 +213,13 @@ const EditorHarness = ({
     initialDraft,
   );
   const draft = controlledDraft ?? localDraft;
-  const handleDraftChange =
-    controlledDraft === undefined ? setDraft : (onDraftChange ?? (() => {}));
+  let handleDraftChange = setDraft;
+  if (controlledDraft !== undefined) {
+    if (!onDraftChange) {
+      throw new Error("Controlled EditorHarness requires onDraftChange.");
+    }
+    handleDraftChange = onDraftChange;
+  }
   const editorRef = useRef<HTMLDivElement>(null);
 
   return (
