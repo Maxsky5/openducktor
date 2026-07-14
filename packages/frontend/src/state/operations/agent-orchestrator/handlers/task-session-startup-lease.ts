@@ -20,7 +20,6 @@ type AcquireTaskSessionStartupLeaseInput = {
 
 type TaskSessionStartupLease = {
   bootstrap: NonNullable<RuntimeInfo["bootstrap"]>;
-  abortAfter: (error: unknown) => Promise<never>;
 };
 
 export const acquireTaskSessionStartupLease = async ({
@@ -38,17 +37,6 @@ export const acquireTaskSessionStartupLease = async ({
     bootstrap: {
       complete: () => complete(repoPath, taskId, leaseId),
       abort: abortLease,
-    },
-    async abortAfter(error): Promise<never> {
-      try {
-        await abortLease();
-      } catch (abortError) {
-        throw new Error(
-          `${error instanceof Error ? error.message : String(error)} Failed to release the task session startup lease: ${abortError instanceof Error ? abortError.message : String(abortError)}`,
-          error instanceof Error ? { cause: error } : undefined,
-        );
-      }
-      throw error;
     },
   };
 };

@@ -18,6 +18,7 @@ import { registerStartedSession } from "./start-session-persistence";
 import { resolveStartTask } from "./start-session-policies";
 import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
 import {
+  rollbackBootstrapAfterStartFailure,
   rollbackStartedSessionBeforeRegistration,
   stopSessionOnStaleAndThrow,
 } from "./start-session-rollback";
@@ -58,33 +59,8 @@ export const executeForkStart = async ({
   input,
   deps,
 }: ForkStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
-  const sourceSession = await resolveLoadedSourceSession({
-    ctx,
-    deps,
-    sourceSession: input.sourceSession,
-  });
-  const { runtimeKind: sourceRuntimeKind, workingDirectory } = readForkSourceRuntime(sourceSession);
-  const [canonicalWorkingDirectory, canonicalRepoPath] = await Promise.all([
-    deps.runtime.canonicalizePath(workingDirectory),
-    deps.runtime.canonicalizePath(ctx.repoPath),
-  ]);
-  if (
-    normalizeWorkingDirectory(canonicalWorkingDirectory) ===
-    normalizeWorkingDirectory(canonicalRepoPath)
-  ) {
-    throw new Error(
-      `Session "${sourceSession.externalSessionId}" is a legacy repository-root task session and cannot be forked. Start a fresh session in the task worktree instead.`,
-    );
-  }
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
-
-  if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
-    throw new Error(
-      `Session "${input.sourceSession.externalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
-    );
-  }
-
   const lease = await acquireTaskSessionStartupLease({
     repoPath: ctx.repoPath,
     taskId: ctx.taskId,
@@ -94,6 +70,32 @@ export const executeForkStart = async ({
     abort: deps.runtime.abortTaskSessionStartupLease,
   });
   try {
+    const sourceSession = await resolveLoadedSourceSession({
+      ctx,
+      deps,
+      sourceSession: input.sourceSession,
+    });
+    const { runtimeKind: sourceRuntimeKind, workingDirectory } =
+      readForkSourceRuntime(sourceSession);
+    const [canonicalWorkingDirectory, canonicalRepoPath] = await Promise.all([
+      deps.runtime.canonicalizePath(workingDirectory),
+      deps.runtime.canonicalizePath(ctx.repoPath),
+    ]);
+    if (
+      normalizeWorkingDirectory(canonicalWorkingDirectory) ===
+      normalizeWorkingDirectory(canonicalRepoPath)
+    ) {
+      throw new Error(
+        `Session "${sourceSession.externalSessionId}" is a legacy repository-root task session and cannot be forked. Start a fresh session in the task worktree instead.`,
+      );
+    }
+
+    if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
+      throw new Error(
+        `Session "${input.sourceSession.externalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
+      );
+    }
+
     const systemPrompt = await loadStartSystemPrompt({
       ctx,
       taskCard,
@@ -195,7 +197,10 @@ export const executeForkStart = async ({
       deps,
       taskCard,
     });
-  } catch (error) {
-    return lease.abortAfter(error);
+  } catch (cause) {
+    return rollbackBootstrapAfterStartFailure({
+      cause,
+      bootstrap: lease.bootstrap,
+    });
   }
 };

@@ -40,40 +40,4 @@ describe("acquireTaskSessionStartupLease", () => {
       ["abort", "/repo", "task-1", "lease-2"],
     ]);
   });
-
-  test("preserves the startup error when aborting the lease also fails", async () => {
-    const startupError = new Error("fork failed");
-    const lease = await acquireTaskSessionStartupLease({
-      repoPath: "/repo",
-      taskId: "task-1",
-      role: "build",
-      prepare: async () => "lease-1",
-      complete: async () => {},
-      abort: async () => {
-        throw new Error("host unavailable");
-      },
-    });
-
-    const error = await lease.abortAfter(startupError).catch((cause: unknown) => cause);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe(
-      "fork failed Failed to release the task session startup lease: host unavailable",
-    );
-    expect((error as Error).cause).toBe(startupError);
-  });
-
-  test("rethrows the original startup error after a successful abort", async () => {
-    const startupError = { reason: "fork failed" };
-    const lease = await acquireTaskSessionStartupLease({
-      repoPath: "/repo",
-      taskId: "task-1",
-      role: "qa",
-      prepare: async () => "lease-1",
-      complete: async () => {},
-      abort: async () => {},
-    });
-
-    const error = await lease.abortAfter(startupError).catch((cause: unknown) => cause);
-    expect(error).toBe(startupError);
-  });
 });
