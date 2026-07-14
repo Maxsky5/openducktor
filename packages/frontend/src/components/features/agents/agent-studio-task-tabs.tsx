@@ -412,23 +412,14 @@ export function AgentStudioTaskTabs({
         {terminalPanelToggleModel ? (
           <Button
             type="button"
-            size="sm"
+            size="icon"
             variant="ghost"
             aria-label={terminalPanelToggleModel.isVisible ? "Hide terminals" : "Show terminals"}
             className="shrink-0 text-studio-chrome-foreground"
             disabled={terminalPanelToggleModel.disabled}
             onClick={terminalPanelToggleModel.onToggle}
           >
-            <SquareTerminal data-icon="inline-start" />
-            Terminal
-            {terminalPanelToggleModel.runningCount > 0 ? (
-              <span
-                role="status"
-                aria-label={`${terminalPanelToggleModel.runningCount} running terminals`}
-              >
-                {terminalPanelToggleModel.runningCount}
-              </span>
-            ) : null}
+            <SquareTerminal />
           </Button>
         ) : null}
         {rightPanelToggleModel ? (

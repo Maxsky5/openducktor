@@ -17,6 +17,7 @@ import type {
   AgentStudioTerminalPanelModel,
   AgentStudioTerminalTab,
 } from "@/pages/agents/terminals/use-agent-studio-terminals";
+import { terminalTabsListClassName, terminalTabTriggerClassName } from "../terminal-tab-styles";
 import { InteractiveTerminal } from "./interactive-terminal";
 
 const lifecycleText = (tab: AgentStudioTerminalTab): string => {
@@ -76,11 +77,20 @@ function TerminalViewport({
       </div>
     );
   }
-  if (!tab.terminalId || !model.controller) {
+  if (!tab.terminalId) {
     return (
-      <div className="flex h-full min-h-0 items-center justify-center text-sm text-muted-foreground">
-        Creating terminal…
-      </div>
+      <div
+        data-testid="agent-studio-terminal-starting-surface"
+        className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
+      />
+    );
+  }
+  if (!model.controller) {
+    return (
+      <div
+        data-testid="agent-studio-terminal-unavailable-surface"
+        className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
+      />
     );
   }
   return (
@@ -128,8 +138,8 @@ export function AgentStudioTerminalPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]">
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
         <Button
           type="button"
           size="xs"
@@ -146,28 +156,18 @@ export function AgentStudioTerminalPanel({
               onValueChange={model.onSelectTab}
               className="gap-0"
             >
-              <TabsList
-                aria-label="Task terminal tabs"
-                className="h-10 w-full max-w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0"
-              >
+              <TabsList aria-label="Task terminal tabs" className={terminalTabsListClassName}>
                 {model.tabs.map((tab) => {
-                  const active = tab.tabId === model.activeTabId;
                   const detail = tab.summary
                     ? `${lifecycleText(tab)}. Started in ${tab.summary.initialWorkingDir}`
                     : lifecycleText(tab);
                   return (
-                    <div
-                      key={tab.tabId}
-                      className={cn(
-                        "group relative flex h-full shrink-0 items-center border-r border-border/70",
-                        active ? "text-foreground" : "text-muted-foreground",
-                      )}
-                    >
+                    <div key={tab.tabId} className="group relative flex h-8 shrink-0 items-center">
                       <TabsTrigger
                         value={tab.tabId}
                         aria-label={`${tab.label}, ${lifecycleText(tab)}`}
                         title={detail}
-                        className="relative h-full max-w-48 flex-none justify-start rounded-none border-0 bg-transparent py-1 pl-3 pr-8 text-xs font-medium shadow-none transition-colors after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-t-sm after:bg-transparent hover:bg-muted/50 hover:text-foreground focus-visible:z-10 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/60 data-[state=active]:border-0 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-selected-accent"
+                        className={cn(terminalTabTriggerClassName, "max-w-48 pr-8")}
                       >
                         <span className="truncate">{tab.label}</span>
                       </TabsTrigger>
@@ -176,13 +176,13 @@ export function AgentStudioTerminalPanel({
                         size="icon"
                         variant="ghost"
                         aria-label={`Close ${tab.label}`}
-                        className="absolute right-1 z-20 size-6 rounded-sm text-muted-foreground/80 opacity-70 hover:bg-accent/60 hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100"
+                        className="absolute right-1 z-20 size-6 rounded-sm text-[var(--dev-server-terminal-foreground)] hover:bg-[var(--dev-server-terminal-surface)] hover:text-[var(--dev-server-terminal-foreground)]"
                         onClick={(event) => {
                           event.stopPropagation();
                           void closeTab(tab);
                         }}
                       >
-                        <X className="size-3.5" />
+                        <X />
                       </Button>
                     </div>
                   );
@@ -207,11 +207,11 @@ export function AgentStudioTerminalPanel({
                 size="icon"
                 variant="ghost"
                 aria-label="New terminal"
-                className="size-8 text-muted-foreground shadow-none hover:text-foreground"
+                className="size-8 text-(--dev-server-terminal-foreground) shadow-none hover:bg-(--dev-server-terminal-tab-inactive) hover:text-(--dev-server-terminal-foreground)"
                 onClick={model.onCreate}
                 disabled={model.isLoading || model.isCreating || model.tabs.length >= 8}
               >
-                <Plus className="size-4" />
+                <Plus />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">New terminal</TooltipContent>

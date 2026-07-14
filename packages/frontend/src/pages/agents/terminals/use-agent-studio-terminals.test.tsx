@@ -135,18 +135,23 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
-  test("hides the panel after closing its final live terminal", async () => {
+  test("hides the panel immediately while its final live terminal closes", async () => {
     rememberVisibleTerminal("task-a");
     const baseDependencies = createTerminalTestDependencies();
     const terminals = [summaryForTask("task-a")];
+    let resolveClose = (_result: { closed: true }): void => undefined;
+    const closePending = new Promise<{ closed: true }>((resolve) => {
+      resolveClose = resolve;
+    });
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
         terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
         terminalClose: async () => {
+          const result = await closePending;
           terminals.splice(0, terminals.length);
-          return { closed: true };
+          return result;
         },
       },
     };
@@ -172,14 +177,82 @@ describe("useAgentStudioTerminals", () => {
         expect(getLatest().tabs).toHaveLength(1);
       });
 
-      await act(async () => {
+      let closePromise: Promise<{ closed: boolean }> | null = null;
+      act(() => {
         const tab = getLatest().tabs[0];
         if (!tab) throw new Error("Expected the live terminal tab.");
-        await getLatest().onClose(tab, false);
+        closePromise = getLatest().onClose(tab, false);
       });
 
-      expect(getLatest().tabs).toEqual([]);
-      expect(getLatest().isVisible).toBe(false);
+      try {
+        await waitFor(() => {
+          expect(getLatest().tabs).toEqual([]);
+          expect(getLatest().isVisible).toBe(false);
+        });
+      } finally {
+        resolveClose({ closed: true });
+        await act(async () => {
+          await closePromise;
+        });
+      }
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("restores an optimistically removed terminal when confirmation is required", async () => {
+    rememberVisibleTerminal("task-a");
+    const baseDependencies = createTerminalTestDependencies();
+    let resolveClose = (_result: { closed: false; confirmationRequired: true }): void => undefined;
+    const closePending = new Promise<{ closed: false; confirmationRequired: true }>((resolve) => {
+      resolveClose = resolve;
+    });
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalClose: async () => closePending,
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
+      let closePromise: ReturnType<HookResult["onClose"]> | null = null;
+      act(() => {
+        const tab = getLatest().tabs[0];
+        if (!tab) throw new Error("Expected the live terminal tab.");
+        closePromise = getLatest().onClose(tab, false);
+      });
+
+      await waitFor(() => {
+        expect(getLatest().tabs).toEqual([]);
+        expect(getLatest().isVisible).toBe(false);
+      });
+
+      resolveClose({ closed: false, confirmationRequired: true });
+      await act(async () => {
+        expect(await closePromise).toEqual({ closed: false, confirmationRequired: true });
+      });
+
+      expect(getLatest().tabs).toHaveLength(1);
+      expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a");
+      expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
+      expect(getLatest().isVisible).toBe(true);
     } finally {
       view.unmount();
     }

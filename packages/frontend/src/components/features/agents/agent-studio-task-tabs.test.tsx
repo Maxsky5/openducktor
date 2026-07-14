@@ -160,6 +160,28 @@ describe("AgentStudioTaskTabs", () => {
     unmount();
   });
 
+  test("renders the terminal toggle as an icon-only action", () => {
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: buildModel(),
+          terminalPanelToggleModel: {
+            isVisible: true,
+            runningCount: 3,
+            disabled: false,
+            onToggle: () => {},
+          },
+        }),
+      ),
+    );
+
+    const terminalToggle = screen.getByRole("button", { name: "Hide terminals" });
+    expect(terminalToggle.textContent).toBe("");
+    expect(screen.queryByRole("status", { name: "3 running terminals" })).toBeNull();
+  });
+
   test("keeps new-tab button enabled while tab tasks are loading", () => {
     const html = renderToStaticMarkup(
       createElement(

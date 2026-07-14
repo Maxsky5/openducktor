@@ -174,7 +174,7 @@ describe("AgentStudioTerminalPanel", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), true));
   });
 
-  test("keeps terminal metadata compact and uses flat terminal chrome", () => {
+  test("reuses compact Dev Server terminal chrome without muted icon actions", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-running",
       hostInstanceId: "host-1",
@@ -222,16 +222,52 @@ describe("AgentStudioTerminalPanel", () => {
     const createButton = screen.getByRole("button", { name: "New terminal" });
     expect(createButton.textContent).toBe("");
     expect(createButton.className).not.toContain("bg-primary");
-    expect(createButton.className).toContain("hover:bg-accent/60");
+    expect(createButton.className).toContain("text-(--dev-server-terminal-foreground)");
+    expect(createButton.className).not.toContain("text-muted-foreground");
+    expect(createButton.className).not.toContain(" opacity-");
     const tab = screen.getByRole("tab", { name: "Shell 1, Running" });
     const closeButton = screen.getByRole("button", { name: "Close Shell 1" });
     expect(closeButton.parentElement).toBe(tab.parentElement);
     expect(tab.parentElement?.className).not.toContain("rounded-md");
+    expect(tab.className).toContain("h-8");
     expect(tab.className).toContain("rounded-none");
-    expect(tab.className).toContain("data-[state=active]:bg-background");
-    expect(tab.className).toContain("after:bg-selected-accent");
+    expect(tab.className).toContain("font-mono");
+    expect(tab.className).toContain("text-[11px]");
+    expect(tab.className).toContain("bg-(--dev-server-terminal-tab-inactive)");
+    expect(tab.className).toContain("data-[state=active]:border-t-selected-accent");
+    expect(tab.className).toContain("data-[state=active]:bg-(--dev-server-terminal-tab-active)");
+    expect(closeButton.className).not.toContain(" opacity-");
     const panel = view.container.querySelector(".bg-card");
-    expect(panel?.className).not.toContain("border-t");
+    expect(panel).toBeNull();
+  });
+
+  test("shows the terminal surface immediately while creation is pending", () => {
+    render(
+      <AgentStudioTerminalPanel
+        model={{
+          ...model,
+          connectionState: "connected",
+          tabs: [
+            {
+              tabId: "creating:terminal",
+              terminalId: null,
+              summary: null,
+              lifecycle: null,
+              lifecycleFromEvent: false,
+              label: "Shell 1",
+              error: null,
+              requestState: "creating",
+            },
+          ],
+          activeTabId: "creating:terminal",
+          isCreating: true,
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Creating terminal…")).toBeNull();
+    const surface = screen.getByTestId("agent-studio-terminal-starting-surface");
+    expect(surface.className).toContain("bg-[var(--dev-server-terminal-panel)]");
   });
 
   test("uses an exited lifecycle frame across every surface despite a stale running summary", async () => {

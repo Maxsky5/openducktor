@@ -489,18 +489,57 @@ export const useAgentStudioTerminals = (
       onClose: async (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => {
         const closesLastTab =
           visibleState.tabs.length === 1 && visibleState.tabs[0]?.tabId === tab.tabId;
-        const hidePanelAfterClose = (): void => {
-          if (!closesLastTab) return;
-          setVisibility((current) =>
-            current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
-          );
+        const tabIndex = visibleState.tabs.findIndex((candidate) => candidate.tabId === tab.tabId);
+        const wasActive = visibleState.activeTabId === tab.tabId;
+        const tabsAfterClose = visibleState.tabs.filter(
+          (candidate) => candidate.tabId !== tab.tabId,
+        );
+        const activeTabIdAfterClose = resolveActiveTabId(
+          tabsAfterClose,
+          visibleState.activeTabId,
+          null,
+        );
+        const removeVisibleTab = (): void => {
+          setScopeState((current) => {
+            if (current.scopeKey !== scopeKey) return current;
+            const tabs = current.tabs.filter((candidate) => candidate.tabId !== tab.tabId);
+            return {
+              ...current,
+              tabs,
+              activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
+            };
+          });
+          if (closesLastTab)
+            setVisibility((current) =>
+              current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
+            );
+        };
+        const restoreVisibleTab = (): void => {
+          setScopeState((current) => {
+            if (
+              current.scopeKey !== scopeKey ||
+              current.tabs.some((candidate) => candidate.tabId === tab.tabId)
+            )
+              return current;
+            const tabs = [...current.tabs];
+            const restoreIndex = Math.max(0, Math.min(tabIndex, tabs.length));
+            tabs.splice(restoreIndex, 0, tab);
+            const restoreActiveTab = wasActive && current.activeTabId === activeTabIdAfterClose;
+            return {
+              ...current,
+              tabs,
+              activeTabId: restoreActiveTab
+                ? tab.tabId
+                : resolveActiveTabId(tabs, current.activeTabId, null),
+            };
+          });
+          if (closesLastTab)
+            setVisibility((current) =>
+              current.scopeKey === scopeKey ? { scopeKey, value: true } : current,
+            );
         };
         if (!tab.terminalId) {
-          setScopeState((current) => ({
-            ...current,
-            tabs: current.tabs.filter((candidate) => candidate.tabId !== tab.tabId),
-          }));
-          hidePanelAfterClose();
+          removeVisibleTab();
           return { closed: true };
         }
         const terminalId = tab.terminalId;
@@ -508,22 +547,24 @@ export const useAgentStudioTerminals = (
         if (!controller || controller.scopeKey !== scopeKey) {
           throw new Error("Terminal transport is unavailable for this task.");
         }
-        const closeResult = await controller.value.closeTerminal(terminalId, () =>
+        const closeRequest = controller.value.closeTerminal(terminalId, () =>
           dependencies.hostClient.terminalClose({
             terminalId,
             confirmTerminate,
           }),
         );
-        if (!closeResult.closed) return closeResult;
-        setScopeState((current) => {
-          const tabs = current.tabs.filter((candidate) => candidate.tabId !== tab.tabId);
-          return {
-            ...current,
-            tabs,
-            activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
-          };
-        });
-        hidePanelAfterClose();
+        removeVisibleTab();
+        let closeResult: TerminalCloseResponse;
+        try {
+          closeResult = await closeRequest;
+        } catch (cause) {
+          restoreVisibleTab();
+          throw cause;
+        }
+        if (!closeResult.closed) {
+          restoreVisibleTab();
+          return closeResult;
+        }
         if (repoPath && taskId)
           forgetRememberedTerminal(repoPath, taskId, terminalId, closesLastTab);
         if (repoPath && taskId)
