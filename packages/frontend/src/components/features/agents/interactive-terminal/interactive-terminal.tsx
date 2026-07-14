@@ -166,7 +166,10 @@ export function InteractiveTerminal({
         aria-label={`Interactive terminal ${terminalId}`}
       />
       {interactionError ? (
-        <p className="absolute inset-x-2 bottom-2 rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground">
+        <p
+          role="alert"
+          className="absolute inset-x-2 bottom-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
           Terminal interaction failed: {interactionError}
         </p>
       ) : null}

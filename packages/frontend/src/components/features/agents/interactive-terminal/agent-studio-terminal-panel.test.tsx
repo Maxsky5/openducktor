@@ -43,8 +43,9 @@ describe("AgentStudioTerminalPanel", () => {
   test("shows explicit lost-session and independent lifecycle/connection states", () => {
     render(<AgentStudioTerminalPanel model={model} />);
     expect(screen.getByText("This terminal belonged to a previous host session.")).toBeTruthy();
-    expect(screen.getByText("Lifecycle: Lost after host restart")).toBeTruthy();
-    expect(screen.getByText("Connection: disconnected")).toBeTruthy();
+    expect(
+      screen.getByLabelText("Terminal status: Lost after host restart, disconnected"),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry terminal creation" })).toBeNull();
   });
 
@@ -127,7 +128,7 @@ describe("AgentStudioTerminalPanel", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), true));
   });
 
-  test("exposes task, started-in path, lifecycle, connection, and semantic theme surfaces", () => {
+  test("keeps terminal metadata compact and uses a quiet create action", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-running",
       hostInstanceId: "host-1",
@@ -166,13 +167,16 @@ describe("AgentStudioTerminalPanel", () => {
       </div>,
     );
 
-    expect(screen.getByRole("tab", { name: /Shell 1 Running/ })).toBeTruthy();
-    expect(screen.getByText("Task: task-1")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Shell 1, Running" })).toBeTruthy();
     expect(screen.getByText("Started in: /repo/worktrees/task-1")).toBeTruthy();
-    expect(screen.getByText("Lifecycle: Running")).toBeTruthy();
-    expect(screen.getByText("Connection: attaching")).toBeTruthy();
+    expect(screen.getByLabelText("Terminal status: Running, attaching")).toBeTruthy();
+    expect(screen.queryByText("Task: task-1")).toBeNull();
+    expect(screen.queryByText("1 running")).toBeNull();
+    const createButton = screen.getByRole("button", { name: "New terminal" });
+    expect(createButton.textContent).toContain("New");
+    expect(createButton.className).not.toContain("bg-primary");
     const panel = view.container.querySelector(".bg-card");
-    expect(panel?.className).toContain("border-border");
+    expect(panel?.className).not.toContain("border-t");
   });
 
   test("uses an exited lifecycle frame across every surface despite a stale running summary", async () => {
@@ -211,9 +215,8 @@ describe("AgentStudioTerminalPanel", () => {
         }}
       />,
     );
-    expect(screen.getByRole("tab", { name: /Shell 1 Exited/ })).toBeTruthy();
-    expect(screen.getByText("0 running")).toBeTruthy();
-    expect(screen.getByText("Lifecycle: Exited")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Shell 1, Exited" })).toBeTruthy();
+    expect(screen.getByLabelText("Terminal status: Exited, disconnected")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close Shell 1" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), false));
     expect(screen.queryByText("Terminate and close Shell 1?")).toBeNull();

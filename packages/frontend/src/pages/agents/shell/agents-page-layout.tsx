@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { PanelImperativeHandle } from "react-resizable-panels";
+import type { GroupImperativeHandle, PanelImperativeHandle } from "react-resizable-panels";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
@@ -34,6 +34,10 @@ import type {
 const PANEL_CONTAINMENT_STYLE = {
   contain: "layout paint",
 } as const;
+const TERMINAL_GROUP_ID = "agent-studio-terminal-layout";
+const WORKSPACE_PANEL_ID = "agent-studio-workspace-panel";
+const TERMINAL_PANEL_ID = "agent-studio-terminal-panel";
+const TERMINAL_SEPARATOR_ID = "agent-studio-terminal-separator";
 
 type AgentsPageWorkspaceProps = {
   hasSelectedTask: boolean;
@@ -110,6 +114,8 @@ export function AgentsPageWorkspace({
   terminalPanel,
 }: AgentsPageWorkspaceProps): ReactElement {
   const [isNarrow, setIsNarrow] = useState(false);
+  const terminalGroupRef = useRef<GroupImperativeHandle | null>(null);
+  const terminalGroupElementRef = useRef<HTMLDivElement | null>(null);
   const terminalPanelRef = useRef<PanelImperativeHandle | null>(null);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -123,6 +129,51 @@ export function AgentsPageWorkspace({
     if (terminalPanel.isVisible) terminalPanelRef.current?.expand();
     else terminalPanelRef.current?.collapse();
   }, [isNarrow, terminalPanel.isVisible]);
+  useEffect(() => {
+    if (!hasSelectedTask || isNarrow) return;
+    const groupElement = terminalGroupElementRef.current;
+    if (!groupElement) return;
+    const resizeTerminalFromKeyboard = (event: KeyboardEvent): void => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || target.id !== TERMINAL_SEPARATOR_ID) return;
+      const group = terminalGroupRef.current;
+      if (!group) return;
+      const layout = group.getLayout();
+      const currentSize = layout[TERMINAL_PANEL_ID] ?? 28;
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        const nextSize = Math.max(16, Math.min(currentSize + 5, 70));
+        group.setLayout({ [WORKSPACE_PANEL_ID]: 100 - nextSize, [TERMINAL_PANEL_ID]: nextSize });
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        event.stopPropagation();
+        const nextSize = Math.max(currentSize - 5, 16);
+        group.setLayout({ [WORKSPACE_PANEL_ID]: 100 - nextSize, [TERMINAL_PANEL_ID]: nextSize });
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        event.stopPropagation();
+        group.setLayout({ [WORKSPACE_PANEL_ID]: 30, [TERMINAL_PANEL_ID]: 70 });
+        return;
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        event.stopPropagation();
+        group.setLayout({ [WORKSPACE_PANEL_ID]: 100, [TERMINAL_PANEL_ID]: 0 });
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    groupElement.addEventListener("keydown", resizeTerminalFromKeyboard, true);
+    return () => groupElement.removeEventListener("keydown", resizeTerminalFromKeyboard, true);
+  }, [hasSelectedTask, isNarrow]);
   if (!hasSelectedTask) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
@@ -156,21 +207,32 @@ export function AgentsPageWorkspace({
   }
   return (
     <DiffWorkerProvider>
-      <ResizablePanelGroup direction="vertical" className="h-full min-h-0 overflow-hidden">
-        <ResizablePanel defaultSize="68%" minSize="30%">
+      <ResizablePanelGroup
+        id={TERMINAL_GROUP_ID}
+        groupRef={terminalGroupRef}
+        elementRef={terminalGroupElementRef}
+        direction="vertical"
+        className="h-full min-h-0 overflow-hidden"
+      >
+        <ResizablePanel id={WORKSPACE_PANEL_ID} defaultSize="72%" minSize="30%">
           {workspacePanes}
         </ResizablePanel>
-        <ResizableHandle
-          withHandle
-          aria-label="Resize terminal panel"
-          className={terminalPanel.isVisible ? undefined : "hidden"}
-        />
+        {terminalPanel.isVisible ? (
+          <ResizableHandle
+            id={TERMINAL_SEPARATOR_ID}
+            aria-label="Resize terminal panel"
+            className="aria-[orientation=horizontal]:h-1 hover:bg-selected-accent"
+          />
+        ) : null}
         <ResizablePanel
+          id={TERMINAL_PANEL_ID}
           panelRef={terminalPanelRef}
+          disabled={!terminalPanel.isVisible}
           collapsible
           collapsedSize="0%"
-          defaultSize="32%"
-          minSize="20%"
+          defaultSize="28%"
+          minSize="16%"
+          maxSize="70%"
         >
           <div className="h-full min-h-0" hidden={!terminalPanel.isVisible}>
             <AgentStudioTerminalPanel model={terminalPanel} />

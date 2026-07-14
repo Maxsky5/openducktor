@@ -77,6 +77,111 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
+  test("opening an empty terminal panel creates and selects a terminal", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    const terminals: TerminalSummary[] = [];
+    let createCalls = 0;
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalCreate: async ({ context }) => {
+          createCalls += 1;
+          const terminal: TerminalSummary = {
+            ...summaryForTask(context.taskId ?? "unassociated"),
+            terminalId: "terminal-created",
+          };
+          terminals.push(terminal);
+          return { ref: { terminalId: terminal.terminalId }, summary: terminal };
+        },
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().isLoading).toBe(false);
+        expect(getLatest().tabs).toEqual([]);
+      });
+
+      act(() => getLatest().onToggle());
+
+      await waitFor(
+        () => {
+          expect(createCalls).toBe(1);
+          expect(getLatest().isVisible).toBe(true);
+          expect(getLatest().activeTabId).toBe("tab:terminal-created");
+        },
+        { timeout: 2_000 },
+      );
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("selects the newly created terminal instead of returning to the previous tab", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    const terminals: TerminalSummary[] = [summaryForTask("task-a")];
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalCreate: async ({ context }) => {
+          const terminal: TerminalSummary = {
+            ...summaryForTask(context.taskId ?? "unassociated"),
+            terminalId: "terminal-created-second",
+            label: "Shell 2",
+          };
+          terminals.push(terminal);
+          return { ref: { terminalId: terminal.terminalId }, summary: terminal };
+        },
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().activeTabId).toBe("tab:terminal-task-a"));
+
+      act(() => getLatest().onCreate());
+
+      await waitFor(() => expect(getLatest().activeTabId).toBe("tab:terminal-created-second"), {
+        timeout: 2_000,
+      });
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("keeps a lifecycle frame authoritative over a stale terminal-list snapshot", async () => {
     rememberVisibleTerminal("task-a");
     const baseDependencies = createTerminalTestDependencies();

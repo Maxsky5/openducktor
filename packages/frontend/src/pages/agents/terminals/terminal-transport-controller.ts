@@ -22,6 +22,8 @@ export const createTerminalTransportController = (
 ) => {
   const listeners = new Map<string, Set<TerminalFrameListener>>();
   const consumedSequences = new Map<string, number>();
+  const attachmentQueues = new Map<string, Promise<void>>();
+  const closingTerminals = new Set<string>();
   let connection: TerminalTransportConnection | null = null;
   let pendingConnection: Promise<TerminalTransportConnection> | null = null;
   const emptyPayload: Uint8Array = new Uint8Array(0);
@@ -44,14 +46,29 @@ export const createTerminalTransportController = (
     await activeConnection.send(encodeTerminalProtocolFrame({ message, payload }));
   };
 
-  const attach = async (terminalId: string): Promise<void> => {
-    await send({
-      version: TERMINAL_PROTOCOL_VERSION,
-      type: "attach",
-      terminalId,
-      lastConsumedSequence: consumedSequences.get(terminalId) ?? null,
-    });
+  const enqueueAttachmentOperation = (
+    terminalId: string,
+    operation: () => Promise<void>,
+  ): Promise<void> => {
+    const previous = attachmentQueues.get(terminalId);
+    const pending = previous ? previous.then(operation) : operation();
+    attachmentQueues.set(terminalId, pending);
+    const clearCompletedOperation = (): void => {
+      if (attachmentQueues.get(terminalId) === pending) attachmentQueues.delete(terminalId);
+    };
+    void pending.then(clearCompletedOperation, clearCompletedOperation);
+    return pending;
   };
+
+  const attach = (terminalId: string): Promise<void> =>
+    enqueueAttachmentOperation(terminalId, () =>
+      send({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "attach",
+        terminalId,
+        lastConsumedSequence: consumedSequences.get(terminalId) ?? null,
+      }),
+    );
   const reportTransportFailure = (): void => onStateChange("disconnected");
 
   const connect = async (): Promise<void> => {
@@ -107,12 +124,15 @@ export const createTerminalTransportController = (
         terminalListeners?.delete(listener);
         if (terminalListeners?.size === 0) {
           listeners.delete(terminalId);
-          if (connection) {
-            void send({
-              version: TERMINAL_PROTOCOL_VERSION,
-              type: "detach",
-              terminalId,
-            }).catch(reportTransportFailure);
+          const isClosing = closingTerminals.delete(terminalId);
+          if (connection && !isClosing) {
+            void enqueueAttachmentOperation(terminalId, () =>
+              send({
+                version: TERMINAL_PROTOCOL_VERSION,
+                type: "detach",
+                terminalId,
+              }),
+            ).catch(reportTransportFailure);
           }
         }
       };
@@ -128,13 +148,29 @@ export const createTerminalTransportController = (
         rows,
       }),
     acknowledge: async (terminalId: string, sequenceEnd: number) => {
+      const consumedSequence = consumedSequences.get(terminalId);
+      if (consumedSequence !== undefined && sequenceEnd <= consumedSequence) return;
       consumedSequences.set(terminalId, sequenceEnd);
-      await send({
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "ack",
-        terminalId,
-        sequenceEnd,
-      });
+      await enqueueAttachmentOperation(terminalId, () =>
+        send({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "ack",
+          terminalId,
+          sequenceEnd,
+        }),
+      );
+    },
+    async closeTerminal(terminalId: string, closeHostTerminal: () => Promise<void>): Promise<void> {
+      closingTerminals.add(terminalId);
+      try {
+        await attachmentQueues.get(terminalId);
+        await closeHostTerminal();
+        consumedSequences.delete(terminalId);
+        if (!listeners.has(terminalId)) closingTerminals.delete(terminalId);
+      } catch (cause) {
+        closingTerminals.delete(terminalId);
+        throw cause;
+      }
     },
     releaseEmulator(terminalId: string): void {
       if ((listeners.get(terminalId)?.size ?? 0) <= 1) consumedSequences.delete(terminalId);
@@ -144,6 +180,8 @@ export const createTerminalTransportController = (
       connection = null;
       pendingConnection = null;
       listeners.clear();
+      attachmentQueues.clear();
+      closingTerminals.clear();
       onStateChange("disconnected");
     },
   };

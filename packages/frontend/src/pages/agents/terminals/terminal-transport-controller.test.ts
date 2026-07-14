@@ -101,6 +101,181 @@ describe("createTerminalTransportController", () => {
     expect(decodeTerminalProtocolFrame(detachFrame).message.type).toBe("detach");
   });
 
+  test("serializes ACK sends so an earlier consumed sequence cannot arrive after a later one", async () => {
+    let releaseFirstAck = (): void => {
+      throw new Error("The first ACK was not sent.");
+    };
+    const firstAckBlocked = new Promise<void>((resolve) => {
+      releaseFirstAck = resolve;
+    });
+    const processedSequences: number[] = [];
+    let acknowledgedSequence = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          const message = decodeTerminalProtocolFrame(frame).message;
+          if (message.type !== "ack") return;
+          if (message.sequenceEnd === 1) await firstAckBlocked;
+          if (message.sequenceEnd < acknowledgedSequence) {
+            throw new Error("Terminal ACK is outside the delivered sequence range.");
+          }
+          acknowledgedSequence = message.sequenceEnd;
+          processedSequences.push(message.sequenceEnd);
+        },
+        close: () => {},
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    await controller.connect();
+
+    const first = controller.acknowledge(terminalId, 1);
+    const second = controller.acknowledge(terminalId, 2);
+    await Promise.resolve();
+    releaseFirstAck();
+    await Promise.all([first, second]);
+
+    expect(processedSequences).toEqual([1, 2]);
+  });
+
+  test("does not send ACKs for replay sequences that were already consumed", async () => {
+    const processedSequences: number[] = [];
+    let acknowledgedSequence = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          const message = decodeTerminalProtocolFrame(frame).message;
+          if (message.type !== "ack") return;
+          if (message.sequenceEnd < acknowledgedSequence) {
+            throw new Error("Terminal ACK is outside the delivered sequence range.");
+          }
+          acknowledgedSequence = message.sequenceEnd;
+          processedSequences.push(message.sequenceEnd);
+        },
+        close: () => {},
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    await controller.connect();
+
+    for (const sequenceEnd of [179, 285, 388, 812, 827]) {
+      await controller.acknowledge(terminalId, sequenceEnd);
+    }
+    for (const sequenceEnd of [179, 285, 388, 812, 827]) {
+      await controller.acknowledge(terminalId, sequenceEnd);
+    }
+
+    expect(processedSequences).toEqual([179, 285, 388, 812, 827]);
+  });
+
+  test("keeps detach and reattach behind an in-flight ACK for the same terminal", async () => {
+    let releaseAck = (): void => {
+      throw new Error("The ACK was not sent.");
+    };
+    const ackBlocked = new Promise<void>((resolve) => {
+      releaseAck = resolve;
+    });
+    let attachCount = 0;
+    let attachment: { acknowledged: number; delivered: number } | null = null;
+    const operations: string[] = [];
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          const message = decodeTerminalProtocolFrame(frame).message;
+          if (message.type === "attach") {
+            operations.push("attach");
+            attachCount += 1;
+            attachment = { acknowledged: 0, delivered: attachCount === 1 ? 1 : 0 };
+            return;
+          }
+          if (message.type === "detach") {
+            operations.push("detach");
+            attachment = null;
+            return;
+          }
+          if (message.type !== "ack") return;
+          operations.push("ack:start");
+          await ackBlocked;
+          if (
+            !attachment ||
+            message.sequenceEnd < attachment.acknowledged ||
+            message.sequenceEnd > attachment.delivered
+          ) {
+            throw new Error("Terminal ACK is outside the delivered sequence range.");
+          }
+          attachment.acknowledged = message.sequenceEnd;
+          operations.push("ack:complete");
+        },
+        close: () => {},
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    await controller.connect();
+    const unsubscribe = controller.subscribe(terminalId, () => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const acknowledging = controller.acknowledge(terminalId, 1);
+    await Promise.resolve();
+    controller.releaseEmulator(terminalId);
+    unsubscribe();
+    controller.subscribe(terminalId, () => {});
+    await Promise.resolve();
+    await Promise.resolve();
+    releaseAck();
+
+    await expect(acknowledging).resolves.toBeUndefined();
+    await Promise.resolve();
+    expect(operations).toEqual(["attach", "ack:start", "ack:complete", "detach", "attach"]);
+  });
+
+  test("drains attachment work and skips detach when the host terminal is closing", async () => {
+    let releaseAck = (): void => {
+      throw new Error("The ACK was not sent.");
+    };
+    const ackBlocked = new Promise<void>((resolve) => {
+      releaseAck = resolve;
+    });
+    let markAckStarted = (): void => {
+      throw new Error("The ACK start signal was not initialized.");
+    };
+    const ackStarted = new Promise<void>((resolve) => {
+      markAckStarted = resolve;
+    });
+    const operations: string[] = [];
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          const message = decodeTerminalProtocolFrame(frame).message;
+          operations.push(message.type);
+          if (message.type === "ack") {
+            markAckStarted();
+            await ackBlocked;
+          }
+        },
+        close: () => {},
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => {});
+    await controller.connect();
+    const unsubscribe = controller.subscribe(terminalId, () => {});
+    await Promise.resolve();
+
+    const acknowledging = controller.acknowledge(terminalId, 1);
+    await ackStarted;
+    const closing = controller.closeTerminal(terminalId, async () => {
+      operations.push("close");
+    });
+    await Promise.resolve();
+    expect(operations).toEqual(["attach", "ack"]);
+
+    releaseAck();
+    await Promise.all([acknowledging, closing]);
+    unsubscribe();
+    await Promise.resolve();
+
+    expect(operations).toEqual(["attach", "ack", "close"]);
+  });
+
   test("routes binary output and rejects client-directed frames from the host", async () => {
     let receive = (_frame: Uint8Array): void => {
       throw new Error("Terminal bridge did not connect.");

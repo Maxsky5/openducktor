@@ -349,29 +349,6 @@ export const useAgentStudioTerminals = (
     visibleState,
   ]);
 
-  const togglePanel = useCallback((): void => {
-    const currentlyVisible = visibility.scopeKey === scopeKey && visibility.value;
-    const transition = toggleTerminalPanel(currentlyVisible);
-    setVisibility({ scopeKey, value: transition.visible });
-    if (transition.requestFocus) {
-      setFocusState((current) => ({
-        scopeKey,
-        request: current.scopeKey === scopeKey ? current.request + 1 : 1,
-      }));
-    }
-  }, [scopeKey, visibility]);
-
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent): void => {
-      if (isTerminalToggleShortcut(event)) {
-        event.preventDefault();
-        togglePanel();
-      }
-    };
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [togglePanel]);
-
   const createTerminal = useCallback(
     async (retryTabId?: string): Promise<void> => {
       if (!repoPath || !taskId) return;
@@ -398,10 +375,14 @@ export const useAgentStudioTerminals = (
         return;
       }
       try {
-        await dependencies.hostClient.terminalCreate({ workingDir, context: { taskId } });
+        const created = await dependencies.hostClient.terminalCreate({
+          workingDir,
+          context: { taskId },
+        });
         setScopeState((current) => ({
           ...current,
           tabs: current.tabs.filter((tab) => tab.tabId !== tabId),
+          activeTabId: `tab:${created.ref.terminalId}`,
         }));
         await queryClient.invalidateQueries({
           queryKey: terminalQueryKeys.task({ repoPath, taskId }),
@@ -429,6 +410,39 @@ export const useAgentStudioTerminals = (
     },
     [dependencies.hostClient, queryClient, repoPath, taskId, worktreeQuery.data?.workingDirectory],
   );
+
+  const togglePanel = useCallback((): void => {
+    const currentlyVisible = visibility.scopeKey === scopeKey && visibility.value;
+    const transition = toggleTerminalPanel(currentlyVisible);
+    setVisibility({ scopeKey, value: transition.visible });
+    if (transition.requestFocus) {
+      setFocusState((current) => ({
+        scopeKey,
+        request: current.scopeKey === scopeKey ? current.request + 1 : 1,
+      }));
+      if (visibleState.tabs.length === 0 && !terminalQuery.isLoading && !worktreeQuery.isLoading) {
+        void createTerminal();
+      }
+    }
+  }, [
+    createTerminal,
+    scopeKey,
+    terminalQuery.isLoading,
+    visibility,
+    visibleState.tabs.length,
+    worktreeQuery.isLoading,
+  ]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent): void => {
+      if (isTerminalToggleShortcut(event)) {
+        event.preventDefault();
+        togglePanel();
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [togglePanel]);
 
   return useMemo(
     () => ({
@@ -458,10 +472,17 @@ export const useAgentStudioTerminals = (
           }));
           return;
         }
-        await dependencies.hostClient.terminalClose({
-          terminalId: tab.terminalId,
-          confirmTerminate,
-        });
+        const terminalId = tab.terminalId;
+        const controller = controllerRef.current;
+        if (!controller || controller.scopeKey !== scopeKey) {
+          throw new Error("Terminal transport is unavailable for this task.");
+        }
+        await controller.value.closeTerminal(terminalId, () =>
+          dependencies.hostClient.terminalClose({
+            terminalId,
+            confirmTerminate,
+          }),
+        );
         setScopeState((current) => {
           const tabs = current.tabs.filter((candidate) => candidate.tabId !== tab.tabId);
           return {
@@ -470,7 +491,7 @@ export const useAgentStudioTerminals = (
             activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
           };
         });
-        if (repoPath && taskId) forgetRememberedTerminal(repoPath, taskId, tab.terminalId);
+        if (repoPath && taskId) forgetRememberedTerminal(repoPath, taskId, terminalId);
         if (repoPath && taskId)
           await queryClient.invalidateQueries({
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),

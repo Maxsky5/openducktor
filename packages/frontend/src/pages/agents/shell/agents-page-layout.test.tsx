@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
@@ -83,13 +83,21 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         rightPanelContent: null,
         terminalPanel: { ...terminalPanel, isVisible },
       });
-    const view = render(renderWorkspace(true));
+    const view = render(renderWorkspace(false));
     const panel = view.getByText("No terminals for this task.");
+    expect(view.queryByRole("separator", { name: "Resize terminal panel" })).toBeNull();
+
+    view.rerender(renderWorkspace(true));
     const separator = view.getByRole("separator", { name: "Resize terminal panel" });
     expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
     expect(separator.tabIndex).toBe(0);
+    expect(separator.querySelector("svg")).toBeNull();
+    expect(separator.className).toContain("aria-[orientation=horizontal]:h-1");
     act(() => separator.focus());
     expect(document.activeElement).toBe(separator);
+    for (const key of ["ArrowUp", "ArrowDown", "Home", "End", "Enter"]) {
+      expect(() => fireEvent.keyDown(separator, { key })).not.toThrow();
+    }
 
     view.rerender(renderWorkspace(false));
     expect(view.getByText("No terminals for this task.")).toBe(panel);

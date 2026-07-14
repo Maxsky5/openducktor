@@ -1,7 +1,6 @@
 import type { TerminalConnectionState, TerminalLifecycle } from "@openducktor/contracts";
 import { Plus, RotateCw, X } from "lucide-react";
 import { type ReactElement, useCallback, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -154,11 +153,11 @@ export function AgentStudioTerminalPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden border-t border-border bg-card">
-      <div className="flex min-h-10 items-center gap-2 border-b border-border px-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card">
+      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-1.5">
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant="ghost"
           className="md:hidden"
           onClick={model.onBackToChat}
@@ -174,21 +173,23 @@ export function AgentStudioTerminalPanel({
             >
               <TabsList
                 aria-label="Task terminal tabs"
-                className="h-8 max-w-full justify-start overflow-x-auto rounded-md"
+                className="h-8 w-full max-w-full justify-start gap-0.5 overflow-x-auto rounded-none bg-transparent p-0"
               >
                 {model.tabs.map((tab) => (
-                  <div key={tab.tabId} className="flex items-center">
-                    <TabsTrigger value={tab.tabId} className="max-w-44">
+                  <div key={tab.tabId} className="flex h-7 shrink-0 items-center">
+                    <TabsTrigger
+                      value={tab.tabId}
+                      aria-label={`${tab.label}, ${lifecycleText(tab)}`}
+                      className="h-7 max-w-40 flex-none rounded-md border-0 bg-transparent px-2 py-1 shadow-none data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                    >
                       <span className="truncate">{tab.label}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {lifecycleText(tab)}
-                      </span>
                     </TabsTrigger>
                     <Button
                       type="button"
                       size="icon"
                       variant="ghost"
                       aria-label={`Close ${tab.label}`}
+                      className="size-7 text-muted-foreground hover:text-foreground"
                       onClick={(event) => {
                         event.stopPropagation();
                         void closeTab(tab);
@@ -201,42 +202,58 @@ export function AgentStudioTerminalPanel({
               </TabsList>
             </Tabs>
           ) : (
-            <p className="text-xs text-muted-foreground">No terminals for this task.</p>
+            <p className="px-1 text-xs text-muted-foreground">No terminals for this task.</p>
           )}
         </div>
-        <Badge variant="secondary">{model.runningCount} running</Badge>
         {model.connectionState === "disconnected" ? (
-          <Button type="button" size="sm" variant="outline" onClick={model.onReconnect}>
+          <Button type="button" size="xs" variant="ghost" onClick={model.onReconnect}>
             <RotateCw data-icon="inline-start" />
             Reconnect
           </Button>
         ) : null}
         <Button
           type="button"
-          size="sm"
+          size="xs"
+          variant="ghost"
+          aria-label="New terminal"
+          className="text-muted-foreground hover:text-foreground"
           onClick={model.onCreate}
           disabled={model.isLoading || model.isCreating || model.tabs.length >= 8}
         >
           <Plus data-icon="inline-start" />
-          New terminal
+          New
         </Button>
       </div>
       {activeTab ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5 text-xs">
-            <span className="font-medium text-foreground">{activeTab.label}</span>
-            <span className="text-muted-foreground">
-              Task: {activeTab.summary?.context.taskId ?? model.taskId ?? "None"}
+          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-2 text-xs">
+            <span
+              role="status"
+              aria-label={`Terminal status: ${lifecycleText(activeTab)}, ${connectionText(activeTab, model, connectionByTerminal)}`}
+              className="shrink-0 font-medium text-foreground"
+            >
+              {lifecycleText(activeTab)}
+              <span className="px-1 text-muted-foreground" aria-hidden="true">
+                ·
+              </span>
+              <span className="capitalize">
+                {connectionText(activeTab, model, connectionByTerminal)}
+              </span>
             </span>
-            <span className="min-w-0 truncate text-muted-foreground">
+            <span className="text-muted-foreground" aria-hidden="true">
+              /
+            </span>
+            <span
+              className="min-w-0 flex-1 truncate text-muted-foreground"
+              title={activeTab.summary?.initialWorkingDir ?? undefined}
+            >
               Started in: {activeTab.summary?.initialWorkingDir ?? "Not started"}
             </span>
-            <Badge variant="outline">Lifecycle: {lifecycleText(activeTab)}</Badge>
-            <Badge variant="outline">
-              Connection: {connectionText(activeTab, model, connectionByTerminal)}
-            </Badge>
+            <span className="sr-only">
+              Task association: {activeTab.summary?.context.taskId ?? model.taskId ?? "None"}
+            </span>
             {activeTab.summary && !activeTab.summary.initialWorkingDirAvailable ? (
-              <Badge variant="danger">Started-in directory unavailable</Badge>
+              <span className="shrink-0 text-warning-muted">Started-in directory unavailable</span>
             ) : null}
           </div>
           <Tabs
@@ -280,7 +297,7 @@ export function AgentStudioTerminalPanel({
         </div>
       )}
       {model.transportError ? (
-        <p className="border-t border-border px-3 py-1.5 text-xs text-destructive">
+        <p className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
           Terminal connection failed: {model.transportError}
         </p>
       ) : null}
