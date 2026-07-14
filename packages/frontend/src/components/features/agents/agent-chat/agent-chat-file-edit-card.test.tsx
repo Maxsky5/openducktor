@@ -161,6 +161,7 @@ describe("AgentChatFileEditCard", () => {
 
     expect(preloadedViewerMock).toHaveBeenCalledTimes(1);
     expect(viewerMock).not.toHaveBeenCalled();
+    expect(fileViewerMock).not.toHaveBeenCalled();
   });
 
   test("does not mount the hidden diff preloader while collapsed", () => {
@@ -254,6 +255,8 @@ describe("AgentChatFileEditCard", () => {
 
     expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-content")).toBe("");
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+    expect(preloadedViewerMock).not.toHaveBeenCalled();
+    expect(viewerMock).not.toHaveBeenCalled();
   });
 
   test("uses full-file content change type for the status badge", () => {
@@ -343,5 +346,6 @@ describe("AgentChatFileEditCard", () => {
     expect(preloaderMock).not.toHaveBeenCalled();
     expect(preloadedViewerMock).not.toHaveBeenCalled();
     expect(viewerMock).not.toHaveBeenCalled();
+    expect(fileViewerMock).not.toHaveBeenCalled();
   });
 });

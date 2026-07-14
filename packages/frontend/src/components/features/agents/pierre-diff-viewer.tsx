@@ -18,6 +18,7 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -82,6 +83,12 @@ type PierreFileViewerProps = {
 };
 
 type PierreHighlightState = "ready" | "pending" | "unavailable";
+type PierreWorkerPool = NonNullable<ReturnType<typeof useWorkerPool>>;
+type PierreFileHighlightObserver = Parameters<PierreWorkerPool["highlightFileAST"]>[0];
+type PierreDiffHighlightObserver = Parameters<PierreWorkerPool["highlightDiffAST"]>[0];
+type PierreHighlightTarget =
+  | { kind: "file"; file: FileContents; taskKey: string }
+  | { kind: "diff"; fileDiff: FileDiffMetadata; taskKey: string };
 
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const DIFF_WRAPPER_STYLE = {
@@ -138,6 +145,7 @@ const getPierreFileHighlightState = (
   workerPool: ReturnType<typeof useWorkerPool>,
   file: FileContents,
   requiresHighlight: boolean,
+  didHighlightFail: boolean,
 ): PierreHighlightState => {
   if (!requiresHighlight) {
     return "ready";
@@ -145,13 +153,17 @@ const getPierreFileHighlightState = (
   if (workerPool == null || !workerPool.isWorkingPool()) {
     return "unavailable";
   }
-  return workerPool.getFileResultCache(file) == null ? "pending" : "ready";
+  if (workerPool.getFileResultCache(file) != null) {
+    return "ready";
+  }
+  return didHighlightFail ? "unavailable" : "pending";
 };
 
 const getPierreDiffHighlightState = (
   workerPool: ReturnType<typeof useWorkerPool>,
   fileDiff: FileDiffMetadata | null,
   requiresHighlight: boolean,
+  didHighlightFail: boolean,
 ): PierreHighlightState => {
   if (!requiresHighlight) {
     return "ready";
@@ -159,7 +171,52 @@ const getPierreDiffHighlightState = (
   if (workerPool == null || !workerPool.isWorkingPool()) {
     return "unavailable";
   }
-  return fileDiff != null && workerPool.getDiffResultCache(fileDiff) != null ? "ready" : "pending";
+  if (fileDiff != null && workerPool.getDiffResultCache(fileDiff) != null) {
+    return "ready";
+  }
+  return didHighlightFail ? "unavailable" : "pending";
+};
+
+const usePierreHighlightTaskFailure = ({
+  target,
+  workerPool,
+  shouldStart,
+}: {
+  target: PierreHighlightTarget | null;
+  workerPool: ReturnType<typeof useWorkerPool>;
+  shouldStart: boolean;
+}): boolean => {
+  const reactId = useId();
+  const [failedTaskKey, setFailedTaskKey] = useState<string | null>(null);
+  const didHighlightFail = target != null && failedTaskKey === target.taskKey;
+
+  useEffect(() => {
+    if (!shouldStart || workerPool == null || target == null || didHighlightFail) {
+      return;
+    }
+
+    const instanceId = `openducktor-highlight:${reactId}:${target.taskKey}`;
+    const onHighlightError = () => setFailedTaskKey(target.taskKey);
+    if (target.kind === "file") {
+      const observer: PierreFileHighlightObserver = {
+        __id: instanceId,
+        onHighlightSuccess: () => undefined,
+        onHighlightError,
+      };
+      workerPool.highlightFileAST(observer, target.file);
+      return () => workerPool.cleanUpTasks(observer);
+    }
+
+    const observer: PierreDiffHighlightObserver = {
+      __id: instanceId,
+      onHighlightSuccess: () => undefined,
+      onHighlightError,
+    };
+    workerPool.highlightDiffAST(observer, target.fileDiff);
+    return () => workerPool.cleanUpTasks(observer);
+  }, [didHighlightFail, reactId, shouldStart, target, workerPool]);
+
+  return didHighlightFail;
 };
 
 const PierreHighlightSkeleton = ({
@@ -203,7 +260,7 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   const { fileDiff } = useMemo(() => getRenderableFileDiff(patch, filePath), [filePath, patch]);
 
   useEffect(() => {
-    if (workerPool == null || fileDiff == null) {
+    if (workerPool == null || !workerPool.isWorkingPool() || fileDiff == null) {
       return;
     }
     if (workerPool.getDiffResultCache(fileDiff) != null) {
@@ -223,15 +280,21 @@ export const PierreFileViewer = memo(function PierreFileViewer({
 }: PierreFileViewerProps): ReactElement {
   const { theme } = useTheme();
   const workerPool = useWorkerPool();
-  const { file, lineCount } = useMemo<{ file: FileContents; lineCount: number }>(() => {
+  const { file, fileCacheKey, lineCount } = useMemo<{
+    file: FileContents;
+    fileCacheKey: string;
+    lineCount: number;
+  }>(() => {
     const metrics = getContentMetrics(content);
+    const fileCacheKey = `${filePath}:${content.length}:${metrics.hash}`;
     return {
       file: {
         name: filePath,
         contents: content,
         lang: getFiletypeFromFileName(filePath),
-        cacheKey: `${filePath}:${content.length}:${metrics.hash}`,
+        cacheKey: fileCacheKey,
       },
+      fileCacheKey,
       lineCount: metrics.lineCount,
     };
   }, [content, filePath]);
@@ -241,8 +304,19 @@ export const PierreFileViewer = memo(function PierreFileViewer({
     workerPool,
     file,
     requiresHighlight,
+    false,
   );
-  const shouldSubscribeToHighlightCache = highlightStateBeforeSubscription === "pending";
+  const highlightTarget = useMemo<PierreHighlightTarget>(
+    () => ({ kind: "file", file, taskKey: fileCacheKey }),
+    [file, fileCacheKey],
+  );
+  const didHighlightFail = usePierreHighlightTaskFailure({
+    target: highlightTarget,
+    workerPool,
+    shouldStart: highlightStateBeforeSubscription === "pending",
+  });
+  const shouldSubscribeToHighlightCache =
+    highlightStateBeforeSubscription === "pending" && !didHighlightFail;
   const subscribeToHighlightCache = useCallback(
     (onStoreChange: () => void) => {
       if (!shouldSubscribeToHighlightCache || workerPool == null) {
@@ -253,8 +327,8 @@ export const PierreFileViewer = memo(function PierreFileViewer({
     [shouldSubscribeToHighlightCache, workerPool],
   );
   const getHighlightCacheSnapshot = useCallback(
-    () => getPierreFileHighlightState(workerPool, file, requiresHighlight),
-    [file, requiresHighlight, workerPool],
+    () => getPierreFileHighlightState(workerPool, file, requiresHighlight, didHighlightFail),
+    [didHighlightFail, file, requiresHighlight, workerPool],
   );
   const highlightState = useSyncExternalStore(
     subscribeToHighlightCache,
@@ -267,11 +341,11 @@ export const PierreFileViewer = memo(function PierreFileViewer({
       themeType: theme,
       overflow: "wrap" as const,
       disableFileHeader: true,
+      tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
     }),
     [theme],
   );
   const isHighlightReady = highlightState === "ready";
-  const renderPhase = isHighlightReady ? "highlighted" : "pending";
 
   if (highlightState === "unavailable") {
     return (
@@ -279,7 +353,7 @@ export const PierreFileViewer = memo(function PierreFileViewer({
         <div
           className="px-3 py-4 text-sm text-destructive"
           role="alert"
-        >{`Syntax highlighting is unavailable for ${filePath}.`}</div>
+        >{`Syntax highlighting ${didHighlightFail ? "failed" : "is unavailable"} for ${filePath}. Reload the session to try again.`}</div>
       </div>
     );
   }
@@ -288,19 +362,13 @@ export const PierreFileViewer = memo(function PierreFileViewer({
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
       <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>
         <div className="grid min-w-0">
-          <div
-            className={cn("col-start-1 row-start-1 min-w-0", !isHighlightReady && "invisible")}
-            aria-hidden={!isHighlightReady || undefined}
-          >
-            <PierreReactFile
-              key={`${file.cacheKey}:${renderPhase}`}
-              file={file}
-              options={options}
-            />
-          </div>
-          {!isHighlightReady ? (
+          {isHighlightReady ? (
+            <div className="col-start-1 row-start-1 min-w-0">
+              <PierreReactFile key={fileCacheKey} file={file} options={options} />
+            </div>
+          ) : (
             <PierreHighlightSkeleton filePath={filePath} testId="pierre-file-highlight-skeleton" />
-          ) : null}
+          )}
         </div>
       </div>
     </div>
@@ -387,6 +455,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       lineDiffType,
       overflow: lineOverflow,
       disableFileHeader: true,
+      tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
       enableLineSelection,
       enableGutterUtility: handleGutterUtilityClick != null,
       ...(handleLineSelectionChange
@@ -499,8 +568,22 @@ export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer
     workerPool,
     fileDiff,
     requiresHighlight,
+    false,
   );
-  const shouldSubscribeToHighlightCache = highlightStateBeforeSubscription === "pending";
+  const highlightTarget = useMemo<PierreHighlightTarget | null>(
+    () =>
+      fileDiff == null || fileDiffCacheKey == null
+        ? null
+        : { kind: "diff", fileDiff, taskKey: fileDiffCacheKey },
+    [fileDiff, fileDiffCacheKey],
+  );
+  const didHighlightFail = usePierreHighlightTaskFailure({
+    target: highlightTarget,
+    workerPool,
+    shouldStart: highlightStateBeforeSubscription === "pending",
+  });
+  const shouldSubscribeToHighlightCache =
+    highlightStateBeforeSubscription === "pending" && !didHighlightFail;
   const subscribeToHighlightCache = useCallback(
     (onStoreChange: () => void) => {
       if (!shouldSubscribeToHighlightCache || workerPool == null) {
@@ -511,8 +594,8 @@ export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer
     [shouldSubscribeToHighlightCache, workerPool],
   );
   const getHighlightCacheSnapshot = useCallback(
-    () => getPierreDiffHighlightState(workerPool, fileDiff, requiresHighlight),
-    [fileDiff, requiresHighlight, workerPool],
+    () => getPierreDiffHighlightState(workerPool, fileDiff, requiresHighlight, didHighlightFail),
+    [didHighlightFail, fileDiff, requiresHighlight, workerPool],
   );
   const highlightState = useSyncExternalStore(
     subscribeToHighlightCache,
@@ -520,7 +603,6 @@ export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer
     () => (requiresHighlight ? "pending" : "ready"),
   );
   const isHighlightReady = highlightState === "ready";
-  const renderPhase = isHighlightReady ? "highlighted" : "pending";
 
   if (highlightState === "unavailable") {
     return (
@@ -528,25 +610,23 @@ export const PierrePreloadedDiffViewer = memo(function PierrePreloadedDiffViewer
         <div
           className="px-3 py-4 text-sm text-destructive"
           role="alert"
-        >{`Syntax highlighting is unavailable for ${props.filePath}.`}</div>
+        >{`Syntax highlighting ${didHighlightFail ? "failed" : "is unavailable"} for ${props.filePath}. Reload the session to try again.`}</div>
       </div>
     );
   }
 
   return (
     <div className={cn("grid min-w-0", className)}>
-      <div
-        className={cn("col-start-1 row-start-1 min-w-0", !isHighlightReady && "invisible")}
-        aria-hidden={!isHighlightReady || undefined}
-      >
-        <PierreDiffViewer key={`${fileDiffCacheKey}:${renderPhase}`} {...viewerProps} />
-      </div>
-      {!isHighlightReady ? (
+      {isHighlightReady ? (
+        <div className="col-start-1 row-start-1 min-w-0">
+          <PierreDiffViewer key={fileDiffCacheKey} {...viewerProps} />
+        </div>
+      ) : (
         <PierreHighlightSkeleton
           filePath={props.filePath}
           testId="pierre-diff-highlight-skeleton"
         />
-      ) : null}
+      )}
     </div>
   );
 });

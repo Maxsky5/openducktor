@@ -10,8 +10,11 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 let pierreViewerModule: typeof import("./pierre-diff-viewer");
 let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
 let workerPoolMock: {
+  cleanUpTasks?: ReturnType<typeof mock>;
   getDiffResultCache: ReturnType<typeof mock>;
   getFileResultCache?: ReturnType<typeof mock>;
+  highlightDiffAST?: ReturnType<typeof mock>;
+  highlightFileAST?: ReturnType<typeof mock>;
   isWorkingPool?: ReturnType<typeof mock>;
   primeDiffHighlightCache: ReturnType<typeof mock>;
   primeFileHighlightCache?: ReturnType<typeof mock>;
@@ -55,6 +58,7 @@ beforeEach(async () => {
               disableFileHeader?: boolean;
               overflow?: string;
               themeType?: string;
+              tokenizeMaxLength?: number;
             };
           }) => {
             const [mountId] = useState(() => {
@@ -71,6 +75,7 @@ beforeEach(async () => {
                 data-mount-id={String(mountId)}
                 data-overflow={String(props.options?.overflow ?? "")}
                 data-theme-type={String(props.options?.themeType ?? "")}
+                data-tokenize-max-length={String(props.options?.tokenizeMaxLength ?? "")}
               />
             );
           },
@@ -84,6 +89,7 @@ beforeEach(async () => {
               onLineSelectionChange?: (range: unknown) => void;
               onLineSelectionStart?: (range: unknown) => void;
               overflow?: string;
+              tokenizeMaxLength?: number;
             };
             selectedLines?: unknown;
           }) => {
@@ -104,6 +110,7 @@ beforeEach(async () => {
                 data-hunk-separators={String(options?.hunkSeparators ?? "")}
                 data-line-diff-type={String(options?.lineDiffType ?? "")}
                 data-overflow={String(options?.overflow ?? "")}
+                data-tokenize-max-length={String(options?.tokenizeMaxLength ?? "")}
               >
                 <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
                 <button
@@ -190,13 +197,17 @@ describe("PierreDiffViewer", () => {
     let notifyStatsChanged: (() => void) | undefined;
     const getDiffResultCache = mock(() => cachedHighlight);
     const primeDiffHighlightCache = mock();
+    const highlightDiffAST = mock();
+    const cleanUpTasks = mock();
     const unsubscribeFromStats = mock();
     const subscribeToStatChanges = mock((callback: () => void) => {
       notifyStatsChanged = callback;
       return unsubscribeFromStats;
     });
     workerPoolMock = {
+      cleanUpTasks,
       getDiffResultCache,
+      highlightDiffAST,
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
       subscribeToStatChanges,
@@ -204,24 +215,54 @@ describe("PierreDiffViewer", () => {
 
     render(<PierrePreloadedDiffViewer patch={selectionPatch} filePath="src/app.ts" />);
 
-    expect(screen.getByTestId("pierre-file-diff").getAttribute("data-mount-id")).toBe("1");
-    expect(screen.getByTestId("pierre-file-diff").closest(".invisible")).not.toBeNull();
+    expect(screen.queryByTestId("pierre-file-diff")).toBeNull();
     expect(screen.getByTestId("pierre-diff-highlight-skeleton")).not.toBeNull();
+    expect(highlightDiffAST).toHaveBeenCalledTimes(1);
     expect(primeDiffHighlightCache).not.toHaveBeenCalled();
 
     cachedHighlight = {};
+    const [observer] = highlightDiffAST.mock.calls[0] ?? [];
+    observer?.onHighlightSuccess();
     act(() => notifyStatsChanged?.());
 
     await waitFor(
       () => {
-        expect(screen.getByTestId("pierre-file-diff").getAttribute("data-mount-id")).toBe("2");
+        expect(screen.getByTestId("pierre-file-diff").getAttribute("data-mount-id")).toBe("1");
         expect(screen.queryByTestId("pierre-diff-highlight-skeleton")).toBeNull();
       },
       { timeout: 1000 },
     );
-    expect(screen.getByTestId("pierre-file-diff").closest(".invisible")).toBeNull();
+    expect(cleanUpTasks).toHaveBeenCalledWith(observer);
     expect(unsubscribeFromStats).toHaveBeenCalledTimes(1);
     expect(getDiffResultCache.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  test("shows an actionable error when diff highlighting fails", async () => {
+    const { PierrePreloadedDiffViewer } = pierreViewerModule;
+    const highlightDiffAST = mock();
+    const cleanUpTasks = mock();
+    workerPoolMock = {
+      cleanUpTasks,
+      getDiffResultCache: mock(() => undefined),
+      highlightDiffAST,
+      isWorkingPool: mock(() => true),
+      primeDiffHighlightCache: mock(),
+      subscribeToStatChanges: mock(() => () => undefined),
+    };
+
+    render(<PierrePreloadedDiffViewer patch={selectionPatch} filePath="src/app.ts" />);
+
+    const [observer] = highlightDiffAST.mock.calls[0] ?? [];
+    act(() => observer?.onHighlightError(new Error("worker failed")));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Syntax highlighting failed for src/app.ts",
+      );
+    });
+    expect(screen.queryByTestId("pierre-diff-highlight-skeleton")).toBeNull();
+    expect(screen.queryByTestId("pierre-file-diff")).toBeNull();
+    expect(cleanUpTasks).toHaveBeenCalledWith(observer);
   });
 
   test("renders a warm cached diff immediately without subscribing", () => {
@@ -315,6 +356,7 @@ describe("PierreDiffViewer", () => {
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
       getDiffResultCache: mock(() => null),
+      isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
     };
 
@@ -339,6 +381,7 @@ describe("PierreDiffViewer", () => {
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
       getDiffResultCache,
+      isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
     };
 
@@ -350,6 +393,25 @@ describe("PierreDiffViewer", () => {
       },
       { timeout: 1000 },
     );
+    expect(primeDiffHighlightCache).not.toHaveBeenCalled();
+  });
+
+  test("skips preloading when the worker pool is unavailable", async () => {
+    const { PierreDiffPreloader } = pierreViewerModule;
+    const getDiffResultCache = mock(() => null);
+    const primeDiffHighlightCache = mock();
+    workerPoolMock = {
+      getDiffResultCache,
+      isWorkingPool: mock(() => false),
+      primeDiffHighlightCache,
+    };
+
+    render(<PierreDiffPreloader patch={selectionPatch} filePath="src/app.ts" />);
+
+    await waitFor(() => {
+      expect(workerPoolMock?.isWorkingPool).toHaveBeenCalledTimes(1);
+    });
+    expect(getDiffResultCache).not.toHaveBeenCalled();
     expect(primeDiffHighlightCache).not.toHaveBeenCalled();
   });
 
@@ -460,6 +522,7 @@ describe("PierreDiffViewer", () => {
     expect(diff.getAttribute("data-hunk-separators")).toBe("line-info");
     expect(diff.getAttribute("data-line-diff-type")).toBe("word-alt");
     expect(diff.getAttribute("data-overflow")).toBe("wrap");
+    expect(diff.getAttribute("data-tokenize-max-length")).toBe("1000");
     expect(diff.parentElement?.className).toContain("max-h-[min(50vh,32rem)]");
     expect(diff.parentElement?.className).toContain("overflow-auto");
   });
@@ -512,6 +575,7 @@ describe("PierreDiffViewer", () => {
     expect(file.getAttribute("data-disable-file-header")).toBe("true");
     expect(file.getAttribute("data-overflow")).toBe("wrap");
     expect(file.getAttribute("data-theme-type")).toBe("light");
+    expect(file.getAttribute("data-tokenize-max-length")).toBe("1000");
     expect(screen.queryByTestId("pierre-file-highlight-skeleton")).toBeNull();
     expect(subscribeToStatChanges).not.toHaveBeenCalled();
     expect(primeFileHighlightCache).not.toHaveBeenCalled();
@@ -535,14 +599,18 @@ describe("PierreDiffViewer", () => {
     let notifyStatsChanged: (() => void) | undefined;
     const getFileResultCache = mock(() => cachedHighlight);
     const primeFileHighlightCache = mock();
+    const highlightFileAST = mock();
+    const cleanUpTasks = mock();
     const unsubscribeFromStats = mock();
     const subscribeToStatChanges = mock((callback: () => void) => {
       notifyStatsChanged = callback;
       return unsubscribeFromStats;
     });
     workerPoolMock = {
+      cleanUpTasks,
       getDiffResultCache: mock(() => null),
       getFileResultCache,
+      highlightFileAST,
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache: mock(),
       primeFileHighlightCache,
@@ -553,24 +621,57 @@ describe("PierreDiffViewer", () => {
       <PierreFileViewer filePath="src/AuthContext.test.tsx" content="export const value = 1;" />,
     );
 
-    expect(screen.getByTestId("pierre-file").getAttribute("data-mount-id")).toBe("1");
-    expect(screen.getByTestId("pierre-file").parentElement?.className).toContain("invisible");
+    expect(screen.queryByTestId("pierre-file")).toBeNull();
     expect(screen.getByTestId("pierre-file-highlight-skeleton")).not.toBeNull();
+    expect(highlightFileAST).toHaveBeenCalledTimes(1);
     expect(primeFileHighlightCache).not.toHaveBeenCalled();
 
     cachedHighlight = {};
+    const [observer] = highlightFileAST.mock.calls[0] ?? [];
+    observer?.onHighlightSuccess();
     act(() => notifyStatsChanged?.());
 
     await waitFor(
       () => {
-        expect(screen.getByTestId("pierre-file").getAttribute("data-mount-id")).toBe("2");
+        expect(screen.getByTestId("pierre-file").getAttribute("data-mount-id")).toBe("1");
         expect(screen.queryByTestId("pierre-file-highlight-skeleton")).toBeNull();
       },
       { timeout: 1000 },
     );
-    expect(screen.getByTestId("pierre-file").parentElement?.className).not.toContain("invisible");
+    expect(cleanUpTasks).toHaveBeenCalledWith(observer);
     expect(unsubscribeFromStats).toHaveBeenCalledTimes(1);
     expect(getFileResultCache.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  test("shows an actionable error when file highlighting fails", async () => {
+    const { PierreFileViewer } = pierreViewerModule;
+    const highlightFileAST = mock();
+    const cleanUpTasks = mock();
+    workerPoolMock = {
+      cleanUpTasks,
+      getDiffResultCache: mock(() => null),
+      getFileResultCache: mock(() => undefined),
+      highlightFileAST,
+      isWorkingPool: mock(() => true),
+      primeDiffHighlightCache: mock(),
+      subscribeToStatChanges: mock(() => () => undefined),
+    };
+
+    render(
+      <PierreFileViewer filePath="src/AuthContext.test.tsx" content="export const value = 1;" />,
+    );
+
+    const [observer] = highlightFileAST.mock.calls[0] ?? [];
+    act(() => observer?.onHighlightError(new Error("worker failed")));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Syntax highlighting failed for src/AuthContext.test.tsx",
+      );
+    });
+    expect(screen.queryByTestId("pierre-file-highlight-skeleton")).toBeNull();
+    expect(screen.queryByTestId("pierre-file")).toBeNull();
+    expect(cleanUpTasks).toHaveBeenCalledWith(observer);
   });
 
   test("renders oversized code as terminal plain content without entering loading", () => {
