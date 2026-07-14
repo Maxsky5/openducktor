@@ -45,6 +45,66 @@ describe("AppUpdatePrompt", () => {
     expect(screen.getByText("Electron update feed configuration is missing.")).toBeTruthy();
   });
 
+  test("shows concise development feedback for menu checks", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "disabled",
+      currentVersion: "0.4.2",
+      disabledCode: "not_packaged",
+      disabledReason: "Updates are available only in packaged desktop builds.",
+      checkInitiator: "menu",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Development build")).toBeTruthy();
+    expect(
+      screen.getByText("Automatic updates are disabled while running OpenDucktor in development."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Updates unavailable")).toBeNull();
+  });
+
+  test("stays hidden when a renderer remount reads a disabled settings check", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "disabled",
+      currentVersion: "0.4.2",
+      disabledCode: "not_packaged",
+      disabledReason: "Updates are available only in packaged desktop builds.",
+      checkInitiator: "settings",
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+
+    render(<AppUpdatePrompt />);
+    await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
+
+    expect(screen.queryByText("Development build")).toBeNull();
+    expect(screen.queryByText("Updates unavailable")).toBeNull();
+  });
+
+  test("shows feedback from a live settings check", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "idle",
+      currentVersion: "0.4.2",
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+
+    render(<AppUpdatePrompt />);
+    await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
+
+    act(() => {
+      appUpdates.emit({
+        status: "upToDate",
+        currentVersion: "0.4.2",
+        checkInitiator: "settings",
+        checkedAt: "2026-07-08T22:00:00.000Z",
+      });
+    });
+
+    expect(await screen.findByText("OpenDucktor is up to date")).toBeTruthy();
+  });
+
   test("keeps long manual check errors in a single bounded panel", async () => {
     const appUpdates = createFakeAppUpdateBridge({
       status: "error",
@@ -388,6 +448,41 @@ describe("AppUpdatePrompt", () => {
     expect(screen.getByText("Quit and reopen OpenDucktor before trying again.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Download Latest Release" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+  });
+
+  test("explains signature mismatches without exposing native updater details", async () => {
+    const recoveryMessage =
+      "This installation cannot verify the signed update because it was installed without a compatible macOS signature. Download and install the latest signed release manually. Automatic updates will work after that.";
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "downloaded",
+      currentVersion: "0.4.4",
+      availableVersion: "0.5.0",
+      progressPercent: 100,
+      installRetryDisabled: true,
+      error: {
+        code: "incompatible_app_signature",
+        message: recoveryMessage,
+        operation: "install",
+      },
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<AppUpdatePrompt />);
+
+    expect(await screen.findByText("Manual update required")).toBeTruthy();
+    expect(screen.getByText(recoveryMessage)).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "This installation cannot verify the signed update because it was installed without a compatible macOS signature.",
+      ),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Download Signed Release" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Download Latest Release" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+    expect(screen.queryByText(/Code signature at URL/)).toBeNull();
+    expect(screen.queryByText(/file:\/\/\/Users\//)).toBeNull();
+    expect(screen.getByText(recoveryMessage).parentElement?.className).toContain(
+      "border-warning-border",
+    );
   });
 
   test("resurfaces a dismissed downloaded prompt when install fails", async () => {

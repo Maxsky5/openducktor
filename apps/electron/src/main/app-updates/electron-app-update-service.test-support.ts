@@ -183,7 +183,7 @@ export const createService = (
     },
     now: () => fixedNow,
     platform: "darwin",
-    readUpdateConfig: () => "provider: github\n",
+    readUpdateConfig: async () => "provider: github\n",
     resourcesPath: "/Applications/OpenDucktor.app/Contents/Resources",
     ...overrides,
   });

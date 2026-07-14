@@ -279,6 +279,71 @@ describe("electron app update install handoff", () => {
     expect(adapter.nativeQuitAndInstallCalls).toBe(1);
   });
 
+  test("turns macOS signature mismatches into manual update guidance", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.5.0" },
+    };
+    adapter.nextDownloadResult = Promise.resolve({ version: "0.5.0" });
+    const { service } = createService({ adapter, platform: "darwin" });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+
+    adapter.emit(
+      "error",
+      new Error(
+        "Code signature at URL file:///Users/example/Library/Caches/com.openducktor.app.ShipIt/update/OpenDucktor.app/ did not pass validation: code failed to satisfy specified code requirement(s)",
+      ),
+    );
+
+    const state = service.getState();
+    expect(state).toMatchObject({
+      status: "downloaded",
+      availableVersion: "0.5.0",
+      installRetryDisabled: true,
+      error: {
+        code: "incompatible_app_signature",
+        message:
+          "This installation cannot verify the signed update because it was installed without a compatible macOS signature. Download and install the latest signed release manually. Automatic updates will work after that.",
+        operation: "install",
+      },
+    });
+    expect(state.status === "downloaded" ? state.error?.message : undefined).not.toContain(
+      "file:///Users/",
+    );
+    expect(canInstallAppUpdate(state)).toBe(false);
+  });
+
+  test("does not classify macOS signature messages on other platforms", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.5.0" },
+    };
+    const { service } = createService({ adapter, platform: "win32" });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+
+    adapter.emit(
+      "error",
+      new Error(
+        "Code signature at URL C:/OpenDucktor did not pass validation: code failed to satisfy specified code requirement(s)",
+      ),
+    );
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      installRetryDisabled: true,
+      error: {
+        code: "install_failed",
+        operation: "install",
+      },
+    });
+  });
+
   test("keeps terminal install failure stable after later updater errors", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {

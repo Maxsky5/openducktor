@@ -33,6 +33,7 @@ export type AppUpdateStateController = {
   checkFromSettings(): Promise<AppUpdateCommandResult | null>;
   commandError: AppUpdateCommandError | null;
   download(): Promise<AppUpdateCommandResult | null>;
+  hasReceivedStateEvent: boolean;
   install(): Promise<AppUpdateCommandResult | null>;
   isLoadingInitialState: boolean;
   state: AppUpdateState | null;
@@ -43,6 +44,7 @@ export function useAppUpdateState(): AppUpdateStateController {
   const [isLoadingInitialState, setIsLoadingInitialState] = useState(true);
   const [actionInFlight, setActionInFlight] = useState<AppUpdateAction | null>(null);
   const [commandError, setCommandError] = useState<AppUpdateCommandError | null>(null);
+  const [hasReceivedStateEvent, setHasReceivedStateEvent] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -55,6 +57,7 @@ export function useAppUpdateState(): AppUpdateStateController {
         const unsubscribeState = await appUpdates.subscribeState((nextState) => {
           receivedSubscribedState = true;
           if (!disposed) {
+            setHasReceivedStateEvent(true);
             setState(nextState);
           }
         });
@@ -127,6 +130,7 @@ export function useAppUpdateState(): AppUpdateStateController {
       ),
     commandError,
     download: () => runAction("download", "download", () => getShellBridge().appUpdates.download()),
+    hasReceivedStateEvent,
     install: () => runAction("install", "install", () => getShellBridge().appUpdates.install()),
     isLoadingInitialState,
     state,

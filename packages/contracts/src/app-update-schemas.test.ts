@@ -54,6 +54,36 @@ describe("app update schemas", () => {
     ).toThrow();
   });
 
+  test("parses incompatible app signature errors", () => {
+    expect(
+      appUpdateErrorSchema.parse({
+        code: "incompatible_app_signature",
+        message: "Install the signed release manually.",
+        operation: "install",
+      }),
+    ).toEqual({
+      code: "incompatible_app_signature",
+      message: "Install the signed release manually.",
+      operation: "install",
+    });
+  });
+
+  test("parses browser runner update policy", () => {
+    expect(
+      appUpdateStateSchema.parse({
+        status: "disabled",
+        currentVersion: "0.4.2",
+        disabledCode: "unsupported_web_runner",
+        disabledReason: "The browser runner does not install updates in OpenDucktor.",
+      }),
+    ).toEqual({
+      status: "disabled",
+      currentVersion: "0.4.2",
+      disabledCode: "unsupported_web_runner",
+      disabledReason: "The browser runner does not install updates in OpenDucktor.",
+    });
+  });
+
   test("keeps update command eligibility in the shared contract", () => {
     expect(
       canDownloadAppUpdate({

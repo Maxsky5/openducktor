@@ -30,7 +30,12 @@ const createTestShellBridge = (): ShellBridge =>
       unsubscribe: () => {},
     }),
     subscribeTaskEvents: async () => () => {},
-    appUpdates: createDisabledAppUpdateBridge("Updates are unavailable in this test shell."),
+    appUpdates: createDisabledAppUpdateBridge({
+      status: "disabled",
+      currentVersion: "unknown",
+      disabledCode: "updater_unavailable",
+      disabledReason: "Updates are unavailable in this test shell.",
+    }),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,

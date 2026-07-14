@@ -56,14 +56,14 @@ export const composeElectronMainStartupEffect = <PreReady, Ready>({
       phase: "configure-ready",
     });
     const ready = yield* configureReady(preReady);
-    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.initialize-host", {
-      phase: "initialize-host",
-    });
-    yield* initializeHost(ready);
     yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.create-window", {
       phase: "create-window",
     });
     yield* createMainWindow(ready);
+    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.initialize-host", {
+      phase: "initialize-host",
+    });
+    yield* initializeHost(ready);
     yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.register-activate", {
       phase: "register-activate",
     });

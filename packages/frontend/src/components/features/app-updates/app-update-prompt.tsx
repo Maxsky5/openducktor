@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { errorMessage as readErrorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
+import { cn } from "@/lib/utils";
 import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
 import {
   canDownloadUpdate,
@@ -16,7 +17,8 @@ import {
   getAppUpdatePromptKey,
   getAppUpdateStatusDisplay,
   isActionableUpdateError,
-  isManualUpdateCheckState,
+  isMenuUpdateCheckState,
+  requiresManualAppUpdate,
 } from "./app-update-display";
 import { AppUpdateProgress } from "./app-update-progress";
 
@@ -85,7 +87,10 @@ export function AppUpdatePrompt(): ReactElement | null {
   const shouldShowPrompt =
     promptStatuses.has(state.status) ||
     isActionableUpdateError(state) ||
-    (isManualUpdateCheckState(state) &&
+    ((isMenuUpdateCheckState(state) ||
+      (controller.hasReceivedStateEvent &&
+        "checkInitiator" in state &&
+        state.checkInitiator === "settings")) &&
       (state.status === "checking" ||
         state.status === "upToDate" ||
         state.status === "disabled" ||
@@ -103,11 +108,14 @@ export function AppUpdatePrompt(): ReactElement | null {
   const progressPercent = Math.round(getAppUpdateProgressPercent(state) ?? 0);
   const availableVersion = getAppUpdateAvailableVersion(state);
   const error = getAppUpdateError(state);
-  const errorMessage = controller.commandError?.message ?? error?.message;
+  const manualUpdateRequired = requiresManualAppUpdate(state);
+  const errorMessage = manualUpdateRequired
+    ? error?.message
+    : (controller.commandError?.message ?? error?.message);
   const installNeedsAttention =
     state.status === "downloaded" && state.installRetryDisabled === true;
   const releaseNotesVersion = promptStatuses.has(state.status) ? availableVersion : undefined;
-  const showDescription = state.status !== "available";
+  const showDescription = state.status !== "available" && display.description !== undefined;
   const visibleVersionText = `Current ${state.currentVersion}${
     availableVersion ? ` · New ${availableVersion}` : ""
   }`;
@@ -126,11 +134,14 @@ export function AppUpdatePrompt(): ReactElement | null {
         </p>
         <CardHeader className="flex-row items-center gap-3 px-4 pt-4">
           <div
-            className={
-              errorMessage
-                ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive-surface text-destructive-surface-foreground"
-                : "flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground"
-            }
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-lg",
+              !errorMessage && "border border-border bg-muted text-foreground",
+              errorMessage &&
+                !manualUpdateRequired &&
+                "bg-destructive-surface text-destructive-surface-foreground",
+              manualUpdateRequired && "bg-warning-surface text-warning-surface-foreground",
+            )}
           >
             {errorMessage ? <CircleAlert /> : <Download />}
           </div>
@@ -165,7 +176,15 @@ export function AppUpdatePrompt(): ReactElement | null {
           {releaseNotesVersion && <ReleaseNotesLink version={releaseNotesVersion} />}
           {showProgress && <AppUpdateProgress percent={progressPercent} />}
           {errorMessage && (
-            <div className="flex items-start gap-2.5 rounded-md border border-destructive/30 bg-destructive-surface px-3 py-2.5 text-sm leading-5 text-destructive-surface-foreground">
+            <div
+              className={cn(
+                "flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm leading-5",
+                manualUpdateRequired &&
+                  "border-warning-border bg-warning-surface text-warning-surface-foreground",
+                !manualUpdateRequired &&
+                  "border-destructive/30 bg-destructive-surface text-destructive-surface-foreground",
+              )}
+            >
               <CircleAlert className="mt-0.5 shrink-0" />
               <p className="max-h-32 min-w-0 overflow-y-auto break-words whitespace-pre-wrap">
                 {errorMessage}
@@ -212,7 +231,7 @@ export function AppUpdatePrompt(): ReactElement | null {
                 onClick={openLatestRelease}
               >
                 <ExternalLink data-icon="inline-start" />
-                Download Latest Release
+                {manualUpdateRequired ? "Download Signed Release" : "Download Latest Release"}
               </Button>
             )}
           </div>

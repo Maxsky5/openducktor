@@ -30,6 +30,7 @@ export type AppUpdateOperation = z.infer<typeof appUpdateOperationSchema>;
 
 export const appUpdateErrorCodeValues = [
   "not_packaged",
+  "unsupported_web_runner",
   "missing_update_config",
   "unsupported_linux_target",
   "updater_unavailable",
@@ -38,6 +39,7 @@ export const appUpdateErrorCodeValues = [
   "check_failed",
   "download_failed",
   "install_failed",
+  "incompatible_app_signature",
 ] as const;
 export const appUpdateErrorCodeSchema = z.enum(appUpdateErrorCodeValues);
 export type AppUpdateErrorCode = z.infer<typeof appUpdateErrorCodeSchema>;

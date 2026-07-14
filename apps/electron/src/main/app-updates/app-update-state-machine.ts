@@ -286,10 +286,12 @@ export const markDownloadedInstallError = ({
 
 export const markDownloadedInstallRetryDisabled = ({
   cause,
+  code,
   message,
   previousState,
 }: {
   cause?: unknown;
+  code: AppUpdateErrorCode;
   message: string;
   previousState: DownloadedAppUpdateState;
 }): AppUpdateState => {
@@ -299,7 +301,7 @@ export const markDownloadedInstallRetryDisabled = ({
     installRetryDisabled: true,
     error: createUpdateError({
       cause,
-      code: "install_failed",
+      code,
       message,
       operation: "install",
     }),

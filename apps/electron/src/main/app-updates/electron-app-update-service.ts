@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   AppUpdateCheckInitiator,
@@ -66,15 +66,18 @@ export type ElectronAppUpdateServiceOptions = {
   logger: ElectronAppUpdateLogger;
   now?: () => string;
   platform: NodeJS.Platform;
-  readUpdateConfig?: (path: string) => string | null;
+  readUpdateConfig?: (path: string) => Promise<string | null>;
   resourcesPath: string;
   scheduler?: ElectronAppUpdateScheduler;
 };
 
 const DEFAULT_APP_UPDATE_CONFIG_FILE = "app-update.yml";
 const INSTALL_RELAUNCH_GUIDANCE = "Quit and reopen OpenDucktor before trying again.";
+const MANUAL_SIGNATURE_UPDATE_GUIDANCE =
+  "This installation cannot verify the signed update because it was installed without a compatible macOS signature. Download and install the latest signed release manually. Automatic updates will work after that.";
 const APP_UPDATE_PROGRESS_INTERVAL_MS = 500;
-export const DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const INITIAL_APP_UPDATE_CHECK_DELAY_MS = 1_000;
+export const DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 const releaseVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+)(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -93,9 +96,9 @@ const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {
   setTimeout: (callback, timeoutMs) => setTimeout(callback, timeoutMs),
 };
 
-const defaultReadUpdateConfig = (path: string): string | null => {
+const defaultReadUpdateConfig = async (path: string): Promise<string | null> => {
   try {
-    return readFileSync(path, "utf8");
+    return await readFile(path, "utf8");
   } catch (cause) {
     if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT") {
       return null;
@@ -108,6 +111,19 @@ const defaultNow = (): string => new Date().toISOString();
 
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
+
+const isMacOsUpdateSignatureMismatch = (platform: NodeJS.Platform, cause: unknown): boolean => {
+  if (platform !== "darwin") {
+    return false;
+  }
+  const message = errorMessage(cause);
+  return (
+    message.includes("Code signature at URL") &&
+    message.includes(
+      "did not pass validation: code failed to satisfy specified code requirement(s)",
+    )
+  );
+};
 
 const readStringProperty = (value: unknown, property: string): string | undefined => {
   if (typeof value !== "object" || value === null) {
@@ -223,8 +239,23 @@ export const createElectronAppUpdateService = ({
   let installHandoffStarted = false;
   let pendingDownloadProgress: number | null = null;
   let disposed = false;
+  let initializationAttempted = false;
   let updaterReady = false;
   let state: AppUpdateState = { status: "idle", currentVersion };
+
+  if (!isPackaged) {
+    state = createDisabledUpdateState({
+      code: "not_packaged",
+      currentVersion,
+      reason: "Updates are available only in packaged desktop builds.",
+    });
+  } else if (platform === "linux" && !appImagePath) {
+    state = createDisabledUpdateState({
+      code: "unsupported_linux_target",
+      currentVersion,
+      reason: "OpenDucktor updates on Linux require the AppImage build.",
+    });
+  }
 
   const publishState = (nextState: AppUpdateState): AppUpdateState => {
     state = nextState;
@@ -406,10 +437,14 @@ export const createElectronAppUpdateService = ({
     previousState: Extract<AppUpdateState, { status: "downloaded" }>,
   ): void => {
     if (installHandoffStarted) {
+      const incompatibleAppSignature = isMacOsUpdateSignatureMismatch(platform, cause);
       publishState(
         markDownloadedInstallRetryDisabled({
           cause,
-          message: installTerminalFailureMessage(cause),
+          code: incompatibleAppSignature ? "incompatible_app_signature" : "install_failed",
+          message: incompatibleAppSignature
+            ? MANUAL_SIGNATURE_UPDATE_GUIDANCE
+            : installTerminalFailureMessage(cause),
           previousState,
         }),
       );
@@ -460,34 +495,23 @@ export const createElectronAppUpdateService = ({
     );
   };
 
-  const configure = (): void => {
-    if (!isPackaged) {
-      publishState(
-        createDisabledUpdateState({
-          code: "not_packaged",
-          currentVersion,
-          reason: "Updates are available only in packaged desktop builds.",
-        }),
-      );
-      return;
+  const initializeUpdater = async (): Promise<boolean> => {
+    if (updaterReady) {
+      return true;
     }
-    if (platform === "linux" && !appImagePath) {
-      publishState(
-        createDisabledUpdateState({
-          code: "unsupported_linux_target",
-          currentVersion,
-          reason: "OpenDucktor updates on Linux require the AppImage build.",
-        }),
-      );
-      return;
+    if (initializationAttempted) {
+      return false;
     }
-
+    initializationAttempted = true;
     let rawConfig: string | null;
     const updateChannel = deriveElectronUpdateChannel(currentVersion);
 
     try {
-      rawConfig = readUpdateConfig(resolvedAppUpdateConfigPath);
+      rawConfig = await readUpdateConfig(resolvedAppUpdateConfigPath);
     } catch (cause) {
+      if (disposed) {
+        return false;
+      }
       setErrorState({
         code: "updater_unavailable",
         cause,
@@ -496,7 +520,11 @@ export const createElectronAppUpdateService = ({
         )}`,
         operation: "initialize",
       });
-      return;
+      return false;
+    }
+
+    if (disposed) {
+      return false;
     }
 
     let hasProviderConfig: boolean;
@@ -511,7 +539,7 @@ export const createElectronAppUpdateService = ({
         )}`,
         operation: "initialize",
       });
-      return;
+      return false;
     }
 
     if (!hasProviderConfig) {
@@ -522,7 +550,7 @@ export const createElectronAppUpdateService = ({
           reason: `Electron update feed configuration is missing at ${resolvedAppUpdateConfigPath}.`,
         }),
       );
-      return;
+      return false;
     }
 
     try {
@@ -535,7 +563,7 @@ export const createElectronAppUpdateService = ({
       });
       registerAdapterEvents();
       updaterReady = true;
-      publishState({ status: "idle", currentVersion });
+      return true;
     } catch (cause) {
       setErrorState({
         code: "updater_unavailable",
@@ -543,13 +571,12 @@ export const createElectronAppUpdateService = ({
         message: `Electron updater initialization failed: ${errorMessage(cause)}`,
         operation: "initialize",
       });
+      return false;
     }
   };
 
-  configure();
-
   const runBackgroundCheck = (): void => {
-    if (disposed || !updaterReady) {
+    if (disposed || state.status === "disabled" || (initializationAttempted && !updaterReady)) {
       return;
     }
     void service.check({ initiator: "background" });
@@ -562,7 +589,7 @@ export const createElectronAppUpdateService = ({
         publishState(markDisabledManualCheck(currentState, initiator, now()));
         return rejectDisabled("check", currentState);
       }
-      if (!updaterReady) {
+      if (initializationAttempted && !updaterReady) {
         if (currentState.status === "error" && initiator !== "background") {
           publishState(markErrorManualCheck(currentState, initiator, now()));
         }
@@ -591,6 +618,20 @@ export const createElectronAppUpdateService = ({
       installHandoffStarted = false;
       publishState(markChecking({ currentVersion, initiator, previousState: currentState }));
       try {
+        if (!(await initializeUpdater())) {
+          const unavailableState = state;
+          if (unavailableState.status === "disabled") {
+            if (initiator !== "background") {
+              publishState(markDisabledManualCheck(unavailableState, initiator, now()));
+            }
+            return rejectDisabled("check", unavailableState);
+          }
+          if (unavailableState.status === "error" && initiator !== "background") {
+            publishState(markErrorManualCheck(unavailableState, initiator, now()));
+          }
+          return rejectUpdaterUnavailable("check");
+        }
+
         const result = await adapter.checkForUpdates();
         if (state.status === "checking") {
           if (result.isUpdateAvailable) {
@@ -639,9 +680,6 @@ export const createElectronAppUpdateService = ({
       if (state.status === "disabled") {
         return rejectDisabled("download", state);
       }
-      if (!updaterReady) {
-        return rejectUpdaterUnavailable("download");
-      }
       if (activeOperation !== null) {
         return rejectBusy("download");
       }
@@ -650,6 +688,9 @@ export const createElectronAppUpdateService = ({
           "download",
           "Download is available only after OpenDucktor finds an update.",
         );
+      }
+      if (!updaterReady) {
+        return rejectUpdaterUnavailable("download");
       }
 
       activeOperation = "download";
@@ -689,9 +730,6 @@ export const createElectronAppUpdateService = ({
       if (state.status === "disabled") {
         return rejectDisabled("install", state);
       }
-      if (!updaterReady) {
-        return rejectUpdaterUnavailable("install");
-      }
       if (activeOperation !== null) {
         return rejectBusy("install");
       }
@@ -701,6 +739,9 @@ export const createElectronAppUpdateService = ({
           "install",
           "Restart and install is available only after the update download completes.",
         );
+      }
+      if (!updaterReady) {
+        return rejectUpdaterUnavailable("install");
       }
 
       activeOperation = "install";
@@ -721,13 +762,13 @@ export const createElectronAppUpdateService = ({
       }
     },
     startBackgroundChecks: () => {
-      if (disposed || !updaterReady || backgroundCheckIntervalHandle !== null) {
+      if (disposed || state.status === "disabled" || backgroundCheckIntervalHandle !== null) {
         return;
       }
       initialBackgroundCheckHandle = scheduler.setTimeout(() => {
         initialBackgroundCheckHandle = null;
         runBackgroundCheck();
-      }, 0);
+      }, INITIAL_APP_UPDATE_CHECK_DELAY_MS);
       backgroundCheckIntervalHandle = scheduler.setInterval(
         runBackgroundCheck,
         backgroundCheckIntervalMs,

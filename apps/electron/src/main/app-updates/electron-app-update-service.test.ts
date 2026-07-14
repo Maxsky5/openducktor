@@ -12,6 +12,60 @@ import {
 import type { ElectronUpdaterCheckResult } from "./electron-app-updater-adapter";
 
 describe("electron app update service", () => {
+  test("keeps packaged updater initialization off the startup call stack", async () => {
+    const fakeScheduler = createFakeScheduler();
+    let updateConfigReads = 0;
+    const { adapter, service } = createService({
+      readUpdateConfig: async () => {
+        updateConfigReads += 1;
+        return "provider: github\n";
+      },
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    expect(updateConfigReads).toBe(0);
+    expect(adapter.configureOptions).toBeNull();
+    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.2" });
+
+    service.startBackgroundChecks();
+
+    expect(updateConfigReads).toBe(0);
+    expect(adapter.configureOptions).toBeNull();
+
+    await fakeScheduler.runTimeout();
+
+    expect(updateConfigReads).toBe(1);
+    expect(adapter.configureOptions).not.toBeNull();
+    expect(adapter.checkCalls).toBe(1);
+  });
+
+  test("does not block while background updater initialization is pending", async () => {
+    const fakeScheduler = createFakeScheduler();
+    let resolveUpdateConfig: (config: string) => void = () => {};
+    const updateConfig = new Promise<string>((resolve) => {
+      resolveUpdateConfig = resolve;
+    });
+    const { adapter, service } = createService({
+      readUpdateConfig: async () => updateConfig,
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    service.startBackgroundChecks();
+    await fakeScheduler.runTimeout();
+
+    expect(adapter.configureOptions).toBeNull();
+    expect(adapter.checkCalls).toBe(0);
+    expect(service.getState()).toMatchObject({ status: "checking" });
+
+    resolveUpdateConfig("provider: github\n");
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(adapter.configureOptions).not.toBeNull();
+    expect(adapter.checkCalls).toBe(1);
+    expect(service.getState()).toMatchObject({ status: "upToDate" });
+  });
+
   test("starts disabled in unpackaged builds and rejects manual checks", async () => {
     const { adapter, service } = createService({ isPackaged: false });
     const states: AppUpdateState[] = [];
@@ -48,13 +102,10 @@ describe("electron app update service", () => {
 
   test("reports missing packaged update config as disabled instead of up-to-date", async () => {
     const { adapter, service } = createService({
-      readUpdateConfig: () => null,
+      readUpdateConfig: async () => null,
     });
 
-    expect(service.getState()).toMatchObject({
-      status: "disabled",
-      disabledCode: "missing_update_config",
-    });
+    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.2" });
 
     const result = await service.check({ initiator: "menu" });
 
@@ -67,10 +118,12 @@ describe("electron app update service", () => {
     expect(adapter.checkCalls).toBe(0);
   });
 
-  test("does not accept commented update provider config as configured", () => {
+  test("does not accept commented update provider config as configured", async () => {
     const { adapter, service } = createService({
-      readUpdateConfig: () => "# provider: github\n",
+      readUpdateConfig: async () => "# provider: github\n",
     });
+
+    await service.check({ initiator: "settings" });
 
     expect(service.getState()).toMatchObject({
       status: "disabled",
@@ -79,10 +132,12 @@ describe("electron app update service", () => {
     expect(adapter.configureOptions).toBeNull();
   });
 
-  test("reports malformed update provider config as an initialization error", () => {
+  test("reports malformed update provider config as an initialization error", async () => {
     const { adapter, service } = createService({
-      readUpdateConfig: () => "provider: [\n",
+      readUpdateConfig: async () => "provider: [\n",
     });
+
+    await service.check({ initiator: "settings" });
 
     expect(service.getState()).toMatchObject({
       status: "error",
@@ -105,7 +160,7 @@ describe("electron app update service", () => {
     }> = [
       {
         configureService: {
-          readUpdateConfig: () => {
+          readUpdateConfig: async () => {
             throw new Error("config unreadable");
           },
         },
@@ -113,7 +168,7 @@ describe("electron app update service", () => {
       },
       {
         configureService: {
-          readUpdateConfig: () => "provider: [\n",
+          readUpdateConfig: async () => "provider: [\n",
         },
         expectedMessage: "Electron update feed configuration is invalid",
       },
@@ -154,10 +209,11 @@ describe("electron app update service", () => {
     }
   });
 
-  test("configures the updater for explicit download and install control", () => {
+  test("configures the updater for explicit download and install control", async () => {
     const { adapter, service } = createService();
 
-    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.2" });
+    await service.check({ initiator: "settings" });
+
     expect(adapter.configureOptions).toMatchObject({
       allowPrerelease: false,
       autoDownload: false,
@@ -166,21 +222,24 @@ describe("electron app update service", () => {
     });
   });
 
-  test("configures prerelease builds to check their update channel", () => {
+  test("configures prerelease builds to check their update channel", async () => {
     const { adapter, service } = createService({ currentVersion: "0.4.0-beta.2" });
 
-    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.0-beta.2" });
+    await service.check({ initiator: "settings" });
+
     expect(adapter.configureOptions).toMatchObject({
       allowPrerelease: true,
       channel: "beta",
     });
   });
 
-  test("defers the initial background check off the startup call stack and repeats hourly", async () => {
+  test("defers the initial background check until after startup and repeats every twelve hours", async () => {
     const fakeScheduler = createFakeScheduler();
     const { adapter, service } = createService({
       scheduler: fakeScheduler.scheduler,
     });
+
+    expect(DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS).toBe(12 * 60 * 60 * 1000);
 
     service.startBackgroundChecks();
 
@@ -189,7 +248,7 @@ describe("electron app update service", () => {
       {
         callback: expect.any(Function),
         cleared: false,
-        timeoutMs: 0,
+        timeoutMs: 1_000,
       },
     ]);
 
@@ -344,9 +403,10 @@ describe("electron app update service", () => {
     expect(result.state.error.message).not.toContain("at createHttpError");
   });
 
-  test("sanitizes updater error events before publishing them to renderers", () => {
+  test("sanitizes updater error events before publishing them to renderers", async () => {
     const adapter = new FakeUpdaterAdapter();
     const { service } = createService({ adapter });
+    await service.check({ initiator: "settings" });
 
     adapter.emit("error", createMissingManifestError());
 

@@ -120,7 +120,7 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("OpenDucktor update state forwarding failed");
   });
 
-  test("startup runs pre-ready setup before app readiness and initializes host before window", async () => {
+  test("startup creates the window before initializing background host services", async () => {
     const calls: string[] = [];
 
     const ready = await runElectronEffect(
@@ -158,8 +158,8 @@ describe("Electron main lifecycle policy", () => {
       "prepare-pre-ready",
       "wait-until-ready",
       "configure-ready:host-router",
-      "initialize-host:host-router",
       "create-window:renderer-session",
+      "initialize-host:host-router",
       "register-activate:renderer-session",
     ]);
   });
