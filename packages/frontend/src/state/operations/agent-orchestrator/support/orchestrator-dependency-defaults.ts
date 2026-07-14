@@ -15,9 +15,13 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
     taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
   },
   runtimeHostPort: {
+    gitCanonicalizePath: (...args) => host.gitCanonicalizePath(...args),
     runtimeEnsure: (...args) => host.runtimeEnsure(...args),
     taskSessionBootstrapPrepare: (...args) => host.taskSessionBootstrapPrepare(...args),
     taskSessionBootstrapComplete: (...args) => host.taskSessionBootstrapComplete(...args),
     taskSessionBootstrapAbort: (...args) => host.taskSessionBootstrapAbort(...args),
+    taskSessionStartupLeasePrepare: (...args) => host.taskSessionStartupLeasePrepare(...args),
+    taskSessionStartupLeaseComplete: (...args) => host.taskSessionStartupLeaseComplete(...args),
+    taskSessionStartupLeaseAbort: (...args) => host.taskSessionStartupLeaseAbort(...args),
   },
 });

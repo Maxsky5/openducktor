@@ -630,6 +630,60 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(abortCalls).toBe(1);
   });
 
+  test("preserves a registered fresh session when rollback cannot stop it", async () => {
+    const sessionsRef = { current: emptyAgentSessionCollection() };
+    const deletedSessionIds: string[] = [];
+    let abortCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-stop-fail",
+      role: "planner",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {
+      throw new Error("runtime unavailable");
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      observeAgentSession: async () => {
+        throw new Error("observer failed");
+      },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {},
+          abort: async () => {
+            abortCalls += 1;
+          },
+        },
+      }),
+      deleteSessionRecord: async (_taskId, identity) => {
+        deletedSessionIds.push(identity.externalSessionId);
+      },
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow(
+      "Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
+    );
+    expect(getSession(sessionsRef.current, "external-stop-fail")).toBeDefined();
+    expect(deletedSessionIds).toEqual([]);
+    expect(abortCalls).toBe(0);
+  });
+
   test("rolls back a started session when the repository changes during bootstrap completion", async () => {
     const completionStarted = createDeferred<void>();
     const completion = createDeferred<void>();

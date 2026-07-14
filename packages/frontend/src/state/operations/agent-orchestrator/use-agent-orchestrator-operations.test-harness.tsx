@@ -45,6 +45,7 @@ export const createTestDependencies = (
     ...hostOverrides,
   },
   runtimeHostPort: {
+    gitCanonicalizePath: async (path) => path,
     runtimeEnsure: async (repoPath, runtimeKind) => ({
       kind: runtimeKind,
       runtimeId: `${runtimeKind}:${repoPath}`,
@@ -64,6 +65,9 @@ export const createTestDependencies = (
     }),
     taskSessionBootstrapComplete: async () => undefined,
     taskSessionBootstrapAbort: async () => undefined,
+    taskSessionStartupLeasePrepare: async () => "lease-1",
+    taskSessionStartupLeaseComplete: async () => undefined,
+    taskSessionStartupLeaseAbort: async () => undefined,
     ...runtimeHostOverrides,
   },
 });

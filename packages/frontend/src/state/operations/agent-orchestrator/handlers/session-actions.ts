@@ -2,7 +2,6 @@ import type { RepoPromptOverrides, TaskCard, TaskWorktreeSummary } from "@opendu
 import type { AgentEnginePort } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { host } from "../../shared/host";
 import type { UpdateSession } from "../events/session-event-types";
 import type {
   EnsureExistingSessionRuntime,
@@ -19,7 +18,7 @@ import { createPrepareSessionSend } from "./prepare-session-send";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStartAgentSession } from "./start-session";
-import type { SessionDependencies } from "./start-session.types";
+import type { RuntimeDependencies, SessionDependencies } from "./start-session.types";
 import { createStopAgentSession, type StopAgentSessionDependencies } from "./stop-session";
 
 type SessionActionsDependencies = {
@@ -37,6 +36,10 @@ type SessionActionsDependencies = {
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
   observeAgentSession: ObserveAgentSession;
+  canonicalizePath: RuntimeDependencies["canonicalizePath"];
+  prepareTaskSessionStartupLease: RuntimeDependencies["prepareTaskSessionStartupLease"];
+  completeTaskSessionStartupLease: RuntimeDependencies["completeTaskSessionStartupLease"];
+  abortTaskSessionStartupLease: RuntimeDependencies["abortTaskSessionStartupLease"];
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: EnsureRuntime;
   ensureExistingSessionRuntime: EnsureExistingSessionRuntime;
@@ -71,6 +74,10 @@ export const createAgentSessionActions = ({
   sessionTurnState,
   updateSession,
   observeAgentSession,
+  canonicalizePath,
+  prepareTaskSessionStartupLease,
+  completeTaskSessionStartupLease,
+  abortTaskSessionStartupLease,
   resolveTaskWorktree,
   ensureRuntime,
   ensureExistingSessionRuntime,
@@ -135,13 +142,10 @@ export const createAgentSessionActions = ({
     },
     runtime: {
       adapter,
-      canonicalizePath: (path) => host.gitCanonicalizePath(path),
-      prepareTaskSessionStartupLease: (repoPath, taskId, role) =>
-        host.taskSessionStartupLeasePrepare(repoPath, taskId, role),
-      completeTaskSessionStartupLease: (repoPath, taskId, leaseId) =>
-        host.taskSessionStartupLeaseComplete(repoPath, taskId, leaseId),
-      abortTaskSessionStartupLease: (repoPath, taskId, leaseId) =>
-        host.taskSessionStartupLeaseAbort(repoPath, taskId, leaseId),
+      canonicalizePath,
+      prepareTaskSessionStartupLease,
+      completeTaskSessionStartupLease,
+      abortTaskSessionStartupLease,
       resolveTaskWorktree,
       ensureRuntime,
     },

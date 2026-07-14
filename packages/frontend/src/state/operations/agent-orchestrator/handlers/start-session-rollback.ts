@@ -109,19 +109,21 @@ export const rollbackRegisteredStartedSession = async ({
   stopReason: string;
   bootstrap?: { abort: () => Promise<void> };
 }): Promise<never> => {
-  session.clearSessionObservationState(identity);
-  session.removeSession(identity);
-
-  let stopError: unknown;
   try {
     await runOrchestratorTask(
       stopReason,
       async () => runtime.adapter.stopSession({ ...identity, repoPath: startedCtx.repoPath }),
       { tags: toStartedSessionTags(startedCtx) },
     );
-  } catch (error) {
-    stopError = error;
+  } catch (stopError) {
+    throw new Error(
+      `${message} Failed to stop the started session during rollback: ${errorMessage(stopError)}. Cleanup was not continued.`,
+      { cause: stopError },
+    );
   }
+
+  session.clearSessionObservationState(identity);
+  session.removeSession(identity);
 
   let deleteError: unknown;
   try {
@@ -140,11 +142,7 @@ export const rollbackRegisteredStartedSession = async ({
   }
 
   const progress = [
-    describeRollbackStep(
-      stopError,
-      "Failed to stop the started session during rollback",
-      "The started session was stopped and removed locally.",
-    ),
+    "The started session was stopped and removed locally.",
     describeRollbackStep(
       deleteError,
       "Failed to delete the durable session record",

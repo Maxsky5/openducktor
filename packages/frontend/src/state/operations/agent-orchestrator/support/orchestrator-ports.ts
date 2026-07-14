@@ -23,10 +23,14 @@ export type AgentOrchestratorHostPort = {
 };
 
 export type AgentOrchestratorRuntimeHostPort = {
+  gitCanonicalizePath: typeof host.gitCanonicalizePath;
   runtimeEnsure: typeof host.runtimeEnsure;
   taskSessionBootstrapPrepare: typeof host.taskSessionBootstrapPrepare;
   taskSessionBootstrapComplete: typeof host.taskSessionBootstrapComplete;
   taskSessionBootstrapAbort: typeof host.taskSessionBootstrapAbort;
+  taskSessionStartupLeasePrepare: typeof host.taskSessionStartupLeasePrepare;
+  taskSessionStartupLeaseComplete: typeof host.taskSessionStartupLeaseComplete;
+  taskSessionStartupLeaseAbort: typeof host.taskSessionStartupLeaseAbort;
 };
 
 export type AgentOrchestratorDependencies = {
