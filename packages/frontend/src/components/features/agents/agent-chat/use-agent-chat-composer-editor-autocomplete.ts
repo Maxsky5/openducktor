@@ -89,7 +89,7 @@ export const AUTOCOMPLETE_NAVIGATION_KEYS = new Set([
 ]);
 
 const FILE_SEARCH_FAILED_MESSAGE = "Failed to search files.";
-const FILE_SEARCH_DEBOUNCE_MS = 150;
+const FILE_SEARCH_DEBOUNCE_MS = 100;
 const FILE_SEARCH_LOADING_INDICATOR_DELAY_MS = 500;
 
 const isSameTextMenuRequest = (
