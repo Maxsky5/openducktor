@@ -2,7 +2,7 @@ import type {
   GitProviderRepository,
   GlobalGitConfig,
   SettingsSnapshot,
-  SettingsSnapshotUpdate,
+  SettingsSnapshotSaveInput,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,7 +32,7 @@ type UseRepoSettingsOperationsResult = {
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
-  saveSettingsSnapshot: (snapshot: SettingsSnapshotUpdate) => Promise<void>;
+  saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
 };
 
 const REPO_CONFIG_QUERY_KEY_PREFIX = [...workspaceQueryKeys.all, "repo-config"] as const;
@@ -161,7 +161,7 @@ export function useRepoSettingsOperations({
   );
 
   const saveSettingsSnapshot = useCallback(
-    async (snapshot: SettingsSnapshotUpdate): Promise<void> => {
+    async (snapshot: SettingsSnapshotSaveInput): Promise<void> => {
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
       queryClient.removeQueries({
         queryKey: settingsSnapshotQueryKey,

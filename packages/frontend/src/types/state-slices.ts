@@ -10,7 +10,7 @@ import type {
   RuntimeCheck,
   RuntimeKind,
   SettingsSnapshot,
-  SettingsSnapshotUpdate,
+  SettingsSnapshotSaveInput,
   TaskCard,
   TaskCreateInput,
   TaskStatus,
@@ -92,7 +92,7 @@ export type WorkspaceStateContextValue = {
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
-  saveSettingsSnapshot: (snapshot: SettingsSnapshotUpdate) => Promise<void>;
+  saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
 };
 
 export type WorkspaceBranchStateContextValue = Pick<

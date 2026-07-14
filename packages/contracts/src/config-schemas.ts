@@ -538,5 +538,16 @@ export const settingsSnapshotSchema = z.object({
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = ParsedSettingsSnapshot;
 
-export const settingsSnapshotUpdateSchema = settingsSnapshotSchema.omit({ theme: true });
-export type SettingsSnapshotUpdate = z.infer<typeof settingsSnapshotUpdateSchema>;
+export const settingsSnapshotSaveInputSchema = settingsSnapshotSchema.pick({
+  git: true,
+  general: true,
+  appearance: true,
+  chat: true,
+  reusablePrompts: true,
+  kanban: true,
+  autopilot: true,
+  agentRuntimes: true,
+  workspaces: true,
+  globalPromptOverrides: true,
+});
+export type SettingsSnapshotSaveInput = z.infer<typeof settingsSnapshotSaveInputSchema>;

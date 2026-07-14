@@ -2,7 +2,7 @@ import {
   globalConfigSchema,
   globalGitConfigSchema,
   repoConfigSchema,
-  settingsSnapshotUpdateSchema,
+  settingsSnapshotSaveInputSchema,
   themeSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -304,7 +304,7 @@ const createUnserializedWorkspaceSettingsService = (
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
       const snapshot = yield* Effect.try({
-        try: () => settingsSnapshotUpdateSchema.parse(rawSnapshot),
+        try: () => settingsSnapshotSaveInputSchema.parse(rawSnapshot),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),

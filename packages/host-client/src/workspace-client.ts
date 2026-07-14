@@ -10,7 +10,7 @@ import {
   type RuntimeKind,
   repoConfigSchema,
   type SettingsSnapshot,
-  type SettingsSnapshotUpdate,
+  type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
   type WorkspaceRecord,
   workspaceRecordSchema,
@@ -167,7 +167,7 @@ const workspaceGetSettingsSnapshot = async (invokeFn: InvokeFn): Promise<Setting
 
 const workspaceSaveSettingsSnapshot = async (
   invokeFn: InvokeFn,
-  snapshot: SettingsSnapshotUpdate,
+  snapshot: SettingsSnapshotSaveInput,
 ): Promise<WorkspaceRecord[]> => {
   const payload = await invokeFn("workspace_save_settings_snapshot", { snapshot });
   return parseArray(workspaceRecordSchema, payload, "workspace_save_settings_snapshot");
@@ -263,7 +263,7 @@ export class HostWorkspaceClient {
   }
 
   async workspaceSaveSettingsSnapshot(
-    snapshot: SettingsSnapshotUpdate,
+    snapshot: SettingsSnapshotSaveInput,
   ): Promise<WorkspaceRecord[]> {
     return workspaceSaveSettingsSnapshot(this.invokeFn, snapshot);
   }

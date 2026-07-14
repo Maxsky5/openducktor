@@ -1,4 +1,4 @@
-import type { SettingsSnapshot, SettingsSnapshotUpdate } from "@openducktor/contracts";
+import type { SettingsSnapshot, SettingsSnapshotSaveInput } from "@openducktor/contracts";
 import { prepareReusablePromptsForSave } from "@/state/read-models/settings-read-model";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { prepareGlobalGitSettingsForSave } from "./global-git-settings";
@@ -7,7 +7,7 @@ import { prepareRepoConfigForSave } from "./repo-config";
 
 export const prepareSettingsSnapshotForSave = (
   snapshot: SettingsSnapshot,
-): SettingsSnapshotUpdate => {
+): SettingsSnapshotSaveInput => {
   const workspaces = Object.fromEntries(
     Object.entries(snapshot.workspaces).map(([workspaceId, repoConfig]) => [
       workspaceId,
