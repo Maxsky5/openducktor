@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { host } from "../operations/host";
@@ -36,12 +36,11 @@ describe("agent session query cache helpers", () => {
 
   test("agentSessionListsQueryOptions makes one normalized host call and defaults missing tasks", async () => {
     const queryClient = new QueryClient();
+    const agentSessionsListForTasksMock = mock(async () => [
+      { taskId: "task-1", agentSessions: [sessionFixture] },
+    ]);
     const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
-    const calls: unknown[] = [];
-    host.agentSessionsListForTasks = async (repoPath, taskIds) => {
-      calls.push({ repoPath, taskIds });
-      return [{ taskId: "task-1", agentSessions: [sessionFixture] }];
-    };
+    host.agentSessionsListForTasks = agentSessionsListForTasksMock;
 
     try {
       const result = await queryClient.fetchQuery(
@@ -52,7 +51,8 @@ describe("agent session query cache helpers", () => {
         "task-1": [sessionFixture],
         "task-2": [],
       });
-      expect(calls).toEqual([{ repoPath: "/repo", taskIds: ["task-1", "task-2"] }]);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledTimes(1);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
     } finally {
       host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     }

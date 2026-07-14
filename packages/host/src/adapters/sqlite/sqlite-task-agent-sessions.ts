@@ -32,21 +32,16 @@ const compactAgentSessionForStorage = (
 export const listAgentSessionsForTasks = (
   session: TaskStoreSession,
   input: Parameters<TaskStorePort["listAgentSessionsForTasks"]>[0],
-): Effect.Effect<TaskAgentSessions[], SqliteTaskStoreReadError> => {
-  const taskIds = Array.from(new Set(input.taskIds.map((taskId) => taskId.trim()).filter(Boolean)));
-  if (taskIds.length === 0) {
-    return Effect.succeed([]);
-  }
-
-  return Effect.gen(function* () {
+): Effect.Effect<TaskAgentSessions[], SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
     const rows = yield* session.execute(
-      (database) => database.select().from(tasks).where(inArray(tasks.id, taskIds)),
+      (database) => database.select().from(tasks).where(inArray(tasks.id, input.taskIds)),
       "sqliteTaskRepository.listAgentSessionsForTasks.selectTasks",
-      { taskIds },
+      { taskIds: input.taskIds },
     );
     const rowsByTaskId = new Map(rows.map((row) => [row.id, row]));
     const results: TaskAgentSessions[] = [];
-    for (const taskId of taskIds) {
+    for (const taskId of input.taskIds) {
       const row = rowsByTaskId.get(taskId);
       if (!row) {
         continue;
@@ -58,7 +53,6 @@ export const listAgentSessionsForTasks = (
     }
     return results;
   });
-};
 
 export const clearAgentSessionsByRoles = (
   session: TaskStoreSession,

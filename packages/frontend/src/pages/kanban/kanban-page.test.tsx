@@ -6,7 +6,6 @@ import {
   type RepoConfig,
   type RepoPromptOverrides,
   type SettingsSnapshot,
-  type TaskAgentSessions,
   type TaskCard,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -76,9 +75,6 @@ const sessionIdentity = (externalSessionId: string) => ({
 const startAgentSessionMock = mock(async () => sessionIdentity("session-1"));
 const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
-const agentSessionsListForTasksMock = mock(
-  async (_repoPath: string, _taskIds: string[]): Promise<TaskAgentSessions[]> => [],
-);
 const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
@@ -749,7 +745,6 @@ describe("KanbanPage session start modal flow", () => {
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
-    agentSessionsListForTasksMock.mockClear();
     humanApproveTaskMock.mockClear();
     humanRequestChangesTaskMock.mockClear();
     deleteTaskMock.mockClear();
@@ -786,11 +781,11 @@ describe("KanbanPage session start modal flow", () => {
       workingDirectory: "/repo/worktrees/TASK-456",
       selectedModel: null,
     };
-    const originalAgentSessionsListForTasks = hostClient.agentSessionsListForTasks;
-    agentSessionsListForTasksMock.mockImplementation(async () => [
+    const agentSessionsListForTasksMock = mock(async () => [
       { taskId: "TASK-123", agentSessions: [firstSession] },
       { taskId: "TASK-456", agentSessions: [secondSession] },
     ]);
+    const originalAgentSessionsListForTasks = hostClient.agentSessionsListForTasks;
     hostClient.agentSessionsListForTasks = agentSessionsListForTasksMock;
 
     const renderer = await renderPage({

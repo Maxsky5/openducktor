@@ -4,11 +4,28 @@ import {
   createAgentSessionRecord,
   describeTaskStorePortContract,
 } from "../../ports/task-store-port-contract.test-support";
+import { createSqliteTaskRepository } from "./sqlite-task-repository";
 import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
 
 describeTaskStorePortContract("SQLite TaskStorePort contract", createSqliteTaskStoreHarness);
 
 describe("SQLite task agent session batches", () => {
+  test("returns an empty normalized ID list without resolving storage", async () => {
+    let resolverCalls = 0;
+    const store = createSqliteTaskRepository({
+      resolveWorkspaceIdForRepoPath: () =>
+        Effect.sync(() => {
+          resolverCalls += 1;
+          return "workspace";
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(store.listAgentSessionsForTasks({ repoPath: "/repo", taskIds: [" ", ""] })),
+    ).resolves.toEqual([]);
+    expect(resolverCalls).toBe(0);
+  });
+
   test("lists multiple tasks, ignores duplicates and missing tasks, and handles empty IDs", async () => {
     const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
     try {

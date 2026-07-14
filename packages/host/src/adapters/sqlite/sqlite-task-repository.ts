@@ -210,13 +210,16 @@ export const createSqliteTaskRepository = ({
       );
     },
     listAgentSessionsForTasks(input) {
-      if (input.taskIds.length === 0) {
+      const taskIds = Array.from(
+        new Set(input.taskIds.map((taskId) => taskId.trim()).filter(Boolean)),
+      );
+      if (taskIds.length === 0) {
         return Effect.succeed([]);
       }
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.listAgentSessionsForTasks",
-        ({ session }) => listAgentSessionsForTasks(session, input),
+        ({ session }) => listAgentSessionsForTasks(session, { ...input, taskIds }),
       );
     },
     listTasks(input) {
