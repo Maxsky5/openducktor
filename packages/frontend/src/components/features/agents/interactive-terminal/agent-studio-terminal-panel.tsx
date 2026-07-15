@@ -1,5 +1,5 @@
 import type { TerminalConnectionState, TerminalLifecycle } from "@openducktor/contracts";
-import { Loader2, Plus, RotateCw, X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { type ReactElement, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -212,12 +212,6 @@ export function AgentStudioTerminalPanel({
             <p className="px-1 text-xs text-muted-foreground">No terminals for this task.</p>
           ) : null}
         </div>
-        {model.connectionState === "disconnected" ? (
-          <Button type="button" size="xs" variant="ghost" onClick={model.onReconnect}>
-            <RotateCw data-icon="inline-start" />
-            Reconnect
-          </Button>
-        ) : null}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -280,7 +274,7 @@ export function AgentStudioTerminalPanel({
       )}
       {model.transportError ? (
         <p className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          Terminal connection failed: {model.transportError}
+          Terminal transport failed: {model.transportError}
         </p>
       ) : null}
 

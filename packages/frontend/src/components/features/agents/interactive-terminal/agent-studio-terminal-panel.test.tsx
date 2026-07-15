@@ -29,7 +29,6 @@ const model: AgentStudioTerminalPanelModel = {
   isLoading: false,
   isCreating: false,
   runningCount: 0,
-  connectionState: "disconnected",
   transportError: null,
   focusRequest: 0,
   controller: null,
@@ -39,28 +38,28 @@ const model: AgentStudioTerminalPanelModel = {
   onCreate: () => undefined,
   onRetryCreate: () => undefined,
   onClose: async () => ({ closed: true }),
-  onReconnect: () => undefined,
   onLifecycle: () => undefined,
   onForgotten: () => undefined,
 };
 
 describe("AgentStudioTerminalPanel", () => {
-  test("shows explicit lost-session and independent lifecycle/connection states", () => {
+  test("shows an explicit lost-session state", () => {
     render(<AgentStudioTerminalPanel model={model} />);
     expect(screen.getByText("This terminal belonged to a previous host session.")).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Shell 1, Lost after host restart" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry terminal creation" })).toBeNull();
   });
 
-  test("shows connection-global protocol failures", () => {
+  test("shows transport-global protocol failures", () => {
     render(
       <AgentStudioTerminalPanel
         model={{ ...model, transportError: "Unsupported terminal protocol version." }}
       />,
     );
     expect(
-      screen.getByText("Terminal connection failed: Unsupported terminal protocol version."),
+      screen.getByText("Terminal transport failed: Unsupported terminal protocol version."),
     ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
   });
 
   test("keeps a hidden closing terminal viewport mounted", () => {
@@ -124,7 +123,6 @@ describe("AgentStudioTerminalPanel", () => {
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          connectionState: "connected",
           runningCount: 1,
           ...tabsModel([
             {
@@ -171,7 +169,6 @@ describe("AgentStudioTerminalPanel", () => {
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          connectionState: "connected",
           runningCount: 1,
           ...tabsModel([
             {
@@ -267,7 +264,6 @@ describe("AgentStudioTerminalPanel", () => {
         <AgentStudioTerminalPanel
           model={{
             ...model,
-            connectionState: "connected",
             runningCount: 1,
             ...tabsModel([
               {
@@ -320,7 +316,6 @@ describe("AgentStudioTerminalPanel", () => {
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          connectionState: "connected",
           ...tabsModel([
             {
               tabId: "creating:terminal",

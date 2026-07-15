@@ -116,9 +116,6 @@ export const createTerminalTransportController = (
 
   return {
     connect,
-    async reconnect(): Promise<void> {
-      await connect();
-    },
     subscribe(terminalId: string, listener: TerminalFrameListener): () => void {
       const current = listeners.get(terminalId) ?? new Set<TerminalFrameListener>();
       const shouldAttach = current.size === 0;

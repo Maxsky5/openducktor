@@ -79,7 +79,7 @@ describe("createTerminalTransportController", () => {
     expect(operations).toEqual(["attach", "resize", "input"]);
   });
 
-  test("attaches once, preserves consumed sequence on reconnect, and detaches the last listener", async () => {
+  test("attaches once, preserves consumed sequence when replacing the transport, and detaches the last listener", async () => {
     const sent: Uint8Array[] = [];
     const closeCalls: number[] = [];
     const bridge: TerminalBridge = {
@@ -111,7 +111,7 @@ describe("createTerminalTransportController", () => {
     expect(sent).toHaveLength(1);
 
     await controller.acknowledge(terminalId, 41);
-    await controller.reconnect();
+    await controller.connect();
     const reattachFrame = sent.at(-1);
     if (!reattachFrame) throw new Error("Expected the reconnect attach frame.");
     expect(decodeTerminalProtocolFrame(reattachFrame).message).toEqual({

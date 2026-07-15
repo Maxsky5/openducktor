@@ -49,7 +49,6 @@ export type AgentStudioTerminalPanelModel = {
   isLoading: boolean;
   isCreating: boolean;
   runningCount: number;
-  connectionState: "connected" | "disconnected";
   transportError: string | null;
   focusRequest: number;
   controller: TerminalTransportController | null;
@@ -62,7 +61,6 @@ export type AgentStudioTerminalPanelModel = {
     tab: AgentStudioTerminalTab,
     confirmTerminate: boolean,
   ) => Promise<TerminalCloseResponse>;
-  onReconnect: () => void;
   onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) => void;
   onForgotten: (terminalId: string, message: string) => void;
 };
@@ -72,6 +70,12 @@ type ScopeState = {
   tabs: AgentStudioTerminalTab[];
   closingTabIds: string[];
   activeTabId: string | null;
+};
+
+type VisibilityState = {
+  scopeKey: string | null;
+  value: boolean;
+  isExplicit: boolean;
 };
 
 const legacyPreferenceKey = (repoPath: string, taskId: string): string =>
@@ -157,19 +161,17 @@ export const useAgentStudioTerminals = (
     closingTabIds: [],
     activeTabId: null,
   });
-  const [visibility, setVisibility] = useState({ scopeKey, value: false });
-  const [transportState, setTransportState] = useState<{
-    connection: "connected" | "disconnected";
-    error: string | null;
-  }>({ connection: "disconnected", error: null });
+  const [visibility, setVisibility] = useState<VisibilityState>({
+    scopeKey,
+    value: false,
+    isExplicit: false,
+  });
+  const [transportError, setTransportError] = useState<string | null>(null);
   const handleTransportState = useCallback((state: "connected" | "disconnected"): void => {
-    setTransportState((current) => ({
-      connection: state,
-      error: state === "connected" ? null : current.error,
-    }));
+    if (state === "connected") setTransportError(null);
   }, []);
   const handleProtocolFailure = useCallback((failure: { message: string }): void => {
-    setTransportState({ connection: "disconnected", error: failure.message });
+    setTransportError(failure.message);
   }, []);
   const [focusState, setFocusState] = useState({ scopeKey, request: 0 });
   const controllerRef = useRef<{ scopeKey: string; value: TerminalTransportController } | null>(
@@ -212,9 +214,9 @@ export const useAgentStudioTerminals = (
       closingTabIds: [],
       activeTabId: null,
     });
-    setVisibility({ scopeKey, value: false });
+    setVisibility({ scopeKey, value: false, isExplicit: false });
     setFocusState({ scopeKey, request: 0 });
-    setTransportState((current) => ({ ...current, error: null }));
+    setTransportError(null);
   }, [repoPath, scopeKey, taskId]);
 
   useEffect(() => {
@@ -262,7 +264,9 @@ export const useAgentStudioTerminals = (
     const closingTabIdSet = new Set(visibleState.closingTabIds);
     return visibleState.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
   }, [visibleState.closingTabIds, visibleState.tabs]);
-  const isVisible = visibility.scopeKey === scopeKey && visibility.value;
+  const isVisible =
+    visibility.scopeKey === scopeKey &&
+    (visibility.isExplicit ? visibility.value : visibleTabs.length > 0);
   const focusRequest = focusState.scopeKey === scopeKey ? focusState.request : 0;
 
   const createTerminal = useCallback(
@@ -330,9 +334,8 @@ export const useAgentStudioTerminals = (
   );
 
   const togglePanel = useCallback((): void => {
-    const currentlyVisible = visibility.scopeKey === scopeKey && visibility.value;
-    const transition = toggleTerminalPanel(currentlyVisible);
-    setVisibility({ scopeKey, value: transition.visible });
+    const transition = toggleTerminalPanel(isVisible);
+    setVisibility({ scopeKey, value: transition.visible, isExplicit: true });
     if (transition.requestFocus) {
       setFocusState((current) => ({
         scopeKey,
@@ -346,7 +349,7 @@ export const useAgentStudioTerminals = (
     createTerminal,
     scopeKey,
     terminalQuery.isLoading,
-    visibility,
+    isVisible,
     visibleState.tabs.length,
     worktreeQuery.isLoading,
   ]);
@@ -373,12 +376,11 @@ export const useAgentStudioTerminals = (
       isLoading: terminalQuery.isLoading || worktreeQuery.isLoading,
       isCreating: visibleTabs.some((tab) => tab.requestState === "creating"),
       runningCount: visibleTabs.filter((tab) => tab.lifecycle === "running").length,
-      connectionState: transportState.connection,
-      transportError: transportState.error,
+      transportError,
       focusRequest,
       controller: controllerRef.current?.scopeKey === scopeKey ? controllerRef.current.value : null,
       onToggle: togglePanel,
-      onBackToChat: () => setVisibility({ scopeKey, value: false }),
+      onBackToChat: () => setVisibility({ scopeKey, value: false, isExplicit: true }),
       onSelectTab: (activeTabId: string) =>
         setScopeState((current) => ({ ...current, activeTabId })),
       onCreate: () => void createTerminal(),
@@ -403,7 +405,9 @@ export const useAgentStudioTerminals = (
           });
           if (closesLastTab)
             setVisibility((current) =>
-              current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
+              current.scopeKey === scopeKey
+                ? { scopeKey, value: false, isExplicit: true }
+                : current,
             );
         };
         const hideClosingTab = (): void => {
@@ -420,7 +424,9 @@ export const useAgentStudioTerminals = (
           });
           if (closesLastTab)
             setVisibility((current) =>
-              current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
+              current.scopeKey === scopeKey
+                ? { scopeKey, value: false, isExplicit: true }
+                : current,
             );
         };
         const restoreClosingTab = (): void => {
@@ -434,7 +440,7 @@ export const useAgentStudioTerminals = (
           });
           if (closesLastTab)
             setVisibility((current) =>
-              current.scopeKey === scopeKey ? { scopeKey, value: true } : current,
+              current.scopeKey === scopeKey ? { scopeKey, value: true, isExplicit: true } : current,
             );
         };
         if (!tab.terminalId) {
@@ -469,12 +475,6 @@ export const useAgentStudioTerminals = (
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),
           });
         return closeResult;
-      },
-      onReconnect: () => {
-        setTransportState((current) => ({ ...current, error: null }));
-        void controllerRef.current?.value
-          .reconnect()
-          .catch(() => handleTransportState("disconnected"));
       },
       onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) =>
         setScopeState((current) => ({
@@ -514,15 +514,13 @@ export const useAgentStudioTerminals = (
       createTerminal,
       dependencies.hostClient,
       focusRequest,
-      handleTransportState,
       isVisible,
       queryClient,
       repoPath,
       scopeKey,
       taskId,
       terminalQuery.isLoading,
-      transportState.connection,
-      transportState.error,
+      transportError,
       togglePanel,
       visibleState.activeTabId,
       visibleState.tabs,

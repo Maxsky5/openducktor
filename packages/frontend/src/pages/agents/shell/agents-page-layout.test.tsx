@@ -60,7 +60,6 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       isLoading: false,
       isCreating: false,
       runningCount: 0,
-      connectionState: "connected",
       transportError: null,
       focusRequest: 1,
       controller: null,
@@ -70,7 +69,6 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onCreate: () => undefined,
       onRetryCreate: () => undefined,
       onClose: async () => ({ closed: true }),
-      onReconnect: () => undefined,
       onLifecycle: () => undefined,
       onForgotten: () => undefined,
     };
@@ -140,7 +138,6 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       isLoading: false,
       isCreating: false,
       runningCount: 0,
-      connectionState: "connected",
       transportError: null,
       focusRequest: 1,
       controller: null,
@@ -150,7 +147,6 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onCreate: () => undefined,
       onRetryCreate: () => undefined,
       onClose: async () => ({ closed: true }),
-      onReconnect: () => undefined,
       onLifecycle: () => undefined,
       onForgotten: () => undefined,
     };

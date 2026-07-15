@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
-  test("ignores and removes legacy persisted terminal UI state", async () => {
+  test("reopens the panel when the host lists existing task terminals", async () => {
     localStorage.setItem(
       "openducktor:agent-studio-terminals:/repo:task-a",
       JSON.stringify({
@@ -95,7 +95,7 @@ describe("useAgentStudioTerminals", () => {
 
       expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual(["terminal-task-a"]);
       expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
-      expect(getLatest().isVisible).toBe(false);
+      expect(getLatest().isVisible).toBe(true);
       expect(localStorage.getItem("openducktor:agent-studio-terminals:/repo:task-a")).toBeNull();
     } finally {
       view.unmount();
@@ -197,7 +197,6 @@ describe("useAgentStudioTerminals", () => {
 
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
-      act(() => getLatest().onToggle());
       expect(getLatest().isVisible).toBe(true);
 
       let closePromise: Promise<{ closed: boolean }> | null = null;
@@ -257,7 +256,6 @@ describe("useAgentStudioTerminals", () => {
 
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
-      act(() => getLatest().onToggle());
       const originalTab = getLatest().tabs[0];
       let closePromise: ReturnType<HookResult["onClose"]> | null = null;
       act(() => {
@@ -307,7 +305,6 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
       act(() => {
-        getLatest().onToggle();
         getLatest().onForgotten("terminal-task-a", "Terminal host restarted.");
       });
       await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("lost"));
@@ -633,16 +630,14 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(
         () => {
-          expect(getLatest().isVisible).toBe(false);
+          expect(getLatest().isVisible).toBe(true);
           expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
         },
         { timeout: 2_000 },
       );
       act(() => getLatest().onToggle());
-      expect(getLatest().focusRequest).toBe(1);
-      await waitFor(() => {
-        expect(document.activeElement?.textContent).toBe("Terminal focus owner");
-      });
+      expect(getLatest().isVisible).toBe(false);
+      expect(getLatest().focusRequest).toBe(0);
       const chatInput = view.getByRole("button", { name: "Chat input" });
       chatInput.focus();
       expect(document.activeElement).toBe(chatInput);
@@ -660,7 +655,7 @@ describe("useAgentStudioTerminals", () => {
 
       await waitFor(
         () => {
-          expect(getLatest().isVisible).toBe(false);
+          expect(getLatest().isVisible).toBe(true);
           expect(getLatest().activeTabId).toBe("tab:terminal-task-b");
         },
         { timeout: 2_000 },
@@ -677,6 +672,7 @@ describe("useAgentStudioTerminals", () => {
       );
       await waitFor(
         () => {
+          expect(getLatest().isVisible).toBe(true);
           expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
         },
         { timeout: 2_000 },
