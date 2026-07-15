@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { agentSessionQueryKeys, invalidateAgentSessionListQuery } from "./agent-sessions";
+import { agentSessionQueryKeys, refreshAgentSessionListQuery } from "./agent-sessions";
 import { useAgentSessionLists } from "./use-agent-session-lists";
 
 const sessionFixture: AgentSessionRecord = {
@@ -58,9 +58,8 @@ describe("useAgentSessionLists", () => {
       expect(singleList).not.toHaveBeenCalled();
 
       await harness.run(async () => {
-        await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-          readPort: { agentSessionsList: singleList },
-          refetchType: "active",
+        await refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+          agentSessionsList: singleList,
         });
       });
       expect(singleList).toHaveBeenCalledTimes(1);
@@ -113,9 +112,8 @@ describe("useAgentSessionLists", () => {
       await harness.mount();
       await harness.waitFor(() => batchList.mock.calls.length === 1);
       await harness.run(async () => {
-        await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-          readPort: { agentSessionsList: singleList },
-          refetchType: "all",
+        await refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+          agentSessionsList: singleList,
         });
         resolveInitialBatch([
           { taskId: "task-1", agentSessions: [sessionFixture] },
@@ -180,9 +178,8 @@ describe("useAgentSessionLists", () => {
       await harness.waitFor(() => batchList.mock.calls.length === 1);
       await harness.run(async () => {
         await expect(
-          invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-            readPort: { agentSessionsList: singleList },
-            refetchType: "all",
+          refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+            agentSessionsList: singleList,
           }),
         ).rejects.toThrow("exact refresh failed");
         resolveInitialBatch([{ taskId: "task-1", agentSessions: [sessionFixture] }]);

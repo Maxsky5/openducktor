@@ -8,6 +8,7 @@ import {
   hydrateAgentSessionListQueries,
   invalidateAgentSessionListQuery,
   loadAgentSessionListsFromQuery,
+  refreshAgentSessionListQuery,
 } from "./agent-sessions";
 
 const sessionFixture: AgentSessionRecord = {
@@ -287,10 +288,7 @@ describe("agent session query cache helpers", () => {
       readPort,
     });
     await Promise.resolve();
-    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-      readPort,
-      refetchType: "all",
-    });
+    await refreshAgentSessionListQuery(queryClient, "/repo", "task-1", readPort);
     resolveBatch([
       {
         taskId: "task-1",
@@ -320,9 +318,8 @@ describe("agent session query cache helpers", () => {
     failRefresh = true;
 
     await expect(
-      invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-        readPort: { agentSessionsList: singleList },
-        refetchType: "all",
+      refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+        agentSessionsList: singleList,
       }),
     ).rejects.toThrow("ordinary refresh failed");
     expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
@@ -346,9 +343,8 @@ describe("agent session query cache helpers", () => {
     failRefresh = true;
 
     await expect(
-      invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-        readPort: { agentSessionsList: singleList },
-        refetchType: "all",
+      refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+        agentSessionsList: singleList,
       }),
     ).rejects.toThrow("static refresh failed");
     expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
@@ -366,14 +362,54 @@ describe("agent session query cache helpers", () => {
     };
 
     await hydrateAgentSessionListQueries(queryClient, "/repo", ["task-1"], readPort);
-    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-      readPort,
-      refetchType: "all",
-    });
+    await refreshAgentSessionListQuery(queryClient, "/repo", "task-1", readPort);
 
     expect(singleList).toHaveBeenCalledTimes(1);
     expect(
       queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
     ).toEqual([refreshedSession]);
+  });
+
+  test("a newer exact invalidation starts a fresh read instead of sharing an older snapshot", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const afterFirstMutation = { ...sessionFixture, externalSessionId: "after-first" };
+    const afterSecondMutation = { ...sessionFixture, externalSessionId: "after-second" };
+    let durableSessions = [afterFirstMutation];
+    let releaseFirstRead: () => void = () => {
+      throw new Error("First read was not started.");
+    };
+    let markFirstReadStarted: () => void = () => {
+      throw new Error("First-read signal was not initialized.");
+    };
+    const firstReadStarted = new Promise<void>((resolve) => {
+      markFirstReadStarted = resolve;
+    });
+    const firstReadRelease = new Promise<void>((resolve) => {
+      releaseFirstRead = resolve;
+    });
+    const singleList = mock(async () => {
+      const snapshot = durableSessions;
+      if (singleList.mock.calls.length === 1) {
+        markFirstReadStarted();
+        await firstReadRelease;
+      }
+      return snapshot;
+    });
+    const readPort = { agentSessionsList: singleList };
+    queryClient.setQueryData(queryKey, [sessionFixture]);
+
+    const firstRefresh = refreshAgentSessionListQuery(queryClient, "/repo", "task-1", readPort);
+    await firstReadStarted;
+    durableSessions = [afterSecondMutation];
+    const secondRefresh = refreshAgentSessionListQuery(queryClient, "/repo", "task-1", readPort);
+
+    await secondRefresh;
+    releaseFirstRead();
+    await firstRefresh;
+
+    expect(singleList).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([afterSecondMutation]);
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
   });
 });

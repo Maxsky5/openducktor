@@ -2,7 +2,10 @@ import type { AgentSessionIdentity, AgentSessionRecord } from "@openducktor/cont
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { invalidateAgentSessionListQuery } from "@/state/queries/agent-sessions";
+import {
+  invalidateAgentSessionListQuery,
+  refreshAgentSessionListQuery,
+} from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 import { requireWorkspaceRepoPath } from "./session-invariants";
@@ -58,10 +61,7 @@ export const createSessionCacheEffects = ({
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await hostPort.agentSessionUpsert(repoPath, taskId, record);
     try {
-      await invalidateAgentSessionListQuery(queryClient, repoPath, taskId, {
-        readPort: hostPort,
-        refetchType: "all",
-      });
+      await refreshAgentSessionListQuery(queryClient, repoPath, taskId, hostPort);
     } catch (error) {
       reportCacheRefreshFailure({ operation: "save", repoPath, taskId, error });
     }
@@ -74,10 +74,7 @@ export const createSessionCacheEffects = ({
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await hostPort.agentSessionDelete(repoPath, taskId, identity);
     try {
-      await invalidateAgentSessionListQuery(queryClient, repoPath, taskId, {
-        readPort: hostPort,
-        refetchType: "all",
-      });
+      await refreshAgentSessionListQuery(queryClient, repoPath, taskId, hostPort);
     } catch (error) {
       reportCacheRefreshFailure({ operation: "delete", repoPath, taskId, error });
     }
