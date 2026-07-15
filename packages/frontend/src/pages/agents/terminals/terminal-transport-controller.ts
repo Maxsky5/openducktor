@@ -24,6 +24,7 @@ export const createTerminalTransportController = (
   const consumedSequences = new Map<string, number>();
   const terminalOperationQueues = new Map<string, Promise<void>>();
   const closingTerminals = new Set<string>();
+  const discardedTerminalOperations = new Set<string>();
   let connection: TerminalTransportConnection | null = null;
   let pendingConnection: Promise<TerminalTransportConnection> | null = null;
   const emptyPayload: Uint8Array = new Uint8Array(0);
@@ -51,11 +52,15 @@ export const createTerminalTransportController = (
     operation: () => Promise<void>,
   ): Promise<void> => {
     const previous = terminalOperationQueues.get(terminalId);
-    const pending = previous ? previous.then(operation) : operation();
+    const run = (): Promise<void> =>
+      discardedTerminalOperations.has(terminalId) ? Promise.resolve() : operation();
+    const pending = previous ? previous.then(run) : run();
     terminalOperationQueues.set(terminalId, pending);
     const clearCompletedOperation = (): void => {
-      if (terminalOperationQueues.get(terminalId) === pending)
+      if (terminalOperationQueues.get(terminalId) === pending) {
         terminalOperationQueues.delete(terminalId);
+        if (!listeners.has(terminalId)) discardedTerminalOperations.delete(terminalId);
+      }
     };
     void pending.then(clearCompletedOperation, clearCompletedOperation);
     return pending;
@@ -126,6 +131,8 @@ export const createTerminalTransportController = (
         if (terminalListeners?.size === 0) {
           listeners.delete(terminalId);
           const isClosing = closingTerminals.delete(terminalId);
+          if (!terminalOperationQueues.has(terminalId))
+            discardedTerminalOperations.delete(terminalId);
           if (connection && !isClosing) {
             void enqueueTerminalOperation(terminalId, () =>
               send({
@@ -171,12 +178,12 @@ export const createTerminalTransportController = (
     ): Promise<Result> {
       closingTerminals.add(terminalId);
       try {
-        await terminalOperationQueues.get(terminalId);
         const result = await closeHostTerminal();
         if (!result.closed) {
           closingTerminals.delete(terminalId);
           return result;
         }
+        discardedTerminalOperations.add(terminalId);
         consumedSequences.delete(terminalId);
         if (!listeners.has(terminalId)) closingTerminals.delete(terminalId);
         return result;
@@ -195,6 +202,7 @@ export const createTerminalTransportController = (
       listeners.clear();
       terminalOperationQueues.clear();
       closingTerminals.clear();
+      discardedTerminalOperations.clear();
       onStateChange("disconnected");
     },
   };

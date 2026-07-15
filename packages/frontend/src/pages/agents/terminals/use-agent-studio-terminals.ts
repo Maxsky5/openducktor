@@ -43,6 +43,7 @@ export type AgentStudioTerminalPanelModel = {
   scopeKey: string | null;
   taskId: string | null;
   tabs: AgentStudioTerminalTab[];
+  mountedTabs: AgentStudioTerminalTab[];
   activeTabId: string | null;
   isVisible: boolean;
   isLoading: boolean;
@@ -69,6 +70,7 @@ export type AgentStudioTerminalPanelModel = {
 type ScopeState = {
   scopeKey: string | null;
   tabs: AgentStudioTerminalTab[];
+  closingTabIds: string[];
   activeTabId: string | null;
 };
 
@@ -152,6 +154,7 @@ export const useAgentStudioTerminals = (
   const [scopeState, setScopeState] = useState<ScopeState>({
     scopeKey,
     tabs: [],
+    closingTabIds: [],
     activeTabId: null,
   });
   const [visibility, setVisibility] = useState({ scopeKey, value: false });
@@ -206,6 +209,7 @@ export const useAgentStudioTerminals = (
     setScopeState({
       scopeKey,
       tabs: [],
+      closingTabIds: [],
       activeTabId: null,
     });
     setVisibility({ scopeKey, value: false });
@@ -239,16 +243,25 @@ export const useAgentStudioTerminals = (
         toHostTab(summary, currentTabsByTerminalId.get(summary.terminalId)),
       );
       const tabs = [...hostTabs, ...transient];
+      const closingTabIdSet = new Set(current.closingTabIds);
+      const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
       return {
         scopeKey,
         tabs,
-        activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
+        closingTabIds: current.closingTabIds,
+        activeTabId: resolveActiveTabId(selectableTabs, current.activeTabId, null),
       };
     });
   }, [scopeKey, terminalQuery.data]);
 
   const visibleState =
-    scopeState.scopeKey === scopeKey ? scopeState : { scopeKey, tabs: [], activeTabId: null };
+    scopeState.scopeKey === scopeKey
+      ? scopeState
+      : { scopeKey, tabs: [], closingTabIds: [], activeTabId: null };
+  const visibleTabs = useMemo(() => {
+    const closingTabIdSet = new Set(visibleState.closingTabIds);
+    return visibleState.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
+  }, [visibleState.closingTabIds, visibleState.tabs]);
   const isVisible = visibility.scopeKey === scopeKey && visibility.value;
   const focusRequest = focusState.scopeKey === scopeKey ? focusState.request : 0;
 
@@ -353,12 +366,13 @@ export const useAgentStudioTerminals = (
     () => ({
       scopeKey,
       taskId,
-      tabs: visibleState.tabs,
+      tabs: visibleTabs,
+      mountedTabs: visibleState.tabs,
       activeTabId: visibleState.activeTabId,
       isVisible,
       isLoading: terminalQuery.isLoading || worktreeQuery.isLoading,
-      isCreating: visibleState.tabs.some((tab) => tab.requestState === "creating"),
-      runningCount: visibleState.tabs.filter((tab) => tab.lifecycle === "running").length,
+      isCreating: visibleTabs.some((tab) => tab.requestState === "creating"),
+      runningCount: visibleTabs.filter((tab) => tab.lifecycle === "running").length,
       connectionState: transportState.connection,
       transportError: transportState.error,
       focusRequest,
@@ -370,16 +384,21 @@ export const useAgentStudioTerminals = (
       onCreate: () => void createTerminal(),
       onRetryCreate: (tabId: string) => void createTerminal(tabId),
       onClose: async (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => {
-        const closesLastTab =
-          visibleState.tabs.length === 1 && visibleState.tabs[0]?.tabId === tab.tabId;
-        const removeVisibleTab = (): void => {
+        const closesLastTab = visibleTabs.length === 1 && visibleTabs[0]?.tabId === tab.tabId;
+        const removeMountedTab = (): void => {
           setScopeState((current) => {
             if (current.scopeKey !== scopeKey) return current;
             const tabs = current.tabs.filter((candidate) => candidate.tabId !== tab.tabId);
+            const closingTabIds = current.closingTabIds.filter((tabId) => tabId !== tab.tabId);
+            const closingTabIdSet = new Set(closingTabIds);
+            const selectableTabs = tabs.filter(
+              (candidate) => !closingTabIdSet.has(candidate.tabId),
+            );
             return {
               ...current,
               tabs,
-              activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
+              closingTabIds,
+              activeTabId: resolveActiveTabId(selectableTabs, current.activeTabId, null),
             };
           });
           if (closesLastTab)
@@ -387,32 +406,31 @@ export const useAgentStudioTerminals = (
               current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
             );
         };
-        const markClosePending = (): void => {
+        const hideClosingTab = (): void => {
           setScopeState((current) => {
             if (current.scopeKey !== scopeKey) return current;
+            const closingTabIds = [...current.closingTabIds, tab.tabId];
+            const closingTabIdSet = new Set(closingTabIds);
+            const tabs = current.tabs.filter((candidate) => !closingTabIdSet.has(candidate.tabId));
             return {
               ...current,
-              tabs: current.tabs.map((candidate) =>
-                candidate.tabId === tab.tabId ? { ...candidate, lifecycle: "closing" } : candidate,
-              ),
+              closingTabIds,
+              activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
             };
           });
         };
-        const restoreCloseLifecycle = (): void => {
+        const restoreClosingTab = (): void => {
           setScopeState((current) => {
             if (current.scopeKey !== scopeKey) return current;
             return {
               ...current,
-              tabs: current.tabs.map((candidate) =>
-                candidate.tabId === tab.tabId && candidate.lifecycle === "closing"
-                  ? { ...candidate, lifecycle: tab.lifecycle }
-                  : candidate,
-              ),
+              closingTabIds: current.closingTabIds.filter((tabId) => tabId !== tab.tabId),
+              activeTabId: tab.tabId,
             };
           });
         };
         if (!tab.terminalId) {
-          removeVisibleTab();
+          removeMountedTab();
           return { closed: true };
         }
         const terminalId = tab.terminalId;
@@ -420,7 +438,7 @@ export const useAgentStudioTerminals = (
         if (!controller || controller.scopeKey !== scopeKey) {
           throw new Error("Terminal transport is unavailable for this task.");
         }
-        markClosePending();
+        hideClosingTab();
         let closeResult: TerminalCloseResponse;
         try {
           closeResult = await controller.value.closeTerminal(terminalId, () =>
@@ -430,14 +448,14 @@ export const useAgentStudioTerminals = (
             }),
           );
         } catch (cause) {
-          restoreCloseLifecycle();
+          restoreClosingTab();
           throw cause;
         }
         if (!closeResult.closed) {
-          restoreCloseLifecycle();
+          restoreClosingTab();
           return closeResult;
         }
-        removeVisibleTab();
+        removeMountedTab();
         if (repoPath && taskId)
           await queryClient.invalidateQueries({
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),
@@ -500,6 +518,7 @@ export const useAgentStudioTerminals = (
       togglePanel,
       visibleState.activeTabId,
       visibleState.tabs,
+      visibleTabs,
       worktreeQuery.isLoading,
     ],
   );

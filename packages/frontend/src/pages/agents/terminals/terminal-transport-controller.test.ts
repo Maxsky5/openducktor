@@ -260,7 +260,7 @@ describe("createTerminalTransportController", () => {
     expect(operations).toEqual(["attach", "ack:start", "ack:complete", "detach", "attach"]);
   });
 
-  test("drains attachment work and skips detach when the host terminal is closing", async () => {
+  test("preempts pending attachment work and skips detach when the host terminal is closing", async () => {
     let releaseAck = (): void => {
       throw new Error("The ACK was not sent.");
     };
@@ -278,11 +278,14 @@ describe("createTerminalTransportController", () => {
       connect: async () => ({
         send: async (frame) => {
           const message = decodeTerminalProtocolFrame(frame).message;
-          operations.push(message.type);
           if (message.type === "ack") {
+            operations.push("ack:start");
             markAckStarted();
             await ackBlocked;
+            operations.push("ack:complete");
+            return;
           }
+          operations.push(message.type);
         },
         close: () => {},
       }),
@@ -294,27 +297,51 @@ describe("createTerminalTransportController", () => {
 
     const acknowledging = controller.acknowledge(terminalId, 1);
     await ackStarted;
+    const resizing = controller.resize(terminalId, 120, 40);
+    const writing = controller.write(terminalId, new Uint8Array([1]));
     const closing = controller.closeTerminal(terminalId, async () => {
       operations.push("close");
       return { closed: true };
     });
     await Promise.resolve();
-    expect(operations).toEqual(["attach", "ack"]);
+    expect(operations).toEqual(["attach", "ack:start", "close"]);
 
-    releaseAck();
-    await Promise.all([acknowledging, closing]);
     unsubscribe();
     await Promise.resolve();
+    expect(operations).toEqual(["attach", "ack:start", "close"]);
 
-    expect(operations).toEqual(["attach", "ack", "close"]);
+    releaseAck();
+    await Promise.all([acknowledging, resizing, writing, closing]);
+
+    expect(operations).toEqual(["attach", "ack:start", "close", "ack:complete"]);
   });
 
-  test("keeps the attachment active when close requires confirmation", async () => {
+  test("keeps queued attachment work when close requires confirmation", async () => {
+    let releaseAck = (): void => {
+      throw new Error("The ACK was not sent.");
+    };
+    const ackBlocked = new Promise<void>((resolve) => {
+      releaseAck = resolve;
+    });
+    let markAckStarted = (): void => {
+      throw new Error("The ACK start signal was not initialized.");
+    };
+    const ackStarted = new Promise<void>((resolve) => {
+      markAckStarted = resolve;
+    });
     const operations: string[] = [];
     const bridge: TerminalBridge = {
       connect: async () => ({
         send: async (frame) => {
-          operations.push(decodeTerminalProtocolFrame(frame).message.type);
+          const message = decodeTerminalProtocolFrame(frame).message;
+          if (message.type === "ack") {
+            operations.push("ack:start");
+            markAckStarted();
+            await ackBlocked;
+            operations.push("ack:complete");
+            return;
+          }
+          operations.push(message.type);
         },
         close: () => {},
       }),
@@ -324,13 +351,31 @@ describe("createTerminalTransportController", () => {
     const unsubscribe = controller.subscribe(terminalId, () => {});
     await Promise.resolve();
 
-    await expect(
-      controller.closeTerminal(terminalId, async () => ({ closed: false })),
-    ).resolves.toEqual({ closed: false });
+    const acknowledging = controller.acknowledge(terminalId, 1);
+    await ackStarted;
+    const resizing = controller.resize(terminalId, 120, 40);
+    const writing = controller.write(terminalId, new Uint8Array([1]));
+    const closing = controller.closeTerminal(terminalId, async () => {
+      operations.push("close");
+      return { closed: false };
+    });
+    await expect(closing).resolves.toEqual({ closed: false });
+    expect(operations).toEqual(["attach", "ack:start", "close"]);
+
+    releaseAck();
+    await Promise.all([acknowledging, resizing, writing]);
     unsubscribe();
     await Promise.resolve();
 
-    expect(operations).toEqual(["attach", "detach"]);
+    expect(operations).toEqual([
+      "attach",
+      "ack:start",
+      "close",
+      "ack:complete",
+      "resize",
+      "input",
+      "detach",
+    ]);
   });
 
   test("routes binary output and rejects client-directed frames from the host", async () => {

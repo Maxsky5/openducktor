@@ -1,24 +1,29 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TerminalSummary } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { AgentStudioTerminalPanelModel } from "@/pages/agents/terminals/use-agent-studio-terminals";
+import type {
+  AgentStudioTerminalPanelModel,
+  AgentStudioTerminalTab,
+} from "@/pages/agents/terminals/use-agent-studio-terminals";
 import { AgentStudioTerminalPanel } from "./agent-studio-terminal-panel";
+
+const lostTab: AgentStudioTerminalTab = {
+  tabId: "lost:terminal-1",
+  terminalId: null,
+  summary: null,
+  lifecycle: null,
+  lifecycleFromEvent: false,
+  label: "Shell 1",
+  error: "This terminal belonged to a previous host session.",
+  requestState: "lost",
+};
+
+const tabsModel = (tabs: AgentStudioTerminalTab[]) => ({ tabs, mountedTabs: tabs });
 
 const model: AgentStudioTerminalPanelModel = {
   scopeKey: "/repo:task-1",
   taskId: "task-1",
-  tabs: [
-    {
-      tabId: "lost:terminal-1",
-      terminalId: null,
-      summary: null,
-      lifecycle: null,
-      lifecycleFromEvent: false,
-      label: "Shell 1",
-      error: "This terminal belonged to a previous host session.",
-      requestState: "lost",
-    },
-  ],
+  ...tabsModel([lostTab]),
   activeTabId: "lost:terminal-1",
   isVisible: true,
   isLoading: false,
@@ -58,21 +63,39 @@ describe("AgentStudioTerminalPanel", () => {
     ).toBeTruthy();
   });
 
+  test("keeps a hidden closing terminal viewport mounted", () => {
+    const view = render(<AgentStudioTerminalPanel model={model} />);
+    const terminalViewport = screen.getByText("This terminal belonged to a previous host session.");
+
+    view.rerender(
+      <AgentStudioTerminalPanel
+        model={{ ...model, tabs: [], activeTabId: null, mountedTabs: [lostTab] }}
+      />,
+    );
+
+    expect(screen.queryByRole("tab", { name: "Shell 1, Lost after host restart" })).toBeNull();
+    expect(screen.getByText("This terminal belonged to a previous host session.")).toBe(
+      terminalViewport,
+    );
+  });
+
   test("enforces the eight-terminal tab limit", () => {
     render(
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          tabs: Array.from({ length: 8 }, (_, index) => ({
-            tabId: `lost:${index}`,
-            terminalId: null,
-            summary: null,
-            lifecycle: null,
-            lifecycleFromEvent: false,
-            label: `Shell ${index + 1}`,
-            error: "This terminal belonged to a previous host session.",
-            requestState: "lost" as const,
-          })),
+          ...tabsModel(
+            Array.from({ length: 8 }, (_, index) => ({
+              tabId: `lost:${index}`,
+              terminalId: null,
+              summary: null,
+              lifecycle: null,
+              lifecycleFromEvent: false,
+              label: `Shell ${index + 1}`,
+              error: "This terminal belonged to a previous host session.",
+              requestState: "lost" as const,
+            })),
+          ),
         }}
       />,
     );
@@ -102,7 +125,7 @@ describe("AgentStudioTerminalPanel", () => {
           ...model,
           connectionState: "connected",
           runningCount: 1,
-          tabs: [
+          ...tabsModel([
             {
               tabId: "tab:terminal-running",
               terminalId: summary.terminalId,
@@ -113,7 +136,7 @@ describe("AgentStudioTerminalPanel", () => {
               error: null,
               requestState: "ready",
             },
-          ],
+          ]),
           activeTabId: "tab:terminal-running",
           onClose,
         }}
@@ -149,7 +172,7 @@ describe("AgentStudioTerminalPanel", () => {
           ...model,
           connectionState: "connected",
           runningCount: 1,
-          tabs: [
+          ...tabsModel([
             {
               tabId: "tab:terminal-busy",
               terminalId: summary.terminalId,
@@ -160,7 +183,7 @@ describe("AgentStudioTerminalPanel", () => {
               error: null,
               requestState: "ready",
             },
-          ],
+          ]),
           activeTabId: "tab:terminal-busy",
           onClose,
         }}
@@ -201,7 +224,7 @@ describe("AgentStudioTerminalPanel", () => {
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          tabs: [
+          ...tabsModel([
             {
               tabId: "tab:terminal-closing",
               terminalId: summary.terminalId,
@@ -212,7 +235,7 @@ describe("AgentStudioTerminalPanel", () => {
               error: null,
               requestState: "ready",
             },
-          ],
+          ]),
           activeTabId: "tab:terminal-closing",
         }}
       />,
@@ -245,7 +268,7 @@ describe("AgentStudioTerminalPanel", () => {
             ...model,
             connectionState: "connected",
             runningCount: 1,
-            tabs: [
+            ...tabsModel([
               {
                 tabId: "tab:terminal-running",
                 terminalId: summary.terminalId,
@@ -256,7 +279,7 @@ describe("AgentStudioTerminalPanel", () => {
                 error: null,
                 requestState: "ready",
               },
-            ],
+            ]),
             activeTabId: "tab:terminal-running",
           }}
         />
@@ -297,7 +320,7 @@ describe("AgentStudioTerminalPanel", () => {
         model={{
           ...model,
           connectionState: "connected",
-          tabs: [
+          ...tabsModel([
             {
               tabId: "creating:terminal",
               terminalId: null,
@@ -308,7 +331,7 @@ describe("AgentStudioTerminalPanel", () => {
               error: null,
               requestState: "creating",
             },
-          ],
+          ]),
           activeTabId: "creating:terminal",
           isCreating: true,
         }}
@@ -339,7 +362,7 @@ describe("AgentStudioTerminalPanel", () => {
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          tabs: [
+          ...tabsModel([
             {
               tabId: "tab:terminal-exited",
               terminalId: summary.terminalId,
@@ -350,7 +373,7 @@ describe("AgentStudioTerminalPanel", () => {
               error: null,
               requestState: "ready",
             },
-          ],
+          ]),
           activeTabId: "tab:terminal-exited",
           onClose,
         }}

@@ -160,7 +160,7 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
-  test("shows closing feedback until its final live terminal closes", async () => {
+  test("hides the final tab immediately while its terminal shuts down", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals = [summaryForTask("task-a")];
     let resolveClose = (_result: { closed: true }): void => undefined;
@@ -208,7 +208,9 @@ describe("useAgentStudioTerminals", () => {
       });
 
       try {
-        await waitFor(() => expect(getLatest().tabs[0]?.lifecycle).toBe("closing"));
+        await waitFor(() => expect(getLatest().tabs).toEqual([]));
+        expect(getLatest().mountedTabs).toHaveLength(1);
+        expect(getLatest().mountedTabs[0]?.terminalId).toBe("terminal-task-a");
         expect(getLatest().isVisible).toBe(true);
       } finally {
         resolveClose({ closed: true });
@@ -217,6 +219,7 @@ describe("useAgentStudioTerminals", () => {
         });
       }
       expect(getLatest().tabs).toEqual([]);
+      expect(getLatest().mountedTabs).toEqual([]);
       expect(getLatest().isVisible).toBe(false);
     } finally {
       view.unmount();
@@ -263,9 +266,9 @@ describe("useAgentStudioTerminals", () => {
         closePromise = getLatest().onClose(tab, false);
       });
 
-      await waitFor(() => expect(getLatest().tabs[0]?.lifecycle).toBe("closing"));
-      expect(getLatest().tabs[0]?.tabId).toBe(originalTab?.tabId);
-      expect(getLatest().tabs[0]?.terminalId).toBe(originalTab?.terminalId);
+      await waitFor(() => expect(getLatest().tabs).toEqual([]));
+      expect(getLatest().mountedTabs[0]?.tabId).toBe(originalTab?.tabId);
+      expect(getLatest().mountedTabs[0]?.terminalId).toBe(originalTab?.terminalId);
       expect(getLatest().isVisible).toBe(true);
 
       resolveClose({ closed: false, confirmationRequired: true });
@@ -274,6 +277,7 @@ describe("useAgentStudioTerminals", () => {
       });
 
       expect(getLatest().tabs).toHaveLength(1);
+      expect(getLatest().mountedTabs).toHaveLength(1);
       expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a");
       expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
       expect(getLatest().isVisible).toBe(true);
