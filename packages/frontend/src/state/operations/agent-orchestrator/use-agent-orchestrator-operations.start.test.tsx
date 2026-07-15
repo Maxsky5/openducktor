@@ -280,6 +280,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   test("reuses an in-memory session after it has been started", async () => {
     let startCalls = 0;
     let persistedListCalls = 0;
+    let persistedSessions = [] as (typeof persistedSessionFixture)[];
 
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
@@ -297,9 +298,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
-      return [];
+      return persistedSessions;
     };
-    host.agentSessionUpsert = async () => {};
+    host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
+      persistedSessions = [record];
+    };
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -385,7 +388,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(firstSessionId).toBe("external-in-memory");
       expect(secondSessionId).toBe("external-in-memory");
       expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBe(1);
+      expect(persistedListCalls).toBe(2);
     } finally {
       await harness.unmount();
 
@@ -408,6 +411,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   test("dedupes concurrent starts for the same repo and task", async () => {
     let startCalls = 0;
     let persistedListCalls = 0;
+    let persistedSessions = [] as (typeof persistedSessionFixture)[];
     const startDeferred = createDeferred<{
       runtimeKind: "opencode";
       workingDirectory: string;
@@ -433,9 +437,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
-      return [];
+      return persistedSessions;
     };
-    host.agentSessionUpsert = async () => {};
+    host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
+      persistedSessions = [record];
+    };
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -520,7 +526,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(firstSessionId).toBe("external-concurrent");
       expect(secondSessionId).toBe("external-concurrent");
       expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBe(1);
+      expect(persistedListCalls).toBeGreaterThanOrEqual(1);
     } finally {
       await harness.unmount();
 

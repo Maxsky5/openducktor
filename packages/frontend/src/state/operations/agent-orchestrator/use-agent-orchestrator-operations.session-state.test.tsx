@@ -687,6 +687,10 @@ describe("use-agent-orchestrator-operations session state", () => {
         role: "spec",
       },
     ]);
+    dependencies.queryClient.setQueryData(
+      agentSessionQueryKeys.hydration("/tmp/repo", ["task-1"]),
+      true,
+    );
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],

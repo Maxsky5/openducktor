@@ -189,6 +189,7 @@ const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
     getTask: unexpectedTaskStoreCall("getTask"),
     getTaskMetadata: unexpectedTaskStoreCall("getTaskMetadata"),
     listPullRequestSyncCandidates: unexpectedTaskStoreCall("listPullRequestSyncCandidates"),
+    listAgentSessionsForTasks: unexpectedTaskStoreCall("listAgentSessionsForTasks"),
     listTasks: unexpectedTaskStoreCall("listTasks"),
     recordQaOutcome: unexpectedTaskStoreCall("recordQaOutcome"),
     setDirectMerge: unexpectedTaskStoreCall("setDirectMerge"),

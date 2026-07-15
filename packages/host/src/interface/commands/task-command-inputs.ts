@@ -8,6 +8,7 @@ import type {
   CreateTaskUseCaseInput,
   DeleteTaskInput,
   DirectMergeInput,
+  ListAgentSessionsForTasksInput,
   ListTasksInput,
   MarkdownDocumentInput,
   OptionalNoteInput,
@@ -61,6 +62,27 @@ export const parseListTasksInput = (input: unknown): ListTasksInput => {
   const repoPath = requireString(record.repoPath, "repoPath");
   const doneVisibleDays = optionalNonNegativeInteger(record.doneVisibleDays, "doneVisibleDays");
   return doneVisibleDays === undefined ? { repoPath } : { repoPath, doneVisibleDays };
+};
+
+export const parseListAgentSessionsForTasksInput = (
+  input: unknown,
+): ListAgentSessionsForTasksInput => {
+  const record = requireRecord(input, "agent_sessions_list_for_tasks input");
+  if (
+    !Array.isArray(record.taskIds) ||
+    record.taskIds.some((taskId) => typeof taskId !== "string")
+  ) {
+    throw new HostValidationError({
+      message: "taskIds must be an array of strings.",
+      field: "taskIds",
+      details: { value: record.taskIds },
+    });
+  }
+
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskIds: Array.from(new Set(record.taskIds.map((taskId) => taskId.trim()).filter(Boolean))),
+  };
 };
 
 export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsertInput => {

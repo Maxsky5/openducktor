@@ -1,5 +1,5 @@
 import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state";
-import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
+import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
@@ -87,6 +87,7 @@ export function useKanbanPageModels({
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
   const reportedPlatformErrorRef = useRef<string | null>(null);
+  const queryClient = useQueryClient();
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const horizontalScrollbarVisibility =
@@ -142,20 +143,18 @@ export function useKanbanPageModels({
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
   const kanbanTaskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
   const shouldLoadHistoricalSessions = workspaceRepoPath !== null && kanbanTaskIds.length > 0;
-  const historicalSessionQueries = useQueries({
-    queries:
-      shouldLoadHistoricalSessions && workspaceRepoPath
-        ? kanbanTaskIds.map((taskId) => agentSessionListQueryOptions(workspaceRepoPath, taskId))
-        : [],
+  const historicalSessionLists = useAgentSessionLists({
+    repoPath: workspaceRepoPath,
+    taskIds: kanbanTaskIds,
+    enabled: shouldLoadHistoricalSessions,
+    queryClient,
   });
   const historicalSessionsByTaskId = useMemo(
     () =>
-      new Map(
-        kanbanTaskIds.map((taskId, index) => [taskId, historicalSessionQueries[index]?.data ?? []]),
-      ),
-    [historicalSessionQueries, kanbanTaskIds],
+      new Map(kanbanTaskIds.map((taskId) => [taskId, historicalSessionLists.data[taskId] ?? []])),
+    [historicalSessionLists.data, kanbanTaskIds],
   );
-  const historicalSessionsError = historicalSessionQueries.find((query) => query.isError)?.error;
+  const historicalSessionsError = historicalSessionLists.error ?? undefined;
   const reportedHistoricalSessionsErrorRef = useRef<string | null>(null);
   useEffect(() => {
     if (!historicalSessionsError) {

@@ -115,6 +115,12 @@ export type AgentSessionIdentity = Pick<
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
 
+export const taskAgentSessionsSchema = z.object({
+  taskId: z.string(),
+  agentSessions: z.array(agentSessionRecordSchema),
+});
+export type TaskAgentSessions = z.infer<typeof taskAgentSessionsSchema>;
+
 export const agentSessionStopTargetSchema = z.object({
   repoPath: nonEmptyStringSchema,
   taskId: nonEmptyStringSchema,

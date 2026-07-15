@@ -1,11 +1,7 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { QueryClient, UseQueryResult } from "@tanstack/react-query";
-import { useQueries } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
+import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { type TaskSessionRecords, toTaskSessionRecords } from "./task-session-records";
-
-type AgentSessionListQueryResult = UseQueryResult<AgentSessionRecord[], Error>;
 
 export type TaskSessionRecordsState =
   | { kind: "loading" }
@@ -19,55 +15,24 @@ type UseTaskSessionRecordsArgs = {
   queryClient: QueryClient;
 };
 
-const TASK_ID_SEPARATOR = "\u001f";
-
-const toTaskIdSetKey = (taskIds: string[]): string =>
-  [...new Set(taskIds)].toSorted().join(TASK_ID_SEPARATOR);
-
-const toTaskSessionTargets = (taskIdsKey: string): { id: string }[] => {
-  if (!taskIdsKey) {
-    return [];
-  }
-  return taskIdsKey.split(TASK_ID_SEPARATOR).map((id) => ({ id }));
-};
-
 export const useTaskSessionRecords = ({
   repoPath,
   taskIds,
   enabled,
   queryClient,
 }: UseTaskSessionRecordsArgs): TaskSessionRecordsState => {
-  const taskIdsKey = toTaskIdSetKey(taskIds);
-  const taskSessionTargets = useMemo(() => toTaskSessionTargets(taskIdsKey), [taskIdsKey]);
-  const shouldReadRecords = enabled && repoPath !== null;
-
-  return useQueries(
-    {
-      queries: shouldReadRecords
-        ? taskSessionTargets.map((task) => agentSessionListQueryOptions(repoPath, task.id))
-        : [],
-      combine: (queries: AgentSessionListQueryResult[]): TaskSessionRecordsState => {
-        if (!shouldReadRecords) {
-          return { kind: "loading" };
-        }
-        if (queries.some((query) => query.isPending)) {
-          return { kind: "loading" };
-        }
-        const failedQuery = queries.find((query) => query.isError);
-        if (failedQuery) {
-          return { kind: "failed", error: failedQuery.error };
-        }
-        return {
-          kind: "ready",
-          records: toTaskSessionRecords(
-            taskSessionTargets,
-            Object.fromEntries(
-              taskSessionTargets.map((task, index) => [task.id, queries[index]?.data ?? []]),
-            ),
-          ),
-        };
-      },
-    },
-    queryClient,
-  );
+  const sessionLists = useAgentSessionLists({ repoPath, taskIds, enabled, queryClient });
+  return useMemo((): TaskSessionRecordsState => {
+    if (sessionLists.isPending) {
+      return { kind: "loading" };
+    }
+    if (sessionLists.error) {
+      return { kind: "failed", error: sessionLists.error };
+    }
+    const taskSessionTargets = Object.keys(sessionLists.data).map((id) => ({ id }));
+    return {
+      kind: "ready",
+      records: toTaskSessionRecords(taskSessionTargets, sessionLists.data),
+    };
+  }, [sessionLists.data, sessionLists.error, sessionLists.isPending]);
 };

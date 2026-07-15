@@ -1,10 +1,6 @@
 import type { AgentSessionIdentity, AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import {
-  invalidateAgentSessionListQuery,
-  removeAgentSessionRecordFromQuery,
-  upsertAgentSessionRecordInQuery,
-} from "@/state/queries/agent-sessions";
+import { invalidateAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 import { requireWorkspaceRepoPath } from "./session-invariants";
@@ -26,7 +22,9 @@ export const createSessionCacheEffects = ({
   ): Promise<void> => {
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await hostPort.agentSessionUpsert(repoPath, taskId, record);
-    upsertAgentSessionRecordInQuery(queryClient, repoPath, taskId, record);
+    await invalidateAgentSessionListQuery(queryClient, repoPath, taskId, {
+      refetchActive: true,
+    });
   };
 
   const deleteSessionRecord = async (
@@ -35,7 +33,9 @@ export const createSessionCacheEffects = ({
   ): Promise<void> => {
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await hostPort.agentSessionDelete(repoPath, taskId, identity);
-    removeAgentSessionRecordFromQuery(queryClient, repoPath, taskId, identity);
+    await invalidateAgentSessionListQuery(queryClient, repoPath, taskId, {
+      refetchActive: true,
+    });
   };
 
   const invalidateSessionStopQueries = async ({

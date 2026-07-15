@@ -90,7 +90,7 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
   );
 
 export const agentSessionsFromRow = (
-  row: TaskRow,
+  row: Pick<TaskRow, "agentSessionsJson" | "id">,
 ): Effect.Effect<AgentSessionRecord[], SqliteTaskStoreDataError> =>
   parseJsonColumn(
     row.agentSessionsJson,

@@ -76,19 +76,22 @@ const createHarnessState = () => {
     opencode: createRepoRuntimeHealthFixture(),
   };
   let runtimeHealthByRuntime = readyRuntimeHealthByRuntime;
-  const props = (taskIds: string[]) => ({
-    workspaceRepoPath: "/repo",
-    taskIds,
-    isLoadingTasks: false,
-    currentWorkspaceRepoPathRef,
-    repoEpochRef,
-    commitSessionCollection,
-    agentEngine,
-    observeAgentSession,
-    clearSessionObservationState,
-    loadLiveSessionHistory,
-    queryClient,
-  });
+  const props = (taskIds: string[]) => {
+    queryClient.setQueryData(agentSessionQueryKeys.hydration("/repo", taskIds), true);
+    return {
+      workspaceRepoPath: "/repo",
+      taskIds,
+      isLoadingTasks: false,
+      currentWorkspaceRepoPathRef,
+      repoEpochRef,
+      commitSessionCollection,
+      agentEngine,
+      observeAgentSession,
+      clearSessionObservationState,
+      loadLiveSessionHistory,
+      queryClient,
+    };
+  };
   const wrapper = ({ children }: PropsWithChildren) => (
     <RuntimeDefinitionsContext.Provider
       value={{

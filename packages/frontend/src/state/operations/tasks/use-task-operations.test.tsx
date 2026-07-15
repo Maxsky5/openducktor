@@ -82,6 +82,7 @@ const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 const originalToastSuccess = toast.success;
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
 
 const createSettingsSnapshotFixture = () => createSharedSettingsSnapshotFixture();
 
@@ -461,6 +462,13 @@ describe("use-task-operations", () => {
       (_message: string, _options?: { description?: string }) => "",
     ) as unknown as typeof toast.success;
     host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture()) as never;
+    host.agentSessionsListForTasks = async (repoPath, taskIds) =>
+      Promise.all(
+        taskIds.map(async (taskId) => ({
+          taskId,
+          agentSessions: await host.agentSessionsList(repoPath, taskId),
+        })),
+      );
   });
 
   afterEach(() => {
@@ -468,6 +476,7 @@ describe("use-task-operations", () => {
     console.warn = originalConsoleWarn;
     toast.success = originalToastSuccess;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     resetAgentChatDraftStoreForTests();
   });
 
