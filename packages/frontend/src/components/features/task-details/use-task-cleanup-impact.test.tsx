@@ -18,7 +18,7 @@ const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
 });
 
 describe("getManagedTaskCleanupImpact", () => {
-  test("counts unique build and qa worktrees outside the repo root", () => {
+  test("counts unique workflow worktrees outside the repo root", () => {
     const impact = getManagedTaskCleanupImpact("/repo", [
       makeSession({
         runtimeKind: "opencode",
@@ -44,14 +44,20 @@ describe("getManagedTaskCleanupImpact", () => {
         role: "planner",
         workingDirectory: "/repo/worktrees/task-3",
       }),
+      makeSession({
+        runtimeKind: "opencode",
+        externalSessionId: "spec-1",
+        role: "spec",
+        workingDirectory: "/repo/worktrees/task-4",
+      }),
       makeSession({ externalSessionId: "build-root", role: "build", workingDirectory: "/repo" }),
     ]);
 
     expect(impact).toEqual({
       hasCanonicalWorktree: false,
       hasManagedSessionCleanup: true,
-      managedWorktreeCount: 2,
-      legacyWorktreeCount: 2,
+      managedWorktreeCount: 4,
+      legacyWorktreeCount: 4,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -196,7 +202,7 @@ describe("getManagedTaskCleanupImpact", () => {
       hasCanonicalWorktree: true,
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 3,
-      legacyWorktreeCount: 1,
+      legacyWorktreeCount: 2,
       impactError: null,
       isLoadingImpact: false,
     });

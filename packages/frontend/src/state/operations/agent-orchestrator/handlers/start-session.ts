@@ -147,6 +147,7 @@ export const createStartAgentSession = ({
 
       let freshBootstrapCommitted = false;
       let bootstrapCompletionAttempted = false;
+      let bootstrapCompleted = false;
       try {
         await observeAgentSessionAndGuard({
           startResult,
@@ -154,8 +155,8 @@ export const createStartAgentSession = ({
         });
         bootstrapCompletionAttempted = !!startResult.runtimeInfo.bootstrap;
         await startResult.runtimeInfo.bootstrap?.complete();
-        freshBootstrapCommitted =
-          input.startMode === "fresh" && !!startResult.runtimeInfo.bootstrap;
+        bootstrapCompleted = !!startResult.runtimeInfo.bootstrap;
+        freshBootstrapCommitted = input.startMode === "fresh" && bootstrapCompleted;
         if (startResult.ctx.isStaleRepoOperation()) {
           throw new Error(STALE_START_ERROR);
         }
@@ -176,7 +177,7 @@ export const createStartAgentSession = ({
           session,
           runtime,
           stopReason: "start-session-stop-after-observer-or-bootstrap-failure",
-          ...(startResult.runtimeInfo.bootstrap
+          ...(startResult.runtimeInfo.bootstrap && !bootstrapCompleted
             ? {
                 bootstrap: startResult.runtimeInfo.bootstrap,
                 commitBootstrapOnDeleteFailure: !bootstrapCompletionAttempted,

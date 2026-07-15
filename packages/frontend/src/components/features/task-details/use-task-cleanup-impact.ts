@@ -46,10 +46,6 @@ export const getManagedTaskCleanupImpact = (
   const managedWorktrees = new Set<string>();
 
   for (const session of sessions) {
-    if (session.role !== "build" && session.role !== "qa") {
-      continue;
-    }
-
     const normalizedWorkingDirectory = normalizePathForComparison(session.workingDirectory);
     if (
       normalizedWorkingDirectory.length === 0 ||
@@ -134,7 +130,7 @@ export const getTaskCleanupImpactFromSessionQueries = (
       const path = normalizePathForComparison(session.workingDirectory);
       if (path && path !== normalizePathForComparison(repoPath)) {
         managedPaths.add(path);
-        if ((session.role === "build" || session.role === "qa") && !canonicalPaths.has(path)) {
+        if (!canonicalPaths.has(path)) {
           legacyWorktreePaths.add(path);
         }
       }

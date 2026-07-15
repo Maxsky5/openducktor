@@ -253,6 +253,69 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     ]);
   });
 
+  test("rolls back a stale fork after lease completion without aborting the completed lease", async () => {
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const adapter = new OpencodeSdkAdapter();
+    const stoppedSessionIds: string[] = [];
+    const deletedSessionIds: string[] = [];
+    const abortedLeaseIds: string[] = [];
+    const sessionsRef = createSessionsRef([
+      sessionFixture({
+        externalSessionId: "source-stale-after-complete",
+        historyLoadState: "loaded",
+      }),
+    ]);
+    adapter.forkSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "fork-stale-after-complete",
+      startedAt: "2026-02-22T08:20:00.000Z",
+      role: "build",
+      status: "idle",
+    });
+    adapter.loadSessionHistory = async () => [];
+    adapter.stopSession = async (sessionRef) => {
+      stoppedSessionIds.push(
+        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
+      );
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      currentWorkspaceRepoPathRef,
+      prepareTaskSessionStartupLease: async () => "stale-after-complete-lease",
+      completeTaskSessionStartupLease: async () => {
+        currentWorkspaceRepoPathRef.current = "/tmp/other";
+      },
+      abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
+        abortedLeaseIds.push(leaseId);
+      },
+      deleteSessionRecord: async (_taskId, identity) => {
+        deletedSessionIds.push(identity.externalSessionId);
+      },
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fork",
+        selectedModel: BUILD_SELECTION,
+        sourceSession: {
+          externalSessionId: "source-stale-after-complete",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      }),
+    ).rejects.toThrow("Workspace changed while starting session.");
+    expect(stoppedSessionIds).toEqual(["fork-stale-after-complete"]);
+    expect(deletedSessionIds).toEqual(["fork-stale-after-complete"]);
+    expect(abortedLeaseIds).toEqual([]);
+    expect(getSession(sessionsRef.current, "fork-stale-after-complete")).toBeUndefined();
+  });
+
   test("aborts the task startup lease when fork persistence fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const abortedLeaseIds: string[] = [];
