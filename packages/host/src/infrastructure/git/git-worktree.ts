@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   combineOutput,
@@ -50,12 +51,14 @@ export const isRegisteredWorktree = (
   worktreePath: string,
 ) =>
   Effect.gen(function* () {
-    const targetPath = yield* requireNonEmptyEffect(worktreePath, "worktree path");
+    const targetPath = normalizePathForComparison(
+      yield* requireNonEmptyEffect(worktreePath, "worktree path"),
+    );
     const output = yield* runGit(runner, repoPath, ["worktree", "list", "--porcelain", "-z"]);
     const registeredPaths = output
       .split("\0")
       .filter((entry) => entry.startsWith("worktree "))
-      .map((entry) => entry.slice("worktree ".length));
+      .map((entry) => normalizePathForComparison(entry.slice("worktree ".length)));
     return registeredPaths.includes(targetPath);
   });
 export const deleteReference = (runner: GitCommandRunner, repoPath: string, reference: string) =>

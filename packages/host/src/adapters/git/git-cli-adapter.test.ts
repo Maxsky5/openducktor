@@ -544,16 +544,27 @@ describe("createGitCliAdapter", () => {
       "Tracked content was restored to main, but ordinary untracked-file cleanup did not complete",
     );
   });
-  test("checks exact registered worktree paths", async () => {
+  test("checks registered worktree paths using canonical comparison semantics", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "worktree list --porcelain -z":
-          "worktree /repo\0HEAD abc\0branch refs/heads/main\0\0worktree /worktrees/task\0HEAD def\0branch refs/heads/task\0\0",
+        "worktree list --porcelain -z": [
+          "worktree /repo\0HEAD abc\0branch refs/heads/main\0\0",
+          "worktree /worktrees/task\0HEAD def\0branch refs/heads/task\0\0",
+          "worktree C:/Users/dev/worktrees/task\0HEAD ghi\0branch refs/heads/windows-task\0\0",
+        ].join(""),
       }),
     });
 
     await expect(
       Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/task")),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(
+        git.isRegisteredWorktree(
+          String.raw`C:\Users\dev\repo`,
+          String.raw`C:\Users\dev\worktrees\task`,
+        ),
+      ),
     ).resolves.toBe(true);
     await expect(
       Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/missing")),
