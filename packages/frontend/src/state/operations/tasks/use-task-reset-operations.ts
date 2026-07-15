@@ -36,8 +36,7 @@ export function useTaskResetOperations({
         throw error;
       }
       try {
-        await invalidateTaskWorkflowQueries(queryClient, repoPath, taskId);
-        await refreshTaskData(repoPath, taskId);
+        await refreshTaskAfterReset(queryClient, repoPath, taskId, refreshTaskData);
       } catch (error) {
         toast.error("Implementation reset, but metadata refresh failed", {
           description: `${repoPath} · ${taskId}: ${errorMessage(error)}`,
@@ -59,8 +58,7 @@ export function useTaskResetOperations({
         throw error;
       }
       try {
-        await invalidateTaskWorkflowQueries(queryClient, repoPath, taskId);
-        await refreshTaskData(repoPath, taskId);
+        await refreshTaskAfterReset(queryClient, repoPath, taskId, refreshTaskData);
       } catch (error) {
         toast.error("Task reset, but metadata refresh failed", {
           description: `${repoPath} · ${taskId}: ${errorMessage(error)}`,
@@ -74,6 +72,25 @@ export function useTaskResetOperations({
 
   return { resetTaskImplementation, resetTask };
 }
+
+const refreshTaskAfterReset = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  refreshTaskData: UseTaskOperationsResult["refreshTaskData"],
+): Promise<void> => {
+  const results = await Promise.allSettled([
+    invalidateTaskWorkflowQueries(queryClient, repoPath, taskId),
+    refreshTaskData(repoPath, taskId),
+  ]);
+  const errors = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, "Multiple post-reset metadata refreshes failed.");
+  }
+};
 
 const invalidateTaskWorkflowQueries = async (
   queryClient: QueryClient,
