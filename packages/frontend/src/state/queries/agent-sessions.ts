@@ -233,10 +233,16 @@ const beginAgentSessionListInvalidation = async (
   return invalidationVersion;
 };
 
-export const invalidateAgentSessionListQuery = async (
+type AuthoritativeAgentSessionListInvalidation = {
+  queryKey: ReturnType<typeof agentSessionQueryKeys.list>;
+  invalidationVersion: number;
+};
+
+const runAuthoritativeAgentSessionListInvalidation = async (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
+  complete: (invalidation: AuthoritativeAgentSessionListInvalidation) => Promise<void>,
 ): Promise<void> => {
   const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
   const invalidationVersion = await beginAgentSessionListInvalidation(
@@ -251,7 +257,22 @@ export const invalidateAgentSessionListQuery = async (
   if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
     return;
   }
-  await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+  await complete({ queryKey, invalidationVersion });
+};
+
+export const invalidateAgentSessionListQuery = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): Promise<void> => {
+  await runAuthoritativeAgentSessionListInvalidation(
+    queryClient,
+    repoPath,
+    taskId,
+    async ({ queryKey }) => {
+      await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+    },
+  );
 };
 
 export const refreshAgentSessionListQuery = async (
@@ -260,30 +281,24 @@ export const refreshAgentSessionListQuery = async (
   taskId: string,
   readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
 ): Promise<void> => {
-  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-  const invalidationVersion = await beginAgentSessionListInvalidation(
+  await runAuthoritativeAgentSessionListInvalidation(
     queryClient,
     repoPath,
     taskId,
+    async ({ invalidationVersion, queryKey }) => {
+      try {
+        await queryClient.fetchQuery({
+          ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+          staleTime: 0,
+        });
+      } catch (error) {
+        const superseded =
+          getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion;
+        if (superseded && isCancelledError(error)) {
+          return;
+        }
+        throw error;
+      }
+    },
   );
-  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
-    return;
-  }
-  await queryClient.cancelQueries({ queryKey, exact: true });
-  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
-    return;
-  }
-  try {
-    await queryClient.fetchQuery({
-      ...agentSessionListQueryOptions(repoPath, taskId, readPort),
-      staleTime: 0,
-    });
-  } catch (error) {
-    const superseded =
-      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion;
-    if (superseded && isCancelledError(error)) {
-      return;
-    }
-    throw error;
-  }
 };

@@ -61,7 +61,7 @@ const defaultGitPushBranch = async () => ({
 const defaultGitAbortConflict = async () => {};
 const defaultHumanApproveTask = async () => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
-const defaultAgentSessions = [
+const createDefaultAgentSessions = () => [
   {
     ...createAgentSessionFixture({
       externalSessionId: "builder-session-old",
@@ -81,9 +81,9 @@ const defaultAgentSessions = [
     }),
   },
 ];
-const defaultAgentSessionsList = async () => defaultAgentSessions;
+const defaultAgentSessionsList = async () => createDefaultAgentSessions();
 const defaultAgentSessionsListForTasks = async () => [
-  { taskId: "TASK-1", agentSessions: defaultAgentSessions },
+  { taskId: "TASK-1", agentSessions: createDefaultAgentSessions() },
 ];
 
 const taskApprovalContextGetMock = mock(defaultTaskApprovalContextGet);
