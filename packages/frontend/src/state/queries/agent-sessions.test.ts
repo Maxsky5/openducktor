@@ -7,6 +7,7 @@ import {
   agentSessionQueryKeys,
   invalidateAgentSessionListQuery,
   loadAgentSessionListsFromQuery,
+  removeAgentSessionRecordFromQuery,
   upsertAgentSessionRecordInQuery,
 } from "./agent-sessions";
 
@@ -180,6 +181,28 @@ describe("agent session query cache helpers", () => {
         agentSessionQueryKeys.listForTasks("/other", ["task-1"]),
       ),
     ).toEqual({ "task-1": [] });
+  });
+
+  test("removeAgentSessionRecordFromQuery updates repository batch caches containing the task", () => {
+    const queryClient = new QueryClient();
+    const batchKey = agentSessionQueryKeys.listForTasks("/repo", ["task-1", "task-2"]);
+    const otherBatchKey = agentSessionQueryKeys.listForTasks("/other", ["task-1"]);
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
+    queryClient.setQueryData(batchKey, { "task-1": [sessionFixture], "task-2": [] });
+    queryClient.setQueryData(otherBatchKey, { "task-1": [sessionFixture] });
+
+    removeAgentSessionRecordFromQuery(queryClient, "/repo", "task-1", sessionFixture);
+
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toEqual([]);
+    expect(queryClient.getQueryData<Record<string, AgentSessionRecord[]>>(batchKey)).toEqual({
+      "task-1": [],
+      "task-2": [],
+    });
+    expect(queryClient.getQueryData<Record<string, AgentSessionRecord[]>>(otherBatchKey)).toEqual({
+      "task-1": [sessionFixture],
+    });
   });
 
   test("invalidateAgentSessionListQuery invalidates per-task and repository batch caches", async () => {

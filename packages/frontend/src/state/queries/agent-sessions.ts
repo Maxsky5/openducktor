@@ -192,8 +192,31 @@ export const removeAgentSessionRecordFromQuery = (
   identity: AgentSessionIdentity,
 ): void => {
   const identityKey = agentSessionIdentityKey(identity);
+  const removeSession = (
+    current: AgentSessionRecord[] | undefined,
+  ): AgentSessionRecord[] | undefined => {
+    if (!current) {
+      return current;
+    }
+    const nextSessions = current.filter((entry) => agentSessionIdentityKey(entry) !== identityKey);
+    return nextSessions.length === current.length ? current : nextSessions;
+  };
   queryClient.setQueryData<AgentSessionRecord[] | undefined>(
     agentSessionQueryKeys.list(repoPath, taskId),
-    (current) => current?.filter((entry) => agentSessionIdentityKey(entry) !== identityKey),
+    removeSession,
+  );
+  queryClient.setQueriesData<Record<string, AgentSessionRecord[]> | undefined>(
+    { queryKey: agentSessionQueryKeys.batches(repoPath) },
+    (current) => {
+      if (!current || !(taskId in current)) {
+        return current;
+      }
+      const currentSessions = current[taskId];
+      const nextSessions = removeSession(currentSessions);
+      if (nextSessions === currentSessions || !nextSessions) {
+        return current;
+      }
+      return { ...current, [taskId]: nextSessions };
+    },
   );
 };
