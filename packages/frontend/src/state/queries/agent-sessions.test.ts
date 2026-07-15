@@ -256,4 +256,49 @@ describe("agent session query cache helpers", () => {
     expect(sessionsByTaskId).toEqual({ "task-1": [refreshedSession] });
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
   });
+
+  test("force-fresh batch loads return the exact task refetch when superseded", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const refreshedSession = { ...sessionFixture, externalSessionId: "external-2" };
+    let resolveBatch: (value: { taskId: string; agentSessions: AgentSessionRecord[] }[]) => void =
+      () => {
+        throw new Error("Batch resolver was not initialized.");
+      };
+    const batchList = mock(
+      () =>
+        new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
+          resolveBatch = resolve;
+        }),
+    );
+    const singleList = mock(async (_repoPath: string, _taskId: string) => [refreshedSession]);
+    const readPort = {
+      agentSessionsList: singleList,
+      agentSessionsListForTasks: batchList,
+    };
+    queryClient.setQueryDefaults(queryKey, {
+      queryFn: () => singleList("/repo", "task-1"),
+    });
+    queryClient.setQueryData(queryKey, [sessionFixture]);
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
+
+    const load = loadAgentSessionListsFromQuery(queryClient, "/repo", ["task-1"], {
+      forceFresh: true,
+      readPort,
+    });
+    await Promise.resolve();
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+      refetchType: "all",
+    });
+    resolveBatch([
+      {
+        taskId: "task-1",
+        agentSessions: [{ ...sessionFixture, externalSessionId: "stale-session" }],
+      },
+    ]);
+
+    await expect(load).resolves.toEqual({ "task-1": [refreshedSession] });
+    expect(batchList).toHaveBeenCalledTimes(1);
+    expect(singleList).toHaveBeenCalledTimes(1);
+  });
 });
