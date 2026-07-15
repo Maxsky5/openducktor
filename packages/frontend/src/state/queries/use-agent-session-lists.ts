@@ -100,10 +100,14 @@ export const useAgentSessionLists = ({
   return useQueries(
     {
       queries: shouldReadLists
-        ? normalizedTaskIds.map((taskId) => ({
-            ...agentSessionListQueryOptions(repoPath, taskId, readPort),
-            enabled: hydrationReady,
-          }))
+        ? normalizedTaskIds.map((taskId) => {
+            const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+            const exactRefreshFailed = queryClient.getQueryState(queryKey)?.status === "error";
+            return {
+              ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+              enabled: hydrationReady && !exactRefreshFailed,
+            };
+          })
         : [],
       combine: combineAgentSessionListQueries,
     },

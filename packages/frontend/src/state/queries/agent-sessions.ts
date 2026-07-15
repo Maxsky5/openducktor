@@ -64,6 +64,7 @@ export const agentSessionListQueryOptions = (
   queryOptions({
     queryKey: agentSessionQueryKeys.list(repoPath, taskId),
     queryFn: (): Promise<AgentSessionRecord[]> => readPort.agentSessionsList(repoPath, taskId),
+    retryOnMount: false,
     staleTime: AGENT_SESSION_LIST_STALE_TIME,
   });
 
