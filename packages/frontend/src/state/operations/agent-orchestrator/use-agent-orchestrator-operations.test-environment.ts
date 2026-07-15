@@ -8,6 +8,7 @@ import { createWorktreeRuntimeFixture } from "./use-agent-orchestrator-operation
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 export const setupOrchestratorOperationsTestEnvironment = async () => {
+  const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalBuildContinuationTargetGet = host.taskWorktreeGet;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
@@ -21,6 +22,8 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
   await clearAppQueryClient();
+  host.agentSessionsListForTasks = async (_repoPath, taskIds) =>
+    taskIds.map((taskId) => ({ taskId, agentSessions: [] }));
   host.taskWorktreeGet = async () => ({
     workingDirectory: "/tmp/repo/worktree",
   });
@@ -71,6 +74,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
   return () => {
+    host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.taskWorktreeGet = originalBuildContinuationTargetGet;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;

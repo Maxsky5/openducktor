@@ -238,7 +238,20 @@ export const invalidateAgentSessionListQuery = async (
   repoPath: string,
   taskId: string,
 ): Promise<void> => {
-  await beginAgentSessionListInvalidation(queryClient, repoPath, taskId);
+  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+  const invalidationVersion = await beginAgentSessionListInvalidation(
+    queryClient,
+    repoPath,
+    taskId,
+  );
+  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
+    return;
+  }
+  await queryClient.cancelQueries({ queryKey, exact: true });
+  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
+    return;
+  }
+  await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
 };
 
 export const refreshAgentSessionListQuery = async (
