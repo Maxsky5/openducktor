@@ -41,16 +41,46 @@ export type ResolveSessionRuntimePolicySync = (input: {
 const shouldKeepLocalSessionWithoutPersistedRecord = (session: AgentSessionState): boolean =>
   session.status === "starting";
 
+const preservePendingInputChangedDuringSnapshotRead = ({
+  current,
+  baseline,
+  snapshotSession,
+}: {
+  current: AgentSessionState | undefined;
+  baseline: AgentSessionState | undefined;
+  snapshotSession: AgentSessionState;
+}): AgentSessionState => {
+  if (!current) {
+    return snapshotSession;
+  }
+  const preserveApprovals = current.pendingApprovals !== baseline?.pendingApprovals;
+  const preserveQuestions = current.pendingQuestions !== baseline?.pendingQuestions;
+  if (!preserveApprovals && !preserveQuestions) {
+    return snapshotSession;
+  }
+  return {
+    ...snapshotSession,
+    pendingApprovals: preserveApprovals
+      ? current.pendingApprovals
+      : snapshotSession.pendingApprovals,
+    pendingQuestions: preserveQuestions
+      ? current.pendingQuestions
+      : snapshotSession.pendingQuestions,
+  };
+};
+
 export const buildRepoSessionReadModel = ({
   repoPath,
   tasks,
   currentSessionCollection,
+  runtimeSnapshotBaseline,
   runtimeSnapshots,
   resolveSessionRuntimePolicy,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords;
   currentSessionCollection?: AgentSessionCollection;
+  runtimeSnapshotBaseline?: AgentSessionCollection;
   runtimeSnapshots: RepoRuntimeSessionSnapshots;
   resolveSessionRuntimePolicy: ResolveSessionRuntimePolicySync;
 }): RepoSessionReadModel => {
@@ -59,6 +89,7 @@ export const buildRepoSessionReadModel = ({
     tasks.records.map(({ record }) => agentSessionIdentityKey(toPersistedSessionIdentity(record))),
   );
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
+  const snapshotBaselineSessions = runtimeSnapshotBaseline ?? currentSessions;
   const carriedSessions: AgentSessionState[] = [];
   const unlistedSessionRefs: SessionRef[] = [];
   const materializedSessionKeys = new Set(persistedSessionKeys);
@@ -109,6 +140,7 @@ export const buildRepoSessionReadModel = ({
     const ref = toRuntimeSessionRef(repoPath, identity);
     const sessionKey = agentSessionIdentityKey(identity);
     const current = getAgentSession(currentSessions, identity) ?? undefined;
+    const baseline = getAgentSession(snapshotBaselineSessions, identity) ?? undefined;
     const snapshot = runtimeSnapshots.get(sessionKey) ?? toMissingAgentSessionRuntimeSnapshot(ref);
     const persistedSessionView = toPersistedSessionView({
       taskId,
@@ -125,10 +157,16 @@ export const buildRepoSessionReadModel = ({
       session: directSession,
       runtimeChildSnapshots,
     });
-    const session = projectedPendingInput.session;
+    const session = preservePendingInputChangedDuringSnapshotRead({
+      current,
+      baseline,
+      snapshotSession: projectedPendingInput.session,
+    });
     const shouldObserveSession =
       shouldObserveAgentSessionRuntimeSnapshot(snapshot) ||
       projectedPendingInput.hasProjectedChildPendingInput ||
+      session.pendingApprovals.length > 0 ||
+      session.pendingQuestions.length > 0 ||
       runtimeChildSnapshots.some(shouldObserveAgentSessionRuntimeSnapshot);
     sessionCollection = replaceAgentSession(sessionCollection, session);
 

@@ -119,6 +119,10 @@ export const loadRepoSessionReadModel = async ({
     return false;
   }
 
+  const runtimeSnapshotBaseline = commitSessionCollection((currentSessionCollection) => ({
+    collection: currentSessionCollection,
+    result: currentSessionCollection,
+  }));
   const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
     repoPath,
     tasks: taskSessionRecords,
@@ -142,6 +146,7 @@ export const loadRepoSessionReadModel = async ({
       repoPath,
       tasks: taskSessionRecords,
       currentSessionCollection,
+      runtimeSnapshotBaseline,
       runtimeSnapshots,
       resolveSessionRuntimePolicy: ({ runtimeKind, sessionScope }) => {
         if (runtimeKind === "opencode") {
