@@ -8,7 +8,7 @@ import {
   emptyAgentSessionCollection,
   listAgentSessions,
 } from "@/state/agent-session-collection";
-import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -16,7 +16,7 @@ import {
 import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../support/session-runtime-policy";
-import type { ResolveSessionRuntimePolicySync } from "./repo-session-read-model";
+import type { ResolveSessionRuntimePolicySync } from "./adapters/session-runtime-policy-resolver";
 import { loadRepoSessionReadModel } from "./repo-session-read-model-loader";
 import type { TaskSessionRecords } from "./task-session-records";
 
@@ -108,6 +108,73 @@ const loadReadModel = async ({
 };
 
 describe("repo session read model loader", () => {
+  test("publishes known running sessions before runtime policy loading finishes", async () => {
+    const codexRecord: AgentSessionRecord = {
+      ...record,
+      runtimeKind: "codex",
+    };
+    const codexRecords: TaskSessionRecords = {
+      taskIds: ["task-1"],
+      records: [{ taskId: "task-1", record: codexRecord }],
+    };
+    const store = createAgentSessionsStore("/repo");
+    let markRuntimePolicyLoadStarted!: () => void;
+    let releaseRuntimePolicy!: () => void;
+    const runtimePolicyLoadStarted = new Promise<void>((resolve) => {
+      markRuntimePolicyLoadStarted = resolve;
+    });
+    const runtimePolicyGate = new Promise<void>((resolve) => {
+      releaseRuntimePolicy = resolve;
+    });
+
+    const load = loadRepoSessionReadModel({
+      repoPath: "/repo",
+      taskSessionRecords: codexRecords,
+      adapter: {
+        listSessionRuntimeSnapshots: async () => [
+          toAgentSessionRuntimeSnapshot({
+            ref: {
+              repoPath: "/repo",
+              runtimeKind: "codex",
+              workingDirectory: codexRecord.workingDirectory,
+              externalSessionId: codexRecord.externalSessionId,
+            },
+            snapshot: {
+              title: "Builder",
+              startedAt: codexRecord.startedAt,
+              runtimeActivity: "running",
+              pendingApprovals: [],
+              pendingQuestions: [],
+            },
+          }),
+        ],
+      },
+      commitSessionCollection: store.commitSessionCollection,
+      observeAgentSession: async () => undefined,
+      clearSessionObservationState: () => undefined,
+      loadLiveSessionHistory: async () => undefined,
+      loadSessionRuntimePolicyResolver: async () => {
+        markRuntimePolicyLoadStarted();
+        await runtimePolicyGate;
+        return createTestRuntimePolicyResolver();
+      },
+      isStaleRepoOperation: () => false,
+    });
+
+    await runtimePolicyLoadStarted;
+
+    expect(store.getActivitySnapshot().sessions).toEqual([
+      expect.objectContaining({
+        externalSessionId: codexRecord.externalSessionId,
+        runtimeKind: "codex",
+        activityState: "running",
+      }),
+    ]);
+
+    releaseRuntimePolicy();
+    await load;
+  });
+
   test("does not clear a live Codex approval with an older runtime snapshot", async () => {
     const codexRecord: AgentSessionRecord = {
       ...record,

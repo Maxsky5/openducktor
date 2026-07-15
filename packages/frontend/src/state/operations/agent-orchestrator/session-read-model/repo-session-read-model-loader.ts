@@ -1,16 +1,19 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
+import {
+  type AgentEnginePort,
+  type PolicyBoundSessionRef,
+  type SessionRef,
+  toAgentRuntimePolicyBinding,
+} from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { appendSessionMessage } from "../support/messages";
 import { buildSessionErrorNoticeMessage } from "../support/session-notice-messages";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
+import type { ResolveSessionRuntimePolicySync } from "./adapters/session-runtime-policy-resolver";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
-import {
-  buildRepoSessionReadModel,
-  type ResolveSessionRuntimePolicySync,
-} from "./repo-session-read-model";
+import { buildRepoSessionReadModel } from "./repo-session-read-model";
 import type { TaskSessionRecords } from "./task-session-records";
 
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
@@ -137,15 +140,6 @@ export const loadRepoSessionReadModel = async ({
   if (isStaleRepoOperation()) {
     return false;
   }
-  const runtimeKinds = new Set(snapshotRuntimeKinds ?? []);
-  for (const snapshot of runtimeSnapshots.values()) {
-    runtimeKinds.add(snapshot.ref.runtimeKind);
-  }
-  const resolveSessionRuntimePolicy = await loadSessionRuntimePolicyResolver([...runtimeKinds]);
-  if (isStaleRepoOperation()) {
-    return false;
-  }
-
   const readModel = commitSessionCollection((currentSessionCollection) => {
     const readModel = buildRepoSessionReadModel({
       repoPath,
@@ -153,7 +147,6 @@ export const loadRepoSessionReadModel = async ({
       currentSessionCollection,
       runtimeSnapshotBaseline,
       runtimeSnapshots,
-      resolveSessionRuntimePolicy,
     });
     return {
       collection: readModel.sessionCollection,
@@ -166,8 +159,26 @@ export const loadRepoSessionReadModel = async ({
     return false;
   }
 
+  const runtimeKinds = Array.from(
+    new Set(readModel.liveSessionRefs.map((session) => session.runtimeKind)),
+  );
+  const resolveSessionRuntimePolicy = await loadSessionRuntimePolicyResolver(runtimeKinds);
+  if (isStaleRepoOperation()) {
+    return false;
+  }
+  const liveSessionRefs: PolicyBoundSessionRef[] = readModel.liveSessionRefs.map((session) => {
+    const runtimePolicy = resolveSessionRuntimePolicy({
+      runtimeKind: session.runtimeKind,
+      sessionScope: session.sessionScope ?? null,
+    });
+    return {
+      ...session,
+      ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),
+    };
+  });
+
   const observerFailures = await observeLiveSessions({
-    sessions: readModel.liveSessionRefs,
+    sessions: liveSessionRefs,
     observeAgentSession,
     isStaleRepoOperation,
   });
@@ -183,7 +194,7 @@ export const loadRepoSessionReadModel = async ({
   }
 
   await Promise.all(
-    readModel.liveSessionRefs.map(async (session) => {
+    liveSessionRefs.map(async (session) => {
       if (isStaleRepoOperation()) {
         return;
       }

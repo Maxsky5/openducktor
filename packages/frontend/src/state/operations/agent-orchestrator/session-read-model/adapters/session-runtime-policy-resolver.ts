@@ -1,9 +1,13 @@
 import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
-import type { AgentSessionRuntimePolicy } from "@openducktor/core";
+import type { AgentSessionRuntimePolicy, AgentSessionScope } from "@openducktor/core";
 import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../../support/session-runtime-policy";
-import type { ResolveSessionRuntimePolicySync } from "../repo-session-read-model";
 
 type LoadSettingsSnapshot = () => Promise<SettingsSnapshot>;
+
+export type ResolveSessionRuntimePolicySync = (input: {
+  runtimeKind: RuntimeKind;
+  sessionScope?: AgentSessionScope | null;
+}) => AgentSessionRuntimePolicy;
 
 const openCodeRuntimePolicy = (): AgentSessionRuntimePolicy => ({ kind: "opencode" });
 

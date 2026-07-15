@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord, CodexEffectivePolicy, RuntimeKind } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import {
   type AgentPendingApprovalRequest,
   type AgentPendingQuestionRequest,
   type AgentRole,
-  type PolicyBoundSessionRef,
   type SessionRef,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
@@ -17,22 +16,11 @@ import { sessionMessagesToArray } from "@/test-utils/session-message-test-helper
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
-import { buildRepoSessionReadModel } from "./repo-session-read-model";
+import { buildRepoSessionReadModel, type SessionObservationRef } from "./repo-session-read-model";
 import type { TaskSessionRecords } from "./task-session-records";
 
 type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModel>;
-const codexPolicy: CodexEffectivePolicy = {
-  sandboxMode: "workspace-write",
-  approvalPolicy: "on-request",
-  approvalsReviewer: "user",
-  commandNetworkAccess: false,
-  approvalsReviewerApplies: true,
-};
-const resolveTestRuntimePolicy = ({ runtimeKind }: { runtimeKind: RuntimeKind }) =>
-  runtimeKind === "codex"
-    ? ({ kind: "codex", policy: codexPolicy } as const)
-    : ({ kind: "opencode" } as const);
-const expectedRuntimeRef = ({
+const expectedObservationRef = ({
   repoPath = "/repo",
   externalSessionId,
   role = "build",
@@ -46,28 +34,13 @@ const expectedRuntimeRef = ({
   runtimeKind?: RuntimeKind;
   taskId?: string;
   workingDirectory?: string;
-}): PolicyBoundSessionRef => {
-  const base = {
-    repoPath,
-    externalSessionId,
-    workingDirectory,
-    sessionScope: { kind: "workflow", taskId, role },
-  } as const;
-
-  if (runtimeKind === "codex") {
-    return {
-      ...base,
-      runtimeKind,
-      runtimePolicy: { kind: "codex", policy: codexPolicy },
-    };
-  }
-
-  return {
-    ...base,
-    runtimeKind,
-    runtimePolicy: { kind: "opencode" },
-  };
-};
+}): SessionObservationRef => ({
+  repoPath,
+  externalSessionId,
+  workingDirectory,
+  runtimeKind,
+  sessionScope: { kind: "workflow", taskId, role },
+});
 const expectedSessionRef = ({
   repoPath = "/repo",
   externalSessionId,
@@ -180,7 +153,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -188,7 +160,7 @@ describe("repo session read model", () => {
     expect(session?.runtimeKind).toBe(runtimeKind);
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
     expect(readModel.liveSessionRefs).toEqual([
-      expectedRuntimeRef({
+      expectedObservationRef({
         externalSessionId: record.externalSessionId,
         runtimeKind,
         workingDirectory: record.workingDirectory,
@@ -226,7 +198,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(listAgentSessions(readModel.sessionCollection)).toHaveLength(1);
@@ -247,7 +218,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: firstRuntimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
     expect(getReadModelSession(firstRead, record.externalSessionId)?.status).toBe("idle");
 
@@ -269,12 +239,11 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: firstRead.sessionCollection,
       runtimeSnapshots: secondRuntimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(secondRead, record.externalSessionId)?.status).toBe("running");
     expect(secondRead.liveSessionRefs).toEqual([
-      expectedRuntimeRef({
+      expectedObservationRef({
         externalSessionId: record.externalSessionId,
         workingDirectory: record.workingDirectory,
       }),
@@ -347,7 +316,6 @@ describe("repo session read model", () => {
         secondCurrentSession,
       ]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(readModel.liveSessionRefs.map((session) => session.externalSessionId)).toEqual([
@@ -389,7 +357,6 @@ describe("repo session read model", () => {
       tasks: createTaskSessionRecords([]),
       currentSessionCollection: createAgentSessionCollection([removedSession, otherTaskSession]),
       runtimeSnapshots: new Map(),
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, removedSession.externalSessionId)).toBeNull();
@@ -426,7 +393,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: idleRuntimeSnapshot,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
@@ -452,7 +418,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: busyRuntimeSnapshot,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
     const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
@@ -465,7 +430,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: busyRead.sessionCollection,
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
@@ -507,7 +471,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -557,7 +520,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -607,7 +569,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const session = getAgentSession(readModel.sessionCollection, record);
@@ -664,7 +625,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -706,7 +666,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.selectedModel).toBeNull();
@@ -761,7 +720,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -808,7 +766,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
@@ -838,7 +795,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
@@ -878,7 +834,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBeNull();
@@ -915,7 +870,6 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBe(currentSession);
@@ -944,7 +898,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: idleRuntimeSnapshot,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const session = getReadModelSession(idleRead, record.externalSessionId);
@@ -1002,7 +955,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
@@ -1033,7 +985,7 @@ describe("repo session read model", () => {
     ]);
     expect(getReadModelSession(readModel, "child-session")).toBeNull();
     expect(readModel.liveSessionRefs).toEqual([
-      expectedRuntimeRef({
+      expectedObservationRef({
         externalSessionId: parentRecord.externalSessionId,
         workingDirectory: parentRecord.workingDirectory,
       }),
@@ -1072,7 +1024,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
@@ -1131,13 +1082,12 @@ describe("repo session read model", () => {
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     const parentSession = requireReadModelSession(readModel, parentRecord.externalSessionId);
     expect(parentSession.messages).toBe(currentSession.messages);
     expect(readModel.liveSessionRefs).toEqual([
-      expectedRuntimeRef({
+      expectedObservationRef({
         externalSessionId: parentRecord.externalSessionId,
         workingDirectory: parentRecord.workingDirectory,
       }),
@@ -1179,7 +1129,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(
@@ -1222,7 +1171,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.pendingQuestions).toEqual([
@@ -1262,7 +1210,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       runtimeSnapshots: runtimeSnapshots,
-      resolveSessionRuntimePolicy: resolveTestRuntimePolicy,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.pendingQuestions).toEqual([
