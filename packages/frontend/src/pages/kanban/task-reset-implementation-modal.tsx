@@ -70,6 +70,9 @@ export function TaskResetImplementationModal({
             {model.legacyWorktreeCount > 0 ? (
               <p>{formatLegacyCleanupMessage(model.legacyWorktreeCount)}</p>
             ) : null}
+            {!model.hasCanonicalWorktree && model.legacyWorktreeCount === 0 ? (
+              <p>Related local task branches will be deleted if present.</p>
+            ) : null}
             <p>QA reports and linked pull request metadata will be cleared.</p>
             <p>
               Specs and implementation plans are kept. The task status will move back to{" "}

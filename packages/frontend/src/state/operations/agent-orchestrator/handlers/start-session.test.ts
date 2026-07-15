@@ -735,7 +735,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(abortCalls).toBe(0);
   });
 
-  test("reports falsy durable-record and bootstrap rollback rejections as failures", async () => {
+  test("preserves the registered session and commits bootstrap resources when durable deletion fails", async () => {
+    const sessionsRef = { current: emptyAgentSessionCollection() };
+    let completeCalls = 0;
+    let abortCalls = 0;
     const adapter = new OpencodeSdkAdapter();
     adapter.startSession = async (input) => ({
       runtimeKind: "opencode",
@@ -749,6 +752,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const { start } = createStartSessionTestHarness({
       adapter,
+      sessionsRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
       observeAgentSession: async () => {
         throw new Error("observer failed");
@@ -757,8 +761,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
         bootstrap: {
-          complete: async () => {},
-          abort: () => Promise.reject(null),
+          complete: async () => {
+            completeCalls += 1;
+          },
+          abort: async () => {
+            abortCalls += 1;
+          },
         },
       }),
       deleteSessionRecord: () => Promise.reject(undefined),
@@ -772,11 +780,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
         selectedModel: PLANNER_SELECTION,
       }),
     ).rejects.toThrow(
-      "Failed to delete the durable session record: Non-Error thrown: undefined. Failed to roll back task worktree bootstrap: null.",
+      "Failed to delete the durable session record: Non-Error thrown: undefined. The stopped session remains registered locally and durably for recovery. The task worktree bootstrap was committed to preserve its resources.",
     );
+    expect(completeCalls).toBe(1);
+    expect(abortCalls).toBe(0);
+    expect(getSession(sessionsRef.current, "external-falsy-rollback-errors")).toBeDefined();
   });
 
-  test("rolls back a started session when the repository changes during bootstrap completion", async () => {
+  test("preserves a fresh non-Builder session when the repository changes after bootstrap commits", async () => {
     const completionStarted = createDeferred<void>();
     const completion = createDeferred<void>();
     const repoEpochRef = { current: 1 };
@@ -832,9 +843,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     completion.resolve();
 
     await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
-    expect(stopCalls).toBe(1);
-    expect(deletedSessionIds).toEqual(["external-stale-bootstrap"]);
-    expect(abortCalls).toBe(1);
+    expect(stopCalls).toBe(0);
+    expect(deletedSessionIds).toEqual([]);
+    expect(abortCalls).toBe(0);
   });
 
   test("preserves a fresh Builder session when the repository changes after bootstrap commits", async () => {
@@ -948,6 +959,58 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const identity = sessionIdentity("external-bootstrap-fail", "/tmp/repo/worktree");
     expect(unsubscribeCalls).toBe(1);
     expect(observers.has(identity)).toBe(false);
+  });
+
+  test("does not retry failed bootstrap completion when durable deletion also fails", async () => {
+    const sessionsRef = { current: emptyAgentSessionCollection() };
+    let completeCalls = 0;
+    let abortCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-bootstrap-delete-fail",
+      role: "planner",
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {};
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {
+            completeCalls += 1;
+            throw new Error("bootstrap completion failed");
+          },
+          abort: async () => {
+            abortCalls += 1;
+          },
+        },
+      }),
+      deleteSessionRecord: async () => {
+        throw new Error("durable delete failed");
+      },
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow(
+      "The task worktree resources were left intact without retrying bootstrap completion.",
+    );
+    expect(completeCalls).toBe(1);
+    expect(abortCalls).toBe(0);
+    expect(getSession(sessionsRef.current, "external-bootstrap-delete-fail")).toBeDefined();
   });
 
   test("throws when task is missing after reuse checks", async () => {

@@ -57,4 +57,16 @@ describe("TaskResetImplementationModal", () => {
     expect(screen.queryByText(/canonical task worktree and branch are retained/i)).toBeNull();
     expect(screen.getByText(/1 legacy implementation worktree/i)).toBeDefined();
   });
+
+  test("warns that related branches may be deleted when no worktree exists", () => {
+    render(
+      <TaskResetImplementationModal
+        model={{ ...makeModel(0), hasCanonicalWorktree: false, hasManagedSessionCleanup: false }}
+      />,
+    );
+
+    expect(
+      screen.getByText(/related local task branches will be deleted if present/i),
+    ).toBeDefined();
+  });
 });

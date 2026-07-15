@@ -145,20 +145,22 @@ export const createStartAgentSession = ({
         return startResult.session;
       }
 
-      let freshBuilderBootstrapCommitted = false;
+      let freshBootstrapCommitted = false;
+      let bootstrapCompletionAttempted = false;
       try {
         await observeAgentSessionAndGuard({
           startResult,
           session,
         });
+        bootstrapCompletionAttempted = !!startResult.runtimeInfo.bootstrap;
         await startResult.runtimeInfo.bootstrap?.complete();
-        freshBuilderBootstrapCommitted =
-          input.startMode === "fresh" && role === "build" && !!startResult.runtimeInfo.bootstrap;
+        freshBootstrapCommitted =
+          input.startMode === "fresh" && !!startResult.runtimeInfo.bootstrap;
         if (startResult.ctx.isStaleRepoOperation()) {
           throw new Error(STALE_START_ERROR);
         }
       } catch (cause) {
-        if (freshBuilderBootstrapCommitted) {
+        if (freshBootstrapCommitted) {
           throw cause;
         }
         const identity = {
@@ -175,7 +177,10 @@ export const createStartAgentSession = ({
           runtime,
           stopReason: "start-session-stop-after-observer-or-bootstrap-failure",
           ...(startResult.runtimeInfo.bootstrap
-            ? { bootstrap: startResult.runtimeInfo.bootstrap }
+            ? {
+                bootstrap: startResult.runtimeInfo.bootstrap,
+                commitBootstrapOnDeleteFailure: !bootstrapCompletionAttempted,
+              }
             : {}),
         });
       }

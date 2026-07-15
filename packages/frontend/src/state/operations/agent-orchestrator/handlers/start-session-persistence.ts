@@ -71,6 +71,7 @@ export const registerStartedSession = async ({
       startedCtx,
       session: deps.session,
       runtime: deps.runtime,
+      ...(runtimeInfo.bootstrap ? { bootstrap: runtimeInfo.bootstrap } : {}),
     });
   }
 
