@@ -10,10 +10,7 @@ import { requireWorkspaceRepoPath } from "./session-invariants";
 type CreateSessionCacheEffectsArgs = {
   workspaceRepoPath: string | null;
   queryClient: QueryClient;
-  hostPort: Pick<
-    AgentOrchestratorHostPort,
-    "agentSessionDelete" | "agentSessionUpsert"
-  >;
+  hostPort: Pick<AgentOrchestratorHostPort, "agentSessionDelete" | "agentSessionUpsert">;
   reportCacheRefreshFailure?: (failure: {
     repoPath: string;
     taskId: string;

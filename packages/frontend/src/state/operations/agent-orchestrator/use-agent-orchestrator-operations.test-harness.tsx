@@ -182,7 +182,6 @@ export const createHookHarness = (args: {
         taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
       },
       {
-        buildStart: (...buildStartArgs) => host.buildStart(...buildStartArgs),
         runtimeEnsure: (...runtimeEnsureArgs) => host.runtimeEnsure(...runtimeEnsureArgs),
       },
     );

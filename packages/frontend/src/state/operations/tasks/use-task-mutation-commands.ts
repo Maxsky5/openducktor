@@ -7,8 +7,8 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import { collectTaskDeletionIds } from "./task-deletion-ids";

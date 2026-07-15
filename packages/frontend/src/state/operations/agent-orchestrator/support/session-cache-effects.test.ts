@@ -80,7 +80,7 @@ describe("createSessionCacheEffects", () => {
     const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
-      hostPort: { agentSessionUpsert: upsert },
+      hostPort: { agentSessionDelete: async () => undefined, agentSessionUpsert: upsert },
       reportCacheRefreshFailure,
     });
     failRefresh = true;
@@ -107,6 +107,7 @@ describe("createSessionCacheEffects", () => {
       workspaceRepoPath: "/repo",
       queryClient,
       hostPort: {
+        agentSessionDelete: async () => undefined,
         agentSessionUpsert: async () => {
           throw persistenceError;
         },
@@ -167,14 +168,16 @@ describe("createSessionCacheEffects", () => {
     expect(invalidatedKeys).toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
   });
 
-  test("deletes through the injected host port and removes only the matching cache record", async () => {
+  test("deletes through the injected host port and authoritatively refetches the task query", async () => {
     const queryClient = createQueryClient();
-    const deleteSession = mock(async () => undefined);
     const otherSession = { ...sessionRecord, externalSessionId: "session-2" };
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
-      sessionRecord,
-      otherSession,
-    ]);
+    let persistedSessions = [sessionRecord, otherSession];
+    const list = mock(async () => persistedSessions);
+    const deleteSession = mock(async () => {
+      persistedSessions = [otherSession];
+    });
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    await queryClient.fetchQuery({ queryKey, queryFn: list });
     const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
@@ -187,8 +190,8 @@ describe("createSessionCacheEffects", () => {
     await effects.deleteSessionRecord("task-1", sessionRecord);
 
     expect(deleteSession).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
-    expect(
-      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
-    ).toEqual([otherSession]);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([otherSession]);
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
   });
 });
