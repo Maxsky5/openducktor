@@ -35,6 +35,10 @@ import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-
 
 enableReactActEnvironment();
 
+const actualRightPanelBridgeModule = {
+  ...(await import("./use-agent-studio-right-panel-bridge")),
+};
+
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
   createAgentSessionFixture({
@@ -427,7 +431,7 @@ const mockedModuleResets = [
     "./use-agents-page-orchestration-shell-model",
     () => import("./use-agents-page-orchestration-shell-model"),
   ],
-  ["./use-agent-studio-right-panel-bridge", () => import("./use-agent-studio-right-panel-bridge")],
+  ["./use-agent-studio-right-panel-bridge", async () => actualRightPanelBridgeModule],
 ] as const;
 
 const registerModuleMocks = (): void => {
