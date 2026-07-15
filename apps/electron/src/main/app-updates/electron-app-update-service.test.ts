@@ -1,170 +1,71 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import type { AppUpdateState } from "@openducktor/contracts";
+import { DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS } from "./electron-app-update-service";
 import {
-  type AppUpdateState,
-  canDownloadAppUpdate,
-  canInstallAppUpdate,
-} from "@openducktor/contracts";
-import { ElectronLifecycleError } from "../../effect/electron-errors";
-import {
-  createElectronAppUpdateService,
-  DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS,
-  type ElectronAppUpdaterAdapter,
-  type ElectronUpdaterCheckResult,
-  type ElectronUpdaterConfigureOptions,
-  type ElectronUpdaterEventMap,
-} from "./electron-app-update-service";
-
-class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
-  checkCalls = 0;
-  configureError: unknown = null;
-  configureOptions: ElectronUpdaterConfigureOptions | null = null;
-  downloadCalls = 0;
-  installCalls: Array<{ isForceRunAfter: boolean | undefined; isSilent: boolean | undefined }> = [];
-  nativeInstallListeners = 0;
-  nativeQuitAndInstallCalls = 0;
-  onDownload: (() => void | Promise<void>) | null = null;
-  nextCheckResult: ElectronUpdaterCheckResult | null | Promise<ElectronUpdaterCheckResult | null> =
-    {
-      isUpdateAvailable: false,
-      updateInfo: { version: "0.4.2" },
-    };
-  nextDownloadResult: Promise<readonly string[]> = Promise.resolve(["/tmp/OpenDucktor.dmg"]);
-
-  private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
-
-  async checkForUpdates() {
-    this.checkCalls += 1;
-    return this.nextCheckResult;
-  }
-
-  configure(options: ElectronUpdaterConfigureOptions): void {
-    if (this.configureError) {
-      throw this.configureError;
-    }
-    this.configureOptions = options;
-  }
-
-  async downloadUpdate(): Promise<readonly string[]> {
-    this.downloadCalls += 1;
-    await this.onDownload?.();
-    return this.nextDownloadResult;
-  }
-
-  emit<EventName extends keyof ElectronUpdaterEventMap>(
-    eventName: EventName,
-    payload: ElectronUpdaterEventMap[EventName],
-  ): void {
-    for (const listener of this.listeners.get(eventName) ?? []) {
-      listener(payload);
-    }
-  }
-
-  on<EventName extends keyof ElectronUpdaterEventMap>(
-    eventName: EventName,
-    listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
-  ): () => void {
-    const listeners = this.listeners.get(eventName) ?? new Set<(payload: unknown) => void>();
-    listeners.add(listener as (payload: unknown) => void);
-    this.listeners.set(eventName, listeners);
-    return () => {
-      listeners.delete(listener as (payload: unknown) => void);
-    };
-  }
-
-  quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void {
-    this.installCalls.push({ isSilent, isForceRunAfter });
-    this.nativeInstallListeners += 1;
-  }
-
-  emitNativeUpdateDownloaded(): void {
-    this.nativeQuitAndInstallCalls += this.nativeInstallListeners;
-  }
-}
-
-const fixedNow = "2026-07-08T22:00:00.000Z";
-
-type FakeScheduledInterval = {
-  callback: () => void;
-  cleared: boolean;
-  intervalMs: number;
-};
-
-const flushAsyncWork = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
-const createFakeScheduler = () => {
-  const intervals: FakeScheduledInterval[] = [];
-  const scheduler = {
-    setInterval(callback: () => void, intervalMs: number): FakeScheduledInterval {
-      const interval = { callback, cleared: false, intervalMs };
-      intervals.push(interval);
-      return interval;
-    },
-    clearInterval(handle: unknown): void {
-      (handle as FakeScheduledInterval).cleared = true;
-    },
-  };
-
-  return {
-    intervals,
-    runInterval: async (index = 0) => {
-      const interval = intervals[index];
-      if (!interval || interval.cleared) {
-        return;
-      }
-      interval.callback();
-      await flushAsyncWork();
-    },
-    scheduler,
-  };
-};
-
-const createMissingManifestError = (): Error & { code: string } =>
-  Object.assign(
-    new Error(`Cannot find latest-mac.yml in the latest release artifacts (https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml): HttpError: 404 "method: GET url: https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml
-
-Please double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.
-"
-Headers: {"content-security-policy":"default-src 'none'","x-github-request-id":"4BDD:2F6204:154326FB:1101F3BB:6A501D61"}
-    at createHttpError
-    at ElectronHttpExecutor.handleResponse
-    at ClientRequest.<anonymous>`),
-    { code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND" },
-  );
-
-const createService = (
-  overrides: Partial<Parameters<typeof createElectronAppUpdateService>[0]> & {
-    adapter?: FakeUpdaterAdapter;
-  } = {},
-) => {
-  const adapter = overrides.adapter ?? new FakeUpdaterAdapter();
-  const installDownloadedUpdate =
-    overrides.installDownloadedUpdate ??
-    (async (runInstall) => {
-      runInstall();
-    });
-  const service = createElectronAppUpdateService({
-    adapter,
-    currentVersion: "0.4.2",
-    installDownloadedUpdate,
-    isPackaged: true,
-    logger: {
-      error: mock(() => {}),
-      info: mock(() => {}),
-      warn: mock(() => {}),
-    },
-    now: () => fixedNow,
-    platform: "darwin",
-    readUpdateConfig: () => "provider: github\n",
-    resourcesPath: "/Applications/OpenDucktor.app/Contents/Resources",
-    ...overrides,
-  });
-  return { adapter, service };
-};
+  createFakeScheduler,
+  createMissingManifestError,
+  createService,
+  FakeUpdaterAdapter,
+  fixedNow,
+  flushAsyncWork,
+} from "./electron-app-update-service.test-support";
+import type { ElectronUpdaterCheckResult } from "./electron-app-updater-adapter";
 
 describe("electron app update service", () => {
+  test("keeps packaged updater initialization off the startup call stack", async () => {
+    const fakeScheduler = createFakeScheduler();
+    let updateConfigReads = 0;
+    const { adapter, service } = createService({
+      readUpdateConfig: async () => {
+        updateConfigReads += 1;
+        return "provider: github\n";
+      },
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    expect(updateConfigReads).toBe(0);
+    expect(adapter.configureOptions).toBeNull();
+    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.2" });
+
+    service.startBackgroundChecks();
+
+    expect(updateConfigReads).toBe(0);
+    expect(adapter.configureOptions).toBeNull();
+
+    await fakeScheduler.runTimeout();
+
+    expect(updateConfigReads).toBe(1);
+    expect(adapter.configureOptions).not.toBeNull();
+    expect(adapter.checkCalls).toBe(1);
+  });
+
+  test("does not block while background updater initialization is pending", async () => {
+    const fakeScheduler = createFakeScheduler();
+    let resolveUpdateConfig: (config: string) => void = () => {};
+    const updateConfig = new Promise<string>((resolve) => {
+      resolveUpdateConfig = resolve;
+    });
+    const { adapter, service } = createService({
+      readUpdateConfig: async () => updateConfig,
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    service.startBackgroundChecks();
+    await fakeScheduler.runTimeout();
+
+    expect(adapter.configureOptions).toBeNull();
+    expect(adapter.checkCalls).toBe(0);
+    expect(service.getState()).toMatchObject({ status: "checking" });
+
+    resolveUpdateConfig("provider: github\n");
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(adapter.configureOptions).not.toBeNull();
+    expect(adapter.checkCalls).toBe(1);
+    expect(service.getState()).toMatchObject({ status: "upToDate" });
+  });
+
   test("starts disabled in unpackaged builds and rejects manual checks", async () => {
     const { adapter, service } = createService({ isPackaged: false });
     const states: AppUpdateState[] = [];
@@ -201,13 +102,10 @@ describe("electron app update service", () => {
 
   test("reports missing packaged update config as disabled instead of up-to-date", async () => {
     const { adapter, service } = createService({
-      readUpdateConfig: () => null,
+      readUpdateConfig: async () => null,
     });
 
-    expect(service.getState()).toMatchObject({
-      status: "disabled",
-      disabledCode: "missing_update_config",
-    });
+    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.2" });
 
     const result = await service.check({ initiator: "menu" });
 
@@ -220,10 +118,12 @@ describe("electron app update service", () => {
     expect(adapter.checkCalls).toBe(0);
   });
 
-  test("does not accept commented update provider config as configured", () => {
+  test("does not accept commented update provider config as configured", async () => {
     const { adapter, service } = createService({
-      readUpdateConfig: () => "# provider: github\n",
+      readUpdateConfig: async () => "# provider: github\n",
     });
+
+    await service.check({ initiator: "settings" });
 
     expect(service.getState()).toMatchObject({
       status: "disabled",
@@ -232,10 +132,12 @@ describe("electron app update service", () => {
     expect(adapter.configureOptions).toBeNull();
   });
 
-  test("reports malformed update provider config as an initialization error", () => {
+  test("reports malformed update provider config as an initialization error", async () => {
     const { adapter, service } = createService({
-      readUpdateConfig: () => "provider: [\n",
+      readUpdateConfig: async () => "provider: [\n",
     });
+
+    await service.check({ initiator: "settings" });
 
     expect(service.getState()).toMatchObject({
       status: "error",
@@ -258,7 +160,7 @@ describe("electron app update service", () => {
     }> = [
       {
         configureService: {
-          readUpdateConfig: () => {
+          readUpdateConfig: async () => {
             throw new Error("config unreadable");
           },
         },
@@ -266,7 +168,7 @@ describe("electron app update service", () => {
       },
       {
         configureService: {
-          readUpdateConfig: () => "provider: [\n",
+          readUpdateConfig: async () => "provider: [\n",
         },
         expectedMessage: "Electron update feed configuration is invalid",
       },
@@ -307,10 +209,11 @@ describe("electron app update service", () => {
     }
   });
 
-  test("configures the updater for explicit download and install control", () => {
+  test("configures the updater for explicit download and install control", async () => {
     const { adapter, service } = createService();
 
-    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.2" });
+    await service.check({ initiator: "settings" });
+
     expect(adapter.configureOptions).toMatchObject({
       allowPrerelease: false,
       autoDownload: false,
@@ -319,24 +222,37 @@ describe("electron app update service", () => {
     });
   });
 
-  test("configures prerelease builds to check their update channel", () => {
+  test("configures prerelease builds to check their update channel", async () => {
     const { adapter, service } = createService({ currentVersion: "0.4.0-beta.2" });
 
-    expect(service.getState()).toEqual({ status: "idle", currentVersion: "0.4.0-beta.2" });
+    await service.check({ initiator: "settings" });
+
     expect(adapter.configureOptions).toMatchObject({
       allowPrerelease: true,
       channel: "beta",
     });
   });
 
-  test("starts background checks immediately and repeats hourly", async () => {
+  test("defers the initial background check until after startup and repeats every twelve hours", async () => {
     const fakeScheduler = createFakeScheduler();
     const { adapter, service } = createService({
       scheduler: fakeScheduler.scheduler,
     });
 
+    expect(DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS).toBe(12 * 60 * 60 * 1000);
+
     service.startBackgroundChecks();
-    await flushAsyncWork();
+
+    expect(adapter.checkCalls).toBe(0);
+    expect(fakeScheduler.timeouts).toEqual([
+      {
+        callback: expect.any(Function),
+        cleared: false,
+        timeoutMs: 1_000,
+      },
+    ]);
+
+    await fakeScheduler.runTimeout();
 
     expect(adapter.checkCalls).toBe(1);
     expect(service.getState()).toMatchObject({
@@ -365,10 +281,11 @@ describe("electron app update service", () => {
 
     service.startBackgroundChecks();
     service.startBackgroundChecks();
-    await flushAsyncWork();
+    await fakeScheduler.runTimeout();
 
     expect(adapter.checkCalls).toBe(1);
     expect(fakeScheduler.intervals).toHaveLength(1);
+    expect(fakeScheduler.timeouts).toHaveLength(1);
   });
 
   test("clears scheduled background checks on dispose", async () => {
@@ -378,11 +295,43 @@ describe("electron app update service", () => {
     });
 
     service.startBackgroundChecks();
-    await flushAsyncWork();
-    service.dispose();
+    await service.dispose();
+    await fakeScheduler.runTimeout();
     await fakeScheduler.runInterval();
 
     expect(fakeScheduler.intervals[0]?.cleared).toBe(true);
+    expect(fakeScheduler.timeouts[0]?.cleared).toBe(true);
+    expect(adapter.checkCalls).toBe(0);
+  });
+
+  test("fences a pending check when disposal begins", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    let resolveCheck: (result: ElectronUpdaterCheckResult) => void = () => {};
+    adapter.nextCheckResult = new Promise((resolve) => {
+      resolveCheck = resolve;
+    });
+    const { service } = createService({ adapter });
+    const states: AppUpdateState[] = [];
+    service.subscribe((state) => states.push(state));
+
+    const checkResult = service.check({ initiator: "settings" });
+    await flushAsyncWork();
+    expect(adapter.checkCalls).toBe(1);
+
+    await service.dispose();
+    resolveCheck({ isUpdateAvailable: true, updateInfo: { version: "0.4.3" } });
+
+    await expect(checkResult).resolves.toMatchObject({
+      accepted: false,
+      rejection: { code: "updater_unavailable", operation: "check" },
+    });
+    expect(states.map((state) => state.status)).toEqual(["checking"]);
+    expect(adapter.disposeCalls).toBe(1);
+
+    await expect(service.check({ initiator: "settings" })).resolves.toMatchObject({
+      accepted: false,
+      rejection: { code: "updater_unavailable", operation: "check" },
+    });
     expect(adapter.checkCalls).toBe(1);
   });
 
@@ -414,16 +363,17 @@ describe("electron app update service", () => {
 
   test("promotes an active background check when the menu requests a manual check", async () => {
     const adapter = new FakeUpdaterAdapter();
+    const fakeScheduler = createFakeScheduler();
     let resolveCheck: (result: ElectronUpdaterCheckResult) => void = () => {};
     adapter.nextCheckResult = new Promise<ElectronUpdaterCheckResult>((resolve) => {
       resolveCheck = resolve;
     });
-    const { service } = createService({ adapter });
+    const { service } = createService({ adapter, scheduler: fakeScheduler.scheduler });
     const states: AppUpdateState[] = [];
     service.subscribe((state) => states.push(state));
 
     service.startBackgroundChecks();
-    await Promise.resolve();
+    await fakeScheduler.runTimeout();
     const menuResult = await service.check({ initiator: "menu" });
 
     expect(menuResult).toMatchObject({
@@ -452,46 +402,6 @@ describe("electron app update service", () => {
       status: "upToDate",
       checkInitiator: "menu",
       checkedAt: fixedNow,
-    });
-  });
-
-  test("treats a null update check result as an actionable error", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = null as unknown as FakeUpdaterAdapter["nextCheckResult"];
-    const { service } = createService({ adapter });
-
-    const result = await service.check({ initiator: "menu" });
-
-    expect(result).toMatchObject({
-      accepted: true,
-      state: {
-        status: "error",
-        checkedAt: fixedNow,
-        error: {
-          code: "updater_unavailable",
-          operation: "check",
-        },
-      },
-    });
-  });
-
-  test("treats an undefined update check result as an actionable error", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = undefined as unknown as FakeUpdaterAdapter["nextCheckResult"];
-    const { service } = createService({ adapter });
-
-    const result = await service.check({ initiator: "settings" });
-
-    expect(result).toMatchObject({
-      accepted: true,
-      state: {
-        status: "error",
-        checkedAt: fixedNow,
-        error: {
-          code: "updater_unavailable",
-          operation: "check",
-        },
-      },
     });
   });
 
@@ -524,9 +434,10 @@ describe("electron app update service", () => {
     expect(result.state.error.message).not.toContain("at createHttpError");
   });
 
-  test("sanitizes updater error events before publishing them to renderers", () => {
+  test("sanitizes updater error events before publishing them to renderers", async () => {
     const adapter = new FakeUpdaterAdapter();
     const { service } = createService({ adapter });
+    await service.check({ initiator: "settings" });
 
     adapter.emit("error", createMissingManifestError());
 
@@ -550,7 +461,7 @@ describe("electron app update service", () => {
     const { service } = createService({ adapter });
     await service.check({ initiator: "settings" });
 
-    adapter.nextCheckResult = null as unknown as FakeUpdaterAdapter["nextCheckResult"];
+    adapter.nextCheckResult = Promise.reject(new Error("GitHub update check failed"));
     const result = await service.check({ initiator: "menu" });
 
     expect(result).toMatchObject({
@@ -561,13 +472,13 @@ describe("electron app update service", () => {
         checkInitiator: "menu",
         checkedAt: fixedNow,
         error: {
-          code: "updater_unavailable",
+          code: "check_failed",
           operation: "check",
         },
       },
     });
 
-    adapter.nextDownloadResult = Promise.resolve(["/tmp/OpenDucktor.dmg"]);
+    adapter.nextDownloadResult = Promise.resolve({ version: "0.4.3" });
     const retryResult = await service.download();
 
     expect(retryResult).toMatchObject({
@@ -595,23 +506,6 @@ describe("electron app update service", () => {
     expect(adapter.downloadCalls).toBe(0);
   });
 
-  test("ignores downloaded events unless a download is active", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const { service } = createService({ adapter });
-    await service.check({ initiator: "settings" });
-
-    adapter.emit("update-downloaded", { version: "0.4.3" });
-
-    expect(service.getState()).toMatchObject({
-      status: "available",
-      availableVersion: "0.4.3",
-    });
-  });
-
   test("downloads only after explicit action and reflects progress", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
@@ -620,7 +514,6 @@ describe("electron app update service", () => {
     };
     adapter.onDownload = () => {
       adapter.emit("download-progress", { percent: 48 });
-      adapter.emit("update-downloaded", { version: "0.4.3" });
     };
     const { service } = createService({ adapter });
     const states: AppUpdateState[] = [];
@@ -648,6 +541,61 @@ describe("electron app update service", () => {
     expect(adapter.downloadCalls).toBe(1);
   });
 
+  test("publishes download progress at most once every 500 milliseconds", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const fakeScheduler = createFakeScheduler();
+    let finishDownload: (() => void) | null = null;
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    adapter.onDownload = () =>
+      new Promise<void>((resolve) => {
+        finishDownload = resolve;
+      });
+    const { service } = createService({ adapter, scheduler: fakeScheduler.scheduler });
+    const states: AppUpdateState[] = [];
+    service.subscribe((state) => states.push(state));
+    await service.check({ initiator: "settings" });
+
+    const download = service.download();
+    await flushAsyncWork();
+    adapter.emit("download-progress", { percent: 10 });
+    adapter.emit("download-progress", { percent: 20 });
+    adapter.emit("download-progress", { percent: 30 });
+
+    expect(
+      states.flatMap((state) => (state.status === "downloading" ? [state.progressPercent] : [])),
+    ).toEqual([0, 10]);
+    expect(fakeScheduler.timeouts).toEqual([
+      {
+        callback: expect.any(Function),
+        cleared: false,
+        timeoutMs: 500,
+      },
+    ]);
+
+    await fakeScheduler.runTimeout();
+
+    expect(
+      states.flatMap((state) => (state.status === "downloading" ? [state.progressPercent] : [])),
+    ).toEqual([0, 10, 30]);
+    adapter.emit("download-progress", { percent: 40 });
+    adapter.emit("download-progress", { percent: 50 });
+    expect(
+      states.flatMap((state) => (state.status === "downloading" ? [state.progressPercent] : [])),
+    ).toEqual([0, 10, 30]);
+
+    if (!finishDownload) {
+      throw new Error("Download did not start.");
+    }
+    finishDownload();
+    await download;
+
+    expect(service.getState()).toMatchObject({ status: "downloaded", progressPercent: 100 });
+    expect(fakeScheduler.timeouts[1]?.cleared).toBe(true);
+  });
+
   test("download failures preserve available version for retry", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
@@ -673,7 +621,7 @@ describe("electron app update service", () => {
       },
     });
 
-    adapter.nextDownloadResult = Promise.resolve(["/tmp/OpenDucktor.dmg"]);
+    adapter.nextDownloadResult = Promise.resolve({ version: "0.4.3" });
     const retryResult = await service.download();
 
     expect(retryResult).toMatchObject({
@@ -685,395 +633,5 @@ describe("electron app update service", () => {
       },
     });
     expect(adapter.downloadCalls).toBe(2);
-  });
-
-  test("install coordinates shutdown before invoking the updater install path", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const order: string[] = [];
-    const { service } = createService({
-      adapter,
-      installDownloadedUpdate: async (runInstall) => {
-        order.push("shutdown");
-        runInstall();
-        order.push("after-install-call");
-      },
-    });
-    await service.check({ initiator: "settings" });
-    await service.download();
-
-    const result = await service.install();
-
-    expect(result.accepted).toBe(true);
-    expect(order).toEqual(["shutdown", "after-install-call"]);
-    expect(adapter.installCalls).toEqual([{ isSilent: false, isForceRunAfter: true }]);
-  });
-
-  test("publishes install requested before shutdown completes and rejects duplicate surfaces", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    let finishShutdown: () => void = () => {};
-    const { service } = createService({
-      adapter,
-      installDownloadedUpdate: async (runInstall) => {
-        await new Promise<void>((resolve) => {
-          finishShutdown = resolve;
-        });
-        runInstall();
-      },
-    });
-    await service.check({ initiator: "settings" });
-    await service.download();
-    const promptStates: AppUpdateState[] = [];
-    const settingsStates: AppUpdateState[] = [];
-    service.subscribe((state) => promptStates.push(state));
-    service.subscribe((state) => settingsStates.push(state));
-
-    const installResultPromise = service.install();
-    await Promise.resolve();
-    const duplicateResult = await service.install();
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      installRequested: true,
-    });
-    expect(canInstallAppUpdate(service.getState())).toBe(false);
-    expect(promptStates.at(-1)).toMatchObject({ installRequested: true });
-    expect(settingsStates.at(-1)).toMatchObject({ installRequested: true });
-    expect(duplicateResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "busy",
-        operation: "install",
-      },
-      state: {
-        status: "downloaded",
-        installRequested: true,
-      },
-    });
-
-    finishShutdown();
-    await installResultPromise;
-
-    expect(adapter.installCalls).toHaveLength(1);
-  });
-
-  test("blocks checks after install handoff starts while the app remains running", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const { service } = createService({ adapter });
-    await service.check({ initiator: "settings" });
-    await service.download();
-    await service.install();
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      installRequested: true,
-    });
-
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.4" },
-    };
-
-    const checkResult = await service.check({ initiator: "settings" });
-
-    expect(checkResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "busy",
-        operation: "check",
-      },
-      state: {
-        status: "downloaded",
-        availableVersion: "0.4.3",
-        installRequested: true,
-      },
-    });
-    expect(adapter.checkCalls).toBe(1);
-
-    adapter.emit("error", new Error("native install failed"));
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      installRetryDisabled: true,
-      error: {
-        code: "install_failed",
-        operation: "install",
-      },
-    });
-
-    const backgroundCheckResult = await service.check({ initiator: "background" });
-
-    expect(backgroundCheckResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "busy",
-        operation: "check",
-      },
-      state: {
-        status: "downloaded",
-        availableVersion: "0.4.3",
-        installRetryDisabled: true,
-      },
-    });
-    expect(adapter.checkCalls).toBe(1);
-
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.4" },
-    };
-
-    const recoveryCheckResult = await service.check({ initiator: "settings" });
-
-    expect(recoveryCheckResult).toMatchObject({
-      accepted: true,
-      state: {
-        status: "available",
-        availableVersion: "0.4.4",
-        checkInitiator: "settings",
-      },
-    });
-    expect(adapter.checkCalls).toBe(2);
-  });
-
-  test("treats delayed macOS updater handoff errors as terminal for the process", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const { service } = createService({ adapter });
-    await service.check({ initiator: "settings" });
-    await service.download();
-
-    const firstResult = await service.install();
-    const duplicateResult = await service.install();
-
-    expect(firstResult).toMatchObject({
-      accepted: true,
-      state: {
-        status: "downloaded",
-        availableVersion: "0.4.3",
-        installRequested: true,
-      },
-    });
-    expect(duplicateResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "invalid_state",
-        operation: "install",
-      },
-    });
-    expect(adapter.installCalls).toHaveLength(1);
-
-    adapter.emit("error", new Error("native install failed"));
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      installRetryDisabled: true,
-      error: {
-        code: "install_failed",
-        message: "native install failed Quit and reopen OpenDucktor before trying again.",
-        operation: "install",
-      },
-    });
-    expect(canInstallAppUpdate(service.getState())).toBe(false);
-
-    const retryResult = await service.install();
-
-    expect(retryResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "invalid_state",
-        operation: "install",
-      },
-    });
-    expect(adapter.installCalls).toHaveLength(1);
-    expect(adapter.nativeInstallListeners).toBe(1);
-
-    adapter.emitNativeUpdateDownloaded();
-
-    expect(adapter.nativeQuitAndInstallCalls).toBe(1);
-  });
-
-  test("keeps macOS relaunch-required install state stable after later updater errors", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const { service } = createService({ adapter });
-    await service.check({ initiator: "settings" });
-    await service.download();
-    await service.install();
-
-    adapter.emit("error", new Error("native install failed"));
-    adapter.emit("error", new Error("native install still failed"));
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      installRetryDisabled: true,
-      error: {
-        code: "install_failed",
-        message: "native install still failed Quit and reopen OpenDucktor before trying again.",
-        operation: "install",
-      },
-    });
-    expect(canInstallAppUpdate(service.getState())).toBe(false);
-    expect(canDownloadAppUpdate(service.getState())).toBe(false);
-  });
-
-  test("host shutdown failures disable same-process install retry", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const { service } = createService({
-      adapter,
-      installDownloadedUpdate: async () => {
-        throw new ElectronLifecycleError({
-          operation: "electron.main.shutdown-host-before-run",
-          message: "OpenDucktor host shutdown failed before the requested shutdown action.",
-          reason: "app-update-install",
-        });
-      },
-    });
-    await service.check({ initiator: "settings" });
-    await service.download();
-
-    const result = await service.install();
-
-    expect(result).toMatchObject({
-      accepted: true,
-      state: {
-        status: "downloaded",
-        availableVersion: "0.4.3",
-        installRetryDisabled: true,
-        error: {
-          code: "install_failed",
-          message:
-            "OpenDucktor host shutdown failed before the requested shutdown action. Quit and reopen OpenDucktor before trying again.",
-          operation: "install",
-        },
-      },
-    });
-    expect(canInstallAppUpdate(result.state)).toBe(false);
-
-    const retryResult = await service.install();
-
-    expect(retryResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "invalid_state",
-        operation: "install",
-      },
-      state: {
-        status: "downloaded",
-        installRetryDisabled: true,
-      },
-    });
-    expect(adapter.installCalls).toEqual([]);
-  });
-
-  test("non-mac updater handoff errors keep downloaded state retryable", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const { service } = createService({ adapter, platform: "win32" });
-    await service.check({ initiator: "settings" });
-    await service.download();
-
-    await service.install();
-    adapter.emit("error", new Error("native install failed"));
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      error: {
-        code: "install_failed",
-        message: "native install failed",
-        operation: "install",
-      },
-    });
-    expect(canInstallAppUpdate(service.getState())).toBe(true);
-
-    const retryResult = await service.install();
-
-    expect(retryResult.accepted).toBe(true);
-    expect(adapter.installCalls).toHaveLength(2);
-  });
-
-  test("allows manual checks after retryable install failures while keeping background blocked", async () => {
-    const adapter = new FakeUpdaterAdapter();
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.3" },
-    };
-    const { service } = createService({ adapter, platform: "win32" });
-    await service.check({ initiator: "settings" });
-    await service.download();
-
-    await service.install();
-    adapter.emit("error", new Error("native install failed"));
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      error: {
-        code: "install_failed",
-        operation: "install",
-      },
-    });
-    expect(canInstallAppUpdate(service.getState())).toBe(true);
-
-    const backgroundCheckResult = await service.check({ initiator: "background" });
-
-    expect(backgroundCheckResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "busy",
-        operation: "check",
-      },
-      state: {
-        status: "downloaded",
-        availableVersion: "0.4.3",
-      },
-    });
-    expect(adapter.checkCalls).toBe(1);
-
-    adapter.nextCheckResult = {
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.4.4" },
-    };
-
-    const recoveryCheckResult = await service.check({ initiator: "settings" });
-
-    expect(recoveryCheckResult).toMatchObject({
-      accepted: true,
-      state: {
-        status: "available",
-        availableVersion: "0.4.4",
-        checkInitiator: "settings",
-      },
-    });
-    expect(adapter.checkCalls).toBe(2);
   });
 });

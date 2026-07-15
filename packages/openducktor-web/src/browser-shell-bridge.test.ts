@@ -1,8 +1,42 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import packageJson from "../package.json";
 import { createBrowserShellBridge } from "./browser-shell-bridge";
 import { validateExternalBrowserUrl } from "./browser-url-validation";
 
 describe("browser shell bridge", () => {
+  let previousAppVersion: string | undefined;
+
+  beforeEach(() => {
+    previousAppVersion = process.env.VITE_ODT_APP_VERSION;
+    process.env.VITE_ODT_APP_VERSION = packageJson.version;
+  });
+
+  afterEach(() => {
+    if (previousAppVersion === undefined) {
+      delete process.env.VITE_ODT_APP_VERSION;
+      return;
+    }
+
+    process.env.VITE_ODT_APP_VERSION = previousAppVersion;
+  });
+
+  test("reports the web runner version and external update policy", async () => {
+    const bridge = createBrowserShellBridge();
+
+    expect(await bridge.appUpdates.getState()).toEqual({
+      status: "disabled",
+      currentVersion: packageJson.version,
+      disabledCode: "unsupported_web_runner",
+      disabledReason: "The browser runner does not install updates in OpenDucktor.",
+    });
+  });
+
+  test("fails when the web build version is missing", () => {
+    delete process.env.VITE_ODT_APP_VERSION;
+
+    expect(() => createBrowserShellBridge()).toThrow("OpenDucktor web build version is missing.");
+  });
+
   test("allows absolute http and https external URLs", () => {
     expect(validateExternalBrowserUrl("https://example.com/path?q=1")).toBe(
       "https://example.com/path?q=1",

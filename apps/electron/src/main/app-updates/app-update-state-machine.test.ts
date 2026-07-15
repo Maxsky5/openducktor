@@ -228,6 +228,7 @@ describe("app update state machine", () => {
     expect(
       markDownloadedInstallRetryDisabled({
         cause: new Error("handoff failed"),
+        code: "install_failed",
         message: "Quit and reopen OpenDucktor before trying again.",
         previousState: {
           ...downloaded,

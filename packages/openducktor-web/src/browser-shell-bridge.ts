@@ -1,4 +1,5 @@
 import { createDisabledAppUpdateBridge, type ShellBridge } from "@openducktor/frontend";
+import { getAppVersion } from "@openducktor/frontend/lib/app-version";
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "./browser-config";
 import { validateExternalBrowserUrlEffect } from "./browser-url-validation";
@@ -8,6 +9,7 @@ import {
   runWebBoundary,
   WebDependencyError,
   type WebError,
+  WebValidationError,
 } from "./effect/web-errors";
 import {
   buildLocalAttachmentPreviewUrl,
@@ -58,13 +60,23 @@ const resolveLocalAttachmentPreviewSrcEffect = (
   });
 
 export const createBrowserShellBridge = (): ShellBridge => {
+  const currentVersion = getAppVersion();
+  if (!currentVersion) {
+    throw new WebValidationError({
+      message: "OpenDucktor web build version is missing.",
+      field: "VITE_ODT_APP_VERSION",
+    });
+  }
   const client = createLocalHostClient();
 
   return {
     client,
-    appUpdates: createDisabledAppUpdateBridge(
-      "Updates are available only in the packaged OpenDucktor desktop app.",
-    ),
+    appUpdates: createDisabledAppUpdateBridge({
+      status: "disabled",
+      currentVersion,
+      disabledCode: "unsupported_web_runner",
+      disabledReason: "The browser runner does not install updates in OpenDucktor.",
+    }),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,

@@ -47,18 +47,14 @@ const failUnavailable = async (): Promise<never> => {
   throw new Error(DEFAULT_UNAVAILABLE_MESSAGE);
 };
 
-export const createDisabledAppUpdateBridge = (reason: string): AppUpdateBridge => {
-  const state: AppUpdateState = {
-    status: "disabled",
-    currentVersion: "unknown",
-    disabledCode: "not_packaged",
-    disabledReason: reason,
-  };
+type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;
+
+export const createDisabledAppUpdateBridge = (state: DisabledAppUpdateState): AppUpdateBridge => {
   const disabledResult = async (): Promise<AppUpdateCommandResult> => ({
     accepted: false,
     rejection: {
-      code: "not_packaged",
-      message: reason,
+      code: state.disabledCode,
+      message: state.disabledReason,
       operation: "check",
     },
     state,
@@ -69,8 +65,8 @@ export const createDisabledAppUpdateBridge = (reason: string): AppUpdateBridge =
     download: async () => ({
       accepted: false,
       rejection: {
-        code: "not_packaged",
-        message: reason,
+        code: state.disabledCode,
+        message: state.disabledReason,
         operation: "download",
       },
       state,
@@ -79,8 +75,8 @@ export const createDisabledAppUpdateBridge = (reason: string): AppUpdateBridge =
     install: async () => ({
       accepted: false,
       rejection: {
-        code: "not_packaged",
-        message: reason,
+        code: state.disabledCode,
+        message: state.disabledReason,
         operation: "install",
       },
       state,
@@ -95,9 +91,12 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeDevServerEvents: failUnavailable,
   subscribeTaskEvents: failUnavailable,
   subscribeCodexAppServerEvents: failUnavailable,
-  appUpdates: createDisabledAppUpdateBridge(
-    "Updates are available only in the packaged OpenDucktor desktop app.",
-  ),
+  appUpdates: createDisabledAppUpdateBridge({
+    status: "disabled",
+    currentVersion: "unknown",
+    disabledCode: "updater_unavailable",
+    disabledReason: "Updates are available only in the packaged OpenDucktor desktop app.",
+  }),
   capabilities: {
     canOpenExternalUrls: false,
     canPreviewLocalAttachments: false,

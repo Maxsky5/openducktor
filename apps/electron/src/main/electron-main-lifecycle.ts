@@ -56,14 +56,14 @@ export const composeElectronMainStartupEffect = <PreReady, Ready>({
       phase: "configure-ready",
     });
     const ready = yield* configureReady(preReady);
-    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.initialize-host", {
-      phase: "initialize-host",
-    });
-    yield* initializeHost(ready);
     yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.create-window", {
       phase: "create-window",
     });
     yield* createMainWindow(ready);
+    yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.initialize-host", {
+      phase: "initialize-host",
+    });
+    yield* initializeHost(ready);
     yield* ensureStartupContinuesEffect(shouldContinueStartup, "electron.main.register-activate", {
       phase: "register-activate",
     });
@@ -118,7 +118,7 @@ export type ElectronMainShutdownOptions = {
 
 export type ElectronMainShutdownRunOptions = {
   reason: string;
-  runAfterShutdown(): void;
+  runAfterShutdown(): Promise<void>;
 };
 
 type ShutdownControllerOptions = {
@@ -219,7 +219,16 @@ export const createElectronMainShutdownController = ({
           reason,
         });
       }
-      runAfterShutdown();
+      try {
+        await runAfterShutdown();
+      } catch (cause) {
+        throw new ElectronLifecycleError({
+          operation: "electron.main.run-after-shutdown",
+          message: "The requested action failed after OpenDucktor host shutdown completed.",
+          reason,
+          cause,
+        });
+      }
     },
   };
 };
