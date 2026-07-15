@@ -14,7 +14,10 @@ import {
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
-import type { CodexPendingInputState } from "./codex-pending-input-state";
+import {
+  type CodexPendingInputState,
+  codexPendingInputRequestInstanceId,
+} from "./codex-pending-input-state";
 import { READ_ONLY_ROLES } from "./codex-session-policy";
 import {
   type CodexSubagentLinkState,
@@ -209,14 +212,21 @@ export const handleCodexServerRequest = async (
       return false;
     }
 
+    const approval = {
+      ...mcpElicitationApproval,
+      requestInstanceId: codexPendingInputRequestInstanceId(
+        routeContext.runtimeId,
+        mcpElicitationApproval.requestId,
+      ),
+    };
     context.pendingInput.addApproval({
       runtimeId: routeContext.runtimeId,
       threadId: routeContext.ownerThreadId,
-      request: mcpElicitationApproval,
+      request: approval,
       ...(routeContext.route ? { route: routeContext.route } : {}),
     });
     emitPendingEvent(context, routeContext, {
-      ...mcpElicitationApproval,
+      ...approval,
       type: "approval_required",
       externalSessionId: routeContext.ownerThreadId,
       timestamp: new Date().toISOString(),
@@ -239,16 +249,23 @@ export const handleCodexServerRequest = async (
       questions: parsed.request.questions,
       ...codexServerRequestIdMetadata(parsed.serverRequestId),
     };
+    const question = {
+      ...parsed.request,
+      requestInstanceId: codexPendingInputRequestInstanceId(
+        routeContext.runtimeId,
+        parsed.request.requestId,
+      ),
+    };
     context.pendingInput.addQuestion({
       runtimeId: routeContext.runtimeId,
       threadId: routeContext.ownerThreadId,
-      request: parsed.request,
+      request: question,
       questionIds: parsed.questionIds,
       input: questionInput,
       ...(routeContext.route ? { route: routeContext.route } : {}),
     });
     emitPendingEvent(context, routeContext, {
-      ...parsed.request,
+      ...question,
       type: "question_required",
       externalSessionId: routeContext.ownerThreadId,
       timestamp: new Date().toISOString(),
@@ -296,7 +313,14 @@ export const handleCodexServerRequest = async (
       return false;
     }
 
-    const approval = toApprovalRequest(rawRequest);
+    const parsedApproval = toApprovalRequest(rawRequest);
+    const approval = {
+      ...parsedApproval,
+      requestInstanceId: codexPendingInputRequestInstanceId(
+        routeContext.runtimeId,
+        parsedApproval.requestId,
+      ),
+    };
     context.pendingInput.addApproval({
       runtimeId: routeContext.runtimeId,
       threadId: routeContext.ownerThreadId,

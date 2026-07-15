@@ -39,8 +39,11 @@ const sameRoute = (a: CodexSubagentRoute, b: CodexSubagentRoute): boolean =>
   a.childExternalSessionId === b.childExternalSessionId &&
   a.subagentCorrelationKey === b.subagentCorrelationKey;
 
-const pendingRequestKey = (runtimeId: string, requestId: string): string =>
+export const codexPendingInputRequestInstanceId = (runtimeId: string, requestId: string): string =>
   `${runtimeId}\u0000${requestId}`;
+
+const pendingRequestKey = (runtimeId: string, requestId: string): string =>
+  codexPendingInputRequestInstanceId(runtimeId, requestId);
 
 export class CodexPendingInputState {
   private readonly pendingApprovalsByRequestKey = new Map<string, PendingApprovalEntry>();

@@ -3,6 +3,7 @@ import {
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
 } from "@/lib/agent-session-identity";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -57,8 +58,9 @@ const addRequests = <Request extends PendingInputRequest>(
   requests: readonly Request[],
 ): void => {
   for (const request of requests) {
-    if (!requestsById.has(request.requestId)) {
-      requestsById.set(request.requestId, request);
+    const requestIdentity = pendingInputIdentity(request);
+    if (!requestsById.has(requestIdentity)) {
+      requestsById.set(requestIdentity, request);
     }
   }
 };
@@ -66,15 +68,17 @@ const addRequests = <Request extends PendingInputRequest>(
 const addVisibleRequests = <Request extends PendingInputRequest>(
   requestsById: Map<string, Request>,
   requests: readonly Request[],
+  targetRequestIds: ReadonlySet<string>,
   ownerSession: AgentSessionState,
   target: AgentSessionIdentity,
 ): void => {
   for (const request of requests) {
     if (
-      !requestsById.has(request.requestId) &&
+      !targetRequestIds.has(request.requestId) &&
+      !requestsById.has(pendingInputIdentity(request)) &&
       isPendingInputVisibleForSession(ownerSession, request, target)
     ) {
-      requestsById.set(request.requestId, request);
+      requestsById.set(pendingInputIdentity(request), request);
     }
   }
 };
@@ -96,13 +100,31 @@ export const getAgentSessionVisiblePendingInput = (
     addRequests(pendingApprovalsById, targetSession.pendingApprovals);
     addRequests(pendingQuestionsById, targetSession.pendingQuestions);
   }
+  const targetApprovalRequestIds = new Set(
+    targetSession?.pendingApprovals.map((request) => request.requestId) ?? [],
+  );
+  const targetQuestionRequestIds = new Set(
+    targetSession?.pendingQuestions.map((request) => request.requestId) ?? [],
+  );
 
   for (const session of collection.values()) {
     if (agentSessionIdentityKey(session) === targetKey) {
       continue;
     }
-    addVisibleRequests(pendingApprovalsById, session.pendingApprovals, session, identity);
-    addVisibleRequests(pendingQuestionsById, session.pendingQuestions, session, identity);
+    addVisibleRequests(
+      pendingApprovalsById,
+      session.pendingApprovals,
+      targetApprovalRequestIds,
+      session,
+      identity,
+    );
+    addVisibleRequests(
+      pendingQuestionsById,
+      session.pendingQuestions,
+      targetQuestionRequestIds,
+      session,
+      identity,
+    );
   }
 
   if (pendingApprovalsById.size === 0 && pendingQuestionsById.size === 0) {

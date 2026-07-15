@@ -122,6 +122,7 @@ describe("handleCodexServerRequest", () => {
       threadId: "thread-unknown-role",
       request: {
         requestId: "29",
+        requestInstanceId: "runtime-live\u000029",
         requestType: "command_execution",
         title: "Network access approval requested",
       },
@@ -135,6 +136,7 @@ describe("handleCodexServerRequest", () => {
       expect.objectContaining({
         type: "approval_required",
         requestId: "29",
+        requestInstanceId: "runtime-live\u000029",
       }),
     );
   });
@@ -418,6 +420,10 @@ describe("handleCodexServerRequest", () => {
 
     expect(pendingInput.question("41")).toMatchObject({
       threadId: "child-thread",
+      request: {
+        requestId: "41",
+        requestInstanceId: "runtime-live\u000041",
+      },
       route: {
         parentExternalSessionId: "parent-thread",
         childExternalSessionId: "child-thread",
@@ -427,6 +433,7 @@ describe("handleCodexServerRequest", () => {
       expect.objectContaining({
         emittedExternalSessionId: "parent-thread",
         type: "question_required",
+        requestInstanceId: "runtime-live\u000041",
         externalSessionId: "parent-thread",
         parentExternalSessionId: "parent-thread",
         childExternalSessionId: "child-thread",

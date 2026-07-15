@@ -529,6 +529,9 @@ export class CodexRuntimeSessionEvents {
       externalSessionId: threadId,
       timestamp: new Date().toISOString(),
       requestId,
+      ...(entry.request.requestInstanceId
+        ? { requestInstanceId: entry.request.requestInstanceId }
+        : {}),
       ...codexSubagentRouteEventFields(route),
     };
     const activeTurn = approval

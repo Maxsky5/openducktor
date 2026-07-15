@@ -60,11 +60,15 @@ describe("agent-session-visible-pending-input", () => {
       childExternalSessionId: "child-session",
       parentExternalSessionId: "parent-session",
     });
+    const childApprovalInstance = {
+      ...childApproval,
+      requestInstanceId: "runtime-b\u0000approval-1",
+    };
     const childSession = createAgentSessionFixture({
       externalSessionId: "child-session",
       runtimeKind: "opencode",
       workingDirectory: "/repo-a",
-      pendingApprovals: [childApproval],
+      pendingApprovals: [childApprovalInstance],
       pendingQuestions: [],
     });
     const parentSession = createAgentSessionFixture({
@@ -74,6 +78,7 @@ describe("agent-session-visible-pending-input", () => {
       pendingApprovals: [
         {
           ...childApproval,
+          requestInstanceId: "runtime-a\u0000approval-1",
           responseSession: childSession,
         },
       ],
@@ -82,7 +87,7 @@ describe("agent-session-visible-pending-input", () => {
     const collection = createAgentSessionCollection([parentSession, childSession]);
 
     expect(getAgentSessionVisiblePendingInput(collection, childSession).pendingApprovals).toEqual([
-      childApproval,
+      childApprovalInstance,
     ]);
   });
 });

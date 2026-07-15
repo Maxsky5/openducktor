@@ -725,6 +725,68 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("prefers reconciled pending input over stale projected request ids", async () => {
+    const projectedParentSession = makeParentSessionWithMirroredSubagentApproval();
+    projectedParentSession.pendingApprovals = projectedParentSession.pendingApprovals.map(
+      (request) => ({ ...request, requestInstanceId: "runtime-a\u0000permission-1" }),
+    );
+    setLiveTranscriptSessions(projectedParentSession);
+    let listener: ((event: AgentEvent) => void) | null = null;
+    subscribeSessionEvents.mockImplementationOnce(async (_sessionRef, nextListener) => {
+      listener = nextListener;
+      return () => undefined;
+    });
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        workspaceRepoPath: "/repo-a",
+        isOpen: true,
+        target: makeTranscriptTarget(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => listener !== null && state.model.thread.session !== null);
+      await harness.run(async () => {
+        listener?.({
+          ...makePendingApproval(),
+          requestInstanceId: "runtime-b\u0000permission-1",
+          type: "approval_required",
+          externalSessionId: "session-subagent-1",
+          timestamp: "2026-02-22T12:01:00.000Z",
+        });
+      });
+      await harness.waitFor((state) =>
+        state.model.thread.pendingApprovalRequests.some(
+          (request) => request.requestInstanceId === "runtime-b\u0000permission-1",
+        ),
+      );
+
+      expect(harness.getLatest().model.thread.pendingApprovalRequests).toHaveLength(1);
+      expect(harness.getLatest().model.thread.pendingApprovalRequests[0]?.requestInstanceId).toBe(
+        "runtime-b\u0000permission-1",
+      );
+
+      await harness.run(async () => {
+        listener?.({
+          type: "approval_resolved",
+          externalSessionId: "session-subagent-1",
+          timestamp: "2026-02-22T12:02:00.000Z",
+          requestId: "permission-1",
+          requestInstanceId: "runtime-b\u0000permission-1",
+        });
+      });
+      await harness.waitFor((state) => state.model.thread.pendingApprovalRequests.length === 0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("uses parent-visible subagent approvals when opening the child transcript", async () => {
     const pendingApproval = makePendingApproval();
     setLiveTranscriptSessions(makeParentSessionWithMirroredSubagentApproval());
