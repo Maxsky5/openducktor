@@ -35,10 +35,6 @@ import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-
 
 enableReactActEnvironment();
 
-const actualRightPanelBridgeModule = {
-  ...(await import("./use-agent-studio-right-panel-bridge")),
-};
-
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
   createAgentSessionFixture({
@@ -431,7 +427,6 @@ const mockedModuleResets = [
     "./use-agents-page-orchestration-shell-model",
     () => import("./use-agents-page-orchestration-shell-model"),
   ],
-  ["./use-agent-studio-right-panel-bridge", async () => actualRightPanelBridgeModule],
 ] as const;
 
 const registerModuleMocks = (): void => {
@@ -492,57 +487,6 @@ const registerModuleMocks = (): void => {
         agentStudioHeaderModel: orchestrationState.agentStudioHeaderModel,
       };
     },
-  }));
-
-  mock.module("./use-agent-studio-right-panel-bridge", () => ({
-    useAgentStudioRightPanelBridge: ({
-      selection,
-      panel,
-      documentsModel,
-      selectedFile,
-      onSelectFile,
-      onClearSelectedFile,
-    }: {
-      selection: OrchestrationControllerArgs["selection"];
-      panel: OrchestrationState["rightPanel"];
-      documentsModel: OrchestrationState["taskExecutionDocumentPanelModel"];
-      selectedFile: OrchestrationState["taskExecutionSelectedFilePreviewModel"]["selectedFile"];
-      onSelectFile: OrchestrationState["onSelectTaskExecutionFile"];
-      onClearSelectedFile: OrchestrationState["taskExecutionSelectedFilePreviewModel"]["onClose"];
-    }) => ({
-      isRightPanelVisible: panel.isPanelOpen,
-      rightPanelBridge: {
-        buildWorktreeRefresh: {
-          activeTabId: panel.activeTabId,
-          isPanelOpen: panel.isPanelOpen,
-          selectedView: {
-            role: selection.view.role,
-            loadedSession: selection.view.selectedSession.loadedSession,
-          },
-        },
-        rightPanel: {
-          activeWorkspace: workspaceState.activeWorkspace,
-          branches: workspaceState.branches,
-          activeBranch: workspaceState.activeBranch,
-          selectedView: selection.view,
-          tabs: panel.tabs,
-          activeTabId: panel.activeTabId,
-          onActiveTabChange: panel.onActiveTabChange,
-          isPanelOpen: panel.isPanelOpen,
-          documentsModel,
-          selectedFile,
-          onSelectFile,
-          onClearSelectedFile,
-          repoSettings: orchestrationState.repoSettings,
-          setTaskTargetBranch: tasksState.setTaskTargetBranch,
-          detectingPullRequestTaskId: tasksState.detectingPullRequestTaskId,
-          onDetectPullRequest: tasksState.syncPullRequests,
-          onResolveGitConflict: handleResolveRebaseConflict,
-          onGitConflictQuickActionContextChange: mock(() => {}),
-        },
-      } satisfies AgentStudioRightPanelBridgeModel,
-      selectedFileRefresh: null,
-    }),
   }));
 };
 
