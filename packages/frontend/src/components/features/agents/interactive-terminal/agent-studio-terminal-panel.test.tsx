@@ -74,6 +74,7 @@ describe("AgentStudioTerminalPanel", () => {
     );
 
     expect(screen.queryByRole("tab", { name: "Shell 1, Lost after host restart" })).toBeNull();
+    expect(screen.queryByText("No terminals for this task.")).toBeNull();
     expect(screen.getByText("This terminal belonged to a previous host session.")).toBe(
       terminalViewport,
     );

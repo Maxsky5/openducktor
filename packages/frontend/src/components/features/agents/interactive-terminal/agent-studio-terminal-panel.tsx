@@ -117,6 +117,7 @@ export function AgentStudioTerminalPanel({
   const [closeError, setCloseError] = useState<string | null>(null);
   const [isConfirmingClose, setIsConfirmingClose] = useState(false);
   const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
+  const showsEmptyTerminalState = model.tabs.length === 0 && model.mountedTabs.length === 0;
   const setTabAttention = useCallback((tabId: string, message: string | null): void => {
     setAttentionByTab((current) => ({ ...current, [tabId]: message }));
   }, []);
@@ -206,9 +207,10 @@ export function AgentStudioTerminalPanel({
                 })}
               </TabsList>
             </Tabs>
-          ) : (
+          ) : null}
+          {showsEmptyTerminalState ? (
             <p className="px-1 text-xs text-muted-foreground">No terminals for this task.</p>
-          )}
+          ) : null}
         </div>
         {model.connectionState === "disconnected" ? (
           <Button type="button" size="xs" variant="ghost" onClick={model.onReconnect}>

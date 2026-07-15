@@ -211,7 +211,7 @@ describe("useAgentStudioTerminals", () => {
         await waitFor(() => expect(getLatest().tabs).toEqual([]));
         expect(getLatest().mountedTabs).toHaveLength(1);
         expect(getLatest().mountedTabs[0]?.terminalId).toBe("terminal-task-a");
-        expect(getLatest().isVisible).toBe(true);
+        expect(getLatest().isVisible).toBe(false);
       } finally {
         resolveClose({ closed: true });
         await act(async () => {
@@ -269,7 +269,7 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() => expect(getLatest().tabs).toEqual([]));
       expect(getLatest().mountedTabs[0]?.tabId).toBe(originalTab?.tabId);
       expect(getLatest().mountedTabs[0]?.terminalId).toBe(originalTab?.terminalId);
-      expect(getLatest().isVisible).toBe(true);
+      expect(getLatest().isVisible).toBe(false);
 
       resolveClose({ closed: false, confirmationRequired: true });
       await act(async () => {

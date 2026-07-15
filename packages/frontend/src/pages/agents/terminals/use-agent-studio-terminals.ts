@@ -418,6 +418,10 @@ export const useAgentStudioTerminals = (
               activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
             };
           });
+          if (closesLastTab)
+            setVisibility((current) =>
+              current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
+            );
         };
         const restoreClosingTab = (): void => {
           setScopeState((current) => {
@@ -428,6 +432,10 @@ export const useAgentStudioTerminals = (
               activeTabId: tab.tabId,
             };
           });
+          if (closesLastTab)
+            setVisibility((current) =>
+              current.scopeKey === scopeKey ? { scopeKey, value: true } : current,
+            );
         };
         if (!tab.terminalId) {
           removeMountedTab();
