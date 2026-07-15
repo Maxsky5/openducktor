@@ -21,16 +21,23 @@ type CreateSessionCacheEffectsArgs = {
   }) => void;
 };
 
-const reportDefaultCacheRefreshFailure = ({
+export const sessionCacheRefreshFailureDescription = ({
+  repoPath,
   taskId,
   error,
 }: {
   repoPath: string;
   taskId: string;
   error: unknown;
+}): string => `${repoPath} · ${taskId}: ${errorMessage(error)}`;
+
+const reportDefaultCacheRefreshFailure = (failure: {
+  repoPath: string;
+  taskId: string;
+  error: unknown;
 }): void => {
   toast.error("Session saved, but metadata refresh failed", {
-    description: `${taskId}: ${errorMessage(error)}`,
+    description: sessionCacheRefreshFailureDescription(failure),
   });
 };
 

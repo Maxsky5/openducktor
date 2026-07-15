@@ -750,6 +750,82 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("reset operations report refresh failures without rejecting successful mutations", async () => {
+    const taskResetImplementation = mock(async () => makeTask("A", "ready_for_dev"));
+    const taskReset = mock(async () => makeTask("A", "open"));
+    const tasksList = mock(async () => [makeTask("A", "in_progress")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock(() => {});
+    const original = {
+      taskResetImplementation: host.taskResetImplementation,
+      taskReset: host.taskReset,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+      toastError: toast.error,
+    };
+    host.taskResetImplementation = taskResetImplementation;
+    host.taskReset = taskReset;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const queryClient = createQueryClient();
+    const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = mock(async (filters, options) => {
+      if (
+        JSON.stringify(filters.queryKey) ===
+        JSON.stringify(agentSessionQueryKeys.list("/repo", "A"))
+      ) {
+        throw new Error("metadata unavailable");
+      }
+      return originalInvalidateQueries(filters, options);
+    }) as typeof queryClient.invalidateQueries;
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+    const Harness = () => {
+      latest = useTaskOperations(
+        normalizeHookArgs({
+          activeRepo: "/repo",
+          refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+        }),
+      );
+      return null;
+    };
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const harness = createSharedHookHarness(Harness, undefined, { wrapper });
+    const getLatest = () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      return latest;
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => getLatest().tasks[0]?.status === "in_progress");
+
+      await expect(
+        harness.run(() => getLatest().resetTaskImplementation("A")),
+      ).resolves.toBeUndefined();
+      await expect(harness.run(() => getLatest().resetTask("A"))).resolves.toBeUndefined();
+
+      expect(toastError).toHaveBeenCalledWith("Implementation reset, but metadata refresh failed", {
+        description: "/repo · A: metadata unavailable",
+      });
+      expect(toastError).toHaveBeenCalledWith("Task reset, but metadata refresh failed", {
+        description: "/repo · A: metadata unavailable",
+      });
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+      host.taskResetImplementation = original.taskResetImplementation;
+      host.taskReset = original.taskReset;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
+      toast.error = original.toastError;
+    }
+  });
+
   test("resetTask refreshes task data after host reset completes", async () => {
     let currentStatus: TaskCard["status"] = "human_review";
     const taskReset = mock(async () => {
