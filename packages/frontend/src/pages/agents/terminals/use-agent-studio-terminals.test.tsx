@@ -28,24 +28,6 @@ const summaryForTask = (taskId: string): TerminalSummary => ({
 
 type TerminalTestDependencies = NonNullable<Parameters<typeof useAgentStudioTerminals>[1]>;
 
-const rememberVisibleTerminal = (taskId: string): void => {
-  localStorage.setItem(
-    `openducktor:agent-studio-terminals:/repo:${taskId}`,
-    JSON.stringify({
-      hostInstanceId: "host-1",
-      visible: true,
-      activeTerminalId: `terminal-${taskId}`,
-      terminals: [
-        {
-          terminalId: `terminal-${taskId}`,
-          label: "Shell 1",
-          initialWorkingDir: `/repo/worktrees/${taskId}`,
-        },
-      ],
-    }),
-  );
-};
-
 const createTerminalTestDependencies = (): TerminalTestDependencies => {
   const unavailable = createUnavailableShellBridge();
   return {
@@ -77,6 +59,49 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
+  test("ignores and removes legacy persisted terminal UI state", async () => {
+    localStorage.setItem(
+      "openducktor:agent-studio-terminals:/repo:task-a",
+      JSON.stringify({
+        hostInstanceId: "host-1",
+        visible: true,
+        activeTerminalId: "terminal-6",
+        terminals: Array.from({ length: 6 }, (_, index) => ({
+          terminalId: `terminal-${index + 1}`,
+          label: `Shell ${index + 1}`,
+          initialWorkingDir: "/repo/worktrees/task-a",
+        })),
+      }),
+    );
+    const dependencies = createTerminalTestDependencies();
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().isLoading).toBe(false));
+
+      expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual(["terminal-task-a"]);
+      expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
+      expect(getLatest().isVisible).toBe(false);
+      expect(localStorage.getItem("openducktor:agent-studio-terminals:/repo:task-a")).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("opening an empty terminal panel creates and selects a terminal", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals: TerminalSummary[] = [];
@@ -135,8 +160,7 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
-  test("hides the panel immediately while its final live terminal closes", async () => {
-    rememberVisibleTerminal("task-a");
+  test("shows closing feedback until its final live terminal closes", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals = [summaryForTask("task-a")];
     let resolveClose = (_result: { closed: true }): void => undefined;
@@ -172,10 +196,9 @@ describe("useAgentStudioTerminals", () => {
     );
 
     try {
-      await waitFor(() => {
-        expect(getLatest().isVisible).toBe(true);
-        expect(getLatest().tabs).toHaveLength(1);
-      });
+      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
+      act(() => getLatest().onToggle());
+      expect(getLatest().isVisible).toBe(true);
 
       let closePromise: Promise<{ closed: boolean }> | null = null;
       act(() => {
@@ -185,23 +208,22 @@ describe("useAgentStudioTerminals", () => {
       });
 
       try {
-        await waitFor(() => {
-          expect(getLatest().tabs).toEqual([]);
-          expect(getLatest().isVisible).toBe(false);
-        });
+        await waitFor(() => expect(getLatest().tabs[0]?.lifecycle).toBe("closing"));
+        expect(getLatest().isVisible).toBe(true);
       } finally {
         resolveClose({ closed: true });
         await act(async () => {
           await closePromise;
         });
       }
+      expect(getLatest().tabs).toEqual([]);
+      expect(getLatest().isVisible).toBe(false);
     } finally {
       view.unmount();
     }
   });
 
-  test("restores an optimistically removed terminal when confirmation is required", async () => {
-    rememberVisibleTerminal("task-a");
+  test("keeps the same terminal mounted when confirmation is required", async () => {
     const baseDependencies = createTerminalTestDependencies();
     let resolveClose = (_result: { closed: false; confirmationRequired: true }): void => undefined;
     const closePending = new Promise<{ closed: false; confirmationRequired: true }>((resolve) => {
@@ -232,6 +254,8 @@ describe("useAgentStudioTerminals", () => {
 
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
+      act(() => getLatest().onToggle());
+      const originalTab = getLatest().tabs[0];
       let closePromise: ReturnType<HookResult["onClose"]> | null = null;
       act(() => {
         const tab = getLatest().tabs[0];
@@ -239,10 +263,10 @@ describe("useAgentStudioTerminals", () => {
         closePromise = getLatest().onClose(tab, false);
       });
 
-      await waitFor(() => {
-        expect(getLatest().tabs).toEqual([]);
-        expect(getLatest().isVisible).toBe(false);
-      });
+      await waitFor(() => expect(getLatest().tabs[0]?.lifecycle).toBe("closing"));
+      expect(getLatest().tabs[0]?.tabId).toBe(originalTab?.tabId);
+      expect(getLatest().tabs[0]?.terminalId).toBe(originalTab?.terminalId);
+      expect(getLatest().isVisible).toBe(true);
 
       resolveClose({ closed: false, confirmationRequired: true });
       await act(async () => {
@@ -259,7 +283,6 @@ describe("useAgentStudioTerminals", () => {
   });
 
   test("hides the panel after dismissing its final lost terminal", async () => {
-    rememberVisibleTerminal("task-a");
     const dependencies = createTerminalTestDependencies();
     type HookResult = ReturnType<typeof useAgentStudioTerminals>;
     let latest: HookResult | null = null;
@@ -280,6 +303,7 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
       act(() => {
+        getLatest().onToggle();
         getLatest().onForgotten("terminal-task-a", "Terminal host restarted.");
       });
       await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("lost"));
@@ -414,7 +438,6 @@ describe("useAgentStudioTerminals", () => {
   });
 
   test("keeps a lifecycle frame authoritative over a stale terminal-list snapshot", async () => {
-    rememberVisibleTerminal("task-a");
     const baseDependencies = createTerminalTestDependencies();
     let terminalListCalls = 0;
     const dependencies: TerminalTestDependencies = {
@@ -468,7 +491,6 @@ describe("useAgentStudioTerminals", () => {
   });
 
   test("turns a forgotten terminal into an explicit non-recoverable tab", async () => {
-    rememberVisibleTerminal("task-a");
     const dependencies = createTerminalTestDependencies();
     type HookResult = ReturnType<typeof useAgentStudioTerminals>;
     let latest: HookResult | null = null;
@@ -510,7 +532,7 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
-  test("restores a remembered non-first active terminal before persisting host state", async () => {
+  test("selects the first host terminal without reading persisted active state", async () => {
     const firstTerminal = summaryForTask("task-a");
     const secondTerminal: TerminalSummary = {
       ...firstTerminal,
@@ -562,22 +584,17 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(
         () => {
           expect(getLatest().isLoading).toBe(false);
-          expect(getLatest().activeTabId).toBe("tab:terminal-task-a-2");
+          expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
         },
         { timeout: 2_000 },
       );
-      const stored = JSON.parse(
-        localStorage.getItem("openducktor:agent-studio-terminals:/repo:task-a") ?? "null",
-      ) as { activeTerminalId?: string } | null;
-      expect(stored?.activeTerminalId).toBe("terminal-task-a-2");
+      expect(localStorage.getItem("openducktor:agent-studio-terminals:/repo:task-a")).toBeNull();
     } finally {
       view.unmount();
     }
   });
 
   test("hides the previous task synchronously and does not reuse its focus request", async () => {
-    rememberVisibleTerminal("task-a");
-    rememberVisibleTerminal("task-b");
     const dependencies = createTerminalTestDependencies();
     type HookResult = ReturnType<typeof useAgentStudioTerminals>;
     let latest: HookResult | null = null;
@@ -612,12 +629,11 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(
         () => {
-          expect(getLatest().isVisible).toBe(true);
+          expect(getLatest().isVisible).toBe(false);
           expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
         },
         { timeout: 2_000 },
       );
-      act(() => getLatest().onToggle());
       act(() => getLatest().onToggle());
       expect(getLatest().focusRequest).toBe(1);
       await waitFor(() => {
@@ -640,7 +656,7 @@ describe("useAgentStudioTerminals", () => {
 
       await waitFor(
         () => {
-          expect(getLatest().isVisible).toBe(true);
+          expect(getLatest().isVisible).toBe(false);
           expect(getLatest().activeTabId).toBe("tab:terminal-task-b");
         },
         { timeout: 2_000 },

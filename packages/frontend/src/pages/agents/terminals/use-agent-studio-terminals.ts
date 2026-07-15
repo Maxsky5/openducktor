@@ -70,61 +70,10 @@ type ScopeState = {
   scopeKey: string | null;
   tabs: AgentStudioTerminalTab[];
   activeTabId: string | null;
-  reconciledTerminalDataUpdatedAt: number;
 };
 
-type TerminalUiPreferences = {
-  hostInstanceId: string;
-  visible: boolean;
-  activeTerminalId: string | null;
-  terminals: Array<{ terminalId: string; label: string; initialWorkingDir: string }>;
-};
-
-const preferenceKey = (repoPath: string, taskId: string): string =>
+const legacyPreferenceKey = (repoPath: string, taskId: string): string =>
   `openducktor:agent-studio-terminals:${repoPath}:${taskId}`;
-
-const readPreferences = (repoPath: string, taskId: string): TerminalUiPreferences | null => {
-  try {
-    const value = localStorage.getItem(preferenceKey(repoPath, taskId));
-    if (!value) return null;
-    const parsed = JSON.parse(value) as Partial<TerminalUiPreferences>;
-    if (typeof parsed.hostInstanceId !== "string" || !Array.isArray(parsed.terminals)) return null;
-    return {
-      hostInstanceId: parsed.hostInstanceId,
-      visible: parsed.visible === true,
-      activeTerminalId:
-        typeof parsed.activeTerminalId === "string" ? parsed.activeTerminalId : null,
-      terminals: parsed.terminals.filter(
-        (entry): entry is TerminalUiPreferences["terminals"][number] =>
-          typeof entry?.terminalId === "string" &&
-          typeof entry.label === "string" &&
-          typeof entry.initialWorkingDir === "string",
-      ),
-    };
-  } catch {
-    return null;
-  }
-};
-
-const forgetRememberedTerminal = (
-  repoPath: string,
-  taskId: string,
-  terminalId: string,
-  hidePanel = false,
-): void => {
-  const preferences = readPreferences(repoPath, taskId);
-  if (!preferences) return;
-  localStorage.setItem(
-    preferenceKey(repoPath, taskId),
-    JSON.stringify({
-      ...preferences,
-      visible: hidePanel ? false : preferences.visible,
-      activeTerminalId:
-        preferences.activeTerminalId === terminalId ? null : preferences.activeTerminalId,
-      terminals: preferences.terminals.filter((entry) => entry.terminalId !== terminalId),
-    } satisfies TerminalUiPreferences),
-  );
-};
 
 const toHostTab = (
   summary: TerminalSummary,
@@ -204,7 +153,6 @@ export const useAgentStudioTerminals = (
     scopeKey,
     tabs: [],
     activeTabId: null,
-    reconciledTerminalDataUpdatedAt: 0,
   });
   const [visibility, setVisibility] = useState({ scopeKey, value: false });
   const [transportState, setTransportState] = useState<{
@@ -254,16 +202,16 @@ export const useAgentStudioTerminals = (
   });
 
   useLayoutEffect(() => {
+    if (repoPath && taskId) localStorage.removeItem(legacyPreferenceKey(repoPath, taskId));
     setScopeState({
       scopeKey,
       tabs: [],
       activeTabId: null,
-      reconciledTerminalDataUpdatedAt: 0,
     });
     setVisibility({ scopeKey, value: false });
     setFocusState({ scopeKey, request: 0 });
     setTransportState((current) => ({ ...current, error: null }));
-  }, [scopeKey]);
+  }, [repoPath, scopeKey, taskId]);
 
   useEffect(() => {
     controllerRef.current?.value.dispose();
@@ -280,7 +228,7 @@ export const useAgentStudioTerminals = (
   }, [dependencies.terminalBridge, handleProtocolFailure, handleTransportState, scopeKey]);
 
   useEffect(() => {
-    if (!scopeKey || !repoPath || !taskId || !terminalQuery.data) return;
+    if (!scopeKey || !terminalQuery.data) return;
     setScopeState((current) => {
       if (current.scopeKey !== scopeKey) return current;
       const transient = current.tabs.filter((tab) => tab.terminalId === null);
@@ -290,84 +238,19 @@ export const useAgentStudioTerminals = (
       const hostTabs = terminalQuery.data.terminals.map((summary) =>
         toHostTab(summary, currentTabsByTerminalId.get(summary.terminalId)),
       );
-      const preferences = readPreferences(repoPath, taskId);
-      const hostTerminalIds = new Set(hostTabs.map((tab) => tab.terminalId));
-      const lostTabs = (preferences?.terminals ?? [])
-        .filter((entry) => !hostTerminalIds.has(entry.terminalId))
-        .map<AgentStudioTerminalTab>((entry) => ({
-          tabId: `lost:${entry.terminalId}`,
-          terminalId: null,
-          summary: null,
-          lifecycle: null,
-          lifecycleFromEvent: false,
-          label: entry.label,
-          error: `This terminal is no longer available from host ${preferences?.hostInstanceId ?? "unknown"}. It cannot be recovered or recreated automatically. It started in ${entry.initialWorkingDir}.`,
-          requestState: "lost",
-        }));
-      const tabs = [...hostTabs, ...lostTabs, ...transient];
-      const preferredActiveTabId = preferences?.activeTerminalId
-        ? `tab:${preferences.activeTerminalId}`
-        : null;
+      const tabs = [...hostTabs, ...transient];
       return {
         scopeKey,
         tabs,
-        activeTabId: resolveActiveTabId(tabs, current.activeTabId, preferredActiveTabId),
-        reconciledTerminalDataUpdatedAt: terminalQuery.dataUpdatedAt,
+        activeTabId: resolveActiveTabId(tabs, current.activeTabId, null),
       };
     });
-    const preferences = readPreferences(repoPath, taskId);
-    if (preferences?.hostInstanceId === terminalQuery.data.hostInstanceId) {
-      setVisibility({ scopeKey, value: preferences.visible });
-    }
-  }, [repoPath, scopeKey, taskId, terminalQuery.data, terminalQuery.dataUpdatedAt]);
+  }, [scopeKey, terminalQuery.data]);
 
   const visibleState =
-    scopeState.scopeKey === scopeKey
-      ? scopeState
-      : { scopeKey, tabs: [], activeTabId: null, reconciledTerminalDataUpdatedAt: 0 };
+    scopeState.scopeKey === scopeKey ? scopeState : { scopeKey, tabs: [], activeTabId: null };
   const isVisible = visibility.scopeKey === scopeKey && visibility.value;
   const focusRequest = focusState.scopeKey === scopeKey ? focusState.request : 0;
-
-  useEffect(() => {
-    if (
-      !repoPath ||
-      !taskId ||
-      !terminalQuery.data ||
-      visibleState.scopeKey !== scopeKey ||
-      visibleState.reconciledTerminalDataUpdatedAt !== terminalQuery.dataUpdatedAt
-    )
-      return;
-    const terminals = visibleState.tabs.flatMap((tab) =>
-      tab.summary
-        ? [
-            {
-              terminalId: tab.summary.terminalId,
-              label: tab.summary.label,
-              initialWorkingDir: tab.summary.initialWorkingDir,
-            },
-          ]
-        : [],
-    );
-    const activeTerminalId =
-      visibleState.tabs.find((tab) => tab.tabId === visibleState.activeTabId)?.terminalId ?? null;
-    localStorage.setItem(
-      preferenceKey(repoPath, taskId),
-      JSON.stringify({
-        hostInstanceId: terminalQuery.data.hostInstanceId,
-        visible: isVisible,
-        activeTerminalId,
-        terminals,
-      } satisfies TerminalUiPreferences),
-    );
-  }, [
-    isVisible,
-    repoPath,
-    scopeKey,
-    taskId,
-    terminalQuery.data,
-    terminalQuery.dataUpdatedAt,
-    visibleState,
-  ]);
 
   const createTerminal = useCallback(
     async (retryTabId?: string): Promise<void> => {
@@ -489,16 +372,6 @@ export const useAgentStudioTerminals = (
       onClose: async (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => {
         const closesLastTab =
           visibleState.tabs.length === 1 && visibleState.tabs[0]?.tabId === tab.tabId;
-        const tabIndex = visibleState.tabs.findIndex((candidate) => candidate.tabId === tab.tabId);
-        const wasActive = visibleState.activeTabId === tab.tabId;
-        const tabsAfterClose = visibleState.tabs.filter(
-          (candidate) => candidate.tabId !== tab.tabId,
-        );
-        const activeTabIdAfterClose = resolveActiveTabId(
-          tabsAfterClose,
-          visibleState.activeTabId,
-          null,
-        );
         const removeVisibleTab = (): void => {
           setScopeState((current) => {
             if (current.scopeKey !== scopeKey) return current;
@@ -514,29 +387,29 @@ export const useAgentStudioTerminals = (
               current.scopeKey === scopeKey ? { scopeKey, value: false } : current,
             );
         };
-        const restoreVisibleTab = (): void => {
+        const markClosePending = (): void => {
           setScopeState((current) => {
-            if (
-              current.scopeKey !== scopeKey ||
-              current.tabs.some((candidate) => candidate.tabId === tab.tabId)
-            )
-              return current;
-            const tabs = [...current.tabs];
-            const restoreIndex = Math.max(0, Math.min(tabIndex, tabs.length));
-            tabs.splice(restoreIndex, 0, tab);
-            const restoreActiveTab = wasActive && current.activeTabId === activeTabIdAfterClose;
+            if (current.scopeKey !== scopeKey) return current;
             return {
               ...current,
-              tabs,
-              activeTabId: restoreActiveTab
-                ? tab.tabId
-                : resolveActiveTabId(tabs, current.activeTabId, null),
+              tabs: current.tabs.map((candidate) =>
+                candidate.tabId === tab.tabId ? { ...candidate, lifecycle: "closing" } : candidate,
+              ),
             };
           });
-          if (closesLastTab)
-            setVisibility((current) =>
-              current.scopeKey === scopeKey ? { scopeKey, value: true } : current,
-            );
+        };
+        const restoreCloseLifecycle = (): void => {
+          setScopeState((current) => {
+            if (current.scopeKey !== scopeKey) return current;
+            return {
+              ...current,
+              tabs: current.tabs.map((candidate) =>
+                candidate.tabId === tab.tabId && candidate.lifecycle === "closing"
+                  ? { ...candidate, lifecycle: tab.lifecycle }
+                  : candidate,
+              ),
+            };
+          });
         };
         if (!tab.terminalId) {
           removeVisibleTab();
@@ -547,26 +420,24 @@ export const useAgentStudioTerminals = (
         if (!controller || controller.scopeKey !== scopeKey) {
           throw new Error("Terminal transport is unavailable for this task.");
         }
-        const closeRequest = controller.value.closeTerminal(terminalId, () =>
-          dependencies.hostClient.terminalClose({
-            terminalId,
-            confirmTerminate,
-          }),
-        );
-        removeVisibleTab();
+        markClosePending();
         let closeResult: TerminalCloseResponse;
         try {
-          closeResult = await closeRequest;
+          closeResult = await controller.value.closeTerminal(terminalId, () =>
+            dependencies.hostClient.terminalClose({
+              terminalId,
+              confirmTerminate,
+            }),
+          );
         } catch (cause) {
-          restoreVisibleTab();
+          restoreCloseLifecycle();
           throw cause;
         }
         if (!closeResult.closed) {
-          restoreVisibleTab();
+          restoreCloseLifecycle();
           return closeResult;
         }
-        if (repoPath && taskId)
-          forgetRememberedTerminal(repoPath, taskId, terminalId, closesLastTab);
+        removeVisibleTab();
         if (repoPath && taskId)
           await queryClient.invalidateQueries({
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),
@@ -611,7 +482,6 @@ export const useAgentStudioTerminals = (
               current.activeTabId === forgottenTab.tabId ? lostTabId : current.activeTabId,
           };
         });
-        if (repoPath && taskId) forgetRememberedTerminal(repoPath, taskId, terminalId);
       },
     }),
     [

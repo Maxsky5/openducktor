@@ -170,8 +170,58 @@ describe("AgentStudioTerminalPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close Shell 1" }));
     await waitFor(() => expect(screen.getByText("Terminate and close Shell 1?")).toBeTruthy());
     expect(onClose).toHaveBeenCalledWith(expect.anything(), false);
-    fireEvent.click(screen.getByRole("button", { name: "Terminate and close" }));
+    const dialog = screen.getByRole("dialog");
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    const confirmButton = screen.getByRole("button", { name: "Terminate and close" });
+    const footer = cancelButton.parentElement;
+    expect(dialog.className).toContain("max-w-lg");
+    expect(footer?.className).toContain("justify-between");
+    expect(footer?.className).toContain("border-t");
+    expect(footer?.firstElementChild).toBe(cancelButton);
+    expect(footer?.lastElementChild).toBe(confirmButton);
+    fireEvent.click(confirmButton);
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), true));
+  });
+
+  test("shows immediate feedback while a terminal close is pending", () => {
+    const summary: TerminalSummary = {
+      terminalId: "terminal-closing",
+      hostInstanceId: "host-1",
+      label: "Shell 1",
+      context: { taskId: "task-1" },
+      initialWorkingDir: "/repo",
+      initialWorkingDirAvailable: true,
+      createdAt: "2026-07-12T00:00:00.000Z",
+      lifecycle: "running",
+      connectionState: "connected",
+      attentionState: "none",
+      exit: null,
+    };
+    render(
+      <AgentStudioTerminalPanel
+        model={{
+          ...model,
+          tabs: [
+            {
+              tabId: "tab:terminal-closing",
+              terminalId: summary.terminalId,
+              summary,
+              lifecycle: "closing",
+              lifecycleFromEvent: false,
+              label: summary.label,
+              error: null,
+              requestState: "ready",
+            },
+          ],
+          activeTabId: "tab:terminal-closing",
+        }}
+      />,
+    );
+
+    const closeButton = screen.getByRole("button", { name: "Close Shell 1" });
+    expect(closeButton.hasAttribute("disabled")).toBe(true);
+    expect(closeButton.getAttribute("aria-busy")).toBe("true");
+    expect(closeButton.querySelector(".animate-spin")).toBeTruthy();
   });
 
   test("reuses compact Dev Server terminal chrome without muted icon actions", () => {

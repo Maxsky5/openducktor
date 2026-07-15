@@ -1,5 +1,5 @@
 import type { TerminalConnectionState, TerminalLifecycle } from "@openducktor/contracts";
-import { Plus, RotateCw, X } from "lucide-react";
+import { Loader2, Plus, RotateCw, X } from "lucide-react";
 import { type ReactElement, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -115,6 +115,7 @@ export function AgentStudioTerminalPanel({
   const [closeCandidate, setCloseCandidate] = useState<AgentStudioTerminalTab | null>(null);
   const [attentionByTab, setAttentionByTab] = useState<Record<string, string | null>>({});
   const [closeError, setCloseError] = useState<string | null>(null);
+  const [isConfirmingClose, setIsConfirmingClose] = useState(false);
   const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
   const setTabAttention = useCallback((tabId: string, message: string | null): void => {
     setAttentionByTab((current) => ({ ...current, [tabId]: message }));
@@ -134,6 +135,20 @@ export function AgentStudioTerminalPanel({
       if (!result.closed) setCloseCandidate(tab);
     } catch (cause) {
       setCloseError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+  const confirmClose = async (): Promise<void> => {
+    const candidate = closeCandidate;
+    if (!candidate) return;
+    setIsConfirmingClose(true);
+    setCloseError(null);
+    try {
+      const result = await model.onClose(candidate, true);
+      if (result.closed) setCloseCandidate(null);
+    } catch (cause) {
+      setCloseError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsConfirmingClose(false);
     }
   };
 
@@ -176,13 +191,15 @@ export function AgentStudioTerminalPanel({
                         size="icon"
                         variant="ghost"
                         aria-label={`Close ${tab.label}`}
+                        aria-busy={tab.lifecycle === "closing"}
                         className="absolute right-1 z-20 size-6 rounded-sm text-[var(--dev-server-terminal-foreground)] hover:bg-[var(--dev-server-terminal-surface)] hover:text-[var(--dev-server-terminal-foreground)]"
+                        disabled={tab.lifecycle === "closing"}
                         onClick={(event) => {
                           event.stopPropagation();
                           void closeTab(tab);
                         }}
                       >
-                        <X />
+                        {tab.lifecycle === "closing" ? <Loader2 className="animate-spin" /> : <X />}
                       </Button>
                     </div>
                   );
@@ -267,34 +284,33 @@ export function AgentStudioTerminalPanel({
 
       <Dialog
         open={closeCandidate !== null}
-        onOpenChange={(open) => !open && setCloseCandidate(null)}
+        onOpenChange={(open) => !open && !isConfirmingClose && setCloseCandidate(null)}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Terminate and close {closeCandidate?.label}?</DialogTitle>
             <DialogDescription>
               This stops the running process tree. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setCloseCandidate(null)}>
+          <DialogFooter className="flex-row justify-between border-t border-border pt-5 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCloseCandidate(null)}
+              disabled={isConfirmingClose}
+            >
               Cancel
             </Button>
             <Button
               type="button"
               variant="destructive"
-              onClick={() => {
-                const candidate = closeCandidate;
-                if (!candidate) return;
-                void model.onClose(candidate, true).then(
-                  () => setCloseCandidate(null),
-                  (cause: unknown) => {
-                    setCloseError(cause instanceof Error ? cause.message : String(cause));
-                    setCloseCandidate(null);
-                  },
-                );
-              }}
+              onClick={() => void confirmClose()}
+              disabled={isConfirmingClose}
             >
+              {isConfirmingClose ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : null}
               Terminate and close
             </Button>
           </DialogFooter>
