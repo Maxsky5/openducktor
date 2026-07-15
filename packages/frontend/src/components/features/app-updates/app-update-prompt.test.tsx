@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -432,7 +432,7 @@ describe("AppUpdatePrompt", () => {
     const appUpdates = createFakeAppUpdateBridge({
       status: "downloaded",
       currentVersion: "0.4.2",
-      availableVersion: "0.4.3",
+      availableVersion: "0.5.0-beta.2",
       progressPercent: 100,
       installRetryDisabled: true,
       error: {
@@ -441,12 +441,21 @@ describe("AppUpdatePrompt", () => {
         operation: "install",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const openExternalUrl = mock(async () => {});
+    configureShellBridge({
+      ...createTestShellBridge(appUpdates),
+      openExternalUrl,
+    });
     render(<AppUpdatePrompt />);
 
     expect(await screen.findByText("Install needs attention")).toBeTruthy();
     expect(screen.getByText("Quit and reopen OpenDucktor before trying again.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Download Latest Release" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download Latest Release" }));
+    await waitFor(() =>
+      expect(openExternalUrl).toHaveBeenCalledWith(
+        "https://github.com/Maxsky5/openducktor/releases/tag/v0.5.0-beta.2",
+      ),
+    );
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
   });
 
@@ -465,7 +474,11 @@ describe("AppUpdatePrompt", () => {
         operation: "install",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const openExternalUrl = mock(async () => {});
+    configureShellBridge({
+      ...createTestShellBridge(appUpdates),
+      openExternalUrl,
+    });
     render(<AppUpdatePrompt />);
 
     expect(await screen.findByText("Manual update required")).toBeTruthy();
@@ -475,7 +488,12 @@ describe("AppUpdatePrompt", () => {
         "This installation cannot verify the signed update because it was installed without a compatible macOS signature.",
       ),
     ).toBeNull();
-    expect(screen.getByRole("button", { name: "Download Signed Release" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download Signed Release" }));
+    await waitFor(() =>
+      expect(openExternalUrl).toHaveBeenCalledWith(
+        "https://github.com/Maxsky5/openducktor/releases/tag/v0.5.0",
+      ),
+    );
     expect(screen.queryByRole("button", { name: "Download Latest Release" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
     expect(screen.queryByText(/Code signature at URL/)).toBeNull();

@@ -212,7 +212,7 @@ describe("electron app update install handoff", () => {
       installRetryDisabled: true,
       error: {
         code: "install_failed",
-        message: "native install still failed Quit and reopen OpenDucktor before trying again.",
+        message: "native install failed Quit and reopen OpenDucktor before trying again.",
         operation: "install",
       },
     });
@@ -364,7 +364,7 @@ describe("electron app update install handoff", () => {
       installRetryDisabled: true,
       error: {
         code: "install_failed",
-        message: "native install still failed Quit and reopen OpenDucktor before trying again.",
+        message: "native install failed Quit and reopen OpenDucktor before trying again.",
         operation: "install",
       },
     });

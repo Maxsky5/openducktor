@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUpdateState } from "@/state/app-updates/use-app-update-state";
-import { getAppUpdateStatusDisplay } from "./app-update-display";
+import { appUpdateErrorPanelClassName, getAppUpdateStatusDisplay } from "./app-update-display";
 
 type SettingsAppUpdatesContentProps = {
   disabled: boolean;
@@ -29,10 +29,13 @@ function SettingsAppUpdatesContent({
     isLoadingInitialState ||
     controller.actionInFlight !== null ||
     visibleState.status === "checking";
+  const downloadedCheckUnavailable =
+    visibleState.status === "downloaded" &&
+    (visibleState.installRequested === true || visibleState.installRetryDisabled === true);
   const checkUnavailable =
     visibleState.status === "disabled" ||
     visibleState.status === "downloading" ||
-    visibleState.status === "downloaded";
+    downloadedCheckUnavailable;
 
   return (
     <div className="rounded-md border border-border bg-card p-4">
@@ -64,6 +67,11 @@ function SettingsAppUpdatesContent({
         <p className="mt-4 flex items-baseline gap-2 text-xs text-muted-foreground">
           Current version
           <span className="font-medium text-foreground">{visibleState.currentVersion}</span>
+        </p>
+      )}
+      {controller.commandError && (
+        <p role="alert" className={`mt-3 ${appUpdateErrorPanelClassName}`}>
+          {controller.commandError.message}
         </p>
       )}
     </div>

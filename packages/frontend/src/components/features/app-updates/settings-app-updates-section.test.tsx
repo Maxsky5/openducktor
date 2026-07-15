@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { AppUpdatePrompt } from "./app-update-prompt";
 import { createFakeAppUpdateBridge, createTestShellBridge } from "./app-update-test-utils";
 import { SettingsAppUpdatesSection } from "./settings-app-updates-section";
 
@@ -68,6 +69,24 @@ describe("SettingsAppUpdatesSection", () => {
 
     await waitFor(() => expect(appUpdates.check).toHaveBeenCalledWith({ initiator: "settings" }));
     expect(await screen.findByText("OpenDucktor is up to date")).toBeTruthy();
+  });
+
+  test("shows manual check transport failures", async () => {
+    const appUpdates = createFakeAppUpdateBridge({
+      status: "idle",
+      currentVersion: "0.4.2",
+    });
+    appUpdates.check.mockImplementation(async () => {
+      throw new Error("bridge check failed");
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(<SettingsAppUpdatesSection disabled={false} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Check for Updates" }));
+
+    const error = await screen.findByRole("alert");
+    expect(error.textContent).toBe("bridge check failed");
+    expect(error.className).toContain("border-destructive/30");
   });
 
   test("shows development mode without offering an update check", async () => {
@@ -137,6 +156,51 @@ describe("SettingsAppUpdatesSection", () => {
     await screen.findByText("Ready to install");
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
     expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+    ).toBe(false);
+  });
+
+  test("resurfaces a dismissed downloaded update through the Settings check", async () => {
+    const downloadedState = {
+      status: "downloaded" as const,
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      progressPercent: 100,
+    };
+    const availableState = {
+      status: "available" as const,
+      currentVersion: "0.4.2",
+      availableVersion: "0.4.3",
+      checkInitiator: "settings" as const,
+      checkedAt: "2026-07-08T22:00:00.000Z",
+    };
+    const appUpdates = createFakeAppUpdateBridge(downloadedState);
+    appUpdates.check.mockImplementation(async () => {
+      appUpdates.emit({
+        status: "checking",
+        currentVersion: "0.4.2",
+        checkInitiator: "settings",
+      });
+      appUpdates.emit(availableState);
+      return { accepted: true, state: availableState };
+    });
+    configureShellBridge(createTestShellBridge(appUpdates));
+    render(
+      <>
+        <AppUpdatePrompt />
+        <SettingsAppUpdatesSection disabled={false} />
+      </>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Restart to Install" })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
+    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Check for Updates" }));
+
+    await waitFor(() => expect(appUpdates.check).toHaveBeenCalledWith({ initiator: "settings" }));
+    expect(await screen.findByRole("button", { name: "Download Update" })).toBeTruthy();
   });
 
   test("shows installer handoff and suppresses update actions", async () => {

@@ -462,14 +462,17 @@ export const createElectronAppUpdateService = ({
 
   const applyAdapterError = (cause: unknown): void => {
     const previousState = state;
+    if (previousState.status === "downloaded" && previousState.installRetryDisabled === true) {
+      logger.warn("Ignoring Electron updater error after terminal install failure", cause);
+      return;
+    }
     if (previousState.status === "downloading") {
       clearDownloadProgressThrottle();
     }
-    const installInProgressOrBlocked =
+    const installInProgress =
       installHandoffStarted ||
-      (previousState.status === "downloaded" &&
-        (previousState.installRequested === true || previousState.installRetryDisabled === true));
-    const operation = activeOperation ?? (installInProgressOrBlocked ? "install" : "check");
+      (previousState.status === "downloaded" && previousState.installRequested === true);
+    const operation = activeOperation ?? (installInProgress ? "install" : "check");
     const availableVersion = availableVersionFromState(previousState);
     const checkedAt = operation === "check" ? now() : checkedAtFromState(previousState);
     const message = appUpdateErrorMessage(operation, cause);

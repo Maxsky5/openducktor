@@ -36,8 +36,8 @@ const openReleaseUrl = (url: string, failureMessage: string): void => {
 const releaseNotesUrl = (version: string): string =>
   `${RELEASES_URL}/tag/v${encodeURIComponent(version)}`;
 
-const openLatestRelease = (): void => {
-  openReleaseUrl(`${RELEASES_URL}/latest`, "Failed to open the latest release");
+const openReleaseVersion = (version: string): void => {
+  openReleaseUrl(releaseNotesUrl(version), "Failed to open the release");
 };
 
 function ReleaseNotesLink({ version }: { version: string }): ReactElement {
@@ -114,6 +114,7 @@ export function AppUpdatePrompt(): ReactElement | null {
     : (controller.commandError?.message ?? error?.message);
   const installNeedsAttention =
     state.status === "downloaded" && state.installRetryDisabled === true;
+  const recoveryVersion = state.status === "downloaded" ? state.availableVersion : undefined;
   const releaseNotesVersion = promptStatuses.has(state.status) ? availableVersion : undefined;
   const showDescription = state.status !== "available" && display.description !== undefined;
   const visibleVersionText = `Current ${state.currentVersion}${
@@ -222,13 +223,15 @@ export function AppUpdatePrompt(): ReactElement | null {
                 Restart to Install
               </Button>
             )}
-            {installNeedsAttention && (
+            {installNeedsAttention && recoveryVersion && (
               <Button
                 type="button"
                 size="sm"
                 variant="accent"
                 className="w-full"
-                onClick={openLatestRelease}
+                onClick={() => {
+                  openReleaseVersion(recoveryVersion);
+                }}
               >
                 <ExternalLink data-icon="inline-start" />
                 {manualUpdateRequired ? "Download Signed Release" : "Download Latest Release"}
