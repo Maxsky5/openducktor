@@ -161,12 +161,18 @@ describe("SettingsAppUpdatesSection", () => {
     ).toBe(false);
   });
 
-  test("resurfaces a dismissed downloaded update through the Settings check", async () => {
+  test("resurfaces dismissed terminal recovery through the Settings check", async () => {
     const downloadedState = {
       status: "downloaded" as const,
       currentVersion: "0.4.2",
       availableVersion: "0.4.3",
       progressPercent: 100,
+      installRetryDisabled: true as const,
+      error: {
+        code: "incompatible_app_signature" as const,
+        message: "Install the signed release manually.",
+        operation: "install" as const,
+      },
     };
     const availableState = {
       status: "available" as const,
@@ -193,9 +199,9 @@ describe("SettingsAppUpdatesSection", () => {
       </>,
     );
 
-    expect(await screen.findByRole("button", { name: "Restart to Install" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Download Signed Release" })).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
-    expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Download Signed Release" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Check for Updates" }));
 
@@ -242,7 +248,7 @@ describe("SettingsAppUpdatesSection", () => {
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   test("shows manual signed-release guidance for incompatible app signatures", async () => {

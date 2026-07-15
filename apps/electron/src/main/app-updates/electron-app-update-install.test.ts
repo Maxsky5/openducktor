@@ -117,7 +117,7 @@ describe("electron app update install handoff", () => {
     expect(adapter.installCalls).toHaveLength(1);
   });
 
-  test("blocks checks after install handoff starts while the app remains running", async () => {
+  test("blocks automatic checks after install handoff but allows manual terminal recovery", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
       isUpdateAvailable: true,
@@ -191,31 +191,14 @@ describe("electron app update install handoff", () => {
     const terminalCheckResult = await service.check({ initiator: "settings" });
 
     expect(terminalCheckResult).toMatchObject({
-      accepted: false,
-      rejection: {
-        code: "busy",
-        operation: "check",
-      },
+      accepted: true,
       state: {
-        status: "downloaded",
-        availableVersion: "0.4.3",
-        installRetryDisabled: true,
+        status: "available",
+        availableVersion: "0.4.4",
+        checkInitiator: "settings",
       },
     });
-    expect(adapter.checkCalls).toBe(1);
-
-    adapter.emit("error", new Error("native install still failed"));
-
-    expect(service.getState()).toMatchObject({
-      status: "downloaded",
-      availableVersion: "0.4.3",
-      installRetryDisabled: true,
-      error: {
-        code: "install_failed",
-        message: "native install failed Quit and reopen OpenDucktor before trying again.",
-        operation: "install",
-      },
-    });
+    expect(adapter.checkCalls).toBe(2);
   });
 
   test("treats delayed updater handoff errors as terminal for the process", async () => {

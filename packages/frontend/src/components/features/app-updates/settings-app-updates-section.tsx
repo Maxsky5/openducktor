@@ -30,8 +30,7 @@ function SettingsAppUpdatesContent({
     controller.actionInFlight !== null ||
     visibleState.status === "checking";
   const downloadedCheckUnavailable =
-    visibleState.status === "downloaded" &&
-    (visibleState.installRequested === true || visibleState.installRetryDisabled === true);
+    visibleState.status === "downloaded" && visibleState.installRequested === true;
   const checkUnavailable =
     visibleState.status === "disabled" ||
     visibleState.status === "downloading" ||
