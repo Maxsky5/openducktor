@@ -24,7 +24,7 @@ describe("useAgentSessionLists", () => {
       { taskId: "task-1", agentSessions: [sessionFixture] },
       { taskId: "task-2", agentSessions: [] },
     ]);
-    const singleList = mock(async () => [refreshedSession]);
+    const singleList = mock(async (_repoPath: string, _taskId: string) => [refreshedSession]);
     const harness = createHookHarness(
       () =>
         useAgentSessionLists({
@@ -76,7 +76,7 @@ describe("useAgentSessionLists", () => {
     }
   });
 
-  test("replaces only a task invalidated during initial batch hydration", async () => {
+  test("refetches only a task invalidated during initial batch hydration", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -86,14 +86,13 @@ describe("useAgentSessionLists", () => {
     ) => void = () => {
       throw new Error("Initial batch resolver was not initialized.");
     };
-    const batchList = mock(async (_repoPath: string, taskIds: string[]) => {
-      if (taskIds.length === 2) {
-        return new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
+    const batchList = mock(
+      async (_repoPath: string, _taskIds: string[]) =>
+        new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
           resolveInitialBatch = resolve;
-        });
-      }
-      return [{ taskId: "task-1", agentSessions: [refreshedSession] }];
-    });
+        }),
+    );
+    const singleList = mock(async (_repoPath: string, _taskId: string) => [refreshedSession]);
     const harness = createHookHarness(
       () =>
         useAgentSessionLists({
@@ -102,9 +101,7 @@ describe("useAgentSessionLists", () => {
           enabled: true,
           queryClient,
           readPort: {
-            agentSessionsList: async () => {
-              throw new Error("Per-task fan-out was not expected.");
-            },
+            agentSessionsList: singleList,
             agentSessionsListForTasks: batchList,
           },
         }),
@@ -115,7 +112,9 @@ describe("useAgentSessionLists", () => {
       await harness.mount();
       await harness.waitFor(() => batchList.mock.calls.length === 1);
       await harness.run(async () => {
-        await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
+        await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+          refetchType: "all",
+        });
         resolveInitialBatch([
           { taskId: "task-1", agentSessions: [sessionFixture] },
           { taskId: "task-2", agentSessions: [] },
@@ -127,9 +126,10 @@ describe("useAgentSessionLists", () => {
       );
       const state = harness.getLatest();
 
-      expect(batchList).toHaveBeenCalledTimes(2);
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(singleList).toHaveBeenCalledTimes(1);
+      expect(singleList).toHaveBeenCalledWith("/repo", "task-1");
       expect(batchList.mock.calls[0]).toEqual(["/repo", ["task-1", "task-2"]]);
-      expect(batchList.mock.calls[1]).toEqual(["/repo", ["task-1"]]);
       expect(state.data).toEqual({
         "task-1": [refreshedSession],
         "task-2": [],

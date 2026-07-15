@@ -201,11 +201,13 @@ export const loadAgentSessionListsFromQuery = async (
   }
 
   const entries = normalizedTaskIds.map((taskId) => {
-    const records = queryClient.getQueryData<AgentSessionRecord[]>(
-      agentSessionQueryKeys.list(repoPath, taskId),
-    );
+    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const records = queryClient.getQueryData<AgentSessionRecord[]>(queryKey);
     if (!records) {
       throw new Error(`Batch session hydration did not populate task "${taskId}".`);
+    }
+    if (queryClient.getQueryState(queryKey)?.isInvalidated === true) {
+      throw new Error(`Batch session hydration for task "${taskId}" was superseded.`);
     }
     return [taskId, records] as const;
   });
@@ -221,10 +223,24 @@ export const invalidateAgentSessionListQuery = async (
     refetchType?: "active" | "all";
   },
 ): Promise<void> => {
+  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+  const initialState = queryClient.getQueryState(queryKey);
   incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
   await queryClient.invalidateQueries({
-    queryKey: agentSessionQueryKeys.list(repoPath, taskId),
+    queryKey,
     exact: true,
     refetchType: options?.refetchType ?? "none",
   });
+  const currentState = queryClient.getQueryState(queryKey);
+  const refetchCompleted =
+    (currentState?.dataUpdateCount ?? 0) !== (initialState?.dataUpdateCount ?? 0) ||
+    (currentState?.errorUpdateCount ?? 0) !== (initialState?.errorUpdateCount ?? 0);
+  const disabledRefetchWasSkipped =
+    options?.refetchType === "all" &&
+    initialState !== undefined &&
+    currentState?.isInvalidated === true &&
+    !refetchCompleted;
+  if (disabledRefetchWasSkipped) {
+    await queryClient.prefetchQuery({ queryKey, staleTime: 0 });
+  }
 };

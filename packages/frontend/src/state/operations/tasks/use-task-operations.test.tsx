@@ -842,7 +842,7 @@ describe("use-task-operations", () => {
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: agentSessionQueryKeys.list("/repo", "A"),
         exact: true,
-        refetchType: "active",
+        refetchType: "all",
       });
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: documentQueryKeys.qaReport("/repo", "A"),
