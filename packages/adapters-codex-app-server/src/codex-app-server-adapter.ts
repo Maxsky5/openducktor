@@ -639,14 +639,15 @@ export class CodexAppServerAdapter
     );
     const output = JSON.stringify({ answers });
     await this.options.respondServerRequest(pending.runtimeId, requestId, { answers }, undefined);
+    const questionToolCallId = pending.request.requestInstanceId ?? pending.request.requestId;
     this.emitSessionEvent(input.externalSessionId, {
       type: "assistant_part",
       externalSessionId: input.externalSessionId,
       timestamp: new Date().toISOString(),
       part: requireNormalizedCodexToolInvocation({
-        messageId: `codex-question-${input.requestId}`,
-        partId: `codex-question-${input.requestId}`,
-        callId: input.requestId,
+        messageId: `codex-question-${questionToolCallId}`,
+        partId: `codex-question-${questionToolCallId}`,
+        callId: questionToolCallId,
         rawToolName: "request_user_input",
         status: "completed",
         input: pending.input,

@@ -14,7 +14,10 @@ import {
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
-import type { CodexPendingInputState } from "./codex-pending-input-state";
+import {
+  type CodexPendingInputState,
+  codexPendingInputRequestInstanceId,
+} from "./codex-pending-input-state";
 import { READ_ONLY_ROLES } from "./codex-session-policy";
 import {
   type CodexSubagentLinkState,
@@ -150,9 +153,25 @@ export const handleCodexServerRequest = async (
     return false;
   }
 
-  if (requestKey) {
-    handledRequestKeys.add(requestKey);
-  }
+  const markHandled = (): void => {
+    if (requestKey) {
+      handledRequestKeys.add(requestKey);
+    }
+  };
+  const forgetHandled = (): void => {
+    if (requestKey) {
+      handledRequestKeys.delete(requestKey);
+    }
+  };
+  const runWhileHandled = (operation: () => void): void => {
+    markHandled();
+    try {
+      operation();
+    } catch (error) {
+      forgetHandled();
+      throw error;
+    }
+  };
 
   if (typeof rawRequest.method !== "string" || rawRequest.method.trim().length === 0) {
     throw new Error("Codex app-server server request is missing method.");
@@ -190,16 +209,22 @@ export const handleCodexServerRequest = async (
       mcpElicitationApproval.tool?.name,
     );
     if (roleRejection) {
-      await context.respondServerRequest(
-        routeContext.runtimeId,
-        requestId,
-        codexApprovalResponseForRequest({
-          outcome: "reject",
-          request: rawRequest,
-          message: `Codex MCP request '${mcpElicitationApproval.tool?.name}' was rejected because ${roleRejection}.`,
-        }),
-        undefined,
-      );
+      markHandled();
+      try {
+        await context.respondServerRequest(
+          routeContext.runtimeId,
+          requestId,
+          codexApprovalResponseForRequest({
+            outcome: "reject",
+            request: rawRequest,
+            message: `Codex MCP request '${mcpElicitationApproval.tool?.name}' was rejected because ${roleRejection}.`,
+          }),
+          undefined,
+        );
+      } catch (error) {
+        forgetHandled();
+        throw error;
+      }
       context.emitSessionEvent(routeContext.policySession.threadId, {
         type: "session_error",
         externalSessionId: routeContext.policySession.threadId,
@@ -209,17 +234,26 @@ export const handleCodexServerRequest = async (
       return false;
     }
 
-    context.pendingInput.addApproval({
-      runtimeId: routeContext.runtimeId,
-      threadId: routeContext.ownerThreadId,
-      request: mcpElicitationApproval,
-      ...(routeContext.route ? { route: routeContext.route } : {}),
-    });
-    emitPendingEvent(context, routeContext, {
+    const approval = {
       ...mcpElicitationApproval,
-      type: "approval_required",
-      externalSessionId: routeContext.ownerThreadId,
-      timestamp: new Date().toISOString(),
+      requestInstanceId: codexPendingInputRequestInstanceId(
+        routeContext.runtimeId,
+        mcpElicitationApproval.requestId,
+      ),
+    };
+    runWhileHandled(() => {
+      context.pendingInput.addApproval({
+        runtimeId: routeContext.runtimeId,
+        threadId: routeContext.ownerThreadId,
+        request: approval,
+        ...(routeContext.route ? { route: routeContext.route } : {}),
+      });
+      emitPendingEvent(context, routeContext, {
+        ...approval,
+        type: "approval_required",
+        externalSessionId: routeContext.ownerThreadId,
+        timestamp: new Date().toISOString(),
+      });
     });
     return true;
   }
@@ -239,40 +273,50 @@ export const handleCodexServerRequest = async (
       questions: parsed.request.questions,
       ...codexServerRequestIdMetadata(parsed.serverRequestId),
     };
-    context.pendingInput.addQuestion({
-      runtimeId: routeContext.runtimeId,
-      threadId: routeContext.ownerThreadId,
-      request: parsed.request,
-      questionIds: parsed.questionIds,
-      input: questionInput,
-      ...(routeContext.route ? { route: routeContext.route } : {}),
-    });
-    emitPendingEvent(context, routeContext, {
+    const question = {
       ...parsed.request,
-      type: "question_required",
-      externalSessionId: routeContext.ownerThreadId,
-      timestamp: new Date().toISOString(),
-    });
-    emitPendingEvent(context, routeContext, {
-      type: "assistant_part",
-      externalSessionId: routeContext.ownerThreadId,
-      timestamp: new Date().toISOString(),
-      part: requireNormalizedCodexToolInvocation({
-        messageId: `codex-question-${parsed.request.requestId}`,
-        partId: `codex-question-${parsed.request.requestId}`,
-        callId: parsed.request.requestId,
-        rawToolName: "request_user_input",
-        status: "running",
+      requestInstanceId: codexPendingInputRequestInstanceId(
+        routeContext.runtimeId,
+        parsed.request.requestId,
+      ),
+    };
+    const questionToolCallId = question.requestInstanceId;
+    runWhileHandled(() => {
+      context.pendingInput.addQuestion({
+        runtimeId: routeContext.runtimeId,
+        threadId: routeContext.ownerThreadId,
+        request: question,
+        questionIds: parsed.questionIds,
         input: questionInput,
-        metadata: {
-          codexServerRequest: true,
-          method: rawRequest.method,
-          requestId: parsed.request.requestId,
-          questions: parsed.request.questions,
-          questionIds: parsed.questionIds,
-          turnId: parsed.turnId,
-        },
-      }),
+        ...(routeContext.route ? { route: routeContext.route } : {}),
+      });
+      emitPendingEvent(context, routeContext, {
+        ...question,
+        type: "question_required",
+        externalSessionId: routeContext.ownerThreadId,
+        timestamp: new Date().toISOString(),
+      });
+      emitPendingEvent(context, routeContext, {
+        type: "assistant_part",
+        externalSessionId: routeContext.ownerThreadId,
+        timestamp: new Date().toISOString(),
+        part: requireNormalizedCodexToolInvocation({
+          messageId: `codex-question-${questionToolCallId}`,
+          partId: `codex-question-${questionToolCallId}`,
+          callId: questionToolCallId,
+          rawToolName: "request_user_input",
+          status: "running",
+          input: questionInput,
+          metadata: {
+            codexServerRequest: true,
+            method: rawRequest.method,
+            requestId: parsed.request.requestId,
+            questions: parsed.request.questions,
+            questionIds: parsed.questionIds,
+            turnId: parsed.turnId,
+          },
+        }),
+      });
     });
     return true;
   }
@@ -287,27 +331,42 @@ export const handleCodexServerRequest = async (
       READ_ONLY_ROLES.has(routeContext.policySession.role) &&
       requestMutation === "read_only"
     ) {
-      await context.respondServerRequest(
-        routeContext.runtimeId,
-        requestId,
-        codexApprovalResponseForRequest({ outcome: "approve_once", request: rawRequest }),
-        undefined,
-      );
+      markHandled();
+      try {
+        await context.respondServerRequest(
+          routeContext.runtimeId,
+          requestId,
+          codexApprovalResponseForRequest({ outcome: "approve_once", request: rawRequest }),
+          undefined,
+        );
+      } catch (error) {
+        forgetHandled();
+        throw error;
+      }
       return false;
     }
 
-    const approval = toApprovalRequest(rawRequest);
-    context.pendingInput.addApproval({
-      runtimeId: routeContext.runtimeId,
-      threadId: routeContext.ownerThreadId,
-      request: approval,
-      ...(routeContext.route ? { route: routeContext.route } : {}),
-    });
-    emitPendingEvent(context, routeContext, {
-      ...approval,
-      type: "approval_required",
-      externalSessionId: routeContext.ownerThreadId,
-      timestamp: new Date().toISOString(),
+    const parsedApproval = toApprovalRequest(rawRequest);
+    const approval = {
+      ...parsedApproval,
+      requestInstanceId: codexPendingInputRequestInstanceId(
+        routeContext.runtimeId,
+        parsedApproval.requestId,
+      ),
+    };
+    runWhileHandled(() => {
+      context.pendingInput.addApproval({
+        runtimeId: routeContext.runtimeId,
+        threadId: routeContext.ownerThreadId,
+        request: approval,
+        ...(routeContext.route ? { route: routeContext.route } : {}),
+      });
+      emitPendingEvent(context, routeContext, {
+        ...approval,
+        type: "approval_required",
+        externalSessionId: routeContext.ownerThreadId,
+        timestamp: new Date().toISOString(),
+      });
     });
     return true;
   }
@@ -318,20 +377,26 @@ export const handleCodexServerRequest = async (
 
   // Dynamic Codex tool calls are never approved here; OpenDucktor workflow tools are exposed
   // through MCP so role-specific approval handling is intentionally bypassed for this method.
-  await context.respondServerRequest(
-    routeContext.runtimeId,
-    requestId,
-    {
-      contentItems: [
-        {
-          type: "inputText",
-          text: "OpenDucktor workflow tools are provided through the openducktor MCP server, not Codex dynamic tools.",
-        },
-      ],
-      success: false,
-    },
-    undefined,
-  );
+  markHandled();
+  try {
+    await context.respondServerRequest(
+      routeContext.runtimeId,
+      requestId,
+      {
+        contentItems: [
+          {
+            type: "inputText",
+            text: "OpenDucktor workflow tools are provided through the openducktor MCP server, not Codex dynamic tools.",
+          },
+        ],
+        success: false,
+      },
+      undefined,
+    );
+  } catch (error) {
+    forgetHandled();
+    throw error;
+  }
   context.emitSessionEvent(routeContext.policySession.threadId, {
     type: "session_error",
     externalSessionId: routeContext.policySession.threadId,

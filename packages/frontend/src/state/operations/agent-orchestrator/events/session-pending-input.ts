@@ -2,6 +2,7 @@ import type { AgentRole } from "@openducktor/core";
 import { isReadOnlyAgentRole } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type {
   AgentApprovalRequest,
   AgentSessionIdentity,
@@ -38,6 +39,7 @@ const toPendingApproval = (event: ApprovalRequiredEvent): AgentApprovalRequest =
 
 const toPendingQuestion = (event: QuestionRequiredEvent) => ({
   requestId: event.requestId,
+  ...(event.requestInstanceId ? { requestInstanceId: event.requestInstanceId } : {}),
   questions: event.questions,
 });
 
@@ -49,7 +51,13 @@ const upsertPendingInput = <Entry extends { requestId: string }>(
 const removePendingInput = <Entry extends { requestId: string }>(
   entries: Entry[],
   requestId: string,
-): Entry[] => entries.filter((entry) => entry.requestId !== requestId);
+  requestInstanceId?: string,
+): Entry[] =>
+  entries.filter((entry) =>
+    requestInstanceId
+      ? pendingInputIdentity(entry) !== requestInstanceId
+      : entry.requestId !== requestId,
+  );
 
 const shouldStoreResponseSession = (target: PendingInputRecordTarget): boolean =>
   agentSessionIdentityKey(target.session) !== agentSessionIdentityKey(target.replySession);
@@ -320,7 +328,11 @@ export const handlePermissionResolved = (
   for (const targetSession of targetSessions) {
     context.store.updateSession(targetSession, (current) => ({
       ...current,
-      pendingApprovals: removePendingInput(current.pendingApprovals, event.requestId),
+      pendingApprovals: removePendingInput(
+        current.pendingApprovals,
+        event.requestId,
+        event.requestInstanceId,
+      ),
     }));
   }
 };
@@ -348,7 +360,11 @@ export const handleQuestionResolved = (
   for (const targetSession of targetSessions) {
     context.store.updateSession(targetSession, (current) => ({
       ...current,
-      pendingQuestions: removePendingInput(current.pendingQuestions, event.requestId),
+      pendingQuestions: removePendingInput(
+        current.pendingQuestions,
+        event.requestId,
+        event.requestInstanceId,
+      ),
     }));
   }
 };

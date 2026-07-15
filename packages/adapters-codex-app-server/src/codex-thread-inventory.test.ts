@@ -100,6 +100,30 @@ describe("CodexThreadInventoryReader", () => {
     ]);
   });
 
+  test("scopes startup inventory reads to the requested working directories and state database", async () => {
+    const threadListCalls: Array<Record<string, unknown>> = [];
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: [], nextCursor: null }),
+      threadList: async (params: Record<string, unknown>) => {
+        threadListCalls.push(params);
+        return { data: [], nextCursor: null };
+      },
+    } as unknown as CodexAppServerClient;
+
+    await reader.readForDirectories(client, "runtime-1", ["/repo", "/repo/worktree"]);
+
+    expect(threadListCalls).toEqual([
+      {
+        cursor: null,
+        limit: 100,
+        sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
+        cwd: ["/repo", "/repo/worktree"],
+        useStateDbOnly: true,
+      },
+    ]);
+  });
+
   test("reads every parent turn id with summary-only pagination", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const reader = new CodexThreadInventoryReader();
@@ -182,6 +206,41 @@ describe("CodexThreadInventoryReader", () => {
     const cached = await reader.read(client, "runtime-1");
     expect(cached.threadsById.has("thread-fresh")).toBe(true);
     expect(cached.threadsById.has("thread-stale")).toBe(false);
+  });
+
+  test("does not reuse a directory inventory read after clearing its runtime", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const staleLoaded = createDeferred<unknown>();
+    const staleThreads = createDeferred<unknown>();
+    let loadedCalls = 0;
+    let threadCalls = 0;
+    const client = {
+      threadLoadedList: () => {
+        loadedCalls += 1;
+        return loadedCalls === 1
+          ? staleLoaded.promise
+          : Promise.resolve({ data: ["thread-fresh"], nextCursor: null });
+      },
+      threadList: () => {
+        threadCalls += 1;
+        return threadCalls === 1
+          ? staleThreads.promise
+          : Promise.resolve(threadListResponse("thread-fresh", "Fresh inventory"));
+      },
+    } as unknown as CodexAppServerClient;
+
+    const staleRead = reader.readForDirectories(client, "runtime-1", ["/repo"]);
+    reader.clearInventory("runtime-1");
+    const freshRead = reader.readForDirectories(client, "runtime-1", ["/repo"]);
+
+    staleLoaded.resolve({ data: ["thread-stale"], nextCursor: null });
+    staleThreads.resolve(threadListResponse("thread-stale", "Stale inventory"));
+    const freshInventory = await freshRead;
+    await staleRead;
+
+    expect(freshInventory.threadsById.has("thread-fresh")).toBe(true);
+    expect(freshInventory.threadsById.has("thread-stale")).toBe(false);
+    expect([loadedCalls, threadCalls]).toEqual([2, 2]);
   });
 
   test("coalesces concurrent refreshes for the same runtime", async () => {

@@ -144,6 +144,7 @@ export type AgentApprovalRequest = AgentPendingApprovalRequest & AgentPendingInp
 
 export type AgentQuestionRequest = {
   requestId: string;
+  requestInstanceId?: string;
   questions: Array<{
     header: string;
     question: string;

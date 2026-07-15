@@ -727,6 +727,9 @@ describe("CodexRuntimeSessionEvents", () => {
     const session = createSession("thread-buffered-order");
     const sessions = new Map([[session.threadId, session]]);
     const pendingInput = new CodexPendingInputState();
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
     const runtimeEvents = createRuntimeEvents({
       takeBufferedEvents: async () => [
         bufferedServerRequestEvent({
@@ -749,6 +752,7 @@ describe("CodexRuntimeSessionEvents", () => {
       ],
       sessions,
       pendingInput,
+      sessionEvents,
     });
 
     const hasPendingInput = await runtimeEvents.handleBufferedRuntimeEvents(session, new Set());
@@ -756,6 +760,13 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(hasPendingInput).toBe(false);
     expect(pendingInput.approval("buffered-approval-1")).toBeUndefined();
     expect(pendingInput.pendingApprovalEventsForSession("thread-buffered-order")).toHaveLength(0);
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_resolved",
+        requestId: "buffered-approval-1",
+        requestInstanceId: "runtime-1\u0000buffered-approval-1",
+      }),
+    );
   });
 
   test("does not replay an answered child approval when the child session materializes", async () => {

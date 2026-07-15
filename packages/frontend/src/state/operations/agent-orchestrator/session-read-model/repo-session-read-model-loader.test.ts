@@ -8,9 +8,15 @@ import {
   emptyAgentSessionCollection,
   listAgentSessions,
 } from "@/state/agent-session-collection";
-import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
+import {
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
+import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../support/session-runtime-policy";
+import type { ResolveSessionRuntimePolicySync } from "./adapters/session-runtime-policy-resolver";
 import { loadRepoSessionReadModel } from "./repo-session-read-model-loader";
 import type { TaskSessionRecords } from "./task-session-records";
 
@@ -35,6 +41,16 @@ const secondRecord: AgentSessionRecord = {
   workingDirectory: "/repo/second-worktree",
   startedAt: "2026-06-12T08:05:00.000Z",
   selectedModel: null,
+};
+
+const createTestRuntimePolicyResolver = (): ResolveSessionRuntimePolicySync => {
+  const snapshot = createSettingsSnapshotFixture();
+  return ({ runtimeKind, sessionScope }) =>
+    resolveAgentSessionRuntimePolicyFromSnapshot({
+      runtimeKind,
+      snapshot,
+      ...(sessionScope !== undefined ? { sessionScope } : {}),
+    });
 };
 
 const createCommitSessionCollection = (
@@ -84,9 +100,7 @@ const loadReadModel = async ({
     observeAgentSession,
     clearSessionObservationState,
     loadLiveSessionHistory,
-    loadSettingsSnapshot: async () => {
-      throw new Error("Unexpected settings snapshot load in repo session read model loader test.");
-    },
+    loadSessionRuntimePolicyResolver: async () => createTestRuntimePolicyResolver(),
     isStaleRepoOperation: () => false,
   });
 
@@ -94,6 +108,461 @@ const loadReadModel = async ({
 };
 
 describe("repo session read model loader", () => {
+  test("publishes known running sessions before runtime policy loading finishes", async () => {
+    const codexRecord: AgentSessionRecord = {
+      ...record,
+      runtimeKind: "codex",
+    };
+    const codexRecords: TaskSessionRecords = {
+      taskIds: ["task-1"],
+      records: [{ taskId: "task-1", record: codexRecord }],
+    };
+    const store = createAgentSessionsStore("/repo");
+    let markRuntimePolicyLoadStarted!: () => void;
+    let releaseRuntimePolicy!: () => void;
+    const runtimePolicyLoadStarted = new Promise<void>((resolve) => {
+      markRuntimePolicyLoadStarted = resolve;
+    });
+    const runtimePolicyGate = new Promise<void>((resolve) => {
+      releaseRuntimePolicy = resolve;
+    });
+
+    const load = loadRepoSessionReadModel({
+      repoPath: "/repo",
+      taskSessionRecords: codexRecords,
+      adapter: {
+        listSessionRuntimeSnapshots: async () => [
+          toAgentSessionRuntimeSnapshot({
+            ref: {
+              repoPath: "/repo",
+              runtimeKind: "codex",
+              workingDirectory: codexRecord.workingDirectory,
+              externalSessionId: codexRecord.externalSessionId,
+            },
+            snapshot: {
+              title: "Builder",
+              startedAt: codexRecord.startedAt,
+              runtimeActivity: "running",
+              pendingApprovals: [],
+              pendingQuestions: [],
+            },
+          }),
+        ],
+      },
+      commitSessionCollection: store.commitSessionCollection,
+      observeAgentSession: async () => undefined,
+      clearSessionObservationState: () => undefined,
+      loadLiveSessionHistory: async () => undefined,
+      loadSessionRuntimePolicyResolver: async () => {
+        markRuntimePolicyLoadStarted();
+        await runtimePolicyGate;
+        return createTestRuntimePolicyResolver();
+      },
+      isStaleRepoOperation: () => false,
+    });
+
+    await runtimePolicyLoadStarted;
+
+    expect(store.getActivitySnapshot().sessions).toEqual([
+      expect.objectContaining({
+        externalSessionId: codexRecord.externalSessionId,
+        runtimeKind: "codex",
+        activityState: "running",
+      }),
+    ]);
+
+    releaseRuntimePolicy();
+    await load;
+  });
+
+  test("does not clear a live Codex approval with an older runtime snapshot", async () => {
+    const codexRecord: AgentSessionRecord = {
+      ...record,
+      runtimeKind: "codex",
+    };
+    const codexRecords: TaskSessionRecords = {
+      taskIds: ["task-1"],
+      records: [{ taskId: "task-1", record: codexRecord }],
+    };
+    const initialSession = createAgentSessionFixture({
+      externalSessionId: codexRecord.externalSessionId,
+      taskId: "task-1",
+      runtimeKind: "codex",
+      role: "build",
+      status: "running",
+      startedAt: codexRecord.startedAt,
+      workingDirectory: codexRecord.workingDirectory,
+    });
+    const collection = createCommitSessionCollection(
+      createAgentSessionCollection([initialSession]),
+    );
+    const pendingApproval: AgentApprovalRequest = {
+      requestId: "mcp-approval-1",
+      requestInstanceId: "runtime-a\u0000mcp-approval-1",
+      requestType: "runtime_tool",
+      title: "Approve MCP tool",
+      summary: "Allow the MCP tool call.",
+      affectedPaths: [],
+      action: { name: "odt_read_task" },
+      mutation: "read_only",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    };
+    let runtimePendingApprovals: AgentApprovalRequest[] = [];
+    let releaseSettingsSnapshot!: () => void;
+    let markSettingsLoadStarted!: () => void;
+    const settingsLoadStarted = new Promise<void>((resolve) => {
+      markSettingsLoadStarted = resolve;
+    });
+    const settingsSnapshotGate = new Promise<void>((resolve) => {
+      releaseSettingsSnapshot = resolve;
+    });
+
+    const load = loadRepoSessionReadModel({
+      repoPath: "/repo",
+      taskSessionRecords: codexRecords,
+      adapter: {
+        listSessionRuntimeSnapshots: async () => [
+          toAgentSessionRuntimeSnapshot({
+            ref: {
+              repoPath: "/repo",
+              runtimeKind: "codex",
+              workingDirectory: codexRecord.workingDirectory,
+              externalSessionId: codexRecord.externalSessionId,
+            },
+            snapshot: {
+              title: "Builder",
+              startedAt: codexRecord.startedAt,
+              runtimeActivity: "running",
+              pendingApprovals: runtimePendingApprovals,
+              pendingQuestions: [],
+            },
+          }),
+        ],
+      },
+      commitSessionCollection: collection.commitSessionCollection,
+      observeAgentSession: async () => undefined,
+      clearSessionObservationState: () => undefined,
+      loadLiveSessionHistory: async () => undefined,
+      loadSessionRuntimePolicyResolver: async () => {
+        markSettingsLoadStarted();
+        await settingsSnapshotGate;
+        return createTestRuntimePolicyResolver();
+      },
+      isStaleRepoOperation: () => false,
+    });
+
+    await settingsLoadStarted;
+    runtimePendingApprovals = [pendingApproval];
+    collection.commitSessionCollection((current) => ({
+      collection: createAgentSessionCollection(
+        listAgentSessions(current).map((session) => ({
+          ...session,
+          pendingApprovals: [pendingApproval],
+        })),
+      ),
+      result: undefined,
+    }));
+    releaseSettingsSnapshot();
+    await load;
+
+    expect(collection.getSession(codexRecord.externalSessionId)?.pendingApprovals).toEqual([
+      pendingApproval,
+    ]);
+  });
+
+  test("materializes the persisted session baseline before its snapshot read completes", async () => {
+    const codexRecord: AgentSessionRecord = {
+      ...record,
+      runtimeKind: "codex",
+    };
+    const codexRecords: TaskSessionRecords = {
+      taskIds: ["task-1"],
+      records: [{ taskId: "task-1", record: codexRecord }],
+    };
+    const collection = createCommitSessionCollection();
+    const pendingApproval: AgentApprovalRequest = {
+      requestId: "mcp-approval-from-snapshot",
+      requestInstanceId: "runtime-a\u0000mcp-approval-from-snapshot",
+      requestType: "runtime_tool",
+      title: "Approve MCP tool",
+      summary: "Allow the MCP tool call.",
+      affectedPaths: [],
+      action: { name: "odt_read_task" },
+      mutation: "read_only",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    };
+    let markSnapshotReadStarted!: () => void;
+    let releaseSnapshot!: () => void;
+    const snapshotReadStarted = new Promise<void>((resolve) => {
+      markSnapshotReadStarted = resolve;
+    });
+    const snapshotGate = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
+
+    const load = loadRepoSessionReadModel({
+      repoPath: "/repo",
+      taskSessionRecords: codexRecords,
+      adapter: {
+        listSessionRuntimeSnapshots: async () => {
+          markSnapshotReadStarted();
+          await snapshotGate;
+          return [
+            toAgentSessionRuntimeSnapshot({
+              ref: {
+                repoPath: "/repo",
+                runtimeKind: "codex",
+                workingDirectory: codexRecord.workingDirectory,
+                externalSessionId: codexRecord.externalSessionId,
+              },
+              snapshot: {
+                title: "Builder",
+                startedAt: codexRecord.startedAt,
+                runtimeActivity: "running",
+                pendingApprovals: [pendingApproval],
+                pendingQuestions: [],
+              },
+            }),
+          ];
+        },
+      },
+      commitSessionCollection: collection.commitSessionCollection,
+      observeAgentSession: async () => undefined,
+      clearSessionObservationState: () => undefined,
+      loadLiveSessionHistory: async () => undefined,
+      loadSessionRuntimePolicyResolver: async () => createTestRuntimePolicyResolver(),
+      isStaleRepoOperation: () => false,
+    });
+
+    await snapshotReadStarted;
+    expect(collection.getSession(codexRecord.externalSessionId)).toMatchObject({
+      externalSessionId: codexRecord.externalSessionId,
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+    releaseSnapshot();
+    await load;
+
+    expect(collection.getSession(codexRecord.externalSessionId)?.pendingApprovals).toEqual([
+      pendingApproval,
+    ]);
+  });
+
+  test("does not resurrect snapshot input resolved after baseline materialization", async () => {
+    const codexRecord: AgentSessionRecord = {
+      ...record,
+      runtimeKind: "codex",
+    };
+    const codexRecords: TaskSessionRecords = {
+      taskIds: ["task-1"],
+      records: [{ taskId: "task-1", record: codexRecord }],
+    };
+    const collection = createCommitSessionCollection();
+    const pendingApproval: AgentApprovalRequest = {
+      requestId: "mcp-approval-resolved-live",
+      requestInstanceId: "runtime-a\u0000mcp-approval-resolved-live",
+      requestType: "runtime_tool",
+      title: "Approve MCP tool",
+      summary: "Allow the MCP tool call.",
+      affectedPaths: [],
+      action: { name: "odt_read_task" },
+      mutation: "read_only",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    };
+    let markSnapshotReadStarted!: () => void;
+    let releaseSnapshot!: () => void;
+    const snapshotReadStarted = new Promise<void>((resolve) => {
+      markSnapshotReadStarted = resolve;
+    });
+    const snapshotGate = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
+
+    const load = loadRepoSessionReadModel({
+      repoPath: "/repo",
+      taskSessionRecords: codexRecords,
+      adapter: {
+        listSessionRuntimeSnapshots: async () => {
+          markSnapshotReadStarted();
+          await snapshotGate;
+          return [
+            toAgentSessionRuntimeSnapshot({
+              ref: {
+                repoPath: "/repo",
+                runtimeKind: "codex",
+                workingDirectory: codexRecord.workingDirectory,
+                externalSessionId: codexRecord.externalSessionId,
+              },
+              snapshot: {
+                title: "Builder",
+                startedAt: codexRecord.startedAt,
+                runtimeActivity: "running",
+                pendingApprovals: [pendingApproval],
+                pendingQuestions: [],
+              },
+            }),
+          ];
+        },
+      },
+      commitSessionCollection: collection.commitSessionCollection,
+      observeAgentSession: async () => undefined,
+      clearSessionObservationState: () => undefined,
+      loadLiveSessionHistory: async () => undefined,
+      loadSessionRuntimePolicyResolver: async () => createTestRuntimePolicyResolver(),
+      isStaleRepoOperation: () => false,
+    });
+
+    await snapshotReadStarted;
+    collection.commitSessionCollection((current) => ({
+      collection: createAgentSessionCollection(
+        listAgentSessions(current).map((session) => ({
+          ...session,
+          pendingApprovals: [pendingApproval],
+        })),
+      ),
+      result: undefined,
+    }));
+    collection.commitSessionCollection((current) => ({
+      collection: createAgentSessionCollection(
+        listAgentSessions(current).map((session) => ({
+          ...session,
+          pendingApprovals: [],
+        })),
+      ),
+      result: undefined,
+    }));
+    releaseSnapshot();
+    await load;
+
+    expect(collection.getSession(codexRecord.externalSessionId)?.pendingApprovals).toEqual([]);
+  });
+
+  test("does not clear a live Codex approval while another runtime snapshot is loading", async () => {
+    const codexRecord: AgentSessionRecord = {
+      ...record,
+      runtimeKind: "codex",
+    };
+    const mixedRuntimeRecords: TaskSessionRecords = {
+      taskIds: ["task-1", "task-2"],
+      records: [
+        { taskId: "task-1", record: codexRecord },
+        { taskId: "task-2", record: secondRecord },
+      ],
+    };
+    const collection = createCommitSessionCollection(
+      createAgentSessionCollection([
+        createAgentSessionFixture({
+          externalSessionId: codexRecord.externalSessionId,
+          taskId: "task-1",
+          runtimeKind: "codex",
+          role: "build",
+          status: "running",
+          startedAt: codexRecord.startedAt,
+          workingDirectory: codexRecord.workingDirectory,
+        }),
+        createAgentSessionFixture({
+          externalSessionId: secondRecord.externalSessionId,
+          taskId: "task-2",
+          runtimeKind: "opencode",
+          role: "qa",
+          status: "running",
+          startedAt: secondRecord.startedAt,
+          workingDirectory: secondRecord.workingDirectory,
+        }),
+      ]),
+    );
+    let markCodexSnapshotReturned!: () => void;
+    let releaseOpenCodeSnapshot!: () => void;
+    const codexSnapshotReturned = new Promise<void>((resolve) => {
+      markCodexSnapshotReturned = resolve;
+    });
+    const openCodeSnapshotGate = new Promise<void>((resolve) => {
+      releaseOpenCodeSnapshot = resolve;
+    });
+    const pendingApproval: AgentApprovalRequest = {
+      requestId: "mcp-approval-2",
+      requestInstanceId: "runtime-a\u0000mcp-approval-2",
+      requestType: "runtime_tool",
+      title: "Approve MCP tool",
+      summary: "Allow the MCP tool call.",
+      affectedPaths: [],
+      action: { name: "odt_read_task" },
+      mutation: "read_only",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    };
+
+    const load = loadRepoSessionReadModel({
+      repoPath: "/repo",
+      taskSessionRecords: mixedRuntimeRecords,
+      adapter: {
+        listSessionRuntimeSnapshots: async ({ runtimeKind }) => {
+          if (runtimeKind === "codex") {
+            markCodexSnapshotReturned();
+            return [
+              toAgentSessionRuntimeSnapshot({
+                ref: {
+                  repoPath: "/repo",
+                  runtimeKind: "codex",
+                  workingDirectory: codexRecord.workingDirectory,
+                  externalSessionId: codexRecord.externalSessionId,
+                },
+                snapshot: {
+                  title: "Builder",
+                  startedAt: codexRecord.startedAt,
+                  runtimeActivity: "running",
+                  pendingApprovals: [],
+                  pendingQuestions: [],
+                },
+              }),
+            ];
+          }
+          await openCodeSnapshotGate;
+          return [
+            toAgentSessionRuntimeSnapshot({
+              ref: {
+                repoPath: "/repo",
+                runtimeKind: "opencode",
+                workingDirectory: secondRecord.workingDirectory,
+                externalSessionId: secondRecord.externalSessionId,
+              },
+              snapshot: {
+                title: "QA",
+                startedAt: secondRecord.startedAt,
+                runtimeActivity: "running",
+                pendingApprovals: [],
+                pendingQuestions: [],
+              },
+            }),
+          ];
+        },
+      },
+      commitSessionCollection: collection.commitSessionCollection,
+      observeAgentSession: async () => undefined,
+      clearSessionObservationState: () => undefined,
+      loadLiveSessionHistory: async () => undefined,
+      loadSessionRuntimePolicyResolver: async () => createTestRuntimePolicyResolver(),
+      isStaleRepoOperation: () => false,
+    });
+
+    await codexSnapshotReturned;
+    collection.commitSessionCollection((current) => ({
+      collection: createAgentSessionCollection(
+        listAgentSessions(current).map((session) =>
+          session.externalSessionId === codexRecord.externalSessionId
+            ? { ...session, pendingApprovals: [pendingApproval] }
+            : session,
+        ),
+      ),
+      result: undefined,
+    }));
+    releaseOpenCodeSnapshot();
+    await load;
+
+    expect(collection.getSession(codexRecord.externalSessionId)?.pendingApprovals).toEqual([
+      pendingApproval,
+    ]);
+  });
+
   test("commits persisted sessions with one runtime snapshot scan", async () => {
     let runtimeSnapshotReads = 0;
     const observedSessions: PolicyBoundSessionRef[] = [];

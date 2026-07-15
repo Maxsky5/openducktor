@@ -15,6 +15,7 @@ import {
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
+import { loadSessionRuntimePolicyResolver } from "../session-read-model/adapters/session-runtime-policy-resolver";
 import { loadRepoSessionReadModel } from "../session-read-model/repo-session-read-model-loader";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { createRepoStaleGuard } from "../support/core";
@@ -145,7 +146,11 @@ export const useRepoSessionReadModel = ({
           observeAgentSession,
           clearSessionObservationState,
           loadLiveSessionHistory,
-          loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
+          loadSessionRuntimePolicyResolver: (runtimeKinds) =>
+            loadSessionRuntimePolicyResolver({
+              runtimeKinds,
+              loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
+            }),
           isStaleRepoOperation,
         });
         if (!isStaleRepoOperation() && didLoadSessionReadModel) {

@@ -89,6 +89,76 @@ const mcpToolApprovalRequest = ({
 });
 
 describe("handleCodexServerRequest", () => {
+  test("allows Codex to replay a request after live delivery fails", async () => {
+    const session = createSession("build");
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const handledRequestKeys = new Set<string>();
+    const context = createRequestContext({
+      events,
+      pendingInput,
+      sessions: new Map([[session.threadId, session]]),
+    });
+    let failDelivery = true;
+    context.emitSessionEvent = (externalSessionId, event) => {
+      if (failDelivery) {
+        throw new Error("simulated live delivery failure");
+      }
+      events.push({ ...event, emittedExternalSessionId: externalSessionId });
+    };
+    const request = mcpToolApprovalRequest({
+      id: 28,
+      serverName: "openducktor",
+      toolName: "odt_read_task",
+      threadId: session.threadId,
+    });
+
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).rejects.toThrow("simulated live delivery failure");
+
+    failDelivery = false;
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).resolves.toBe(true);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "28",
+      }),
+    );
+  });
+
+  test("does not replay a request after Codex already received its response", async () => {
+    const session = createSession("spec");
+    const events: unknown[] = [];
+    const respondServerRequest = mock(async () => {});
+    const handledRequestKeys = new Set<string>();
+    const context = createRequestContext({
+      events,
+      respondServerRequest,
+      sessions: new Map([[session.threadId, session]]),
+    });
+    context.emitSessionEvent = () => {
+      throw new Error("simulated post-response delivery failure");
+    };
+    const request = mcpToolApprovalRequest({
+      id: 27,
+      serverName: "openducktor",
+      toolName: "odt_set_plan",
+      threadId: session.threadId,
+    });
+
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).rejects.toThrow("simulated post-response delivery failure");
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).resolves.toBe(false);
+
+    expect(respondServerRequest).toHaveBeenCalledTimes(1);
+  });
+
   test("surfaces command approvals when the session role is unknown", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
@@ -122,6 +192,7 @@ describe("handleCodexServerRequest", () => {
       threadId: "thread-unknown-role",
       request: {
         requestId: "29",
+        requestInstanceId: "runtime-live\u000029",
         requestType: "command_execution",
         title: "Network access approval requested",
       },
@@ -135,6 +206,7 @@ describe("handleCodexServerRequest", () => {
       expect.objectContaining({
         type: "approval_required",
         requestId: "29",
+        requestInstanceId: "runtime-live\u000029",
       }),
     );
   });
@@ -418,6 +490,10 @@ describe("handleCodexServerRequest", () => {
 
     expect(pendingInput.question("41")).toMatchObject({
       threadId: "child-thread",
+      request: {
+        requestId: "41",
+        requestInstanceId: "runtime-live\u000041",
+      },
       route: {
         parentExternalSessionId: "parent-thread",
         childExternalSessionId: "child-thread",
@@ -427,6 +503,7 @@ describe("handleCodexServerRequest", () => {
       expect.objectContaining({
         emittedExternalSessionId: "parent-thread",
         type: "question_required",
+        requestInstanceId: "runtime-live\u000041",
         externalSessionId: "parent-thread",
         parentExternalSessionId: "parent-thread",
         childExternalSessionId: "child-thread",
@@ -440,5 +517,70 @@ describe("handleCodexServerRequest", () => {
     );
     expect(bindActiveTurnId).not.toHaveBeenCalled();
     expect(flushQueuedUserMessagesLater).not.toHaveBeenCalled();
+  });
+
+  test("scopes synthetic question tool rows to the runtime request instance", async () => {
+    const request = {
+      id: 41,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
+      params: {
+        threadId: "thread-build",
+        turnId: "turn-question",
+        questions: [
+          {
+            id: "question-item-1",
+            header: "Choose",
+            question: "Proceed?",
+            options: ["Yes", "No"],
+          },
+        ],
+      },
+    } satisfies CodexServerRequestRecord;
+    const firstSession = createSession("build");
+    firstSession.runtimeId = "runtime-one";
+    const secondSession = createSession("build");
+    secondSession.runtimeId = "runtime-two";
+    const firstEvents: unknown[] = [];
+    const secondEvents: unknown[] = [];
+
+    await handleCodexServerRequest(
+      createRequestContext({
+        events: firstEvents,
+        sessions: new Map([[firstSession.threadId, firstSession]]),
+      }),
+      firstSession,
+      request,
+      new Set(),
+    );
+    await handleCodexServerRequest(
+      createRequestContext({
+        events: secondEvents,
+        sessions: new Map([[secondSession.threadId, secondSession]]),
+      }),
+      secondSession,
+      request,
+      new Set(),
+    );
+
+    expect(firstEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          messageId: "codex-question-runtime-one\u000041",
+          partId: "codex-question-runtime-one\u000041",
+          callId: "runtime-one\u000041",
+        }),
+      }),
+    );
+    expect(secondEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          messageId: "codex-question-runtime-two\u000041",
+          partId: "codex-question-runtime-two\u000041",
+          callId: "runtime-two\u000041",
+        }),
+      }),
+    );
   });
 });

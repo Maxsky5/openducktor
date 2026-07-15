@@ -11,7 +11,6 @@ import { AgentOperationsContext } from "@/state/app-state-contexts";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -133,6 +132,10 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   target: createTarget(),
   repoReadinessState: "ready",
   liveSession: null,
+  pendingInputSeed: {
+    pendingApprovals: [],
+    pendingQuestions: [],
+  },
   ...overrides,
 });
 
@@ -492,7 +495,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("keeps loaded-session approval routing while clearing overlay pending input", async () => {
+  test("uses central approval routing for a loaded session", async () => {
     const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
     subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
       subscribed.listener = listener;
@@ -522,19 +525,13 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         await harness.getLatest().replyAgentApproval(createTarget(), approval, "approve_once");
       });
 
-      expect(replyAgentApproval).toHaveBeenCalledWith(
-        createTarget(),
-        approval,
-        "approve_once",
-        undefined,
-      );
-      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([]);
+      expect(replyAgentApproval).toHaveBeenCalledWith(createTarget(), approval, "approve_once");
     } finally {
       await harness.unmount();
     }
   });
 
-  test("annotates a question answered through the live transcript overlay", async () => {
+  test("uses central question routing for a loaded session", async () => {
     const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
     subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
       subscribed.listener = listener;
@@ -586,17 +583,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       });
 
       expect(answerAgentQuestion).toHaveBeenCalledWith(createTarget(), question, [["yes"]]);
-      expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
-      const interactionSession = harness.getLatest().interactionSession;
-      if (!interactionSession) {
-        throw new Error("Expected overlay interaction session.");
-      }
-      const message = sessionMessageAt(interactionSession, 0);
-      if (message?.meta?.kind !== "tool") {
-        throw new Error("Expected question tool message metadata.");
-      }
-      expect(message.meta.metadata?.requestId).toBe("question-live");
-      expect(message.meta.metadata?.answers).toEqual([["yes"]]);
     } finally {
       await harness.unmount();
     }
@@ -663,6 +649,233 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         throw new Error("Expected the refreshed transcript session.");
       }
       expect(getSessionMessageCount(renderedSession)).toBe(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows a projected approval that arrives after earlier runtime activity", async () => {
+    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const target = createTarget({ runtimeKind: "codex" });
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+    });
+    const harness = createHookHarness(createBaseArgs({ target, liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(createLiveUserMessageEvent()));
+      await harness.waitFor(
+        (state) => (state.session ? getSessionMessageCount(state.session) : 0) === 1,
+      );
+
+      const pendingApproval = createLiveApprovalEvent();
+      await harness.update(
+        createBaseArgs({
+          target,
+          liveSession: {
+            ...liveSession,
+            pendingApprovals: [pendingApproval],
+          },
+        }),
+      );
+
+      await harness.waitFor((state) => state.interactionSession?.pendingApprovals.length === 1);
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([pendingApproval]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("preserves a streamed approval across projected session refreshes", async () => {
+    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const target = createTarget({ runtimeKind: "codex" });
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+    });
+    const harness = createHookHarness(createBaseArgs({ target, liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      const pendingApproval = createLiveApprovalEvent();
+      await harness.run(async () => subscribed.listener?.(pendingApproval));
+      await harness.waitFor((state) => state.interactionSession?.pendingApprovals.length === 1);
+
+      await harness.update(
+        createBaseArgs({
+          target,
+          liveSession: {
+            ...liveSession,
+            selectedModel: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+          },
+        }),
+      );
+
+      await harness.waitFor((state) => state.interactionSession?.selectedModel?.variant === "high");
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toHaveLength(1);
+      expect(harness.getLatest().interactionSession?.pendingApprovals[0]?.requestId).toBe(
+        pendingApproval.requestId,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("prefers a fresh streamed request instance over a reused projected id", async () => {
+    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const target = createTarget({ runtimeKind: "codex" });
+    const projectedApproval = {
+      ...createLiveApprovalEvent(),
+      requestInstanceId: "runtime-a\u0000approval-live",
+    };
+    const freshApproval = {
+      ...projectedApproval,
+      requestInstanceId: "runtime-b\u0000approval-live",
+    };
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      pendingApprovals: [projectedApproval],
+    });
+    const harness = createHookHarness(createBaseArgs({ target, liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => subscribed.listener?.(freshApproval));
+      await harness.waitFor(
+        (state) =>
+          state.interactionSession?.pendingApprovals[0]?.requestInstanceId ===
+          freshApproval.requestInstanceId,
+      );
+
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toHaveLength(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows fresh runtime pending input when Codex reuses resolved request ids", async () => {
+    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const target = createTarget({ runtimeKind: "codex" });
+    const liveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+    });
+    const pendingApproval = {
+      ...createLiveApprovalEvent(),
+      requestInstanceId: "runtime-a\u0000approval-live",
+    };
+    const pendingQuestion = {
+      ...createLiveQuestionEvent(),
+      requestInstanceId: "runtime-a\u0000question-live",
+    };
+    const freshApproval = {
+      ...pendingApproval,
+      requestInstanceId: "runtime-b\u0000approval-live",
+    };
+    const freshQuestion = {
+      ...pendingQuestion,
+      requestInstanceId: "runtime-b\u0000question-live",
+    };
+    const harness = createHookHarness(createBaseArgs({ target, liveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => subscribed.listener !== null);
+      await harness.run(async () => {
+        subscribed.listener?.(pendingApproval);
+        subscribed.listener?.(pendingQuestion);
+      });
+      await harness.waitFor(
+        (state) =>
+          state.interactionSession?.pendingApprovals.length === 1 &&
+          state.interactionSession.pendingQuestions.length === 1,
+      );
+
+      await harness.run(async () => {
+        subscribed.listener?.({
+          type: "approval_resolved",
+          externalSessionId: "session-1",
+          requestId: pendingApproval.requestId,
+          timestamp: "2026-02-22T12:02:00.000Z",
+        });
+        subscribed.listener?.({
+          type: "question_resolved",
+          externalSessionId: "session-1",
+          requestId: pendingQuestion.requestId,
+          timestamp: "2026-02-22T12:02:00.000Z",
+        });
+      });
+      await harness.waitFor(
+        (state) =>
+          state.interactionSession?.pendingApprovals.length === 0 &&
+          state.interactionSession.pendingQuestions.length === 0,
+      );
+
+      await harness.run(async () => {
+        subscribed.listener?.(freshApproval);
+        subscribed.listener?.(freshQuestion);
+      });
+      await harness.waitFor(
+        (state) =>
+          state.interactionSession?.pendingApprovals.length === 1 &&
+          state.interactionSession.pendingQuestions.length === 1,
+      );
+
+      await harness.update(
+        createBaseArgs({
+          target,
+          liveSession: {
+            ...liveSession,
+            selectedModel: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+          },
+        }),
+      );
+      await harness.waitFor((state) => state.interactionSession?.selectedModel?.variant === "high");
+
+      expect(harness.getLatest().interactionSession?.pendingApprovals[0]?.requestId).toBe(
+        freshApproval.requestId,
+      );
+      expect(harness.getLatest().interactionSession?.pendingQuestions[0]?.requestId).toBe(
+        freshQuestion.requestId,
+      );
     } finally {
       await harness.unmount();
     }

@@ -835,7 +835,9 @@ describe("CodexAppServerAdapter approvals", () => {
       ),
     ).resolves.toMatchObject({
       part: expect.objectContaining({
-        callId: "32",
+        messageId: "codex-question-runtime-live\u000032",
+        partId: "codex-question-runtime-live\u000032",
+        callId: "runtime-live\u000032",
         tool: "request_user_input",
         title: "Question",
         preview: "Pick a mode",
@@ -899,7 +901,9 @@ describe("CodexAppServerAdapter approvals", () => {
       ),
     ).resolves.toMatchObject({
       part: expect.objectContaining({
-        callId: "32",
+        messageId: "codex-question-runtime-live\u000032",
+        partId: "codex-question-runtime-live\u000032",
+        callId: "runtime-live\u000032",
         tool: "request_user_input",
         status: "completed",
         output: JSON.stringify({ answers: { "question-1": { answers: ["Safe"] } } }),

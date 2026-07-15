@@ -203,6 +203,7 @@ export type AgentApprovalMutation = "mutating" | "read_only" | "unknown";
 
 export type AgentPendingApprovalRequest = {
   requestId: RuntimePendingInputRequestId;
+  requestInstanceId?: RuntimePendingInputRequestId;
   requestType: RuntimeApprovalRequestType;
   title: string;
   summary?: string;
@@ -228,6 +229,7 @@ export type AgentPendingApprovalRequest = {
 
 export type AgentPendingQuestionRequest = {
   requestId: RuntimePendingInputRequestId;
+  requestInstanceId?: RuntimePendingInputRequestId;
   questions: Array<{
     header: string;
     question: string;
@@ -441,6 +443,7 @@ export type AgentEvent = (
       externalSessionId: ExternalSessionId;
       timestamp: string;
       requestId: RuntimePendingInputRequestId;
+      requestInstanceId?: RuntimePendingInputRequestId;
       parentExternalSessionId?: string;
       childExternalSessionId?: string;
       subagentCorrelationKey?: string;
@@ -450,6 +453,7 @@ export type AgentEvent = (
       externalSessionId: ExternalSessionId;
       timestamp: string;
       requestId: RuntimePendingInputRequestId;
+      requestInstanceId?: RuntimePendingInputRequestId;
       parentExternalSessionId?: string;
       childExternalSessionId?: string;
       subagentCorrelationKey?: string;
@@ -466,6 +470,7 @@ export type AgentEvent = (
       externalSessionId: ExternalSessionId;
       timestamp: string;
       requestId: RuntimePendingInputRequestId;
+      requestInstanceId?: RuntimePendingInputRequestId;
       parentExternalSessionId?: string;
       childExternalSessionId?: string;
       subagentCorrelationKey?: string;

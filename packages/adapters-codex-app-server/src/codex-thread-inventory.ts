@@ -21,9 +21,15 @@ type PendingInventoryRead = {
   promise: Promise<CodexThreadInventory>;
 };
 
+type PendingDirectoryInventoryRead = {
+  runtimeId: string;
+  promise: Promise<CodexThreadInventory>;
+};
+
 export class CodexThreadInventoryReader {
   private readonly inventoryByRuntimeId = new Map<string, CodexThreadInventory>();
   private readonly pendingInventoryByRuntimeId = new Map<string, PendingInventoryRead>();
+  private readonly pendingDirectoryInventory = new Map<string, PendingDirectoryInventoryRead>();
   private readonly statusOverridesByRuntimeId = new Map<
     string,
     Map<string, CodexThreadStatusSnapshot>
@@ -32,6 +38,11 @@ export class CodexThreadInventoryReader {
   clearInventory(runtimeId: string): void {
     this.inventoryByRuntimeId.delete(runtimeId);
     this.pendingInventoryByRuntimeId.delete(runtimeId);
+    for (const [readKey, pending] of this.pendingDirectoryInventory) {
+      if (pending.runtimeId === runtimeId) {
+        this.pendingDirectoryInventory.delete(readKey);
+      }
+    }
   }
 
   async read(client: CodexAppServerClient, runtimeId: string): Promise<CodexThreadInventory> {
@@ -53,6 +64,30 @@ export class CodexThreadInventoryReader {
       return pending.promise;
     }
     return this.startInventoryRead(client, runtimeId, "refresh");
+  }
+
+  async readForDirectories(
+    client: CodexAppServerClient,
+    runtimeId: string,
+    directories: readonly string[],
+  ): Promise<CodexThreadInventory> {
+    const readKey = JSON.stringify([runtimeId, ...directories]);
+    const pending = this.pendingDirectoryInventory.get(readKey);
+    if (pending) {
+      return pending.promise;
+    }
+    const inventoryRead: PendingDirectoryInventoryRead = {
+      runtimeId,
+      promise: this.fetch(client, runtimeId, directories)
+        .then((inventory) => this.withStatusOverrides(runtimeId, inventory))
+        .finally(() => {
+          if (this.pendingDirectoryInventory.get(readKey) === inventoryRead) {
+            this.pendingDirectoryInventory.delete(readKey);
+          }
+        }),
+    };
+    this.pendingDirectoryInventory.set(readKey, inventoryRead);
+    return inventoryRead.promise;
   }
 
   private startInventoryRead(
@@ -249,10 +284,11 @@ export class CodexThreadInventoryReader {
   private async fetch(
     client: CodexAppServerClient,
     runtimeId: string,
+    directories?: readonly string[],
   ): Promise<CodexThreadInventory> {
     const [loadedIds, threads] = await Promise.all([
       this.fetchLoadedThreadIds(client),
-      this.fetchThreads(client),
+      this.fetchThreads(client, directories),
     ]);
     return {
       runtimeId,
@@ -284,7 +320,10 @@ export class CodexThreadInventoryReader {
     return loadedIds;
   }
 
-  private async fetchThreads(client: CodexAppServerClient): Promise<CodexThreadSnapshot[]> {
+  private async fetchThreads(
+    client: CodexAppServerClient,
+    directories?: readonly string[],
+  ): Promise<CodexThreadSnapshot[]> {
     const threads: CodexThreadSnapshot[] = [];
     let cursor: string | null = null;
     const seenCursors = new Set<string>();
@@ -296,6 +335,12 @@ export class CodexThreadInventoryReader {
         cursor,
         limit: 100,
         sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
+        ...(directories
+          ? {
+              ...(directories.length > 0 ? { cwd: [...directories] } : {}),
+              useStateDbOnly: true,
+            }
+          : {}),
       });
       threads.push(...codexThreadList(response));
       cursor = isPlainObject(response)

@@ -1,5 +1,4 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
-import { useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -12,29 +11,6 @@ import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-inter
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
 const EMPTY_TODOS = Object.freeze([]) as readonly AgentSessionTodoItem[];
-
-const mergePendingRequests = <Entry extends { requestId: string }>(
-  primary: readonly Entry[],
-  additional: readonly Entry[],
-): readonly Entry[] => {
-  if (primary.length === 0) {
-    return additional;
-  }
-  if (additional.length === 0) {
-    return primary;
-  }
-
-  const requestIds = new Set(primary.map((entry) => entry.requestId));
-  const merged = [...primary];
-  for (const entry of additional) {
-    if (requestIds.has(entry.requestId)) {
-      continue;
-    }
-    requestIds.add(entry.requestId);
-    merged.push(entry);
-  }
-  return merged;
-};
 
 type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
@@ -65,23 +41,14 @@ export function useSessionTranscriptSurfaceModel({
     target,
     repoReadinessState: runtimeReadiness.state,
     liveSession,
+    pendingInputSeed: visiblePendingInput,
   });
-  const pendingApprovalRequests = useMemo(
-    () =>
-      mergePendingRequests(
-        visiblePendingInput.pendingApprovals,
-        sessionHistory.interactionSession?.pendingApprovals ?? [],
-      ),
-    [sessionHistory.interactionSession, visiblePendingInput.pendingApprovals],
-  );
-  const pendingQuestionRequests = useMemo(
-    () =>
-      mergePendingRequests(
-        visiblePendingInput.pendingQuestions,
-        sessionHistory.interactionSession?.pendingQuestions ?? [],
-      ),
-    [sessionHistory.interactionSession, visiblePendingInput.pendingQuestions],
-  );
+  const transientInteractionSession =
+    liveSession === null ? sessionHistory.liveInteractionSession : null;
+  const pendingApprovalRequests =
+    transientInteractionSession?.pendingApprovals ?? visiblePendingInput.pendingApprovals;
+  const pendingQuestionRequests =
+    transientInteractionSession?.pendingQuestions ?? visiblePendingInput.pendingQuestions;
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     target,
     pendingApprovalRequests,

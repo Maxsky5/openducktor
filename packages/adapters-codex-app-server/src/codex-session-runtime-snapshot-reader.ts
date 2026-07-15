@@ -79,7 +79,15 @@ export const listCodexSessionRuntimeSnapshots = async (
   const localSessions = [...deps.sessions.values()]
     .filter((session) => session.repoPath === input.repoPath)
     .filter((session) => directories.size === 0 || directories.has(session.workingDirectory));
+  const { client, runtimeId } = await deps.runtimeClients.resolve(
+    input,
+    "list session runtime snapshots",
+  );
   const inventoryByRuntimeId = new Map<string, Promise<CodexThreadInventory>>();
+  const runtimeInventory = deps.threadInventory.readForDirectories(client, runtimeId, [
+    ...directories,
+  ]);
+  inventoryByRuntimeId.set(runtimeId, runtimeInventory);
   const localSnapshots = await Promise.all(
     localSessions.map(async (session) =>
       toRefreshedRuntimeSnapshot({
@@ -98,11 +106,7 @@ export const listCodexSessionRuntimeSnapshots = async (
     ),
   );
   const localThreadIds = new Set(localSessions.map((session) => session.threadId));
-  const { client, runtimeId } = await deps.runtimeClients.resolve(
-    input,
-    "list session runtime snapshots",
-  );
-  const inventory = await deps.threadInventory.refresh(client, runtimeId);
+  const inventory = await runtimeInventory;
   const remoteSnapshots = [...inventory.threadsById.values()]
     .filter(
       (thread) =>

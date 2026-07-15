@@ -1,12 +1,22 @@
-import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
-import type { AgentEnginePort, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
+import type { RuntimeKind } from "@openducktor/contracts";
+import {
+  type AgentEnginePort,
+  type PolicyBoundSessionRef,
+  type SessionRef,
+  toAgentRuntimePolicyBinding,
+} from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import {
+  type AgentSessionCollection,
+  getAgentSession,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { appendSessionMessage } from "../support/messages";
+import { fromPersistedSessionRecord } from "../support/persistence";
 import { buildSessionErrorNoticeMessage } from "../support/session-notice-messages";
-import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../support/session-runtime-policy";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
+import type { ResolveSessionRuntimePolicySync } from "./adapters/session-runtime-policy-resolver";
 import { readRepoRuntimeSessionSnapshots } from "./repo-runtime-session-snapshots";
 import { buildRepoSessionReadModel } from "./repo-session-read-model";
 import type { TaskSessionRecords } from "./task-session-records";
@@ -14,9 +24,26 @@ import type { TaskSessionRecords } from "./task-session-records";
 type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
 type ClearSessionObservationState = (sessions: readonly SessionRef[]) => void;
+type LoadSessionRuntimePolicyResolver = (
+  runtimeKinds: readonly RuntimeKind[],
+) => Promise<ResolveSessionRuntimePolicySync>;
 type SessionObserverFailure = {
   session: PolicyBoundSessionRef;
   message: string;
+};
+
+const materializePersistedSessionBaseline = (
+  currentSessionCollection: AgentSessionCollection,
+  taskSessionRecords: TaskSessionRecords,
+): AgentSessionCollection => {
+  let baseline = currentSessionCollection;
+  for (const { taskId, record } of taskSessionRecords.records) {
+    const persistedSession = fromPersistedSessionRecord({ taskId, record });
+    if (!getAgentSession(baseline, persistedSession)) {
+      baseline = replaceAgentSession(baseline, persistedSession);
+    }
+  }
+  return baseline;
 };
 
 const observeLiveSessions = async ({
@@ -101,7 +128,7 @@ export const loadRepoSessionReadModel = async ({
   observeAgentSession,
   clearSessionObservationState,
   loadLiveSessionHistory,
-  loadSettingsSnapshot,
+  loadSessionRuntimePolicyResolver,
   isStaleRepoOperation,
 }: {
   repoPath: string;
@@ -112,13 +139,23 @@ export const loadRepoSessionReadModel = async ({
   observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: ClearSessionObservationState;
   loadLiveSessionHistory: (session: PolicyBoundSessionRef) => Promise<unknown>;
-  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  loadSessionRuntimePolicyResolver: LoadSessionRuntimePolicyResolver;
   isStaleRepoOperation: () => boolean;
 }): Promise<boolean> => {
   if (isStaleRepoOperation()) {
     return false;
   }
 
+  const runtimeSnapshotBaseline = commitSessionCollection((currentSessionCollection) => {
+    const baseline = materializePersistedSessionBaseline(
+      currentSessionCollection,
+      taskSessionRecords,
+    );
+    return {
+      collection: baseline,
+      result: baseline,
+    };
+  });
   const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
     repoPath,
     tasks: taskSessionRecords,
@@ -128,36 +165,13 @@ export const loadRepoSessionReadModel = async ({
   if (isStaleRepoOperation()) {
     return false;
   }
-  const requiresCodexRuntimePolicy =
-    Array.from(runtimeSnapshots.values()).some(
-      (snapshot) => snapshot.ref.runtimeKind === "codex",
-    ) || snapshotRuntimeKinds?.includes("codex") === true;
-  const settingsSnapshot = requiresCodexRuntimePolicy ? await loadSettingsSnapshot() : null;
-  if (isStaleRepoOperation()) {
-    return false;
-  }
-
   const readModel = commitSessionCollection((currentSessionCollection) => {
     const readModel = buildRepoSessionReadModel({
       repoPath,
       tasks: taskSessionRecords,
       currentSessionCollection,
+      runtimeSnapshotBaseline,
       runtimeSnapshots,
-      resolveSessionRuntimePolicy: ({ runtimeKind, sessionScope }) => {
-        if (runtimeKind === "opencode") {
-          return { kind: "opencode" };
-        }
-        if (!settingsSnapshot) {
-          throw new Error(
-            `Settings snapshot is required to resolve ${runtimeKind} runtime policy.`,
-          );
-        }
-        return resolveAgentSessionRuntimePolicyFromSnapshot({
-          runtimeKind,
-          snapshot: settingsSnapshot,
-          ...(sessionScope !== undefined ? { sessionScope } : {}),
-        });
-      },
     });
     return {
       collection: readModel.sessionCollection,
@@ -170,8 +184,26 @@ export const loadRepoSessionReadModel = async ({
     return false;
   }
 
+  const runtimeKinds = Array.from(
+    new Set(readModel.liveSessionRefs.map((session) => session.runtimeKind)),
+  );
+  const resolveSessionRuntimePolicy = await loadSessionRuntimePolicyResolver(runtimeKinds);
+  if (isStaleRepoOperation()) {
+    return false;
+  }
+  const liveSessionRefs: PolicyBoundSessionRef[] = readModel.liveSessionRefs.map((session) => {
+    const runtimePolicy = resolveSessionRuntimePolicy({
+      runtimeKind: session.runtimeKind,
+      sessionScope: session.sessionScope ?? null,
+    });
+    return {
+      ...session,
+      ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),
+    };
+  });
+
   const observerFailures = await observeLiveSessions({
-    sessions: readModel.liveSessionRefs,
+    sessions: liveSessionRefs,
     observeAgentSession,
     isStaleRepoOperation,
   });
@@ -187,7 +219,7 @@ export const loadRepoSessionReadModel = async ({
   }
 
   await Promise.all(
-    readModel.liveSessionRefs.map(async (session) => {
+    liveSessionRefs.map(async (session) => {
       if (isStaleRepoOperation()) {
         return;
       }

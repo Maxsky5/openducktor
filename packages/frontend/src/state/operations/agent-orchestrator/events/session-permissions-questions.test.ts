@@ -159,6 +159,54 @@ describe("agent-orchestrator session permissions and questions", () => {
     expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toEqual([]);
   });
 
+  test("does not clear reused pending input from a late resolved request instance", async () => {
+    const pendingApproval = {
+      requestId: "reused-request-1",
+      requestInstanceId: "runtime-b\u0000reused-request-1",
+      requestType: "permission_grant" as const,
+      title: "Approve permission: read",
+    };
+    const pendingQuestion = {
+      requestId: "reused-question-1",
+      requestInstanceId: "runtime-b\u0000reused-question-1",
+      questions: [],
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        externalSessionId: "external-session",
+        role: "build",
+        pendingApprovals: [pendingApproval],
+        pendingQuestions: [pendingQuestion],
+      }),
+    ]);
+    const handleEvent = await startTestSessionObserver({
+      externalSessionId: "external-session",
+      sessionsRef,
+    });
+
+    handleEvent({
+      type: "approval_resolved",
+      externalSessionId: "external-session",
+      timestamp: "2026-02-22T08:00:06.000Z",
+      requestId: pendingApproval.requestId,
+      requestInstanceId: "runtime-a\u0000reused-request-1",
+    });
+    handleEvent({
+      type: "question_resolved",
+      externalSessionId: "external-session",
+      timestamp: "2026-02-22T08:00:06.000Z",
+      requestId: pendingQuestion.requestId,
+      requestInstanceId: "runtime-a\u0000reused-question-1",
+    });
+
+    expect(findSession(sessionsRef, "external-session")?.pendingApprovals).toEqual([
+      pendingApproval,
+    ]);
+    expect(findSession(sessionsRef, "external-session")?.pendingQuestions).toEqual([
+      pendingQuestion,
+    ]);
+  });
+
   test("clears child question when question is resolved", async () => {
     const pendingQuestion = {
       requestId: "question-child-1",
