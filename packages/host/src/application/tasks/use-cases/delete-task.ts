@@ -73,6 +73,9 @@ export const createTaskDeleteUseCase = ({
 
       const targetTasks = collectTaskDeleteTargets(currentTasks, taskId, deleteSubtasks);
       const targetTaskIds = targetTasks.map((task) => task.id);
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const additionalTaskIds = targetTaskIds.filter((targetTaskId) => targetTaskId !== taskId);
       if (taskSessionBootstrapCoordinator && additionalTaskIds.length > 0) {
         yield* taskSessionBootstrapCoordinator.acquireLifecycle(
@@ -109,14 +112,11 @@ export const createTaskDeleteUseCase = ({
           );
         }
         yield* taskActivityGuard.ensureNoActiveTaskDeleteRuns({
-          repoPath,
+          repoPath: effectiveRepoPath,
           taskSessions: targetTaskSessions,
         });
       }
 
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,

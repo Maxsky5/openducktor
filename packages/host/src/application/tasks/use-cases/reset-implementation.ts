@@ -96,7 +96,7 @@ export const createTaskImplementationResetUseCase = ({
         );
       yield* ensureNoActiveImplementationResetActivity(
         taskActivityGuard,
-        repoPath,
+        effectiveRepoPath,
         taskId,
         guardedSessions,
       );

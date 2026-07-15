@@ -51,6 +51,7 @@ export function useTaskResetFlow({
   );
   const open = task !== null;
   const {
+    hasCanonicalWorktree,
     hasManagedSessionCleanup,
     managedWorktreeCount,
     legacyWorktreeCount,
@@ -136,6 +137,7 @@ export function useTaskResetFlow({
       targetStatusLabel: deriveRollbackLabel(task),
       isSubmitting,
       isLoadingImpact,
+      hasCanonicalWorktree,
       hasManagedSessionCleanup,
       managedWorktreeCount,
       legacyWorktreeCount,

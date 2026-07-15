@@ -506,7 +506,7 @@ describe("TaskService.closeTask", () => {
     const activityGuard: TaskActivityGuardPort = {
       ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
       ensureNoActiveTaskResetActivity: (input) => {
-        calls.push(`${input.operationLabel}:${input.sessionRoles.join(",")}`);
+        calls.push(`${input.operationLabel}:${input.repoPath}:${input.sessionRoles.join(",")}`);
         return Effect.succeed(undefined);
       },
     };
@@ -521,9 +521,9 @@ describe("TaskService.closeTask", () => {
       worktreeFiles: createWorktreeFiles(calls),
     });
 
-    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
+    await run(service.closeTask({ repoPath: "/repo-alias", taskId: "task-1" }));
 
-    expect(calls[0]).toBe("close task:spec,planner,build,qa");
+    expect(calls[0]).toBe("close task:/repo:spec,planner,build,qa");
   });
 
   test("guards and cleans legacy Planner worktrees", async () => {

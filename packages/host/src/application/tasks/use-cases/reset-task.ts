@@ -75,6 +75,9 @@ export const createTaskFullResetUseCase = ({
 
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
@@ -88,7 +91,7 @@ export const createTaskFullResetUseCase = ({
           );
         }
         yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath,
+          repoPath: effectiveRepoPath,
           taskId,
           sessions: currentSessions,
           operationLabel: "reset task",
@@ -96,9 +99,6 @@ export const createTaskFullResetUseCase = ({
         });
       }
 
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,

@@ -782,11 +782,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true }),
+        }).deleteTask({ repoPath: "/repo-alias", taskId: "epic-1", deleteSubtasks: true }),
       ),
     ).resolves.toEqual({ ok: true });
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "list", input: { repoPath: "/repo-alias" } },
       {
         type: "activityGuard",
         input: {
@@ -1440,11 +1440,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
+        }).resetImplementation({ repoPath: "/repo-alias", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "list", input: { repoPath: "/repo-alias" } },
       {
         type: "resetActivityGuard",
         input: {
@@ -1738,11 +1738,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).resetTask({ repoPath: "/repo-alias", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "list", input: { repoPath: "/repo-alias" } },
       {
         type: "resetActivityGuard",
         input: {

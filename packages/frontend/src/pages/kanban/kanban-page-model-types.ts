@@ -161,6 +161,7 @@ export type KanbanPageModels = {
     targetStatusLabel: string;
     isSubmitting: boolean;
     isLoadingImpact: boolean;
+    hasCanonicalWorktree: boolean;
     hasManagedSessionCleanup: boolean;
     managedWorktreeCount: number;
     legacyWorktreeCount: number;

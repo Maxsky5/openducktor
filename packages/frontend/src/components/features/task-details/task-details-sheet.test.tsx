@@ -91,6 +91,7 @@ describe("TaskDetailsSheet", () => {
       }),
     );
     const taskCleanupImpactHookMock = mock(() => ({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       legacyWorktreeCount: 0,
@@ -152,6 +153,7 @@ describe("TaskDetailsSheet", () => {
       applyDocumentUpdate: () => {},
     }));
     const taskCleanupImpactHookMock = mock(() => ({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       legacyWorktreeCount: 0,
@@ -216,6 +218,7 @@ describe("TaskDetailsSheet", () => {
       applyDocumentUpdate: () => {},
     }));
     const taskCleanupImpactHookMock = mock(() => ({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       legacyWorktreeCount: 0,

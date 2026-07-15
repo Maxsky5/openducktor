@@ -7,6 +7,7 @@ import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 
 type TaskCleanupImpact = {
+  hasCanonicalWorktree: boolean;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   legacyWorktreeCount: number;
@@ -29,6 +30,7 @@ type TaskWorktreeImpactQuerySnapshot = {
 };
 
 const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
+  hasCanonicalWorktree: false,
   hasManagedSessionCleanup: false,
   managedWorktreeCount: 0,
   legacyWorktreeCount: 0,
@@ -60,6 +62,7 @@ export const getManagedTaskCleanupImpact = (
   }
 
   return {
+    hasCanonicalWorktree: false,
     hasManagedSessionCleanup: managedWorktrees.size > 0,
     managedWorktreeCount: managedWorktrees.size,
     legacyWorktreeCount: managedWorktrees.size,
@@ -90,6 +93,7 @@ export const getTaskCleanupImpactFromSessionQueries = (
   );
   if (failedQuery) {
     return {
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       legacyWorktreeCount: 0,
@@ -138,6 +142,7 @@ export const getTaskCleanupImpactFromSessionQueries = (
   }
   return {
     ...sessionImpact,
+    hasCanonicalWorktree: canonicalPaths.size > 0,
     hasManagedSessionCleanup: managedPaths.size > 0,
     managedWorktreeCount: managedPaths.size,
     legacyWorktreeCount: legacyWorktreePaths.size,

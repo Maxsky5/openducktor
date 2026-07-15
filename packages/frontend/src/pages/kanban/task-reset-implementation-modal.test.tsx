@@ -12,6 +12,7 @@ const makeModel = (
   targetStatusLabel: "Ready for Dev",
   isSubmitting: false,
   isLoadingImpact: false,
+  hasCanonicalWorktree: true,
   hasManagedSessionCleanup: true,
   managedWorktreeCount: legacyWorktreeCount + 1,
   legacyWorktreeCount,
@@ -46,5 +47,14 @@ describe("TaskResetImplementationModal", () => {
       ),
     ).toBeDefined();
     expect(screen.getByText(/uncommitted changes in that worktree will be lost/i)).toBeDefined();
+  });
+
+  test("does not claim retention when only legacy worktrees exist", () => {
+    render(
+      <TaskResetImplementationModal model={{ ...makeModel(1), hasCanonicalWorktree: false }} />,
+    );
+
+    expect(screen.queryByText(/canonical task worktree and branch are retained/i)).toBeNull();
+    expect(screen.getByText(/1 legacy implementation worktree/i)).toBeDefined();
   });
 });

@@ -66,7 +66,7 @@ export function TaskResetImplementationModal({
             <p className="font-medium">
               This action removes Builder and QA session history for this task.
             </p>
-            <p>{formatManagedCleanupMessage()}</p>
+            {model.hasCanonicalWorktree ? <p>{formatManagedCleanupMessage()}</p> : null}
             {model.legacyWorktreeCount > 0 ? (
               <p>{formatLegacyCleanupMessage(model.legacyWorktreeCount)}</p>
             ) : null}

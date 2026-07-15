@@ -75,28 +75,21 @@ export const createTaskCloseUseCase = ({
 
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
-
-      if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
-        if (!taskActivityGuard) {
-          return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "task_close",
-              message:
-                "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath,
-          taskId,
-          sessions: currentSessions,
-          operationLabel: "close task",
-          sessionRoles: [...workflowCleanupSessionRoleNames],
-        });
+      const hasWorkflowSessions = taskHasSessionsForRoles(
+        currentSessions,
+        workflowCleanupSessionRoles,
+      );
+      if (hasWorkflowSessions && !taskActivityGuard) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "taskActivityGuard",
+            operation: "task_close",
+            message:
+              "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+            details: { repoPath, taskId },
+          }),
+        );
       }
-
       const dependencies = yield* requireDependencies(() =>
         requireTaskCloseDependencies(
           devServerService,
@@ -107,7 +100,18 @@ export const createTaskCloseUseCase = ({
       );
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+
+      if (hasWorkflowSessions && taskActivityGuard) {
+        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
+          repoPath: effectiveRepoPath,
+          taskId,
+          sessions: currentSessions,
+          operationLabel: "close task",
+          sessionRoles: [...workflowCleanupSessionRoleNames],
+        });
+      }
+
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
