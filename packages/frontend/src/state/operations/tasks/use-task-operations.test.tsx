@@ -752,6 +752,7 @@ describe("use-task-operations", () => {
 
   test("reset operations report refresh failures without rejecting successful mutations", async () => {
     let currentStatus: TaskCard["status"] = "in_progress";
+    let failTaskRefresh = false;
     const taskResetImplementation = mock(async () => {
       currentStatus = "ready_for_dev";
       return makeTask("A", currentStatus);
@@ -760,7 +761,12 @@ describe("use-task-operations", () => {
       currentStatus = "open";
       return makeTask("A", currentStatus);
     });
-    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
+    const tasksList = mock(async () => {
+      if (failTaskRefresh) {
+        throw new Error("task state unavailable");
+      }
+      return [makeTask("A", currentStatus)];
+    });
     const runsList = mock(async (): Promise<RunSummary[]> => []);
     const toastError = mock(() => {});
     const original = {
@@ -817,12 +823,18 @@ describe("use-task-operations", () => {
       await harness.waitFor(() => getLatest().tasks[0]?.status === "ready_for_dev");
       await expect(harness.run(() => getLatest().resetTask("A"))).resolves.toBeUndefined();
       await harness.waitFor(() => getLatest().tasks[0]?.status === "open");
+      failTaskRefresh = true;
+      await expect(harness.run(() => getLatest().resetTask("A"))).resolves.toBeUndefined();
 
       expect(toastError).toHaveBeenCalledWith("Implementation reset, but metadata refresh failed", {
         description: "/repo · A: metadata unavailable",
       });
       expect(toastError).toHaveBeenCalledWith("Task reset, but metadata refresh failed", {
         description: "/repo · A: metadata unavailable",
+      });
+      expect(toastError).toHaveBeenCalledWith("Task reset, but metadata refresh failed", {
+        description:
+          "/repo · A: Post-reset metadata refreshes failed: metadata unavailable; task state unavailable",
       });
       expect(getLatest().tasks[0]?.status).toBe("open");
     } finally {
