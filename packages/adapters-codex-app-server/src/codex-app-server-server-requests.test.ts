@@ -89,6 +89,76 @@ const mcpToolApprovalRequest = ({
 });
 
 describe("handleCodexServerRequest", () => {
+  test("allows Codex to replay a request after live delivery fails", async () => {
+    const session = createSession("build");
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const handledRequestKeys = new Set<string>();
+    const context = createRequestContext({
+      events,
+      pendingInput,
+      sessions: new Map([[session.threadId, session]]),
+    });
+    let failDelivery = true;
+    context.emitSessionEvent = (externalSessionId, event) => {
+      if (failDelivery) {
+        throw new Error("simulated live delivery failure");
+      }
+      events.push({ ...event, emittedExternalSessionId: externalSessionId });
+    };
+    const request = mcpToolApprovalRequest({
+      id: 28,
+      serverName: "openducktor",
+      toolName: "odt_read_task",
+      threadId: session.threadId,
+    });
+
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).rejects.toThrow("simulated live delivery failure");
+
+    failDelivery = false;
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).resolves.toBe(true);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "28",
+      }),
+    );
+  });
+
+  test("does not replay a request after Codex already received its response", async () => {
+    const session = createSession("spec");
+    const events: unknown[] = [];
+    const respondServerRequest = mock(async () => {});
+    const handledRequestKeys = new Set<string>();
+    const context = createRequestContext({
+      events,
+      respondServerRequest,
+      sessions: new Map([[session.threadId, session]]),
+    });
+    context.emitSessionEvent = () => {
+      throw new Error("simulated post-response delivery failure");
+    };
+    const request = mcpToolApprovalRequest({
+      id: 27,
+      serverName: "openducktor",
+      toolName: "odt_set_plan",
+      threadId: session.threadId,
+    });
+
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).rejects.toThrow("simulated post-response delivery failure");
+    await expect(
+      handleCodexServerRequest(context, session, request, handledRequestKeys),
+    ).resolves.toBe(false);
+
+    expect(respondServerRequest).toHaveBeenCalledTimes(1);
+  });
+
   test("surfaces command approvals when the session role is unknown", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();

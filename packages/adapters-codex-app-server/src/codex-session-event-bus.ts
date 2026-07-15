@@ -36,8 +36,16 @@ export class CodexSessionEventBus {
       return;
     }
 
+    const deliveryErrors: unknown[] = [];
     for (const listener of listeners) {
-      listener(event);
+      try {
+        listener(event);
+      } catch (error) {
+        deliveryErrors.push(error);
+      }
+    }
+    if (deliveryErrors.length > 0) {
+      throw deliveryErrors[0];
     }
   }
 

@@ -32,6 +32,20 @@ describe("CodexSessionEventBus", () => {
     expect(secondEvents).toEqual([]);
   });
 
+  test("delivers an event to every subscriber when one subscriber fails", () => {
+    const bus = new CodexSessionEventBus();
+    const deliveredEvents: AgentEvent[] = [];
+    const event = sessionErrorEvent("offline");
+
+    bus.subscribe(sessionRef, () => {
+      throw new Error("simulated subscriber failure");
+    });
+    bus.subscribe(sessionRef, (nextEvent) => deliveredEvents.push(nextEvent));
+
+    expect(() => bus.emit(sessionRef, event)).toThrow("simulated subscriber failure");
+    expect(deliveredEvents).toEqual([event]);
+  });
+
   test("does not backlog pending input because runtime snapshot owns its current state", () => {
     const bus = new CodexSessionEventBus();
     const events: AgentEvent[] = [];
