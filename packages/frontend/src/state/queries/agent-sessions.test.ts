@@ -128,16 +128,14 @@ describe("agent session query cache helpers", () => {
     queryClient.setQueryData(queryKey, [sessionFixture]);
     await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
 
-    const hydration = queryClient
-      .fetchQuery(
-        agentSessionListHydrationQueryOptions(
-          queryClient,
-          "/repo",
-          ["task-1"],
-          createReadPort(agentSessionsListForTasksMock),
-        ),
-      )
-      .catch(() => undefined);
+    const hydration = queryClient.fetchQuery(
+      agentSessionListHydrationQueryOptions(
+        queryClient,
+        "/repo",
+        ["task-1"],
+        createReadPort(agentSessionsListForTasksMock),
+      ),
+    );
     await Promise.resolve();
     expect(agentSessionsListForTasksMock).toHaveBeenCalledTimes(1);
 
