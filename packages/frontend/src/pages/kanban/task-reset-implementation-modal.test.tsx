@@ -36,6 +36,9 @@ describe("TaskResetImplementationModal", () => {
     render(<TaskResetImplementationModal model={makeModel(0)} />);
 
     expect(screen.queryByText(/legacy implementation worktree/i)).toBeNull();
+    expect(
+      screen.getByText(/other related local task branches will be deleted if present/i),
+    ).toBeDefined();
   });
 
   test("uses singular wording for one legacy worktree", () => {
