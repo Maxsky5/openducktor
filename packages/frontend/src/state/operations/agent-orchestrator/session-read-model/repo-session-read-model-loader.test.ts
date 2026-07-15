@@ -15,6 +15,8 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
+import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../support/session-runtime-policy";
+import type { ResolveSessionRuntimePolicySync } from "./repo-session-read-model";
 import { loadRepoSessionReadModel } from "./repo-session-read-model-loader";
 import type { TaskSessionRecords } from "./task-session-records";
 
@@ -39,6 +41,16 @@ const secondRecord: AgentSessionRecord = {
   workingDirectory: "/repo/second-worktree",
   startedAt: "2026-06-12T08:05:00.000Z",
   selectedModel: null,
+};
+
+const createTestRuntimePolicyResolver = (): ResolveSessionRuntimePolicySync => {
+  const snapshot = createSettingsSnapshotFixture();
+  return ({ runtimeKind, sessionScope }) =>
+    resolveAgentSessionRuntimePolicyFromSnapshot({
+      runtimeKind,
+      snapshot,
+      ...(sessionScope !== undefined ? { sessionScope } : {}),
+    });
 };
 
 const createCommitSessionCollection = (
@@ -88,9 +100,7 @@ const loadReadModel = async ({
     observeAgentSession,
     clearSessionObservationState,
     loadLiveSessionHistory,
-    loadSettingsSnapshot: async () => {
-      throw new Error("Unexpected settings snapshot load in repo session read model loader test.");
-    },
+    loadSessionRuntimePolicyResolver: async () => createTestRuntimePolicyResolver(),
     isStaleRepoOperation: () => false,
   });
 
@@ -166,10 +176,10 @@ describe("repo session read model loader", () => {
       observeAgentSession: async () => undefined,
       clearSessionObservationState: () => undefined,
       loadLiveSessionHistory: async () => undefined,
-      loadSettingsSnapshot: async () => {
+      loadSessionRuntimePolicyResolver: async () => {
         markSettingsLoadStarted();
         await settingsSnapshotGate;
-        return createSettingsSnapshotFixture();
+        return createTestRuntimePolicyResolver();
       },
       isStaleRepoOperation: () => false,
     });
@@ -296,7 +306,7 @@ describe("repo session read model loader", () => {
       observeAgentSession: async () => undefined,
       clearSessionObservationState: () => undefined,
       loadLiveSessionHistory: async () => undefined,
-      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      loadSessionRuntimePolicyResolver: async () => createTestRuntimePolicyResolver(),
       isStaleRepoOperation: () => false,
     });
 

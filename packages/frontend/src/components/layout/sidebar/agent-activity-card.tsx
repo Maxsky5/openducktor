@@ -6,6 +6,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentActivitySessionItem } from "@/state/read-models/agent-activity-read-model";
 
 type AgentActivityCardProps = {
+  isLoading: boolean;
   activeSessionCount: number;
   waitingForInputCount: number;
   activeSessions: AgentActivitySessionItem[];
@@ -59,13 +60,29 @@ function ActivitySection({
   accentClassName,
 }: {
   label: string;
-  count: number;
+  count: number | null;
   icon: ReactElement;
   iconClassName: string;
   badgeClassName: string;
   sessions: AgentActivitySessionItem[];
   accentClassName: string;
 }): ReactElement {
+  if (count === null) {
+    return (
+      <div
+        className="flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2"
+        role="status"
+        aria-label={`${label} loading`}
+      >
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className={iconClassName}>{icon}</span>
+          <span>{label}</span>
+        </div>
+        <span className={badgeClassName}>…</span>
+      </div>
+    );
+  }
+
   if (count === 0) {
     return (
       <div className="flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2">
@@ -96,6 +113,7 @@ function ActivitySection({
 }
 
 export function AgentActivityCard({
+  isLoading,
   activeSessionCount,
   waitingForInputCount,
   activeSessions,
@@ -113,7 +131,7 @@ export function AgentActivityCard({
       <div className="space-y-2">
         <ActivitySection
           label="Active sessions"
-          count={activeSessionCount}
+          count={isLoading ? null : activeSessionCount}
           icon={<Activity className="size-3.5 text-info-accent" />}
           iconClassName="inline-flex"
           badgeClassName="rounded-full bg-info-surface px-2 py-0.5 font-semibold text-info-muted"
@@ -122,7 +140,7 @@ export function AgentActivityCard({
         />
         <ActivitySection
           label="Needs your input"
-          count={waitingForInputCount}
+          count={isLoading ? null : waitingForInputCount}
           icon={
             <CircleAlert
               className={

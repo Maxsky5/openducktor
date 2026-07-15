@@ -100,6 +100,30 @@ describe("CodexThreadInventoryReader", () => {
     ]);
   });
 
+  test("scopes startup inventory reads to the requested working directories and state database", async () => {
+    const threadListCalls: Array<Record<string, unknown>> = [];
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: [], nextCursor: null }),
+      threadList: async (params: Record<string, unknown>) => {
+        threadListCalls.push(params);
+        return { data: [], nextCursor: null };
+      },
+    } as unknown as CodexAppServerClient;
+
+    await reader.readForDirectories(client, "runtime-1", ["/repo", "/repo/worktree"]);
+
+    expect(threadListCalls).toEqual([
+      {
+        cursor: null,
+        limit: 100,
+        sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
+        cwd: ["/repo", "/repo/worktree"],
+        useStateDbOnly: true,
+      },
+    ]);
+  });
+
   test("reads every parent turn id with summary-only pagination", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const reader = new CodexThreadInventoryReader();

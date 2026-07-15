@@ -39,6 +39,7 @@ const createDeps = (
   threadInventory: {
     read: async () => inventory,
     refresh: async () => inventory,
+    readForDirectories: async () => inventory,
   } as never,
   sessions: {
     get: (threadId) => sessions.find((session) => session.threadId === threadId),
@@ -51,6 +52,55 @@ const createDeps = (
 });
 
 describe("Codex session runtime snapshot reader", () => {
+  test("reads one Codex inventory when local sessions use the resolved runtime", async () => {
+    const thread = createChildThread();
+    const inventory = createInventory(thread);
+    const localSession: CodexSessionState = {
+      summary: {
+        externalSessionId: thread.id,
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        role: null,
+        startedAt: thread.startedAt,
+        status: "running",
+      },
+      systemPrompt: "",
+      role: null,
+      runtimeId: "runtime-1",
+      repoPath: "/repo",
+      threadId: thread.id,
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      liveStatus: codexThreadStatusSnapshot("active"),
+    };
+    const deps = createDeps(inventory, [localSession]);
+    let inventoryReadCount = 0;
+    deps.threadInventory = {
+      read: async () => {
+        inventoryReadCount += 1;
+        return inventory;
+      },
+      refresh: async () => {
+        inventoryReadCount += 1;
+        return inventory;
+      },
+      readForDirectories: async () => {
+        inventoryReadCount += 1;
+        return inventory;
+      },
+    } as never;
+
+    await expect(
+      listCodexSessionRuntimeSnapshots(deps, {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        directories: ["/repo"],
+      }),
+    ).resolves.toHaveLength(1);
+
+    expect(inventoryReadCount).toBe(1);
+  });
+
   test("reads child parent metadata without learning a live route", async () => {
     await expect(
       readCodexSessionRuntimeSnapshot(createDeps(createInventory(createChildThread())), {

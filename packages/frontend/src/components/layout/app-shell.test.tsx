@@ -8,6 +8,7 @@ import { createQueryClient } from "@/lib/query-client";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
+  AgentSessionReadModelStateContext,
   AgentSessionsContext,
   ChecksStateContext,
   RepoRuntimeHealthContext,
@@ -19,6 +20,10 @@ import {
 } from "@/state/app-state-contexts";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  loadingAgentSessionReadModelLoadState,
+  readyAgentSessionReadModelLoadState,
+} from "@/types/agent-session-read-model";
 import type {
   ChecksStateContextValue,
   TasksStateContextValue,
@@ -137,6 +142,7 @@ const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
 type RenderAppShellForTestOptions = {
   isLoadingRuntimeDefinitions?: boolean;
   runtimeDefinitionsError?: string | null;
+  isLoadingSessionReadModel?: boolean;
 };
 
 const createChecksState = (): ChecksStateContextValue => ({
@@ -225,13 +231,24 @@ const renderAppShellForTest = (
                     >
                       <ChecksStateContext.Provider value={createChecksState()}>
                         <TasksStateContext.Provider value={createTasksState()}>
-                          <AgentSessionsContext.Provider value={createAgentSessionsStore("/repo")}>
-                            <Routes>
-                              <Route element={<AppShell />}>
-                                <Route path="/kanban" element={<main>Kanban</main>} />
-                              </Route>
-                            </Routes>
-                          </AgentSessionsContext.Provider>
+                          <AgentSessionReadModelStateContext.Provider
+                            value={{
+                              sessionReadModelLoadState: options.isLoadingSessionReadModel
+                                ? loadingAgentSessionReadModelLoadState("/repo")
+                                : readyAgentSessionReadModelLoadState("/repo"),
+                              reloadSessionReadModel: () => undefined,
+                            }}
+                          >
+                            <AgentSessionsContext.Provider
+                              value={createAgentSessionsStore("/repo")}
+                            >
+                              <Routes>
+                                <Route element={<AppShell />}>
+                                  <Route path="/kanban" element={<main>Kanban</main>} />
+                                </Route>
+                              </Routes>
+                            </AgentSessionsContext.Provider>
+                          </AgentSessionReadModelStateContext.Provider>
                         </TasksStateContext.Provider>
                       </ChecksStateContext.Provider>
                     </RepoRuntimeHealthContext.Provider>
@@ -267,6 +284,13 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
     expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
+  });
+
+  test("does not report zero activity before the session read model is ready", () => {
+    renderAppShellForTest({ isLoadingSessionReadModel: true });
+
+    expect(screen.getByLabelText("Active sessions loading")).toBeTruthy();
+    expect(screen.getByLabelText("Needs your input loading")).toBeTruthy();
   });
 
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {

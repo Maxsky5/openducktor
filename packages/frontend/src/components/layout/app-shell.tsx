@@ -14,7 +14,11 @@ import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
+import {
+  useActiveWorkspace,
+  useAgentSessionReadModelState,
+  useWorkspacePresence,
+} from "@/state/app-state-provider";
 import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
@@ -71,6 +75,10 @@ export const AppShell = memo(function AppShell(): ReactElement {
   const diagnosticsAutoOpenedByRepo = diagnosticsAutoOpenedByRepoRef.current;
   const hasActiveWorkspace = activeWorkspace !== null;
   const isRepositoryModalBlocking = !hasActiveWorkspace && !hasWorkspaces;
+  const { sessionReadModelLoadState } = useAgentSessionReadModelState();
+  const isAgentActivityLoading =
+    sessionReadModelLoadState.kind === "loading" &&
+    sessionReadModelLoadState.workspaceRepoPath === activeWorkspace?.repoPath;
   const agentActivity = useShellAgentActivity(activeWorkspace?.repoPath ?? null);
 
   useEffect(() => {
@@ -155,6 +163,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
 
                   <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} />
                   <AgentActivityCard
+                    isLoading={isAgentActivityLoading}
                     activeSessionCount={agentActivity.activeSessionCount}
                     waitingForInputCount={agentActivity.waitingForInputCount}
                     activeSessions={agentActivity.activeSessions}

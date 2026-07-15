@@ -43,6 +43,7 @@ describe("AgentActivityCard", () => {
         MemoryRouter,
         { initialEntries: ["/kanban"] },
         createElement(AgentActivityCard, {
+          isLoading: false,
           activeSessionCount: 1,
           waitingForInputCount: 1,
           activeSessions: [activeSession],
@@ -69,6 +70,7 @@ describe("AgentActivityCard", () => {
         MemoryRouter,
         { initialEntries: ["/kanban"] },
         createElement(AgentActivityCard, {
+          isLoading: false,
           activeSessionCount: 0,
           waitingForInputCount: 0,
           activeSessions: [],
@@ -79,5 +81,25 @@ describe("AgentActivityCard", () => {
 
     expect(html).not.toContain("No sessions are waiting on user input.");
     expect(html).not.toContain("Open Agents");
+  });
+
+  test("renders indeterminate counters while the session read model is loading", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(AgentActivityCard, {
+          isLoading: true,
+          activeSessionCount: 0,
+          waitingForInputCount: 0,
+          activeSessions: [],
+          waitingForInputSessions: [],
+        }),
+      ),
+    );
+
+    expect(html).toContain('aria-label="Active sessions loading"');
+    expect(html).toContain('aria-label="Needs your input loading"');
+    expect(html).not.toContain(">0<");
   });
 });

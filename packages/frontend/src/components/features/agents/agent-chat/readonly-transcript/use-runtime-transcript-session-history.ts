@@ -42,8 +42,6 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
   target: AgentSessionTranscriptTarget | null;
   repoReadinessState: RepoRuntimeReadinessState;
   liveSession: AgentSessionState | null;
-  visiblePendingApprovals?: readonly AgentSessionState["pendingApprovals"][number][];
-  visiblePendingQuestions?: readonly AgentSessionState["pendingQuestions"][number][];
 };
 
 type RuntimeTranscriptSessionHistory = {
@@ -60,8 +58,6 @@ const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHis
   staleTime: SESSION_HISTORY_STALE_TIME_MS,
   refetchOnWindowFocus: false,
 });
-
-const EMPTY_PENDING_INPUT: readonly never[] = [];
 
 const agentRoleSet = new Set<string>(agentRoleValues);
 
@@ -88,8 +84,6 @@ export function useRuntimeTranscriptSessionHistory({
   target,
   repoReadinessState,
   liveSession,
-  visiblePendingApprovals = liveSession?.pendingApprovals ?? EMPTY_PENDING_INPUT,
-  visiblePendingQuestions = liveSession?.pendingQuestions ?? EMPTY_PENDING_INPUT,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory, replyAgentApproval, answerAgentQuestion, subscribeSessionEvents } =
     useAgentOperations();
@@ -221,8 +215,6 @@ export function useRuntimeTranscriptSessionHistory({
     target: stableTarget,
     sessionRef: runtimeSessionRef,
     baseSession: matchingLiveSession,
-    projectedPendingApprovals: visiblePendingApprovals,
-    projectedPendingQuestions: visiblePendingQuestions,
     history: historyQuery.data,
     shouldMergeHistory: shouldLoadHistory,
     replyAgentApproval,
@@ -262,7 +254,8 @@ export function useRuntimeTranscriptSessionHistory({
     stableTarget,
   ]);
   const interactionSession = liveOverlay.interactionSession ?? matchingLiveSession;
-  const useOverlayInteractionActions = liveOverlay.interactionSession !== null;
+  const useOverlayInteractionActions =
+    matchingLiveSession === null && liveOverlay.interactionSession !== null;
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };

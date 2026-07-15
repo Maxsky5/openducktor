@@ -41,13 +41,13 @@ export function useSessionTranscriptSurfaceModel({
     target,
     repoReadinessState: runtimeReadiness.state,
     liveSession,
-    visiblePendingApprovals: visiblePendingInput.pendingApprovals,
-    visiblePendingQuestions: visiblePendingInput.pendingQuestions,
   });
+  const transientInteractionSession =
+    liveSession === null ? sessionHistory.liveInteractionSession : null;
   const pendingApprovalRequests =
-    sessionHistory.liveInteractionSession?.pendingApprovals ?? visiblePendingInput.pendingApprovals;
+    transientInteractionSession?.pendingApprovals ?? visiblePendingInput.pendingApprovals;
   const pendingQuestionRequests =
-    sessionHistory.liveInteractionSession?.pendingQuestions ?? visiblePendingInput.pendingQuestions;
+    transientInteractionSession?.pendingQuestions ?? visiblePendingInput.pendingQuestions;
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     target,
     pendingApprovalRequests,

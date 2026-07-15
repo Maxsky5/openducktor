@@ -725,6 +725,55 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("keeps loaded-session approval visibility owned by the central session store", async () => {
+    const liveSession = makeLiveTranscriptSession();
+    setLiveTranscriptSessions(liveSession);
+    let listener: ((event: AgentEvent) => void) | null = null;
+    subscribeSessionEvents.mockImplementationOnce(async (_sessionRef, nextListener) => {
+      listener = nextListener;
+      return () => undefined;
+    });
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        workspaceRepoPath: "/repo-a",
+        isOpen: true,
+        target: makeTranscriptTarget(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => listener !== null && state.model.thread.pendingApprovalRequests.length === 1,
+      );
+
+      await harness.run(async () => {
+        listener?.({
+          type: "approval_resolved",
+          externalSessionId: liveSession.externalSessionId,
+          requestId: liveSession.pendingApprovals[0]?.requestId ?? "missing-request",
+          timestamp: "2026-02-22T12:01:00.000Z",
+        });
+      });
+
+      expect(harness.getLatest().model.thread.pendingApprovalRequests).toEqual(
+        liveSession.pendingApprovals,
+      );
+
+      await harness.run(async () => {
+        setLiveTranscriptSessions({ ...liveSession, pendingApprovals: [] });
+      });
+      await harness.waitFor((state) => state.model.thread.pendingApprovalRequests.length === 0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("prefers reconciled pending input over stale projected request ids", async () => {
     const projectedParentSession = makeParentSessionWithMirroredSubagentApproval();
     projectedParentSession.pendingApprovals = projectedParentSession.pendingApprovals.map(

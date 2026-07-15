@@ -15,20 +15,10 @@ import {
 } from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
-type PendingInputOwnership = {
-  projectedRequestIds: ReadonlySet<string>;
-  runtimeRequestIds: ReadonlySet<string>;
-  resolvedRequestIds: ReadonlySet<string>;
-};
-
-type PendingInputEntry = Parameters<typeof pendingInputIdentity>[0];
-
 type RuntimeTranscriptLiveState = {
   session: AgentSessionState;
   hasRuntimeEvents: boolean;
   error: string | null;
-  approvalOwnership: PendingInputOwnership;
-  questionOwnership: PendingInputOwnership;
 };
 
 type RuntimeTranscriptLiveStateUpdater = (
@@ -51,8 +41,6 @@ type UseRuntimeTranscriptLiveOverlayArgs = {
   target: AgentSessionTranscriptTarget | null;
   sessionRef: PolicyBoundSessionRef | null;
   baseSession: AgentSessionState | null;
-  projectedPendingApprovals: readonly AgentSessionState["pendingApprovals"][number][];
-  projectedPendingQuestions: readonly AgentSessionState["pendingQuestions"][number][];
   history: AgentSessionHistoryMessage[] | undefined;
   shouldMergeHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
@@ -75,117 +63,20 @@ const hasVisibleRuntimeData = (session: AgentSessionState): boolean =>
   session.pendingApprovals.length > 0 ||
   session.pendingQuestions.length > 0;
 
-const mergePendingInput = <Entry extends PendingInputEntry>(
-  baseEntries: readonly Entry[],
-  liveEntries: readonly Entry[],
-  ownership: PendingInputOwnership,
+const mergePendingInput = <Entry extends { requestId: string }>(
+  baseEntries: Entry[],
+  runtimeEntries: Entry[],
 ): Entry[] => {
-  const runtimeEntries = liveEntries.filter((entry) => {
-    const requestIdentity = pendingInputIdentity(entry);
-    return (
-      ownership.runtimeRequestIds.has(requestIdentity) &&
-      !ownership.resolvedRequestIds.has(requestIdentity)
-    );
-  });
   const runtimeRequestIds = new Set(runtimeEntries.map((entry) => entry.requestId));
-  const entriesByRequestId = new Map<string, Entry>();
-  for (const entry of baseEntries) {
-    const requestIdentity = pendingInputIdentity(entry);
-    if (
-      !runtimeRequestIds.has(entry.requestId) &&
-      !ownership.resolvedRequestIds.has(requestIdentity)
-    ) {
-      entriesByRequestId.set(requestIdentity, entry);
-    }
-  }
-  for (const entry of runtimeEntries) {
-    const requestIdentity = pendingInputIdentity(entry);
-    entriesByRequestId.set(requestIdentity, entry);
-  }
-  return [...entriesByRequestId.values()];
-};
-
-const createPendingInputOwnership = <Entry extends PendingInputEntry>(
-  projectedEntries: readonly Entry[],
-): PendingInputOwnership => ({
-  projectedRequestIds: new Set(projectedEntries.map(pendingInputIdentity)),
-  runtimeRequestIds: new Set(),
-  resolvedRequestIds: new Set(),
-});
-
-const applyRuntimePendingInputUpdate = <Entry extends PendingInputEntry>(
-  ownership: PendingInputOwnership,
-  previousEntries: readonly Entry[],
-  nextEntries: readonly Entry[],
-): PendingInputOwnership => {
-  const previousEntriesByRequestId = new Map(
-    previousEntries.map((entry) => [pendingInputIdentity(entry), entry]),
-  );
-  const nextRequestIds = new Set(nextEntries.map(pendingInputIdentity));
-  const nextRuntimeRequestIds = new Set(
-    [...ownership.runtimeRequestIds].filter((requestId) => nextRequestIds.has(requestId)),
-  );
-  const nextResolvedRequestIds = new Set(ownership.resolvedRequestIds);
-  for (const entry of previousEntries) {
-    const requestIdentity = pendingInputIdentity(entry);
-    if (!nextRequestIds.has(requestIdentity)) {
-      nextResolvedRequestIds.add(requestIdentity);
-    }
-  }
-  for (const entry of nextEntries) {
-    const requestIdentity = pendingInputIdentity(entry);
-    // Pending-input event handlers replace only the request they update, while unrelated events
-    // preserve entry identity. This keeps projected-only requests owned by the base snapshot.
-    if (previousEntriesByRequestId.get(requestIdentity) !== entry) {
-      nextRuntimeRequestIds.add(requestIdentity);
-      nextResolvedRequestIds.delete(requestIdentity);
-    }
-  }
-  return {
-    ...ownership,
-    runtimeRequestIds: nextRuntimeRequestIds,
-    resolvedRequestIds: nextResolvedRequestIds,
-  };
-};
-
-const applyProjectedPendingInputUpdate = <Entry extends PendingInputEntry>(
-  ownership: PendingInputOwnership,
-  nextEntries: readonly Entry[],
-): PendingInputOwnership => {
-  const nextProjectedRequestIds = new Set(nextEntries.map(pendingInputIdentity));
-  const nextResolvedRequestIds = new Set(ownership.resolvedRequestIds);
-  for (const requestId of ownership.projectedRequestIds) {
-    if (!nextProjectedRequestIds.has(requestId) && !ownership.runtimeRequestIds.has(requestId)) {
-      nextResolvedRequestIds.add(requestId);
-    }
-  }
-  return {
-    ...ownership,
-    projectedRequestIds: nextProjectedRequestIds,
-    resolvedRequestIds: nextResolvedRequestIds,
-  };
-};
-
-const resolvePendingInput = (
-  ownership: PendingInputOwnership,
-  requestId: string,
-): PendingInputOwnership => {
-  const nextRuntimeRequestIds = new Set(ownership.runtimeRequestIds);
-  nextRuntimeRequestIds.delete(requestId);
-  const nextResolvedRequestIds = new Set(ownership.resolvedRequestIds);
-  nextResolvedRequestIds.add(requestId);
-  return {
-    ...ownership,
-    runtimeRequestIds: nextRuntimeRequestIds,
-    resolvedRequestIds: nextResolvedRequestIds,
-  };
+  return [
+    ...baseEntries.filter((entry) => !runtimeRequestIds.has(entry.requestId)),
+    ...runtimeEntries,
+  ];
 };
 
 const mergeBaseSessionIntoLiveOverlay = (
   baseSession: AgentSessionState,
   liveSession: AgentSessionState,
-  approvalOwnership: PendingInputOwnership,
-  questionOwnership: PendingInputOwnership,
 ): AgentSessionState => ({
   ...baseSession,
   status: liveSession.status,
@@ -196,16 +87,8 @@ const mergeBaseSessionIntoLiveOverlay = (
     liveSession.messages,
   ),
   ...(liveSession.contextUsage !== undefined ? { contextUsage: liveSession.contextUsage } : {}),
-  pendingApprovals: mergePendingInput(
-    baseSession.pendingApprovals,
-    liveSession.pendingApprovals,
-    approvalOwnership,
-  ),
-  pendingQuestions: mergePendingInput(
-    baseSession.pendingQuestions,
-    liveSession.pendingQuestions,
-    questionOwnership,
-  ),
+  pendingApprovals: mergePendingInput(baseSession.pendingApprovals, liveSession.pendingApprovals),
+  pendingQuestions: mergePendingInput(baseSession.pendingQuestions, liveSession.pendingQuestions),
   ...(liveSession.pendingUserMessageStartedAt !== undefined
     ? { pendingUserMessageStartedAt: liveSession.pendingUserMessageStartedAt }
     : {}),
@@ -220,8 +103,6 @@ export function useRuntimeTranscriptLiveOverlay({
   target,
   sessionRef,
   baseSession,
-  projectedPendingApprovals,
-  projectedPendingQuestions,
   history,
   shouldMergeHistory,
   replyAgentApproval,
@@ -231,8 +112,6 @@ export function useRuntimeTranscriptLiveOverlay({
   const [liveState, setLiveState] = useState<RuntimeTranscriptLiveState | null>(null);
   const liveStateRef = useRef<RuntimeTranscriptLiveState | null>(null);
   const baseSessionRef = useRef(baseSession);
-  const projectedPendingApprovalsRef = useRef(projectedPendingApprovals);
-  const projectedPendingQuestionsRef = useRef(projectedPendingQuestions);
   const replyAgentApprovalRef = useRef(replyAgentApproval);
   const answerAgentQuestionRef = useRef(answerAgentQuestion);
   const subscribeSessionEventsRef = useRef(subscribeSessionEvents);
@@ -251,54 +130,25 @@ export function useRuntimeTranscriptLiveOverlay({
 
   useEffect(() => {
     baseSessionRef.current = baseSession;
-    projectedPendingApprovalsRef.current = projectedPendingApprovals;
-    projectedPendingQuestionsRef.current = projectedPendingQuestions;
     replyAgentApprovalRef.current = replyAgentApproval;
     answerAgentQuestionRef.current = answerAgentQuestion;
     subscribeSessionEventsRef.current = subscribeSessionEvents;
-  }, [
-    answerAgentQuestion,
-    baseSession,
-    projectedPendingApprovals,
-    projectedPendingQuestions,
-    replyAgentApproval,
-    subscribeSessionEvents,
-  ]);
+  }, [answerAgentQuestion, baseSession, replyAgentApproval, subscribeSessionEvents]);
 
   useEffect(() => {
-    if (target === null) {
+    if (!baseSession || target === null) {
       return;
     }
     updateLiveState((current) => {
-      if (!current || !matchesAgentSessionIdentity(current.session, target)) {
+      if (!current?.hasRuntimeEvents || !matchesAgentSessionIdentity(current.session, target)) {
         return current;
       }
-      const approvalOwnership = applyProjectedPendingInputUpdate(
-        current.approvalOwnership,
-        projectedPendingApprovals,
-      );
-      const questionOwnership = applyProjectedPendingInputUpdate(
-        current.questionOwnership,
-        projectedPendingQuestions,
-      );
-      const projectedBaseSession = {
-        ...(baseSession ?? current.session),
-        pendingApprovals: [...projectedPendingApprovals],
-        pendingQuestions: [...projectedPendingQuestions],
-      };
       return {
         ...current,
-        approvalOwnership,
-        questionOwnership,
-        session: mergeBaseSessionIntoLiveOverlay(
-          projectedBaseSession,
-          current.session,
-          approvalOwnership,
-          questionOwnership,
-        ),
+        session: mergeBaseSessionIntoLiveOverlay(baseSession, current.session),
       };
     });
-  }, [baseSession, projectedPendingApprovals, projectedPendingQuestions, target, updateLiveState]);
+  }, [baseSession, target, updateLiveState]);
 
   useEffect(() => {
     if (!shouldObserve || repoPath === null || target === null || sessionRef === null) {
@@ -321,17 +171,10 @@ export function useRuntimeTranscriptLiveOverlay({
       return createEmptyReadonlyRuntimeSessionState(target);
     };
 
-    const initialSession = {
-      ...ensureSession(),
-      pendingApprovals: [...projectedPendingApprovalsRef.current],
-      pendingQuestions: [...projectedPendingQuestionsRef.current],
-    };
     commitLiveState({
-      session: initialSession,
+      session: ensureSession(),
       hasRuntimeEvents: false,
       error: null,
-      approvalOwnership: createPendingInputOwnership(initialSession.pendingApprovals),
-      questionOwnership: createPendingInputOwnership(initialSession.pendingQuestions),
     });
 
     void observeTransientAgentSessionEvents({
@@ -340,23 +183,11 @@ export function useRuntimeTranscriptLiveOverlay({
       sessionRef,
       readSession: () => liveStateRef.current?.session ?? null,
       applySessionEvent: (updater) => {
-        const currentState = liveStateRef.current;
-        const currentSession = ensureSession();
-        const nextSession = updater(currentSession);
+        const nextSession = updater(ensureSession());
         commitLiveState({
           session: nextSession,
           hasRuntimeEvents: true,
           error: null,
-          approvalOwnership: applyRuntimePendingInputUpdate(
-            currentState?.approvalOwnership ?? createPendingInputOwnership([]),
-            currentSession.pendingApprovals,
-            nextSession.pendingApprovals,
-          ),
-          questionOwnership: applyRuntimePendingInputUpdate(
-            currentState?.questionOwnership ?? createPendingInputOwnership([]),
-            currentSession.pendingQuestions,
-            nextSession.pendingQuestions,
-          ),
         });
         return nextSession;
       },
@@ -376,10 +207,6 @@ export function useRuntimeTranscriptLiveOverlay({
           session: ensureSession(),
           hasRuntimeEvents: false,
           error: errorMessageFromUnknown(error, "Failed to subscribe to transcript updates."),
-          approvalOwnership:
-            liveStateRef.current?.approvalOwnership ?? createPendingInputOwnership([]),
-          questionOwnership:
-            liveStateRef.current?.questionOwnership ?? createPendingInputOwnership([]),
         });
       });
 
@@ -403,8 +230,6 @@ export function useRuntimeTranscriptLiveOverlay({
         session: mergeReadonlyRuntimeHistory(currentSession, history),
         hasRuntimeEvents: current?.hasRuntimeEvents ?? false,
         error: current?.error ?? null,
-        approvalOwnership: current?.approvalOwnership ?? createPendingInputOwnership([]),
-        questionOwnership: current?.questionOwnership ?? createPendingInputOwnership([]),
       };
     });
   }, [history, shouldMergeHistory, target, updateLiveState]);
@@ -425,14 +250,10 @@ export function useRuntimeTranscriptLiveOverlay({
         }
         return {
           ...current,
-          approvalOwnership: resolvePendingInput(
-            current.approvalOwnership,
-            pendingInputIdentity(request),
-          ),
           session: {
             ...current.session,
             pendingApprovals: current.session.pendingApprovals.filter(
-              (entry) => entry.requestId !== request.requestId,
+              (entry) => pendingInputIdentity(entry) !== pendingInputIdentity(request),
             ),
           },
         };
@@ -462,10 +283,6 @@ export function useRuntimeTranscriptLiveOverlay({
         );
         return {
           ...current,
-          questionOwnership: resolvePendingInput(
-            current.questionOwnership,
-            pendingInputIdentity(request),
-          ),
           session: {
             ...current.session,
             pendingQuestions,
