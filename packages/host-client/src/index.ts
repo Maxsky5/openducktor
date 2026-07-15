@@ -77,6 +77,7 @@ const TASK_METHODS = [
   "qaRejected",
   "agentSessionsList",
   "agentSessionDelete",
+  "agentSessionsListForTasks",
   "agentSessionUpsert",
 ] as const satisfies readonly MethodName<HostTaskClient>[];
 

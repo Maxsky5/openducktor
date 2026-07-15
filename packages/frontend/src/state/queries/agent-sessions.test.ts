@@ -1,11 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { host } from "../operations/host";
 import {
+  agentSessionListHydrationQueryOptions,
   agentSessionQueryKeys,
+  hydrateAgentSessionListQueries,
+  invalidateAgentSessionListQuery,
   loadAgentSessionListsFromQuery,
-  upsertAgentSessionRecordInQuery,
 } from "./agent-sessions";
 
 const sessionFixture: AgentSessionRecord = {
@@ -18,125 +20,92 @@ const sessionFixture: AgentSessionRecord = {
 };
 
 describe("agent session query cache helpers", () => {
-  const selectedModelFixture: NonNullable<AgentSessionRecord["selectedModel"]> = {
-    runtimeKind: "opencode",
-    providerId: "anthropic",
-    modelId: "claude-sonnet",
-    variant: "latest",
-    profileId: "work",
-  };
-
-  test("upsertAgentSessionRecordInQuery inserts a missing session record", () => {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
-
-    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", sessionFixture);
-
-    const sessions = queryClient.getQueryData<AgentSessionRecord[]>(
-      agentSessionQueryKeys.list("/repo", "task-1"),
-    );
-
-    expect(sessions).toEqual([sessionFixture]);
+  test("hydration query keys normalize task ordering, whitespace, duplicates, and empty IDs", () => {
+    expect(agentSessionQueryKeys.hydration("/repo", [" task-2 ", "", "task-1", "task-2"])).toEqual([
+      "agent-sessions",
+      "hydrate-lists",
+      "/repo",
+      ["task-1", "task-2"],
+    ]);
   });
 
-  test("upsertAgentSessionRecordInQuery replaces an existing session record with the same identity", () => {
+  test("batch hydration makes one normalized host call and seeds canonical per-task caches", async () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
+    const agentSessionsListForTasksMock = mock(async () => [
+      { taskId: "task-1", agentSessions: [sessionFixture] },
+      { taskId: "unrequested-task", agentSessions: [sessionFixture] },
+    ]);
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    host.agentSessionsListForTasks = agentSessionsListForTasksMock;
 
-    const updatedSession: AgentSessionRecord = {
-      ...sessionFixture,
-      startedAt: "2026-03-22T12:30:00.000Z",
-    };
+    try {
+      const result = await queryClient.fetchQuery(
+        agentSessionListHydrationQueryOptions(queryClient, "/repo", [
+          " task-2 ",
+          "task-1",
+          "task-2",
+        ]),
+      );
 
-    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", updatedSession);
-
-    const sessions = queryClient.getQueryData<AgentSessionRecord[]>(
-      agentSessionQueryKeys.list("/repo", "task-1"),
-    );
-
-    expect(sessions).toEqual([updatedSession]);
+      expect(result).toBe(true);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledTimes(1);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([sessionFixture]);
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-2"),
+        ),
+      ).toEqual([]);
+      expect(
+        queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "unrequested-task")),
+      ).toBeUndefined();
+    } finally {
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+    }
   });
 
-  test("upsertAgentSessionRecordInQuery keeps equivalent session records stable", () => {
+  test("empty hydration does not call the host", async () => {
     const queryClient = new QueryClient();
-    const sessionWithModel: AgentSessionRecord = {
-      ...sessionFixture,
-      selectedModel: selectedModelFixture,
-    };
-    const cachedSessions = [sessionWithModel];
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), cachedSessions);
+    const agentSessionsListForTasksMock = mock(async () => []);
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    host.agentSessionsListForTasks = agentSessionsListForTasksMock;
 
-    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", {
-      ...sessionWithModel,
-      selectedModel: {
-        ...selectedModelFixture,
-      },
-    });
-
-    const sessions = queryClient.getQueryData<AgentSessionRecord[]>(
-      agentSessionQueryKeys.list("/repo", "task-1"),
-    );
-
-    expect(sessions).toBe(cachedSessions);
-    expect(sessions?.[0]).toBe(sessionWithModel);
+    try {
+      await hydrateAgentSessionListQueries(queryClient, "/repo", ["", " "]);
+      expect(agentSessionsListForTasksMock).not.toHaveBeenCalled();
+    } finally {
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+    }
   });
 
-  test("upsertAgentSessionRecordInQuery replaces records when selected model changes", () => {
+  test("invalidation targets only the canonical per-task cache", async () => {
     const queryClient = new QueryClient();
-    const originalSession: AgentSessionRecord = {
-      ...sessionFixture,
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-      },
-    };
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [originalSession]);
+    const firstListKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const secondListKey = agentSessionQueryKeys.list("/repo", "task-2");
+    const hydrationKey = agentSessionQueryKeys.hydration("/repo", ["task-1", "task-2"]);
+    queryClient.setQueryData(firstListKey, []);
+    queryClient.setQueryData(secondListKey, []);
+    queryClient.setQueryData(hydrationKey, true);
 
-    const updatedSession: AgentSessionRecord = {
-      ...originalSession,
-      selectedModel: {
-        runtimeKind: "opencode",
-        providerId: "anthropic",
-        modelId: "claude-opus",
-      },
-    };
-    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", updatedSession);
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
 
-    const sessions = queryClient.getQueryData<AgentSessionRecord[]>(
-      agentSessionQueryKeys.list("/repo", "task-1"),
-    );
-
-    expect(sessions).toEqual([updatedSession]);
+    expect(queryClient.getQueryState(firstListKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(secondListKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(hydrationKey)?.isInvalidated).toBe(false);
   });
 
-  test("upsertAgentSessionRecordInQuery keeps records distinct when only external id matches", () => {
+  test("loadAgentSessionListsFromQuery batch-hydrates the per-task session cache", async () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
-
-    const otherRuntimeSession: AgentSessionRecord = {
-      ...sessionFixture,
-      runtimeKind: "codex",
-      workingDirectory: "/tmp/repo/codex-worktree",
-    };
-
-    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", otherRuntimeSession);
-
-    const sessions = queryClient.getQueryData<AgentSessionRecord[]>(
-      agentSessionQueryKeys.list("/repo", "task-1"),
-    );
-
-    expect(sessions).toEqual([sessionFixture, otherRuntimeSession]);
-  });
-
-  test("loadAgentSessionListsFromQuery reads the per-task session cache", async () => {
-    const queryClient = new QueryClient();
-    const originalAgentSessionsList = host.agentSessionsList;
-    const hostCalls: string[] = [];
-    host.agentSessionsList = async (_repoPath, taskId) => {
-      hostCalls.push(taskId);
-      return taskId === "task-2" ? [] : [sessionFixture];
-    };
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    const agentSessionsListForTasksMock = mock(async () => [
+      { taskId: "task-1", agentSessions: [sessionFixture] },
+      { taskId: "task-2", agentSessions: [] },
+    ]);
+    host.agentSessionsListForTasks = agentSessionsListForTasksMock;
 
     try {
       const sessionsByTaskId = await loadAgentSessionListsFromQuery(queryClient, "/repo", [
@@ -148,7 +117,8 @@ describe("agent session query cache helpers", () => {
         "task-1": [sessionFixture],
         "task-2": [],
       });
-      expect(hostCalls).toEqual(["task-1", "task-2"]);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledTimes(1);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
       expect(
         queryClient.getQueryData<AgentSessionRecord[]>(
           agentSessionQueryKeys.list("/repo", "task-1"),
@@ -160,17 +130,17 @@ describe("agent session query cache helpers", () => {
         ),
       ).toEqual([]);
     } finally {
-      host.agentSessionsList = originalAgentSessionsList;
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     }
   });
 
-  test("loadAgentSessionListsFromQuery uses the same list cache updated by session upserts", async () => {
+  test("loadAgentSessionListsFromQuery reuses hydrated per-task cache entries", async () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
-    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", sessionFixture);
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
+    queryClient.setQueryData(agentSessionQueryKeys.hydration("/repo", ["task-1"]), true);
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => {
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    host.agentSessionsListForTasks = async () => {
       throw new Error("The cached per-task session list should be authoritative.");
     };
 
@@ -183,7 +153,7 @@ describe("agent session query cache helpers", () => {
         "task-1": [sessionFixture],
       });
     } finally {
-      host.agentSessionsList = originalAgentSessionsList;
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     }
   });
 });

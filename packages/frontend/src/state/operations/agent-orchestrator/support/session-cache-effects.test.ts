@@ -23,7 +23,7 @@ const createQueryClient = (): QueryClient =>
   });
 
 describe("createSessionCacheEffects", () => {
-  test("persists through the injected host port and updates the injected query client", async () => {
+  test("persists through the injected host port and invalidates the canonical task query", async () => {
     const queryClient = createQueryClient();
     const upsert = mock(async () => undefined);
     queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
@@ -38,7 +38,10 @@ describe("createSessionCacheEffects", () => {
     expect(upsert).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
     expect(
       queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
-    ).toEqual([sessionRecord]);
+    ).toEqual([]);
+    expect(
+      queryClient.getQueryState(agentSessionQueryKeys.list("/repo", "task-1"))?.isInvalidated,
+    ).toBe(true);
   });
 
   test("fails instead of silently dropping a session record without an active workspace", async () => {

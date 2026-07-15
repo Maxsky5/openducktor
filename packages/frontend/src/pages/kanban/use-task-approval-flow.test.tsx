@@ -61,7 +61,7 @@ const defaultGitPushBranch = async () => ({
 const defaultGitAbortConflict = async () => {};
 const defaultHumanApproveTask = async () => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
-const defaultAgentSessionsList = async () => [
+const defaultAgentSessionsList = async (_repoPath: string, _taskId: string) => [
   {
     ...createAgentSessionFixture({
       externalSessionId: "builder-session-old",
@@ -152,6 +152,13 @@ const buildMockedHost = () => ({
   gitPushBranch: gitPushBranchMock,
   gitAbortConflict: gitAbortConflictMock,
   agentSessionsList: agentSessionsListMock,
+  agentSessionsListForTasks: async (repoPath: string, taskIds: string[]) =>
+    Promise.all(
+      taskIds.map(async (taskId) => ({
+        taskId,
+        agentSessions: await agentSessionsListMock(repoPath, taskId),
+      })),
+    ),
   specGet: async () => ({ markdown: "", updatedAt: null }),
   planGet: async () => ({ markdown: "", updatedAt: null }),
   qaGetReport: async () => ({ markdown: "", updatedAt: null }),
@@ -167,6 +174,7 @@ const HOST_METHOD_NAMES = [
   "gitPushBranch",
   "gitAbortConflict",
   "agentSessionsList",
+  "agentSessionsListForTasks",
   "specGet",
   "planGet",
   "qaGetReport",

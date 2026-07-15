@@ -1901,6 +1901,64 @@ describe("HostClient", () => {
     });
   });
 
+  test("agentSessionsListForTasks uses one command and parses the batch response", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "agent_sessions_list_for_tasks") {
+        return [
+          {
+            taskId: "task-1",
+            agentSessions: [
+              {
+                externalSessionId: "session-opencode-1",
+                role: "spec",
+                startedAt: "2026-02-18T17:20:00Z",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo",
+                selectedModel: null,
+              },
+            ],
+          },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const sessions = await client.agentSessionsListForTasks("/repo", ["task-2", "task-1"]);
+
+    expect(sessions).toHaveLength(1);
+    expect(calls).toEqual([
+      {
+        command: "agent_sessions_list_for_tasks",
+        args: { repoPath: "/repo", taskIds: ["task-2", "task-1"] },
+      },
+    ]);
+  });
+
+  test("agentSessionsListForTasks rejects invalid nested session entries", async () => {
+    const { client } = createClient((command) => {
+      if (command === "agent_sessions_list_for_tasks") {
+        return [
+          {
+            taskId: "task-1",
+            agentSessions: [
+              {
+                externalSessionId: "session-opencode-1",
+                role: "invalid-role",
+                startedAt: "2026-02-18T17:20:00Z",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo",
+                selectedModel: null,
+              },
+            ],
+          },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.agentSessionsListForTasks("/repo", ["task-1"])).rejects.toThrow("role");
+  });
+
   test("agentSessionsList rejects invalid persisted agent session entries", async () => {
     const { client } = createClient((command) => {
       if (command === "task_metadata_get") {

@@ -52,6 +52,7 @@ const createState = (
   const queryClient = new QueryClient();
   const records = Array.isArray(taskRecords) ? taskRecords : [taskRecords];
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), records);
+  queryClient.setQueryData(agentSessionQueryKeys.hydration("/repo", ["task-1"]), true);
   const sessionStore = createAgentSessionsStore("/repo");
   let listener: ((payload: AgentSessionLiveEnvelope) => void) | null = null;
   const callOrder: string[] = [];

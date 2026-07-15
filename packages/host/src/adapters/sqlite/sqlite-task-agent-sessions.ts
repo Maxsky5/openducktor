@@ -1,5 +1,5 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
-import { eq } from "drizzle-orm";
+import type { AgentSessionRecord, TaskAgentSessions } from "@openducktor/contracts";
+import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
@@ -8,6 +8,7 @@ import { agentSessionsFromRow, encodeJson } from "./sqlite-json-codecs";
 import { requireTaskRow } from "./sqlite-task-queries";
 import {
   SqliteTaskStoreDataError,
+  type SqliteTaskStoreReadError,
   type SqliteTaskStoreWriteError,
 } from "./sqlite-task-store-errors";
 import { type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
@@ -27,6 +28,38 @@ const compactAgentSessionForStorage = (
     }),
   );
 };
+
+export const listAgentSessionsForTasks = (
+  session: TaskStoreSession,
+  input: Parameters<TaskStorePort["listAgentSessionsForTasks"]>[0],
+): Effect.Effect<TaskAgentSessions[], SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    const rows = yield* session.execute(
+      (database) =>
+        database
+          .select({
+            id: tasks.id,
+            agentSessionsJson: tasks.agentSessionsJson,
+          })
+          .from(tasks)
+          .where(inArray(tasks.id, input.taskIds)),
+      "sqliteTaskRepository.listAgentSessionsForTasks.selectTasks",
+      { taskIds: input.taskIds },
+    );
+    const rowsByTaskId = new Map(rows.map((row) => [row.id, row]));
+    const results: TaskAgentSessions[] = [];
+    for (const taskId of input.taskIds) {
+      const row = rowsByTaskId.get(taskId);
+      if (!row) {
+        continue;
+      }
+      results.push({
+        taskId,
+        agentSessions: yield* agentSessionsFromRow(row),
+      });
+    }
+    return results;
+  });
 
 export const clearAgentSessionsByRoles = (
   session: TaskStoreSession,

@@ -75,7 +75,6 @@ const sessionIdentity = (externalSessionId: string) => ({
 const startAgentSessionMock = mock(async () => sessionIdentity("session-1"));
 const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
-const agentSessionsListMock = mock(async (_repoPath: string, _taskId: string) => []);
 const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
@@ -144,7 +143,7 @@ type LatestKanbanPageModels = {
 };
 
 type KanbanPageRenderState = {
-  task: TaskCard;
+  tasks: TaskCard[];
   repoConfig: RepoConfig;
   settingsSnapshot: SettingsSnapshot;
   sessions: AgentSessionState[];
@@ -292,12 +291,12 @@ const createAgentOperationsValue = (): AgentOperationsContextValue => ({
 const createTasksStateValue = (
   renderState: Pick<
     KanbanPageRenderState,
-    "task" | "pendingMergedPullRequest" | "linkingMergedPullRequestTaskId"
+    "tasks" | "pendingMergedPullRequest" | "linkingMergedPullRequestTaskId"
   >,
 ): TasksStateContextValue => ({
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
-  tasks: [renderState.task],
+  tasks: renderState.tasks,
   isLoadingTasks: false,
   createTask: async () => {},
   updateTask: async () => {},
@@ -431,10 +430,15 @@ const getKanbanColumnProps = (latest: LatestKanbanPageModels): Record<string, un
 };
 
 const renderPage = async (
-  options: { seedSettingsSnapshot?: boolean; platform?: AppPlatform | null } = {},
+  options: {
+    seedSettingsSnapshot?: boolean;
+    seedAgentSessionLists?: boolean;
+    platform?: AppPlatform | null;
+    tasks?: TaskCard[];
+  } = {},
 ): Promise<KanbanPageHarness> => {
   const renderState: KanbanPageRenderState = {
-    task: currentTaskFixture,
+    tasks: options.tasks ?? [currentTaskFixture],
     repoConfig: currentRepoConfigFixture,
     settingsSnapshot: currentSettingsSnapshotFixture,
     sessions: currentSessionsFixture,
@@ -463,7 +467,18 @@ const renderPage = async (
   if (options.platform !== null) {
     queryClient.setQueryData(systemQueryKeys.platform(), options.platform ?? "darwin");
   }
-  queryClient.setQueryData(agentSessionQueryKeys.list("/repo", renderState.task.id), []);
+  if (options.seedAgentSessionLists !== false) {
+    for (const task of renderState.tasks) {
+      queryClient.setQueryData(agentSessionQueryKeys.list("/repo", task.id), []);
+    }
+    queryClient.setQueryData(
+      agentSessionQueryKeys.hydration(
+        "/repo",
+        renderState.tasks.map((task) => task.id),
+      ),
+      true,
+    );
+  }
   const LocationProbe = (): ReactElement | null => {
     const location = useLocation();
     latest.location = `${location.pathname}${location.search}`;
@@ -735,7 +750,6 @@ describe("KanbanPage session start modal flow", () => {
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
-    agentSessionsListMock.mockClear();
     humanApproveTaskMock.mockClear();
     humanRequestChangesTaskMock.mockClear();
     deleteTaskMock.mockClear();
@@ -752,6 +766,54 @@ describe("KanbanPage session start modal flow", () => {
 
   afterAll(async () => {
     console.error = originalConsoleError;
+  });
+
+  kanbanTest("loads histories for multiple tasks with one batch call", async () => {
+    const secondTask = createTaskCardFixture({ id: "TASK-456", status: "open" });
+    const firstSession = {
+      externalSessionId: "session-task-123",
+      role: "spec" as const,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktrees/TASK-123",
+      selectedModel: null,
+    };
+    const secondSession = {
+      externalSessionId: "session-task-456",
+      role: "build" as const,
+      startedAt: "2026-01-02T00:00:00.000Z",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktrees/TASK-456",
+      selectedModel: null,
+    };
+    const agentSessionsListForTasksMock = mock(async () => [
+      { taskId: "TASK-123", agentSessions: [firstSession] },
+      { taskId: "TASK-456", agentSessions: [secondSession] },
+    ]);
+    const originalAgentSessionsListForTasks = hostClient.agentSessionsListForTasks;
+    hostClient.agentSessionsListForTasks = agentSessionsListForTasksMock;
+
+    const renderer = await renderPage({
+      seedAgentSessionLists: false,
+      tasks: [currentTaskFixture, secondTask],
+    });
+
+    try {
+      await waitForMockCall(agentSessionsListForTasksMock);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledTimes(1);
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-123", "TASK-456"]);
+      expect(renderer.getKanbanColumnProps().historicalSessionsByTaskId).toEqual(
+        new Map([
+          ["TASK-123", [firstSession]],
+          ["TASK-456", [secondSession]],
+        ]),
+      );
+    } finally {
+      hostClient.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+      await act(async () => {
+        renderer.unmount();
+      });
+    }
   });
 
   kanbanTest(
