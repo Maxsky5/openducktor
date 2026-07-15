@@ -139,4 +139,62 @@ describe("useAgentSessionLists", () => {
       queryClient.clear();
     }
   });
+
+  test("does not retry a failed exact refetch when startup hydration enables the task query", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    let resolveInitialBatch: (
+      value: { taskId: string; agentSessions: AgentSessionRecord[] }[],
+    ) => void = () => {
+      throw new Error("Initial batch resolver was not initialized.");
+    };
+    const batchList = mock(
+      async (_repoPath: string, _taskIds: string[]) =>
+        new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
+          resolveInitialBatch = resolve;
+        }),
+    );
+    const singleList = mock(async (_repoPath: string, _taskId: string) => {
+      throw new Error("exact refresh failed");
+    });
+    const harness = createHookHarness(
+      () =>
+        useAgentSessionLists({
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          enabled: true,
+          queryClient,
+          readPort: {
+            agentSessionsList: singleList,
+            agentSessionsListForTasks: batchList,
+          },
+        }),
+      undefined,
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => batchList.mock.calls.length === 1);
+      await harness.run(async () => {
+        await expect(
+          invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+            refetchType: "all",
+          }),
+        ).rejects.toThrow("exact refresh failed");
+        resolveInitialBatch([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
+      });
+      await harness.waitFor(
+        (current) =>
+          current.error instanceof Error && current.error.message === "exact refresh failed",
+      );
+
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(singleList).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isPending).toBe(false);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
 });
