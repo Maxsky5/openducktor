@@ -6,9 +6,14 @@ import {
   toAgentRuntimePolicyBinding,
 } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import {
+  type AgentSessionCollection,
+  getAgentSession,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { appendSessionMessage } from "../support/messages";
+import { fromPersistedSessionRecord } from "../support/persistence";
 import { buildSessionErrorNoticeMessage } from "../support/session-notice-messages";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import type { ResolveSessionRuntimePolicySync } from "./adapters/session-runtime-policy-resolver";
@@ -25,6 +30,20 @@ type LoadSessionRuntimePolicyResolver = (
 type SessionObserverFailure = {
   session: PolicyBoundSessionRef;
   message: string;
+};
+
+const materializePersistedSessionBaseline = (
+  currentSessionCollection: AgentSessionCollection,
+  taskSessionRecords: TaskSessionRecords,
+): AgentSessionCollection => {
+  let baseline = currentSessionCollection;
+  for (const { taskId, record } of taskSessionRecords.records) {
+    const persistedSession = fromPersistedSessionRecord({ taskId, record });
+    if (!getAgentSession(baseline, persistedSession)) {
+      baseline = replaceAgentSession(baseline, persistedSession);
+    }
+  }
+  return baseline;
 };
 
 const observeLiveSessions = async ({
@@ -127,10 +146,16 @@ export const loadRepoSessionReadModel = async ({
     return false;
   }
 
-  const runtimeSnapshotBaseline = commitSessionCollection((currentSessionCollection) => ({
-    collection: currentSessionCollection,
-    result: currentSessionCollection,
-  }));
+  const runtimeSnapshotBaseline = commitSessionCollection((currentSessionCollection) => {
+    const baseline = materializePersistedSessionBaseline(
+      currentSessionCollection,
+      taskSessionRecords,
+    );
+    return {
+      collection: baseline,
+      result: baseline,
+    };
+  });
   const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
     repoPath,
     tasks: taskSessionRecords,
