@@ -1,9 +1,6 @@
 import type { AgentSessionIdentity, AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import {
-  agentSessionListQueryOptions,
-  invalidateAgentSessionListQuery,
-} from "@/state/queries/agent-sessions";
+import { invalidateAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 import { requireWorkspaceRepoPath } from "./session-invariants";
@@ -13,7 +10,7 @@ type CreateSessionCacheEffectsArgs = {
   queryClient: QueryClient;
   hostPort: Pick<
     AgentOrchestratorHostPort,
-    "agentSessionDelete" | "agentSessionsList" | "agentSessionUpsert"
+    "agentSessionDelete" | "agentSessionUpsert"
   >;
 };
 
@@ -28,11 +25,8 @@ export const createSessionCacheEffects = ({
   ): Promise<void> => {
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await hostPort.agentSessionUpsert(repoPath, taskId, record);
-    await invalidateAgentSessionListQuery(queryClient, repoPath, taskId);
-    await queryClient.fetchQuery({
-      ...agentSessionListQueryOptions(repoPath, taskId),
-      queryFn: () => hostPort.agentSessionsList(repoPath, taskId),
-      staleTime: 0,
+    await invalidateAgentSessionListQuery(queryClient, repoPath, taskId, {
+      refetchType: "all",
     });
   };
 

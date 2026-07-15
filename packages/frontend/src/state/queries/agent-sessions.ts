@@ -157,11 +157,11 @@ export const invalidateAgentSessionListQuery = (
   repoPath: string,
   taskId: string,
   options?: {
-    refetchActive?: boolean;
+    refetchType?: "active" | "all";
   },
 ): Promise<void> =>
   queryClient.invalidateQueries({
     queryKey: agentSessionQueryKeys.list(repoPath, taskId),
     exact: true,
-    refetchType: options?.refetchActive === true ? "active" : "none",
+    refetchType: options?.refetchType ?? "none",
   });

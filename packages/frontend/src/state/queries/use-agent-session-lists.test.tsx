@@ -60,7 +60,7 @@ describe("useAgentSessionLists", () => {
 
       await harness.run(async () => {
         await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
-          refetchActive: true,
+          refetchType: "active",
         });
       });
       expect(singleList).toHaveBeenCalledTimes(1);

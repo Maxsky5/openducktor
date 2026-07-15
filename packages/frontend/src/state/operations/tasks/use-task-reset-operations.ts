@@ -76,7 +76,7 @@ const invalidateTaskWorkflowQueries = async (
       exact: true,
       refetchType: "none",
     }),
-    invalidateAgentSessionListQuery(queryClient, repoPath, taskId, { refetchActive: true }),
+    invalidateAgentSessionListQuery(queryClient, repoPath, taskId, { refetchType: "active" }),
     queryClient.invalidateQueries({
       queryKey: documentQueryKeys.spec(repoPath, taskId),
       exact: true,

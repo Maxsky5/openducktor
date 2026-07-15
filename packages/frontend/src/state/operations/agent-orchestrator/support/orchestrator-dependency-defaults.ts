@@ -8,7 +8,6 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
   hostPort: {
     agentSessionDelete: (repoPath, taskId, identity) =>
       host.agentSessionDelete(repoPath, taskId, identity),
-    agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
     agentSessionUpsert: (repoPath, taskId, record) =>
       host.agentSessionUpsert(repoPath, taskId, record),
     taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
