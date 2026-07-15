@@ -48,6 +48,7 @@ export const hydrateAgentSessionListQueries = async (
   repoPath: string,
   taskIds: string[],
   readPort: AgentSessionReadPort = host,
+  signal?: AbortSignal,
 ): Promise<void> => {
   const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
   if (normalizedTaskIds.length === 0) {
@@ -79,6 +80,7 @@ export const hydrateAgentSessionListQueries = async (
   if (missingTaskId) {
     throw new Error(`Batch session response omitted task "${missingTaskId}".`);
   }
+  signal?.throwIfAborted();
 
   for (const taskId of normalizedTaskIds) {
     const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
@@ -106,8 +108,14 @@ export const agentSessionListHydrationQueryOptions = (
   const normalizedTaskIds = queryKey[3];
   return queryOptions({
     queryKey,
-    queryFn: async (): Promise<true> => {
-      await hydrateAgentSessionListQueries(queryClient, repoPath, normalizedTaskIds, readPort);
+    queryFn: async ({ signal }): Promise<true> => {
+      await hydrateAgentSessionListQueries(
+        queryClient,
+        repoPath,
+        normalizedTaskIds,
+        readPort,
+        signal,
+      );
       return true;
     },
     staleTime: AGENT_SESSION_LIST_STALE_TIME,
@@ -181,16 +189,29 @@ export const loadAgentSessionListsFromQuery = async (
   return Object.fromEntries(entries);
 };
 
-export const invalidateAgentSessionListQuery = (
+export const invalidateAgentSessionListQuery = async (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
   options?: {
     refetchType?: "active" | "all";
   },
-): Promise<void> =>
-  queryClient.invalidateQueries({
+): Promise<void> => {
+  await queryClient.cancelQueries({
+    predicate: (query) => {
+      const [root, kind, queryRepoPath, queryTaskIds] = query.queryKey;
+      return (
+        root === agentSessionQueryKeys.all[0] &&
+        kind === "hydrate-missing-lists" &&
+        queryRepoPath === repoPath &&
+        Array.isArray(queryTaskIds) &&
+        queryTaskIds.includes(taskId)
+      );
+    },
+  });
+  await queryClient.invalidateQueries({
     queryKey: agentSessionQueryKeys.list(repoPath, taskId),
     exact: true,
     refetchType: options?.refetchType ?? "none",
   });
+};

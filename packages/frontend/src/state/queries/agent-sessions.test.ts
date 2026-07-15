@@ -112,6 +112,48 @@ describe("agent session query cache helpers", () => {
     expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([newerSession]);
   });
 
+  test("batch hydration does not overwrite an invalidation repeated while already invalidated", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    let resolveBatch: (value: { taskId: string; agentSessions: AgentSessionRecord[] }[]) => void =
+      () => {
+        throw new Error("Batch resolver was not initialized.");
+      };
+    const agentSessionsListForTasksMock = mock(
+      () =>
+        new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
+          resolveBatch = resolve;
+        }),
+    );
+    queryClient.setQueryData(queryKey, [sessionFixture]);
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
+
+    const hydration = queryClient
+      .fetchQuery(
+        agentSessionListHydrationQueryOptions(
+          queryClient,
+          "/repo",
+          ["task-1"],
+          createReadPort(agentSessionsListForTasksMock),
+        ),
+      )
+      .catch(() => undefined);
+    await Promise.resolve();
+    expect(agentSessionsListForTasksMock).toHaveBeenCalledTimes(1);
+
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
+    resolveBatch([
+      {
+        taskId: "task-1",
+        agentSessions: [{ ...sessionFixture, externalSessionId: "stale-session" }],
+      },
+    ]);
+    await hydration;
+
+    expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([sessionFixture]);
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
+  });
+
   test("invalidation targets only the canonical per-task cache", async () => {
     const queryClient = new QueryClient();
     const firstListKey = agentSessionQueryKeys.list("/repo", "task-1");
