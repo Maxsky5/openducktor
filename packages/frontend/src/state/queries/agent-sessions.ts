@@ -3,11 +3,35 @@ import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
 const AGENT_SESSION_LIST_STALE_TIME = Number.POSITIVE_INFINITY;
+const invalidationVersionsByQueryClient = new WeakMap<QueryClient, Map<string, number>>();
 
 export type AgentSessionReadPort = Pick<
   typeof host,
   "agentSessionsList" | "agentSessionsListForTasks"
 >;
+
+const agentSessionInvalidationVersionKey = (repoPath: string, taskId: string): string =>
+  JSON.stringify([repoPath, taskId]);
+
+const getAgentSessionInvalidationVersion = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): number =>
+  invalidationVersionsByQueryClient
+    .get(queryClient)
+    ?.get(agentSessionInvalidationVersionKey(repoPath, taskId)) ?? 0;
+
+const incrementAgentSessionInvalidationVersion = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): void => {
+  const versions = invalidationVersionsByQueryClient.get(queryClient) ?? new Map<string, number>();
+  const versionKey = agentSessionInvalidationVersionKey(repoPath, taskId);
+  versions.set(versionKey, (versions.get(versionKey) ?? 0) + 1);
+  invalidationVersionsByQueryClient.set(queryClient, versions);
+};
 
 export const normalizeAgentSessionTaskIds = (taskIds: string[]): string[] =>
   Array.from(
@@ -48,7 +72,6 @@ export const hydrateAgentSessionListQueries = async (
   repoPath: string,
   taskIds: string[],
   readPort: AgentSessionReadPort = host,
-  signal?: AbortSignal,
 ): Promise<void> => {
   const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
   if (normalizedTaskIds.length === 0) {
@@ -60,6 +83,12 @@ export const hydrateAgentSessionListQueries = async (
     normalizedTaskIds.map((taskId) => [
       taskId,
       queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId)),
+    ]),
+  );
+  const initialInvalidationVersions = new Map(
+    normalizedTaskIds.map((taskId) => [
+      taskId,
+      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId),
     ]),
   );
   const taskSessions = await readPort.agentSessionsListForTasks(repoPath, normalizedTaskIds);
@@ -80,8 +109,6 @@ export const hydrateAgentSessionListQueries = async (
   if (missingTaskId) {
     throw new Error(`Batch session response omitted task "${missingTaskId}".`);
   }
-  signal?.throwIfAborted();
-
   for (const taskId of normalizedTaskIds) {
     const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
     const initialState = initialQueryStates.get(taskId);
@@ -91,7 +118,10 @@ export const hydrateAgentSessionListQueries = async (
       (currentState?.errorUpdateCount ?? 0) !== (initialState?.errorUpdateCount ?? 0);
     const invalidatedAfterBatchStarted =
       initialState?.isInvalidated !== true && currentState?.isInvalidated === true;
-    if (generationChanged || invalidatedAfterBatchStarted) {
+    const invalidationVersionChanged =
+      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !==
+      initialInvalidationVersions.get(taskId);
+    if (generationChanged || invalidatedAfterBatchStarted || invalidationVersionChanged) {
       continue;
     }
     queryClient.setQueryData(queryKey, sessionsByTaskId.get(taskId));
@@ -108,14 +138,8 @@ export const agentSessionListHydrationQueryOptions = (
   const normalizedTaskIds = queryKey[3];
   return queryOptions({
     queryKey,
-    queryFn: async ({ signal }): Promise<true> => {
-      await hydrateAgentSessionListQueries(
-        queryClient,
-        repoPath,
-        normalizedTaskIds,
-        readPort,
-        signal,
-      );
+    queryFn: async (): Promise<true> => {
+      await hydrateAgentSessionListQueries(queryClient, repoPath, normalizedTaskIds, readPort);
       return true;
     },
     staleTime: AGENT_SESSION_LIST_STALE_TIME,
@@ -197,18 +221,7 @@ export const invalidateAgentSessionListQuery = async (
     refetchType?: "active" | "all";
   },
 ): Promise<void> => {
-  await queryClient.cancelQueries({
-    predicate: (query) => {
-      const [root, kind, queryRepoPath, queryTaskIds] = query.queryKey;
-      return (
-        root === agentSessionQueryKeys.all[0] &&
-        kind === "hydrate-missing-lists" &&
-        queryRepoPath === repoPath &&
-        Array.isArray(queryTaskIds) &&
-        queryTaskIds.includes(taskId)
-      );
-    },
-  });
+  incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
   await queryClient.invalidateQueries({
     queryKey: agentSessionQueryKeys.list(repoPath, taskId),
     exact: true,
