@@ -258,6 +258,9 @@ export const createElectronAppUpdateService = ({
   }
 
   const publishState = (nextState: AppUpdateState): AppUpdateState => {
+    if (disposed) {
+      return state;
+    }
     state = nextState;
     for (const listener of listeners) {
       listener(state);
@@ -307,6 +310,13 @@ export const createElectronAppUpdateService = ({
       operation,
     });
   };
+
+  const rejectDisposed = (operation: AppUpdateOperation): AppUpdateCommandResult =>
+    commandRejected({
+      code: "updater_unavailable",
+      message: "Electron updater is no longer available because the app is shutting down.",
+      operation,
+    });
 
   const rejectInvalidState = (
     operation: AppUpdateOperation,
@@ -388,7 +398,7 @@ export const createElectronAppUpdateService = ({
 
   const flushDownloadProgress = (): void => {
     downloadProgressThrottleHandle = null;
-    if (pendingDownloadProgress === null || state.status !== "downloading") {
+    if (disposed || pendingDownloadProgress === null || state.status !== "downloading") {
       pendingDownloadProgress = null;
       return;
     }
@@ -403,7 +413,7 @@ export const createElectronAppUpdateService = ({
   };
 
   const applyDownloadProgress = (progress: ElectronUpdaterDownloadProgress): void => {
-    if (state.status !== "downloading") {
+    if (disposed || state.status !== "downloading") {
       return;
     }
     if (downloadProgressThrottleHandle === null) {
@@ -418,7 +428,7 @@ export const createElectronAppUpdateService = ({
   };
 
   const applyDownloaded = (info: ElectronUpdaterUpdateInfo): void => {
-    if (state.status !== "downloading") {
+    if (disposed || state.status !== "downloading") {
       return;
     }
     clearDownloadProgressThrottle();
@@ -461,6 +471,9 @@ export const createElectronAppUpdateService = ({
   };
 
   const applyAdapterError = (cause: unknown): void => {
+    if (disposed) {
+      return;
+    }
     const previousState = state;
     if (previousState.status === "downloaded" && previousState.installRetryDisabled === true) {
       logger.warn("Ignoring Electron updater error after terminal install failure", cause);
@@ -499,6 +512,9 @@ export const createElectronAppUpdateService = ({
   };
 
   const initializeUpdater = async (): Promise<boolean> => {
+    if (disposed) {
+      return false;
+    }
     if (updaterReady) {
       return true;
     }
@@ -587,6 +603,9 @@ export const createElectronAppUpdateService = ({
 
   const service: ElectronAppUpdateService = {
     check: async ({ initiator }) => {
+      if (disposed) {
+        return rejectDisposed("check");
+      }
       const currentState = state;
       if (currentState.status === "disabled") {
         publishState(markDisabledManualCheck(currentState, initiator, now()));
@@ -619,7 +638,11 @@ export const createElectronAppUpdateService = ({
       installHandoffStarted = false;
       publishState(markChecking({ currentVersion, initiator, previousState: currentState }));
       try {
-        if (!(await initializeUpdater())) {
+        const initialized = await initializeUpdater();
+        if (disposed) {
+          return rejectDisposed("check");
+        }
+        if (!initialized) {
           const unavailableState = state;
           if (unavailableState.status === "disabled") {
             if (initiator !== "background") {
@@ -634,6 +657,9 @@ export const createElectronAppUpdateService = ({
         }
 
         const result = await adapter.checkForUpdates();
+        if (disposed) {
+          return rejectDisposed("check");
+        }
         if (state.status === "checking") {
           if (result.isUpdateAvailable) {
             applyAvailable(result.updateInfo.version);
@@ -644,6 +670,9 @@ export const createElectronAppUpdateService = ({
         logger.info(`OpenDucktor update check completed (${initiator})`);
         return commandAccepted();
       } catch (cause) {
+        if (disposed) {
+          return rejectDisposed("check");
+        }
         logger.error("OpenDucktor update check failed", cause);
         setErrorState({
           checkedAt: now(),
@@ -678,6 +707,9 @@ export const createElectronAppUpdateService = ({
       await adapter.dispose();
     },
     download: async () => {
+      if (disposed) {
+        return rejectDisposed("download");
+      }
       if (state.status === "disabled") {
         return rejectDisabled("download", state);
       }
@@ -706,10 +738,16 @@ export const createElectronAppUpdateService = ({
       );
       try {
         const result = await adapter.downloadUpdate();
+        if (disposed) {
+          return rejectDisposed("download");
+        }
         applyDownloaded(result);
         logger.info("OpenDucktor update download completed");
         return commandAccepted();
       } catch (cause) {
+        if (disposed) {
+          return rejectDisposed("download");
+        }
         clearDownloadProgressThrottle();
         logger.error("OpenDucktor update download failed", cause);
         const checkedAt = checkedAtFromState(state);
@@ -728,6 +766,9 @@ export const createElectronAppUpdateService = ({
     },
     getState: () => state,
     install: async () => {
+      if (disposed) {
+        return rejectDisposed("install");
+      }
       if (state.status === "disabled") {
         return rejectDisabled("install", state);
       }
@@ -750,10 +791,19 @@ export const createElectronAppUpdateService = ({
       publishState(markDownloadedInstallRequested(downloadedState));
       try {
         const installHandoff = await adapter.prepareInstall();
+        if (disposed) {
+          return rejectDisposed("install");
+        }
         installHandoffStarted = true;
         await installDownloadedUpdate(installHandoff);
+        if (disposed) {
+          return rejectDisposed("install");
+        }
         return commandAccepted();
       } catch (cause) {
+        if (disposed) {
+          return rejectDisposed("install");
+        }
         logger.error("OpenDucktor update install failed", cause);
         const previousState = state.status === "downloaded" ? state : downloadedState;
         applyInstallFailure(cause, previousState);
@@ -776,6 +826,9 @@ export const createElectronAppUpdateService = ({
       );
     },
     subscribe: (listener) => {
+      if (disposed) {
+        return () => {};
+      }
       listeners.add(listener);
       return () => {
         listeners.delete(listener);

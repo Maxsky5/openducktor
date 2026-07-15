@@ -59,7 +59,19 @@ export const createElectronUpdaterAdapter = ({
   let loadedUpdater: AppUpdater | undefined;
   let resolvedRelease: GitHubRelease | undefined;
   let updaterPromise: Promise<AppUpdater> | undefined;
+  let disposed = false;
   const listeners = createEventListeners();
+
+  const requireActive = (operation: string): void => {
+    if (!disposed) {
+      return;
+    }
+    throw new ElectronOperationError({
+      operation,
+      message: "Electron updater is no longer available because the app is shutting down.",
+      platform,
+    });
+  };
 
   const emit = <EventName extends keyof ElectronUpdaterEventMap>(
     eventName: EventName,
@@ -112,8 +124,10 @@ export const createElectronUpdaterAdapter = ({
   };
 
   const getUpdater = (): Promise<AppUpdater> => {
+    requireActive("electron.updater.initialize");
     requireConfiguration();
     updaterPromise ??= loadUpdater().then((updater) => {
+      requireActive("electron.updater.initialize");
       configureNativeUpdater(updater, requireConfiguration());
       attachNativeListeners(updater);
       loadedUpdater = updater;
@@ -124,21 +138,29 @@ export const createElectronUpdaterAdapter = ({
 
   return {
     checkForUpdates: async () => {
+      requireActive("electron.updater.check");
       const { channel } = requireConfiguration();
-      resolvedRelease = await releaseSource.resolve(channel);
-      const updateInfo = { version: resolvedRelease.version };
+      const release = await releaseSource.resolve(channel);
+      requireActive("electron.updater.check");
+      resolvedRelease = release;
+      const updateInfo = { version: release.version };
       return {
-        isUpdateAvailable: compareReleaseVersions(resolvedRelease.version, currentVersion) > 0,
+        isUpdateAvailable: compareReleaseVersions(release.version, currentVersion) > 0,
         updateInfo,
       } satisfies ElectronUpdaterCheckResult;
     },
     configure: (options) => {
+      requireActive("electron.updater.configure");
       configuration = options;
       if (loadedUpdater) {
         configureNativeUpdater(loadedUpdater, options);
       }
     },
     dispose: async () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       if (loadedUpdater) {
         detachNativeListeners(loadedUpdater);
       }
@@ -147,6 +169,7 @@ export const createElectronUpdaterAdapter = ({
       }
     },
     downloadUpdate: async () => {
+      requireActive("electron.updater.download");
       if (!resolvedRelease) {
         throw new ElectronOperationError({
           operation: "electron.updater.prepare-download",
@@ -155,7 +178,9 @@ export const createElectronUpdaterAdapter = ({
         });
       }
       const updater = await getUpdater();
+      requireActive("electron.updater.download");
       const nativeResult = await updater.checkForUpdates();
+      requireActive("electron.updater.download");
       const nativeVersion = nativeResult?.updateInfo.version;
       if (
         !nativeResult?.isUpdateAvailable ||
@@ -169,15 +194,18 @@ export const createElectronUpdaterAdapter = ({
         });
       }
       await updater.downloadUpdate();
+      requireActive("electron.updater.download");
       return { version: resolvedRelease.version };
     },
     on: (eventName, listener) => {
+      requireActive("electron.updater.subscribe");
       listeners[eventName].add(listener);
       return () => {
         listeners[eventName].delete(listener);
       };
     },
     prepareInstall: async (): Promise<ElectronInstallHandoff> => {
+      requireActive("electron.updater.prepare-install");
       if (!loadedUpdater) {
         throw new ElectronOperationError({
           operation: "electron.updater.prepare-install",

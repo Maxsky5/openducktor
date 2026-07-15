@@ -8,7 +8,10 @@ const release = (tagName: string, isPrerelease = tagName.includes("-")) => ({
 
 describe("GitHub release source", () => {
   test("uses GitHub's stable latest-release endpoint", async () => {
-    const fetch = mock(async () => Response.json(release("v0.5.0", false)));
+    const fetch = mock(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return Response.json(release("v0.5.0", false));
+    });
     const source = createGitHubReleaseSource({ fetch, owner: "Maxsky5", repo: "openducktor" });
 
     await expect(source.resolve(null)).resolves.toMatchObject({ version: "0.5.0" });
@@ -33,6 +36,16 @@ describe("GitHub release source", () => {
 
     await expect(source.resolve("beta")).resolves.toMatchObject({ version: "0.6.0-beta.1" });
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("ignores unrelated non-semver tags while resolving a prerelease channel", async () => {
+    const source = createGitHubReleaseSource({
+      fetch: mock(async () => Response.json([release("nightly", false), release("v0.6.0-beta.1")])),
+      owner: "Maxsky5",
+      repo: "openducktor",
+    });
+
+    await expect(source.resolve("beta")).resolves.toMatchObject({ version: "0.6.0-beta.1" });
   });
 
   test("discovers prerelease channels whose first identifier is numeric", async () => {

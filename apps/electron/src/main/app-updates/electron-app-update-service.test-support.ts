@@ -12,6 +12,7 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   checkCalls = 0;
   configureError: unknown = null;
   configureOptions: ElectronUpdaterConfigureOptions | null = null;
+  disposeCalls = 0;
   downloadCalls = 0;
   installCalls: Array<{ isForceRunAfter: boolean | undefined; isSilent: boolean | undefined }> = [];
   nativeInstallListeners = 0;
@@ -45,7 +46,9 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
     return this.nextDownloadResult;
   }
 
-  async dispose(): Promise<void> {}
+  async dispose(): Promise<void> {
+    this.disposeCalls += 1;
+  }
 
   emit<EventName extends keyof ElectronUpdaterEventMap>(
     eventName: EventName,

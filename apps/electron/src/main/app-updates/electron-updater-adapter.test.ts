@@ -121,6 +121,38 @@ describe("electron updater adapter", () => {
     expect(nativeUpdater.logger).toBe(logger);
   });
 
+  test("does not finish pending native updater initialization after disposal", async () => {
+    const nativeUpdater = new FakeNativeUpdater();
+    let finishLoading: (updater: FakeNativeUpdater) => void = () => {};
+    const loadUpdater = mock(
+      () =>
+        new Promise<FakeNativeUpdater>((resolve) => {
+          finishLoading = resolve;
+        }),
+    );
+    const adapter = createElectronUpdaterAdapter({
+      currentVersion: "0.4.4",
+      loadUpdater,
+      platform: "win32",
+      releaseSource: createReleaseSource(),
+    });
+    configure(adapter);
+    await adapter.checkForUpdates();
+
+    const downloadResult = adapter.downloadUpdate();
+    const settledDownload = downloadResult.then(
+      () => ({ error: null }),
+      (error: unknown) => ({ error }),
+    );
+    await adapter.dispose();
+    finishLoading(nativeUpdater);
+
+    const { error } = await settledDownload;
+    expect(error).toMatchObject({ operation: "electron.updater.initialize" });
+    expect(nativeUpdater.on).not.toHaveBeenCalled();
+    expect(nativeUpdater.checkForUpdates).not.toHaveBeenCalled();
+  });
+
   test("rejects download when native metadata disagrees with the GitHub release", async () => {
     const nativeUpdater = new FakeNativeUpdater();
     nativeUpdater.checkForUpdates.mockImplementation(async () => ({

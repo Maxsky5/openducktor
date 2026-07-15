@@ -304,6 +304,37 @@ describe("electron app update service", () => {
     expect(adapter.checkCalls).toBe(0);
   });
 
+  test("fences a pending check when disposal begins", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    let resolveCheck: (result: ElectronUpdaterCheckResult) => void = () => {};
+    adapter.nextCheckResult = new Promise((resolve) => {
+      resolveCheck = resolve;
+    });
+    const { service } = createService({ adapter });
+    const states: AppUpdateState[] = [];
+    service.subscribe((state) => states.push(state));
+
+    const checkResult = service.check({ initiator: "settings" });
+    await flushAsyncWork();
+    expect(adapter.checkCalls).toBe(1);
+
+    await service.dispose();
+    resolveCheck({ isUpdateAvailable: true, updateInfo: { version: "0.4.3" } });
+
+    await expect(checkResult).resolves.toMatchObject({
+      accepted: false,
+      rejection: { code: "updater_unavailable", operation: "check" },
+    });
+    expect(states.map((state) => state.status)).toEqual(["checking"]);
+    expect(adapter.disposeCalls).toBe(1);
+
+    await expect(service.check({ initiator: "settings" })).resolves.toMatchObject({
+      accepted: false,
+      rejection: { code: "updater_unavailable", operation: "check" },
+    });
+    expect(adapter.checkCalls).toBe(1);
+  });
+
   test("checks manually and publishes an available update state", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {

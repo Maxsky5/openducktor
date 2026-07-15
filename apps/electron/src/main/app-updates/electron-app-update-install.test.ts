@@ -64,6 +64,35 @@ describe("electron app update install handoff", () => {
     expect(canInstallAppUpdate(result.state)).toBe(true);
   });
 
+  test("does not start the install handoff after disposal begins", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    let finishPreparation: () => void = () => {};
+    adapter.onPrepareInstall = () =>
+      new Promise<void>((resolve) => {
+        finishPreparation = resolve;
+      });
+    const installDownloadedUpdate = mock(async () => {});
+    const { service } = createService({ adapter, installDownloadedUpdate });
+    await service.check({ initiator: "settings" });
+    await service.download();
+
+    const installResult = service.install();
+    await Promise.resolve();
+    await service.dispose();
+    finishPreparation();
+
+    await expect(installResult).resolves.toMatchObject({
+      accepted: false,
+      rejection: { code: "updater_unavailable", operation: "install" },
+    });
+    expect(installDownloadedUpdate).not.toHaveBeenCalled();
+    expect(adapter.installCalls).toHaveLength(0);
+  });
+
   test("publishes install requested before shutdown completes and rejects duplicate surfaces", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
