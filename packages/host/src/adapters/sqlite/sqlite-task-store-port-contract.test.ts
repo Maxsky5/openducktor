@@ -10,7 +10,7 @@ import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
 describeTaskStorePortContract("SQLite TaskStorePort contract", createSqliteTaskStoreHarness);
 
 describe("SQLite task agent session batches", () => {
-  test("returns an empty normalized ID list without resolving storage", async () => {
+  test("returns an empty ID list without resolving storage", async () => {
     let resolverCalls = 0;
     const store = createSqliteTaskRepository({
       resolveWorkspaceIdForRepoPath: () =>
@@ -21,12 +21,12 @@ describe("SQLite task agent session batches", () => {
     });
 
     await expect(
-      Effect.runPromise(store.listAgentSessionsForTasks({ repoPath: "/repo", taskIds: [" ", ""] })),
+      Effect.runPromise(store.listAgentSessionsForTasks({ repoPath: "/repo", taskIds: [] })),
     ).resolves.toEqual([]);
     expect(resolverCalls).toBe(0);
   });
 
-  test("lists multiple tasks, ignores duplicate IDs, and rejects missing tasks", async () => {
+  test("lists multiple tasks and rejects missing tasks", async () => {
     const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
     try {
       const firstTask = await Effect.runPromise(
@@ -70,7 +70,7 @@ describe("SQLite task agent session batches", () => {
         Effect.runPromise(
           store.listAgentSessionsForTasks({
             repoPath,
-            taskIds: [secondTask.id, firstTask.id, firstTask.id],
+            taskIds: [secondTask.id, firstTask.id],
           }),
         ),
       ).resolves.toEqual([

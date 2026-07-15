@@ -5,9 +5,10 @@ import type {
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import type { host } from "../../shared/host";
 
-export type AgentOrchestratorHostPort = {
+export type AgentOrchestratorHostPort = AgentSessionReadPort & {
   agentSessionDelete: (
     repoPath: string,
     taskId: string,

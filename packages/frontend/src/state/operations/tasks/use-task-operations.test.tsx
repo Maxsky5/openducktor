@@ -82,7 +82,6 @@ const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 const originalToastSuccess = toast.success;
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
 
 const createSettingsSnapshotFixture = () => createSharedSettingsSnapshotFixture();
 
@@ -215,6 +214,17 @@ const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   repoPath,
 });
 
+const testAgentSessionReadPort = {
+  agentSessionsList: (repoPath: string, taskId: string) => host.agentSessionsList(repoPath, taskId),
+  agentSessionsListForTasks: async (repoPath: string, taskIds: string[]) =>
+    Promise.all(
+      taskIds.map(async (taskId) => ({
+        taskId,
+        agentSessions: await host.agentSessionsList(repoPath, taskId),
+      })),
+    ),
+};
+
 const normalizeHookArgs = ({
   activeWorkspace,
   activeRepo,
@@ -223,6 +233,7 @@ const normalizeHookArgs = ({
 }: LegacyHookArgs): HookArgs => ({
   ...rest,
   activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+  agentSessionReadPort: rest.agentSessionReadPort ?? testAgentSessionReadPort,
 });
 
 const createHookHarness = (initialArgs: LegacyHookArgs) => {
@@ -230,7 +241,7 @@ const createHookHarness = (initialArgs: LegacyHookArgs) => {
   let currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
-    latest = useTaskOperations(args);
+    latest = useTaskOperations(normalizeHookArgs(args));
     return null;
   };
 
@@ -291,7 +302,7 @@ const createTaskAndKanbanHarness = (initialArgs: LegacyHookArgs, doneVisibleDays
   const currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
-    const operations = useTaskOperations(args);
+    const operations = useTaskOperations(normalizeHookArgs(args));
     const activeRepoPath = args.activeWorkspace?.repoPath ?? null;
     const kanbanTaskListQuery = useQuery({
       ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays),
@@ -462,13 +473,6 @@ describe("use-task-operations", () => {
       (_message: string, _options?: { description?: string }) => "",
     ) as unknown as typeof toast.success;
     host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture()) as never;
-    host.agentSessionsListForTasks = async (repoPath, taskIds) =>
-      Promise.all(
-        taskIds.map(async (taskId) => ({
-          taskId,
-          agentSessions: await host.agentSessionsList(repoPath, taskId),
-        })),
-      );
   });
 
   afterEach(() => {
@@ -476,7 +480,6 @@ describe("use-task-operations", () => {
     console.warn = originalConsoleWarn;
     toast.success = originalToastSuccess;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-    host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     resetAgentChatDraftStoreForTests();
   });
 
@@ -635,7 +638,7 @@ describe("use-task-operations", () => {
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
     const Harness = () => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
     const getLatest = (): ReturnType<typeof useTaskOperations> => {
@@ -792,7 +795,7 @@ describe("use-task-operations", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -1577,7 +1580,7 @@ describe("use-task-operations", () => {
     let latest: ReturnType<typeof useTaskOperations> | null = null;
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -1682,7 +1685,7 @@ describe("use-task-operations", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      const operations = useTaskOperations(args);
+      const operations = useTaskOperations(normalizeHookArgs(args));
       const { planDoc } = useTaskDocuments("A", true, args.activeWorkspace?.repoPath ?? "");
       latest = {
         operations,
@@ -1781,7 +1784,7 @@ describe("use-task-operations", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -1868,7 +1871,7 @@ describe("use-task-operations", () => {
     let latest: ReturnType<typeof useTaskOperations> | null = null;
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -2210,7 +2213,7 @@ describe("use-task-operations", () => {
     let latest: ReturnType<typeof useTaskOperations> | null = null;
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 

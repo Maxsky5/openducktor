@@ -68,20 +68,18 @@ export const parseListAgentSessionsForTasksInput = (
   input: unknown,
 ): ListAgentSessionsForTasksInput => {
   const record = requireRecord(input, "agent_sessions_list_for_tasks input");
-  if (
-    !Array.isArray(record.taskIds) ||
-    record.taskIds.some((taskId) => typeof taskId !== "string")
-  ) {
+  if (!Array.isArray(record.taskIds)) {
     throw new HostValidationError({
       message: "taskIds must be an array of strings.",
       field: "taskIds",
       details: { value: record.taskIds },
     });
   }
+  const taskIds = record.taskIds.map((taskId, index) => requireString(taskId, `taskIds[${index}]`));
 
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
-    taskIds: Array.from(new Set(record.taskIds.map((taskId) => taskId.trim()).filter(Boolean))),
+    taskIds: Array.from(new Set(taskIds)),
   };
 };
 

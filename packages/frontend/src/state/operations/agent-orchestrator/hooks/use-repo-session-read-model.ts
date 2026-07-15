@@ -6,6 +6,7 @@ import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import {
   type AgentSessionReadModelLoadState,
@@ -49,6 +50,7 @@ type UseRepoSessionReadModelArgs = {
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   recoverTranscriptGap: (message: string) => Promise<void>;
   queryClient: QueryClient;
+  sessionReadPort: AgentSessionReadPort;
 };
 
 export type RepoSessionReadModelState = {
@@ -67,6 +69,7 @@ export const useRepoSessionReadModel = ({
   transcriptEvents,
   recoverTranscriptGap,
   queryClient,
+  sessionReadPort,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
@@ -89,6 +92,7 @@ export const useRepoSessionReadModel = ({
     taskIds,
     enabled: !isLoadingTasks,
     queryClient,
+    readPort: sessionReadPort,
   });
   const taskSessionRecordsRef = useRef<{
     repoPath: string;

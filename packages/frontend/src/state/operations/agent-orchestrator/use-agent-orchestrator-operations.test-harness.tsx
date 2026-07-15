@@ -101,6 +101,16 @@ export const createTestDependencies = (
   runtimeHostOverrides: Partial<OrchestratorDependencies["runtimeHostPort"]> = {},
   liveSessionHostOverrides: Partial<OrchestratorDependencies["liveSessionHostPort"]> = {},
 ): OrchestratorDependencies => {
+  const agentSessionsList = hostOverrides.agentSessionsList ?? (async () => []);
+  const agentSessionsListForTasks =
+    hostOverrides.agentSessionsListForTasks ??
+    (async (repoPath, taskIds) =>
+      Promise.all(
+        taskIds.map(async (taskId) => ({
+          taskId,
+          agentSessions: await agentSessionsList(repoPath, taskId),
+        })),
+      ));
   return {
     queryClient: new QueryClient({
       defaultOptions: {
@@ -110,6 +120,8 @@ export const createTestDependencies = (
     }),
     hostPort: {
       agentSessionDelete: async () => undefined,
+      agentSessionsList,
+      agentSessionsListForTasks,
       agentSessionUpsert: (...args) => host.agentSessionUpsert(...args),
       taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
       ...hostOverrides,
@@ -227,6 +239,19 @@ export const createHookHarness = (args: {
   dependencies?: OrchestratorDependencies;
 }) => {
   let latest: OrchestratorHookState | null = null;
+  const dependencies =
+    args.dependencies ??
+    createTestDependencies(
+      {
+        agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
+        agentSessionUpsert: (repoPath, taskId, record) =>
+          host.agentSessionUpsert(repoPath, taskId, record),
+        taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
+      },
+      {
+        runtimeEnsure: (...runtimeEnsureArgs) => host.runtimeEnsure(...runtimeEnsureArgs),
+      },
+    );
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
@@ -235,7 +260,7 @@ export const createHookHarness = (args: {
       opencode: createRepoRuntimeHealthFixture(),
     },
     agentEngine: args.agentEngine ?? (new OpencodeSdkAdapter() as AgentEnginePort),
-    dependencies: args.dependencies ?? createTestDependencies(),
+    dependencies,
   };
 
   const Harness = () => {

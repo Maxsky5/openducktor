@@ -65,6 +65,7 @@ export async function submitDirectMergeApproval({
 }: SubmitDirectMergeApprovalArgs): Promise<SubmitDirectMergeApprovalResult> {
   const approvalContext = approval.approvalContext;
   const directMergeResult = await runTaskMutationWithChatDraftCleanup({
+    agentSessionReadPort: host,
     queryClient,
     repoPath,
     workspaceId,
@@ -134,6 +135,7 @@ export async function completeDirectMergeApproval({
   const publishTarget = approvalContext.publishTarget;
 
   await runTaskMutationWithChatDraftCleanup({
+    agentSessionReadPort: host,
     queryClient,
     repoPath,
     workspaceId,
