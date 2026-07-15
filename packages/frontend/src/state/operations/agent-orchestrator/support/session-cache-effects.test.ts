@@ -63,10 +63,12 @@ describe("createSessionCacheEffects", () => {
       },
     });
     const upsert = mock(async () => undefined);
+    const reportCacheRefreshFailure = mock(() => undefined);
     const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
       hostPort: { agentSessionUpsert: upsert },
+      reportCacheRefreshFailure,
     });
     failRefresh = true;
 
@@ -77,6 +79,32 @@ describe("createSessionCacheEffects", () => {
     expect(queryClient.getQueryState(queryKey)?.error).toEqual(
       new Error("Session cache refresh failed."),
     );
+    expect(reportCacheRefreshFailure).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      taskId: "task-1",
+      error: new Error("Session cache refresh failed."),
+    });
+  });
+
+  test("propagates persistence failures without reporting a cache refresh failure", async () => {
+    const queryClient = createQueryClient();
+    const persistenceError = new Error("Session persistence failed.");
+    const reportCacheRefreshFailure = mock(() => undefined);
+    const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
+      queryClient,
+      hostPort: {
+        agentSessionUpsert: async () => {
+          throw persistenceError;
+        },
+      },
+      reportCacheRefreshFailure,
+    });
+
+    await expect(effects.persistSessionRecord("task-1", sessionRecord)).rejects.toBe(
+      persistenceError,
+    );
+    expect(reportCacheRefreshFailure).not.toHaveBeenCalled();
   });
 
   test("fails instead of silently dropping a session record without an active workspace", async () => {
