@@ -226,11 +226,14 @@ export const invalidateAgentSessionListQuery = async (
   const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
   const initialState = queryClient.getQueryState(queryKey);
   incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
-  await queryClient.invalidateQueries({
-    queryKey,
-    exact: true,
-    refetchType: options?.refetchType ?? "none",
-  });
+  await queryClient.invalidateQueries(
+    {
+      queryKey,
+      exact: true,
+      refetchType: options?.refetchType ?? "none",
+    },
+    { throwOnError: true },
+  );
   const currentState = queryClient.getQueryState(queryKey);
   const refetchCompleted =
     (currentState?.dataUpdateCount ?? 0) !== (initialState?.dataUpdateCount ?? 0) ||
@@ -241,6 +244,6 @@ export const invalidateAgentSessionListQuery = async (
     currentState?.isInvalidated === true &&
     !refetchCompleted;
   if (disabledRefetchWasSkipped) {
-    await queryClient.prefetchQuery({ queryKey, staleTime: 0 });
+    await queryClient.fetchQuery({ queryKey, staleTime: 0 });
   }
 };

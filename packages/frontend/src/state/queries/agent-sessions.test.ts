@@ -301,4 +301,51 @@ describe("agent session query cache helpers", () => {
     expect(batchList).toHaveBeenCalledTimes(1);
     expect(singleList).toHaveBeenCalledTimes(1);
   });
+
+  test("exact invalidation propagates an ordinary refetch failure", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    let failRefresh = false;
+    await queryClient.fetchQuery({
+      queryKey,
+      queryFn: async () => {
+        if (failRefresh) {
+          throw new Error("ordinary refresh failed");
+        }
+        return [sessionFixture];
+      },
+    });
+    failRefresh = true;
+
+    await expect(
+      invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+        refetchType: "all",
+      }),
+    ).rejects.toThrow("ordinary refresh failed");
+    expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
+  });
+
+  test("exact invalidation propagates a disabled static-query refresh failure", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    let failRefresh = false;
+    await queryClient.fetchQuery({
+      queryKey,
+      queryFn: async () => {
+        if (failRefresh) {
+          throw new Error("static refresh failed");
+        }
+        return [sessionFixture];
+      },
+      staleTime: "static",
+    });
+    failRefresh = true;
+
+    await expect(
+      invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+        refetchType: "all",
+      }),
+    ).rejects.toThrow("static refresh failed");
+    expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
+  });
 });
