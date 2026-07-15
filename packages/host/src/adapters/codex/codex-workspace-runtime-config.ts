@@ -20,7 +20,7 @@ export const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
     `mcp_servers.openducktor.command=${tomlString(mcpBinary)}`,
     `mcp_servers.openducktor.args=${tomlStringArray(mcpArgs)}`,
     `mcp_servers.openducktor.env_vars=${tomlStringArray(OPENDUCKTOR_MCP_ENV_VAR_NAMES)}`,
-    `mcp_servers.openducktor.default_tools_approval_mode=${tomlString("prompt")}`,
+    `mcp_servers.openducktor.default_tools_approval_mode=${tomlString("approve")}`,
     "mcp_servers.openducktor.enabled=true",
   ].flatMap((config) => ["--config", config]);
 };
