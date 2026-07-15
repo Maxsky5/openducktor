@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { host } from "../operations/host";
 import { agentSessionQueryKeys, invalidateAgentSessionListQuery } from "./agent-sessions";
 import { useAgentSessionLists } from "./use-agent-session-lists";
 
@@ -26,10 +25,6 @@ describe("useAgentSessionLists", () => {
       { taskId: "task-2", agentSessions: [] },
     ]);
     const singleList = mock(async () => [refreshedSession]);
-    const originalBatchList = host.agentSessionsListForTasks;
-    const originalSingleList = host.agentSessionsList;
-    host.agentSessionsListForTasks = batchList;
-    host.agentSessionsList = singleList;
     const harness = createHookHarness(
       () =>
         useAgentSessionLists({
@@ -37,6 +32,10 @@ describe("useAgentSessionLists", () => {
           taskIds: ["task-1", "task-2"],
           enabled: true,
           queryClient,
+          readPort: {
+            agentSessionsList: singleList,
+            agentSessionsListForTasks: batchList,
+          },
         }),
       undefined,
     );
@@ -73,8 +72,6 @@ describe("useAgentSessionLists", () => {
       expect(batchList).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
-      host.agentSessionsListForTasks = originalBatchList;
-      host.agentSessionsList = originalSingleList;
       queryClient.clear();
     }
   });

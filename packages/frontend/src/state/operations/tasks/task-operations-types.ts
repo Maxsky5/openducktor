@@ -7,10 +7,12 @@ import type {
   TaskUpdatePatch,
 } from "@openducktor/contracts";
 import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type UseTaskOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
+  agentSessionReadPort?: AgentSessionReadPort;
 };
 
 export type UseTaskOperationsResult = {

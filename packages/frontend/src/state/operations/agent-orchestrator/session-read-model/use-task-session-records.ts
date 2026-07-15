@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { type TaskSessionRecords, toTaskSessionRecords } from "./task-session-records";
 
@@ -13,6 +14,7 @@ type UseTaskSessionRecordsArgs = {
   taskIds: string[];
   enabled: boolean;
   queryClient: QueryClient;
+  readPort: AgentSessionReadPort;
 };
 
 export const useTaskSessionRecords = ({
@@ -20,8 +22,15 @@ export const useTaskSessionRecords = ({
   taskIds,
   enabled,
   queryClient,
+  readPort,
 }: UseTaskSessionRecordsArgs): TaskSessionRecordsState => {
-  const sessionLists = useAgentSessionLists({ repoPath, taskIds, enabled, queryClient });
+  const sessionLists = useAgentSessionLists({
+    repoPath,
+    taskIds,
+    enabled,
+    queryClient,
+    readPort,
+  });
   return useMemo((): TaskSessionRecordsState => {
     if (sessionLists.isPending) {
       return { kind: "loading" };

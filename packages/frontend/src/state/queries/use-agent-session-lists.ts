@@ -3,6 +3,7 @@ import type { QueryClient, UseQueryResult } from "@tanstack/react-query";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
+  type AgentSessionReadPort,
   agentSessionListHydrationQueryOptions,
   agentSessionListQueryOptions,
   agentSessionQueryKeys,
@@ -22,6 +23,7 @@ type UseAgentSessionListsArgs = {
   taskIds: string[];
   enabled: boolean;
   queryClient: QueryClient;
+  readPort?: AgentSessionReadPort;
 };
 
 const TASK_ID_SEPARATOR = "\u001f";
@@ -37,6 +39,7 @@ export const useAgentSessionLists = ({
   taskIds,
   enabled,
   queryClient,
+  readPort,
 }: UseAgentSessionListsArgs): AgentSessionListsState => {
   const taskIdsKey = toTaskIdSetKey(taskIds);
   const normalizedTaskIds = useMemo(() => toTaskIds(taskIdsKey), [taskIdsKey]);
@@ -50,7 +53,12 @@ export const useAgentSessionLists = ({
   const shouldHydrateLists = missingTaskIds.length > 0;
   const hydrationQuery = useQuery(
     {
-      ...agentSessionListHydrationQueryOptions(queryClient, repoPath ?? "", missingTaskIds),
+      ...agentSessionListHydrationQueryOptions(
+        queryClient,
+        repoPath ?? "",
+        missingTaskIds,
+        readPort,
+      ),
       enabled: shouldHydrateLists,
     },
     queryClient,
@@ -93,7 +101,7 @@ export const useAgentSessionLists = ({
     {
       queries: shouldReadLists
         ? normalizedTaskIds.map((taskId) => ({
-            ...agentSessionListQueryOptions(repoPath, taskId),
+            ...agentSessionListQueryOptions(repoPath, taskId, readPort),
             enabled: hydrationReady,
           }))
         : [],

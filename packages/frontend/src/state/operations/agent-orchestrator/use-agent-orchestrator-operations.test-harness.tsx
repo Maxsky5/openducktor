@@ -18,6 +18,7 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
+import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 export type OrchestratorDependencies = NonNullable<
@@ -27,50 +28,62 @@ export type OrchestratorDependencies = NonNullable<
 export const createTestDependencies = (
   hostOverrides: Partial<OrchestratorDependencies["hostPort"]> = {},
   runtimeHostOverrides: Partial<OrchestratorDependencies["runtimeHostPort"]> = {},
-): OrchestratorDependencies => ({
-  queryClient: new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
+): OrchestratorDependencies => {
+  const agentSessionsList = hostOverrides.agentSessionsList ?? (async () => []);
+  return {
+    queryClient: new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    }),
+    hostPort: {
+      agentSessionDelete: async () => undefined,
+      agentSessionsList,
+      agentSessionsListForTasks: async (repoPath, taskIds) =>
+        Promise.all(
+          taskIds.map(async (taskId) => ({
+            taskId,
+            agentSessions: await agentSessionsList(repoPath, taskId),
+          })),
+        ),
+      agentSessionUpsert: async () => undefined,
+      agentSessionStop: async () => undefined,
+      taskWorktreeGet: async () => ({
+        workingDirectory: "/tmp/repo/worktree",
+        source: "active_build_run",
+      }),
+      ...hostOverrides,
     },
-  }),
-  hostPort: {
-    agentSessionDelete: async () => undefined,
-    agentSessionUpsert: async () => undefined,
-    agentSessionStop: async () => undefined,
-    taskWorktreeGet: async () => ({
-      workingDirectory: "/tmp/repo/worktree",
-      source: "active_build_run",
-    }),
-    ...hostOverrides,
-  },
-  runtimeHostPort: {
-    gitCanonicalizePath: async (path) => path,
-    runtimeEnsure: async (repoPath, runtimeKind) => ({
-      kind: runtimeKind,
-      runtimeId: `${runtimeKind}:${repoPath}`,
-      repoPath,
-      taskId: null,
-      role: "workspace",
-      workingDirectory: repoPath,
-      runtimeRoute: { type: "stdio", identity: `${runtimeKind}:${repoPath}` },
-      startedAt: "2026-01-01T00:00:00.000Z",
-      descriptor: runtimeKind === "codex" ? CODEX_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR,
-    }),
-    taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind) => ({
-      bootstrapId: "bootstrap-1",
-      role,
-      runtimeKind,
-      workingDirectory: "/tmp/repo/worktree",
-    }),
-    taskSessionBootstrapComplete: async () => undefined,
-    taskSessionBootstrapAbort: async () => undefined,
-    taskSessionStartupLeasePrepare: async () => "lease-1",
-    taskSessionStartupLeaseComplete: async () => undefined,
-    taskSessionStartupLeaseAbort: async () => undefined,
-    ...runtimeHostOverrides,
-  },
-});
+    runtimeHostPort: {
+      gitCanonicalizePath: async (path) => path,
+      runtimeEnsure: async (repoPath, runtimeKind) => ({
+        kind: runtimeKind,
+        runtimeId: `${runtimeKind}:${repoPath}`,
+        repoPath,
+        taskId: null,
+        role: "workspace",
+        workingDirectory: repoPath,
+        runtimeRoute: { type: "stdio", identity: `${runtimeKind}:${repoPath}` },
+        startedAt: "2026-01-01T00:00:00.000Z",
+        descriptor:
+          runtimeKind === "codex" ? CODEX_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR,
+      }),
+      taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind) => ({
+        bootstrapId: "bootstrap-1",
+        role,
+        runtimeKind,
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      taskSessionBootstrapComplete: async () => undefined,
+      taskSessionBootstrapAbort: async () => undefined,
+      taskSessionStartupLeasePrepare: async () => "lease-1",
+      taskSessionStartupLeaseComplete: async () => undefined,
+      taskSessionStartupLeaseAbort: async () => undefined,
+      ...runtimeHostOverrides,
+    },
+  };
+};
 
 const createDefaultActiveWorkspace = (activeRepo: string | null) =>
   activeRepo === null
@@ -156,6 +169,23 @@ export const createHookHarness = (args: {
   dependencies?: OrchestratorDependencies;
 }) => {
   let latest: OrchestratorHookState | null = null;
+  const dependencies =
+    args.dependencies ??
+    createTestDependencies(
+      {
+        agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
+        agentSessionUpsert: (repoPath, taskId, record) =>
+          host.agentSessionUpsert(repoPath, taskId, record),
+        agentSessionStop: async (target) => {
+          await host.agentSessionStop(target);
+        },
+        taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
+      },
+      {
+        buildStart: (...buildStartArgs) => host.buildStart(...buildStartArgs),
+        runtimeEnsure: (...runtimeEnsureArgs) => host.runtimeEnsure(...runtimeEnsureArgs),
+      },
+    );
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
@@ -164,6 +194,7 @@ export const createHookHarness = (args: {
       opencode: createRepoRuntimeHealthFixture(),
     },
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
+    dependencies,
   };
 
   const Harness = () => {

@@ -219,6 +219,7 @@ export function useAgentOrchestratorOperations({
     clearSessionObservationState,
     loadLiveSessionHistory: sessionHistoryLoaders.loadSelectedSessionBaselineHistory,
     queryClient,
+    sessionReadPort: hostPort,
   });
   const ensureRuntime = useMemo(
     () =>

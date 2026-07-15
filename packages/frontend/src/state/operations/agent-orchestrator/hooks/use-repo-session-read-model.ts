@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { useSnapshotReadableRepoRuntimeKinds } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import {
   type AgentSessionReadModelLoadState,
@@ -34,6 +35,7 @@ type UseRepoSessionReadModelArgs = {
   clearSessionObservationState: (sessions: readonly SessionRef[]) => void;
   loadLiveSessionHistory: (session: PolicyBoundSessionRef) => Promise<unknown>;
   queryClient: QueryClient;
+  sessionReadPort: AgentSessionReadPort;
 };
 
 export type RepoSessionReadModelState = {
@@ -53,6 +55,7 @@ export const useRepoSessionReadModel = ({
   clearSessionObservationState,
   loadLiveSessionHistory,
   queryClient,
+  sessionReadPort,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
@@ -75,6 +78,7 @@ export const useRepoSessionReadModel = ({
     taskIds,
     enabled: !isLoadingTasks,
     queryClient,
+    readPort: sessionReadPort,
   });
   const requiredRuntimeKinds = useMemo(() => {
     if (taskSessionRecordsState.kind !== "ready") {

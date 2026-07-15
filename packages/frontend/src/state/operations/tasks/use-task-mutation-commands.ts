@@ -8,6 +8,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import { collectTaskDeletionIds } from "./task-deletion-ids";
@@ -23,6 +24,7 @@ type UseTaskMutationCommandsArgs = {
   activeWorkspaceId: string | null;
   tasks: TaskCard[];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
+  agentSessionReadPort: AgentSessionReadPort;
 };
 
 export type TaskMutationCommands = {
@@ -41,6 +43,7 @@ export function useTaskMutationCommands({
   activeWorkspaceId,
   tasks,
   runTaskMutation,
+  agentSessionReadPort,
 }: UseTaskMutationCommandsArgs): TaskMutationCommands {
   const queryClient = useQueryClient();
 
@@ -106,6 +109,7 @@ export function useTaskMutationCommands({
             repoPath,
             workspaceId: activeWorkspaceId,
             taskIds: taskIdsToRemove,
+            agentSessionReadPort,
             mutation: async () => {
               await host.taskDelete(repoPath, taskId, deleteSubtasks);
               await Promise.all(
@@ -126,7 +130,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to delete task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation, tasks],
+    [activeWorkspaceId, agentSessionReadPort, queryClient, runTaskMutation, tasks],
   );
 
   const closeTask = useCallback(
@@ -139,6 +143,7 @@ export function useTaskMutationCommands({
             repoPath,
             workspaceId: activeWorkspaceId,
             taskIds: [taskId],
+            agentSessionReadPort,
             mutation: async () => {
               await host.taskClose(repoPath, taskId);
               await queryClient.invalidateQueries({
@@ -152,7 +157,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to close task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation],
+    [activeWorkspaceId, agentSessionReadPort, queryClient, runTaskMutation],
   );
 
   const transitionTask = useCallback(
@@ -170,6 +175,7 @@ export function useTaskMutationCommands({
             repoPath,
             workspaceId: activeWorkspaceId,
             taskIds: [taskId],
+            agentSessionReadPort,
             mutation: async () => {
               await host.taskTransition(repoPath, taskId, status, reason);
             },
@@ -179,7 +185,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to transition task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation],
+    [activeWorkspaceId, agentSessionReadPort, queryClient, runTaskMutation],
   );
 
   const humanApproveTask = useCallback(
@@ -192,6 +198,7 @@ export function useTaskMutationCommands({
             repoPath,
             workspaceId: activeWorkspaceId,
             taskIds: [taskId],
+            agentSessionReadPort,
             mutation: async () => {
               await host.humanApprove(repoPath, taskId);
             },
@@ -202,7 +209,7 @@ export function useTaskMutationCommands({
         failureTitle: "Failed to approve task",
       });
     },
-    [activeWorkspaceId, queryClient, runTaskMutation],
+    [activeWorkspaceId, agentSessionReadPort, queryClient, runTaskMutation],
   );
 
   const humanRequestChangesTask = useCallback(

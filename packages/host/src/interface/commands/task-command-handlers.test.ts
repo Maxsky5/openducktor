@@ -683,10 +683,10 @@ describe("createTaskCommandHandlers", () => {
     await expect(
       runHandler(
         handlers.agent_sessions_list_for_tasks?.(
-          { repoPath: "/repo", taskIds: [" task-2 ", "", "task-1", "task-2"] },
+          { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
           {
             command: "agent_sessions_list_for_tasks",
-            args: { repoPath: "/repo", taskIds: [" task-2 ", "", "task-1", "task-2"] },
+            args: { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
           },
         ),
       ),

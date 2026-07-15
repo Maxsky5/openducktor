@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { host } from "../shared/host";
 import { useTaskMutationRunner } from "./task-mutation-runner";
 import type { UseTaskOperationsArgs, UseTaskOperationsResult } from "./task-operations-types";
 import { useTaskMutationCommands } from "./use-task-mutation-commands";
@@ -8,6 +9,7 @@ import { useTaskResetOperations } from "./use-task-reset-operations";
 
 export function useTaskOperations({
   activeWorkspace,
+  agentSessionReadPort = host,
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
@@ -18,6 +20,7 @@ export function useTaskOperations({
     activeWorkspaceId,
     tasks: taskReadFlow.tasks,
     runTaskMutation: mutationRunner.runTaskMutation,
+    agentSessionReadPort,
   });
   const resetOperations = useTaskResetOperations({
     activeRepoPath,
@@ -28,6 +31,7 @@ export function useTaskOperations({
     activeWorkspaceId,
     refreshTaskData: taskReadFlow.refreshTaskData,
     runTaskMutation: mutationRunner.runTaskMutation,
+    agentSessionReadPort,
   });
 
   const clearTaskData = useCallback(() => {

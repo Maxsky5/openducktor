@@ -89,6 +89,14 @@ const createHarnessState = () => {
       clearSessionObservationState,
       loadLiveSessionHistory,
       queryClient,
+      sessionReadPort: {
+        agentSessionsList: async () => {
+          throw new Error("Per-task session cache should already be hydrated.");
+        },
+        agentSessionsListForTasks: async () => {
+          throw new Error("Per-task session cache should already be hydrated.");
+        },
+      },
     };
   };
   const wrapper = ({ children }: PropsWithChildren) => (
