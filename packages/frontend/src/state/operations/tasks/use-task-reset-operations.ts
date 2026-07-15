@@ -88,7 +88,8 @@ const refreshTaskAfterReset = async (
     throw errors[0];
   }
   if (errors.length > 1) {
-    throw new AggregateError(errors, "Multiple post-reset metadata refreshes failed.");
+    const details = errors.map(errorMessage).join("; ");
+    throw new AggregateError(errors, `Post-reset metadata refreshes failed: ${details}`);
   }
 };
 
