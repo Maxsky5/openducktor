@@ -68,6 +68,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
+    host.agentSessionsListForTasks = async () => [
+      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+    ];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -146,6 +149,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
+    host.agentSessionsListForTasks = async () => [
+      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+    ];
     host.agentSessionUpsert = async () => {};
     OpencodeSdkAdapter.prototype.subscribeEvents = async () => {
       subscribeCalls += 1;
@@ -209,6 +215,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     toast.error = toastError;
     host.agentSessionsList = async () => [persistedSessionFixture];
+    host.agentSessionsListForTasks = async () => [
+      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+    ];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -299,6 +308,10 @@ describe("use-agent-orchestrator-operations start and send", () => {
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
       return persistedSessions;
+    };
+    host.agentSessionsListForTasks = async () => {
+      persistedListCalls += 1;
+      return [{ taskId: "task-1", agentSessions: persistedSessions }];
     };
     host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
       persistedSessions = [record];
@@ -439,6 +452,10 @@ describe("use-agent-orchestrator-operations start and send", () => {
       persistedListCalls += 1;
       return persistedSessions;
     };
+    host.agentSessionsListForTasks = async () => {
+      persistedListCalls += 1;
+      return [{ taskId: "task-1", agentSessions: persistedSessions }];
+    };
     host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
       persistedSessions = [record];
     };
@@ -566,6 +583,18 @@ describe("use-agent-orchestrator-operations start and send", () => {
       {
         ...persistedSessionFixture,
         role: "build",
+      },
+    ];
+    host.agentSessionsListForTasks = async () => [
+      {
+        taskId: "task-1",
+        agentSessions: [
+          {
+            ...persistedSessionFixture,
+            role: "build",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        ],
       },
     ];
     host.agentSessionUpsert = async () => {};

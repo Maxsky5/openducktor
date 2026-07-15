@@ -29,7 +29,6 @@ export const createTestDependencies = (
   hostOverrides: Partial<OrchestratorDependencies["hostPort"]> = {},
   runtimeHostOverrides: Partial<OrchestratorDependencies["runtimeHostPort"]> = {},
 ): OrchestratorDependencies => {
-  const agentSessionsList = hostOverrides.agentSessionsList ?? (async () => []);
   return {
     queryClient: new QueryClient({
       defaultOptions: {
@@ -39,14 +38,8 @@ export const createTestDependencies = (
     }),
     hostPort: {
       agentSessionDelete: async () => undefined,
-      agentSessionsList,
-      agentSessionsListForTasks: async (repoPath, taskIds) =>
-        Promise.all(
-          taskIds.map(async (taskId) => ({
-            taskId,
-            agentSessions: await agentSessionsList(repoPath, taskId),
-          })),
-        ),
+      agentSessionsList: async () => [],
+      agentSessionsListForTasks: async () => [],
       agentSessionUpsert: async () => undefined,
       agentSessionStop: async () => undefined,
       taskWorktreeGet: async () => ({
@@ -174,6 +167,8 @@ export const createHookHarness = (args: {
     createTestDependencies(
       {
         agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
+        agentSessionsListForTasks: (repoPath, taskIds) =>
+          host.agentSessionsListForTasks(repoPath, taskIds),
         agentSessionUpsert: (repoPath, taskId, record) =>
           host.agentSessionUpsert(repoPath, taskId, record),
         agentSessionStop: async (target) => {

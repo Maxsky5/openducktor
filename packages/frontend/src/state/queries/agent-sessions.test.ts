@@ -412,4 +412,38 @@ describe("agent session query cache helpers", () => {
     expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([afterSecondMutation]);
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
   });
+
+  test("plain invalidation cancels an older exact refresh and remains invalidated", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    let releaseRead: () => void = () => {
+      throw new Error("Read was not started.");
+    };
+    let markReadStarted: () => void = () => {
+      throw new Error("Read-start signal was not initialized.");
+    };
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    const readRelease = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const singleList = mock(async () => {
+      markReadStarted();
+      await readRelease;
+      return [{ ...sessionFixture, externalSessionId: "stale-session" }];
+    });
+    queryClient.setQueryData(queryKey, [sessionFixture]);
+
+    const refresh = refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+      agentSessionsList: singleList,
+    });
+    await readStarted;
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1");
+    releaseRead();
+    await refresh;
+
+    expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([sessionFixture]);
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
+  });
 });
