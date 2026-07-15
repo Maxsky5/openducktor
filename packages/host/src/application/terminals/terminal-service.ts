@@ -167,17 +167,10 @@ export const createTerminalService = ({
           }
           const plan = yield* launch(input, DEFAULT_GRID);
           const terminalId = idFactory();
-          const usedLabels = new Set(
-            [...sessions.values()]
-              .filter((session) => session.summary.context.taskId === input.context.taskId)
-              .map((session) => session.summary.label),
-          );
-          let labelNumber = 1;
-          while (usedLabels.has(`Shell ${labelNumber}`)) labelNumber += 1;
           const summary: TerminalSummary = {
             terminalId,
             hostInstanceId,
-            label: `Shell ${labelNumber}`,
+            label: plan.cwd,
             context: input.context,
             initialWorkingDir: plan.cwd,
             initialWorkingDirAvailable: true,

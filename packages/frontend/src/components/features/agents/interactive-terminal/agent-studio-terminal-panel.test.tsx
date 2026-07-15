@@ -37,6 +37,8 @@ const model: AgentStudioTerminalPanelModel = {
   onSelectTab: () => undefined,
   onCreate: () => undefined,
   onRetryCreate: () => undefined,
+  onReorderTab: () => undefined,
+  onTitleChange: () => undefined,
   onClose: async () => ({ closed: true }),
   onLifecycle: () => undefined,
   onForgotten: () => undefined,
@@ -299,6 +301,8 @@ describe("AgentStudioTerminalPanel", () => {
     const closeButton = screen.getByRole("button", { name: "Close Shell 1" });
     expect(closeButton.parentElement).toBe(tab.parentElement);
     expect(tab.parentElement?.className).not.toContain("rounded-md");
+    expect(tab.parentElement?.className).toContain("min-w-52");
+    expect(tab.parentElement?.className).toContain("max-w-80");
     expect(tab.className).toContain("h-8");
     expect(tab.className).toContain("rounded-none");
     expect(tab.className).toContain("font-mono");

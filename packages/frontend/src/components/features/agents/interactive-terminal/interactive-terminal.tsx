@@ -14,6 +14,7 @@ import {
   createTerminalKeyEventHandler,
   enqueueParsedTerminalWrite,
   handleTerminalMetadataFrame,
+  normalizeTerminalTitle,
 } from "./interactive-terminal-policy";
 
 const readCssVariable = (element: HTMLElement, name: string): string =>
@@ -40,6 +41,7 @@ export function InteractiveTerminal({
   onConnectionState,
   onLifecycle,
   onForgotten,
+  onTitleChange,
 }: {
   terminalId: string;
   controller: TerminalTransportController;
@@ -49,15 +51,28 @@ export function InteractiveTerminal({
   onConnectionState: (state: TerminalConnectionState) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
   onForgotten: (message: string) => void;
+  onTitleChange: (title: string) => void;
 }): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
-  const callbacksRef = useRef({ onAttention, onConnectionState, onLifecycle, onForgotten });
+  const callbacksRef = useRef({
+    onAttention,
+    onConnectionState,
+    onLifecycle,
+    onForgotten,
+    onTitleChange,
+  });
   const [interactionError, setInteractionError] = useState<string | null>(null);
 
   useEffect(() => {
-    callbacksRef.current = { onAttention, onConnectionState, onLifecycle, onForgotten };
-  }, [onAttention, onConnectionState, onForgotten, onLifecycle]);
+    callbacksRef.current = {
+      onAttention,
+      onConnectionState,
+      onLifecycle,
+      onForgotten,
+      onTitleChange,
+    };
+  }, [onAttention, onConnectionState, onForgotten, onLifecycle, onTitleChange]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -95,6 +110,10 @@ export function InteractiveTerminal({
     const dataSubscription = terminal.onData((data) => {
       resizeScheduler.flush();
       void enqueueInput(() => new TextEncoder().encode(data));
+    });
+    const titleSubscription = terminal.onTitleChange((title) => {
+      const normalizedTitle = normalizeTerminalTitle(title, "");
+      if (normalizedTitle) callbacksRef.current.onTitleChange(normalizedTitle);
     });
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
     terminal.attachCustomKeyEventHandler(
@@ -146,6 +165,7 @@ export function InteractiveTerminal({
       observer.disconnect();
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
+      titleSubscription.dispose();
       resizeSubscription.dispose();
       fitAddon.dispose();
       terminal.dispose();

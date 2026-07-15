@@ -1,5 +1,5 @@
 import type { TerminalConnectionState, TerminalLifecycle } from "@openducktor/contracts";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { type ReactElement, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,27 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import type {
   AgentStudioTerminalPanelModel,
   AgentStudioTerminalTab,
 } from "@/pages/agents/terminals/use-agent-studio-terminals";
-import { terminalTabsListClassName, terminalTabTriggerClassName } from "../terminal-tab-styles";
 import { InteractiveTerminal } from "./interactive-terminal";
-
-const lifecycleText = (tab: AgentStudioTerminalTab): string => {
-  if (tab.requestState === "creating") return "Creating";
-  if (tab.requestState === "unsupported_runtime") return "Unsupported runtime";
-  if (tab.requestState === "creation_failed") return "Creation failed";
-  if (tab.requestState === "lost") return "Lost after host restart";
-  if (tab.lifecycle === "starting") return "Starting";
-  if (tab.lifecycle === "closing") return "Closing";
-  if (tab.lifecycle === "close_failed") return "Close failed";
-  if (tab.lifecycle === "exited") return "Exited";
-  return "Running";
-};
+import { TerminalTabStrip } from "./terminal-tab-strip";
 
 const ignoreConnectionState = (_state: TerminalConnectionState): void => undefined;
 
@@ -41,6 +28,7 @@ function TerminalViewport({
   onAttention,
   onLifecycle,
   onForgotten,
+  onTitleChange,
 }: {
   tab: AgentStudioTerminalTab;
   model: AgentStudioTerminalPanelModel;
@@ -48,6 +36,7 @@ function TerminalViewport({
   onAttention: (tabId: string, message: string | null) => void;
   onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle, exitText: string | null) => void;
   onForgotten: (terminalId: string, message: string) => void;
+  onTitleChange: (terminalId: string, title: string) => void;
 }): ReactElement {
   const handleAttention = useCallback(
     (message: string | null) => onAttention(tab.tabId, message),
@@ -64,6 +53,12 @@ function TerminalViewport({
       if (tab.terminalId) onForgotten(tab.terminalId, message);
     },
     [onForgotten, tab.terminalId],
+  );
+  const handleTitleChange = useCallback(
+    (title: string) => {
+      if (tab.terminalId) onTitleChange(tab.terminalId, title);
+    },
+    [onTitleChange, tab.terminalId],
   );
   if (tab.error) {
     return (
@@ -103,6 +98,7 @@ function TerminalViewport({
       onConnectionState={ignoreConnectionState}
       onLifecycle={handleLifecycle}
       onForgotten={handleForgotten}
+      onTitleChange={handleTitleChange}
     />
   );
 }
@@ -152,7 +148,6 @@ export function AgentStudioTerminalPanel({
       setIsConfirmingClose(false);
     }
   };
-
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
@@ -169,43 +164,15 @@ export function AgentStudioTerminalPanel({
           {model.tabs.length > 0 ? (
             <Tabs
               {...(model.activeTabId ? { value: model.activeTabId } : {})}
-              onValueChange={model.onSelectTab}
+              onValueChange={() => undefined}
               className="gap-0"
             >
-              <TabsList aria-label="Task terminal tabs" className={terminalTabsListClassName}>
-                {model.tabs.map((tab) => {
-                  const detail = tab.summary
-                    ? `${lifecycleText(tab)}. Started in ${tab.summary.initialWorkingDir}`
-                    : lifecycleText(tab);
-                  return (
-                    <div key={tab.tabId} className="group relative flex h-8 shrink-0 items-center">
-                      <TabsTrigger
-                        value={tab.tabId}
-                        aria-label={`${tab.label}, ${lifecycleText(tab)}`}
-                        title={detail}
-                        className={cn(terminalTabTriggerClassName, "max-w-48 pr-8")}
-                      >
-                        <span className="truncate">{tab.label}</span>
-                      </TabsTrigger>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Close ${tab.label}`}
-                        aria-busy={tab.lifecycle === "closing"}
-                        className="absolute right-1 z-20 size-6 rounded-sm text-[var(--dev-server-terminal-foreground)] hover:bg-[var(--dev-server-terminal-surface)] hover:text-[var(--dev-server-terminal-foreground)]"
-                        disabled={tab.lifecycle === "closing"}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void closeTab(tab);
-                        }}
-                      >
-                        {tab.lifecycle === "closing" ? <Loader2 className="animate-spin" /> : <X />}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </TabsList>
+              <TerminalTabStrip
+                tabs={model.tabs}
+                onSelectTab={model.onSelectTab}
+                onReorderTab={model.onReorderTab}
+                onCloseTab={(tab) => void closeTab(tab)}
+              />
             </Tabs>
           ) : null}
           {showsEmptyTerminalState ? (
@@ -252,6 +219,7 @@ export function AgentStudioTerminalPanel({
                   onAttention={setTabAttention}
                   onLifecycle={setTerminalLifecycle}
                   onForgotten={model.onForgotten}
+                  onTitleChange={model.onTitleChange}
                 />
               </TabsContent>
             ))}

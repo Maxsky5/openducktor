@@ -6,6 +6,7 @@ import {
   createTerminalKeyEventHandler,
   enqueueParsedTerminalWrite,
   handleTerminalMetadataFrame,
+  normalizeTerminalTitle,
   resolveTerminalKeyAction,
 } from "./interactive-terminal-policy";
 
@@ -20,6 +21,15 @@ const keyEvent = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
   }) as KeyboardEvent;
 
 describe("InteractiveTerminal policies", () => {
+  test("normalizes live shell titles without exposing control characters", () => {
+    expect(normalizeTerminalTitle("  pnpm run dev\u0007  ", "/repo/worktree")).toBe("pnpm run dev");
+    expect(normalizeTerminalTitle("\u0000\u001f", "/repo/worktree")).toBe("/repo/worktree");
+    expect(normalizeTerminalTitle("maxsky5@studio:~/repo/worktree", "/repo/worktree")).toBe(
+      "~/repo/worktree",
+    );
+    expect(normalizeTerminalTitle("x".repeat(300), "/repo/worktree")).toHaveLength(160);
+  });
+
   test("keeps copy, paste, and Ctrl+C interrupt semantics distinct", () => {
     expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), false, true)).toBe(
       "copy",

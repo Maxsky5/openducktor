@@ -6,6 +6,23 @@ import type {
 
 export type TerminalKeyAction = "copy" | "interrupt" | "paste" | "passthrough";
 
+const TERMINAL_TITLE_MAX_LENGTH = 160;
+
+export const normalizeTerminalTitle = (title: string, fallback: string): string => {
+  const sanitize = (value: string): string =>
+    Array.from(value.trim())
+      .filter((character) => {
+        const codePoint = character.codePointAt(0) ?? 0;
+        return codePoint > 31 && (codePoint < 127 || codePoint > 159);
+      })
+      .slice(0, TERMINAL_TITLE_MAX_LENGTH)
+      .join("");
+  const sanitizedTitle = sanitize(title);
+  const shellDirectory = sanitizedTitle.match(/^[^@\s]+@[^:\s]+:(?<directory>[~/].*)$/u)?.groups
+    ?.directory;
+  return shellDirectory || sanitizedTitle || sanitize(fallback);
+};
+
 type TerminalKeyEventHandlerInput = {
   isMac: boolean;
   hasSelection: () => boolean;

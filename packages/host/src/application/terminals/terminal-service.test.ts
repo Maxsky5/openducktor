@@ -99,6 +99,7 @@ describe("TerminalService", () => {
   test("creates a taskless terminal and keeps its canonical initial directory immutable", async () => {
     const { service, pty } = await makeService();
     const created = await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    expect(created.summary.label).toBe("/canonical/repo");
     await Effect.runPromise(
       service.write(created.ref.terminalId, new TextEncoder().encode("cd /tmp\n")),
     );

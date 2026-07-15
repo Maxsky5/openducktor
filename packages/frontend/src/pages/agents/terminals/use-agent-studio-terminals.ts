@@ -1,3 +1,4 @@
+import { arrayMove } from "@dnd-kit/sortable";
 import type {
   TerminalCloseResponse,
   TerminalLifecycle,
@@ -57,6 +58,8 @@ export type AgentStudioTerminalPanelModel = {
   onSelectTab: (tabId: string) => void;
   onCreate: () => void;
   onRetryCreate: (tabId: string) => void;
+  onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
+  onTitleChange: (terminalId: string, title: string) => void;
   onClose: (
     tab: AgentStudioTerminalTab,
     confirmTerminate: boolean,
@@ -93,7 +96,7 @@ const toHostTab = (
     summary,
     lifecycle: lifecycleFromEvent ? previous.lifecycle : summary.lifecycle,
     lifecycleFromEvent,
-    label: summary.label,
+    label: previous?.label ?? summary.label,
     error: null,
     requestState: "ready",
   };
@@ -109,17 +112,11 @@ const resolveActiveTabId = (
   return tabs[0]?.tabId ?? null;
 };
 
-const nextShellLabel = (tabs: AgentStudioTerminalTab[]): string => {
-  const usedLabels = new Set(tabs.map((tab) => tab.label));
-  let index = 1;
-  while (usedLabels.has(`Shell ${index}`)) index += 1;
-  return `Shell ${index}`;
-};
-
 const beginTerminalCreation = (
   tabs: AgentStudioTerminalTab[],
   tabId: string,
   retry: boolean,
+  label: string,
 ): AgentStudioTerminalTab[] => {
   if (retry) {
     return tabs.map((tab) =>
@@ -134,7 +131,7 @@ const beginTerminalCreation = (
       summary: null,
       lifecycle: null,
       lifecycleFromEvent: false,
-      label: nextShellLabel(tabs),
+      label,
       error: null,
       requestState: "creating",
     },
@@ -241,9 +238,20 @@ export const useAgentStudioTerminals = (
       const currentTabsByTerminalId = new Map(
         current.tabs.flatMap((tab) => (tab.terminalId ? [[tab.terminalId, tab] as const] : [])),
       );
-      const hostTabs = terminalQuery.data.terminals.map((summary) =>
-        toHostTab(summary, currentTabsByTerminalId.get(summary.terminalId)),
+      const summariesByTerminalId = new Map(
+        terminalQuery.data.terminals.map((summary) => [summary.terminalId, summary] as const),
       );
+      const hostTabs = current.tabs.flatMap((tab) => {
+        if (!tab.terminalId) return [];
+        const summary = summariesByTerminalId.get(tab.terminalId);
+        return summary ? [toHostTab(summary, tab)] : [];
+      });
+      const knownTerminalIds = new Set(hostTabs.map((tab) => tab.terminalId));
+      for (const summary of terminalQuery.data.terminals) {
+        if (!knownTerminalIds.has(summary.terminalId)) {
+          hostTabs.push(toHostTab(summary, currentTabsByTerminalId.get(summary.terminalId)));
+        }
+      }
       const tabs = [...hostTabs, ...transient];
       const closingTabIdSet = new Set(current.closingTabIds);
       const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
@@ -273,12 +281,17 @@ export const useAgentStudioTerminals = (
     async (retryTabId?: string): Promise<void> => {
       if (!repoPath || !taskId) return;
       const tabId = retryTabId ?? `creating:${globalThis.crypto.randomUUID()}`;
+      const workingDir = worktreeQuery.data?.workingDirectory;
       setScopeState((current) => ({
         ...current,
-        tabs: beginTerminalCreation(current.tabs, tabId, retryTabId !== undefined),
+        tabs: beginTerminalCreation(
+          current.tabs,
+          tabId,
+          retryTabId !== undefined,
+          workingDir ?? repoPath,
+        ),
         activeTabId: tabId,
       }));
-      const workingDir = worktreeQuery.data?.workingDirectory;
       if (!workingDir) {
         setScopeState((current) => ({
           ...current,
@@ -385,6 +398,22 @@ export const useAgentStudioTerminals = (
         setScopeState((current) => ({ ...current, activeTabId })),
       onCreate: () => void createTerminal(),
       onRetryCreate: (tabId: string) => void createTerminal(tabId),
+      onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") =>
+        setScopeState((current) => {
+          const draggedIndex = current.tabs.findIndex((tab) => tab.tabId === draggedTabId);
+          const targetIndex = current.tabs.findIndex((tab) => tab.tabId === targetTabId);
+          if (draggedIndex < 0 || targetIndex < 0 || draggedIndex === targetIndex) return current;
+          const insertionIndex = position === "before" ? targetIndex : targetIndex + 1;
+          const adjustedIndex = draggedIndex < insertionIndex ? insertionIndex - 1 : insertionIndex;
+          return { ...current, tabs: arrayMove(current.tabs, draggedIndex, adjustedIndex) };
+        }),
+      onTitleChange: (terminalId: string, title: string) =>
+        setScopeState((current) => ({
+          ...current,
+          tabs: current.tabs.map((tab) =>
+            tab.terminalId === terminalId ? { ...tab, label: title } : tab,
+          ),
+        })),
       onClose: async (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => {
         const closesLastTab = visibleTabs.length === 1 && visibleTabs[0]?.tabId === tab.tabId;
         const removeMountedTab = (): void => {
