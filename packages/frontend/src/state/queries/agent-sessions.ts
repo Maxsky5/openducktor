@@ -1,5 +1,5 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { isCancelledError, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
 const AGENT_SESSION_LIST_STALE_TIME = Number.POSITIVE_INFINITY;
@@ -26,11 +26,13 @@ const incrementAgentSessionInvalidationVersion = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-): void => {
+): number => {
   const versions = invalidationVersionsByQueryClient.get(queryClient) ?? new Map<string, number>();
   const versionKey = agentSessionInvalidationVersionKey(repoPath, taskId);
-  versions.set(versionKey, (versions.get(versionKey) ?? 0) + 1);
+  const version = (versions.get(versionKey) ?? 0) + 1;
+  versions.set(versionKey, version);
   invalidationVersionsByQueryClient.set(queryClient, versions);
+  return version;
 };
 
 export const normalizeAgentSessionTaskIds = (taskIds: string[]): string[] =>
@@ -216,33 +218,59 @@ export const loadAgentSessionListsFromQuery = async (
   return Object.fromEntries(entries);
 };
 
+const beginAgentSessionListInvalidation = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): Promise<number> => {
+  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+  const invalidationVersion = incrementAgentSessionInvalidationVersion(
+    queryClient,
+    repoPath,
+    taskId,
+  );
+  await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+  return invalidationVersion;
+};
+
 export const invalidateAgentSessionListQuery = async (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  options?: {
-    readPort?: Pick<AgentSessionReadPort, "agentSessionsList">;
-    refetchType?: "active" | "all";
-  },
+): Promise<void> => {
+  await beginAgentSessionListInvalidation(queryClient, repoPath, taskId);
+};
+
+export const refreshAgentSessionListQuery = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
 ): Promise<void> => {
   const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-  incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
-
-  if (options?.refetchType === "all") {
-    await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
-    await queryClient.fetchQuery({
-      ...agentSessionListQueryOptions(repoPath, taskId, options.readPort),
-      staleTime: 0,
-    });
+  const invalidationVersion = await beginAgentSessionListInvalidation(
+    queryClient,
+    repoPath,
+    taskId,
+  );
+  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
     return;
   }
-
-  await queryClient.invalidateQueries(
-    {
-      queryKey,
-      exact: true,
-      refetchType: options?.refetchType ?? "none",
-    },
-    { throwOnError: true },
-  );
+  await queryClient.cancelQueries({ queryKey, exact: true });
+  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
+    return;
+  }
+  try {
+    await queryClient.fetchQuery({
+      ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+      staleTime: 0,
+    });
+  } catch (error) {
+    const superseded =
+      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion;
+    if (superseded && isCancelledError(error)) {
+      return;
+    }
+    throw error;
+  }
 };

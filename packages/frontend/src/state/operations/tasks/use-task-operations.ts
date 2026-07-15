@@ -24,6 +24,7 @@ export function useTaskOperations({
   });
   const resetOperations = useTaskResetOperations({
     activeRepoPath,
+    agentSessionReadPort,
     refreshTaskData: taskReadFlow.refreshTaskData,
   });
   const pullRequestOperations = useTaskPullRequestOperations({
