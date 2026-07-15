@@ -43,6 +43,9 @@ export type { GitService, GitServiceError } from "./git-service-types";
 export const createGitService = (input: GitPort | CreateGitServiceInput): GitService => {
   const { gitPort, settingsConfig, worktreeFiles } = normalizeCreateGitServiceInput(input);
   return {
+    canonicalizePath(input) {
+      return gitPort.canonicalizePath(input.workingDir ?? input.repoPath);
+    },
     getBranches(input) {
       return Effect.gen(function* () {
         const { repoPath } = input;

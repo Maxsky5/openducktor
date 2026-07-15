@@ -124,7 +124,18 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
-  const usesTaskWorktree = selectedView.role === "build" || selectedView.role === "qa";
+  const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
+    workspaceRepoPath,
+    selectedView,
+    isGitTabActive,
+    isRightPanelOpen,
+  });
+  const sessionWorktreePath = resolveDirectBuildWorktreePath({
+    repoPath: workspaceRepoPath,
+    sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
+  });
+  const usesTaskWorktree =
+    selectedView.role === "build" || selectedView.role === "qa" || sessionWorktreePath != null;
   const gitPanelContextMode: AgentStudioGitPanelContextMode = usesTaskWorktree
     ? "worktree"
     : "repository";
@@ -159,12 +170,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
         : taskTargetBranchState.effectiveTargetBranch,
     [gitPanelContextMode, taskTargetBranchState.effectiveTargetBranch],
   );
-  const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
-    workspaceRepoPath,
-    selectedView,
-    isGitTabActive,
-    isRightPanelOpen,
-  });
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const hasGitContext = buildToolsBootstrap.repoPath != null && hasSelectedTask;
   const repoPath = hasGitContext ? buildToolsBootstrap.repoPath : null;
@@ -178,10 +183,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       ? (selectedView.selectedTask?.id ?? null)
       : null;
   const isDevServerEnabled = devServerRepoPath != null && devServerTaskId != null;
-  const directWorktreePath = resolveDirectBuildWorktreePath({
-    repoPath,
-    sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
-  });
+  const directWorktreePath = hasGitContext ? sessionWorktreePath : null;
   const shouldUseTaskWorktreeQuery =
     gitPanelContextMode === "worktree" &&
     repoPath != null &&

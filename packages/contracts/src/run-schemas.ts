@@ -4,6 +4,7 @@ import {
   runtimeKindSchema,
   stdioRuntimeIdentitySchema,
 } from "./agent-runtime-schemas";
+import { agentRoleSchema } from "./agent-workflow-schemas";
 import { failureKindSchema } from "./failure-schemas";
 
 export const runtimeHealthSchema = z.object({
@@ -110,6 +111,16 @@ export const buildSessionBootstrapSchema = z.object({
   workingDirectory: z.string().trim().min(1),
 });
 export type BuildSessionBootstrap = z.infer<typeof buildSessionBootstrapSchema>;
+
+export const taskSessionBootstrapSchema = z
+  .object({
+    bootstrapId: z.string().trim().min(1),
+    role: agentRoleSchema,
+    runtimeKind: runtimeKindSchema,
+    workingDirectory: z.string().trim().min(1),
+  })
+  .strict();
+export type TaskSessionBootstrap = z.infer<typeof taskSessionBootstrapSchema>;
 
 export const runtimeInstanceSummaryRoleSchema = z.literal("workspace");
 export type RuntimeInstanceSummaryRole = z.infer<typeof runtimeInstanceSummaryRoleSchema>;

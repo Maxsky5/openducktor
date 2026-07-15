@@ -76,6 +76,9 @@ describe("OpenInMenu", () => {
       expect(screen.getByTestId("agent-studio-git-open-in-default-button").textContent).toContain(
         "Finder",
       );
+      expect(
+        screen.getByTestId("agent-studio-git-open-in-default-button").getAttribute("aria-label"),
+      ).toBe("Open task worktree in Finder");
 
       await runWithReactAct(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
@@ -120,7 +123,7 @@ describe("OpenInMenu", () => {
             <OpenInMenu
               contextMode="worktree"
               targetPath={null}
-              disabledReason="Builder worktree path is unavailable. Refresh the Git panel and try again."
+              disabledReason="Task worktree path is unavailable. Refresh the Git panel and try again."
             />
           </TooltipProvider>
         </QueryProvider>,
@@ -133,10 +136,10 @@ describe("OpenInMenu", () => {
       expect(disabledTrigger).toBeTruthy();
       expect(
         screen.getByText(
-          "Builder worktree path is unavailable. Refresh the Git panel and try again.",
+          "Task worktree path is unavailable. Refresh the Git panel and try again.",
           { selector: "span.sr-only" },
         ).textContent,
-      ).toContain("Builder worktree path is unavailable. Refresh the Git panel and try again.");
+      ).toContain("Task worktree path is unavailable. Refresh the Git panel and try again.");
     } finally {
       host.systemListOpenInTools = originalSystemListOpenInTools;
     }
@@ -165,10 +168,10 @@ describe("OpenInMenu", () => {
       expect(trigger.disabled).toBe(true);
       expect(
         screen.getByText(
-          "Builder worktree path is unavailable. Refresh the Git panel and try again.",
+          "Task worktree path is unavailable. Refresh the Git panel and try again.",
           { selector: "span.sr-only" },
         ).textContent,
-      ).toContain("Builder worktree path is unavailable");
+      ).toContain("Task worktree path is unavailable");
     } finally {
       host.systemListOpenInTools = originalSystemListOpenInTools;
     }

@@ -1,10 +1,10 @@
 import type { PolicyBoundSessionRef } from "@openducktor/core";
 import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type {
-  RuntimeDependencies,
   SessionDependencies,
   StartAgentSessionInput,
   StartAgentSessionResult,
@@ -17,11 +17,8 @@ import { executeForkStart } from "./start-session-fork-strategy";
 import { executeFreshStart } from "./start-session-fresh-strategy";
 import { resolveStartTask } from "./start-session-policies";
 import { executeReuseStart } from "./start-session-reuse-strategy";
-import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
-import {
-  resolveFreshStartTargetWorkingDirectoryForStart,
-  serializeSelectedModelKey,
-} from "./start-session-runtime";
+import { rollbackRegisteredStartedSession } from "./start-session-rollback";
+import { serializeSelectedModelKey } from "./start-session-runtime";
 
 export type {
   StartAgentSessionInput,
@@ -29,36 +26,23 @@ export type {
   StartSessionDependencies,
 } from "./start-session.types";
 
-const resolveFreshStartTarget = async ({
-  input,
-  ctx,
-  runtime,
-}: {
-  input: StartAgentSessionInput;
-  ctx: StartSessionContext;
-  runtime: RuntimeDependencies;
-}) => {
+const resolveFreshStartTarget = ({ input }: { input: StartAgentSessionInput }) => {
   if (input.startMode !== "fresh") {
     return null;
   }
 
-  return resolveFreshStartTargetWorkingDirectoryForStart({
-    ctx,
-    runtime,
-    ...(input.targetWorkingDirectory !== undefined
-      ? { targetWorkingDirectory: input.targetWorkingDirectory }
-      : {}),
-  });
+  return {
+    targetWorkingDirectory: input.targetWorkingDirectory,
+    normalizedTargetWorkingDirectory: normalizeWorkingDirectory(input.targetWorkingDirectory),
+  };
 };
 
 const observeAgentSessionAndGuard = async ({
   startResult,
   session,
-  runtime,
 }: {
   startResult: Extract<StartOrReuseResult, { kind: "started" }>;
   session: SessionDependencies;
-  runtime: RuntimeDependencies;
 }): Promise<void> => {
   const { ctx: startedCtx, runtimeInfo } = startResult;
   const observerTarget: PolicyBoundSessionRef = {
@@ -76,12 +60,7 @@ const observeAgentSessionAndGuard = async ({
   if (!startedCtx.isStaleRepoOperation()) {
     return;
   }
-
-  await stopSessionOnStaleAndThrow({
-    reason: "start-session-stop-on-stale-after-observer-start",
-    runtime,
-    startedCtx,
-  });
+  throw new Error(STALE_START_ERROR);
 };
 
 export const createStartAgentSession = ({
@@ -120,10 +99,8 @@ export const createStartAgentSession = ({
     }
     const sourceSessionKey =
       input.startMode === "fresh" ? "" : agentSessionIdentityKey(input.sourceSession);
-    const freshStartTarget = await resolveFreshStartTarget({
+    const freshStartTarget = resolveFreshStartTarget({
       input,
-      ctx: startCtx,
-      runtime,
     });
     const normalizedTargetWorkingDirectory =
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
@@ -168,11 +145,46 @@ export const createStartAgentSession = ({
         return startResult.session;
       }
 
-      await observeAgentSessionAndGuard({
-        startResult,
-        session,
-        runtime,
-      });
+      let freshBootstrapCommitted = false;
+      let bootstrapCompletionAttempted = false;
+      let bootstrapCompleted = false;
+      try {
+        await observeAgentSessionAndGuard({
+          startResult,
+          session,
+        });
+        bootstrapCompletionAttempted = !!startResult.runtimeInfo.bootstrap;
+        await startResult.runtimeInfo.bootstrap?.complete();
+        bootstrapCompleted = !!startResult.runtimeInfo.bootstrap;
+        freshBootstrapCommitted = input.startMode === "fresh" && bootstrapCompleted;
+        if (startResult.ctx.isStaleRepoOperation()) {
+          throw new Error(STALE_START_ERROR);
+        }
+      } catch (cause) {
+        if (freshBootstrapCommitted) {
+          throw cause;
+        }
+        const identity = {
+          externalSessionId: startResult.ctx.summary.externalSessionId,
+          runtimeKind: startResult.runtimeInfo.runtimeKind,
+          workingDirectory: startResult.runtimeInfo.workingDirectory,
+        };
+        await rollbackRegisteredStartedSession({
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+          startedCtx: startResult.ctx,
+          identity,
+          session,
+          runtime,
+          stopReason: "start-session-stop-after-observer-or-bootstrap-failure",
+          ...(startResult.runtimeInfo.bootstrap && !bootstrapCompleted
+            ? {
+                bootstrap: startResult.runtimeInfo.bootstrap,
+                commitBootstrapOnDeleteFailure: !bootstrapCompletionAttempted,
+              }
+            : {}),
+        });
+      }
 
       return {
         externalSessionId: startResult.ctx.summary.externalSessionId,

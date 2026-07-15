@@ -78,7 +78,7 @@ It is live runtime-instance metadata only:
 
 `runtimeInstanceSummaryRoleSchema` is currently `workspace` only, so this payload describes shared workspace runtime instances rather than every startup path in the system.
 
-The host keeps this payload at runtime-registry and adapter boundaries. Higher-level orchestration must carry durable request coordinates instead: `runtimeKind`, repository path, working directory, and session id when a session exists. Build startup returns `BuildSessionBootstrap` instead, because the Builder session only needs `runtimeKind` and the build worktree `workingDirectory` at that boundary. The live route belongs to the running runtime instance and is resolved again through the runtime registry when adapter operations need it. Runtime adapters require that live route; runtime startup stays in `runtimeEnsure`, `repoRuntimeHealth`, or build startup orchestration.
+The host keeps this payload at runtime-registry and adapter boundaries. Higher-level orchestration carries durable request coordinates instead: `runtimeKind`, repository path, working directory, and session id when a session exists. Fresh task sessions use a transient prepare/complete/abort bootstrap handle; the handle is never persisted. The live route belongs to the repository-scoped runtime instance and is resolved again through the runtime registry when adapter operations need it.
 
 ### `RuntimeRoute`
 
@@ -373,11 +373,9 @@ Rules:
 
 Build runtime support is separate from workspace runtime acquisition.
 
-Current startup routing is split like this:
+Every fresh task-scoped role uses `task_session_bootstrap_prepare`. The host creates or strictly validates the deterministic canonical task worktree, ensures the selected runtime at repository scope, and returns the worktree for adapter session startup. Copy paths and pre-start hooks run only for first creation. The frontend calls `complete` after persistence and observer attachment or `abort` on failure; only Builder completion transitions to `in_progress`. `build_start` remains a compatibility wrapper over the same bootstrap.
 
-- `runtime_ensure(runtime_kind, repo)` is the repo-scoped workspace-runtime path used by `spec` and `planner`,
-- `qa` still requires `task` scope, but current frontend orchestration resolves the task/build continuation working directory, ensures the selected repo-scoped runtime, then starts or resumes the QA session with that working directory,
-- `build_start(repo, task, runtimeKind)` is the build-specific path and returns `BuildSessionBootstrap`, not `RuntimeInstanceSummary`; internally, the current host prepares the build worktree, ensures the selected repo-scoped runtime, validates that runtime for build bootstrap, and returns the runtime kind plus the build worktree working directory.
+Persisted legacy sessions are not migrated. Reuse and history operations continue using their recorded runtime kind and working directory, while repository-root-backed task sessions cannot be forked into a new task session.
 
 Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/contracts/src/agent-runtime-schemas.ts`, while launch-action start-mode compatibility is exported through `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts` and sourced from `packages/frontend/src/lib/session-launch-actions.ts`.
 

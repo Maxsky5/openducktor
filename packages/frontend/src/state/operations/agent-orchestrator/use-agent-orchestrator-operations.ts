@@ -19,7 +19,12 @@ import {
 import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
-import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
+import {
+  createEnsureExistingSessionRuntime,
+  createEnsureRuntime,
+  loadRepoPromptOverrides,
+  loadTaskDocuments,
+} from "./runtime/runtime";
 import { createLoadSourceSession } from "./session-read-model/source-session-loader";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
@@ -85,7 +90,8 @@ export function useAgentOrchestratorOperations({
     () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
     [workspaceRepoPath, queryClient, hostPort],
   );
-  const { persistSessionRecord, invalidateSessionStopQueries } = sessionCacheEffects;
+  const { deleteSessionRecord, persistSessionRecord, invalidateSessionStopQueries } =
+    sessionCacheEffects;
   const updateSession = useCallback<UpdateSession>(
     (identity, updater, options) => {
       const shouldPersist = options?.persist === true;
@@ -218,12 +224,16 @@ export function useAgentOrchestratorOperations({
     () =>
       createEnsureRuntime({
         refreshTaskData,
+        queryClient,
         hostClient: {
           ...runtimeHostPort,
-          taskWorktreeGet: hostPort.taskWorktreeGet,
         },
       }),
-    [refreshTaskData, runtimeHostPort, hostPort.taskWorktreeGet],
+    [queryClient, refreshTaskData, runtimeHostPort],
+  );
+  const ensureExistingSessionRuntime = useMemo(
+    () => createEnsureExistingSessionRuntime(runtimeHostPort),
+    [runtimeHostPort],
   );
   const sessionActions = useMemo(
     () =>
@@ -242,8 +252,13 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
         updateSession,
         observeAgentSession,
+        canonicalizePath: runtimeHostPort.gitCanonicalizePath,
+        prepareTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeasePrepare,
+        completeTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeaseComplete,
+        abortTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeaseAbort,
         resolveTaskWorktree: hostPort.taskWorktreeGet,
         ensureRuntime,
+        ensureExistingSessionRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
@@ -251,6 +266,7 @@ export function useAgentOrchestratorOperations({
         loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
         refreshTaskData,
         persistSessionRecord,
+        deleteSessionRecord,
         stopAuthoritativeSession: hostPort.agentSessionStop,
         invalidateSessionStopQueries,
       }),
@@ -258,15 +274,18 @@ export function useAgentOrchestratorOperations({
       agentEngine,
       currentWorkspaceRepoPathRef,
       ensureRuntime,
+      ensureExistingSessionRuntime,
       hostPort,
       invalidateSessionStopQueries,
       loadSourceSession,
       observeAgentSession,
       persistSessionRecord,
+      deleteSessionRecord,
       queryBackedPromptOverrides,
       queryClient,
       repoEpochRef,
       refreshTaskData,
+      runtimeHostPort,
       sessionObserversRef,
       sessionStore,
       sessionHistoryLoaders,

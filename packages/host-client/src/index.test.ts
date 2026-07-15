@@ -1848,7 +1848,7 @@ describe("HostClient", () => {
           ],
         };
       }
-      if (command === "agent_session_upsert") {
+      if (command === "agent_session_upsert" || command === "agent_session_delete") {
         return { ok: true };
       }
       throw new Error(`Unexpected command: ${command}`);
@@ -1860,11 +1860,13 @@ describe("HostClient", () => {
       throw new Error("Expected persisted session history entry");
     }
     await client.agentSessionUpsert("/repo", "task-1", first);
+    await client.agentSessionDelete("/repo", "task-1", first);
 
     expect(history).toHaveLength(1);
     expect(calls.map((entry) => entry.command)).toEqual([
       "task_metadata_get",
       "agent_session_upsert",
+      "agent_session_delete",
     ]);
     expect(calls[0].args).toEqual({
       repoPath: "/repo",

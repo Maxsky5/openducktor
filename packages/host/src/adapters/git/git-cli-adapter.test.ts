@@ -1,4 +1,9 @@
+import { execFileSync } from "node:child_process";
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Effect } from "effect";
+import { validateExistingTaskWorktreeCandidate } from "../../application/tasks/support/task-cleanup-support";
 import {
   createGitCliAdapter as createEffectGitCliAdapter,
   type GitCommandRunner,
@@ -500,6 +505,127 @@ describe("createGitCliAdapter", () => {
       ),
     ).resolves.toEqual({ affectedPaths: ["src/new.ts"] });
     expect(calls).toEqual(["ls-files --error-unmatch -- src/new.ts", "clean -f -- src/new.ts"]);
+  });
+  test("restores a whole worktree without deleting ignored files", async () => {
+    const calls: string[] = [];
+    const git = createGitCliAdapter({
+      runner: (_workingDirectory, args) => {
+        calls.push(args.join(" "));
+        return Effect.succeed({
+          ok: true,
+          stdout: args[0] === "rev-parse" ? "abc123\n" : "",
+          stderr: "",
+        });
+      },
+    });
+
+    await expect(
+      Effect.runPromise(git.restoreWorktreeToReference("/worktree", "origin/main")),
+    ).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      "rev-parse --verify --end-of-options origin/main^{commit}",
+      "reset --hard abc123",
+      "clean -d -f",
+    ]);
+  });
+  test("reports partial progress when whole-worktree cleanup fails", async () => {
+    const git = createGitCliAdapter({
+      runner: (_workingDirectory, args) =>
+        Effect.succeed({
+          ok: args[0] !== "clean",
+          stdout: args[0] === "rev-parse" ? "abc123\n" : "",
+          stderr: args[0] === "clean" ? "permission denied" : "",
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(git.restoreWorktreeToReference("/worktree", "main")),
+    ).rejects.toThrow(
+      "Tracked content was restored to main, but ordinary untracked-file cleanup did not complete",
+    );
+  });
+  test("checks exact registered worktree paths", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "worktree list --porcelain -z":
+          "worktree /repo\0HEAD abc\0branch refs/heads/main\0\0worktree /worktrees/task\0HEAD def\0branch refs/heads/task\0\0",
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/task")),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/missing")),
+    ).resolves.toBe(false);
+  });
+  test("restores tracked and ordinary untracked content while preserving ignored files in a real worktree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openducktor-git-restore-"));
+    const repo = join(root, "repo");
+    const worktree = join(root, "task");
+    const git = (...args: string[]): string =>
+      execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+    try {
+      await mkdir(repo);
+      git("init", "-b", "main");
+      git("config", "core.autocrlf", "false");
+      git("config", "user.email", "test@example.com");
+      git("config", "user.name", "Test");
+      await writeFile(join(repo, ".gitignore"), "ignored/\n");
+      await writeFile(join(repo, "tracked.txt"), "base\n");
+      git("add", ".");
+      git("commit", "-m", "base");
+      git("worktree", "add", "-b", "task", worktree, "main");
+      await writeFile(join(worktree, "tracked.txt"), "changed\n");
+      await writeFile(join(worktree, "ordinary.txt"), "remove\n");
+      await mkdir(join(worktree, "ordinary-dir"));
+      await writeFile(join(worktree, "ordinary-dir", "nested.txt"), "remove\n");
+      await mkdir(join(worktree, "ignored"));
+      await writeFile(join(worktree, "ignored", "state.txt"), "preserve\n");
+
+      const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
+      await Effect.runPromise(adapter.restoreWorktreeToReference(worktree, "main"));
+
+      expect(await readFile(join(worktree, "tracked.txt"), "utf8")).toBe("base\n");
+      await expect(access(join(worktree, "ordinary.txt"))).rejects.toThrow();
+      await expect(access(join(worktree, "ordinary-dir"))).rejects.toThrow();
+      expect(await readFile(join(worktree, "ignored", "state.txt"), "utf8")).toBe("preserve\n");
+      expect(git("-C", worktree, "branch", "--show-current")).toBe("task");
+      expect(git("worktree", "list", "--porcelain")).toContain(
+        `worktree ${(await realpath(worktree)).replaceAll("\\", "/")}`,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  test("rejects an unrelated real repository at a managed task path before cleanup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openducktor-unrelated-cleanup-"));
+    const repo = join(root, "repo");
+    const unrelated = join(root, "task-1");
+    const init = async (path: string, branch: string) => {
+      await mkdir(path);
+      execFileSync("git", ["init", "-b", branch], { cwd: path });
+    };
+    try {
+      await init(repo, "main");
+      await init(unrelated, "odt/task-1-unrelated");
+      const adapter = createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") });
+      await expect(
+        Effect.runPromise(
+          validateExistingTaskWorktreeCandidate(
+            adapter,
+            repo,
+            unrelated,
+            "odt",
+            "task-1",
+            "delete",
+          ),
+        ),
+      ).rejects.toThrow("is not a registered worktree");
+      expect(await access(unrelated).then(() => true)).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
   test("resets a hunk selection with reverse patch application", async () => {
     const calls: Array<{

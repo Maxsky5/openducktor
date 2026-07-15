@@ -1,4 +1,6 @@
+import { agentRoleSchema } from "@openducktor/contracts";
 import type {
+  AgentSessionDeleteInput,
   AgentSessionUpsertInput,
   BuildBlockedInput,
   BuildCompletedInput,
@@ -14,6 +16,10 @@ import type {
   RepoPathInput,
   SetPlanInput,
   TaskIdInput,
+  TaskSessionBootstrapFinalizeInput,
+  TaskSessionBootstrapPrepareInput,
+  TaskSessionStartupLeaseFinalizeInput,
+  TaskSessionStartupLeasePrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
@@ -22,6 +28,7 @@ import {
   compactAgentSessionForStorage,
   optionalBoolean,
   optionalNonNegativeInteger,
+  parseAgentSessionIdentity,
   parseAgentSessionRecord,
   parseCreateInput,
   parseOptionalNote,
@@ -62,6 +69,15 @@ export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsert
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     session: compactAgentSessionForStorage(parseAgentSessionRecord(record.session)),
+  };
+};
+
+export const parseAgentSessionDeleteInput = (input: unknown): AgentSessionDeleteInput => {
+  const record = requireRecord(input, "agent_session_delete input");
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    identity: parseAgentSessionIdentity(record.identity),
   };
 };
 
@@ -170,6 +186,71 @@ export const parseBuildStartInput = (input: unknown): BuildStartInput => {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
+  };
+};
+
+export const parseTaskSessionBootstrapPrepareInput = (
+  input: unknown,
+): TaskSessionBootstrapPrepareInput => {
+  const record = requireRecord(input, "task_session_bootstrap_prepare input");
+  const parsedRole = agentRoleSchema.safeParse(record.role);
+  if (!parsedRole.success) {
+    throw new HostValidationError({
+      field: "role",
+      message: "A supported agent role is required.",
+    });
+  }
+  const targetWorkingDirectory =
+    typeof record.targetWorkingDirectory === "string" && record.targetWorkingDirectory.trim()
+      ? record.targetWorkingDirectory.trim()
+      : undefined;
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
+    role: parsedRole.data,
+    ...(targetWorkingDirectory ? { targetWorkingDirectory } : {}),
+  };
+};
+
+export const parseTaskSessionBootstrapFinalizeInput = (
+  input: unknown,
+  label: string,
+): TaskSessionBootstrapFinalizeInput => {
+  const record = requireRecord(input, label);
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    bootstrapId: requireString(record.bootstrapId, "bootstrapId"),
+  };
+};
+
+export const parseTaskSessionStartupLeasePrepareInput = (
+  input: unknown,
+): TaskSessionStartupLeasePrepareInput => {
+  const record = requireRecord(input, "task_session_startup_lease_prepare input");
+  const role = agentRoleSchema.safeParse(record.role);
+  if (!role.success)
+    throw new HostValidationError({
+      field: "role",
+      message: "A supported agent role is required.",
+    });
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    role: role.data,
+  };
+};
+
+export const parseTaskSessionStartupLeaseFinalizeInput = (
+  input: unknown,
+  label: string,
+): TaskSessionStartupLeaseFinalizeInput => {
+  const record = requireRecord(input, label);
+  return {
+    repoPath: requireString(record.repoPath, "repoPath"),
+    taskId: requireString(record.taskId, "taskId"),
+    leaseId: requireString(record.leaseId, "leaseId"),
   };
 };
 

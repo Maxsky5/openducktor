@@ -390,6 +390,25 @@ export const describeTaskStorePortContract = (
       });
 
       await run(
+        store.deleteAgentSession({
+          repoPath,
+          taskId: task.id,
+          identity: updatedBuildSession,
+        }),
+      );
+      await expect(
+        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+      ).resolves.toMatchObject({
+        agentSessions: [
+          expect.objectContaining({
+            externalSessionId: "build-session",
+            workingDirectory: "/repos/fairnest/worktrees/build-session-other",
+          }),
+          expect.objectContaining({ externalSessionId: "qa-session" }),
+        ],
+      });
+
+      await run(
         store.clearAgentSessionsByRoles({
           repoPath,
           taskId: task.id,

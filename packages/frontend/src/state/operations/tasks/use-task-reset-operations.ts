@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { invalidateAgentSessionListQuery } from "../../queries/agent-sessions";
 import { host } from "../shared/host";
@@ -85,6 +86,9 @@ const invalidateTaskWorkflowQueries = async (
       queryKey: documentQueryKeys.plan(repoPath, taskId),
       exact: true,
       refetchType: "none",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
     }),
   ]);
 };

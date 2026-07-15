@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionIdentity, AgentSessionRecord } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { host } from "../operations/host";
@@ -126,5 +126,18 @@ export const upsertAgentSessionRecordInQuery = (
 
       return current.map((entry, index) => (index === existingIndex ? session : entry));
     },
+  );
+};
+
+export const removeAgentSessionRecordFromQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  identity: AgentSessionIdentity,
+): void => {
+  const identityKey = agentSessionIdentityKey(identity);
+  queryClient.setQueryData<AgentSessionRecord[] | undefined>(
+    agentSessionQueryKeys.list(repoPath, taskId),
+    (current) => current?.filter((entry) => agentSessionIdentityKey(entry) !== identityKey),
   );
 };

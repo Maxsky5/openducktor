@@ -9,7 +9,10 @@ import type {
 } from "./start-session.types";
 import { registerStartedSession } from "./start-session-persistence";
 import { resolveStartTask } from "./start-session-policies";
-import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
+import {
+  rollbackBootstrapAfterStartFailure,
+  stopSessionOnStaleAndThrow,
+} from "./start-session-rollback";
 import { resolveFreshStartRuntimeContext } from "./start-session-runtime";
 
 type FreshStrategyInput = {
@@ -40,47 +43,57 @@ export const executeFreshStart = async ({
     taskCard,
     deps,
   });
-  const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
-  const loadSettingsSnapshot = deps.model.loadSettingsSnapshot;
-  const runtimePolicy = await resolveAgentSessionRuntimePolicy({
-    runtimeKind: selectedModelRuntimeKind,
-    sessionScope,
-    loadSettingsSnapshot,
-  });
-
-  const summary = await deps.runtime.adapter.startSession({
-    repoPath: ctx.repoPath,
-    ...toAgentRuntimePolicyBinding({
+  try {
+    const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
+    const loadSettingsSnapshot = deps.model.loadSettingsSnapshot;
+    const runtimePolicy = await resolveAgentSessionRuntimePolicy({
       runtimeKind: selectedModelRuntimeKind,
-      runtimePolicy,
-    }),
-    workingDirectory: resolved.runtime.workingDirectory,
-    sessionScope,
-    systemPrompt: resolved.systemPrompt,
-    model: selectedModelWithRuntime,
-  });
+      sessionScope,
+      loadSettingsSnapshot,
+    });
 
-  const startedCtx = {
-    ...ctx,
-    summary,
-  };
+    const summary = await deps.runtime.adapter.startSession({
+      repoPath: ctx.repoPath,
+      ...toAgentRuntimePolicyBinding({
+        runtimeKind: selectedModelRuntimeKind,
+        runtimePolicy,
+      }),
+      workingDirectory: resolved.runtime.workingDirectory,
+      sessionScope,
+      systemPrompt: resolved.systemPrompt,
+      model: selectedModelWithRuntime,
+    });
 
-  if (ctx.isStaleRepoOperation()) {
-    await stopSessionOnStaleAndThrow({
-      reason: "start-session-stop-on-stale-after-start",
-      runtime: deps.runtime,
+    const startedCtx = {
+      ...ctx,
+      summary,
+    };
+
+    if (ctx.isStaleRepoOperation()) {
+      await stopSessionOnStaleAndThrow({
+        reason: "start-session-stop-on-stale-after-start",
+        runtime: deps.runtime,
+        startedCtx,
+      });
+    }
+
+    return await registerStartedSession({
+      ctx,
       startedCtx,
+      runtimeInfo: resolved.runtime,
+      runtimePolicy,
+      systemPrompt: resolved.systemPrompt,
+      selectedModel: selectedModelWithRuntime,
+      deps,
+      taskCard,
+    });
+  } catch (cause) {
+    if (!resolved.runtime.bootstrap) {
+      throw cause;
+    }
+    return rollbackBootstrapAfterStartFailure({
+      cause,
+      bootstrap: resolved.runtime.bootstrap,
     });
   }
-
-  return registerStartedSession({
-    ctx,
-    startedCtx,
-    runtimeInfo: resolved.runtime,
-    runtimePolicy,
-    systemPrompt: resolved.systemPrompt,
-    selectedModel: selectedModelWithRuntime,
-    deps,
-    taskCard,
-  });
 };

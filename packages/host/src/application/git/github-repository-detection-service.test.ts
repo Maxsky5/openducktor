@@ -66,6 +66,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    isRegisteredWorktree() {
+      return Effect.succeed(false);
+    },
     referenceExists() {
       return Effect.succeed(true);
     },
@@ -300,6 +303,9 @@ const createFakeGitPort = ({
             cause: cause,
           }),
       });
+    },
+    restoreWorktreeToReference() {
+      return Effect.dieMessage("unexpected restore worktree");
     },
     fetchRemote() {
       return Effect.tryPromise({

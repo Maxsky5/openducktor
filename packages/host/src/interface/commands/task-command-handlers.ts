@@ -1,6 +1,7 @@
 import type { TaskService } from "../../application/tasks/task-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import {
+  parseAgentSessionDeleteInput,
   parseAgentSessionUpsertInput,
   parseBuildBlockedInput,
   parseBuildCompletedInput,
@@ -17,11 +18,17 @@ import {
   parseRepoPathInput,
   parseSetPlanInput,
   parseTaskIdInput,
+  parseTaskSessionBootstrapFinalizeInput,
+  parseTaskSessionBootstrapPrepareInput,
+  parseTaskSessionStartupLeaseFinalizeInput,
+  parseTaskSessionStartupLeasePrepareInput,
   parseTransitionTaskInput,
   parseUpdateTaskInput,
 } from "./task-command-inputs";
 
 export const createTaskCommandHandlers = (taskService: TaskService): HostCommandHandlers => ({
+  agent_session_delete: (args) =>
+    taskService.agentSessionDelete(parseAgentSessionDeleteInput(args)),
   agent_session_upsert: (args) =>
     taskService.agentSessionUpsert(parseAgentSessionUpsertInput(args)),
   agent_sessions_list: (args) =>
@@ -30,6 +37,26 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
   build_completed: (args) => taskService.buildCompleted(parseBuildCompletedInput(args)),
   build_resumed: (args) => taskService.buildResumed(parseTaskIdInput(args, "build_resumed input")),
   build_start: (args) => taskService.buildStart(parseBuildStartInput(args)),
+  task_session_bootstrap_prepare: (args) =>
+    taskService.taskSessionBootstrapPrepare(parseTaskSessionBootstrapPrepareInput(args)),
+  task_session_bootstrap_complete: (args) =>
+    taskService.taskSessionBootstrapComplete(
+      parseTaskSessionBootstrapFinalizeInput(args, "task_session_bootstrap_complete input"),
+    ),
+  task_session_bootstrap_abort: (args) =>
+    taskService.taskSessionBootstrapAbort(
+      parseTaskSessionBootstrapFinalizeInput(args, "task_session_bootstrap_abort input"),
+    ),
+  task_session_startup_lease_prepare: (args) =>
+    taskService.taskSessionStartupLeasePrepare(parseTaskSessionStartupLeasePrepareInput(args)),
+  task_session_startup_lease_complete: (args) =>
+    taskService.taskSessionStartupLeaseComplete(
+      parseTaskSessionStartupLeaseFinalizeInput(args, "task_session_startup_lease_complete input"),
+    ),
+  task_session_startup_lease_abort: (args) =>
+    taskService.taskSessionStartupLeaseAbort(
+      parseTaskSessionStartupLeaseFinalizeInput(args, "task_session_startup_lease_abort input"),
+    ),
   human_approve: (args) => taskService.humanApprove(parseTaskIdInput(args, "human_approve input")),
   human_request_changes: (args) =>
     taskService.humanRequestChanges(

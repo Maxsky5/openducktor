@@ -5,6 +5,8 @@ import type { AgentOrchestratorDependencies } from "./orchestrator-ports";
 export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorDependencies => ({
   queryClient: appQueryClient,
   hostPort: {
+    agentSessionDelete: (repoPath, taskId, identity) =>
+      host.agentSessionDelete(repoPath, taskId, identity),
     agentSessionUpsert: (repoPath, taskId, record) =>
       host.agentSessionUpsert(repoPath, taskId, record),
     agentSessionStop: async (target) => {
@@ -13,7 +15,13 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
     taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
   },
   runtimeHostPort: {
-    buildStart: (...args) => host.buildStart(...args),
+    gitCanonicalizePath: (...args) => host.gitCanonicalizePath(...args),
     runtimeEnsure: (...args) => host.runtimeEnsure(...args),
+    taskSessionBootstrapPrepare: (...args) => host.taskSessionBootstrapPrepare(...args),
+    taskSessionBootstrapComplete: (...args) => host.taskSessionBootstrapComplete(...args),
+    taskSessionBootstrapAbort: (...args) => host.taskSessionBootstrapAbort(...args),
+    taskSessionStartupLeasePrepare: (...args) => host.taskSessionStartupLeasePrepare(...args),
+    taskSessionStartupLeaseComplete: (...args) => host.taskSessionStartupLeaseComplete(...args),
+    taskSessionStartupLeaseAbort: (...args) => host.taskSessionStartupLeaseAbort(...args),
   },
 });

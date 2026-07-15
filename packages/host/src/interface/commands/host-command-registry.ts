@@ -1,6 +1,7 @@
 import { HostValidationError } from "../../effect/host-errors";
 
 export const HOST_COMMAND_NAMES = [
+  "agent_session_delete",
   "agent_session_stop",
   "agent_session_upsert",
   "agent_sessions_list",
@@ -19,6 +20,7 @@ export const HOST_COMMAND_NAMES = [
   "filesystem_list_tree",
   "filesystem_read_text_file",
   "git_abort_conflict",
+  "git_canonicalize_path",
   "git_commit_all",
   "git_commits_ahead_behind",
   "git_create_worktree",
@@ -76,6 +78,12 @@ export const HOST_COMMAND_NAMES = [
   "task_pull_request_upsert",
   "task_reset",
   "task_reset_implementation",
+  "task_session_bootstrap_abort",
+  "task_session_bootstrap_complete",
+  "task_session_bootstrap_prepare",
+  "task_session_startup_lease_abort",
+  "task_session_startup_lease_complete",
+  "task_session_startup_lease_prepare",
   "task_store_check",
   "task_transition",
   "task_update",

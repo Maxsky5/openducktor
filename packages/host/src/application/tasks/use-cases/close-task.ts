@@ -31,12 +31,13 @@ export const createTaskCloseUseCase = ({
   taskWorktreeService,
   worktreeFiles,
   workspaceSettingsService,
+  taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
+      let currentTasks = yield* taskStore.listTasks({ repoPath });
+      let current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -51,31 +52,44 @@ export const createTaskCloseUseCase = ({
       }
 
       yield* validateManualCloseTaskEffect(current, currentTasks);
-
-      const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      const currentSessions = currentMetadata.agentSessions;
-
-      if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
-        if (!taskActivityGuard) {
+      if (taskSessionBootstrapCoordinator && gitPort) {
+        const canonicalInputRepo = yield* gitPort.canonicalizePath(repoPath);
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+          canonicalInputRepo,
+          [taskId],
+          "close task",
+        );
+        currentTasks = yield* taskStore.listTasks({ repoPath });
+        current = currentTasks.find((task) => task.id === taskId);
+        if (!current) {
           return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "task_close",
-              message:
-                "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+            new HostValidationError({
+              field: "taskId",
+              message: `Task not found: ${taskId}`,
               details: { repoPath, taskId },
             }),
           );
         }
-        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath,
-          taskId,
-          sessions: currentSessions,
-          operationLabel: "close task",
-          sessionRoles: [...workflowCleanupSessionRoleNames],
-        });
+        yield* validateManualCloseTaskEffect(current, currentTasks);
       }
 
+      const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const currentSessions = currentMetadata.agentSessions;
+      const hasWorkflowSessions = taskHasSessionsForRoles(
+        currentSessions,
+        workflowCleanupSessionRoles,
+      );
+      if (hasWorkflowSessions && !taskActivityGuard) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "taskActivityGuard",
+            operation: "task_close",
+            message:
+              "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+            details: { repoPath, taskId },
+          }),
+        );
+      }
       const dependencies = yield* requireDependencies(() =>
         requireTaskCloseDependencies(
           devServerService,
@@ -86,7 +100,18 @@ export const createTaskCloseUseCase = ({
       );
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+
+      if (hasWorkflowSessions && taskActivityGuard) {
+        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
+          repoPath: effectiveRepoPath,
+          taskId,
+          sessions: currentSessions,
+          operationLabel: "close task",
+          sessionRoles: [...workflowCleanupSessionRoleNames],
+        });
+      }
+
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
@@ -151,6 +176,6 @@ export const createTaskCloseUseCase = ({
           ),
         ),
       );
-    });
+    }).pipe(Effect.scoped);
   },
 });

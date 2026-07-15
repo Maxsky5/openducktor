@@ -1,4 +1,5 @@
 import {
+  type AgentSessionIdentity,
   type AgentSessionRecord,
   agentSessionRecordSchema,
   type PlanSubtaskInput,
@@ -163,6 +164,24 @@ export const parseAgentSessionRecord = (value: unknown): AgentSessionRecord => {
   throw invalidInput(
     `agent_session_upsert input.session is invalid: ${parsed.error.message}`,
     "input.session",
+  );
+};
+
+const agentSessionIdentitySchema = agentSessionRecordSchema.pick({
+  externalSessionId: true,
+  runtimeKind: true,
+  workingDirectory: true,
+});
+
+export const parseAgentSessionIdentity = (value: unknown): AgentSessionIdentity => {
+  const parsed = agentSessionIdentitySchema.safeParse(normalizeAgentSessionInput(value));
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  throw invalidInput(
+    `agent_session_delete input.identity is invalid: ${parsed.error.message}`,
+    "input.identity",
   );
 };
 

@@ -91,8 +91,10 @@ describe("TaskDetailsSheet", () => {
       }),
     );
     const taskCleanupImpactHookMock = mock(() => ({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
     }));
@@ -151,8 +153,10 @@ describe("TaskDetailsSheet", () => {
       applyDocumentUpdate: () => {},
     }));
     const taskCleanupImpactHookMock = mock(() => ({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
     }));
@@ -214,8 +218,10 @@ describe("TaskDetailsSheet", () => {
       applyDocumentUpdate: () => {},
     }));
     const taskCleanupImpactHookMock = mock(() => ({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
     }));

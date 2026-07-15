@@ -62,8 +62,10 @@ The backend is the single source of truth for which actions are currently allowe
   - `spec_ready` when only a spec document is retained.
   - `open` when neither document is retained.
 - Guardrails:
-  - reject while live build or QA activity still exists for the task.
-  - fail if task-owned branch cleanup is unsafe, including checked-out branches.
+  - reject while any live task role uses the canonical worktree.
+  - validate the canonical worktree and expected task branch before mutation.
+  - restore tracked content to the locally available base and remove ordinary untracked files while preserving ignored files.
+  - retain the canonical worktree and task branch; do not rerun copy paths or hooks.
   - preserve retained spec and plan documents.
 
 ### `reset_task`

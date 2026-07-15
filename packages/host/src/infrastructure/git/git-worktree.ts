@@ -43,6 +43,21 @@ export const createWorktree = (
       : ["worktree", "add", "--end-of-options", targetWorktreePath, targetBranch];
     yield* runGit(runner, repoPath, args);
   });
+
+export const isRegisteredWorktree = (
+  runner: GitCommandRunner,
+  repoPath: string,
+  worktreePath: string,
+) =>
+  Effect.gen(function* () {
+    const targetPath = yield* requireNonEmptyEffect(worktreePath, "worktree path");
+    const output = yield* runGit(runner, repoPath, ["worktree", "list", "--porcelain", "-z"]);
+    const registeredPaths = output
+      .split("\0")
+      .filter((entry) => entry.startsWith("worktree "))
+      .map((entry) => entry.slice("worktree ".length));
+    return registeredPaths.includes(targetPath);
+  });
 export const deleteReference = (runner: GitCommandRunner, repoPath: string, reference: string) =>
   Effect.gen(function* () {
     const targetReference = yield* requireNonEmptyEffect(reference, "reference");

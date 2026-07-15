@@ -35,6 +35,7 @@ export const createTestDependencies = (
     },
   }),
   hostPort: {
+    agentSessionDelete: async () => undefined,
     agentSessionUpsert: async () => undefined,
     agentSessionStop: async () => undefined,
     taskWorktreeGet: async () => ({
@@ -44,23 +45,29 @@ export const createTestDependencies = (
     ...hostOverrides,
   },
   runtimeHostPort: {
-    buildStart: async (_repoPath, _taskId, runtimeKind) => ({
-      runtimeKind,
-      runtimeId: "runtime-1",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-      workingDirectory: "/tmp/repo/worktree",
-    }),
+    gitCanonicalizePath: async (path) => path,
     runtimeEnsure: async (repoPath, runtimeKind) => ({
       kind: runtimeKind,
-      runtimeId: "runtime-1",
+      runtimeId: `${runtimeKind}:${repoPath}`,
       repoPath,
       taskId: null,
       role: "workspace",
       workingDirectory: repoPath,
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: { ...OPENCODE_RUNTIME_DESCRIPTOR, kind: runtimeKind },
+      runtimeRoute: { type: "stdio", identity: `${runtimeKind}:${repoPath}` },
+      startedAt: "2026-01-01T00:00:00.000Z",
+      descriptor: runtimeKind === "codex" ? CODEX_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR,
     }),
+    taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind) => ({
+      bootstrapId: "bootstrap-1",
+      role,
+      runtimeKind,
+      workingDirectory: "/tmp/repo/worktree",
+    }),
+    taskSessionBootstrapComplete: async () => undefined,
+    taskSessionBootstrapAbort: async () => undefined,
+    taskSessionStartupLeasePrepare: async () => "lease-1",
+    taskSessionStartupLeaseComplete: async () => undefined,
+    taskSessionStartupLeaseAbort: async () => undefined,
     ...runtimeHostOverrides,
   },
 });

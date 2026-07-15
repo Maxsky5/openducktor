@@ -88,3 +88,31 @@ export const upsertAgentSession = (
     );
     return true;
   });
+
+export const deleteAgentSession = (
+  session: TaskStoreSession,
+  input: Parameters<TaskStorePort["deleteAgentSession"]>[0],
+  updatedAt: Date,
+): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
+  Effect.gen(function* () {
+    const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
+    const sessions = yield* agentSessionsFromRow(row);
+    const remaining = sessions.filter(
+      (entry) => !hasSameAgentSessionIdentity(entry, input.identity),
+    );
+    if (remaining.length === sessions.length) {
+      return true;
+    }
+    yield* session.execute(
+      (database) =>
+        database
+          .update(tasks)
+          .set({
+            agentSessionsJson: encodeJson(remaining),
+            updatedAt,
+          })
+          .where(eq(tasks.id, input.taskId)),
+      "sqliteTaskRepository.deleteAgentSession.updateTask",
+    );
+    return true;
+  });

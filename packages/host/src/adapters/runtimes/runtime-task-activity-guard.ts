@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import { type AgentSessionRecord, agentRoleValues } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -59,7 +59,7 @@ export const createRuntimeTaskActivityGuard = ({
           runtimeRegistry,
           input.repoPath,
           task.sessions,
-          ["build", "qa"],
+          [...agentRoleValues],
         ).pipe(
           Effect.mapError(
             (error) =>
@@ -100,7 +100,7 @@ export const createRuntimeTaskActivityGuard = ({
       return yield* Effect.fail(
         new HostOperationError({
           operation: "runtimeTaskActivityGuard.ensureNoActiveTaskDeleteRuns",
-          message: `Cannot delete tasks with active builder work in progress. Stop the active session(s) first: ${activeSummary}`,
+          message: `Cannot delete tasks with active workflow sessions. Stop the active session(s) first: ${activeSummary}`,
           details: { activeTasks },
         }),
       );

@@ -14,6 +14,12 @@ describe("createTaskCommandHandlers", () => {
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
     const service: Partial<TaskService> = {
+      agentSessionDelete(input: unknown) {
+        return Effect.sync(() => {
+          calls.push({ command: "agent_session_delete", input });
+          return true;
+        });
+      },
       agentSessionUpsert(input: unknown) {
         return Effect.tryPromise({
           try: async () => {
@@ -624,6 +630,33 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBe(true);
     await expect(
       runHandler(
+        handlers.agent_session_delete?.(
+          {
+            repoPath: "/repo",
+            taskId: "task-1",
+            identity: {
+              externalSessionId: "session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/task-1",
+            },
+          },
+          {
+            command: "agent_session_delete",
+            args: {
+              repoPath: "/repo",
+              taskId: "task-1",
+              identity: {
+                externalSessionId: "session-1",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo/task-1",
+              },
+            },
+          },
+        ),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      runHandler(
         handlers.agent_sessions_list?.(
           { repoPath: "/repo", taskId: "task-1" },
           {
@@ -971,6 +1004,18 @@ describe("createTaskCommandHandlers", () => {
             runtimeKind: "opencode",
             workingDirectory: "/repo/task-1",
             selectedModel: null,
+          },
+        },
+      },
+      {
+        command: "agent_session_delete",
+        input: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          identity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/task-1",
           },
         },
       },

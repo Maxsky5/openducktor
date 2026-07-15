@@ -110,6 +110,10 @@ const agentSessionRecordShape = {
 
 export const agentSessionRecordSchema = z.object(agentSessionRecordShape);
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
+export type AgentSessionIdentity = Pick<
+  AgentSessionRecord,
+  "externalSessionId" | "runtimeKind" | "workingDirectory"
+>;
 
 export const agentSessionStopTargetSchema = z.object({
   repoPath: nonEmptyStringSchema,

@@ -1,4 +1,5 @@
 import type {
+  AgentSessionIdentity,
   AgentSessionRecord,
   AgentSessionStopTarget,
   TaskWorktreeSummary,
@@ -7,6 +8,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { host } from "../../shared/host";
 
 export type AgentOrchestratorHostPort = {
+  agentSessionDelete: (
+    repoPath: string,
+    taskId: string,
+    identity: AgentSessionIdentity,
+  ) => Promise<void>;
   agentSessionUpsert: (
     repoPath: string,
     taskId: string,
@@ -17,8 +23,14 @@ export type AgentOrchestratorHostPort = {
 };
 
 export type AgentOrchestratorRuntimeHostPort = {
-  buildStart: typeof host.buildStart;
+  gitCanonicalizePath: typeof host.gitCanonicalizePath;
   runtimeEnsure: typeof host.runtimeEnsure;
+  taskSessionBootstrapPrepare: typeof host.taskSessionBootstrapPrepare;
+  taskSessionBootstrapComplete: typeof host.taskSessionBootstrapComplete;
+  taskSessionBootstrapAbort: typeof host.taskSessionBootstrapAbort;
+  taskSessionStartupLeasePrepare: typeof host.taskSessionStartupLeasePrepare;
+  taskSessionStartupLeaseComplete: typeof host.taskSessionStartupLeaseComplete;
+  taskSessionStartupLeaseAbort: typeof host.taskSessionStartupLeaseAbort;
 };
 
 export type AgentOrchestratorDependencies = {

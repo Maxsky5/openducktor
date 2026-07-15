@@ -1,4 +1,6 @@
 import type {
+  AgentRole,
+  AgentSessionIdentity,
   AgentSessionRecord,
   PlanSubtaskInput,
   PullRequest,
@@ -22,6 +24,10 @@ export type ListTasksInput = RepoPathInput & {
 
 export type AgentSessionUpsertInput = TaskIdInput & {
   session: AgentSessionRecord;
+};
+
+export type AgentSessionDeleteInput = TaskIdInput & {
+  identity: AgentSessionIdentity;
 };
 
 export type PullRequestNumberInput = TaskIdInput & {
@@ -73,6 +79,18 @@ export type SetPlanInput = TaskIdInput & {
 export type BuildStartInput = TaskIdInput & {
   runtimeKind: string;
 };
+
+export type TaskSessionBootstrapPrepareInput = BuildStartInput & {
+  role: AgentRole;
+  targetWorkingDirectory?: string;
+};
+
+export type TaskSessionBootstrapFinalizeInput = TaskIdInput & {
+  bootstrapId: string;
+};
+
+export type TaskSessionStartupLeasePrepareInput = TaskIdInput & { role: AgentRole };
+export type TaskSessionStartupLeaseFinalizeInput = TaskIdInput & { leaseId: string };
 
 export type BuildBlockedInput = TaskIdInput & {
   reason: string;

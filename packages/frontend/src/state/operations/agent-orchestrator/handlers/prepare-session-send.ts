@@ -1,7 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { type SessionRef, workflowAgentSessionScope } from "@openducktor/core";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
-import type { EnsureRuntime } from "../runtime/runtime";
+import type { EnsureExistingSessionRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionObservers } from "../support/session-observers";
@@ -21,7 +21,7 @@ type PrepareSessionSendDependencies = {
   taskRef: { current: TaskCard[] };
   sessionObserversRef: { current: SessionObservers };
   observeAgentSession: ObserveAgentSession;
-  ensureRuntime: EnsureRuntime;
+  ensureExistingSessionRuntime: EnsureExistingSessionRuntime;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
 };
@@ -66,7 +66,7 @@ export const createPrepareSessionSend = ({
   taskRef,
   sessionObserversRef,
   observeAgentSession,
-  ensureRuntime,
+  ensureExistingSessionRuntime,
   loadRepoPromptOverrides,
   loadSettingsSnapshot,
 }: PrepareSessionSendDependencies) => {
@@ -102,11 +102,7 @@ export const createPrepareSessionSend = ({
         task,
         loadRepoPromptOverrides,
       }),
-      ensureRuntime(repoPath, session.taskId, session.role, {
-        workspaceId,
-        targetWorkingDirectory: session.workingDirectory,
-        runtimeKind: sessionRef.runtimeKind,
-      }),
+      ensureExistingSessionRuntime(repoPath, sessionRef.runtimeKind),
     ]);
     assertNotStale();
 

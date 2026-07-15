@@ -176,8 +176,24 @@ export type FlatStartSessionDependencies = Omit<
       "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
     >
   > &
-  Omit<StartSessionDependencies["runtime"], "resolveTaskWorktree"> &
-  Partial<Pick<StartSessionDependencies["runtime"], "resolveTaskWorktree">> &
+  Omit<
+    StartSessionDependencies["runtime"],
+    | "resolveTaskWorktree"
+    | "canonicalizePath"
+    | "prepareTaskSessionStartupLease"
+    | "completeTaskSessionStartupLease"
+    | "abortTaskSessionStartupLease"
+  > &
+  Partial<
+    Pick<
+      StartSessionDependencies["runtime"],
+      | "resolveTaskWorktree"
+      | "canonicalizePath"
+      | "prepareTaskSessionStartupLease"
+      | "completeTaskSessionStartupLease"
+      | "abortTaskSessionStartupLease"
+    >
+  > &
   StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
@@ -201,10 +217,17 @@ export const toStartSessionDependencies = (
       loadSourceSession: deps.loadSourceSession,
       loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => null),
       persistSessionRecord: deps.persistSessionRecord,
+      deleteSessionRecord: deps.deleteSessionRecord,
       observeAgentSession: deps.observeAgentSession,
+      clearSessionObservationState: deps.clearSessionObservationState,
     },
     runtime: {
       adapter: deps.adapter,
+      canonicalizePath: deps.canonicalizePath ?? (async (path) => path),
+      prepareTaskSessionStartupLease:
+        deps.prepareTaskSessionStartupLease ?? (async () => "lease-1"),
+      completeTaskSessionStartupLease: deps.completeTaskSessionStartupLease ?? (async () => {}),
+      abortTaskSessionStartupLease: deps.abortTaskSessionStartupLease ?? (async () => {}),
       resolveTaskWorktree:
         deps.resolveTaskWorktree ??
         (async () => ({
@@ -246,14 +269,20 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     repoEpochRef = { current: 1 },
     currentWorkspaceRepoPathRef = { current: "/tmp/repo" },
     observeAgentSession = async () => undefined,
+    clearSessionObservationState = () => undefined,
     loadSourceSession = async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory = async () => null,
     persistSessionRecord = async () => {},
+    deleteSessionRecord = async () => {},
     resolveTaskWorktree = async () => ({
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run" as const,
     }),
+    canonicalizePath = async (path: string) => path,
+    prepareTaskSessionStartupLease = async () => "lease-1",
+    completeTaskSessionStartupLease = async () => {},
+    abortTaskSessionStartupLease = async () => {},
     ensureRuntime = ensureRuntimeWithKind,
     loadTaskDocuments = async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     refreshTaskData = async () => {},
@@ -289,10 +318,16 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       observeAgentSession,
+      clearSessionObservationState,
       loadSourceSession,
       loadAgentSessionHistory,
       persistSessionRecord,
+      deleteSessionRecord,
       resolveTaskWorktree,
+      canonicalizePath,
+      prepareTaskSessionStartupLease,
+      completeTaskSessionStartupLease,
+      abortTaskSessionStartupLease,
       ensureRuntime,
       loadTaskDocuments,
       refreshTaskData,

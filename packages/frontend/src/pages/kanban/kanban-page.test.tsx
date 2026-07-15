@@ -1418,56 +1418,109 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  kanbanTest("reset implementation is blocked while build or qa is waiting for input", async () => {
-    currentTaskFixture = createTaskCardFixture({
-      id: "TASK-123",
-      status: "in_progress",
-      availableActions: ["reset_implementation"],
-    });
-    currentSessionsFixture = [
-      createAgentSessionFixture({
-        runtimeKind: "opencode",
-        externalSessionId: "session-build-waiting",
-        taskId: "TASK-123",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-01-02T00:00:00.000Z",
-        pendingApprovals: [],
-        pendingQuestions: [
-          {
-            requestId: "question-1",
-            questions: [
-              {
-                header: "Decision",
-                question: "Can reset continue?",
-                options: [{ label: "No", description: "Keep waiting" }],
-              },
-            ],
-          },
-        ],
-      }),
-    ];
-    const renderer = await renderPage();
+  kanbanTest(
+    "reset implementation is blocked while a task role is active in a worktree",
+    async () => {
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "in_progress",
+        availableActions: ["reset_implementation"],
+      });
+      currentSessionsFixture = [
+        createAgentSessionFixture({
+          runtimeKind: "opencode",
+          externalSessionId: "session-build-waiting",
+          taskId: "TASK-123",
+          role: "spec",
+          workingDirectory: "/tmp/default-worktrees/TASK-123",
+          status: "idle",
+          startedAt: "2026-01-02T00:00:00.000Z",
+          pendingApprovals: [],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Decision",
+                  question: "Can reset continue?",
+                  options: [{ label: "No", description: "Keep waiting" }],
+                },
+              ],
+            },
+          ],
+        }),
+      ];
+      const renderer = await renderPage();
 
-    await act(async () => {
-      (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-        "TASK-123",
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+      await act(async () => {
+        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
+          "TASK-123",
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
 
-    expect(renderer.getResetImplementationModalModel()).toBeNull();
-    expect(toastErrorMock).toHaveBeenCalledWith("Stop active work first", {
-      description:
-        "Builder or QA is still active for TASK-123. Stop the active session before resetting the implementation.",
-    });
-    expect(resetTaskImplementationMock).not.toHaveBeenCalled();
+      expect(renderer.getResetImplementationModalModel()).toBeNull();
+      expect(toastErrorMock).toHaveBeenCalledWith("Stop active work first", {
+        description:
+          "A task session is still active for TASK-123. Stop the active session before resetting the implementation.",
+      });
+      expect(resetTaskImplementationMock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
+      await act(async () => {
+        renderer.unmount();
+      });
+    },
+  );
+
+  kanbanTest(
+    "reset implementation allows a legacy root-backed Spec session to remain active",
+    async () => {
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "in_progress",
+        availableActions: ["reset_implementation"],
+      });
+      currentSessionsFixture = [
+        createAgentSessionFixture({
+          runtimeKind: "opencode",
+          externalSessionId: "legacy-root-spec",
+          taskId: "TASK-123",
+          role: "spec",
+          workingDirectory: "/repo/",
+          status: "idle",
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Decision",
+                  question: "Can reset continue?",
+                  options: [{ label: "No", description: "Keep waiting" }],
+                },
+              ],
+            },
+          ],
+        }),
+      ];
+      const renderer = await renderPage();
+
+      await act(async () => {
+        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
+          "TASK-123",
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(renderer.getResetImplementationModalModel()).not.toBeNull();
+      expect(toastErrorMock).not.toHaveBeenCalledWith("Stop active work first", expect.anything());
+
+      await act(async () => {
+        renderer.unmount();
+      });
+    },
+  );
 
   kanbanTest("reset implementation keeps the modal open when reset fails", async () => {
     currentTaskFixture = createTaskCardFixture({

@@ -672,6 +672,11 @@ Pre-session repo tools use the repository root as their working directory, but
 they still pass that through the same runtime working-directory ref shape as
 loaded-session tools.
 
+Fresh task-scoped agent sessions are different: Specification, Planner, Builder,
+and QA all prepare the task's canonical worktree before adapter startup while
+the shared runtime process remains repository-scoped. Existing persisted
+sessions continue using their exact recorded working directory.
+
 Invariant: Agent Studio chat surface state receives selected-session transcript state
 and already-computed start availability. It must not recompute task workflow
 availability or runtime readiness.

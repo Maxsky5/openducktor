@@ -72,6 +72,7 @@ const TASK_METHODS = [
   "qaApproved",
   "qaRejected",
   "agentSessionsList",
+  "agentSessionDelete",
   "agentSessionUpsert",
 ] as const satisfies readonly MethodName<HostTaskClient>[];
 
@@ -91,6 +92,12 @@ const AGENT_METHODS = [
   "codexAppServerRespond",
   "takeCodexAppServerBufferedEvents",
   "buildStart",
+  "taskSessionBootstrapPrepare",
+  "taskSessionBootstrapComplete",
+  "taskSessionBootstrapAbort",
+  "taskSessionStartupLeasePrepare",
+  "taskSessionStartupLeaseComplete",
+  "taskSessionStartupLeaseAbort",
   "devServerGetState",
   "devServerStart",
   "devServerStop",
@@ -112,6 +119,7 @@ const AGENT_METHODS = [
 ] as const satisfies readonly MethodName<HostAgentClient>[];
 
 const GIT_METHODS = [
+  "gitCanonicalizePath",
   "gitGetBranches",
   "gitGetCurrentBranch",
   "gitSwitchBranch",

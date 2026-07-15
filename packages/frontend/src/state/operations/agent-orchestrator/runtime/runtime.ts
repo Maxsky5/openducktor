@@ -1,5 +1,4 @@
 import type {
-  BuildSessionBootstrap,
   RepoConfig,
   RepoPromptOverrides,
   RuntimeKind,
@@ -9,7 +8,7 @@ import type {
 import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
-import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -17,6 +16,10 @@ import { runOrchestratorSideEffect } from "../support/async-side-effects";
 export type RuntimeInfo = {
   runtimeKind: RuntimeKind;
   workingDirectory: string;
+  bootstrap?: {
+    complete: () => Promise<void>;
+    abort: () => Promise<void>;
+  };
 };
 
 export type EnsureRuntimeOptions = {
@@ -32,6 +35,11 @@ export type EnsureRuntime = (
   options?: EnsureRuntimeOptions,
 ) => Promise<RuntimeInfo>;
 
+export type EnsureExistingSessionRuntime = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+) => Promise<void>;
+
 export type TaskDocuments = {
   specMarkdown: string;
   planMarkdown: string;
@@ -39,6 +47,7 @@ export type TaskDocuments = {
 };
 
 type EnsureRuntimeDependencies = {
+  queryClient?: QueryClient;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -48,15 +57,10 @@ type EnsureRuntimeDependencies = {
   repoConfigLoader?: RepoConfigLoader;
 };
 
-type RuntimeStartupHost = {
-  buildStart(
-    repoPath: string,
-    taskId: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<BuildSessionBootstrap>;
-  runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<{ workingDirectory: string }>;
-  taskWorktreeGet(repoPath: string, taskId: string): Promise<TaskWorktreeSummary | null>;
-};
+type RuntimeStartupHost = Pick<
+  typeof host,
+  "taskSessionBootstrapPrepare" | "taskSessionBootstrapComplete" | "taskSessionBootstrapAbort"
+>;
 
 type RuntimeWorkspaceQueryHost = Pick<
   typeof host,
@@ -166,6 +170,7 @@ export const createEnsureRuntime = ({
   refreshTaskData,
   hostClient = host,
   repoConfigLoader = defaultRepoConfigLoader,
+  queryClient = appQueryClient,
 }: EnsureRuntimeDependencies): EnsureRuntime => {
   return async (repoPath, taskId, role, options): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
@@ -183,47 +188,48 @@ export const createEnsureRuntime = ({
       }
       runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, role, repoConfigLoader);
     }
-    const toRuntimeInfo = (workingDirectory: string): RuntimeInfo => ({
+    const prepareBootstrap = hostClient.taskSessionBootstrapPrepare;
+    const completeBootstrap = hostClient.taskSessionBootstrapComplete;
+    const abortBootstrap = hostClient.taskSessionBootstrapAbort;
+    const bootstrap = await prepareBootstrap(
+      repoPath,
+      taskId,
+      role,
       runtimeKind,
-      workingDirectory,
-    });
-
-    if (role === "build") {
-      if (targetWorkingDirectory) {
-        await hostClient.runtimeEnsure(repoPath, runtimeKind);
-        return toRuntimeInfo(targetWorkingDirectory);
-      }
-
-      const bootstrap: BuildSessionBootstrap = await hostClient.buildStart(
-        repoPath,
-        taskId,
-        runtimeKind,
-      );
-      runOrchestratorSideEffect(
-        "runtime-refresh-task-data-after-build-start",
-        refreshTaskData(repoPath),
-        {
-          tags: { repoPath, taskId, role },
+      targetWorkingDirectory || undefined,
+    );
+    return {
+      runtimeKind,
+      workingDirectory: bootstrap.workingDirectory,
+      bootstrap: {
+        complete: async () => {
+          await completeBootstrap(repoPath, taskId, bootstrap.bootstrapId);
+          await queryClient.invalidateQueries({
+            queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+          });
+          if (role === "build") {
+            runOrchestratorSideEffect(
+              "runtime-refresh-task-data-after-build-start",
+              refreshTaskData(repoPath),
+              { tags: { repoPath, taskId, role } },
+            );
+          }
         },
-      );
-      return toRuntimeInfo(bootstrap.workingDirectory);
-    }
+        abort: async () => {
+          await abortBootstrap(repoPath, taskId, bootstrap.bootstrapId);
+          await queryClient.invalidateQueries({
+            queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+          });
+        },
+      },
+    };
+  };
+};
 
-    if (role === "qa") {
-      const continuationTarget =
-        targetWorkingDirectory.length === 0
-          ? await hostClient.taskWorktreeGet(repoPath, taskId)
-          : null;
-      const workingDirectory = targetWorkingDirectory || continuationTarget?.workingDirectory;
-      if (!workingDirectory) {
-        throw new Error(MISSING_BUILD_TARGET_ERROR);
-      }
-      await hostClient.runtimeEnsure(repoPath, runtimeKind);
-      return toRuntimeInfo(workingDirectory);
-    }
-
-    const runtime = await hostClient.runtimeEnsure(repoPath, runtimeKind);
-    const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
-    return toRuntimeInfo(workingDirectory);
+export const createEnsureExistingSessionRuntime = (
+  hostClient: Pick<typeof host, "runtimeEnsure"> = host,
+): EnsureExistingSessionRuntime => {
+  return async (repoPath, runtimeKind): Promise<void> => {
+    await hostClient.runtimeEnsure(repoPath, runtimeKind);
   };
 };

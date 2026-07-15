@@ -1,4 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import {
+  type AgentRole,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type RuntimeDescriptor,
+  type RuntimeSupportedScope,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
@@ -22,6 +28,7 @@ import {
   cleanupMergedBuilderState,
   findLatestCleanupTarget,
   loadBuilderBranchCleanup,
+  resolveRuntimeDescriptorForTaskSession,
   rollbackFailedBuildWorktree,
 } from "./builder-worktree-cleanup";
 import { requireBuildStartDependencies } from "./required-task-dependencies";
@@ -35,6 +42,7 @@ const taskStoreWithTasks = (
     clearQaReports: () => Effect.dieMessage("unexpected clearQaReports"),
     clearWorkflowDocuments: () => Effect.dieMessage("unexpected clearWorkflowDocuments"),
     createTask: () => Effect.dieMessage("unexpected createTask"),
+    deleteAgentSession: () => Effect.dieMessage("unexpected deleteAgentSession"),
     deleteTask: () => Effect.dieMessage("unexpected deleteTask"),
     diagnoseRepoStore: () => Effect.dieMessage("unexpected diagnoseRepoStore"),
     getTask: () => Effect.dieMessage("unexpected getTask"),
@@ -62,7 +70,43 @@ const emptyHooks = {
   postComplete: [],
 };
 
+const runtimeDefinitionsWithScopes = (
+  supportedScopes: RuntimeSupportedScope[],
+): { listRuntimeDefinitions(): RuntimeDescriptor[] } => ({
+  listRuntimeDefinitions: () => [
+    {
+      ...RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      capabilities: {
+        ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities,
+        workflow: {
+          ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities.workflow,
+          supportedScopes,
+        },
+      },
+    },
+  ],
+});
+
 describe("builder worktree cleanup", () => {
+  test.each([
+    ["spec", ["workspace"]],
+    ["planner", ["workspace"]],
+    ["qa", ["task"]],
+    ["build", ["build", "workspace"]],
+  ] satisfies Array<
+    [AgentRole, RuntimeSupportedScope[]]
+  >)("accepts the shared %s runtime scope contract", async (role, supportedScopes) => {
+    await expect(
+      Effect.runPromise(
+        resolveRuntimeDescriptorForTaskSession(
+          runtimeDefinitionsWithScopes(supportedScopes),
+          "opencode",
+          role,
+        ),
+      ),
+    ).resolves.toMatchObject({ kind: "opencode" });
+  });
+
   test("selects the task worktree before older build sessions when it is on the source branch", async () => {
     const calls: unknown[] = [];
     const cleanupTarget = await Effect.runPromise(

@@ -299,6 +299,23 @@ describe("autopilot feature helpers", () => {
     });
   });
 
+  test("starts fresh QA when the canonical task worktree does not exist yet", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "ai_review" }));
+
+    const outcome = await executeAutopilotAction({
+      ...args,
+      actionId: "startQa",
+    });
+
+    expect(outcome.kind).toBe("started");
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.not.objectContaining({ targetWorkingDirectory: expect.anything() }),
+        decision: expect.objectContaining({ startMode: "fresh" }),
+      }),
+    );
+  });
+
   test("surfaces unexpected pull request start failures", async () => {
     runSessionStartWorkflowMock.mockImplementationOnce(async () => {
       throw new Error("workflow failed");

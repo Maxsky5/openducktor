@@ -3,7 +3,11 @@ import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { encodeJson, normalizeLabels } from "./sqlite-json-codecs";
-import { clearAgentSessionsByRoles, upsertAgentSession } from "./sqlite-task-agent-sessions";
+import {
+  clearAgentSessionsByRoles,
+  deleteAgentSession,
+  upsertAgentSession,
+} from "./sqlite-task-agent-sessions";
 import { getTaskCard, listTasksInDatabase } from "./sqlite-task-card-read-model";
 import {
   clearQaReportDocuments,
@@ -102,6 +106,16 @@ export const createSqliteTaskRepository = ({
         ({ session }) =>
           session.transaction("sqliteTaskRepository.clearAgentSessionsByRoles", (transaction) =>
             clearAgentSessionsByRoles(transaction, input, now()),
+          ),
+      );
+    },
+    deleteAgentSession(input) {
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.deleteAgentSession",
+        ({ session }) =>
+          session.transaction("sqliteTaskRepository.deleteAgentSession", (transaction) =>
+            deleteAgentSession(transaction, input, now()),
           ),
       );
     },

@@ -323,7 +323,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalBuildStart = host.buildStart;
+    const originalTaskSessionBootstrapPrepare = host.taskSessionBootstrapPrepare;
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
@@ -336,9 +336,9 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    host.buildStart = async () => {
+    host.taskSessionBootstrapPrepare = async (_repoPath, _taskId, role, runtimeKind) => {
       buildStartCalls += 1;
-      return buildBootstrapFixture;
+      return { ...buildBootstrapFixture, bootstrapId: "bootstrap-latest", role, runtimeKind };
     };
     host.workspaceGetRepoConfig = async () => ({
       workspaceId: "repo",
@@ -408,7 +408,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      host.buildStart = originalBuildStart;
+      host.taskSessionBootstrapPrepare = originalTaskSessionBootstrapPrepare;
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
 
       OpencodeSdkAdapter.prototype.startSession = originalStartSession;

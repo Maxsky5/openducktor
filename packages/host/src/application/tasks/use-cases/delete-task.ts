@@ -12,7 +12,8 @@ import {
   managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
   type TaskSessionRecords,
-  taskHasImplementationSessions,
+  taskHasSessionsForRoles,
+  workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -24,6 +25,7 @@ export const createTaskDeleteUseCase = ({
   settingsConfig,
   worktreeFiles,
   workspaceSettingsService,
+  taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
@@ -36,6 +38,14 @@ export const createTaskDeleteUseCase = ({
           workspaceSettingsService,
         ),
       );
+      const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
+      if (taskSessionBootstrapCoordinator) {
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+          canonicalInputRepo,
+          [taskId],
+          "delete tasks",
+        );
+      }
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
@@ -63,6 +73,17 @@ export const createTaskDeleteUseCase = ({
 
       const targetTasks = collectTaskDeleteTargets(currentTasks, taskId, deleteSubtasks);
       const targetTaskIds = targetTasks.map((task) => task.id);
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+      const additionalTaskIds = targetTaskIds.filter((targetTaskId) => targetTaskId !== taskId);
+      if (taskSessionBootstrapCoordinator && additionalTaskIds.length > 0) {
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+          canonicalInputRepo,
+          additionalTaskIds,
+          "delete tasks",
+        );
+      }
       const targetTaskSessions: TaskSessionRecords[] = [];
       for (const targetTask of targetTasks) {
         const metadata = yield* taskStore.getTaskMetadata({
@@ -74,27 +95,28 @@ export const createTaskDeleteUseCase = ({
           sessions: metadata.agentSessions,
         });
       }
-      if (targetTaskSessions.some((entry) => taskHasImplementationSessions(entry.sessions))) {
+      if (
+        targetTaskSessions.some((entry) =>
+          taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
+        )
+      ) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
               dependency: "taskActivityGuard",
               operation: "task_delete",
               message:
-                "task_delete requires runtime session activity checks for tasks with build or QA sessions.",
+                "task_delete requires runtime session activity checks for tasks with workflow sessions.",
               details: { repoPath, taskId },
             }),
           );
         }
         yield* taskActivityGuard.ensureNoActiveTaskDeleteRuns({
-          repoPath,
+          repoPath: effectiveRepoPath,
           taskSessions: targetTaskSessions,
         });
       }
 
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
@@ -103,6 +125,7 @@ export const createTaskDeleteUseCase = ({
       const worktreePaths = yield* collectDeleteWorktreePaths(
         dependencies,
         effectiveRepoPath,
+        managedWorktreeBasePath,
         branchPrefix,
         targetTaskSessions,
       );
@@ -147,6 +170,6 @@ export const createTaskDeleteUseCase = ({
           ),
         ),
       );
-    });
+    }).pipe(Effect.scoped);
   },
 });

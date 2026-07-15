@@ -28,10 +28,28 @@ export type SessionDependencies = {
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
+  deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
   observeAgentSession: ObserveAgentSession;
+  clearSessionObservationState: (identity: AgentSessionIdentity) => void;
 };
 
 export type RuntimeDependencies = {
+  canonicalizePath: (path: string) => Promise<string>;
+  prepareTaskSessionStartupLease: (
+    repoPath: string,
+    taskId: string,
+    role: AgentRole,
+  ) => Promise<string>;
+  completeTaskSessionStartupLease: (
+    repoPath: string,
+    taskId: string,
+    leaseId: string,
+  ) => Promise<void>;
+  abortTaskSessionStartupLease: (
+    repoPath: string,
+    taskId: string,
+    leaseId: string,
+  ) => Promise<void>;
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   adapter: AgentEnginePort;
   ensureRuntime: EnsureRuntime;

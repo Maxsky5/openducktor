@@ -1,13 +1,15 @@
-import type {
-  AgentSessionRecord,
-  BuildSessionBootstrap,
-  PullRequest,
-  TaskApprovalContextLoadResult,
-  TaskCard,
-  TaskDirectMergeResult,
-  TaskMetadataDocument,
-  TaskMetadataPayload,
-  TaskPullRequestDetectResult,
+import {
+  type AgentSessionRecord,
+  type BuildSessionBootstrap,
+  buildSessionBootstrapSchema,
+  type PullRequest,
+  type TaskApprovalContextLoadResult,
+  type TaskCard,
+  type TaskDirectMergeResult,
+  type TaskMetadataDocument,
+  type TaskMetadataPayload,
+  type TaskPullRequestDetectResult,
+  type TaskSessionBootstrap,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
@@ -39,6 +41,7 @@ import type {
 } from "../workspaces/workspace-settings-service";
 import { createTaskGithubDependencies } from "./support/required-task-dependencies";
 import type {
+  AgentSessionDeleteInput,
   AgentSessionUpsertInput,
   BuildBlockedInput,
   BuildCompletedInput,
@@ -55,6 +58,10 @@ import type {
   RepoPathInput,
   SetPlanInput,
   TaskIdInput,
+  TaskSessionBootstrapFinalizeInput,
+  TaskSessionBootstrapPrepareInput,
+  TaskSessionStartupLeaseFinalizeInput,
+  TaskSessionStartupLeasePrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
@@ -72,9 +79,14 @@ import { createTaskQueryUseCases } from "./use-cases/query-tasks";
 import { createTaskImplementationResetUseCase } from "./use-cases/reset-implementation";
 import { createTaskFullResetUseCase } from "./use-cases/reset-task";
 import { createTaskReviewUseCases } from "./use-cases/review-task";
-import { createTaskBuildStartUseCase } from "./use-cases/start-build";
 import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
+import { createTaskSessionBootstrapUseCase } from "./use-cases/task-session-bootstrap";
+import { createTaskSessionStartupLeaseUseCase } from "./use-cases/task-session-startup-lease";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
+import {
+  createTaskSessionBootstrapCoordinator,
+  type TaskSessionBootstrapCoordinator,
+} from "./worktrees/task-session-bootstrap-coordinator";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 export type TaskServiceError =
@@ -98,6 +110,7 @@ export type TaskService = {
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
   agentSessionsList(input: TaskIdInput): Effect.Effect<AgentSessionRecord[], TaskServiceError>;
   agentSessionUpsert(input: AgentSessionUpsertInput): Effect.Effect<boolean, TaskServiceError>;
+  agentSessionDelete(input: AgentSessionDeleteInput): Effect.Effect<boolean, TaskServiceError>;
   getApprovalContext(
     input: TaskIdInput,
   ): Effect.Effect<TaskApprovalContextLoadResult, TaskServiceError>;
@@ -137,6 +150,24 @@ export type TaskService = {
   qaGetReport(input: TaskIdInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
   buildBlocked(input: BuildBlockedInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildStart(input: BuildStartInput): Effect.Effect<BuildSessionBootstrap, TaskServiceError>;
+  taskSessionBootstrapPrepare(
+    input: TaskSessionBootstrapPrepareInput,
+  ): Effect.Effect<TaskSessionBootstrap, TaskServiceError>;
+  taskSessionBootstrapComplete(
+    input: TaskSessionBootstrapFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
+  taskSessionBootstrapAbort(
+    input: TaskSessionBootstrapFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
+  taskSessionStartupLeasePrepare(
+    input: TaskSessionStartupLeasePrepareInput,
+  ): Effect.Effect<string, TaskServiceError>;
+  taskSessionStartupLeaseComplete(
+    input: TaskSessionStartupLeaseFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
+  taskSessionStartupLeaseAbort(
+    input: TaskSessionStartupLeaseFinalizeInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
   qaApproved(input: MarkdownDocumentInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -170,6 +201,7 @@ export type CreateTaskServiceInput = {
   runtimeDefinitionsService?: RuntimeDefinitionsService;
   runtimeRegistry?: RuntimeRegistryPort;
   worktreeFiles?: WorktreeFilePort;
+  taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
   cause instanceof TaskPolicyError || isHostError(cause);
@@ -191,7 +223,10 @@ const mapTaskServiceErrors = <A, E>(
 
 export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
   const githubDependencies = createTaskGithubDependencies(input);
-  const useCaseInput = { ...input, githubDependencies };
+  const taskSessionBootstrapCoordinator =
+    input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
+  const useCaseInput = { ...input, githubDependencies, taskSessionBootstrapCoordinator };
+  const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),
     ...createTaskApprovalContextUseCase(useCaseInput),
@@ -206,18 +241,67 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     ...createTaskImplementationResetUseCase(useCaseInput),
     ...createTaskFullResetUseCase(useCaseInput),
     ...createTaskDocumentUseCases(useCaseInput),
-    ...createTaskBuildStartUseCase(useCaseInput),
+    ...taskSessionBootstrap,
+    ...createTaskSessionStartupLeaseUseCase(useCaseInput),
+    buildStart: (startInput: BuildStartInput) =>
+      Effect.gen(function* () {
+        const bootstrap = yield* taskSessionBootstrap.taskSessionBootstrapPrepare({
+          ...startInput,
+          role: "build",
+        });
+        const completed = yield* Effect.either(
+          taskSessionBootstrap.taskSessionBootstrapComplete({
+            repoPath: startInput.repoPath,
+            taskId: startInput.taskId,
+            bootstrapId: bootstrap.bootstrapId,
+          }),
+        );
+        if (completed._tag === "Left") {
+          const abort = yield* Effect.either(
+            taskSessionBootstrap.taskSessionBootstrapAbort({
+              repoPath: startInput.repoPath,
+              taskId: startInput.taskId,
+              bootstrapId: bootstrap.bootstrapId,
+            }),
+          );
+          return yield* Effect.fail(
+            new HostOperationErrorValue({
+              operation: "task.build_start.finalize",
+              message: `${errorMessage(completed.left)}${abort._tag === "Left" ? `\nAlso failed to roll back: ${errorMessage(abort.left)}` : ""}`,
+              cause: completed.left,
+              details: { repoPath: startInput.repoPath, taskId: startInput.taskId },
+            }),
+          );
+        }
+        return buildSessionBootstrapSchema.parse({
+          runtimeKind: bootstrap.runtimeKind,
+          workingDirectory: bootstrap.workingDirectory,
+        });
+      }),
     ...createTaskBuildStateUseCases(useCaseInput),
     ...createTaskReviewUseCases(useCaseInput),
     ...createTaskPullRequestSyncUseCases(useCaseInput),
   };
   return {
+    agentSessionDelete: (input) => mapTaskServiceErrors(service.agentSessionDelete(input)),
     agentSessionsList: (input) => mapTaskServiceErrors(service.agentSessionsList(input)),
     agentSessionUpsert: (input) => mapTaskServiceErrors(service.agentSessionUpsert(input)),
     buildBlocked: (input) => mapTaskServiceErrors(service.buildBlocked(input)),
     buildCompleted: (input) => mapTaskServiceErrors(service.buildCompleted(input)),
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
+    taskSessionBootstrapPrepare: (input) =>
+      mapTaskServiceErrors(service.taskSessionBootstrapPrepare(input)),
+    taskSessionBootstrapComplete: (input) =>
+      mapTaskServiceErrors(service.taskSessionBootstrapComplete(input)),
+    taskSessionBootstrapAbort: (input) =>
+      mapTaskServiceErrors(service.taskSessionBootstrapAbort(input)),
+    taskSessionStartupLeasePrepare: (input) =>
+      mapTaskServiceErrors(service.taskSessionStartupLeasePrepare(input)),
+    taskSessionStartupLeaseComplete: (input) =>
+      mapTaskServiceErrors(service.taskSessionStartupLeaseComplete(input)),
+    taskSessionStartupLeaseAbort: (input) =>
+      mapTaskServiceErrors(service.taskSessionStartupLeaseAbort(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskServiceErrors(service.createTask(input)),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),

@@ -99,6 +99,10 @@ export type GitPort = {
     repoPath: string,
     workingDir: string,
   ): Effect.Effect<boolean, GitPortError>;
+  isRegisteredWorktree(
+    repoPath: string,
+    worktreePath: string,
+  ): Effect.Effect<boolean, GitPortError>;
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
@@ -168,6 +172,10 @@ export type GitPort = {
     fileDiffs: FileDiff[],
     selection: GitResetWorktreeSelection,
   ): Effect.Effect<GitResetWorktreeSelectionResult, GitPortError>;
+  restoreWorktreeToReference(
+    workingDirectory: string,
+    reference: string,
+  ): Effect.Effect<void, GitPortError>;
   commitsAheadBehind(
     workingDir: string,
     targetBranch: string,

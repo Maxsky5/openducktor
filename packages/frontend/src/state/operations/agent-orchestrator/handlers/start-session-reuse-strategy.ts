@@ -1,5 +1,4 @@
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { throwIfRepoStale } from "../support/core";
 import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
@@ -9,7 +8,7 @@ import type {
   StartSessionContext,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
-import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
+import { STALE_START_ERROR } from "./start-session-constants";
 import { resolveStartTask } from "./start-session-policies";
 
 type ReuseStrategyInput = {
@@ -84,42 +83,6 @@ const loadSourceSessionWithHistory = async ({
   return historyLoadedSession;
 };
 
-const validateReusableSession = async ({
-  ctx,
-  deps,
-  session,
-}: {
-  ctx: StartSessionContext;
-  deps: Pick<StartSessionExecutionDependencies, "runtime">;
-  session: Pick<AgentSessionState, "workingDirectory">;
-}): Promise<string | null> => {
-  if (ctx.role !== "qa" && ctx.role !== "build") {
-    return null;
-  }
-
-  let expectedWorkingDirectory: string;
-  try {
-    expectedWorkingDirectory = normalizeWorkingDirectory(
-      requireBuildContinuationTarget(
-        await deps.runtime.resolveTaskWorktree(ctx.repoPath, ctx.taskId),
-      ).workingDirectory,
-    );
-  } catch (error) {
-    if (ctx.role === "build") {
-      return "it does not match the current builder continuation target";
-    }
-    throw error;
-  }
-
-  if (normalizeWorkingDirectory(session.workingDirectory) === expectedWorkingDirectory) {
-    return null;
-  }
-
-  return ctx.role === "qa"
-    ? "it does not match the required builder worktree for this QA session"
-    : "it does not match the current builder continuation target";
-};
-
 export const resolveLoadedSourceSession = async ({
   ctx,
   deps,
@@ -150,17 +113,6 @@ export const executeReuseStart = async ({
     deps,
     sourceSession: input.sourceSession,
   });
-
-  const reuseError = await validateReusableSession({
-    ctx,
-    deps,
-    session: loadedSession,
-  });
-  if (reuseError) {
-    throw new Error(
-      `Session "${input.sourceSession.externalSessionId}" cannot be reused because ${reuseError}.`,
-    );
-  }
 
   return {
     kind: "reused",

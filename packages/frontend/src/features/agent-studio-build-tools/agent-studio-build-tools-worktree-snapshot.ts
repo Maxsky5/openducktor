@@ -117,11 +117,11 @@ export const resolveBuildToolsOpenInTarget = ({
   }
 
   if (isWorktreeResolving) {
-    return { path: null, disabledReason: "Resolving builder worktree path..." };
+    return { path: null, disabledReason: "Resolving task worktree path..." };
   }
 
   return {
     path: null,
-    disabledReason: "Builder worktree path is unavailable. Refresh the Git panel and try again.",
+    disabledReason: "Task worktree path is unavailable. Refresh the Git panel and try again.",
   };
 };

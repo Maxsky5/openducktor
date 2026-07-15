@@ -53,7 +53,9 @@ export const createSessionDependenciesFixture = (
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,
     persistSessionRecord: async () => {},
+    deleteSessionRecord: async () => {},
     observeAgentSession: async () => undefined,
+    clearSessionObservationState: () => undefined,
     ...sessionOverrides,
   };
 };
@@ -62,6 +64,10 @@ export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},
 ): RuntimeDependencies => ({
   adapter: {} as RuntimeDependencies["adapter"],
+  canonicalizePath: async (path) => path,
+  prepareTaskSessionStartupLease: async () => "lease-1",
+  completeTaskSessionStartupLease: async () => {},
+  abortTaskSessionStartupLease: async () => {},
   ensureRuntime: async () => {
     throw new Error("should not resolve runtime");
   },

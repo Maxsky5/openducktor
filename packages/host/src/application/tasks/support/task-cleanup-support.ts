@@ -20,14 +20,38 @@ import type { DevServerService } from "../../dev-servers/dev-server-service";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
 export const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
-export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
+const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
 export const workflowCleanupSessionRoles = new Set<string>(workflowCleanupSessionRoleNames);
 export type TaskSessionRecords = {
   taskId: string;
   sessions: AgentSessionRecord[];
 };
-export const taskHasImplementationSessions = (sessions: AgentSessionRecord[]): boolean =>
-  sessions.some((session) => implementationSessionRoles.has(session.role.trim()));
+export const collectSessionsUsingCanonicalWorktree = (
+  gitPort: GitPort,
+  settingsConfig: SettingsConfigPort,
+  sessions: AgentSessionRecord[],
+  canonicalWorktreePath: string,
+) =>
+  Effect.gen(function* () {
+    const guarded: AgentSessionRecord[] = [];
+    const canonicalExists = yield* settingsConfig.pathExists(canonicalWorktreePath);
+    const canonical = canonicalExists
+      ? normalizePathForComparison(yield* gitPort.canonicalizePath(canonicalWorktreePath))
+      : null;
+    for (const session of sessions) {
+      if (implementationSessionRoles.has(session.role.trim())) {
+        guarded.push(session);
+      } else if (
+        canonical &&
+        (yield* settingsConfig.pathExists(session.workingDirectory)) &&
+        normalizePathForComparison(yield* gitPort.canonicalizePath(session.workingDirectory)) ===
+          canonical
+      ) {
+        guarded.push(session);
+      }
+    }
+    return { canonicalExists, guarded };
+  });
 export const managedWorktreeBaseForRepoConfig = (
   settingsConfig: SettingsConfigPort,
   repoConfig: RepoConfig,
@@ -55,15 +79,78 @@ export const collectTaskDeleteTargets = (
   }
   return tasks.filter((task) => targetIds.has(task.id));
 };
-export const isRelatedTaskBranch = (
-  branchName: string,
-  branchPrefix: string,
-  taskId: string,
-): boolean => {
-  const cleanPrefix = branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
+const isRelatedTaskBranch = (branchName: string, branchPrefix: string, taskId: string): boolean => {
+  const cleanPrefix = branchPrefix.trim().replace(/\/+$/g, "") || DEFAULT_BRANCH_PREFIX;
   const taskPrefix = `${cleanPrefix}/${taskId}`;
   return branchName === taskPrefix || branchName.startsWith(`${taskPrefix}-`);
 };
+export const validateExistingTaskWorktreeCandidate = (
+  gitPort: GitPort,
+  repoPath: string,
+  worktreePath: string,
+  branchPrefix: string,
+  taskId: string,
+  operationLabel: string,
+) =>
+  Effect.gen(function* () {
+    const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
+    const canonicalWorktreePath = yield* gitPort.canonicalizePath(worktreePath);
+    if (
+      normalizePathForComparison(canonicalWorktreePath) ===
+      normalizePathForComparison(canonicalRepoPath)
+    ) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Cannot ${operationLabel} task ${taskId} because worktree ${worktreePath} resolves to the repository root.`,
+          details: { repoPath: canonicalRepoPath, taskId, worktreePath: canonicalWorktreePath },
+        }),
+      );
+    }
+    if (!(yield* gitPort.isGitRepository(canonicalWorktreePath))) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Cannot ${operationLabel} task ${taskId} because ${worktreePath} is not a Git worktree owned by the repository.`,
+          details: { repoPath: canonicalRepoPath, taskId, worktreePath: canonicalWorktreePath },
+        }),
+      );
+    }
+    const [sharesCommonDirectory, registered] = yield* Effect.all([
+      gitPort.shareGitCommonDirectory(canonicalRepoPath, canonicalWorktreePath),
+      gitPort.isRegisteredWorktree(canonicalRepoPath, canonicalWorktreePath),
+    ]);
+    if (!sharesCommonDirectory || !registered) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Cannot ${operationLabel} task ${taskId} because ${worktreePath} is not a registered worktree of ${canonicalRepoPath}.`,
+          details: { repoPath: canonicalRepoPath, taskId, worktreePath: canonicalWorktreePath },
+        }),
+      );
+    }
+    const currentBranch = yield* gitPort.getCurrentBranch(canonicalWorktreePath);
+    const branchName = currentBranch.name?.trim();
+    if (
+      !branchName ||
+      currentBranch.detached ||
+      !isRelatedTaskBranch(branchName, branchPrefix, taskId)
+    ) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Cannot ${operationLabel} task ${taskId} because worktree ${worktreePath} is not on its task branch.`,
+          details: {
+            repoPath: canonicalRepoPath,
+            taskId,
+            worktreePath: canonicalWorktreePath,
+            actualBranch: branchName,
+          },
+        }),
+      );
+    }
+    return canonicalWorktreePath;
+  });
 export const collectRelatedTaskBranches = (
   gitPort: GitPort,
   repoPath: string,
@@ -83,22 +170,47 @@ export const collectRelatedTaskBranches = (
     }
     return [...names].sort();
   });
-export const collectDeleteWorktreePaths = (
+const collectManagedTaskWorktreePaths = (
   dependencies: {
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
   },
   repoPath: string,
+  managedWorktreeBasePath: string,
   branchPrefix: string,
-  targetTaskSessions: TaskSessionRecords[],
+  targetTaskSessions: Array<TaskSessionRecords & { sessionRoles: Set<string> }>,
+  operationLabel: "delete" | "reset implementation" | "reset task",
 ) =>
   Effect.gen(function* () {
     const normalizedRepo = normalizePathForComparison(repoPath);
     const seen = new Set<string>();
     const paths: string[] = [];
-    for (const { taskId, sessions } of targetTaskSessions) {
+    for (const { taskId, sessions, sessionRoles } of targetTaskSessions) {
+      const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+      const normalizedCanonical = normalizePathForComparison(canonicalWorktree);
+      if (normalizedCanonical === normalizedRepo) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Cannot ${operationLabel} task ${taskId} because its canonical worktree resolves to the repository root.`,
+            details: { repoPath, taskId, canonicalWorktree },
+          }),
+        );
+      }
+      if (yield* dependencies.settingsConfig.pathExists(canonicalWorktree)) {
+        const validated = yield* validateExistingTaskWorktreeCandidate(
+          dependencies.gitPort,
+          repoPath,
+          canonicalWorktree,
+          branchPrefix,
+          taskId,
+          operationLabel,
+        );
+        seen.add(normalizePathForComparison(validated));
+        paths.push(validated);
+      }
       for (const session of sessions) {
-        if (!implementationSessionRoles.has(session.role.trim())) {
+        if (!sessionRoles.has(session.role.trim())) {
           continue;
         }
         const workingDirectory = session.workingDirectory.trim();
@@ -109,72 +221,74 @@ export const collectDeleteWorktreePaths = (
         if (normalizedWorktree === normalizedRepo) {
           continue;
         }
-        if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
-          const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
-          const branchName = currentBranch.name?.trim();
-          if (!branchName || !isRelatedTaskBranch(branchName, branchPrefix, taskId)) {
-            continue;
-          }
-        }
-        if (!seen.has(normalizedWorktree)) {
-          seen.add(normalizedWorktree);
-          paths.push(workingDirectory);
-        }
-      }
-    }
-    return paths;
-  });
-export const collectResetWorktreePaths = (
-  dependencies: {
-    gitPort: GitPort;
-    settingsConfig: SettingsConfigPort;
-  },
-  repoPath: string,
-  branchPrefix: string,
-  taskId: string,
-  sessions: AgentSessionRecord[],
-  sessionRoles: Set<string>,
-  operationLabel: "reset implementation" | "reset task",
-) =>
-  Effect.gen(function* () {
-    const normalizedRepo = normalizePathForComparison(repoPath);
-    const seen = new Set<string>();
-    const paths: string[] = [];
-    for (const session of sessions) {
-      if (!sessionRoles.has(session.role.trim())) {
-        continue;
-      }
-      const workingDirectory = session.workingDirectory.trim();
-      if (!workingDirectory) {
-        continue;
-      }
-      const normalizedWorktree = normalizePathForComparison(workingDirectory);
-      if (normalizedWorktree === normalizedRepo) {
-        continue;
-      }
-      if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
-        const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
-        const branchName = currentBranch.name?.trim();
-        if (!branchName) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Cannot ${operationLabel} task ${taskId} because worktree ${workingDirectory} is detached or has no active branch.`,
-              details: { repoPath, taskId, workingDirectory },
-            }),
-          );
-        }
-        if (!isRelatedTaskBranch(branchName, branchPrefix, taskId)) {
+        if (seen.has(normalizedWorktree)) {
           continue;
         }
-      }
-      if (!seen.has(normalizedWorktree)) {
+        if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
+          const validated = yield* validateExistingTaskWorktreeCandidate(
+            dependencies.gitPort,
+            repoPath,
+            workingDirectory,
+            branchPrefix,
+            taskId,
+            operationLabel,
+          );
+          const normalizedValidated = normalizePathForComparison(validated);
+          if (seen.has(normalizedValidated)) continue;
+          seen.add(normalizedValidated);
+          paths.push(validated);
+          continue;
+        }
         seen.add(normalizedWorktree);
         paths.push(workingDirectory);
       }
     }
     return paths;
   });
+
+export const collectDeleteWorktreePaths = (
+  dependencies: {
+    gitPort: GitPort;
+    settingsConfig: SettingsConfigPort;
+  },
+  repoPath: string,
+  managedWorktreeBasePath: string,
+  branchPrefix: string,
+  targetTaskSessions: TaskSessionRecords[],
+) =>
+  collectManagedTaskWorktreePaths(
+    dependencies,
+    repoPath,
+    managedWorktreeBasePath,
+    branchPrefix,
+    targetTaskSessions.map((target) => ({
+      ...target,
+      sessionRoles: workflowCleanupSessionRoles,
+    })),
+    "delete",
+  );
+
+export const collectResetWorktreePaths = (
+  dependencies: {
+    gitPort: GitPort;
+    settingsConfig: SettingsConfigPort;
+  },
+  repoPath: string,
+  managedWorktreeBasePath: string,
+  branchPrefix: string,
+  taskId: string,
+  sessions: AgentSessionRecord[],
+  sessionRoles: Set<string>,
+  operationLabel: "reset implementation" | "reset task",
+) =>
+  collectManagedTaskWorktreePaths(
+    dependencies,
+    repoPath,
+    managedWorktreeBasePath,
+    branchPrefix,
+    [{ taskId, sessions, sessionRoles }],
+    operationLabel,
+  );
 const taskCleanupProgressCopy = {
   task_close: { label: "Close", retryVerb: "close" },
   task_delete: { label: "Delete", retryVerb: "delete" },

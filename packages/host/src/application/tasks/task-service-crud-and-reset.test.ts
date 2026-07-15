@@ -638,6 +638,7 @@ describe("createTaskService task mutations and reset", () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord({
       workingDirectory: "/worktrees/repo/task-1",
+      role: "planner",
     });
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -762,7 +763,7 @@ describe("createTaskService task mutations and reset", () => {
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              "/worktrees/repo/task-1": { name: "odt/task-1-task-1", detached: false },
             },
             branches: {
               "/repo": [
@@ -781,11 +782,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true }),
+        }).deleteTask({ repoPath: "/repo-alias", taskId: "epic-1", deleteSubtasks: true }),
       ),
     ).resolves.toEqual({ ok: true });
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "list", input: { repoPath: "/repo-alias" } },
       {
         type: "activityGuard",
         input: {
@@ -1168,7 +1169,7 @@ describe("createTaskService task mutations and reset", () => {
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
     ).rejects.toThrow(
-      "task_delete requires runtime session activity checks for tasks with build or QA sessions.",
+      "task_delete requires runtime session activity checks for tasks with workflow sessions.",
     );
   });
   test("resets implementation after activity guard and cleans builder state", async () => {
@@ -1177,8 +1178,14 @@ describe("createTaskService task mutations and reset", () => {
       createAgentSessionRecord({
         workingDirectory: "/worktrees/repo/task-1",
       }),
+      createAgentSessionRecord({
+        externalSessionId: "legacy-qa",
+        role: "qa",
+        workingDirectory: "/worktrees/repo/task-1-legacy",
+      }),
     ];
     const currentTask = task({
+      title: "Renamed Task",
       status: "ai_review",
       documentSummary: {
         spec: { has: true, updatedAt: "2026-05-01T00:00:00.000Z" },
@@ -1405,16 +1412,26 @@ describe("createTaskService task mutations and reset", () => {
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              "/worktrees/repo/task-1": {
+                name: "odt/task-1-original-title",
+                detached: false,
+              },
+              "/worktrees/repo/task-1-legacy": {
+                name: "odt/task-1-legacy",
+                detached: false,
+              },
             },
             branches: {
               "/repo": [
                 { name: "main", isCurrent: true, isRemote: false },
-                { name: "odt/task-1", isCurrent: false, isRemote: false },
+                { name: "odt/task-1-original-title", isCurrent: false, isRemote: false },
+                { name: "odt/task-1-legacy", isCurrent: false, isRemote: false },
               ],
             },
           }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          settingsConfig: createBuildSettingsConfig(
+            new Set(["/repo", "/worktrees/repo/task-1", "/worktrees/repo/task-1-legacy"]),
+          ),
           taskActivityGuard,
           taskStore,
           worktreeFiles: createCleanupWorktreeFiles(calls),
@@ -1423,11 +1440,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
+        }).resetImplementation({ repoPath: "/repo-alias", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "list", input: { repoPath: "/repo-alias" } },
       {
         type: "resetActivityGuard",
         input: {
@@ -1439,16 +1456,28 @@ describe("createTaskService task mutations and reset", () => {
         },
       },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1-legacy" },
       { type: "listBranches", workingDir: "/repo" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
         repoPath: "/repo",
-        worktreePath: "/worktrees/repo/task-1",
+        worktreePath: "/worktrees/repo/task-1-legacy",
         force: true,
       },
-      { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
-      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1-legacy" },
+      {
+        type: "deleteLocalBranch",
+        repoPath: "/repo",
+        branch: "odt/task-1-legacy",
+        force: true,
+      },
+      {
+        type: "restoreWorktree",
+        workingDirectory: "/worktrees/repo/task-1",
+        reference: "origin/main",
+      },
       {
         type: "clearAgentSessions",
         input: { repoPath: "/repo", taskId: "task-1", roles: ["build", "qa"] },
@@ -1709,11 +1738,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).resetTask({ repoPath: "/repo-alias", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
+      { type: "list", input: { repoPath: "/repo-alias" } },
       {
         type: "resetActivityGuard",
         input: {
@@ -1909,7 +1938,7 @@ describe("createTaskService task mutations and reset", () => {
         }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow(
-      "task_reset_implementation requires runtime session activity checks for tasks with build or QA sessions.",
+      "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
     );
   });
   test("updates a task after validating parent relationships and enriches the result", async () => {

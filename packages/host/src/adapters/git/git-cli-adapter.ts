@@ -22,7 +22,10 @@ import {
   suggestedSquashCommitMessage,
   switchBranch,
 } from "../../infrastructure/git/git-merge";
-import { resetWorktreeSelection } from "../../infrastructure/git/git-reset";
+import {
+  resetWorktreeSelection,
+  restoreWorktreeToReference,
+} from "../../infrastructure/git/git-reset";
 import {
   getCurrentBranchUnchecked,
   getStatusUnchecked,
@@ -44,6 +47,7 @@ import {
   createWorktree,
   deleteLocalBranch,
   deleteReference,
+  isRegisteredWorktree,
   removeWorktree,
 } from "../../infrastructure/git/git-worktree";
 import {
@@ -136,6 +140,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         ]);
         return repoCommonDir === workingCommonDir;
       });
+    },
+    isRegisteredWorktree(repoPath, worktreePath) {
+      return isRegisteredWorktree(runner, repoPath, worktreePath);
     },
     referenceExists(workingDir, reference) {
       return referenceExists(runner, workingDir, reference);
@@ -242,6 +249,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     resetWorktreeSelection(workingDirectory, fileDiffs, selection) {
       return resetWorktreeSelection(runner, workingDirectory, fileDiffs, selection);
+    },
+    restoreWorktreeToReference(workingDirectory, reference) {
+      return restoreWorktreeToReference(runner, workingDirectory, reference);
     },
     commitsAheadBehind(workingDirectory, targetBranch) {
       return Effect.gen(function* () {

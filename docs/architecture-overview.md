@@ -83,10 +83,7 @@ Key boundary:
    - `fork`: create a new session from an existing source session
 3. The session-start modal resolves the final start mode from the selected launch action in `packages/frontend/src/features/session-start/session-start-launch-options.ts`.
 4. For new or forked sessions it concurrently loads task docs, resolves runtime, and loads repo default model.
-5. Runtime acquisition:
-   - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime.
-   - `qa` role: runtime orchestration resolves the build continuation working directory, reuses a matching running build run when available, and otherwise ensures the selected runtime for that continuation target through the shared runtime acquisition path.
-   - `spec`/`planner`: `host.runtimeEnsure(repo, runtimeKind)` ensures a shared workspace runtime for the selected kind.
+5. Runtime acquisition uses the role-neutral task-session bootstrap for every fresh `spec`, `planner`, `build`, and `qa` session. The first fresh role creates the canonical task worktree and runs configured copy paths and pre-start hooks once; later roles strictly validate and reuse it. The runtime itself remains repository-scoped, the adapter session uses the worktree, and only successful Builder completion advances the task to `in_progress`.
 6. The active host resolves the requested runtime kind, then runs runtime-specific startup. The shared contract is runtime descriptors plus `RuntimeInstanceSummary`; startup mechanics are runtime-specific (`local_http` for OpenCode, stdio/app-server identity for Codex).
 7. The runtime-launched MCP process uses only the host-bridge contract. It is host-scoped and forbids explicit `workspaceId`; public external MCP clients may pass `workspaceId`, but all MCP calls still go through the host bridge and never receive task-store database coordinates.
 8. The selected runtime adapter starts, resumes, or forks the session and subscribes to runtime events.

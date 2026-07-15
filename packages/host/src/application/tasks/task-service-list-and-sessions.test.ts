@@ -809,6 +809,30 @@ describe("createTaskService list and session reads", () => {
       },
     ]);
   });
+  test("deletes one exact durable agent session identity", async () => {
+    const calls: unknown[] = [];
+    const taskStore = {
+      deleteAgentSession(input: unknown) {
+        return Effect.sync(() => {
+          calls.push(input);
+          return true;
+        });
+      },
+    } as TaskStorePort;
+    const service = createTaskService({ taskStore });
+    const identity = {
+      externalSessionId: "session-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/task-1",
+    };
+
+    await expect(
+      Effect.runPromise(
+        service.agentSessionDelete({ repoPath: "/repo", taskId: "task-1", identity }),
+      ),
+    ).resolves.toBe(true);
+    expect(calls).toEqual([{ repoPath: "/repo", taskId: "task-1", identity }]);
+  });
   test("upserts an agent session from the configured worktree base", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({

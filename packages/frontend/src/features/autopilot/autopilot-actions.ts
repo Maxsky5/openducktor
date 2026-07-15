@@ -197,6 +197,12 @@ const resolveAutopilotStart = async ({
 
   const continuationTarget = await resolveTaskWorktree(activeWorkspace.repoPath, task.id);
   if (!continuationTarget) {
+    if (action.role === "qa" && allowedStartModes.includes("fresh")) {
+      return {
+        kind: "start",
+        startMode: "fresh",
+      };
+    }
     throw new Error(MISSING_BUILD_TARGET_ERROR);
   }
 

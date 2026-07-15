@@ -1,7 +1,6 @@
 import type { RepoConfig, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
-import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import {
   effectiveTargetBranchForTask,
   resolveBuildStartPoint,
@@ -18,13 +17,26 @@ export type PreparedBuildWorktree = {
 };
 
 export const validateExistingGitBuildWorktree = (
-  dependencies: BuildStartDependencies,
+  dependencies: Pick<BuildStartDependencies, "gitPort">,
   canonicalRepoPath: string,
   worktreePath: string,
   taskId: string,
   branch: string,
 ) =>
   Effect.gen(function* () {
+    const [canonicalWorktreePath, canonicalRepositoryPath] = yield* Effect.all([
+      dependencies.gitPort.canonicalizePath(worktreePath),
+      dependencies.gitPort.canonicalizePath(canonicalRepoPath),
+    ]);
+    if (canonicalWorktreePath === canonicalRepositoryPath) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Canonical worktree for task ${taskId} resolves to the repository root.`,
+          details: { repoPath: canonicalRepoPath, taskId, worktreePath },
+        }),
+      );
+    }
     const sharesGitCommonDirectory = yield* dependencies.gitPort.shareGitCommonDirectory(
       canonicalRepoPath,
       worktreePath,
@@ -34,6 +46,18 @@ export const validateExistingGitBuildWorktree = (
         new HostValidationError({
           field: "taskId",
           message: `Existing worktree path does not belong to repository ${canonicalRepoPath}: ${worktreePath}`,
+          details: { repoPath: canonicalRepoPath, taskId, worktreePath },
+        }),
+      );
+    }
+
+    if (
+      !(yield* dependencies.gitPort.isRegisteredWorktree(canonicalRepoPath, canonicalWorktreePath))
+    ) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Existing canonical path is not a registered worktree for task ${taskId}: ${worktreePath}`,
           details: { repoPath: canonicalRepoPath, taskId, worktreePath },
         }),
       );
@@ -55,30 +79,6 @@ export const validateExistingGitBuildWorktree = (
       );
     }
   });
-
-export const removeInvalidExistingBuildWorktree = (
-  dependencies: BuildStartDependencies,
-  canonicalRepoPath: string,
-  worktreeBase: string,
-  worktreePath: string,
-) =>
-  removeWorktreeAndFilesystemPath(dependencies, {
-    force: true,
-    managedWorktreeBasePath: worktreeBase,
-    missingOutsideManagedRootPathPolicy: "fail",
-    repoPath: canonicalRepoPath,
-    worktreePath,
-  }).pipe(
-    Effect.mapError(
-      (error) =>
-        new HostOperationError({
-          operation: "task.build_start.remove_invalid_worktree",
-          message: `Existing managed worktree path is not a git repository and could not be removed: ${worktreePath}`,
-          cause: error,
-          details: { repoPath: canonicalRepoPath, worktreeBase, worktreePath },
-        }),
-    ),
-  );
 
 export const prepareNewBuildWorktree = (
   dependencies: BuildStartDependencies,

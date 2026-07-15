@@ -18,7 +18,7 @@ const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
 });
 
 describe("getManagedTaskCleanupImpact", () => {
-  test("counts unique build and qa worktrees outside the repo root", () => {
+  test("counts unique workflow worktrees outside the repo root", () => {
     const impact = getManagedTaskCleanupImpact("/repo", [
       makeSession({
         runtimeKind: "opencode",
@@ -44,12 +44,20 @@ describe("getManagedTaskCleanupImpact", () => {
         role: "planner",
         workingDirectory: "/repo/worktrees/task-3",
       }),
+      makeSession({
+        runtimeKind: "opencode",
+        externalSessionId: "spec-1",
+        role: "spec",
+        workingDirectory: "/repo/worktrees/task-4",
+      }),
       makeSession({ externalSessionId: "build-root", role: "build", workingDirectory: "/repo" }),
     ]);
 
     expect(impact).toEqual({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: true,
-      managedWorktreeCount: 2,
+      managedWorktreeCount: 4,
+      legacyWorktreeCount: 4,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -67,8 +75,10 @@ describe("getManagedTaskCleanupImpact", () => {
     ]);
 
     expect(impact).toEqual({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -91,8 +101,10 @@ describe("getManagedTaskCleanupImpact", () => {
     ]);
 
     expect(impact).toEqual({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 1,
+      legacyWorktreeCount: 1,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -105,8 +117,10 @@ describe("getManagedTaskCleanupImpact", () => {
     ]);
 
     expect(impact).toEqual({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 1,
+      legacyWorktreeCount: 1,
       impactError: null,
       isLoadingImpact: false,
     });
@@ -138,10 +152,93 @@ describe("getManagedTaskCleanupImpact", () => {
     );
 
     expect(impact).toEqual({
+      hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
       impactError: null,
       isLoadingImpact: true,
+    });
+  });
+
+  test("distinguishes the retained canonical worktree from legacy session worktrees", () => {
+    const impact = getTaskCleanupImpactFromSessionQueries(
+      "/repo",
+      ["task-1"],
+      [
+        {
+          data: [
+            makeSession({
+              externalSessionId: "canonical-build",
+              workingDirectory: "/worktrees/task-1",
+            }),
+            makeSession({
+              externalSessionId: "legacy-qa",
+              role: "qa",
+              workingDirectory: "/legacy/task-1-qa",
+            }),
+            makeSession({
+              externalSessionId: "legacy-planner",
+              role: "planner",
+              workingDirectory: "/legacy/task-1-planner",
+            }),
+          ],
+          error: null,
+          isLoading: false,
+          isFetching: false,
+        },
+      ],
+      [
+        {
+          data: { workingDirectory: "/worktrees/task-1" },
+          error: null,
+          isLoading: false,
+          isFetching: false,
+        },
+      ],
+    );
+
+    expect(impact).toEqual({
+      hasCanonicalWorktree: true,
+      hasManagedSessionCleanup: true,
+      managedWorktreeCount: 3,
+      legacyWorktreeCount: 2,
+      impactError: null,
+      isLoadingImpact: false,
+    });
+    expect(impact).toMatchObject({ hasCanonicalWorktree: true });
+  });
+
+  test("reports when only legacy worktrees exist", () => {
+    const impact = getTaskCleanupImpactFromSessionQueries(
+      "/repo",
+      ["task-1"],
+      [
+        {
+          data: [
+            makeSession({
+              externalSessionId: "legacy-build",
+              workingDirectory: "/legacy/task-1-build",
+            }),
+          ],
+          error: null,
+          isLoading: false,
+          isFetching: false,
+        },
+      ],
+      [
+        {
+          data: null,
+          error: null,
+          isLoading: false,
+          isFetching: false,
+        },
+      ],
+    );
+
+    expect(impact).toMatchObject({
+      hasCanonicalWorktree: false,
+      legacyWorktreeCount: 1,
     });
   });
 });

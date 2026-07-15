@@ -30,6 +30,7 @@ export const createTaskFullResetUseCase = ({
   settingsConfig,
   worktreeFiles,
   workspaceSettingsService,
+  taskSessionBootstrapCoordinator,
 }: CreateTaskServiceInput): Pick<TaskService, "resetTask"> => ({
   resetTask(input) {
     return Effect.gen(function* () {
@@ -43,6 +44,14 @@ export const createTaskFullResetUseCase = ({
         ),
       );
       const storeDependencies = requireTaskResetStoreDependencies(taskStore);
+      if (taskSessionBootstrapCoordinator) {
+        const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
+        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+          canonicalInputRepo,
+          [taskId],
+          "reset task",
+        );
+      }
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
@@ -66,6 +75,9 @@ export const createTaskFullResetUseCase = ({
 
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
@@ -79,7 +91,7 @@ export const createTaskFullResetUseCase = ({
           );
         }
         yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath,
+          repoPath: effectiveRepoPath,
           taskId,
           sessions: currentSessions,
           operationLabel: "reset task",
@@ -87,9 +99,6 @@ export const createTaskFullResetUseCase = ({
         });
       }
 
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
@@ -98,6 +107,7 @@ export const createTaskFullResetUseCase = ({
       const worktreePaths = yield* collectResetWorktreePaths(
         dependencies,
         effectiveRepoPath,
+        managedWorktreeBasePath,
         branchPrefix,
         current.id,
         currentSessions,
@@ -163,6 +173,6 @@ export const createTaskFullResetUseCase = ({
           ),
         ),
       );
-    });
+    }).pipe(Effect.scoped);
   },
 });
