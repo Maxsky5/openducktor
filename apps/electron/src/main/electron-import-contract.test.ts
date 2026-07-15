@@ -19,4 +19,16 @@ describe("Electron runtime imports", () => {
       expect(readRepoFile(entryPoint)).not.toMatch(/import\s+\{[^}]+\}\s+from\s+"electron"/u);
     }
   });
+
+  test("do not import build scripts from production sources", () => {
+    const productionSources = [
+      ...new Bun.Glob("apps/electron/src/**/*.{ts,tsx}").scanSync({ cwd: REPO_ROOT }),
+    ].filter((path) => !/\.(?:conformance|spec|test)\.[^.]+$/u.test(path));
+
+    for (const sourcePath of productionSources) {
+      expect(readRepoFile(sourcePath)).not.toMatch(
+        /(?:from\s*|import\s*\(|require\s*\()\s*["'][^"']*\/scripts\//u,
+      );
+    }
+  });
 });

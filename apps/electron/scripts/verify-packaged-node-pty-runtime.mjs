@@ -1,5 +1,5 @@
-const { createRequire } = require("node:module");
-const { join } = require("node:path");
+import { createRequire } from "node:module";
+import { join } from "node:path";
 
 const nodePtyRoot = process.argv[2];
 if (!nodePtyRoot) throw new Error("Expected the packaged node-pty module root.");

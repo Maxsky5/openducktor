@@ -4,7 +4,7 @@ import {
   verifyLiveTerminalPtyNaturalExitCleanup,
   verifyLiveTerminalPtyProcessTreeTermination,
 } from "@openducktor/host";
-import { createNodePtyPort } from "../src/main/terminals/node-pty-adapter";
+import { createNodePtyPort } from "./node-pty-adapter";
 
 const observation = await observeLiveTerminalPtyConformance(createNodePtyPort());
 

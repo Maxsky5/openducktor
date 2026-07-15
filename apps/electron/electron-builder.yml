@@ -17,6 +17,7 @@ afterAllArtifactBuild: scripts/print-package-artifacts.cjs
 files:
   - dist/**/*
   - node_modules/node-pty/**/*
+  - "!node_modules/node-pty/scripts/**/*"
 
 extraResources:
   - from: build/sidecars
@@ -33,8 +34,8 @@ extraMetadata:
   dependencies:
     node-pty: 1.1.0
 
-afterPack: scripts/verify-packaged-node-pty.cjs
-afterSign: scripts/verify-signed-node-pty.cjs
+afterPack: scripts/verify-packaged-node-pty.mjs
+afterSign: scripts/verify-packaged-node-pty.mjs
 
 mac:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}

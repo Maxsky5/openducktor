@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 
-const require = createRequire(import.meta.url);
-const { resolvePackagedResourcesRoot } = require("./verify-packaged-node-pty.cjs") as {
+const { afterPack, afterSign, resolvePackagedResourcesRoot } = (await import(
+  "../../../scripts/verify-packaged-node-pty.mjs"
+)) as {
+  afterPack: (context: unknown) => Promise<void>;
+  afterSign: (context: unknown) => Promise<void>;
   resolvePackagedResourcesRoot: (context: {
     appOutDir: string;
     electronPlatformName: string;
@@ -12,6 +14,11 @@ const { resolvePackagedResourcesRoot } = require("./verify-packaged-node-pty.cjs
 };
 
 describe("verifyPackagedNodePty", () => {
+  test("exports both electron-builder lifecycle hooks", () => {
+    expect(afterPack).toBeFunction();
+    expect(afterSign).toBeFunction();
+  });
+
   test("resolves resources inside the macOS app bundle", () => {
     expect(
       resolvePackagedResourcesRoot({
