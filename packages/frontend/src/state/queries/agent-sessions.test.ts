@@ -288,6 +288,7 @@ describe("agent session query cache helpers", () => {
     });
     await Promise.resolve();
     await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+      readPort,
       refetchType: "all",
     });
     resolveBatch([
@@ -306,19 +307,21 @@ describe("agent session query cache helpers", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     let failRefresh = false;
+    const singleList = async () => {
+      if (failRefresh) {
+        throw new Error("ordinary refresh failed");
+      }
+      return [sessionFixture];
+    };
     await queryClient.fetchQuery({
       queryKey,
-      queryFn: async () => {
-        if (failRefresh) {
-          throw new Error("ordinary refresh failed");
-        }
-        return [sessionFixture];
-      },
+      queryFn: singleList,
     });
     failRefresh = true;
 
     await expect(
       invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+        readPort: { agentSessionsList: singleList },
         refetchType: "all",
       }),
     ).rejects.toThrow("ordinary refresh failed");
@@ -329,23 +332,48 @@ describe("agent session query cache helpers", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     let failRefresh = false;
+    const singleList = async () => {
+      if (failRefresh) {
+        throw new Error("static refresh failed");
+      }
+      return [sessionFixture];
+    };
     await queryClient.fetchQuery({
       queryKey,
-      queryFn: async () => {
-        if (failRefresh) {
-          throw new Error("static refresh failed");
-        }
-        return [sessionFixture];
-      },
+      queryFn: singleList,
       staleTime: "static",
     });
     failRefresh = true;
 
     await expect(
       invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+        readPort: { agentSessionsList: singleList },
         refetchType: "all",
       }),
     ).rejects.toThrow("static refresh failed");
     expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
+  });
+
+  test("exact invalidation refetches a batch-seeded inactive task with canonical options", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const refreshedSession = { ...sessionFixture, externalSessionId: "session-refreshed" };
+    const singleList = mock(async () => [refreshedSession]);
+    const readPort = {
+      agentSessionsList: singleList,
+      agentSessionsListForTasks: mock(async () => [
+        { taskId: "task-1", agentSessions: [sessionFixture] },
+      ]),
+    };
+
+    await hydrateAgentSessionListQueries(queryClient, "/repo", ["task-1"], readPort);
+    await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+      readPort,
+      refetchType: "all",
+    });
+
+    expect(singleList).toHaveBeenCalledTimes(1);
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toEqual([refreshedSession]);
   });
 });
