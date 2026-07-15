@@ -77,7 +77,6 @@ const createHarnessState = () => {
   };
   let runtimeHealthByRuntime = readyRuntimeHealthByRuntime;
   const props = (taskIds: string[]) => {
-    queryClient.setQueryData(agentSessionQueryKeys.hydration("/repo", taskIds), true);
     return {
       workspaceRepoPath: "/repo",
       taskIds,

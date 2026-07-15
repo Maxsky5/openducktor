@@ -13,6 +13,7 @@ export type AgentOrchestratorHostPort = {
     taskId: string,
     identity: AgentSessionIdentity,
   ) => Promise<void>;
+  agentSessionsList: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
   agentSessionUpsert: (
     repoPath: string,
     taskId: string,

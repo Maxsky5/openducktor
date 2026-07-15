@@ -3,6 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
+import { HostResourceError } from "../../effect/host-errors";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { agentSessionsFromRow, encodeJson } from "./sqlite-json-codecs";
 import { requireTaskRow } from "./sqlite-task-queries";
@@ -51,7 +52,12 @@ export const listAgentSessionsForTasks = (
     for (const taskId of input.taskIds) {
       const row = rowsByTaskId.get(taskId);
       if (!row) {
-        continue;
+        return yield* new HostResourceError({
+          resource: "task",
+          operation: "sqliteTaskRepository.listAgentSessionsForTasks",
+          message: `Task not found: ${taskId}`,
+          details: { repoPath: input.repoPath, taskId },
+        });
       }
       results.push({
         taskId,

@@ -26,7 +26,7 @@ describe("SQLite task agent session batches", () => {
     expect(resolverCalls).toBe(0);
   });
 
-  test("lists multiple tasks, ignores duplicates and missing tasks, and handles empty IDs", async () => {
+  test("lists multiple tasks, ignores duplicate IDs, and rejects missing tasks", async () => {
     const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
     try {
       const firstTask = await Effect.runPromise(
@@ -70,13 +70,21 @@ describe("SQLite task agent session batches", () => {
         Effect.runPromise(
           store.listAgentSessionsForTasks({
             repoPath,
-            taskIds: [secondTask.id, firstTask.id, firstTask.id, "missing-task"],
+            taskIds: [secondTask.id, firstTask.id, firstTask.id],
           }),
         ),
       ).resolves.toEqual([
         { taskId: secondTask.id, agentSessions: [] },
         { taskId: firstTask.id, agentSessions: [newerSession, olderSession] },
       ]);
+      await expect(
+        Effect.runPromise(
+          store.listAgentSessionsForTasks({
+            repoPath,
+            taskIds: [firstTask.id, "missing-task"],
+          }),
+        ),
+      ).rejects.toThrow("Task not found: missing-task");
       await expect(
         Effect.runPromise(store.listAgentSessionsForTasks({ repoPath, taskIds: [] })),
       ).resolves.toEqual([]);
