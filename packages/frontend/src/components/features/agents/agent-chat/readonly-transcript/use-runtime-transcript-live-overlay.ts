@@ -62,17 +62,6 @@ const hasVisibleRuntimeData = (session: AgentSessionState): boolean =>
   session.pendingApprovals.length > 0 ||
   session.pendingQuestions.length > 0;
 
-const mergePendingInput = <Entry extends { requestId: string }>(
-  baseEntries: Entry[],
-  runtimeEntries: Entry[],
-): Entry[] => {
-  const runtimeRequestIds = new Set(runtimeEntries.map((entry) => entry.requestId));
-  return [
-    ...baseEntries.filter((entry) => !runtimeRequestIds.has(entry.requestId)),
-    ...runtimeEntries,
-  ];
-};
-
 const mergeBaseSessionIntoLiveOverlay = (
   baseSession: AgentSessionState,
   liveSession: AgentSessionState,
@@ -86,8 +75,8 @@ const mergeBaseSessionIntoLiveOverlay = (
     liveSession.messages,
   ),
   ...(liveSession.contextUsage !== undefined ? { contextUsage: liveSession.contextUsage } : {}),
-  pendingApprovals: mergePendingInput(baseSession.pendingApprovals, liveSession.pendingApprovals),
-  pendingQuestions: mergePendingInput(baseSession.pendingQuestions, liveSession.pendingQuestions),
+  pendingApprovals: liveSession.pendingApprovals,
+  pendingQuestions: liveSession.pendingQuestions,
   ...(liveSession.pendingUserMessageStartedAt !== undefined
     ? { pendingUserMessageStartedAt: liveSession.pendingUserMessageStartedAt }
     : {}),

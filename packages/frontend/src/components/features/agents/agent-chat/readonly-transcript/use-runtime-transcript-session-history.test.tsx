@@ -668,6 +668,84 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("does not restore resolved pending input from a stale projected session", async () => {
+    const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
+    subscribeSessionEventsRef.current = async (_sessionRef, listener) => {
+      subscribed.listener = listener;
+      return () => undefined;
+    };
+    readSessionHistoryRef.current = async () => [];
+    const permissionPrompt = createLiveApprovalEvent();
+    const structuredQuestion = createLiveQuestionEvent();
+    const staleLiveSession = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a/worktree",
+      pendingApprovals: [permissionPrompt],
+      pendingQuestions: [structuredQuestion],
+    });
+    const harness = createHookHarness(createBaseArgs({ liveSession: staleLiveSession }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          subscribed.listener !== null &&
+          state.interactionSession?.pendingApprovals.length === 1 &&
+          state.interactionSession.pendingQuestions.length === 1,
+      );
+
+      await harness.run(async () => {
+        subscribed.listener?.({
+          type: "approval_resolved",
+          externalSessionId: "session-1",
+          requestId: permissionPrompt.requestId,
+          timestamp: "2026-02-22T12:02:00.000Z",
+        });
+        subscribed.listener?.({
+          type: "question_resolved",
+          externalSessionId: "session-1",
+          requestId: structuredQuestion.requestId,
+          timestamp: "2026-02-22T12:02:00.000Z",
+        });
+      });
+      await harness.waitFor(
+        (state) =>
+          state.interactionSession?.pendingApprovals.length === 0 &&
+          state.interactionSession.pendingQuestions.length === 0,
+      );
+
+      await harness.update(
+        createBaseArgs({
+          liveSession: {
+            ...staleLiveSession,
+            selectedModel: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+          },
+        }),
+      );
+      await harness.waitFor((state) => state.interactionSession?.selectedModel?.variant === "high");
+
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([]);
+      expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
+
+      await harness.update(
+        createBaseArgs({
+          liveSession: {
+            ...staleLiveSession,
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        }),
+      );
+
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toEqual([]);
+      expect(harness.getLatest().interactionSession?.pendingQuestions).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps the first hydrated child subscription when operation callbacks refresh", async () => {
     const subscribed: { listener: ((event: AgentEvent) => void) | null } = { listener: null };
     const firstUnsubscribe = mock(() => undefined);
