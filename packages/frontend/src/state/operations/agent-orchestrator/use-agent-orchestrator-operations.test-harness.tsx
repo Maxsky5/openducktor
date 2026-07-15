@@ -110,6 +110,7 @@ export const createTestDependencies = (
     }),
     hostPort: {
       agentSessionDelete: async () => undefined,
+      agentSessionsList: async () => [],
       agentSessionUpsert: (...args) => host.agentSessionUpsert(...args),
       taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
       ...hostOverrides,

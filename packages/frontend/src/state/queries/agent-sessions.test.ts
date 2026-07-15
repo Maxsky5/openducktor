@@ -23,7 +23,7 @@ describe("agent session query cache helpers", () => {
   test("hydration query keys normalize task ordering, whitespace, duplicates, and empty IDs", () => {
     expect(agentSessionQueryKeys.hydration("/repo", [" task-2 ", "", "task-1", "task-2"])).toEqual([
       "agent-sessions",
-      "hydrate-lists",
+      "hydrate-missing-lists",
       "/repo",
       ["task-1", "task-2"],
     ]);
@@ -33,7 +33,7 @@ describe("agent session query cache helpers", () => {
     const queryClient = new QueryClient();
     const agentSessionsListForTasksMock = mock(async () => [
       { taskId: "task-1", agentSessions: [sessionFixture] },
-      { taskId: "unrequested-task", agentSessions: [sessionFixture] },
+      { taskId: "task-2", agentSessions: [] },
     ]);
     const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
     host.agentSessionsListForTasks = agentSessionsListForTasksMock;
@@ -60,9 +60,6 @@ describe("agent session query cache helpers", () => {
           agentSessionQueryKeys.list("/repo", "task-2"),
         ),
       ).toEqual([]);
-      expect(
-        queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "unrequested-task")),
-      ).toBeUndefined();
     } finally {
       host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     }
@@ -77,6 +74,54 @@ describe("agent session query cache helpers", () => {
     try {
       await hydrateAgentSessionListQueries(queryClient, "/repo", ["", " "]);
       expect(agentSessionsListForTasksMock).not.toHaveBeenCalled();
+    } finally {
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+    }
+  });
+
+  test("batch hydration fails when the host omits a requested task", async () => {
+    const queryClient = new QueryClient();
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    host.agentSessionsListForTasks = async () => [
+      { taskId: "task-1", agentSessions: [sessionFixture] },
+    ];
+
+    try {
+      await expect(
+        hydrateAgentSessionListQueries(queryClient, "/repo", ["task-1", "task-2"]),
+      ).rejects.toThrow('Batch session response omitted task "task-2".');
+      expect(
+        queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "task-1")),
+      ).toBeUndefined();
+      expect(
+        queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "task-2")),
+      ).toBeUndefined();
+    } finally {
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+    }
+  });
+
+  test("batch hydration does not overwrite a task cache updated while the batch is in flight", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const newerSession = { ...sessionFixture, externalSessionId: "external-2" };
+    let resolveBatch: (value: { taskId: string; agentSessions: AgentSessionRecord[] }[]) => void =
+      () => {
+        throw new Error("Batch resolver was not initialized.");
+      };
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    host.agentSessionsListForTasks = () =>
+      new Promise((resolve) => {
+        resolveBatch = resolve;
+      });
+
+    try {
+      const hydration = hydrateAgentSessionListQueries(queryClient, "/repo", ["task-1"]);
+      queryClient.setQueryData(queryKey, [newerSession]);
+      resolveBatch([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
+      await hydration;
+
+      expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([newerSession]);
     } finally {
       host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
     }
@@ -134,10 +179,34 @@ describe("agent session query cache helpers", () => {
     }
   });
 
+  test("loadAgentSessionListsFromQuery batch-hydrates only missing per-task caches", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
+    const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
+    const agentSessionsListForTasksMock = mock(async () => [
+      { taskId: "task-2", agentSessions: [] },
+    ]);
+    host.agentSessionsListForTasks = agentSessionsListForTasksMock;
+
+    try {
+      const sessionsByTaskId = await loadAgentSessionListsFromQuery(queryClient, "/repo", [
+        "task-1",
+        "task-2",
+      ]);
+
+      expect(sessionsByTaskId).toEqual({
+        "task-1": [sessionFixture],
+        "task-2": [],
+      });
+      expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["task-2"]);
+    } finally {
+      host.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+    }
+  });
+
   test("loadAgentSessionListsFromQuery reuses hydrated per-task cache entries", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
-    queryClient.setQueryData(agentSessionQueryKeys.hydration("/repo", ["task-1"]), true);
 
     const originalAgentSessionsListForTasks = host.agentSessionsListForTasks;
     host.agentSessionsListForTasks = async () => {

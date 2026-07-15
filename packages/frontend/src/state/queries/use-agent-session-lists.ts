@@ -5,6 +5,7 @@ import { useCallback, useMemo } from "react";
 import {
   agentSessionListHydrationQueryOptions,
   agentSessionListQueryOptions,
+  agentSessionQueryKeys,
   normalizeAgentSessionTaskIds,
 } from "./agent-sessions";
 
@@ -40,15 +41,21 @@ export const useAgentSessionLists = ({
   const taskIdsKey = toTaskIdSetKey(taskIds);
   const normalizedTaskIds = useMemo(() => toTaskIds(taskIdsKey), [taskIdsKey]);
   const shouldReadLists = enabled && repoPath !== null;
-  const shouldHydrateLists = shouldReadLists && normalizedTaskIds.length > 0;
+  const missingTaskIds = shouldReadLists
+    ? normalizedTaskIds.filter(
+        (taskId) =>
+          queryClient.getQueryData(agentSessionQueryKeys.list(repoPath, taskId)) === undefined,
+      )
+    : [];
+  const shouldHydrateLists = missingTaskIds.length > 0;
   const hydrationQuery = useQuery(
     {
-      ...agentSessionListHydrationQueryOptions(queryClient, repoPath ?? "", normalizedTaskIds),
+      ...agentSessionListHydrationQueryOptions(queryClient, repoPath ?? "", missingTaskIds),
       enabled: shouldHydrateLists,
     },
     queryClient,
   );
-  const hydrationReady = normalizedTaskIds.length === 0 || hydrationQuery.isSuccess;
+  const hydrationReady = !shouldHydrateLists || hydrationQuery.isSuccess;
   const combineAgentSessionListQueries = useCallback(
     (queries: AgentSessionListQueryResult[]): AgentSessionListsState => {
       const data = Object.fromEntries(
