@@ -285,7 +285,7 @@ export const refreshAgentSessionListQuery = async (
     queryClient,
     repoPath,
     taskId,
-    async ({ invalidationVersion, queryKey }) => {
+    async ({ invalidationVersion }) => {
       try {
         await queryClient.fetchQuery({
           ...agentSessionListQueryOptions(repoPath, taskId, readPort),
