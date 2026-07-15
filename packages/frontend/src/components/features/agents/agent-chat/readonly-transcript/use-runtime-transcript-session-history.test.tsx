@@ -132,6 +132,10 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   target: createTarget(),
   repoReadinessState: "ready",
   liveSession: null,
+  pendingInputSeed: {
+    pendingApprovals: [],
+    pendingQuestions: [],
+  },
   ...overrides,
 });
 

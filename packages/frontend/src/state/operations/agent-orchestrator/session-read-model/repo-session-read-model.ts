@@ -44,7 +44,7 @@ const preservePendingInputChangedDuringSnapshotRead = ({
   baseline: AgentSessionState | undefined;
   snapshotSession: AgentSessionState;
 }): AgentSessionState => {
-  if (!current) {
+  if (!current || !baseline) {
     return snapshotSession;
   }
   const preserveApprovals = current.pendingApprovals !== baseline?.pendingApprovals;

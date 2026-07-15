@@ -41,6 +41,7 @@ export function useSessionTranscriptSurfaceModel({
     target,
     repoReadinessState: runtimeReadiness.state,
     liveSession,
+    pendingInputSeed: visiblePendingInput,
   });
   const transientInteractionSession =
     liveSession === null ? sessionHistory.liveInteractionSession : null;

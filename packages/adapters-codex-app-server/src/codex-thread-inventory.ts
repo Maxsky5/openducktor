@@ -21,10 +21,15 @@ type PendingInventoryRead = {
   promise: Promise<CodexThreadInventory>;
 };
 
+type PendingDirectoryInventoryRead = {
+  runtimeId: string;
+  promise: Promise<CodexThreadInventory>;
+};
+
 export class CodexThreadInventoryReader {
   private readonly inventoryByRuntimeId = new Map<string, CodexThreadInventory>();
   private readonly pendingInventoryByRuntimeId = new Map<string, PendingInventoryRead>();
-  private readonly pendingDirectoryInventory = new Map<string, Promise<CodexThreadInventory>>();
+  private readonly pendingDirectoryInventory = new Map<string, PendingDirectoryInventoryRead>();
   private readonly statusOverridesByRuntimeId = new Map<
     string,
     Map<string, CodexThreadStatusSnapshot>
@@ -33,6 +38,11 @@ export class CodexThreadInventoryReader {
   clearInventory(runtimeId: string): void {
     this.inventoryByRuntimeId.delete(runtimeId);
     this.pendingInventoryByRuntimeId.delete(runtimeId);
+    for (const [readKey, pending] of this.pendingDirectoryInventory) {
+      if (pending.runtimeId === runtimeId) {
+        this.pendingDirectoryInventory.delete(readKey);
+      }
+    }
   }
 
   async read(client: CodexAppServerClient, runtimeId: string): Promise<CodexThreadInventory> {
@@ -64,17 +74,20 @@ export class CodexThreadInventoryReader {
     const readKey = JSON.stringify([runtimeId, ...directories]);
     const pending = this.pendingDirectoryInventory.get(readKey);
     if (pending) {
-      return pending;
+      return pending.promise;
     }
-    const inventoryRead = this.fetch(client, runtimeId, directories)
-      .then((inventory) => this.withStatusOverrides(runtimeId, inventory))
-      .finally(() => {
-        if (this.pendingDirectoryInventory.get(readKey) === inventoryRead) {
-          this.pendingDirectoryInventory.delete(readKey);
-        }
-      });
+    const inventoryRead: PendingDirectoryInventoryRead = {
+      runtimeId,
+      promise: this.fetch(client, runtimeId, directories)
+        .then((inventory) => this.withStatusOverrides(runtimeId, inventory))
+        .finally(() => {
+          if (this.pendingDirectoryInventory.get(readKey) === inventoryRead) {
+            this.pendingDirectoryInventory.delete(readKey);
+          }
+        }),
+    };
     this.pendingDirectoryInventory.set(readKey, inventoryRead);
-    return inventoryRead;
+    return inventoryRead.promise;
   }
 
   private startInventoryRead(

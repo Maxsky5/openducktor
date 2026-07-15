@@ -34,7 +34,10 @@ import {
   mergeReadonlyRuntimeHistory,
 } from "./readonly-transcript-session";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
-import { useRuntimeTranscriptLiveOverlay } from "./use-runtime-transcript-live-overlay";
+import {
+  type RuntimeTranscriptPendingInputSeed,
+  useRuntimeTranscriptLiveOverlay,
+} from "./use-runtime-transcript-live-overlay";
 
 type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;
@@ -42,6 +45,7 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
   target: AgentSessionTranscriptTarget | null;
   repoReadinessState: RepoRuntimeReadinessState;
   liveSession: AgentSessionState | null;
+  pendingInputSeed: RuntimeTranscriptPendingInputSeed;
 };
 
 type RuntimeTranscriptSessionHistory = {
@@ -84,6 +88,7 @@ export function useRuntimeTranscriptSessionHistory({
   target,
   repoReadinessState,
   liveSession,
+  pendingInputSeed,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory, replyAgentApproval, answerAgentQuestion, subscribeSessionEvents } =
     useAgentOperations();
@@ -215,6 +220,7 @@ export function useRuntimeTranscriptSessionHistory({
     target: stableTarget,
     sessionRef: runtimeSessionRef,
     baseSession: matchingLiveSession,
+    pendingInputSeed,
     history: historyQuery.data,
     shouldMergeHistory: shouldLoadHistory,
     replyAgentApproval,

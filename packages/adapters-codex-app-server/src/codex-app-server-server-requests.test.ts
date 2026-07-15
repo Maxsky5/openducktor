@@ -518,4 +518,69 @@ describe("handleCodexServerRequest", () => {
     expect(bindActiveTurnId).not.toHaveBeenCalled();
     expect(flushQueuedUserMessagesLater).not.toHaveBeenCalled();
   });
+
+  test("scopes synthetic question tool rows to the runtime request instance", async () => {
+    const request = {
+      id: 41,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
+      params: {
+        threadId: "thread-build",
+        turnId: "turn-question",
+        questions: [
+          {
+            id: "question-item-1",
+            header: "Choose",
+            question: "Proceed?",
+            options: ["Yes", "No"],
+          },
+        ],
+      },
+    } satisfies CodexServerRequestRecord;
+    const firstSession = createSession("build");
+    firstSession.runtimeId = "runtime-one";
+    const secondSession = createSession("build");
+    secondSession.runtimeId = "runtime-two";
+    const firstEvents: unknown[] = [];
+    const secondEvents: unknown[] = [];
+
+    await handleCodexServerRequest(
+      createRequestContext({
+        events: firstEvents,
+        sessions: new Map([[firstSession.threadId, firstSession]]),
+      }),
+      firstSession,
+      request,
+      new Set(),
+    );
+    await handleCodexServerRequest(
+      createRequestContext({
+        events: secondEvents,
+        sessions: new Map([[secondSession.threadId, secondSession]]),
+      }),
+      secondSession,
+      request,
+      new Set(),
+    );
+
+    expect(firstEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          messageId: "codex-question-runtime-one\u000041",
+          partId: "codex-question-runtime-one\u000041",
+          callId: "runtime-one\u000041",
+        }),
+      }),
+    );
+    expect(secondEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          messageId: "codex-question-runtime-two\u000041",
+          partId: "codex-question-runtime-two\u000041",
+          callId: "runtime-two\u000041",
+        }),
+      }),
+    );
+  });
 });

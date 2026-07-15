@@ -280,6 +280,7 @@ export const handleCodexServerRequest = async (
         parsed.request.requestId,
       ),
     };
+    const questionToolCallId = question.requestInstanceId;
     runWhileHandled(() => {
       context.pendingInput.addQuestion({
         runtimeId: routeContext.runtimeId,
@@ -300,9 +301,9 @@ export const handleCodexServerRequest = async (
         externalSessionId: routeContext.ownerThreadId,
         timestamp: new Date().toISOString(),
         part: requireNormalizedCodexToolInvocation({
-          messageId: `codex-question-${parsed.request.requestId}`,
-          partId: `codex-question-${parsed.request.requestId}`,
-          callId: parsed.request.requestId,
+          messageId: `codex-question-${questionToolCallId}`,
+          partId: `codex-question-${questionToolCallId}`,
+          callId: questionToolCallId,
           rawToolName: "request_user_input",
           status: "running",
           input: questionInput,

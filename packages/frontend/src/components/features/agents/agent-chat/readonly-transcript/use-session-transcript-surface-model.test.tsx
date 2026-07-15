@@ -656,7 +656,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
           ...pendingQuestion,
         });
       });
-      await harness.waitFor((state) => state.model.thread.canSubmitQuestionAnswers === true);
+      expect(harness.getLatest().model.thread.pendingQuestionRequests).toMatchObject([
+        makePendingQuestion(),
+      ]);
 
       expect(harness.getLatest().model.thread.pendingQuestionRequests).toEqual([pendingQuestion]);
     } finally {
@@ -801,6 +803,19 @@ describe("useSessionTranscriptSurfaceModel", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => listener !== null && state.model.thread.session !== null);
+      await harness.run(async () => {
+        listener?.({
+          ...makePendingQuestion(),
+          type: "question_required",
+          externalSessionId: "session-subagent-1",
+          timestamp: "2026-02-22T12:00:30.000Z",
+        });
+      });
+      await harness.waitFor((state) => state.model.thread.canSubmitQuestionAnswers === true);
+      expect(harness.getLatest().model.thread.pendingApprovalRequests[0]?.requestInstanceId).toBe(
+        "runtime-a\u0000permission-1",
+      );
+
       await harness.run(async () => {
         listener?.({
           ...makePendingApproval(),

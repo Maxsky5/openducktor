@@ -35,12 +35,18 @@ type RuntimeTranscriptLiveOverlay = {
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"] | null;
 };
 
+export type RuntimeTranscriptPendingInputSeed = {
+  pendingApprovals: readonly AgentSessionState["pendingApprovals"][number][];
+  pendingQuestions: readonly AgentSessionState["pendingQuestions"][number][];
+};
+
 type UseRuntimeTranscriptLiveOverlayArgs = {
   shouldObserve: boolean;
   repoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
   sessionRef: PolicyBoundSessionRef | null;
   baseSession: AgentSessionState | null;
+  pendingInputSeed: RuntimeTranscriptPendingInputSeed;
   history: AgentSessionHistoryMessage[] | undefined;
   shouldMergeHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
@@ -103,6 +109,7 @@ export function useRuntimeTranscriptLiveOverlay({
   target,
   sessionRef,
   baseSession,
+  pendingInputSeed,
   history,
   shouldMergeHistory,
   replyAgentApproval,
@@ -112,6 +119,7 @@ export function useRuntimeTranscriptLiveOverlay({
   const [liveState, setLiveState] = useState<RuntimeTranscriptLiveState | null>(null);
   const liveStateRef = useRef<RuntimeTranscriptLiveState | null>(null);
   const baseSessionRef = useRef(baseSession);
+  const pendingInputSeedRef = useRef(pendingInputSeed);
   const replyAgentApprovalRef = useRef(replyAgentApproval);
   const answerAgentQuestionRef = useRef(answerAgentQuestion);
   const subscribeSessionEventsRef = useRef(subscribeSessionEvents);
@@ -130,10 +138,17 @@ export function useRuntimeTranscriptLiveOverlay({
 
   useEffect(() => {
     baseSessionRef.current = baseSession;
+    pendingInputSeedRef.current = pendingInputSeed;
     replyAgentApprovalRef.current = replyAgentApproval;
     answerAgentQuestionRef.current = answerAgentQuestion;
     subscribeSessionEventsRef.current = subscribeSessionEvents;
-  }, [answerAgentQuestion, baseSession, replyAgentApproval, subscribeSessionEvents]);
+  }, [
+    answerAgentQuestion,
+    baseSession,
+    pendingInputSeed,
+    replyAgentApproval,
+    subscribeSessionEvents,
+  ]);
 
   useEffect(() => {
     if (!baseSession || target === null) {
@@ -168,7 +183,11 @@ export function useRuntimeTranscriptLiveOverlay({
       if (currentBaseSession && matchesAgentSessionIdentity(currentBaseSession, target)) {
         return currentBaseSession;
       }
-      return createEmptyReadonlyRuntimeSessionState(target);
+      return {
+        ...createEmptyReadonlyRuntimeSessionState(target),
+        pendingApprovals: [...pendingInputSeedRef.current.pendingApprovals],
+        pendingQuestions: [...pendingInputSeedRef.current.pendingQuestions],
+      };
     };
 
     commitLiveState({
