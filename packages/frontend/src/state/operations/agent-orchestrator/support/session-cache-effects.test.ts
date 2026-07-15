@@ -3,7 +3,10 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { taskQueryKeys } from "@/state/queries/tasks";
-import { createSessionCacheEffects } from "./session-cache-effects";
+import {
+  createSessionCacheEffects,
+  sessionCacheRefreshFailureDescription,
+} from "./session-cache-effects";
 
 const sessionRecord: AgentSessionRecord = {
   runtimeKind: "opencode",
@@ -23,6 +26,16 @@ const createQueryClient = (): QueryClient =>
   });
 
 describe("createSessionCacheEffects", () => {
+  test("formats the default cache refresh report with repository, task, and error", () => {
+    expect(
+      sessionCacheRefreshFailureDescription({
+        repoPath: "/repo",
+        taskId: "task-1",
+        error: new Error("refresh failed"),
+      }),
+    ).toBe("/repo · task-1: refresh failed");
+  });
+
   test("persists and authoritatively refetches the canonical task query", async () => {
     const queryClient = createQueryClient();
     let persistedSessions: AgentSessionRecord[] = [];
