@@ -50,6 +50,7 @@ describe("createSessionCacheEffects", () => {
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
+        agentSessionsList: list,
         agentSessionUpsert: upsert,
       },
     });
@@ -66,21 +67,26 @@ describe("createSessionCacheEffects", () => {
     const queryClient = createQueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     let failRefresh = false;
+    const list = async () => {
+      if (failRefresh) {
+        throw new Error("Session cache refresh failed.");
+      }
+      return [];
+    };
     await queryClient.fetchQuery({
       queryKey,
-      queryFn: async () => {
-        if (failRefresh) {
-          throw new Error("Session cache refresh failed.");
-        }
-        return [];
-      },
+      queryFn: list,
     });
     const upsert = mock(async () => undefined);
     const reportCacheRefreshFailure = mock(() => undefined);
     const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
-      hostPort: { agentSessionDelete: async () => undefined, agentSessionUpsert: upsert },
+      hostPort: {
+        agentSessionDelete: async () => undefined,
+        agentSessionsList: list,
+        agentSessionUpsert: upsert,
+      },
       reportCacheRefreshFailure,
     });
     failRefresh = true;
@@ -93,6 +99,7 @@ describe("createSessionCacheEffects", () => {
       new Error("Session cache refresh failed."),
     );
     expect(reportCacheRefreshFailure).toHaveBeenCalledWith({
+      operation: "save",
       repoPath: "/repo",
       taskId: "task-1",
       error: new Error("Session cache refresh failed."),
@@ -108,6 +115,7 @@ describe("createSessionCacheEffects", () => {
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
+        agentSessionsList: async () => [],
         agentSessionUpsert: async () => {
           throw persistenceError;
         },
@@ -129,6 +137,7 @@ describe("createSessionCacheEffects", () => {
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
+        agentSessionsList: async () => [],
         agentSessionUpsert: upsert,
       },
     });
@@ -155,6 +164,7 @@ describe("createSessionCacheEffects", () => {
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
+        agentSessionsList: async () => [],
         agentSessionUpsert: async () => undefined,
       },
     });
@@ -183,6 +193,7 @@ describe("createSessionCacheEffects", () => {
       queryClient,
       hostPort: {
         agentSessionDelete: deleteSession,
+        agentSessionsList: list,
         agentSessionUpsert: async () => undefined,
       },
     });
@@ -193,5 +204,48 @@ describe("createSessionCacheEffects", () => {
     expect(list).toHaveBeenCalledTimes(2);
     expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([otherSession]);
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
+  });
+
+  test("keeps a successful durable deletion successful when the query refresh fails", async () => {
+    const queryClient = createQueryClient();
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    let failRefresh = false;
+    const list = async () => {
+      if (failRefresh) {
+        throw new Error("Session cache refresh failed.");
+      }
+      return [sessionRecord];
+    };
+    await queryClient.fetchQuery({
+      queryKey,
+      queryFn: list,
+    });
+    const deleteSession = mock(async () => undefined);
+    const reportCacheRefreshFailure = mock(() => undefined);
+    const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
+      queryClient,
+      hostPort: {
+        agentSessionDelete: deleteSession,
+        agentSessionsList: list,
+        agentSessionUpsert: async () => undefined,
+      },
+      reportCacheRefreshFailure,
+    });
+    failRefresh = true;
+
+    await expect(effects.deleteSessionRecord("task-1", sessionRecord)).resolves.toBeUndefined();
+
+    expect(deleteSession).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
+    expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
+    expect(queryClient.getQueryState(queryKey)?.error).toEqual(
+      new Error("Session cache refresh failed."),
+    );
+    expect(reportCacheRefreshFailure).toHaveBeenCalledWith({
+      operation: "delete",
+      repoPath: "/repo",
+      taskId: "task-1",
+      error: new Error("Session cache refresh failed."),
+    });
   });
 });

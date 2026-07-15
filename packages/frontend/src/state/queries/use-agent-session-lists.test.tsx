@@ -59,6 +59,7 @@ describe("useAgentSessionLists", () => {
 
       await harness.run(async () => {
         await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+          readPort: { agentSessionsList: singleList },
           refetchType: "active",
         });
       });
@@ -113,6 +114,7 @@ describe("useAgentSessionLists", () => {
       await harness.waitFor(() => batchList.mock.calls.length === 1);
       await harness.run(async () => {
         await invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+          readPort: { agentSessionsList: singleList },
           refetchType: "all",
         });
         resolveInitialBatch([
@@ -179,6 +181,7 @@ describe("useAgentSessionLists", () => {
       await harness.run(async () => {
         await expect(
           invalidateAgentSessionListQuery(queryClient, "/repo", "task-1", {
+            readPort: { agentSessionsList: singleList },
             refetchType: "all",
           }),
         ).rejects.toThrow("exact refresh failed");

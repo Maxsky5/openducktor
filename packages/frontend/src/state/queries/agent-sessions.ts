@@ -59,7 +59,7 @@ export const agentSessionQueryKeys = {
 export const agentSessionListQueryOptions = (
   repoPath: string,
   taskId: string,
-  readPort: AgentSessionReadPort = host,
+  readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
 ) =>
   queryOptions({
     queryKey: agentSessionQueryKeys.list(repoPath, taskId),
@@ -221,12 +221,22 @@ export const invalidateAgentSessionListQuery = async (
   repoPath: string,
   taskId: string,
   options?: {
+    readPort?: Pick<AgentSessionReadPort, "agentSessionsList">;
     refetchType?: "active" | "all";
   },
 ): Promise<void> => {
   const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-  const initialState = queryClient.getQueryState(queryKey);
   incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
+
+  if (options?.refetchType === "all") {
+    await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+    await queryClient.fetchQuery({
+      ...agentSessionListQueryOptions(repoPath, taskId, options.readPort),
+      staleTime: 0,
+    });
+    return;
+  }
+
   await queryClient.invalidateQueries(
     {
       queryKey,
@@ -235,16 +245,4 @@ export const invalidateAgentSessionListQuery = async (
     },
     { throwOnError: true },
   );
-  const currentState = queryClient.getQueryState(queryKey);
-  const refetchCompleted =
-    (currentState?.dataUpdateCount ?? 0) !== (initialState?.dataUpdateCount ?? 0) ||
-    (currentState?.errorUpdateCount ?? 0) !== (initialState?.errorUpdateCount ?? 0);
-  const disabledRefetchWasSkipped =
-    options?.refetchType === "all" &&
-    initialState !== undefined &&
-    currentState?.isInvalidated === true &&
-    !refetchCompleted;
-  if (disabledRefetchWasSkipped) {
-    await queryClient.fetchQuery({ queryKey, staleTime: 0 });
-  }
 };
