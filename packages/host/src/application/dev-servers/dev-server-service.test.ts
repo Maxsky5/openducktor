@@ -756,4 +756,67 @@ describe("createDevServerService", () => {
     });
     expect(stoppedPids).toEqual([400, 401]);
   });
+  test("begins stopping every dev server process concurrently during host shutdown", async () => {
+    let nextPid = 800;
+    const stopCalls: number[] = [];
+    let reportAllStopsStarted: (() => void) | undefined;
+    const allStopsStarted = new Promise<void>((resolve) => {
+      reportAllStopsStarted = resolve;
+    });
+    let releaseStops: (() => void) | undefined;
+    const stopsReleased = new Promise<void>((resolve) => {
+      releaseStops = resolve;
+    });
+    const processPort: DevServerProcessPort = {
+      start(input) {
+        const pid = nextPid;
+        nextPid += 1;
+        return Effect.succeed({
+          pid,
+          stop: () =>
+            Effect.promise(async () => {
+              stopCalls.push(pid);
+              if (stopCalls.length === 4) {
+                reportAllStopsStarted?.();
+              }
+              await stopsReleased;
+              input.onExit({ pid, exitCode: 0, signal: null, error: null });
+            }),
+        });
+      },
+    };
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
+      workspaceSettingsService: createWorkspaceSettingsService(
+        repoConfig({
+          devServers: [
+            { id: "web", name: "Web", command: "bun run dev" },
+            { id: "api", name: "API", command: "bun run api" },
+          ],
+        }),
+      ),
+    });
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-2" }));
+
+    const stopping = Effect.runPromise(service.stopAll());
+    let assertionFailure: unknown;
+    try {
+      const startedConcurrently = await Promise.race([
+        allStopsStarted.then(() => true),
+        Bun.sleep(500).then(() => false),
+      ]);
+      expect(startedConcurrently).toBe(true);
+      expect(stopCalls).toHaveLength(4);
+    } catch (error) {
+      assertionFailure = error;
+    } finally {
+      releaseStops?.();
+      await stopping;
+    }
+    if (assertionFailure) {
+      throw assertionFailure;
+    }
+  });
 });

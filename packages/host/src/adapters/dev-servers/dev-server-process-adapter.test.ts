@@ -74,7 +74,18 @@ describe("createDevServerProcessAdapter", () => {
     await writeFile(
       scriptPath,
       `
-process.stdout.write("stdout:" + process.cwd() + ":" + process.env.ODT_PROCESS_ENV_VALUE + ":" + process.env.ODT_START_ENV_VALUE);
+process.stdout.write(
+  "stdout:" +
+    process.cwd() +
+    ":" +
+    process.env.ODT_PROCESS_ENV_VALUE +
+    ":" +
+    process.env.ODT_START_ENV_VALUE +
+    ":" +
+    process.env.OPENDUCKTOR_APP_TOKEN +
+    ":" +
+    process.env.ODT_HOST_TOKEN,
+);
 process.stderr.write("stderr:ready");
 setInterval(() => {}, 1000);
 `,
@@ -83,6 +94,7 @@ setInterval(() => {}, 1000);
       processEnv: {
         ...process.env,
         ODT_PROCESS_ENV_VALUE: "from-process-env",
+        OPENDUCKTOR_APP_TOKEN: "must-not-reach-child",
       },
       startGracePeriodMs: 20,
       stopTimeoutMs: 750,
@@ -98,6 +110,7 @@ setInterval(() => {}, 1000);
         cwd: root,
         env: {
           ODT_START_ENV_VALUE: "from-start-env",
+          ODT_HOST_TOKEN: "must-not-reach-child",
         },
         onExit: (exit) => exits.push(exit),
         onOutput: (output) => outputs.push(output.data),
@@ -110,6 +123,7 @@ setInterval(() => {}, 1000);
       const output = outputs.join("");
       expect(output).toContain("odt dev server cwd ");
       expect(output).toContain(":from-process-env:from-start-env");
+      expect(output).toContain(":from-process-env:from-start-env:undefined:undefined");
       expect(outputs.join("")).toContain("stderr:ready");
       expect(exits).toEqual([
         expect.objectContaining({

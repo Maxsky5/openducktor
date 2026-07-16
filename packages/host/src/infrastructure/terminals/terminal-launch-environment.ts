@@ -1,15 +1,12 @@
 import { userInfo } from "node:os";
 import { isAbsolute } from "node:path";
 import { Effect } from "effect";
-import {
-  TERMINAL_SECRET_ENV_NAMES,
-  type TerminalLaunchEnvironmentPort,
-} from "../../application/terminals/terminal-launch-policy";
+import type { TerminalLaunchEnvironmentPort } from "../../application/terminals/terminal-launch-policy";
 import { TerminalServiceError } from "../../application/terminals/terminal-service-error";
-import { createProcessEnvironment } from "../process/process-environment";
+import { sanitizeChildProcessEnvironment } from "../process/process-environment";
 
 type TerminalLaunchEnvironmentInput = {
-  processEnv?: NodeJS.ProcessEnv;
+  processEnv: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
   readUserShell?: () => string | null;
 };
@@ -27,13 +24,10 @@ export const createTerminalLaunchEnvironment =
     processEnv,
     platform = process.platform,
     readUserShell = accountShell,
-  }: TerminalLaunchEnvironmentInput = {}): TerminalLaunchEnvironmentPort =>
+  }: TerminalLaunchEnvironmentInput): TerminalLaunchEnvironmentPort =>
   () =>
     Effect.gen(function* () {
-      const environment = createProcessEnvironment({
-        ...(processEnv ? { baseEnv: processEnv } : {}),
-        platform,
-      });
+      const environment = sanitizeChildProcessEnvironment(processEnv, platform);
       const configuredShell =
         platform === "win32" ? (environment.ComSpec ?? environment.COMSPEC) : environment.SHELL;
       const shell =
@@ -47,7 +41,7 @@ export const createTerminalLaunchEnvironment =
       }
       const env: Record<string, string> = {};
       for (const [name, value] of Object.entries(environment)) {
-        if (value !== undefined && !TERMINAL_SECRET_ENV_NAMES.includes(name as never)) {
+        if (value !== undefined) {
           env[name] = value;
         }
       }

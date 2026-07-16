@@ -5,18 +5,6 @@ import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { TerminalGrid, TerminalPtyLaunchPlan } from "../../ports/terminal-pty-port";
 import { TerminalServiceError } from "./terminal-service-error";
 
-export const TERMINAL_SECRET_ENV_NAMES = [
-  "ODT_WORKSPACE_ID",
-  "ODT_HOST_URL",
-  "ODT_HOST_TOKEN",
-  "ODT_FORBID_WORKSPACE_ID_INPUT",
-  "ODT_ALLOWED_TOOLS",
-  "VITE_ODT_BROWSER_BACKEND_URL",
-  "VITE_ODT_BROWSER_AUTH_TOKEN",
-  "OPENDUCKTOR_CONTROL_TOKEN",
-  "OPENDUCKTOR_APP_TOKEN",
-] as const;
-
 type TerminalLaunchPolicyInput = {
   filesystem: FilesystemPort;
   resolveEnvironment: TerminalLaunchEnvironmentPort;
