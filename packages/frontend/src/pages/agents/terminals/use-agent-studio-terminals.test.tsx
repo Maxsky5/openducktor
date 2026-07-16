@@ -795,4 +795,76 @@ describe("useAgentStudioTerminals", () => {
       view.unmount();
     }
   }, 5_000);
+
+  test("restores task-local tab order and active selection when returning to a task", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    const summaries = (taskId: string): TerminalSummary[] => [
+      summaryForTask(taskId),
+      {
+        ...summaryForTask(taskId),
+        terminalId: `terminal-${taskId}-2`,
+        createdAt: "2026-07-13T00:01:00.000Z",
+      },
+    ];
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async ({ filter }) => {
+          const taskId = filter.kind === "task" ? filter.taskId : "unassociated";
+          return { hostInstanceId: "host-1", terminals: summaries(taskId) };
+        },
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = ({ taskId }: { taskId: string }) => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness taskId="task-a" />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().tabs).toHaveLength(2));
+      act(() => {
+        getLatest().onReorderTab("tab:terminal-task-a-2", "tab:terminal-task-a", "before");
+        getLatest().onSelectTab("tab:terminal-task-a-2");
+      });
+      expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual([
+        "terminal-task-a-2",
+        "terminal-task-a",
+      ]);
+      expect(getLatest().activeTabId).toBe("tab:terminal-task-a-2");
+
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness taskId="task-b" />
+        </QueryProvider>,
+      );
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-b"));
+
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness taskId="task-a" />
+        </QueryProvider>,
+      );
+      await waitFor(() => expect(getLatest().tabs).toHaveLength(2));
+
+      expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual([
+        "terminal-task-a-2",
+        "terminal-task-a",
+      ]);
+      expect(getLatest().activeTabId).toBe("tab:terminal-task-a-2");
+    } finally {
+      view.unmount();
+    }
+  }, 5_000);
 });

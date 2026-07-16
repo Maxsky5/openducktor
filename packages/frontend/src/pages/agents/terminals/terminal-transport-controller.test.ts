@@ -133,6 +133,44 @@ describe("createTerminalTransportController", () => {
     expect(decodeTerminalProtocolFrame(detachFrame).message.type).toBe("detach");
   });
 
+  test("automatically reconnects and reattaches after transport loss", async () => {
+    const sentByConnection: Uint8Array[][] = [];
+    const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
+    const bridge: TerminalBridge = {
+      connect: async (_onFrame, onStateChange) => {
+        const sent: Uint8Array[] = [];
+        sentByConnection.push(sent);
+        stateListeners.push(onStateChange);
+        onStateChange("connected");
+        return {
+          send: async (frame) => {
+            sent.push(frame);
+          },
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    await controller.connect();
+    controller.subscribe(terminalId, () => undefined);
+    await Promise.resolve();
+    await controller.acknowledge(terminalId, 41);
+
+    stateListeners[0]?.("disconnected");
+    await Bun.sleep(10);
+
+    expect(sentByConnection).toHaveLength(2);
+    const reattachFrame = sentByConnection[1]?.[0];
+    if (!reattachFrame) throw new Error("Expected an automatic reattach frame.");
+    expect(decodeTerminalProtocolFrame(reattachFrame).message).toEqual({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "attach",
+      terminalId,
+      lastConsumedSequence: 41,
+    });
+    controller.dispose();
+  });
+
   test("serializes ACK sends so an earlier consumed sequence cannot arrive after a later one", async () => {
     let releaseFirstAck = (): void => {
       throw new Error("The first ACK was not sent.");

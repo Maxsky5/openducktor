@@ -1,23 +1,24 @@
-import {
-  type ChildProcess,
-  type SpawnSyncOptions,
-  type SpawnSyncReturns,
-  spawnSync,
-} from "node:child_process";
+import { type ChildProcess, execFile } from "node:child_process";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 
 export type ProcessTreePlatform = NodeJS.Platform;
 export type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => boolean;
-type SpawnSyncCommand = (
+export type ProcessCommandResult = {
+  status: number | null;
+  stdout: Buffer;
+  stderr: Buffer;
+  error?: Error;
+};
+
+export type ProcessCommandRunner = (
   command: string,
   args: string[],
-  options: SpawnSyncOptions,
-) => SpawnSyncReturns<Buffer>;
+) => Effect.Effect<ProcessCommandResult>;
 
 export type InspectProcessTreeDependencies = {
   platform: ProcessTreePlatform;
-  spawnSync: SpawnSyncCommand;
+  runCommand: ProcessCommandRunner;
 };
 
 export type ProcessTreeInspector = (pid: number) => Effect.Effect<boolean, HostOperationError>;
@@ -25,7 +26,7 @@ export type ProcessTreeInspector = (pid: number) => Effect.Effect<boolean, HostO
 type SignalProcessTreeDependencies = {
   platform: ProcessTreePlatform;
   kill: KillProcess;
-  spawnSync: SpawnSyncCommand;
+  runCommand: ProcessCommandRunner;
   isAlive: (pid: number) => boolean;
 };
 
@@ -80,7 +81,7 @@ const defaultSignalProcessTreeDependencies = (): SignalProcessTreeDependencies =
   return {
     platform: process.platform,
     kill,
-    spawnSync,
+    runCommand: runProcessCommand,
     isAlive: (pid) => processIsAlive(pid, kill),
   };
 };
@@ -100,56 +101,76 @@ export const processTreeIsAlive = (
   kill: KillProcess = process.kill,
 ): boolean => processIsAlive(platform === "win32" ? pid : -pid, kill);
 
-const inspectProcessTree = (
-  pid: number,
-  { platform, spawnSync: spawnSyncCommand }: InspectProcessTreeDependencies,
-): boolean => {
-  assertValidPid(pid, "process tree");
-  const result =
-    platform === "win32"
-      ? spawnSyncCommand(
-          "powershell.exe",
-          [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            `(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${pid}' | Select-Object -First 1 -ExpandProperty ProcessId)`,
-          ],
-          { stdio: ["ignore", "pipe", "pipe"] },
-        )
-      : spawnSyncCommand("ps", ["-Ao", "ppid="], {
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-  if (result.error || result.status !== 0) {
-    throw new HostOperationError({
-      message: `Failed to inspect child processes for process ${pid}.`,
-      operation: "process-tree.inspect",
-      details: {
-        pid,
-        platform,
-        status: result.status,
-        stderr: result.stderr.toString("utf8").trim(),
+const runProcessCommand: ProcessCommandRunner = (command, args) =>
+  Effect.async<ProcessCommandResult>((resume, signal) => {
+    const child = execFile(
+      command,
+      args,
+      { encoding: "buffer", windowsHide: true },
+      (error, stdout, stderr) => {
+        const status =
+          error && "code" in error && typeof error.code === "number" ? error.code : error ? 1 : 0;
+        resume(
+          Effect.succeed({
+            status,
+            stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
+            stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
+            ...(error ? { error } : {}),
+          }),
+        );
       },
-      ...(result.error ? { cause: result.error } : {}),
-    });
-  }
-  if (platform === "win32") return result.stdout.toString("utf8").trim().length > 0;
-  return result.stdout
-    .toString("utf8")
-    .split(/\s+/)
-    .some((parentPid) => Number(parentPid) === pid);
-};
+    );
+    const abort = (): void => {
+      child.kill();
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    return Effect.sync(() => signal.removeEventListener("abort", abort));
+  });
 
 export const processTreeHasChildren = (
   pid: number,
   dependencies: InspectProcessTreeDependencies = {
     platform: process.platform,
-    spawnSync,
+    runCommand: runProcessCommand,
   },
 ): Effect.Effect<boolean, HostOperationError> =>
-  Effect.try({
-    try: () => inspectProcessTree(pid, dependencies),
-    catch: (cause) => toHostOperationError(cause, "process-tree.inspect", { pid }),
+  Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => assertValidPid(pid, "process tree"),
+      catch: (cause) => toHostOperationError(cause, "process-tree.inspect", { pid }),
+    });
+    const { platform, runCommand } = dependencies;
+    const result = yield* runCommand(
+      platform === "win32" ? "powershell.exe" : "ps",
+      platform === "win32"
+        ? [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${pid}' | Select-Object -First 1 -ExpandProperty ProcessId)`,
+          ]
+        : ["-Ao", "ppid="],
+    );
+    if (result.error || result.status !== 0) {
+      return yield* Effect.fail(
+        new HostOperationError({
+          message: `Failed to inspect child processes for process ${pid}.`,
+          operation: "process-tree.inspect",
+          details: {
+            pid,
+            platform,
+            status: result.status,
+            stderr: result.stderr.toString("utf8").trim(),
+          },
+          ...(result.error ? { cause: result.error } : {}),
+        }),
+      );
+    }
+    if (platform === "win32") return result.stdout.toString("utf8").trim().length > 0;
+    return result.stdout
+      .toString("utf8")
+      .split(/\s+/)
+      .some((parentPid) => Number(parentPid) === pid);
   });
 
 const isAlreadyExitedError = (error: unknown): boolean =>
@@ -168,45 +189,43 @@ const signalProcessTree = (
   pid: number,
   signal: NodeJS.Signals,
   dependencies: SignalProcessTreeDependencies = defaultSignalProcessTreeDependencies(),
-): void => {
-  const { platform, kill, spawnSync: spawnSyncCommand, isAlive } = dependencies;
+): Effect.Effect<void, HostOperationError> =>
+  Effect.gen(function* () {
+    const { platform, kill, runCommand, isAlive } = dependencies;
 
-  if (platform === "win32") {
-    const result = spawnSyncCommand("taskkill", ["/pid", String(pid), "/t", "/f"], {
-      stdio: "ignore",
-    });
-    if (result.status === 0 || !isAlive(pid)) {
-      return;
+    if (platform === "win32") {
+      const result = yield* runCommand("taskkill", ["/pid", String(pid), "/t", "/f"]);
+      if (result.status === 0 || !isAlive(pid)) {
+        return;
+      }
+      throw new HostOperationError({
+        message: `Failed to stop Windows process tree ${pid} with taskkill for ${signal}.`,
+        operation: "process-tree.stop",
+        details: { pid, signal },
+      });
     }
-    throw new HostOperationError({
-      message: `Failed to stop Windows process tree ${pid} with taskkill for ${signal}.`,
-      operation: "process-tree.stop",
-      details: { pid, signal },
-    });
-  }
 
-  try {
-    kill(-pid, signal);
-  } catch (error) {
-    if (isAlreadyExitedError(error)) {
-      return;
-    }
-    if (!isAlive(pid)) {
-      return;
-    }
-    throw error;
-  }
-};
+    yield* Effect.try({
+      try: () => {
+        try {
+          kill(-pid, signal);
+        } catch (error) {
+          if (isAlreadyExitedError(error) || !isAlive(pid)) return;
+          throw error;
+        }
+      },
+      catch: (cause) => toHostOperationError(cause, "process-tree.signal", { pid, signal }),
+    });
+  });
 
 const signalProcessTreeEffect = (
   pid: number,
   signal: NodeJS.Signals,
   dependencies?: SignalProcessTreeDependencies,
 ) =>
-  Effect.try({
-    try: () => signalProcessTree(pid, signal, dependencies),
-    catch: (cause) => toHostOperationError(cause, "process-tree.signal", { pid, signal }),
-  });
+  signalProcessTree(pid, signal, dependencies).pipe(
+    Effect.mapError((cause) => toHostOperationError(cause, "process-tree.signal", { pid, signal })),
+  );
 
 export const terminateProcessTree = ({
   pid,

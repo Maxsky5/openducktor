@@ -124,7 +124,6 @@ export function AgentsPageWorkspace({
 }: AgentsPageWorkspaceProps): ReactElement {
   const [isNarrow, setIsNarrow] = useState(false);
   const terminalGroupRef = useRef<GroupImperativeHandle | null>(null);
-  const terminalGroupElementRef = useRef<HTMLDivElement | null>(null);
   const terminalPanelSizeRef = useRef(TERMINAL_VISIBLE_LAYOUT[TERMINAL_PANEL_ID]);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
@@ -147,51 +146,6 @@ export function AgentsPageWorkspace({
     const terminalSize = layout[TERMINAL_PANEL_ID];
     if (terminalSize !== undefined && terminalSize > 0) terminalPanelSizeRef.current = terminalSize;
   }, []);
-  useEffect(() => {
-    if (!hasSelectedTask || isNarrow) return;
-    const groupElement = terminalGroupElementRef.current;
-    if (!groupElement) return;
-    const resizeTerminalFromKeyboard = (event: KeyboardEvent): void => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement) || target.id !== TERMINAL_SEPARATOR_ID) return;
-      const group = terminalGroupRef.current;
-      if (!group) return;
-      const layout = group.getLayout();
-      const currentSize = layout[TERMINAL_PANEL_ID] ?? 28;
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        event.stopPropagation();
-        const nextSize = Math.max(16, Math.min(currentSize + 5, 70));
-        group.setLayout({ [WORKSPACE_PANEL_ID]: 100 - nextSize, [TERMINAL_PANEL_ID]: nextSize });
-        return;
-      }
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        event.stopPropagation();
-        const nextSize = Math.max(currentSize - 5, 16);
-        group.setLayout({ [WORKSPACE_PANEL_ID]: 100 - nextSize, [TERMINAL_PANEL_ID]: nextSize });
-        return;
-      }
-      if (event.key === "Home") {
-        event.preventDefault();
-        event.stopPropagation();
-        group.setLayout({ [WORKSPACE_PANEL_ID]: 30, [TERMINAL_PANEL_ID]: 70 });
-        return;
-      }
-      if (event.key === "End") {
-        event.preventDefault();
-        event.stopPropagation();
-        group.setLayout({ [WORKSPACE_PANEL_ID]: 100, [TERMINAL_PANEL_ID]: 0 });
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-    groupElement.addEventListener("keydown", resizeTerminalFromKeyboard, true);
-    return () => groupElement.removeEventListener("keydown", resizeTerminalFromKeyboard, true);
-  }, [hasSelectedTask, isNarrow]);
   if (!hasSelectedTask) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
@@ -229,7 +183,6 @@ export function AgentsPageWorkspace({
         id={TERMINAL_GROUP_ID}
         defaultLayout={terminalPanel.isVisible ? TERMINAL_VISIBLE_LAYOUT : TERMINAL_HIDDEN_LAYOUT}
         groupRef={terminalGroupRef}
-        elementRef={terminalGroupElementRef}
         onLayoutChanged={handleTerminalLayoutChanged}
         direction="vertical"
         className="h-full min-h-0 overflow-hidden"

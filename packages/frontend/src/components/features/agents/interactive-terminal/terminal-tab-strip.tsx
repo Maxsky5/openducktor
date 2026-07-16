@@ -7,15 +7,17 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   type RefCallback,
-  useEffect,
   useMemo,
-  useRef,
 } from "react";
 import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type { AgentStudioTerminalTab } from "@/pages/agents/terminals/use-agent-studio-terminals";
 import { terminalTabsListClassName, terminalTabTriggerClassName } from "../terminal-tab-styles";
+import {
+  horizontalTabDropAnimation,
+  horizontalTabSortTransition,
+} from "../use-horizontal-sortable-tabs";
 import { useTerminalTabReorderDrag } from "./use-terminal-tab-reorder-drag";
 
 const lifecycleText = (tab: AgentStudioTerminalTab): string => {
@@ -34,12 +36,6 @@ const detailText = (tab: AgentStudioTerminalTab): string =>
   tab.summary
     ? `${lifecycleText(tab)}. Started in ${tab.summary.initialWorkingDir}`
     : lifecycleText(tab);
-
-const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
-  if (frameRef.current === null) return;
-  globalThis.cancelAnimationFrame(frameRef.current);
-  frameRef.current = null;
-};
 
 type TerminalTabShellProps = {
   tab: AgentStudioTerminalTab;
@@ -141,7 +137,7 @@ function SortableTerminalTab({
 }): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tab.tabId,
-    transition: { duration: 180, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    transition: horizontalTabSortTransition,
   });
   return (
     <TerminalTabShell
@@ -168,8 +164,6 @@ export function TerminalTabStrip({
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
   onCloseTab: (tab: AgentStudioTerminalTab) => void;
 }): ReactElement {
-  const suppressedSelectionTabIdRef = useRef<string | null>(null);
-  const selectionSuppressionFrameRef = useRef<number | null>(null);
   const tabIds = useMemo(() => tabs.map((tab) => tab.tabId), [tabs]);
   const {
     activeTabId,
@@ -180,37 +174,20 @@ export function TerminalTabStrip({
     handleDragStart,
     handleDragEnd,
     handleDragCancel,
+    shouldSuppressSelection,
   } = useTerminalTabReorderDrag({ tabIds, onReorderTab });
   const activeDragTab = activeTabId
     ? (tabs.find((tab) => tab.tabId === activeTabId) ?? null)
     : null;
-  const scheduleSelectionSuppressionClear = (): void => {
-    cancelPendingAnimationFrame(selectionSuppressionFrameRef);
-    selectionSuppressionFrameRef.current = globalThis.requestAnimationFrame(() => {
-      suppressedSelectionTabIdRef.current = null;
-      selectionSuppressionFrameRef.current = null;
-    });
-  };
-  useEffect(() => () => cancelPendingAnimationFrame(selectionSuppressionFrameRef), []);
-
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
       measuring={measuring}
       modifiers={modifiers}
-      onDragStart={(event) => {
-        suppressedSelectionTabIdRef.current = String(event.active.id);
-        handleDragStart(event);
-      }}
-      onDragEnd={(event) => {
-        handleDragEnd(event);
-        scheduleSelectionSuppressionClear();
-      }}
-      onDragCancel={() => {
-        handleDragCancel();
-        scheduleSelectionSuppressionClear();
-      }}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
         <TabsList
@@ -222,17 +199,14 @@ export function TerminalTabStrip({
               key={tab.tabId}
               tab={tab}
               isActiveDrag={activeTabId === tab.tabId}
-              shouldSuppressSelection={suppressedSelectionTabIdRef.current === tab.tabId}
+              shouldSuppressSelection={shouldSuppressSelection(tab.tabId)}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
             />
           ))}
         </TabsList>
       </SortableContext>
-      <DragOverlay
-        dropAnimation={{ duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}
-        zIndex={40}
-      >
+      <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
         {activeDragTab ? <TerminalTabShell tab={activeDragTab} isDragOverlay /> : null}
       </DragOverlay>
     </DndContext>

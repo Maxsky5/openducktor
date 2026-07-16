@@ -8,7 +8,6 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   type RefCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -31,6 +30,10 @@ import {
   type TaskExecutionPanelToggleModel,
 } from "./task-execution-panel";
 import { useAgentStudioTaskTabReorderDrag } from "./use-agent-studio-task-tab-reorder-drag";
+import {
+  horizontalTabDropAnimation,
+  horizontalTabSortTransition,
+} from "./use-horizontal-sortable-tabs";
 
 export type AgentStudioTaskTabStatus = "working" | "idle" | "waiting_input";
 
@@ -145,14 +148,6 @@ const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
   return <Circle className="size-3.5 fill-input text-input" />;
 };
 
-const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
-  const pendingFrame = frameRef.current;
-  if (pendingFrame !== null) {
-    globalThis.cancelAnimationFrame(pendingFrame);
-    frameRef.current = null;
-  }
-};
-
 function AgentStudioTaskTabShell({
   tab,
   dragListeners,
@@ -245,10 +240,7 @@ function SortableAgentStudioTaskTab({
 }): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tab.taskId,
-    transition: {
-      duration: 180,
-      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-    },
+    transition: horizontalTabSortTransition,
   });
 
   return (
@@ -289,8 +281,6 @@ export function AgentStudioTaskTabs({
   } = model;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState("");
-  const suppressedSelectionTaskIdRef = useRef<string | null>(null);
-  const selectionSuppressionFrameRef = useRef<number | null>(null);
   const scrollRegionRef = useRef<HTMLDivElement | null>(null);
   const tabTaskIds = useMemo(() => tabs.map((tab) => tab.taskId), [tabs]);
   const {
@@ -302,6 +292,7 @@ export function AgentStudioTaskTabs({
     handleDragStart,
     handleDragEnd,
     handleDragCancel,
+    shouldSuppressSelection,
   } = useAgentStudioTaskTabReorderDrag({
     tabTaskIds,
     onReorderTab,
@@ -317,18 +308,6 @@ export function AgentStudioTaskTabs({
     ? (tabs.find((tab) => tab.taskId === activeTaskId) ?? null)
     : null;
 
-  const scheduleSelectionSuppressionClear = (): void => {
-    cancelPendingAnimationFrame(selectionSuppressionFrameRef);
-    selectionSuppressionFrameRef.current = globalThis.requestAnimationFrame(() => {
-      suppressedSelectionTaskIdRef.current = null;
-      selectionSuppressionFrameRef.current = null;
-    });
-  };
-
-  useEffect(() => {
-    return () => cancelPendingAnimationFrame(selectionSuppressionFrameRef);
-  }, []);
-
   return (
     <div className="bg-studio-chrome px-2 pt-1.5 pb-0">
       <div className="flex min-w-0 items-center gap-1">
@@ -341,18 +320,9 @@ export function AgentStudioTaskTabs({
                   collisionDetection={collisionDetection}
                   measuring={measuring}
                   modifiers={modifiers}
-                  onDragStart={(event) => {
-                    suppressedSelectionTaskIdRef.current = String(event.active.id);
-                    handleDragStart(event);
-                  }}
-                  onDragEnd={(event) => {
-                    handleDragEnd(event);
-                    scheduleSelectionSuppressionClear();
-                  }}
-                  onDragCancel={() => {
-                    handleDragCancel();
-                    scheduleSelectionSuppressionClear();
-                  }}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
                 >
                   <SortableContext items={tabTaskIds} strategy={horizontalListSortingStrategy}>
                     <TabsList
@@ -364,9 +334,7 @@ export function AgentStudioTaskTabs({
                           key={tab.taskId}
                           tab={tab}
                           isActiveDrag={activeTaskId === tab.taskId}
-                          shouldSuppressSelection={
-                            suppressedSelectionTaskIdRef.current === tab.taskId
-                          }
+                          shouldSuppressSelection={shouldSuppressSelection(tab.taskId)}
                           onSelectTab={onSelectTab}
                           onCloseTab={onCloseTab}
                         />
@@ -374,13 +342,7 @@ export function AgentStudioTaskTabs({
                     </TabsList>
                   </SortableContext>
 
-                  <DragOverlay
-                    dropAnimation={{
-                      duration: 220,
-                      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-                    }}
-                    zIndex={40}
-                  >
+                  <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
                     {activeDragTab ? (
                       <AgentStudioTaskTabShell tab={activeDragTab} isDragOverlay />
                     ) : null}

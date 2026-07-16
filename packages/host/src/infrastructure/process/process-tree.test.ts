@@ -7,14 +7,12 @@ import {
 } from "./process-tree";
 
 const noopKill: KillProcess = () => true;
-const noopSpawnSync = () => ({
-  status: 0,
-  signal: null,
-  output: [],
-  pid: 0,
-  stdout: Buffer.alloc(0),
-  stderr: Buffer.alloc(0),
-});
+const noopProcessCommand = () =>
+  Effect.succeed({
+    status: 0,
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.alloc(0),
+  });
 const processIsAlive = () => true;
 
 describe("process-tree", () => {
@@ -22,10 +20,12 @@ describe("process-tree", () => {
     const hasChildren = await Effect.runPromise(
       processTreeHasChildren(1234, {
         platform: "darwin",
-        spawnSync: () => ({
-          ...noopSpawnSync(),
-          stdout: Buffer.from("   1\n1234\n  77\n"),
-        }),
+        runCommand: () =>
+          Effect.succeed({
+            status: 0,
+            stderr: Buffer.alloc(0),
+            stdout: Buffer.from("   1\n1234\n  77\n"),
+          }),
       }),
     );
 
@@ -36,14 +36,40 @@ describe("process-tree", () => {
     const hasChildren = await Effect.runPromise(
       processTreeHasChildren(1234, {
         platform: "linux",
-        spawnSync: () => ({
-          ...noopSpawnSync(),
-          stdout: Buffer.from("   1\n  42\n  77\n"),
-        }),
+        runCommand: () =>
+          Effect.succeed({
+            status: 0,
+            stderr: Buffer.alloc(0),
+            stdout: Buffer.from("   1\n  42\n  77\n"),
+          }),
       }),
     );
 
     expect(hasChildren).toBe(false);
+  });
+
+  test("does not block the event loop while child processes are inspected", async () => {
+    let eventLoopProgressed = false;
+    const progress = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        eventLoopProgressed = true;
+        resolve();
+      }, 0);
+    });
+
+    await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "darwin",
+        runCommand: () =>
+          Effect.promise(async () => {
+            await Bun.sleep(25);
+            return { status: 0, stderr: Buffer.alloc(0), stdout: Buffer.from("1234\n") };
+          }),
+      }),
+    );
+
+    expect(eventLoopProgressed).toBe(true);
+    await progress;
   });
 
   test("uses one direct Windows process query", async () => {
@@ -51,9 +77,13 @@ describe("process-tree", () => {
     const hasChildren = await Effect.runPromise(
       processTreeHasChildren(1234, {
         platform: "win32",
-        spawnSync: (command, args) => {
+        runCommand: (command, args) => {
           calls.push({ command, args });
-          return { ...noopSpawnSync(), stdout: Buffer.from("4321\r\n") };
+          return Effect.succeed({
+            status: 0,
+            stderr: Buffer.alloc(0),
+            stdout: Buffer.from("4321\r\n"),
+          });
         },
       }),
     );
@@ -85,9 +115,9 @@ describe("process-tree", () => {
         signalDependencies: {
           platform: "win32",
           kill: noopKill,
-          spawnSync: (command, args) => {
+          runCommand: (command, args) => {
             calls.push({ command, args });
-            return noopSpawnSync();
+            return noopProcessCommand();
           },
           isAlive: processIsAlive,
         },
@@ -126,7 +156,7 @@ describe("process-tree", () => {
             signals.push({ pid, signal });
             return true;
           },
-          spawnSync: noopSpawnSync,
+          runCommand: noopProcessCommand,
           isAlive: processIsAlive,
         },
       }),
@@ -154,7 +184,7 @@ describe("process-tree", () => {
             signals.push({ pid, signal });
             return true;
           },
-          spawnSync: noopSpawnSync,
+          runCommand: noopProcessCommand,
           isAlive: processIsAlive,
         },
       }),
@@ -175,7 +205,7 @@ describe("process-tree", () => {
           signalDependencies: {
             platform: "linux",
             kill: noopKill,
-            spawnSync: noopSpawnSync,
+            runCommand: noopProcessCommand,
             isAlive: processIsAlive,
           },
         }),
@@ -201,7 +231,7 @@ describe("process-tree", () => {
             kill: () => {
               throw error;
             },
-            spawnSync: noopSpawnSync,
+            runCommand: noopProcessCommand,
             isAlive: () => false,
           },
         }),

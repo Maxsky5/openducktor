@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { createElement } from "react";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
@@ -106,9 +106,6 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     expect(separator.className).toContain("aria-[orientation=horizontal]:h-3");
     act(() => separator.focus());
     expect(document.activeElement).toBe(separator);
-    for (const key of ["ArrowUp", "ArrowDown", "Home", "End", "Enter"]) {
-      expect(() => fireEvent.keyDown(separator, { key })).not.toThrow();
-    }
 
     view.rerender(renderWorkspace(false));
     expect(workspacePanel?.style.flexGrow).toBe("100");

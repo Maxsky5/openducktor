@@ -78,8 +78,14 @@ export const createBunPtyPort = ({
         let terminationRequested = false;
         let terminationComplete = false;
         let naturalFinalizationStarted = false;
+        let drainGeneration = 0;
         const subprocessExitWaiters = new Set<() => void>();
         const terminalEofWaiters = new Set<() => void>();
+        const drainWaiters = new Set<() => void>();
+        const notifyDrainWaiters = (): void => {
+          drainGeneration += 1;
+          for (const waiter of drainWaiters) waiter();
+        };
         let startNaturalFinalization = (): void => undefined;
         const publishExit = (): void => {
           if (!exitPublished && terminalEof && subprocessExit) {
@@ -99,13 +105,15 @@ export const createBunPtyPort = ({
             exit: () => {
               terminalEof = true;
               for (const waiter of terminalEofWaiters) waiter();
+              notifyDrainWaiters();
               startNaturalFinalization();
             },
-            drain: () => undefined,
+            drain: notifyDrainWaiters,
           },
           onExit: (_process, exitCode, signalCode) => {
             subprocessClosed = true;
             for (const waiter of subprocessExitWaiters) waiter();
+            notifyDrainWaiters();
             subprocessExit = {
               exitCode,
               signal: signalCode === null ? null : String(signalCode),
@@ -230,12 +238,12 @@ export const createBunPtyPort = ({
             ),
           );
         };
-        const ensureOpen = (operation: TerminalPtyError["operation"], run: () => void) =>
+        const ensureOpen = <Value>(operation: TerminalPtyError["operation"], run: () => Value) =>
           Effect.try({
             try: () => {
               if (terminationRequested || subprocessClosed || terminal.closed)
                 throw new Error("The terminal is already closed.");
-              run();
+              return run();
             },
             catch: (cause) =>
               new TerminalPtyError({
@@ -244,6 +252,43 @@ export const createBunPtyPort = ({
                 message: `Bun terminal ${operation} failed.`,
                 cause,
               }),
+          });
+        const waitForDrain = (generation: number): Effect.Effect<void> => {
+          if (drainGeneration !== generation) return Effect.void;
+          return Effect.async<void>((resume, signal) => {
+            const finish = (): void => {
+              drainWaiters.delete(finish);
+              signal.removeEventListener("abort", finish);
+              resume(Effect.void);
+            };
+            drainWaiters.add(finish);
+            signal.addEventListener("abort", finish, { once: true });
+            if (drainGeneration !== generation) finish();
+            return Effect.sync(() => {
+              drainWaiters.delete(finish);
+              signal.removeEventListener("abort", finish);
+            });
+          });
+        };
+        const writeAll = (data: Uint8Array): Effect.Effect<void, TerminalPtyError> =>
+          Effect.gen(function* () {
+            let offset = 0;
+            while (offset < data.byteLength) {
+              const generation = drainGeneration;
+              const remaining = data.subarray(offset);
+              const written = yield* ensureOpen("write", () => terminal.write(remaining));
+              if (!Number.isInteger(written) || written < 0 || written > remaining.byteLength) {
+                return yield* Effect.fail(
+                  new TerminalPtyError({
+                    code: "operation_failed",
+                    operation: "write",
+                    message: "Bun terminal reported an invalid input write length.",
+                  }),
+                );
+              }
+              offset += written;
+              if (offset < data.byteLength) yield* waitForDrain(generation);
+            }
           });
         const handle: TerminalPtyHandle = {
           supportsOutputPause: false,
@@ -259,12 +304,7 @@ export const createBunPtyPort = ({
                   }),
               ),
             ),
-          write: (data) =>
-            ensureOpen("write", () => {
-              const written = terminal.write(data);
-              if (written !== data.byteLength)
-                throw new Error("Bun terminal input backpressure prevented a complete write.");
-            }),
+          write: writeAll,
           resize: ({ columns, rows }) => ensureOpen("resize", () => terminal.resize(columns, rows)),
           pauseOutput: () =>
             Effect.fail(

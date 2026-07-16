@@ -124,6 +124,48 @@ describe("createBunPtyPort", () => {
     expect(calls).not.toContain("terminate-tree:42");
   });
 
+  test("resumes a partial input write after terminal drain", async () => {
+    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    const writes: number[][] = [];
+    let writeCalls = 0;
+    const terminal = {
+      closed: false,
+      write: (data: Uint8Array) => {
+        writes.push([...data]);
+        writeCalls += 1;
+        return writeCalls === 1 ? 1 : data.byteLength;
+      },
+      resize: () => undefined,
+      close: () => undefined,
+    };
+    const port = createBunPtyPort({
+      platform: "win32",
+      spawn: ((_command, options) => {
+        captured.options = options;
+        return { pid: 42, terminal, kill: () => undefined };
+      }) satisfies BunPtySpawn,
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: ["-l"], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+      ),
+    );
+
+    const writing = Effect.runPromise(handle.write(new Uint8Array([1, 2, 3])));
+    await Bun.sleep(0);
+    expect(writes).toEqual([[1, 2, 3]]);
+    const options = captured.options;
+    if (!options) throw new Error("Expected Bun spawn options to be captured.");
+    options.terminal.drain(terminal);
+
+    await expect(writing).resolves.toBeUndefined();
+    expect(writes).toEqual([
+      [1, 2, 3],
+      [2, 3],
+    ]);
+  });
+
   test("retries process-tree cleanup after a failed termination", async () => {
     const captured: { options: BunPtySpawnOptions | null } = { options: null };
     let cleanupCalls = 0;

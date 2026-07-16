@@ -208,6 +208,39 @@ describe("TerminalService", () => {
     expect(sinkCalls).toBe(1);
   });
 
+  test("isolates a stale attachment while continuing output delivery", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    let staleSinkShouldThrow = false;
+    const healthyEvents: string[] = [];
+
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "stale-renderer",
+        lastConsumedSequence: 0,
+        sink: () => {
+          if (staleSinkShouldThrow) throw new Error("renderer destroyed");
+        },
+      }),
+    );
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "healthy-renderer",
+        lastConsumedSequence: 0,
+        sink: (event) => healthyEvents.push(event.type),
+      }),
+    );
+
+    staleSinkShouldThrow = true;
+    expect(() => pty.emit(new Uint8Array([1]))).not.toThrow();
+    expect(healthyEvents).toEqual(["snapshot", "output"]);
+
+    pty.emit(new Uint8Array([2]));
+    expect(healthyEvents).toEqual(["snapshot", "output", "output"]);
+  });
+
   test("updates started-directory availability without replacing the terminal", async () => {
     directoryAvailable = true;
     const { service } = await makeService();
@@ -334,5 +367,41 @@ describe("TerminalService", () => {
 
     expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
     expect(pty.operations).toContain("terminate");
+  });
+
+  test("terminates independent sessions concurrently during host shutdown", async () => {
+    let terminalId = 0;
+    let startedTerminations = 0;
+    let releaseTerminations = (): void => undefined;
+    const terminationsReleased = new Promise<void>((resolve) => {
+      releaseTerminations = resolve;
+    });
+    const pty = makePty();
+    pty.port.start = () =>
+      Effect.succeed({
+        supportsOutputPause: true,
+        hasChildProcesses: () => Effect.succeed(false),
+        write: () => Effect.void,
+        resize: () => Effect.void,
+        pauseOutput: () => Effect.void,
+        resumeOutput: () => Effect.void,
+        terminate: () =>
+          Effect.promise(async () => {
+            startedTerminations += 1;
+            await terminationsReleased;
+          }),
+      });
+    const { service } = await makeService(pty, () => `terminal-${++terminalId}`);
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+
+    const disposing = Effect.runPromise(service.dispose());
+    try {
+      await Bun.sleep(0);
+      expect(startedTerminations).toBe(2);
+    } finally {
+      releaseTerminations();
+      await disposing;
+    }
   });
 });
