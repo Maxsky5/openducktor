@@ -4,6 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionReadPort,
   agentSessionListHydrationQueryOptions,
+  agentSessionListQueryOptions,
   agentSessionQueryKeys,
   hydrateAgentSessionListQueries,
   invalidateAgentSessionListQuery,
@@ -283,7 +284,7 @@ describe("agent session query cache helpers", () => {
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
   });
 
-  test("force-fresh batch loads return the exact task refetch when superseded", async () => {
+  test("force-fresh batch loads await an exact task refetch that is still in flight", async () => {
     const queryClient = new QueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const refreshedSession = { ...sessionFixture, externalSessionId: "external-2" };
@@ -297,7 +298,23 @@ describe("agent session query cache helpers", () => {
           resolveBatch = resolve;
         }),
     );
-    const singleList = mock(async (_repoPath: string, _taskId: string) => [refreshedSession]);
+    let releaseSingleRead: () => void = () => {
+      throw new Error("Single-read release was not initialized.");
+    };
+    let markSingleReadStarted: () => void = () => {
+      throw new Error("Single-read start signal was not initialized.");
+    };
+    const singleReadStarted = new Promise<void>((resolve) => {
+      markSingleReadStarted = resolve;
+    });
+    const singleReadRelease = new Promise<void>((resolve) => {
+      releaseSingleRead = resolve;
+    });
+    const singleList = mock(async (_repoPath: string, _taskId: string) => {
+      markSingleReadStarted();
+      await singleReadRelease;
+      return [refreshedSession];
+    });
     const readPort = {
       agentSessionsList: singleList,
       agentSessionsListForTasks: batchList,
@@ -313,16 +330,88 @@ describe("agent session query cache helpers", () => {
       readPort,
     });
     await Promise.resolve();
-    await refreshAgentSessionListQuery(queryClient, "/repo", "task-1", readPort);
+    const refresh = refreshAgentSessionListQuery(queryClient, "/repo", "task-1", readPort);
+    await singleReadStarted;
     resolveBatch([
       {
         taskId: "task-1",
         agentSessions: [{ ...sessionFixture, externalSessionId: "stale-session" }],
       },
     ]);
+    let loadOutcome: "pending" | "resolved" | "rejected" = "pending";
+    const observedLoad = load.then(
+      (value) => {
+        loadOutcome = "resolved";
+        return { status: "resolved" as const, value };
+      },
+      (error: unknown) => {
+        loadOutcome = "rejected";
+        return { status: "rejected" as const, error };
+      },
+    );
+    const hydrationKey = agentSessionQueryKeys.hydration("/repo", ["task-1"]);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (queryClient.getQueryState(hydrationKey)?.status === "success") {
+        break;
+      }
+      await Promise.resolve();
+    }
+    await Promise.resolve();
 
-    await expect(load).resolves.toEqual({ "task-1": [refreshedSession] });
+    expect(queryClient.getQueryState(hydrationKey)?.status).toBe("success");
+    expect(loadOutcome).toBe("pending");
+    releaseSingleRead();
+    await expect(observedLoad).resolves.toEqual({
+      status: "resolved",
+      value: { "task-1": [refreshedSession] },
+    });
+    await refresh;
     expect(batchList).toHaveBeenCalledTimes(1);
+    expect(singleList).toHaveBeenCalledTimes(1);
+  });
+
+  test("batch hydration defers to a canonical per-task read already in flight", async () => {
+    const queryClient = new QueryClient();
+    const firstQueryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const secondQueryKey = agentSessionQueryKeys.list("/repo", "task-2");
+    const canonicalSession = { ...sessionFixture, externalSessionId: "canonical-session" };
+    let releaseCanonicalRead: () => void = () => {
+      throw new Error("Canonical read release was not initialized.");
+    };
+    const canonicalReadRelease = new Promise<void>((resolve) => {
+      releaseCanonicalRead = resolve;
+    });
+    const singleList = mock(async () => {
+      await canonicalReadRelease;
+      return [canonicalSession];
+    });
+    const batchList = mock(async (_repoPath: string, taskIds: string[]) => {
+      expect(taskIds).toEqual(["task-2"]);
+      return [{ taskId: "task-2", agentSessions: [] }];
+    });
+    const readPort = {
+      agentSessionsList: singleList,
+      agentSessionsListForTasks: batchList,
+    };
+
+    const canonicalRead = queryClient.fetchQuery(
+      agentSessionListQueryOptions("/repo", "task-1", readPort),
+    );
+    const hydration = hydrateAgentSessionListQueries(
+      queryClient,
+      "/repo",
+      ["task-1", "task-2"],
+      readPort,
+    );
+    await Promise.resolve();
+
+    expect(batchList).toHaveBeenCalledTimes(1);
+    releaseCanonicalRead();
+    await Promise.all([canonicalRead, hydration]);
+    expect(queryClient.getQueryData<AgentSessionRecord[]>(firstQueryKey)).toEqual([
+      canonicalSession,
+    ]);
+    expect(queryClient.getQueryData<AgentSessionRecord[]>(secondQueryKey)).toEqual([]);
     expect(singleList).toHaveBeenCalledTimes(1);
   });
 

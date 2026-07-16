@@ -265,4 +265,49 @@ describe("useAgentSessionLists", () => {
       queryClient.clear();
     }
   });
+
+  test("surfaces an exact refresh error without batch-hydrating the failed query", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [sessionFixture] }]);
+    const singleList = mock(async () => {
+      throw new Error("exact refresh failed before mount");
+    });
+    await expect(
+      refreshAgentSessionListQuery(queryClient, "/repo", "task-1", {
+        agentSessionsList: singleList,
+      }),
+    ).rejects.toThrow("exact refresh failed before mount");
+    const harness = createHookHarness(
+      () =>
+        useAgentSessionLists({
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          enabled: true,
+          queryClient,
+          readPort: {
+            agentSessionsList: singleList,
+            agentSessionsListForTasks: batchList,
+          },
+        }),
+      undefined,
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (current) =>
+          current.error instanceof Error &&
+          current.error.message === "exact refresh failed before mount",
+      );
+
+      expect(batchList).not.toHaveBeenCalled();
+      expect(singleList).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isPending).toBe(false);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
 });

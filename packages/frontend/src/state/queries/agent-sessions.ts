@@ -70,6 +70,17 @@ export const agentSessionListQueryOptions = (
     staleTime: AGENT_SESSION_LIST_STALE_TIME,
   });
 
+const joinInFlightAgentSessionListQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  readPort: Pick<AgentSessionReadPort, "agentSessionsList">,
+): Promise<AgentSessionRecord[]> =>
+  queryClient.fetchQuery({
+    ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+    staleTime: 0,
+  });
+
 export const hydrateAgentSessionListQueries = async (
   queryClient: QueryClient,
   repoPath: string,
@@ -81,20 +92,36 @@ export const hydrateAgentSessionListQueries = async (
     return;
   }
 
-  const requestedTaskIds = new Set(normalizedTaskIds);
   const initialQueryStates = new Map(
     normalizedTaskIds.map((taskId) => [
       taskId,
       queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId)),
     ]),
   );
+  const taskIdsWithInFlightQueries = normalizedTaskIds.filter(
+    (taskId) => initialQueryStates.get(taskId)?.fetchStatus === "fetching",
+  );
+  const taskIdsToHydrate = normalizedTaskIds.filter(
+    (taskId) => initialQueryStates.get(taskId)?.fetchStatus !== "fetching",
+  );
+  const inFlightQueries = taskIdsWithInFlightQueries.map((taskId) =>
+    joinInFlightAgentSessionListQuery(queryClient, repoPath, taskId, readPort),
+  );
+  if (taskIdsToHydrate.length === 0) {
+    await Promise.all(inFlightQueries);
+    return;
+  }
   const initialInvalidationVersions = new Map(
-    normalizedTaskIds.map((taskId) => [
+    taskIdsToHydrate.map((taskId) => [
       taskId,
       getAgentSessionInvalidationVersion(queryClient, repoPath, taskId),
     ]),
   );
-  const taskSessions = await readPort.agentSessionsListForTasks(repoPath, normalizedTaskIds);
+  const [taskSessions] = await Promise.all([
+    readPort.agentSessionsListForTasks(repoPath, taskIdsToHydrate),
+    Promise.all(inFlightQueries),
+  ]);
+  const requestedTaskIds = new Set(taskIdsToHydrate);
   const sessionsByTaskId = new Map<string, AgentSessionRecord[]>();
   for (const taskSession of taskSessions) {
     if (!requestedTaskIds.has(taskSession.taskId)) {
@@ -108,11 +135,11 @@ export const hydrateAgentSessionListQueries = async (
     sessionsByTaskId.set(taskSession.taskId, taskSession.agentSessions);
   }
 
-  const missingTaskId = normalizedTaskIds.find((taskId) => !sessionsByTaskId.has(taskId));
+  const missingTaskId = taskIdsToHydrate.find((taskId) => !sessionsByTaskId.has(taskId));
   if (missingTaskId) {
     throw new Error(`Batch session response omitted task "${missingTaskId}".`);
   }
-  for (const taskId of normalizedTaskIds) {
+  for (const taskId of taskIdsToHydrate) {
     const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
     const initialState = initialQueryStates.get(taskId);
     const currentState = queryClient.getQueryState(queryKey);
@@ -203,15 +230,34 @@ export const loadAgentSessionListsFromQuery = async (
       ),
       ...(options?.forceFresh || refreshesInvalidatedData ? { staleTime: 0 } : {}),
     });
+    await Promise.all(
+      taskIdsToHydrate.flatMap((taskId) => {
+        const queryState = queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId));
+        return queryState?.fetchStatus === "fetching"
+          ? [
+              joinInFlightAgentSessionListQuery(
+                queryClient,
+                repoPath,
+                taskId,
+                options?.readPort ?? host,
+              ),
+            ]
+          : [];
+      }),
+    );
   }
 
   const entries = normalizedTaskIds.map((taskId) => {
     const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const queryState = queryClient.getQueryState(queryKey);
+    if (queryState?.status === "error") {
+      throw queryState.error;
+    }
     const records = queryClient.getQueryData<AgentSessionRecord[]>(queryKey);
     if (!records) {
       throw new Error(`Batch session hydration did not populate task "${taskId}".`);
     }
-    if (queryClient.getQueryState(queryKey)?.isInvalidated === true) {
+    if (queryState?.isInvalidated === true) {
       throw new Error(`Batch session hydration for task "${taskId}" was superseded.`);
     }
     return [taskId, records] as const;

@@ -45,10 +45,10 @@ export const useAgentSessionLists = ({
   const normalizedTaskIds = useMemo(() => toTaskIds(taskIdsKey), [taskIdsKey]);
   const shouldReadLists = enabled && repoPath !== null;
   const missingTaskIds = shouldReadLists
-    ? normalizedTaskIds.filter(
-        (taskId) =>
-          queryClient.getQueryData(agentSessionQueryKeys.list(repoPath, taskId)) === undefined,
-      )
+    ? normalizedTaskIds.filter((taskId) => {
+        const queryState = queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId));
+        return queryState?.status !== "error" && queryState?.data === undefined;
+      })
     : [];
   const shouldHydrateLists = missingTaskIds.length > 0;
   const hydrationQuery = useQuery(
