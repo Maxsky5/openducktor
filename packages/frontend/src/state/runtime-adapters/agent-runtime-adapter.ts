@@ -1,12 +1,12 @@
 import type {
   AgentCatalogPort,
   AgentRuntimeDefinition,
-  AgentSessionPort,
+  AgentSessionHistoryPort,
   AgentWorkspaceInspectionPort,
 } from "@openducktor/core";
 
 export type AgentRuntimeAdapter = AgentCatalogPort &
-  AgentSessionPort &
+  AgentSessionHistoryPort &
   AgentWorkspaceInspectionPort & {
     getRuntimeDefinition(): AgentRuntimeDefinition;
   };

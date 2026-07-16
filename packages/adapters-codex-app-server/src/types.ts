@@ -1,4 +1,5 @@
 import type {
+  AgentSessionLiveSnapshot,
   CodexAppServerApprovalsReviewer,
   CodexAppServerAskForApproval,
   CodexAppServerFuzzyFileSearchParams,
@@ -7,6 +8,7 @@ import type {
   CodexAppServerSandboxMode,
   CodexAppServerSandboxPolicy,
   CodexAppServerThreadListParams,
+  RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type {
@@ -51,6 +53,32 @@ export type CodexNotificationRecord = {
   method: string;
   params?: unknown;
   receivedAt: string;
+};
+
+export type CodexSessionContextUsage = {
+  totalTokens: number;
+  contextWindow?: number;
+};
+
+export type CodexLiveSessionLocator = {
+  runtimeId: string;
+  externalSessionId: string;
+};
+
+export type CodexLiveApprovalReplyInput = CodexLiveSessionLocator & {
+  requestId: string;
+  outcome: RuntimeApprovalReplyOutcome;
+  message?: string;
+};
+
+export type CodexLiveQuestionReplyInput = CodexLiveSessionLocator & {
+  requestId: string;
+  answers: string[][];
+};
+
+export type CodexCatalogInvalidation = {
+  runtimeId: string;
+  catalog: "skills";
 };
 
 export type CodexServerRequestResponder = (
@@ -316,13 +344,22 @@ export type CodexAppServerClient = {
 export type CodexAppServerAdapterOptions = {
   repoRuntimeResolver: CodexRepoRuntimeResolverPort;
   transportFactory: CodexJsonRpcTransportFactory;
-  takeBufferedEvents: (runtimeId: string) => Promise<CodexAppServerStreamEvent[]>;
   subscribeEvents?: (
     runtimeId: string,
     listener: (event: CodexAppServerStreamEvent) => void,
   ) => Promise<() => void> | (() => void);
-  respondServerRequest: CodexServerRequestResponder;
+  respondServerRequest?: CodexServerRequestResponder;
+  onLiveSessionMutation?: (mutation: CodexLiveSessionMutation) => void | Promise<void>;
+  onCatalogInvalidated?: (event: CodexCatalogInvalidation) => void;
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
+};
+
+export type CodexLiveSessionMutation = {
+  runtimeId: string;
+  snapshots: AgentSessionLiveSnapshot[];
+  transcriptEvents: AgentEvent[];
+  catalogInvalidated: boolean;
+  fault?: string;
 };
 
 export type {

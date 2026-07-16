@@ -11,6 +11,10 @@ import {
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
+  type AgentSessionLiveSseLeaseRegistry,
+  createAgentSessionLiveSseLeaseRegistry,
+} from "./agent-session-live-sse-lease";
+import {
   errorMessage,
   runWebBoundary,
   toWebOperationError,
@@ -55,7 +59,7 @@ const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const LAST_EVENT_ID_HEADER = "last-event-id";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
-const INITIAL_REPLAY_STREAM_PATHS = new Set(["codex-app-server-events"]);
+const AGENT_SESSION_LIVE_STREAM_PATH = "agent-session-live-events";
 
 const jsonResponseBody = (payload: unknown): string => {
   const serialized = JSON.stringify(payload);
@@ -277,9 +281,6 @@ const streamWarningSubject = (streamPath: string): string => {
   if (streamPath === "task-events") {
     return "Task stream";
   }
-  if (streamPath === "codex-app-server-events") {
-    return "Codex app-server stream";
-  }
   return "Event stream";
 };
 
@@ -293,33 +294,47 @@ const createSseResponse = (
   streamPath: string,
   lastEventId: number | null,
   corsHeaders: HeadersInit,
-  options: { includeRecentWhenNoLastEventId?: boolean } = {},
+  options: {
+    readonly acceptsEvent?: (event: BufferedHostEvent) => boolean;
+    readonly onCancel?: () => Promise<void>;
+    readonly replay?: boolean;
+  } = {},
 ): Response => {
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
+  const acceptsEvent = options.acceptsEvent ?? (() => true);
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(SSE_READY_COMMENT));
-      const replay = stream.replayAfterWithDiagnostics(lastEventId, options);
-      if (replay.skippedEventCount > 0) {
-        controller.enqueue(
-          encoder.encode(
-            writeSseNamedEvent(
-              "stream-warning",
-              skippedReplayWarningMessage(streamPath, replay.skippedEventCount),
+      if (options.replay !== false) {
+        const replay = stream.replayAfterWithDiagnostics(lastEventId);
+        if (replay.skippedEventCount > 0) {
+          controller.enqueue(
+            encoder.encode(
+              writeSseNamedEvent(
+                "stream-warning",
+                skippedReplayWarningMessage(streamPath, replay.skippedEventCount),
+              ),
             ),
-          ),
-        );
-      }
-      for (const event of replay.events) {
-        controller.enqueue(encoder.encode(writeSseEvent(event)));
+          );
+        }
+        for (const event of replay.events) {
+          if (!acceptsEvent(event)) {
+            continue;
+          }
+          controller.enqueue(encoder.encode(writeSseEvent(event)));
+        }
       }
       unsubscribe = stream.subscribe((event) => {
+        if (!acceptsEvent(event)) {
+          return;
+        }
         controller.enqueue(encoder.encode(writeSseEvent(event)));
       });
     },
     cancel() {
       unsubscribe?.();
+      return options.onCancel?.();
     },
   });
 
@@ -353,23 +368,6 @@ const webHostRequestErrorResponse = (
 ): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
-const isJsonRpcRequestId = (value: unknown): value is string | number =>
-  typeof value === "string" || typeof value === "number";
-
-const forgetRespondedCodexAppServerRequest = (
-  eventBus: BufferedHostEventBus,
-  command: string,
-  args: Record<string, unknown>,
-): void => {
-  if (command !== "codex_app_server_respond") {
-    return;
-  }
-  const { runtimeId, requestId } = args;
-  if (typeof runtimeId !== "string" || !isJsonRpcRequestId(requestId)) {
-    return;
-  }
-  eventBus.forgetCodexAppServerRequest(runtimeId, requestId);
-};
 
 const parseJsonObjectBody = (
   request: Request,
@@ -472,11 +470,11 @@ const localAttachmentPreviewResponse = (
   });
 
 const routeCorsRequest = ({
+  agentSessionLiveSseLeases,
   appToken,
   controlToken,
   corsHeaders,
   eventBus,
-  hostCommandRouter,
   localAttachments,
   request,
   requestTimeouts,
@@ -484,11 +482,11 @@ const routeCorsRequest = ({
   beginShutdown,
   stop,
 }: {
+  agentSessionLiveSseLeases: AgentSessionLiveSseLeaseRegistry;
   appToken: string;
   controlToken: string;
   corsHeaders: HeadersInit;
   eventBus: BufferedHostEventBus;
-  hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
@@ -539,12 +537,22 @@ const routeCorsRequest = ({
         );
       }
       requestTimeouts?.timeout(request, 0);
+      const liveSessionLease =
+        streamPath === AGENT_SESSION_LIVE_STREAM_PATH
+          ? yield* agentSessionLiveSseLeases.createLease(requestUrl)
+          : null;
       return createSseResponse(
         eventBus.streamFor(streamChannel),
         streamPath,
         yield* parseLastEventId(request),
         corsHeaders,
-        { includeRecentWhenNoLastEventId: INITIAL_REPLAY_STREAM_PATHS.has(streamPath) },
+        liveSessionLease
+          ? {
+              acceptsEvent: liveSessionLease.acceptsEvent,
+              onCancel: liveSessionLease.release,
+              replay: false,
+            }
+          : undefined,
       );
     }
 
@@ -576,10 +584,15 @@ const routeCorsRequest = ({
             cause,
           }),
       });
-      const result = yield* hostCommandRouter
+      const result = yield* agentSessionLiveSseLeases
         .invoke(decodedCommand, args)
-        .pipe(Effect.mapError((error) => hostCommandFailureToWebError(decodedCommand, error)));
-      forgetRespondedCodexAppServerRequest(eventBus, decodedCommand, args);
+        .pipe(
+          Effect.mapError((error) =>
+            error instanceof WebHostRequestError
+              ? error
+              : hostCommandFailureToWebError(decodedCommand, error),
+          ),
+        );
       return jsonResponse(result, undefined, corsHeaders);
     }
 
@@ -587,11 +600,11 @@ const routeCorsRequest = ({
   });
 
 export const handleTypescriptHostBackendRequest = ({
+  agentSessionLiveSseLeases,
   allowedOrigins,
   appToken,
   controlToken,
   eventBus,
-  hostCommandRouter,
   localAttachments,
   request,
   requestTimeouts,
@@ -599,11 +612,11 @@ export const handleTypescriptHostBackendRequest = ({
   beginShutdown,
   stop,
 }: {
+  agentSessionLiveSseLeases: AgentSessionLiveSseLeaseRegistry;
   allowedOrigins: Set<string>;
   appToken: string;
   controlToken: string;
   eventBus: BufferedHostEventBus;
-  hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
@@ -622,11 +635,11 @@ export const handleTypescriptHostBackendRequest = ({
     }
 
     return yield* routeCorsRequest({
+      agentSessionLiveSseLeases,
       appToken,
       controlToken,
       corsHeaders,
       eventBus,
-      hostCommandRouter,
       localAttachments,
       request,
       requestTimeouts,
@@ -663,6 +676,7 @@ export const startTypescriptHostBackendEffect = ({
       ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
     });
+    const agentSessionLiveSseLeases = createAgentSessionLiveSseLeaseRegistry(hostCommandRouter);
     let shutdownStarted = false;
     const beginShutdown = (): void => {
       shutdownStarted = true;
@@ -711,11 +725,11 @@ export const startTypescriptHostBackendEffect = ({
               fetch(request, server) {
                 return Effect.runPromise(
                   handleTypescriptHostBackendRequest({
+                    agentSessionLiveSseLeases,
                     allowedOrigins,
                     appToken,
                     controlToken,
                     eventBus,
-                    hostCommandRouter,
                     localAttachments,
                     request,
                     requestTimeouts: server,

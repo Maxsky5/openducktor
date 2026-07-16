@@ -11,8 +11,9 @@ import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract"
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const TASK_EVENT_CHANNEL = "openducktor://task-event";
-const CODEX_APP_SERVER_EVENT_CHANNEL = "openducktor://codex-app-server-event";
+const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 let nextDevServerTransportEpoch = 0;
+let nextAgentSessionLiveTransportEpoch = 0;
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
   constructor() {
@@ -59,11 +60,13 @@ export const createElectronShellBridge = (): ShellBridge => {
       nextDevServerTransportEpoch += 1;
       return { transportEpoch, unsubscribe };
     },
+    subscribeAgentSessionLiveEvents: async (listener) => {
+      const unsubscribe = electronApi.subscribe(AGENT_SESSION_LIVE_EVENT_CHANNEL, listener);
+      const transportEpoch = `electron-agent-session-live:${nextAgentSessionLiveTransportEpoch}`;
+      nextAgentSessionLiveTransportEpoch += 1;
+      return { transportEpoch, unsubscribe };
+    },
     subscribeTaskEvents: subscribeElectronEvent(electronApi, TASK_EVENT_CHANNEL),
-    subscribeCodexAppServerEvents: subscribeElectronEvent(
-      electronApi,
-      CODEX_APP_SERVER_EVENT_CHANNEL,
-    ),
     appUpdates: {
       getState: async () => readAppUpdateState(await electronApi.appUpdates.getState()),
       check: async (input) => readAppUpdateCommandResult(await electronApi.appUpdates.check(input)),

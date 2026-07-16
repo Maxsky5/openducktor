@@ -2,10 +2,19 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_WORKFLOW_AGENT_TOOL_NAMES, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import {
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { terminateProcessTree } from "../../infrastructure/process/process-tree";
+import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
+import type {
+  PreparedRuntimeLiveSessionAdapter,
+  RuntimeLiveSessionLifecyclePort,
+} from "../../ports/runtime-live-session-lifecycle-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
@@ -20,9 +29,14 @@ type OpenCodeWorkspaceRuntimeStarterInput = Parameters<
 >[0];
 type OpenCodeWorkspaceRuntimeStarterTestInput = Omit<
   OpenCodeWorkspaceRuntimeStarterInput,
-  "runtimeDistribution" | "toolDiscovery"
+  "liveSessionLifecycle" | "prepareLiveSessionAdapter" | "runtimeDistribution" | "toolDiscovery"
 > &
-  Partial<Pick<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution" | "toolDiscovery">> & {
+  Partial<
+    Pick<
+      OpenCodeWorkspaceRuntimeStarterInput,
+      "liveSessionLifecycle" | "prepareLiveSessionAdapter" | "runtimeDistribution" | "toolDiscovery"
+    >
+  > & {
     systemCommands?: SystemCommandPort;
   };
 const testRuntimeDistribution = createArtifactRuntimeDistribution({
@@ -32,7 +46,19 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
   },
 });
 const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeStarterTestInput) => {
-  const { processEnv, systemCommands, toolDiscovery, ...starterInput } = input;
+  const {
+    liveSessionLifecycle,
+    prepareLiveSessionAdapter,
+    processEnv,
+    systemCommands,
+    toolDiscovery,
+    ...starterInput
+  } = input;
+  const defaultLifecycle: RuntimeLiveSessionLifecyclePort = {
+    registerRuntimeAdapter: () => Effect.void,
+    releaseRuntime: () => Effect.succeed([]),
+    runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
+  };
   return createEffectOpenCodeWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery:
@@ -40,6 +66,30 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
       createToolDiscoveryAdapter({
         ...(processEnv === undefined ? {} : { env: processEnv }),
         systemCommands: systemCommands ?? createSystemCommands(),
+      }),
+    liveSessionLifecycle: liveSessionLifecycle ?? defaultLifecycle,
+    prepareLiveSessionAdapter:
+      prepareLiveSessionAdapter ??
+      ((runtime) => {
+        const adapter: AgentSessionLiveAdapterPort = {
+          binding: {
+            runtimeId: runtime.runtimeId,
+            runtimeKind: runtime.kind,
+            repoPath: runtime.repoPath,
+          },
+          matches: () => false,
+          listRetainedSnapshots: () => Effect.succeed([]),
+          readRetainedSnapshot: (ref) => Effect.succeed({ type: "missing", ref }),
+          loadContext: () => Effect.succeed(null),
+          replyApproval: () => Effect.void,
+          replyQuestion: () => Effect.void,
+          releaseRuntime: () => Effect.succeed([]),
+        };
+        return Effect.succeed({
+          adapter,
+          startForwarding: () => Effect.void,
+          discard: () => Effect.void,
+        } satisfies PreparedRuntimeLiveSessionAdapter);
       }),
     ...(processEnv === undefined ? {} : { processEnv }),
     ...starterInput,
@@ -146,7 +196,7 @@ const forceStopProcessTree = (pid: number) =>
 
 const createFakeOpenCode = async (
   root: string,
-  options: { childPidPath?: string; configCapturePath?: string } = {},
+  options: { childPidPath?: string; configCapturePath?: string; exitAfterMs?: number } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "opencode.mjs");
   await writeFile(
@@ -166,6 +216,7 @@ if (Number(args[portFlagIndex + 1]) !== 43123) {
 }
 const childPidPath = ${JSON.stringify(options.childPidPath ?? null)};
 const configCapturePath = ${JSON.stringify(options.configCapturePath ?? null)};
+const exitAfterMs = ${JSON.stringify(options.exitAfterMs ?? null)};
 if (configCapturePath) {
   writeFileSync(configCapturePath, process.env.OPENCODE_CONFIG_CONTENT ?? "");
 }
@@ -182,10 +233,29 @@ const stop = () => {
 };
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
+if (exitAfterMs !== null) {
+  setTimeout(stop, exitAfterMs);
+}
 `,
   );
   return writeFakeRuntimeCommand(root, "opencode", "opencode.mjs");
 };
+
+const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAdapterPort => ({
+  binding: {
+    runtimeId: runtime.runtimeId,
+    runtimeKind: runtime.kind,
+    repoPath: runtime.repoPath,
+  },
+  matches: () => false,
+  listRetainedSnapshots: () => Effect.succeed([]),
+  readRetainedSnapshot: (ref) => Effect.succeed({ type: "missing", ref }),
+  loadContext: () => Effect.succeed(null),
+  replyApproval: () => Effect.void,
+  replyQuestion: () => Effect.void,
+  releaseRuntime: () => Effect.succeed([]),
+});
+
 describe("createOpenCodeWorkspaceRuntimeStarter", () => {
   test("fails fast when the MCP bridge connection is not configured", async () => {
     const starter = createOpenCodeWorkspaceRuntimeStarter({
@@ -299,6 +369,260 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         },
       });
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
+    } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("registers the live adapter before forwarding and returning the runtime handle", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-order-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const opencodeBinary = await createFakeOpenCode(root);
+      const order: string[] = [];
+      const releasedRuntimeIds: string[] = [];
+      const lifecycle: RuntimeLiveSessionLifecyclePort = {
+        registerRuntimeAdapter: (adapter) =>
+          Effect.sync(() => {
+            order.push(`register:${adapter.binding.runtimeId}`);
+          }),
+        releaseRuntime: (runtimeId) =>
+          Effect.sync(() => {
+            releasedRuntimeIds.push(runtimeId);
+            return [];
+          }),
+        runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
+      };
+      const starter = createOpenCodeWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
+        liveSessionLifecycle: lifecycle,
+        prepareLiveSessionAdapter: (runtime) =>
+          Effect.sync(() => {
+            order.push(`prepare:${runtime.runtimeId}`);
+            return {
+              adapter: createLiveAdapter(runtime),
+              startForwarding: () =>
+                Effect.sync(() => {
+                  order.push(`forward:${runtime.runtimeId}`);
+                }),
+              discard: () => Effect.void,
+            };
+          }),
+        startupTimeoutMs: 2_000,
+        retryDelayMs: 1,
+        portAllocator: () => Effect.succeed(43123),
+        portProbe: () => Effect.succeed(true),
+        runtimeId: () => "runtime-live-order",
+      });
+
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      );
+      order.push("returned");
+      expect(order).toEqual([
+        "prepare:runtime-live-order",
+        "register:runtime-live-order",
+        "forward:runtime-live-order",
+        "returned",
+      ]);
+
+      await Effect.runPromise(handle.stop());
+      expect(releasedRuntimeIds).toEqual(["runtime-live-order"]);
+    } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("releases exactly its live runtime when the OpenCode process exits unexpectedly", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-close-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const opencodeBinary = await createFakeOpenCode(root, { exitAfterMs: 50 });
+      const releasedRuntimeIds: string[] = [];
+      const lifecycle: RuntimeLiveSessionLifecyclePort = {
+        registerRuntimeAdapter: () => Effect.void,
+        releaseRuntime: (runtimeId) =>
+          Effect.sync(() => {
+            releasedRuntimeIds.push(runtimeId);
+            return [];
+          }),
+        runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
+      };
+      const starter = createOpenCodeWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
+        liveSessionLifecycle: lifecycle,
+        prepareLiveSessionAdapter: (runtime) =>
+          Effect.succeed({
+            adapter: createLiveAdapter(runtime),
+            startForwarding: () => Effect.void,
+            discard: () => Effect.void,
+          }),
+        startupTimeoutMs: 2_000,
+        retryDelayMs: 1,
+        portAllocator: () => Effect.succeed(43123),
+        portProbe: () => Effect.succeed(true),
+        runtimeId: () => "runtime-unexpected-close",
+      });
+
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      );
+      await waitFor(() => releasedRuntimeIds.length === 1);
+      expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
+      await Effect.runPromise(handle.stop());
+      expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
+    } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("discards prepared observation when live-adapter registration fails", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-register-failure-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const opencodeBinary = await createFakeOpenCode(root);
+      let discardCalls = 0;
+      const starter = createOpenCodeWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
+        liveSessionLifecycle: {
+          registerRuntimeAdapter: () =>
+            Effect.fail(
+              new HostOperationError({
+                operation: "test.register-live-adapter",
+                message: "live registration failed",
+              }),
+            ),
+          releaseRuntime: () => Effect.succeed([]),
+          runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
+        },
+        prepareLiveSessionAdapter: (runtime) =>
+          Effect.succeed({
+            adapter: createLiveAdapter(runtime),
+            startForwarding: () => Effect.void,
+            discard: () =>
+              Effect.sync(() => {
+                discardCalls += 1;
+              }),
+          }),
+        startupTimeoutMs: 2_000,
+        retryDelayMs: 1,
+        portAllocator: () => Effect.succeed(43123),
+        portProbe: () => Effect.succeed(true),
+        runtimeId: () => "runtime-register-failure",
+      });
+
+      await expect(
+        Effect.runPromise(
+          starter.startWorkspaceRuntime({
+            runtimeKind: "opencode",
+            repoPath: repo,
+            workingDirectory: repo,
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          }),
+        ),
+      ).rejects.toThrow("live registration failed");
+      expect(discardCalls).toBe(1);
+    } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("removes a registered live adapter when forwarding startup fails", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-forward-failure-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const opencodeBinary = await createFakeOpenCode(root);
+      const registeredRuntimeIds = new Set<string>();
+      const releasedRuntimeIds: string[] = [];
+      const lifecycle: RuntimeLiveSessionLifecyclePort = {
+        registerRuntimeAdapter: (adapter) =>
+          Effect.sync(() => {
+            registeredRuntimeIds.add(adapter.binding.runtimeId);
+          }),
+        releaseRuntime: (runtimeId) =>
+          Effect.sync(() => {
+            registeredRuntimeIds.delete(runtimeId);
+            releasedRuntimeIds.push(runtimeId);
+            return [];
+          }),
+        runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
+      };
+      const starter = createOpenCodeWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
+        liveSessionLifecycle: lifecycle,
+        prepareLiveSessionAdapter: (runtime) =>
+          Effect.succeed({
+            adapter: createLiveAdapter(runtime),
+            startForwarding: () =>
+              Effect.fail(
+                new HostOperationError({
+                  operation: "test.start-forwarding",
+                  message: "live forwarding failed",
+                }),
+              ),
+            discard: () => Effect.void,
+          }),
+        startupTimeoutMs: 2_000,
+        retryDelayMs: 1,
+        portAllocator: () => Effect.succeed(43123),
+        portProbe: () => Effect.succeed(true),
+        runtimeId: () => "runtime-forward-failure",
+      });
+
+      await expect(
+        Effect.runPromise(
+          starter.startWorkspaceRuntime({
+            runtimeKind: "opencode",
+            repoPath: repo,
+            workingDirectory: repo,
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          }),
+        ),
+      ).rejects.toThrow("live forwarding failed");
+      expect(registeredRuntimeIds.size).toBe(0);
+      expect(releasedRuntimeIds).toEqual(["runtime-forward-failure"]);
     } finally {
       await removeTestDirectory(root);
     }

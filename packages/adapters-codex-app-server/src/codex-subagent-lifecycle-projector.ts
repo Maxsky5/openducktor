@@ -118,6 +118,10 @@ export class CodexSubagentLifecycleProjector {
     }
   }
 
+  clearRuntime(runtimeId: string): void {
+    this.pendingLifecycleByRuntimeId.delete(runtimeId);
+  }
+
   private projectLifecycleUpdate(
     runtimeId: string,
     childThreadId: string,

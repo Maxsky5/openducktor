@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { AgentSessionStopTarget } from "@openducktor/contracts";
+import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
@@ -8,13 +8,9 @@ import {
   lastSessionMessageForTest,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { listenToAgentSessionEvents } from "../events/session-events";
+import { listenToAgentSessionEvents } from "../events/session-events-test-harness";
 import { createSessionTurnMetadata } from "../support/session-turn-metadata";
-import {
-  createDeferred,
-  createSessionObserversRefFixture,
-  createTaskCardFixture,
-} from "../test-utils";
+import { createDeferred, createTaskCardFixture } from "../test-utils";
 import {
   buildSession,
   createSessionActions,
@@ -26,7 +22,10 @@ import {
 describe("agent-orchestrator/handlers/session-actions stop", () => {
   test("stops a workspace-scoped planner session and clears pending state", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const stopTargets: AgentSessionStopTarget[] = [];
+    const stopTargets: SessionRef[] = [];
+    adapter.stopSession = async (target) => {
+      stopTargets.push(target);
+    };
 
     const sessionsRef = createSessionsRef([
       buildSession({
@@ -68,16 +67,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      stopAuthoritativeSession: async (target) => {
-        stopTargets.push(target);
-      },
     });
 
     await actions.stopAgentSession(getSession(sessionsRef));
     expect(stopTargets).toEqual([
       {
         repoPath: "/tmp/repo",
-        taskId: "task-1",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
         externalSessionId: "session-1",
@@ -95,9 +90,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     let localStopCalls = 0;
     adapter.stopSession = async () => {
       localStopCalls += 1;
+      throw new Error("build stop failed");
     };
-    let unsubscribeCalls = 0;
-
     const sessionsRef = createSessionsRef([
       buildSession({
         pendingApprovals: [
@@ -136,36 +130,18 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const sessionTurnState = createSessionTurnStateFixture();
     sessionTurnState.turnMetadata.recordModel(sessionKey, null);
 
-    const stopAuthoritativeSession = async () => {
-      throw new Error("build stop failed");
-    };
-    const sessionObserversRef = createSessionObserversRefFixture();
-    await sessionObserversRef.current.ensureObserver(
-      {
-        externalSessionId: "session-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-      async () => () => {
-        unsubscribeCalls += 1;
-      },
-    );
-
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      sessionObserversRef,
       sessionTurnState: sessionTurnState.sessionTurnState,
-      stopAuthoritativeSession,
     });
 
     try {
       await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
         "Failed to stop build session 'session-1': build stop failed",
       );
-      expect(localStopCalls).toBe(0);
-      expect(unsubscribeCalls).toBe(0);
+      expect(localStopCalls).toBe(1);
       expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeNull();
       expect(getSession(sessionsRef)?.status).toBe("running");
       expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
@@ -179,6 +155,9 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   test("records stop intent before awaiting authoritative session stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopDeferred = createDeferred<void>();
+    adapter.stopSession = async () => {
+      await stopDeferred.promise;
+    };
     const sessionsRef = createSessionsRef([
       buildSession({
         role: "build",
@@ -188,9 +167,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      stopAuthoritativeSession: async () => {
-        await stopDeferred.promise;
-      },
     });
 
     const stopPromise = actions.stopAgentSession(getSession(sessionsRef));
@@ -272,6 +248,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const unsubscribe = await listenToAgentSessionEvents({
       adapter,
+      sessionsRef,
       sessionRef: {
         externalSessionId: "session-1",
         repoPath: "/tmp/repo",
@@ -303,32 +280,20 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       workflowToolAliasesByCanonical: undefined,
     });
 
-    adapter.stopSession = async (externalSessionId) => {
+    adapter.stopSession = async (sessionRef) => {
       sessionEventListener?.({
         type: "session_finished",
-        externalSessionId,
+        externalSessionId: sessionRef.externalSessionId,
         timestamp: "2026-02-22T08:00:10.000Z",
         message: "Session stopped",
       });
     };
 
-    const sessionObserversRef = createSessionObserversRefFixture();
-    await sessionObserversRef.current.ensureObserver(
-      {
-        externalSessionId: "session-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-      async () => unsubscribe,
-    );
-
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      sessionObserversRef,
       updateSession,
-      observeAgentSession: async () => undefined,
     });
 
     try {
@@ -401,7 +366,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     try {
       await actions.stopAgentSession(getSession(sessionsRef));
 
-      expect(localStopCalls).toBe(0);
+      expect(localStopCalls).toBe(1);
       const lastMessage = lastSessionMessageForTest(getSession(sessionsRef));
       expect(lastMessage?.content).toBe("Session stopped at your request.");
       expect(lastMessage?.meta).toEqual({
@@ -427,28 +392,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     }
   });
 
-  test("continues cleanup when local adapter stop fails after authoritative stop", async () => {
+  test("clears renderer turn state after the host stop succeeds", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalReleaseSession = adapter.releaseSession;
     const callOrder: string[] = [];
-    adapter.releaseSession = async () => {
-      callOrder.push("local-release");
-      throw new Error("local release failed");
+    adapter.stopSession = async () => {
+      callOrder.push("host-stop");
     };
-
-    let unsubscribeCalls = 0;
-
-    const sessionObserversRef = createSessionObserversRefFixture();
-    await sessionObserversRef.current.ensureObserver(
-      {
-        externalSessionId: "session-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-      async () => () => {
-        unsubscribeCalls += 1;
-      },
-    );
 
     const sessionsRef = createSessionsRef([buildSession()]);
     const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
@@ -460,39 +409,29 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      sessionObserversRef,
       sessionTurnState: sessionTurnState.sessionTurnState,
-      stopAuthoritativeSession: async () => {
-        callOrder.push("host-stop");
-      },
     });
 
-    const originalWarn = console.warn;
-    console.warn = () => {};
-
-    try {
-      await expect(actions.stopAgentSession(getSession(sessionsRef))).resolves.toBeUndefined();
-      expect(callOrder).toEqual(["host-stop", "local-release"]);
-      expect(unsubscribeCalls).toBe(1);
-      expect(
-        sessionTurnState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
-      ).toBeUndefined();
-      expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeUndefined();
-      expect(getSession(sessionsRef)?.status).toBe("stopped");
-    } finally {
-      adapter.releaseSession = originalReleaseSession;
-      console.warn = originalWarn;
-    }
+    await expect(actions.stopAgentSession(getSession(sessionsRef))).resolves.toBeUndefined();
+    expect(callOrder).toEqual(["host-stop"]);
+    expect(
+      sessionTurnState.assistantTurnTiming.readTurnUserMessageStartedAtMs(sessionKey),
+    ).toBeUndefined();
+    expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeUndefined();
+    expect(getSession(sessionsRef)?.status).toBe("stopped");
   });
 
   test("stops shared-runtime qa sessions authoritatively without runId", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalReleaseSession = adapter.releaseSession;
     let buildStopCalls = 0;
-    let localReleaseCalls = 0;
-
-    adapter.releaseSession = async () => {
-      localReleaseCalls += 1;
+    adapter.stopSession = async (target) => {
+      buildStopCalls += 1;
+      expect(target).toEqual({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        externalSessionId: "session-1",
+      });
     };
 
     const sessionsRef = createSessionsRef([
@@ -504,26 +443,11 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      stopAuthoritativeSession: async (target) => {
-        buildStopCalls += 1;
-        expect(target).toEqual({
-          repoPath: "/tmp/repo",
-          taskId: "task-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-          externalSessionId: "session-1",
-        });
-      },
     });
 
-    try {
-      await actions.stopAgentSession(getSession(sessionsRef));
-      expect(buildStopCalls).toBe(1);
-      expect(localReleaseCalls).toBe(1);
-      expect(getSession(sessionsRef)?.status).toBe("stopped");
-    } finally {
-      adapter.releaseSession = originalReleaseSession;
-    }
+    await actions.stopAgentSession(getSession(sessionsRef));
+    expect(buildStopCalls).toBe(1);
+    expect(getSession(sessionsRef)?.status).toBe("stopped");
   });
 
   test("persists stopped snapshot before refreshing task-owned state", async () => {
@@ -531,6 +455,9 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const persistDeferred = createDeferred<void>();
     const callOrder: string[] = [];
+    adapter.stopSession = async () => {
+      callOrder.push("stop-authoritative-session");
+    };
 
     const sessionsRef = createSessionsRef([
       buildSession({
@@ -583,9 +510,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         await persistDeferred.promise;
         callOrder.push("persist-end");
       },
-      stopAuthoritativeSession: async () => {
-        callOrder.push("stop-authoritative-session");
-      },
       invalidateSessionStopQueries: async () => {
         callOrder.push("invalidate-stop-queries");
       },
@@ -612,14 +536,13 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("refreshes task-owned state after successful authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalReleaseSession = adapter.releaseSession;
     let refreshTaskDataCalls = 0;
     let loadSourceSessionCalls = 0;
-    let localReleaseCalls = 0;
+    let stopCalls = 0;
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
 
-    adapter.releaseSession = async () => {
-      localReleaseCalls += 1;
+    adapter.stopSession = async () => {
+      stopCalls += 1;
     };
 
     const sessionsRef = createSessionsRef([
@@ -644,25 +567,24 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       },
     });
 
-    try {
-      await actions.stopAgentSession(getSession(sessionsRef));
-      expect(localReleaseCalls).toBe(1);
-      expect(refreshTaskDataCalls).toBe(1);
-      expect(loadSourceSessionCalls).toBe(0);
-      expect(invalidationCalls).toEqual([
-        {
-          repoPath: "/tmp/repo",
-          taskId: "task-1",
-        },
-      ]);
-    } finally {
-      adapter.releaseSession = originalReleaseSession;
-    }
+    await actions.stopAgentSession(getSession(sessionsRef));
+    expect(stopCalls).toBe(1);
+    expect(refreshTaskDataCalls).toBe(1);
+    expect(loadSourceSessionCalls).toBe(0);
+    expect(invalidationCalls).toEqual([
+      {
+        repoPath: "/tmp/repo",
+        taskId: "task-1",
+      },
+    ]);
   });
 
   test("fails fast when stopping without an active workspace", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const stopTargets: AgentSessionStopTarget[] = [];
+    const stopTargets: SessionRef[] = [];
+    adapter.stopSession = async (target) => {
+      stopTargets.push(target);
+    };
     const refreshTaskDataCalls: string[] = [];
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
     let loadSourceSessionCalls = 0;
@@ -687,9 +609,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       refreshTaskData: async (repoPath) => {
         refreshTaskDataCalls.push(repoPath);
       },
-      stopAuthoritativeSession: async (target) => {
-        stopTargets.push(target);
-      },
       invalidateSessionStopQueries: async (input) => {
         invalidationCalls.push(input);
       },
@@ -708,6 +627,9 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
   test("allows stopping a running session even when role is unavailable", async () => {
     const adapter = new OpencodeSdkAdapter();
     let stopCalls = 0;
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
     const sessionsRef = createSessionsRef([
       buildSession({ status: "running", role: "build", taskId: "task-1" }),
     ]);
@@ -734,9 +656,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
-      stopAuthoritativeSession: async () => {
-        stopCalls += 1;
-      },
     });
 
     await actions.stopAgentSession(getSession(sessionsRef));

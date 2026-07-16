@@ -62,10 +62,7 @@ import {
   subscribeSessionEvents,
 } from "./event-emitter";
 import { createEventStreamRuntime } from "./event-stream";
-import {
-  emitAdmittedUserMessage,
-  seedHistoryUserMessage,
-} from "./event-stream/message-events/user-emitter";
+import { emitAdmittedUserMessage } from "./event-stream/message-events/user-emitter";
 import type { EventStreamRuntime } from "./event-stream/shared";
 import {
   applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
@@ -74,7 +71,7 @@ import {
   listOpencodeRuntimeSnapshotSources,
 } from "./live-session-snapshots";
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
-import { loadAndSeedSessionHistory, loadSessionHistory, loadSessionTodos } from "./message-ops";
+import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -154,56 +151,26 @@ const assertOpenCodeRuntimePolicyBinding = (
   }
 };
 
-const copySubagentCorrelationState = (source: SessionRecord, target: SessionRecord): void => {
-  for (const [partId, correlationKey] of source.subagentCorrelationKeyByPartId) {
-    target.subagentCorrelationKeyByPartId.set(partId, correlationKey);
-  }
-  for (const [
-    externalSessionId,
-    correlationKey,
-  ] of source.subagentCorrelationKeyByExternalSessionId) {
-    target.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, correlationKey);
-  }
-  for (const [correlationKey, partId] of source.subagentPartIdByCorrelationKey) {
-    target.subagentPartIdByCorrelationKey.set(correlationKey, partId);
-  }
-  for (const [externalSessionId, partId] of source.subagentPartIdByExternalSessionId) {
-    target.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
-  }
-
-  target.pendingSubagentCorrelationKeys.splice(
-    0,
-    target.pendingSubagentCorrelationKeys.length,
-    ...source.pendingSubagentCorrelationKeys,
-  );
-  target.pendingSubagentCorrelationKeysBySignature.clear();
-  for (const [signature, pending] of source.pendingSubagentCorrelationKeysBySignature) {
-    target.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending]);
-  }
-  target.pendingBackgroundTaskResultsByExternalSessionId.clear();
-  for (const [
-    externalSessionId,
-    pending,
-  ] of source.pendingBackgroundTaskResultsByExternalSessionId) {
-    target.pendingBackgroundTaskResultsByExternalSessionId.set(
-      externalSessionId,
-      pending.map((entry) => ({ ...entry })),
-    );
-  }
-};
-
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
-  private readonly sessions = new Map<string, SessionRecord>();
-  private readonly runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
+  private readonly sessions: Map<string, SessionRecord>;
+  private readonly runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   private readonly listeners: SessionEventListeners = new Map();
   private readonly now: () => string;
   private readonly createClient: ClientFactory;
   private readonly repoRuntimeResolver: RepoRuntimeResolverPort | undefined;
   private readonly logEvent: OpencodeEventLogger | undefined;
 
-  constructor(options: OpencodeSdkAdapterOptions = {}) {
+  constructor(
+    options: OpencodeSdkAdapterOptions = {},
+    runtimeState?: {
+      sessions: Map<string, SessionRecord>;
+      runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+    },
+  ) {
+    this.sessions = runtimeState?.sessions ?? new Map();
+    this.runtimeEventTransports = runtimeState?.runtimeEventTransports ?? new Map();
     this.now = options.now ?? nowIso;
     this.createClient = options.createClient ?? buildDefaultFactory();
     this.repoRuntimeResolver = options.repoRuntimeResolver;
@@ -265,6 +232,23 @@ export class OpencodeSdkAdapter
     assertOpenCodeRuntimePolicyBinding(input, "resume OpenCode session");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
+      const registeredSessionRef = opencodeSessionRef(existing);
+      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+        throw new Error(
+          `Cannot resume OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+        );
+      }
+      applyRuntimeContextToSession(existing, input);
+      if (input.sessionScope) {
+        existing.summary = {
+          ...existing.summary,
+          title: formatWorkflowAgentSessionTitle(
+            input.sessionScope.role,
+            input.sessionScope.taskId,
+          ),
+          role: input.sessionScope.role,
+        };
+      }
       return existing.summary;
     }
 
@@ -339,7 +323,6 @@ export class OpencodeSdkAdapter
     });
 
     try {
-      const session = requireSession(this.sessions, input.externalSessionId);
       subscribeSessionToRuntimeEvents({
         sessions: this.sessions,
         runtimeEventTransports: this.runtimeEventTransports,
@@ -352,13 +335,6 @@ export class OpencodeSdkAdapter
         emit: this.emit.bind(this),
         ...(this.logEvent ? { logEvent: this.logEvent } : {}),
       });
-      const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
-        runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-        session,
-      });
-      this.seedRuntimeUserMessagesFromHistory(session, history);
     } catch (error) {
       const session = this.sessions.get(input.externalSessionId);
       if (session) {
@@ -547,27 +523,7 @@ export class OpencodeSdkAdapter
       ...(preservedDisplayPartsByMessageId.size > 0 ? { preservedDisplayPartsByMessageId } : {}),
     };
 
-    if (matchingSessions.length === 0) {
-      return loadSessionHistory(this.createClient, this.now, historyInput);
-    }
-
-    const [primarySession, ...otherSessions] = matchingSessions;
-    if (!primarySession) {
-      return loadSessionHistory(this.createClient, this.now, historyInput);
-    }
-
-    const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
-      ...historyInput,
-      session: primarySession,
-    });
-    this.seedRuntimeUserMessagesFromHistory(primarySession, history);
-
-    for (const session of otherSessions) {
-      copySubagentCorrelationState(primarySession, session);
-      this.seedRuntimeUserMessagesFromHistory(session, history);
-    }
-
-    return history;
+    return loadSessionHistory(this.createClient, this.now, historyInput);
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
@@ -699,7 +655,7 @@ export class OpencodeSdkAdapter
     }
   }
 
-  updateSessionModel(input: UpdateAgentSessionModelInput): void {
+  async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     session.input = {
       ...session.input,
@@ -827,18 +783,6 @@ export class OpencodeSdkAdapter
       );
     }
     return runtime;
-  }
-
-  private seedRuntimeUserMessagesFromHistory(
-    session: SessionRecord,
-    history: AgentSessionHistoryMessage[],
-  ): void {
-    const runtime = this.createRuntimeEventView(session);
-    for (const message of history) {
-      if (message.role === "user") {
-        seedHistoryUserMessage(runtime, message);
-      }
-    }
   }
 
   private clearPendingSubagentInputEvent(externalSessionId: string, requestId: string): void {

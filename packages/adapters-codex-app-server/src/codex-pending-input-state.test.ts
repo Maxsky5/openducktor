@@ -1,407 +1,321 @@
 import { describe, expect, test } from "bun:test";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
+import type { CodexSubagentRoute } from "./codex-subagent-link-state";
 
-const approvalRequest = (requestId: string) => ({
-  requestId,
-  requestType: "permission_grant" as const,
-  title: "Approve read",
-});
+type PendingInputFixture = {
+  runtimeId?: string;
+  threadId?: string;
+  nativeRequestId?: string | number;
+  route?: CodexSubagentRoute;
+};
 
-const questionRequest = (requestId: string) => ({
-  requestId,
-  questions: [{ header: "Confirm", question: "Proceed?", options: [] }],
+const registerApproval = (
+  pendingInput: CodexPendingInputState,
+  fixture: PendingInputFixture = {},
+) =>
+  pendingInput.addApproval({
+    runtimeId: fixture.runtimeId ?? "runtime-1",
+    threadId: fixture.threadId ?? "thread-1",
+    nativeRequest: {
+      id: fixture.nativeRequestId ?? "approval-1",
+      method: "item/commandExecution/requestApproval",
+      params: { threadId: fixture.threadId ?? "thread-1" },
+    },
+    request: {
+      requestType: "permission_grant",
+      title: "Approve read",
+    },
+    ...(fixture.route ? { route: fixture.route } : {}),
+  });
+
+const registerQuestion = (
+  pendingInput: CodexPendingInputState,
+  fixture: PendingInputFixture = {},
+) =>
+  pendingInput.addQuestion({
+    runtimeId: fixture.runtimeId ?? "runtime-1",
+    threadId: fixture.threadId ?? "thread-1",
+    nativeRequest: {
+      id: fixture.nativeRequestId ?? "question-1",
+      method: "item/tool/requestUserInput",
+      params: { threadId: fixture.threadId ?? "thread-1" },
+    },
+    request: {
+      questions: [{ header: "Confirm", question: "Proceed?", options: [] }],
+    },
+    questionIds: ["question-item-1"],
+    input: { questions: [{ header: "Confirm", question: "Proceed?", options: [] }] },
+    ...(fixture.route ? { route: fixture.route } : {}),
+  });
+
+const route = (
+  parentExternalSessionId = "parent-thread",
+  childExternalSessionId = "child-thread",
+  runtimeId?: string,
+): CodexSubagentRoute => ({
+  ...(runtimeId ? { runtimeId } : {}),
+  parentExternalSessionId,
+  childExternalSessionId,
+  subagentCorrelationKey: `codex-subagent:${parentExternalSessionId}:${childExternalSessionId}`,
 });
 
 describe("CodexPendingInputState", () => {
-  test("indexes pending approvals and questions by owning session", () => {
+  test("indexes opaque pending approvals and questions by owning session", () => {
     const pendingInput = new CodexPendingInputState();
+    const approval = registerApproval(pendingInput);
+    const question = registerQuestion(pendingInput);
 
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "thread-1",
-      request: approvalRequest("approval-1"),
-    });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
-      threadId: "thread-1",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-    });
-
-    expect(pendingInput.pendingApprovalsForSession("thread-1")).toEqual([
-      approvalRequest("approval-1"),
-    ]);
-    expect(pendingInput.pendingQuestionsForSession("thread-1")).toEqual([
-      questionRequest("question-1"),
-    ]);
+    expect(pendingInput.pendingApprovalsForSession("thread-1")).toEqual([approval.entry.request]);
+    expect(pendingInput.pendingQuestionsForSession("thread-1")).toEqual([question.entry.request]);
+    expect(approval.entry.request.requestId).not.toContain("approval-1");
+    expect(question.entry.request.requestId).not.toContain("question-1");
     expect(pendingInput.pendingApprovalsForSession("thread-2")).toEqual([]);
-    expect(pendingInput.pendingQuestionsForSession("thread-2")).toEqual([]);
   });
 
-  test("resolves one request without clearing unrelated pending input", () => {
+  test("resolves one occurrence without clearing unrelated pending input", () => {
     const pendingInput = new CodexPendingInputState();
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "thread-1",
-      request: approvalRequest("approval-1"),
-    });
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
+    const first = registerApproval(pendingInput);
+    const second = registerApproval(pendingInput, {
       threadId: "thread-2",
-      request: approvalRequest("approval-2"),
+      nativeRequestId: "approval-2",
     });
 
-    pendingInput.resolveApproval("approval-1");
+    pendingInput.resolveApproval(first.entry.request.requestId);
 
-    expect(pendingInput.approval("approval-1")).toBeUndefined();
+    expect(pendingInput.approval(first.entry.request.requestId)).toBeUndefined();
     expect(pendingInput.pendingApprovalsForSession("thread-1")).toEqual([]);
-    expect(pendingInput.pendingApprovalsForSession("thread-2")).toEqual([
-      approvalRequest("approval-2"),
-    ]);
+    expect(pendingInput.pendingApprovalsForSession("thread-2")).toEqual([second.entry.request]);
   });
 
-  test("keeps identical request ids independently replyable across runtimes", () => {
+  test("keeps identical native ids independent across runtimes", () => {
     const pendingInput = new CodexPendingInputState();
-    pendingInput.addApproval({
+    const first = registerApproval(pendingInput, {
       runtimeId: "runtime-1",
-      threadId: "child-thread",
-      request: approvalRequest("0"),
-      route: {
-        runtimeId: "runtime-1",
-        parentExternalSessionId: "parent-one",
-        childExternalSessionId: "child-thread",
-        subagentCorrelationKey: "codex-subagent:parent-one:child-thread",
-      },
+      nativeRequestId: 0,
     });
-    pendingInput.addApproval({
+    const second = registerApproval(pendingInput, {
       runtimeId: "runtime-2",
-      threadId: "child-thread",
-      request: approvalRequest("0"),
-      route: {
-        runtimeId: "runtime-2",
-        parentExternalSessionId: "parent-two",
-        childExternalSessionId: "child-thread",
-        subagentCorrelationKey: "codex-subagent:parent-two:child-thread",
-      },
-    });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
-      threadId: "child-thread",
-      request: questionRequest("0"),
-      questionIds: ["question-runtime-1"],
-      input: { requestId: "0" },
-    });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-2",
-      threadId: "child-thread",
-      request: questionRequest("0"),
-      questionIds: ["question-runtime-2"],
-      input: { requestId: "0" },
+      nativeRequestId: 0,
     });
 
-    expect(pendingInput.requireApprovalForSession("0", "parent-one").runtimeId).toBe("runtime-1");
-    expect(pendingInput.requireApprovalForSession("0", "parent-two").runtimeId).toBe("runtime-2");
-    expect(pendingInput.requireApprovalForSession("0", "child-thread", "runtime-1").runtimeId).toBe(
-      "runtime-1",
-    );
-    expect(pendingInput.requireApprovalForSession("0", "child-thread", "runtime-2").runtimeId).toBe(
-      "runtime-2",
-    );
-    expect(pendingInput.requireQuestionForSession("0", "child-thread", "runtime-1").runtimeId).toBe(
-      "runtime-1",
-    );
-    expect(pendingInput.requireQuestionForSession("0", "child-thread", "runtime-2").runtimeId).toBe(
-      "runtime-2",
-    );
-    expect(pendingInput.pendingApprovalsForSession("child-thread", "runtime-1")).toEqual([
-      approvalRequest("0"),
-    ]);
-    expect(pendingInput.pendingApprovalsForSession("child-thread", "runtime-2")).toEqual([
-      approvalRequest("0"),
-    ]);
+    expect(first.entry.request.requestId).not.toBe(second.entry.request.requestId);
+    pendingInput.resolveApproval(first.entry.request.requestId, "runtime-1");
+    expect(pendingInput.approval(second.entry.request.requestId, "runtime-2")).toBe(second.entry);
+  });
 
-    pendingInput.resolveApproval("0", "runtime-1");
+  test("keeps identical native ids independent across sessions in one runtime", () => {
+    const pendingInput = new CodexPendingInputState();
+    const first = registerApproval(pendingInput, { threadId: "thread-1", nativeRequestId: 7 });
+    const second = registerApproval(pendingInput, { threadId: "thread-2", nativeRequestId: 7 });
 
-    expect(pendingInput.approval("0", "runtime-1")).toBeUndefined();
-    expect(pendingInput.approval("0", "runtime-2")?.runtimeId).toBe("runtime-2");
+    expect(first.entry.request.requestId).not.toBe(second.entry.request.requestId);
+    expect(first.entry.request.requestId).not.toContain("runtime-1");
+    expect(first.entry.request.requestId).not.toContain("thread-1");
+    expect(first.entry.request.requestId).not.toBe("7");
+    expect(pendingInput.nativeRequest("runtime-1", "thread-1", 7)).toEqual({
+      kind: "approval",
+      entry: first.entry,
+    });
+    expect(pendingInput.nativeRequest("runtime-1", "thread-2", 7)).toEqual({
+      kind: "approval",
+      entry: second.entry,
+    });
+  });
+
+  test("deduplicates an unresolved native request and gives sequential reuse a fresh occurrence", () => {
+    const pendingInput = new CodexPendingInputState();
+    const fixture = { nativeRequestId: "request-1" };
+
+    const first = registerApproval(pendingInput, fixture);
+    const duplicate = registerApproval(pendingInput, fixture);
+
+    expect(first.isNew).toBe(true);
+    expect(duplicate.isNew).toBe(false);
+    expect(duplicate.entry).toBe(first.entry);
+    expect(pendingInput.pendingApprovalsForSession("thread-1")).toEqual([first.entry.request]);
+
+    pendingInput.resolveApproval(first.entry.request.requestId);
+    const reused = registerApproval(pendingInput, fixture);
+
+    expect(reused.isNew).toBe(true);
+    expect(reused.entry.request.requestId).not.toBe(first.entry.request.requestId);
+  });
+
+  test("routes native resolutions by runtime, session, kind, and native id", () => {
+    const pendingInput = new CodexPendingInputState();
+    const approval = registerApproval(pendingInput, { threadId: "thread-1", nativeRequestId: 0 });
+    const question = registerQuestion(pendingInput, { threadId: "thread-2", nativeRequestId: 0 });
+
+    expect(pendingInput.nativeRequest("runtime-1", "thread-1", 0)).toEqual({
+      kind: "approval",
+      entry: approval.entry,
+    });
+    expect(pendingInput.nativeRequest("runtime-1", "thread-2", 0)).toEqual({
+      kind: "question",
+      entry: question.entry,
+    });
+    expect(pendingInput.nativeRequest("runtime-2", "thread-1", 0)).toBeUndefined();
+  });
+
+  test("validates occurrence kind, runtime, session ownership, and liveness", () => {
+    const pendingInput = new CodexPendingInputState();
+    const approval = registerApproval(pendingInput);
+
+    expect(
+      pendingInput.requireApprovalForSession(
+        approval.entry.request.requestId,
+        "thread-1",
+        "runtime-1",
+      ),
+    ).toBe(approval.entry);
+    expect(() =>
+      pendingInput.requireQuestionForSession(
+        approval.entry.request.requestId,
+        "thread-1",
+        "runtime-1",
+      ),
+    ).toThrow("Unknown Codex question request");
+    expect(() =>
+      pendingInput.requireApprovalForSession(
+        approval.entry.request.requestId,
+        "thread-1",
+        "runtime-2",
+      ),
+    ).toThrow("Unknown Codex approval request");
+    expect(() =>
+      pendingInput.requireApprovalForSession(
+        approval.entry.request.requestId,
+        "thread-2",
+        "runtime-1",
+      ),
+    ).toThrow("belongs to session 'thread-1', not 'thread-2'");
+
+    pendingInput.resolveApproval(approval.entry.request.requestId, "runtime-1");
+    expect(() =>
+      pendingInput.requireApprovalForSession(
+        approval.entry.request.requestId,
+        "thread-1",
+        "runtime-1",
+      ),
+    ).toThrow("Unknown Codex approval request");
   });
 
   test("binds active turns only to pending input from the same runtime", () => {
     const pendingInput = new CodexPendingInputState();
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "shared-thread",
-      request: approvalRequest("approval-1"),
-    });
-    pendingInput.addApproval({
+    const first = registerApproval(pendingInput, { runtimeId: "runtime-1" });
+    const second = registerApproval(pendingInput, {
       runtimeId: "runtime-2",
-      threadId: "shared-thread",
-      request: approvalRequest("approval-2"),
+      nativeRequestId: "approval-2",
     });
     const activeTurn = {
-      session: { threadId: "shared-thread", runtimeId: "runtime-1" },
+      session: { threadId: "thread-1", runtimeId: "runtime-1" },
     } as unknown as ActiveCodexTurn;
 
-    pendingInput.bindActiveTurn("shared-thread", activeTurn);
+    pendingInput.bindActiveTurn("thread-1", activeTurn);
 
-    expect(pendingInput.resolveApproval("approval-1", "runtime-1")).toBe(activeTurn);
-    expect(pendingInput.resolveApproval("approval-2", "runtime-2")).toBeUndefined();
+    expect(pendingInput.resolveApproval(first.entry.request.requestId, "runtime-1")).toBe(
+      activeTurn,
+    );
+    expect(
+      pendingInput.resolveApproval(second.entry.request.requestId, "runtime-2"),
+    ).toBeUndefined();
   });
 
   test("clears pending input only for the released runtime session", () => {
     const pendingInput = new CodexPendingInputState();
-    pendingInput.addApproval({
+    const first = registerApproval(pendingInput, {
       runtimeId: "runtime-1",
-      threadId: "shared-child-thread",
-      request: approvalRequest("0"),
+      threadId: "shared-thread",
+      nativeRequestId: 0,
     });
-    pendingInput.addApproval({
+    const second = registerApproval(pendingInput, {
       runtimeId: "runtime-2",
-      threadId: "shared-child-thread",
-      request: approvalRequest("0"),
+      threadId: "shared-thread",
+      nativeRequestId: 0,
     });
 
-    pendingInput.clearSession("shared-child-thread", "runtime-1");
+    pendingInput.clearSession("shared-thread", "runtime-1");
 
-    expect(pendingInput.approval("0", "runtime-1")).toBeUndefined();
-    expect(pendingInput.approval("0", "runtime-2")?.runtimeId).toBe("runtime-2");
-    expect(pendingInput.pendingApprovalsForSession("shared-child-thread", "runtime-2")).toEqual([
-      approvalRequest("0"),
-    ]);
+    expect(pendingInput.approval(first.entry.request.requestId, "runtime-1")).toBeUndefined();
+    expect(pendingInput.approval(second.entry.request.requestId, "runtime-2")).toBe(second.entry);
   });
 
-  test("requires pending requests to belong to the replying session", () => {
+  test("mirrors child pending input to its parent while preserving owner reply routing", () => {
     const pendingInput = new CodexPendingInputState();
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "thread-1",
-      request: approvalRequest("approval-1"),
-    });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
-      threadId: "thread-1",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-    });
-
-    expect(pendingInput.requireApprovalForSession("approval-1", "thread-1")).toMatchObject({
-      threadId: "thread-1",
-    });
-    expect(pendingInput.requireQuestionForSession("question-1", "thread-1")).toMatchObject({
-      threadId: "thread-1",
-    });
-    expect(() => pendingInput.requireApprovalForSession("approval-1", "thread-2")).toThrow(
-      "belongs to session 'thread-1', not 'thread-2'",
-    );
-    expect(() => pendingInput.requireQuestionForSession("question-1", "thread-2")).toThrow(
-      "belongs to session 'thread-1', not 'thread-2'",
-    );
-  });
-
-  test("mirrors child pending input to the parent while preserving reply ownership", () => {
-    const pendingInput = new CodexPendingInputState();
-    const route = {
-      parentExternalSessionId: "parent-thread",
-      childExternalSessionId: "child-thread",
-      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
-    };
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
+    const childRoute = route();
+    const approval = registerApproval(pendingInput, {
       threadId: "child-thread",
-      request: approvalRequest("approval-1"),
-      route,
+      route: childRoute,
     });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
+    const question = registerQuestion(pendingInput, {
       threadId: "child-thread",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-      route,
+      route: childRoute,
     });
 
     expect(pendingInput.pendingApprovalsForSession("parent-thread")).toEqual([]);
-    expect(pendingInput.pendingQuestionsForSession("parent-thread")).toEqual([]);
     expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([
-      { request: approvalRequest("approval-1"), route },
+      { request: approval.entry.request, route: childRoute },
     ]);
     expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([
-      { request: questionRequest("question-1"), route },
+      { request: question.entry.request, route: childRoute },
     ]);
-    expect(pendingInput.requireApprovalForSession("approval-1", "parent-thread")).toMatchObject({
-      threadId: "child-thread",
-    });
-    expect(pendingInput.requireQuestionForSession("question-1", "parent-thread")).toMatchObject({
-      threadId: "child-thread",
-    });
-    expect(pendingInput.requireApprovalForSession("approval-1", "child-thread")).toMatchObject({
-      threadId: "child-thread",
-    });
-
-    pendingInput.resolveApproval("approval-1");
-    pendingInput.resolveQuestion("question-1");
-
-    expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([]);
-    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([]);
+    expect(
+      pendingInput.requireApprovalForSession(approval.entry.request.requestId, "parent-thread"),
+    ).toBe(approval.entry);
   });
 
-  test("adds a learned child route to existing owner-scoped pending input", () => {
+  test("adds a learned child route to existing owner-scoped pending input exactly once", () => {
     const pendingInput = new CodexPendingInputState();
-    const route = {
-      parentExternalSessionId: "parent-thread",
-      childExternalSessionId: "child-thread",
-      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
-    };
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "child-thread",
-      request: approvalRequest("approval-1"),
-    });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
-      threadId: "child-thread",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-    });
+    const approval = registerApproval(pendingInput, { threadId: "child-thread" });
+    const question = registerQuestion(pendingInput, { threadId: "child-thread" });
+    const childRoute = route();
 
-    expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([]);
-    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([]);
-
-    expect(pendingInput.applyRouteToPendingInput(route)).toEqual({
-      approvals: [expect.objectContaining({ request: approvalRequest("approval-1"), route })],
-      questions: [expect.objectContaining({ request: questionRequest("question-1"), route })],
+    expect(pendingInput.applyRouteToPendingInput(childRoute)).toEqual({
+      approvals: [{ request: approval.entry.request, route: childRoute }],
+      questions: [{ request: question.entry.request, route: childRoute }],
     });
-
-    expect(pendingInput.approval("approval-1")).toMatchObject({ route });
-    expect(pendingInput.question("question-1")).toMatchObject({ route });
-    expect(pendingInput.pendingApprovalEventsForSession("parent-thread")).toEqual([
-      { request: approvalRequest("approval-1"), route },
-    ]);
-    expect(pendingInput.pendingQuestionEventsForSession("parent-thread")).toEqual([
-      { request: questionRequest("question-1"), route },
-    ]);
+    expect(pendingInput.applyRouteToPendingInput(childRoute)).toEqual({
+      approvals: [],
+      questions: [],
+    });
   });
 
-  test("binds mirrored child pending input to the active parent turn", () => {
+  test("binds mirrored child pending input to an active parent turn", () => {
     const pendingInput = new CodexPendingInputState();
-    const route = {
-      parentExternalSessionId: "parent-thread",
-      childExternalSessionId: "child-thread",
-      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
-    };
+    const childRoute = route();
+    const question = registerQuestion(pendingInput, {
+      threadId: "child-thread",
+      route: childRoute,
+    });
     const activeTurn = {
       session: { threadId: "parent-thread", runtimeId: "runtime-1" },
     } as unknown as ActiveCodexTurn;
-
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
-      threadId: "child-thread",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-      route,
-    });
 
     pendingInput.bindActiveTurn("parent-thread", activeTurn);
 
-    expect(pendingInput.resolveQuestion("question-1")).toBe(activeTurn);
+    expect(pendingInput.resolveQuestion(question.entry.request.requestId)).toBe(activeTurn);
   });
 
-  test("clearing a parent mirror preserves child pending input turn ownership", () => {
+  test("clearing a parent mirror preserves child pending input but removes parent turn bindings", () => {
     const pendingInput = new CodexPendingInputState();
-    const route = {
-      parentExternalSessionId: "parent-thread",
-      childExternalSessionId: "child-thread",
-      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
-    };
-    const activeTurn = {
-      session: { threadId: "child-thread", runtimeId: "runtime-1" },
-    } as unknown as ActiveCodexTurn;
-
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
+    const childRoute = route();
+    const approval = registerApproval(pendingInput, {
       threadId: "child-thread",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-      route,
+      route: childRoute,
     });
-
-    pendingInput.bindActiveTurn("child-thread", activeTurn);
-    pendingInput.clearSession("parent-thread");
-
-    expect(pendingInput.resolveQuestion("question-1")).toBe(activeTurn);
-  });
-
-  test("clearing a parent mirror removes its stale active turn bindings", () => {
-    const pendingInput = new CodexPendingInputState();
-    const route = {
-      parentExternalSessionId: "parent-thread",
-      childExternalSessionId: "child-thread",
-      subagentCorrelationKey: "codex-subagent:parent-thread:child-thread",
-    };
     const activeParentTurn = {
       session: { threadId: "parent-thread", runtimeId: "runtime-1" },
     } as unknown as ActiveCodexTurn;
-
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "child-thread",
-      request: approvalRequest("approval-1"),
-      route,
-    });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
-      threadId: "child-thread",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-      route,
-    });
 
     pendingInput.bindActiveTurn("parent-thread", activeParentTurn);
     pendingInput.clearSession("parent-thread", "runtime-1");
 
     expect(pendingInput.pendingApprovalsForSession("child-thread", "runtime-1")).toEqual([
-      approvalRequest("approval-1"),
+      approval.entry.request,
     ]);
-    expect(pendingInput.pendingQuestionsForSession("child-thread", "runtime-1")).toEqual([
-      questionRequest("question-1"),
-    ]);
-    expect(pendingInput.resolveApproval("approval-1", "runtime-1")).toBeUndefined();
-    expect(pendingInput.resolveQuestion("question-1", "runtime-1")).toBeUndefined();
-  });
-
-  test("clears all pending input for one session only", () => {
-    const pendingInput = new CodexPendingInputState();
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "thread-1",
-      request: approvalRequest("approval-1"),
-    });
-    pendingInput.addQuestion({
-      runtimeId: "runtime-1",
-      threadId: "thread-1",
-      request: questionRequest("question-1"),
-      questionIds: ["question-item-1"],
-      input: { requestId: "question-1" },
-    });
-    pendingInput.addApproval({
-      runtimeId: "runtime-1",
-      threadId: "thread-2",
-      request: approvalRequest("approval-2"),
-    });
-
-    pendingInput.clearSession("thread-1");
-
-    expect(pendingInput.pendingApprovalsForSession("thread-1")).toEqual([]);
-    expect(pendingInput.pendingQuestionsForSession("thread-1")).toEqual([]);
-    expect(pendingInput.pendingApprovalsForSession("thread-2")).toEqual([
-      approvalRequest("approval-2"),
-    ]);
+    expect(
+      pendingInput.resolveApproval(approval.entry.request.requestId, "runtime-1"),
+    ).toBeUndefined();
   });
 });

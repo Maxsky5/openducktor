@@ -1,22 +1,15 @@
 import { Effect } from "effect";
-import type {
-  CodexAppServerRuntimeInput,
-  CodexAppServerService,
-} from "../../application/runtimes/codex-app-server-service";
+import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import type { HostLifecycleLogger } from "../../composition/host-lifecycle";
 import { HostValidationError } from "../../effect/host-errors";
 import type {
-  CodexAppServerRequestId,
   CodexAppServerRequestInput,
   CodexAppServerRequestMethod,
-  CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 import { CODEX_APP_SERVER_REQUEST_METHODS } from "../../ports/codex-app-server-port";
 import {
   type CodexAppServerRequestParams,
   type CodexAppServerRequestResult,
-  type CodexAppServerRespondError,
-  type CodexAppServerRespondResult,
   isCodexAppServerJsonValue,
 } from "../../ports/codex-app-server-protocol";
 import type { HostCommandHandlers } from "../router/host-command-router";
@@ -160,21 +153,6 @@ const requireCodexJsonValue = (value: unknown, context: string) => {
   return value;
 };
 
-const requireRequestId = (value: unknown): CodexAppServerRequestId => {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
-  }
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new HostValidationError({
-      message: "requestId must be a non-empty string or non-negative integer.",
-      field: "requestId",
-      details: { value },
-    });
-  }
-
-  return value;
-};
-
 const requireCodexRequestMethod = (value: unknown): CodexAppServerRequestMethod => {
   const method = requireString(value, "method");
   if (!isCodexRequestMethod(method)) {
@@ -187,14 +165,6 @@ const requireCodexRequestMethod = (value: unknown): CodexAppServerRequestMethod 
   return method;
 };
 
-const parseRuntimeInput = (
-  args: Record<string, unknown> | undefined,
-  label: string,
-): CodexAppServerRuntimeInput => {
-  const record = requireRecord(args, `${label} input`);
-  return { runtimeId: requireString(record.runtimeId, "runtimeId") };
-};
-
 const parseRequestInput = (
   args: Record<string, unknown> | undefined,
 ): CodexAppServerRequestInput => {
@@ -205,22 +175,6 @@ const parseRequestInput = (
     runtimeId: requireString(record.runtimeId, "runtimeId"),
     method: requireCodexRequestMethod(record.method),
     ...(params !== undefined ? { params: params as CodexAppServerRequestParams } : {}),
-  };
-};
-
-const parseRespondInput = (
-  args: Record<string, unknown> | undefined,
-): CodexAppServerRespondInput => {
-  const record = requireRecord(args, "codex_app_server_respond input");
-  const result =
-    record.result === undefined ? undefined : requireCodexJsonValue(record.result, "result");
-  const error =
-    record.error === undefined ? undefined : requireCodexJsonValue(record.error, "error");
-  return {
-    runtimeId: requireString(record.runtimeId, "runtimeId"),
-    requestId: requireRequestId(record.requestId),
-    ...(result !== undefined ? { result: result as CodexAppServerRespondResult } : {}),
-    ...(error !== undefined ? { error: error as CodexAppServerRespondError } : {}),
   };
 };
 
@@ -238,9 +192,4 @@ export const createCodexAppServerCommandHandlers = (
         ),
       );
   },
-  codex_app_server_take_buffered_events: (args) =>
-    codexAppServerService.takeBufferedEvents(
-      parseRuntimeInput(args, "codex_app_server_take_buffered_events"),
-    ),
-  codex_app_server_respond: (args) => codexAppServerService.respond(parseRespondInput(args)),
 });

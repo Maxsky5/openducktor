@@ -41,18 +41,11 @@ export function useSessionTranscriptSurfaceModel({
     target,
     repoReadinessState: runtimeReadiness.state,
     liveSession,
-    pendingInputSeed: visiblePendingInput,
   });
-  const transientInteractionSession =
-    liveSession === null ? sessionHistory.liveInteractionSession : null;
-  const pendingApprovalRequests =
-    transientInteractionSession?.pendingApprovals ?? visiblePendingInput.pendingApprovals;
-  const pendingQuestionRequests =
-    transientInteractionSession?.pendingQuestions ?? visiblePendingInput.pendingQuestions;
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     target,
-    pendingApprovalRequests,
-    pendingQuestionRequests,
+    pendingApprovalRequests: visiblePendingInput.pendingApprovals,
+    pendingQuestionRequests: visiblePendingInput.pendingQuestions,
     isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval: sessionHistory.replyAgentApproval,
     answerAgentQuestion: sessionHistory.answerAgentQuestion,

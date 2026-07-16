@@ -66,6 +66,11 @@ const readSessionTodosRef: {
 } = {
   current: async () => [],
 };
+const loadAgentSessionContextRef: {
+  current: AgentOperationsContextValue["loadAgentSessionContext"];
+} = {
+  current: async () => undefined,
+};
 const createdSessionStateByKey = new Map<string, AgentSessionState>();
 let sessionStore = createAgentSessionsStore(null);
 
@@ -74,6 +79,7 @@ type TestContextOverrides = {
   sessionReadModelLoadState?: AgentSessionReadModelLoadState;
   loadSelectedSessionBaselineHistory?: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
+  loadAgentSessionContext?: AgentOperationsContextValue["loadAgentSessionContext"];
   runtimeDefinitionsContext?: Partial<ReturnType<typeof createRuntimeDefinitionsContextValue>>;
   checksStateContext?: Partial<ReturnType<typeof createChecksStateContextValue>>;
   repoRuntimeHealthContext?: Partial<ReturnType<typeof createRepoRuntimeHealthContextValue>>;
@@ -150,6 +156,8 @@ const applyTestContextOverrides = (
   loadSelectedSessionBaselineHistoryRef.current =
     contextOverrides.loadSelectedSessionBaselineHistory ?? (async () => null);
   readSessionTodosRef.current = contextOverrides.readSessionTodos ?? (async () => []);
+  loadAgentSessionContextRef.current =
+    contextOverrides.loadAgentSessionContext ?? (async () => undefined);
 };
 
 const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContextOverrides = {}) => {
@@ -167,8 +175,8 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   const agentOperationsValue = (): AgentOperationsContextValue => ({
     readSessionTodos: readSessionTodosRef.current,
     readSessionHistory: async () => [],
-    subscribeSessionEvents: async () => () => undefined,
     loadAgentSessionHistory: async () => null,
+    loadAgentSessionContext: loadAgentSessionContextRef.current,
     startAgentSession: async () => ({
       externalSessionId: "session-started",
       runtimeKind: "opencode",
@@ -294,6 +302,51 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-2");
       expect(latest.view.taskId).toBe("task-2");
       expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-2");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces context recovery failure without hiding pending input", async () => {
+    const selectedSession = createSession("task-1", "session-with-approval", {
+      contextUsage: null,
+      pendingApprovals: [
+        {
+          requestId: "approval-1",
+          requestType: "command_execution",
+          title: "Run command",
+        },
+      ],
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [selectedSession],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(selectedSession),
+      }),
+      {
+        loadAgentSessionContext: async () => {
+          throw new Error("context recovery unavailable");
+        },
+        runtimeDefinitionsContext: {
+          loadRepoRuntimeCatalog: async () => emptyCatalog,
+        },
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.view.selectedSession.runtimeData.error !== null);
+
+      const latest = harness.getLatest().view.selectedSession;
+      expect(latest.runtimeData.error).toBe(
+        'Failed to load context usage for session "session-with-approval": context recovery unavailable',
+      );
+      expect(latest.loadedSession?.pendingApprovals).toEqual([
+        expect.objectContaining({ requestId: "approval-1" }),
+      ]);
     } finally {
       await harness.unmount();
     }

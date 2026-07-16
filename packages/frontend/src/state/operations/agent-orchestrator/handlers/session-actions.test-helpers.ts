@@ -1,4 +1,5 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AgentEnginePort } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import {
   type AgentSessionCollection,
@@ -17,11 +18,7 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import { createSessionTurnState } from "../support/session-turn-state";
-import {
-  createAgentSessionRuntimeSnapshotFixture,
-  createSessionObserversRefFixture,
-  createTaskCardFixture,
-} from "../test-utils";
+import { createAgentSessionRuntimeSnapshotFixture, createTaskCardFixture } from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
 
 type BuildSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
@@ -91,13 +88,18 @@ export const mockAgentSessionRuntimeSnapshot = (
 };
 
 type SessionActionDependencies = Parameters<typeof createAgentSessionActions>[0];
-export type SessionActionTestOverrides = Partial<SessionActionDependencies> & {
+export type SessionActionTestOverrides = Omit<Partial<SessionActionDependencies>, "adapter"> & {
+  adapter?: AgentEnginePort | OpencodeSdkAdapter;
   sessionsRef?: { current: AgentSessionCollection };
 };
 
 export const createSessionActions = (overrides: SessionActionTestOverrides = {}) => {
-  const { sessionsRef: overrideSessionsRef, ...actionOverrides } = overrides;
-  const adapter = actionOverrides.adapter ?? new OpencodeSdkAdapter();
+  const {
+    adapter: adapterOverride,
+    sessionsRef: overrideSessionsRef,
+    ...actionOverrides
+  } = overrides;
+  const adapter = (adapterOverride ?? new OpencodeSdkAdapter()) as AgentEnginePort;
   const sessionsRef = overrideSessionsRef ?? createSessionsRef();
   sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
   const sessionTurnState = createSessionTurnStateFixture();
@@ -117,7 +119,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     repoEpochRef: { current: 1 },
     currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
     sessionStartGateRef: { current: createSessionStartGate() },
-    sessionObserversRef: createSessionObserversRefFixture(),
     sessionTurnState: sessionTurnState.sessionTurnState,
     updateSession: (identity, updater) => {
       const current = getAgentSession(sessionsRef.current, identity);
@@ -132,7 +133,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       );
       return nextSession;
     },
-    observeAgentSession: async () => undefined,
     canonicalizePath: async (path) => path,
     prepareTaskSessionStartupLease: async () => "lease-1",
     completeTaskSessionStartupLease: async () => {},
@@ -147,13 +147,16 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     loadRepoPromptOverrides: async () => ({}),
     loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    liveSessionHost: {
+      agentSessionLiveReplyApproval: async () => {},
+      agentSessionLiveReplyQuestion: async () => {},
+    },
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,
     refreshTaskData: async () => {},
     persistSessionRecord: async () => {},
     deleteSessionRecord: async () => {},
-    stopAuthoritativeSession: async () => {},
     invalidateSessionStopQueries: async () => {},
   };
 

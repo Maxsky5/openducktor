@@ -1,32 +1,21 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRole } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
-import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createRepoStaleGuard } from "../support/core";
-import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
-import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
-import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
-import {
-  applyRuntimeSnapshotToSession,
-  shouldObserveAgentSessionRuntimeSnapshot,
-} from "./session-runtime-snapshot";
+import { toPersistedSessionIdentity } from "../support/persistence";
 
-type CommitSessionCollection = AgentSessionsStore["commitSessionCollection"];
-type SourceSessionLoaderAdapter = Pick<AgentEnginePort, "readSessionRuntimeSnapshot">;
+type ReadSessionSnapshot = AgentSessionsStore["getSessionSnapshot"];
 
 type CreateSourceSessionLoaderArgs = {
   workspaceRepoPath: string | null;
-  adapter: SourceSessionLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-  commitSessionCollection: CommitSessionCollection;
-  observeAgentSession: ObserveAgentSession;
+  readSessionSnapshot: ReadSessionSnapshot;
   queryClient: QueryClient;
 };
 
@@ -52,11 +41,9 @@ const findSourceSessionRecord = (
 
 export const createLoadSourceSession = ({
   workspaceRepoPath,
-  adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
-  commitSessionCollection,
-  observeAgentSession,
+  readSessionSnapshot,
   queryClient,
 }: CreateSourceSessionLoaderArgs): LoadSourceSession => {
   return async ({ taskId, role, sourceSession }): Promise<AgentSessionState | null> => {
@@ -86,30 +73,8 @@ export const createLoadSourceSession = ({
       return null;
     }
 
-    const ref = toRuntimeSessionRef(repoPath, toPersistedSessionIdentity(record));
-    const runtimeSnapshot = await adapter.readSessionRuntimeSnapshot(ref);
-    if (isStaleRepoOperation()) {
-      return null;
-    }
-
-    const loadedSession = commitSessionCollection((currentSessionCollection) => {
-      const current = getAgentSession(currentSessionCollection, sourceSession) ?? undefined;
-      const sourceView = toPersistedSessionView({ taskId, record, current });
-      const session = applyRuntimeSnapshotToSession(sourceView, runtimeSnapshot);
-      return {
-        collection: replaceAgentSession(currentSessionCollection, session),
-        result: session,
-      };
-    });
-
-    if (shouldObserveAgentSessionRuntimeSnapshot(runtimeSnapshot) && !isStaleRepoOperation()) {
-      await observeAgentSession(
-        await resolveRuntimeSessionContextRef(repoPath, loadedSession, () =>
-          loadSettingsSnapshotFromQuery(queryClient),
-        ),
-      );
-    }
-
+    const identity = toPersistedSessionIdentity(record);
+    const loadedSession = readSessionSnapshot(identity);
     return isStaleRepoOperation() ? null : loadedSession;
   };
 };

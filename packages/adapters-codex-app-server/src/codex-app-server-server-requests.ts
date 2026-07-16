@@ -3,7 +3,7 @@ import {
   type AgentEvent,
   normalizeOdtWorkflowToolName,
 } from "@openducktor/core";
-import { codexServerRequestIdMetadata, codexServerRequestKey } from "./codex-app-server-approvals";
+import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
@@ -14,10 +14,7 @@ import {
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
-import {
-  type CodexPendingInputState,
-  codexPendingInputRequestInstanceId,
-} from "./codex-pending-input-state";
+import type { CodexPendingInputState } from "./codex-pending-input-state";
 import { READ_ONLY_ROLES } from "./codex-session-policy";
 import {
   type CodexSubagentLinkState,
@@ -163,11 +160,12 @@ export const handleCodexServerRequest = async (
       handledRequestKeys.delete(requestKey);
     }
   };
-  const runWhileHandled = (operation: () => void): void => {
+  const runWhileHandled = (operation: () => void, rollback?: () => void): void => {
     markHandled();
     try {
       operation();
     } catch (error) {
+      rollback?.();
       forgetHandled();
       throw error;
     }
@@ -234,27 +232,37 @@ export const handleCodexServerRequest = async (
       return false;
     }
 
-    const approval = {
-      ...mcpElicitationApproval,
-      requestInstanceId: codexPendingInputRequestInstanceId(
-        routeContext.runtimeId,
-        mcpElicitationApproval.requestId,
-      ),
-    };
-    runWhileHandled(() => {
-      context.pendingInput.addApproval({
-        runtimeId: routeContext.runtimeId,
-        threadId: routeContext.ownerThreadId,
-        request: approval,
-        ...(routeContext.route ? { route: routeContext.route } : {}),
-      });
-      emitPendingEvent(context, routeContext, {
-        ...approval,
-        type: "approval_required",
-        externalSessionId: routeContext.ownerThreadId,
-        timestamp: new Date().toISOString(),
-      });
-    });
+    let registeredRequestId: string | null = null;
+    runWhileHandled(
+      () => {
+        const registration = context.pendingInput.addApproval({
+          runtimeId: routeContext.runtimeId,
+          threadId: routeContext.ownerThreadId,
+          nativeRequest: {
+            id: requestId,
+            method: rawRequest.method,
+            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
+          },
+          request: mcpElicitationApproval,
+          ...(routeContext.route ? { route: routeContext.route } : {}),
+        });
+        if (!registration.isNew) {
+          return;
+        }
+        registeredRequestId = registration.entry.request.requestId;
+        emitPendingEvent(context, routeContext, {
+          ...registration.entry.request,
+          type: "approval_required",
+          externalSessionId: routeContext.ownerThreadId,
+          timestamp: new Date().toISOString(),
+        });
+      },
+      () => {
+        if (registeredRequestId) {
+          context.pendingInput.resolveApproval(registeredRequestId, routeContext.runtimeId);
+        }
+      },
+    );
     return true;
   }
 
@@ -269,55 +277,60 @@ export const handleCodexServerRequest = async (
       context.flushQueuedUserMessagesLater(activeTurn);
     }
     const questionInput = {
-      requestId: parsed.request.requestId,
       questions: parsed.request.questions,
-      ...codexServerRequestIdMetadata(parsed.serverRequestId),
     };
-    const question = {
-      ...parsed.request,
-      requestInstanceId: codexPendingInputRequestInstanceId(
-        routeContext.runtimeId,
-        parsed.request.requestId,
-      ),
-    };
-    const questionToolCallId = question.requestInstanceId;
-    runWhileHandled(() => {
-      context.pendingInput.addQuestion({
-        runtimeId: routeContext.runtimeId,
-        threadId: routeContext.ownerThreadId,
-        request: question,
-        questionIds: parsed.questionIds,
-        input: questionInput,
-        ...(routeContext.route ? { route: routeContext.route } : {}),
-      });
-      emitPendingEvent(context, routeContext, {
-        ...question,
-        type: "question_required",
-        externalSessionId: routeContext.ownerThreadId,
-        timestamp: new Date().toISOString(),
-      });
-      emitPendingEvent(context, routeContext, {
-        type: "assistant_part",
-        externalSessionId: routeContext.ownerThreadId,
-        timestamp: new Date().toISOString(),
-        part: requireNormalizedCodexToolInvocation({
-          messageId: `codex-question-${questionToolCallId}`,
-          partId: `codex-question-${questionToolCallId}`,
-          callId: questionToolCallId,
-          rawToolName: "request_user_input",
-          status: "running",
-          input: questionInput,
-          metadata: {
-            codexServerRequest: true,
+    let registeredRequestId: string | null = null;
+    runWhileHandled(
+      () => {
+        const registration = context.pendingInput.addQuestion({
+          runtimeId: routeContext.runtimeId,
+          threadId: routeContext.ownerThreadId,
+          nativeRequest: {
+            id: parsed.serverRequestId,
             method: rawRequest.method,
-            requestId: parsed.request.requestId,
-            questions: parsed.request.questions,
-            questionIds: parsed.questionIds,
-            turnId: parsed.turnId,
+            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
           },
-        }),
-      });
-    });
+          request: parsed.request,
+          questionIds: parsed.questionIds,
+          input: questionInput,
+          ...(routeContext.route ? { route: routeContext.route } : {}),
+        });
+        if (!registration.isNew) {
+          return;
+        }
+        registeredRequestId = registration.entry.request.requestId;
+        const question = registration.entry.request;
+        const questionToolCallId = question.requestId;
+        emitPendingEvent(context, routeContext, {
+          ...question,
+          type: "question_required",
+          externalSessionId: routeContext.ownerThreadId,
+          timestamp: new Date().toISOString(),
+        });
+        emitPendingEvent(context, routeContext, {
+          type: "assistant_part",
+          externalSessionId: routeContext.ownerThreadId,
+          timestamp: new Date().toISOString(),
+          part: requireNormalizedCodexToolInvocation({
+            messageId: `codex-question-${questionToolCallId}`,
+            partId: `codex-question-${questionToolCallId}`,
+            callId: questionToolCallId,
+            rawToolName: "request_user_input",
+            status: "running",
+            input: questionInput,
+            metadata: {
+              codexServerRequest: true,
+              questions: parsed.request.questions,
+            },
+          }),
+        });
+      },
+      () => {
+        if (registeredRequestId) {
+          context.pendingInput.resolveQuestion(registeredRequestId, routeContext.runtimeId);
+        }
+      },
+    );
     return true;
   }
 
@@ -347,27 +360,37 @@ export const handleCodexServerRequest = async (
     }
 
     const parsedApproval = toApprovalRequest(rawRequest);
-    const approval = {
-      ...parsedApproval,
-      requestInstanceId: codexPendingInputRequestInstanceId(
-        routeContext.runtimeId,
-        parsedApproval.requestId,
-      ),
-    };
-    runWhileHandled(() => {
-      context.pendingInput.addApproval({
-        runtimeId: routeContext.runtimeId,
-        threadId: routeContext.ownerThreadId,
-        request: approval,
-        ...(routeContext.route ? { route: routeContext.route } : {}),
-      });
-      emitPendingEvent(context, routeContext, {
-        ...approval,
-        type: "approval_required",
-        externalSessionId: routeContext.ownerThreadId,
-        timestamp: new Date().toISOString(),
-      });
-    });
+    let registeredRequestId: string | null = null;
+    runWhileHandled(
+      () => {
+        const registration = context.pendingInput.addApproval({
+          runtimeId: routeContext.runtimeId,
+          threadId: routeContext.ownerThreadId,
+          nativeRequest: {
+            id: requestId,
+            method: rawRequest.method,
+            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
+          },
+          request: parsedApproval,
+          ...(routeContext.route ? { route: routeContext.route } : {}),
+        });
+        if (!registration.isNew) {
+          return;
+        }
+        registeredRequestId = registration.entry.request.requestId;
+        emitPendingEvent(context, routeContext, {
+          ...registration.entry.request,
+          type: "approval_required",
+          externalSessionId: routeContext.ownerThreadId,
+          timestamp: new Date().toISOString(),
+        });
+      },
+      () => {
+        if (registeredRequestId) {
+          context.pendingInput.resolveApproval(registeredRequestId, routeContext.runtimeId);
+        }
+      },
+    );
     return true;
   }
 

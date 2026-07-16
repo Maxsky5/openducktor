@@ -1,4 +1,6 @@
 export * from "./agent-runtime-schemas";
+export * from "./agent-session-control-schemas";
+export * from "./agent-session-live-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
 export * from "./codex-app-server-protocol";

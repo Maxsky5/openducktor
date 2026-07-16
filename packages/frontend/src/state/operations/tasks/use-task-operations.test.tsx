@@ -38,7 +38,7 @@ import { workspaceQueryKeys } from "../../queries/workspace";
 import {
   listenToAgentSessionEvents,
   type SessionEventAdapter,
-} from "../agent-orchestrator/events/session-events";
+} from "../agent-orchestrator/events/session-events-test-harness";
 import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
 import { createSessionTurnMetadata } from "../agent-orchestrator/support/session-turn-metadata";
 import {
@@ -2305,6 +2305,7 @@ describe("use-task-operations", () => {
 
       const unsubscribe = await listenToAgentSessionEvents({
         adapter,
+        sessionsRef,
         sessionRef: {
           externalSessionId: "session-1",
           repoPath: "/repo",

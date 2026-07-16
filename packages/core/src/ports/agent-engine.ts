@@ -1,4 +1,8 @@
 import type {
+  AgentSessionControlForkInput,
+  AgentSessionControlResumeInput,
+  AgentSessionControlSendInput,
+  AgentSessionControlStartInput,
   CodexEffectivePolicy,
   FileDiff,
   FileStatus,
@@ -13,6 +17,18 @@ import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
   AgentRole,
+  AgentSessionActivity,
+  AgentSessionLiveAttachInput,
+  AgentSessionLiveDetachInput,
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveListInput,
+  AgentSessionLiveLoadContextInput,
+  AgentSessionLiveLoadContextResult,
+  AgentSessionLiveReadInput,
+  AgentSessionLiveReadResult,
+  AgentSessionLiveReplyApprovalInput,
+  AgentSessionLiveReplyQuestionInput,
+  AgentSessionLiveSnapshot,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -207,13 +223,6 @@ export type AgentSessionHistoryMessage =
       parts: [];
     };
 
-export type AgentSessionActivity =
-  | "waiting_for_question"
-  | "waiting_for_permission"
-  | "retrying"
-  | "running"
-  | "idle";
-
 export type AgentSessionRuntimeSnapshotAvailability = "runtime" | "missing";
 
 export type AgentSessionRuntimeSnapshot =
@@ -270,29 +279,52 @@ export interface AgentCatalogPort {
   searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
 }
 
-export interface AgentSessionPort {
+/** Host-owned, runtime-neutral live session projection. */
+export interface AgentSessionLivePort {
+  listLiveSessions(input: AgentSessionLiveListInput): Promise<AgentSessionLiveSnapshot[]>;
+  readLiveSession(input: AgentSessionLiveReadInput): Promise<AgentSessionLiveReadResult>;
+  attachLiveSessions(
+    input: AgentSessionLiveAttachInput,
+    listener: (envelope: AgentSessionLiveEnvelope) => void,
+  ): Promise<EventUnsubscribe>;
+  detachLiveSessions(input: AgentSessionLiveDetachInput): Promise<void>;
+  loadLiveSessionContext(
+    input: AgentSessionLiveLoadContextInput,
+  ): Promise<AgentSessionLiveLoadContextResult>;
+  replyLiveSessionApproval(input: AgentSessionLiveReplyApprovalInput): Promise<void>;
+  replyLiveSessionQuestion(input: AgentSessionLiveReplyQuestionInput): Promise<void>;
+}
+
+/** Runtime-neutral session controls owned by the host application boundary. */
+export interface AgentSessionControlPort {
+  startSession(input: AgentSessionControlStartInput): Promise<AgentSessionSummary>;
+  resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionSummary>;
+  releaseSession(input: SessionRef): Promise<void>;
+  forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionSummary>;
+  updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void>;
+  sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentUserMessage>;
+  stopSession(input: SessionRef): Promise<void>;
+}
+
+/** Policy-bound runtime-library controls. Host adapters are the only shared-path callers. */
+export interface AgentRuntimeSessionControlPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
-  listSessionRuntimeSnapshots(
-    input: ListSessionRuntimeSnapshotsInput,
-  ): Promise<AgentSessionRuntimeSnapshot[]>;
-  readSessionRuntimeSnapshot(
-    input: ReadSessionRuntimeSnapshotInput,
-  ): Promise<AgentSessionRuntimeSnapshot>;
-  loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
-  loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
-  updateSessionModel(input: UpdateAgentSessionModelInput): void;
+  updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void>;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage>;
-  replyApproval(input: ReplyApprovalInput): Promise<void>;
-  replyQuestion(input: ReplyQuestionInput): Promise<void>;
-  subscribeEvents(
-    input: PolicyBoundSessionRef,
-    listener: (event: AgentEvent) => void,
-  ): Promise<EventUnsubscribe>;
   stopSession(input: SessionRef): Promise<void>;
 }
+
+/** Pure runtime history and transcript-adjacent reads. */
+export interface AgentSessionHistoryPort {
+  loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
+  loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
+}
+
+/** Runtime-library session controls and pure history reads. Live state uses AgentSessionLivePort. */
+export interface AgentSessionPort extends AgentRuntimeSessionControlPort, AgentSessionHistoryPort {}
 
 export interface AgentWorkspaceInspectionPort {
   loadSessionDiff(input: LoadAgentSessionDiffInput): Promise<FileDiff[]>;
@@ -301,5 +333,6 @@ export interface AgentWorkspaceInspectionPort {
 
 export type AgentEnginePort = AgentRuntimeDefinitionsPort &
   AgentCatalogPort &
-  AgentSessionPort &
+  AgentSessionControlPort &
+  AgentSessionHistoryPort &
   AgentWorkspaceInspectionPort;

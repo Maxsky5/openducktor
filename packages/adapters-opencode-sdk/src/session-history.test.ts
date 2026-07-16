@@ -1032,7 +1032,7 @@ describe("OpencodeSdkAdapter session history", () => {
     ]);
   });
 
-  test("loadSessionHistory seeds live subagent correlation for later task-tool updates", async () => {
+  test("loadSessionHistory does not seed live subagent correlation for later task-tool updates", async () => {
     const streamEvents: Event[] = [
       {
         type: "message.updated",
@@ -1156,11 +1156,11 @@ describe("OpencodeSdkAdapter session history", () => {
       kind: "subagent",
       status: "running",
       externalSessionId: "child-a",
-      correlationKey: "part:msg-200:subtask-a",
     });
+    expect(subagentEvents[0]?.part.correlationKey).not.toBe("part:msg-200:subtask-a");
   });
 
-  test("loadSessionHistory seeds live subagent correlation across assistant message boundaries", async () => {
+  test("loadSessionHistory does not seed live correlation across assistant message boundaries", async () => {
     const streamEvents: Event[] = [
       {
         type: "message.updated",
@@ -1288,8 +1288,8 @@ describe("OpencodeSdkAdapter session history", () => {
       kind: "subagent",
       status: "completed",
       externalSessionId: "child-a",
-      correlationKey: "part:msg-200:subtask-a",
     });
+    expect(subagentEvents[0]?.part.correlationKey).not.toBe("part:msg-200:subtask-a");
   });
 
   test("loadSessionHistory normalizes split-message subagent history to one canonical correlation", async () => {

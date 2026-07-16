@@ -38,6 +38,49 @@ const acceptedUserMessage = (
 });
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
+  test("routes a normalized workflow control without loading runtime policy settings", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendInput: unknown;
+    adapter.sendUserMessage = async (input) => {
+      sendInput = input;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureExistingSessionRuntime: async () => {},
+      loadSettingsSnapshot: async () => {
+        throw new Error("session control must not load runtime policy settings");
+      },
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      expect(sendInput).toMatchObject({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        externalSessionId: "session-1",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      });
+      expect(sendInput).not.toHaveProperty("runtimePolicy");
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
   test("does not store the Codex compaction send result as a user message", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;

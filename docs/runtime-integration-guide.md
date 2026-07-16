@@ -119,6 +119,24 @@ Persisted records keep durable session context only:
 
 Persisted records store durable session context. `selectedModel`, when present, includes its own `runtimeKind` and must round-trip with the session. Live route or connection fields such as `runtimeRoute`, `runtimeEndpoint`, `baseUrl`, or `runtimeTransport` are never persisted; they are resolved only at the adapter call boundary.
 
+### Ephemeral live-session state
+
+Defined by the normalized schemas in `packages/contracts/src/agent-session-live-schemas.ts` and exposed through the core live-session port.
+
+The host owns one runtime-specific live adapter for each running runtime. That adapter retains only ephemeral state:
+
+- normalized session activity and identity,
+- unresolved approvals and questions,
+- latest known context usage,
+- parent/child session links needed by the live projection,
+- and private runtime-native reply routing data.
+
+The adapter is registered before runtime events can arrive and is released when the runtime ends. None of this state belongs in SQLite, task documents, persisted session records, or a renderer cache.
+
+Renderer attachment is atomic: the current snapshot is the first envelope on an attachment, and every later change follows on that same ordered channel. A runtime integration must not expose separate snapshot-then-subscribe operations or require the frontend to reconcile them.
+
+Pending-request identities exposed by this contract are opaque and runtime-neutral. Native request IDs stay private to the runtime adapter and must be validated together with runtime, session, request kind, and unresolved instance when a reply is routed.
+
 ### Session routing behavior
 
 Session-scoped operations use the session's runtime kind when loading:
@@ -128,6 +146,8 @@ Session-scoped operations use the session's runtime kind when loading:
 - diff,
 - file status,
 - model catalog.
+
+Session controls, pending-input replies, live context reads, and context recovery go through the host live-session service. Shared application and frontend code must not select a runtime-specific live implementation. Runtime selection is confined to host adapter registration/composition.
 
 If the runtime kind is missing, or loading cannot resolve a live repo runtime for the stored runtime kind, the operation returns an actionable error instead of silently switching runtimes. The persisted session `workingDirectory` remains the request working directory for adapter operations; it is not required to equal the repo-scoped runtime instance working directory, because build and QA sessions may run against a task worktree while reusing a repo-scoped runtime process.
 
@@ -290,17 +310,19 @@ At this layer, update:
 
 These contracts are the host-visible source of truth, so downstream adapters, host services, frontend orchestration, and docs must stay aligned in the same change set.
 
-### 2. Core boundary and runtime adapter
+### 2. Core boundaries and runtime protocol adapters
 
-The core runtime boundary is anchored by `packages/core/src/ports/agent-engine.ts` and the runtime-kind/working-directory helpers in `packages/core/src/services/runtime-connections.ts`. The runtime adapter is where resolved runtime context becomes runtime-specific client input.
+The core boundaries are anchored by `packages/core/src/ports/agent-engine.ts` and the runtime-kind/working-directory helpers in `packages/core/src/services/runtime-connections.ts`. History, catalogs, and workspace inspection remain request/response runtime surfaces. Live sessions use the normalized live-session port and are implemented by host-owned adapters.
 
 This layer must cover:
 
-- session start, resume, stop, and any supported fork flows,
-- streaming events, history, todos, model catalog, slash-command catalog, diff, and file status,
+- normalized session controls, ordered live snapshots/events, context loading, pending-input replies, and runtime release,
+- history, todos, model catalog, slash-command catalog, diff, and file status without coupling history to live hydration,
 - explicit failure for unsupported operations instead of descriptor/adapter mismatches.
 
 Reference implementation anchors today are `packages/adapters-opencode-sdk/src/opencode-sdk-adapter.ts`, `packages/adapters-codex-app-server/src/index.ts`, and their supporting mapping and workflow-tool permission modules.
+
+Runtime-native protocol logic stays in those runtime packages. Host wrappers under `packages/host/src/adapters/agent-sessions` turn each implementation into the same normalized host port. Shared host application code and frontend code must never branch on runtime kind to interpret live state.
 
 For Builder PR generation, the runtime integration is responsible for making provider-native git or PR tools available to the agent. OpenDucktor persists the authoritative PR metadata only after the agent calls `odt_set_pull_request(taskId, providerId, number)`, then resolves the canonical provider record itself.
 
@@ -311,9 +333,12 @@ The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-
 Frontend/runtime orchestration must keep these rules true:
 
 - session-scoped reads carry explicit `runtimeKind`,
-- build startup carries explicit runtime kind,
+- live controls carry only normalized session refs, workflow scope, model, and message data; each runtime-specific host adapter resolves and injects its native effective policy internally,
 - capability-driven UI behavior comes from runtime descriptors rather than per-session heuristics,
-- persisted session loading fails on runtime-kind mismatches.
+- persisted session loading fails on runtime-kind mismatches,
+- the session collection commits the initial normalized live snapshot once and derives sidebar counts from that same collection,
+- selected-session history and missing-context loading are independent, on-demand operations,
+- pending input and retained context never wait for transcript history.
 
 Catalog/query helpers, session-start UI, settings, and diagnostics consumers may move, but they must continue to derive runtime behavior from the same descriptor-owned capability model.
 
@@ -326,7 +351,9 @@ This layer must ensure that:
 - persisted session records keep `externalSessionId`, `role`, `startedAt`, `runtimeKind`, `workingDirectory`, and nullable `selectedModel` with `selectedModel.runtimeKind` when present,
 - session loading re-resolves a live repo runtime from `runtimeKind` and repo path, then preserves the persisted session `workingDirectory` for adapter requests,
 - missing runtimes and mismatched runtime kind or repo identity are rejected,
-- session-scoped reads continue to resolve from the stored session runtime instead of the repo default runtime.
+- session-scoped reads continue to resolve from the stored session runtime instead of the repo default runtime,
+- repository hydration does not load transcript history for every live session,
+- `loadSessionHistory` remains a pure history operation and never discovers pending input, drains event buffers, resumes a runtime for context, or mutates the live projection.
 
 ### 5. Host integration
 
@@ -334,6 +361,10 @@ Host-visible runtime support is anchored by the shared TypeScript contracts and 
 
 Current TypeScript host anchors:
 
+- `packages/host/src/application/agent-sessions/agent-session-live-state-service.ts`
+- `packages/host/src/adapters/agent-sessions/live-session-adapter-registry.ts`
+- `packages/host/src/adapters/agent-sessions/codex-live-session-adapter.ts`
+- `packages/host/src/adapters/agent-sessions/opencode-live-session-adapter.ts`
 - `packages/host/src/adapters/runtimes/runtime-registry.ts`
 - `packages/host/src/adapters/opencode/opencode-workspace-runtime-starter.ts`
 - `packages/host/src/adapters/codex/codex-workspace-runtime-starter.ts`
@@ -347,10 +378,15 @@ Host integration work includes:
 - adding the runtime kind to descriptors and registration data,
 - adding the runtime definition to the host-visible runtime registry so default runtime config and startup validation know about it,
 - implementing runtime startup and registering it in the host registry with the correct default startup config,
+- preparing and registering the live-session adapter before runtime event ingestion or runtime advertisement,
+- applying every adapter projection mutation and emitted normalized change through the host coordinator,
+- releasing exactly that runtime's ephemeral projection on explicit stop, removal, or unexpected exit,
 - ensuring runtime config defaults are derived from the same runtime definition set used by the host registry,
 - making `runtime_definitions_list`, `runtime_list`, `runtime_ensure`, `repo_runtime_health`, and `build_start` understand it where applicable,
 - implementing host-managed or external provisioning correctly,
 - preserving full workflow scope coverage (`workspace`, `task`, and `build`).
+
+Context loading may use different native strategies behind the host adapter. An adapter must return retained context immediately when it has it and deduplicate concurrent recovery for the same session. If native recovery is expensive, it must remain explicit and session-scoped. For Codex specifically, historical token usage requires an adapter-internal resume/rejoin with turns included; `excludeTurns: true` does not replay the token-usage notification. That protocol rule must not leak into shared contracts or frontend code.
 
 When you need the surrounding host implementation, follow the owning module boundary (`runtime_orchestrator`, `build_orchestrator`, registry, or startup helpers) instead of treating any one file list as exhaustive.
 

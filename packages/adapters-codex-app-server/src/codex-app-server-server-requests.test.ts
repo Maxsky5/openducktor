@@ -121,10 +121,12 @@ describe("handleCodexServerRequest", () => {
     await expect(
       handleCodexServerRequest(context, session, request, handledRequestKeys),
     ).resolves.toBe(true);
+    const pending = pendingInput.nativeRequest("runtime-live", session.threadId, 28);
+    expect(pending?.kind).toBe("approval");
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "approval_required",
-        requestId: "28",
+        requestId: pending?.entry.request.requestId,
       }),
     );
   });
@@ -187,26 +189,25 @@ describe("handleCodexServerRequest", () => {
     ).resolves.toBe(true);
 
     expect(respondServerRequest).not.toHaveBeenCalled();
-    expect(pendingInput.approval("29")).toMatchObject({
-      runtimeId: "runtime-live",
-      threadId: "thread-unknown-role",
-      request: {
-        requestId: "29",
-        requestInstanceId: "runtime-live\u000029",
-        requestType: "command_execution",
-        title: "Network access approval requested",
+    const pending = pendingInput.nativeRequest("runtime-live", "thread-unknown-role", 29);
+    expect(pending).toMatchObject({
+      kind: "approval",
+      entry: {
+        runtimeId: "runtime-live",
+        threadId: "thread-unknown-role",
+        request: {
+          requestType: "command_execution",
+          title: "Network access approval requested",
+        },
       },
     });
-    expect(pendingInput.approval("29")?.request.metadata).toEqual({
-      codexMethod: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
-      codexServerRequestId: 29,
-      params: expect.any(Object),
-    });
+    expect(pending?.entry.request.metadata).toBeUndefined();
+    expect(pending?.entry.request.requestId).not.toBe("29");
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "approval_required",
-        requestId: "29",
-        requestInstanceId: "runtime-live\u000029",
+        requestId: pending?.entry.request.requestId,
+        requestInstanceId: pending?.entry.request.requestId,
       }),
     );
   });
@@ -228,16 +229,19 @@ describe("handleCodexServerRequest", () => {
     );
 
     expect(respondServerRequest).not.toHaveBeenCalled();
-    expect(pendingInput.approval("30")).toMatchObject({
-      request: {
-        requestId: "30",
-        title: "Codex status/check",
+    const pending = pendingInput.nativeRequest("runtime-live", "thread-unknown-role", 30);
+    expect(pending).toMatchObject({
+      kind: "approval",
+      entry: {
+        request: {
+          title: "Codex status/check",
+        },
       },
     });
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "approval_required",
-        requestId: "30",
+        requestId: pending?.entry.request.requestId,
       }),
     );
   });
@@ -257,11 +261,12 @@ describe("handleCodexServerRequest", () => {
     ).resolves.toBe(true);
 
     expect(respondServerRequest).not.toHaveBeenCalled();
-    expect(pendingInput.approval("31")?.request.tool?.name).toBe("search");
+    const pending = pendingInput.nativeRequest("runtime-live", "thread-spec", 31);
+    expect(pending?.entry.request.tool?.name).toBe("search");
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "approval_required",
-        requestId: "31",
+        requestId: pending?.entry.request.requestId,
       }),
     );
   });
@@ -294,19 +299,26 @@ describe("handleCodexServerRequest", () => {
     ).resolves.toBe(true);
 
     expect(respondServerRequest).not.toHaveBeenCalled();
-    expect(pendingInput.approval("network-command-approval-1")).toMatchObject({
-      runtimeId: "runtime-live",
-      threadId: "thread-spec",
-      request: {
-        requestId: "network-command-approval-1",
-        requestType: "command_execution",
-        mutation: "unknown",
+    const pending = pendingInput.nativeRequest(
+      "runtime-live",
+      "thread-spec",
+      "network-command-approval-1",
+    );
+    expect(pending).toMatchObject({
+      kind: "approval",
+      entry: {
+        runtimeId: "runtime-live",
+        threadId: "thread-spec",
+        request: {
+          requestType: "command_execution",
+          mutation: "unknown",
+        },
       },
     });
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "approval_required",
-        requestId: "network-command-approval-1",
+        requestId: pending?.entry.request.requestId,
         mutation: "unknown",
       }),
     );
@@ -327,7 +339,9 @@ describe("handleCodexServerRequest", () => {
     ).resolves.toBe(true);
 
     expect(respondServerRequest).not.toHaveBeenCalled();
-    expect(pendingInput.approval("33")?.request.tool?.name).toBe("odt_set_plan");
+    expect(
+      pendingInput.nativeRequest("runtime-live", "thread-spec", 33)?.entry.request.tool?.name,
+    ).toBe("odt_set_plan");
   });
 
   test("rejects request owners that are neither the current session nor a known child route", async () => {
@@ -349,7 +363,7 @@ describe("handleCodexServerRequest", () => {
       ),
     ).rejects.toThrow("no known session or subagent route");
 
-    expect(pendingInput.approval("34")).toBeUndefined();
+    expect(pendingInput.nativeRequest("runtime-live", "unknown-child-thread", 34)).toBeUndefined();
     expect(events).toEqual([]);
   });
 
@@ -367,7 +381,7 @@ describe("handleCodexServerRequest", () => {
       ),
     ).resolves.toBe(false);
 
-    expect(pendingInput.approval("32")).toBeUndefined();
+    expect(pendingInput.nativeRequest("runtime-live", "thread-spec", 32)).toBeUndefined();
     expect(respondServerRequest).toHaveBeenCalledWith(
       "runtime-live",
       32,
@@ -413,11 +427,14 @@ describe("handleCodexServerRequest", () => {
       ),
     ).resolves.toBe(true);
 
-    expect(pendingInput.approval("40")).toMatchObject({
-      threadId: "child-thread",
-      route: {
-        parentExternalSessionId: "parent-thread",
-        childExternalSessionId: "child-thread",
+    expect(pendingInput.nativeRequest("runtime-live", "child-thread", 40)).toMatchObject({
+      kind: "approval",
+      entry: {
+        threadId: "child-thread",
+        route: {
+          parentExternalSessionId: "parent-thread",
+          childExternalSessionId: "child-thread",
+        },
       },
     });
     expect(events).toContainEqual(
@@ -488,22 +505,22 @@ describe("handleCodexServerRequest", () => {
       ),
     ).resolves.toBe(true);
 
-    expect(pendingInput.question("41")).toMatchObject({
-      threadId: "child-thread",
-      request: {
-        requestId: "41",
-        requestInstanceId: "runtime-live\u000041",
-      },
-      route: {
-        parentExternalSessionId: "parent-thread",
-        childExternalSessionId: "child-thread",
+    const pending = pendingInput.nativeRequest("runtime-live", "child-thread", 41);
+    expect(pending).toMatchObject({
+      kind: "question",
+      entry: {
+        threadId: "child-thread",
+        route: {
+          parentExternalSessionId: "parent-thread",
+          childExternalSessionId: "child-thread",
+        },
       },
     });
     expect(events).toContainEqual(
       expect.objectContaining({
         emittedExternalSessionId: "parent-thread",
         type: "question_required",
-        requestInstanceId: "runtime-live\u000041",
+        requestInstanceId: pending?.entry.request.requestId,
         externalSessionId: "parent-thread",
         parentExternalSessionId: "parent-thread",
         childExternalSessionId: "child-thread",
@@ -562,25 +579,22 @@ describe("handleCodexServerRequest", () => {
       new Set(),
     );
 
-    expect(firstEvents).toContainEqual(
-      expect.objectContaining({
-        type: "assistant_part",
-        part: expect.objectContaining({
-          messageId: "codex-question-runtime-one\u000041",
-          partId: "codex-question-runtime-one\u000041",
-          callId: "runtime-one\u000041",
-        }),
-      }),
-    );
-    expect(secondEvents).toContainEqual(
-      expect.objectContaining({
-        type: "assistant_part",
-        part: expect.objectContaining({
-          messageId: "codex-question-runtime-two\u000041",
-          partId: "codex-question-runtime-two\u000041",
-          callId: "runtime-two\u000041",
-        }),
-      }),
-    );
+    const firstPart = firstEvents.find(
+      (event) => (event as { type?: string }).type === "assistant_part",
+    ) as { part: { messageId: string; partId: string; callId: string; metadata: unknown } };
+    const secondPart = secondEvents.find(
+      (event) => (event as { type?: string }).type === "assistant_part",
+    ) as { part: { messageId: string; partId: string; callId: string; metadata: unknown } };
+    expect(firstPart.part.callId).not.toBe(secondPart.part.callId);
+    expect(firstPart.part.callId).not.toContain("runtime-one");
+    expect(firstPart.part.callId).not.toBe("41");
+    expect(firstPart.part.messageId).toBe(`codex-question-${firstPart.part.callId}`);
+    expect(firstPart.part.partId).toBe(firstPart.part.messageId);
+    expect(firstPart.part.metadata).not.toMatchObject({
+      method: expect.anything(),
+      requestId: expect.anything(),
+      questionIds: expect.anything(),
+      turnId: expect.anything(),
+    });
   });
 });

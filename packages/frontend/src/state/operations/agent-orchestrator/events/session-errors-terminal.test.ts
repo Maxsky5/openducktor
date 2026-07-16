@@ -1,5 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { describe, expect, test } from "bun:test";
 import {
   buildSession,
   createRecordingSessionTodosUpdater,
@@ -13,191 +12,7 @@ import {
   type SessionUpdateFn,
 } from "./session-events-test-harness";
 
-const flushAutoReject = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-};
-
 describe("agent-orchestrator session errors and terminal state", () => {
-  test("keeps permission pending when auto-reject reply fails", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const replyApproval = mock((_request: Parameters<SessionEventAdapter["replyApproval"]>[0]) =>
-      Promise.reject(new Error("network down")),
-    );
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
-        return () => {};
-      },
-      replyApproval,
-    };
-
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        externalSessionId: "external-parent-session",
-        role: "planner",
-        messages: [
-          {
-            id: "subagent:part:assistant-parent:subtask-fail",
-            role: "system",
-            content: "Subagent (spec): Inspect repo",
-            timestamp: "2026-02-22T08:00:01.000Z",
-            meta: {
-              kind: "subagent",
-              partId: "subtask-fail",
-              correlationKey: "part:assistant-parent:subtask-fail",
-              status: "running",
-              agent: "spec",
-              prompt: "Inspect repo",
-            },
-          },
-        ],
-      }),
-      buildSession({ role: "spec" }),
-    ]);
-
-    const updateSession = createSessionUpdater(sessionsRef);
-
-    await listenToAgentSessionEvents({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-1",
-      sessionsRef,
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-    });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "session-1",
-      requestId: "perm-fail",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"write"}`,
-      summary: `Approval request for ${"write"}.`,
-      affectedPaths: ["edit file"],
-      action: { name: "write" },
-      mutation: "mutating" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      metadata: { tool: "edit" },
-      timestamp: "2026-02-22T08:00:05.000Z",
-      parentExternalSessionId: "external-parent-session",
-      childExternalSessionId: "external-1",
-      subagentCorrelationKey: "part:assistant-parent:subtask-fail",
-    });
-
-    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(1);
-    await flushAutoReject();
-
-    expect(replyApproval).toHaveBeenCalledTimes(1);
-    expect(findSession(sessionsRef, "external-parent-session")?.pendingApprovals).toHaveLength(1);
-    expect(
-      findSession(sessionsRef, "external-parent-session")?.pendingApprovals[0]?.requestId,
-    ).toBe("perm-fail");
-    expect(
-      getSessionMessages(sessionsRef, "external-parent-session").some((message) =>
-        message.content.includes("Automatic approval rejection failed"),
-      ),
-    ).toBe(true);
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
-    expect(parentSubagentMessage?.meta).toMatchObject({
-      kind: "subagent",
-      correlationKey: "part:assistant-parent:subtask-fail",
-      externalSessionId: "external-1",
-    });
-  });
-
-  test("keeps permission pending when auto-reject prompt rendering fails", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const replyApproval = mock((_request: Parameters<SessionEventAdapter["replyApproval"]>[0]) =>
-      Promise.resolve(),
-    );
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
-        return () => {};
-      },
-      replyApproval,
-    };
-
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        role: "spec",
-      }),
-    ]);
-
-    const updateSession = createSessionUpdater(sessionsRef);
-
-    await listenToAgentSessionEvents({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-1",
-      sessionsRef,
-      updateSession,
-      buildReadOnlyApprovalRejectionMessage: async () => {
-        throw new Error("Unsupported prompt token {{unsupported.token}}");
-      },
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-    });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "approval_required",
-      externalSessionId: "session-1",
-      requestId: "perm-template-fail",
-      requestType: "permission_grant" as const,
-      title: `Approve permission: ${"write"}`,
-      summary: `Approval request for ${"write"}.`,
-      affectedPaths: ["edit file"],
-      action: { name: "write" },
-      mutation: "mutating" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-      metadata: { tool: "edit" },
-      timestamp: "2026-02-22T08:00:05.000Z",
-    });
-
-    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(1);
-    await flushAutoReject();
-
-    expect(replyApproval).toHaveBeenCalledTimes(0);
-    expect(findSession(sessionsRef, "session-1")?.pendingApprovals).toHaveLength(1);
-    expect(findSession(sessionsRef, "session-1")?.pendingApprovals[0]?.requestId).toBe(
-      "perm-template-fail",
-    );
-    expect(
-      getSessionMessages(sessionsRef).some((message) =>
-        message.content.includes("Automatic approval rejection failed"),
-      ),
-    ).toBe(true);
-  });
-
   test("records session_error as an error notice and clears pending requests", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
@@ -460,7 +275,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
     ).toBe(false);
   });
 
-  test("handles question/todo updates and terminal finish", async () => {
+  test("handles todo updates and terminal finish", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const todosRecorder = createRecordingSessionTodosUpdater();
     const adapter: SessionEventAdapter = {
@@ -500,21 +315,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
     }
 
     handleEvent({
-      type: "question_required",
-      externalSessionId: "session-1",
-      requestId: "question-1",
-      questions: [
-        {
-          header: "Confirm",
-          question: "Confirm",
-          options: [],
-          multiple: false,
-          custom: false,
-        },
-      ],
-      timestamp: "2026-02-22T08:00:02.000Z",
-    });
-    handleEvent({
       type: "session_todos_updated",
       externalSessionId: "session-1",
       todos: [{ id: "todo-1", content: "Do it", status: "pending", priority: "high" }],
@@ -527,7 +327,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
     });
 
     expect(todosRecorder.getTodos()).toHaveLength(1);
-    expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toHaveLength(0);
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
     expect(updateSessionOptions).toContain(undefined);
     expect(updateSessionOptions).toContainEqual({ persist: true });

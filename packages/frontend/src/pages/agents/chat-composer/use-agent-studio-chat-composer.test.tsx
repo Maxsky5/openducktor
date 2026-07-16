@@ -1646,7 +1646,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("derives context usage from latest assistant message with descriptor fallback", async () => {
+  test("does not derive context usage from transcript messages", async () => {
     const loadedSession = createLoadedSession({
       messages: [
         createAssistantMessage({
@@ -1671,11 +1671,7 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
-        totalTokens: 24,
-        contextWindow: 200_000,
-        outputLimit: 8_192,
-      });
+      expect(harness.getLatest().selectedSessionContextUsage).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -1715,7 +1711,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("recomputes context usage from messages after live usage ends", async () => {
+  test("clears context usage when the host live projection no longer provides it", async () => {
     const loadedSession = createLoadedSession({
       contextUsage: {
         totalTokens: 35_022,
@@ -1750,17 +1746,13 @@ describe("useAgentStudioChatComposer", () => {
         }),
       );
 
-      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
-        totalTokens: 12,
-        contextWindow: 40_000,
-        outputLimit: 1_000,
-      });
+      expect(harness.getLatest().selectedSessionContextUsage).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("merges incomplete idle live usage with assistant message metadata", async () => {
+  test("does not complete partial live usage from assistant message metadata", async () => {
     const loadedSession = createLoadedSession({
       status: "idle",
       selectedModel: null,
@@ -1788,11 +1780,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
-      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
-        totalTokens: 31,
-        contextWindow: 40_000,
-        outputLimit: 1_000,
-      });
+      expect(harness.getLatest().selectedSessionContextUsage).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -1855,7 +1843,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("falls back to the selected model context window when message + descriptor metadata are missing", async () => {
+  test("does not synthesize token usage from transcript and selected-model metadata", async () => {
     const primaryModel = CATALOG.models[0];
     const secondaryModel = CATALOG.models[1];
     if (!primaryModel || !secondaryModel) {
@@ -1895,16 +1883,13 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
-        totalTokens: 33,
-        contextWindow: 100_000,
-      });
+      expect(harness.getLatest().selectedSessionContextUsage).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("uses an older assistant message for context usage when the latest tokenized one is incomplete", async () => {
+  test("does not search older assistant messages for context usage", async () => {
     const loadedSession = createLoadedSession({
       selectedModel: {
         runtimeKind: "opencode",
@@ -1930,10 +1915,7 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().selectedSessionContextUsage).toEqual({
-        totalTokens: 11,
-        contextWindow: 25_000,
-      });
+      expect(harness.getLatest().selectedSessionContextUsage).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -1989,7 +1971,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("keeps fallback context usage unchanged when unrelated tail messages change", async () => {
+  test("keeps context usage absent when unrelated tail messages change", async () => {
     const loadedSession = createLoadedSession({
       contextUsage: null,
       messages: [
@@ -2003,7 +1985,7 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      const previousUsage = harness.getLatest().selectedSessionContextUsage;
+      expect(harness.getLatest().selectedSessionContextUsage).toBeNull();
 
       await harness.update(
         createBaseProps({
@@ -2031,13 +2013,13 @@ describe("useAgentStudioChatComposer", () => {
         }),
       );
 
-      expect(harness.getLatest().selectedSessionContextUsage).toEqual(previousUsage);
+      expect(harness.getLatest().selectedSessionContextUsage).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("derives context usage from the selected session when identities share an external id", async () => {
+  test("uses live context from the selected session when identities share an external id", async () => {
     const externalSessionId = "shared-external-session";
     const firstMessages = createSessionMessagesState(externalSessionId, [
       createAssistantMessage({
@@ -2055,11 +2037,19 @@ describe("useAgentStudioChatComposer", () => {
       externalSessionId,
       workingDirectory: "/repo/worktree-a",
       messages: firstMessages,
+      contextUsage: {
+        totalTokens: 21,
+        contextWindow: 48_000,
+      },
     });
     const secondSession = createLoadedSession({
       externalSessionId,
       workingDirectory: "/repo/worktree-b",
       messages: secondMessages,
+      contextUsage: {
+        totalTokens: 34,
+        contextWindow: 96_000,
+      },
     });
     const harness = createHookHarness(createBaseProps({ loadedSession: firstSession }));
 

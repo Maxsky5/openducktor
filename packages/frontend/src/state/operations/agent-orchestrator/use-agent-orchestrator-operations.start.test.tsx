@@ -3,16 +3,16 @@ import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
   buildBootstrapFixture,
-  createAgentSessionRuntimeSnapshotFixture,
+  createAgentSessionLiveSnapshotFixture,
   createDeferred,
   createHookHarness,
+  createLiveSessionStreamFixture,
   createTestDependencies,
   createUnavailableBuildTaskFixture,
   host,
   listHarnessSessions,
   OPENCODE_RUNTIME_DESCRIPTOR,
   OpencodeSdkAdapter,
-  opencodeSdkAdapterPrototype,
   persistedSessionFixture,
   setupOrchestratorOperationsTestEnvironment,
   taskFixture,
@@ -51,8 +51,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("restarts observer before send when adapter session exists", async () => {
-    let subscribeCalls = 0;
+  test("sends through a host-hydrated live session without reattaching", async () => {
     let sendCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
@@ -61,7 +60,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
-    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
@@ -76,10 +74,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
     });
-    OpencodeSdkAdapter.prototype.subscribeEvents = async (_externalSessionId, _listener) => {
-      subscribeCalls += 1;
-      return () => {};
-    };
     OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
@@ -92,10 +86,13 @@ describe("use-agent-orchestrator-operations start and send", () => {
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
 
+    const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
+
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
     });
 
     try {
@@ -115,7 +112,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
           .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]);
       });
 
-      expect(subscribeCalls).toBeGreaterThan(0);
+      expect(liveStream.getAttachCount()).toBe(1);
       expect(sendCalls).toBe(1);
     } finally {
       await harness.unmount();
@@ -126,7 +123,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
-      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
@@ -134,23 +130,15 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("does not add a duplicate session observer during startup loading", async () => {
-    let subscribeCalls = 0;
+  test("keeps one ordered live-session attachment during startup loading", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
-    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
-    const originalListSessionRuntimeSnapshots =
-      opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.agentSessionUpsert = async () => {};
-    OpencodeSdkAdapter.prototype.subscribeEvents = async () => {
-      subscribeCalls += 1;
-      return () => {};
-    };
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
@@ -158,35 +146,33 @@ describe("use-agent-orchestrator-operations start and send", () => {
       defaultModelsByProvider: {},
       profiles: [],
     });
-    opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = async () => [
-      createAgentSessionRuntimeSnapshotFixture({
-        snapshot: {
-          title: "PLANNER task-1",
-          runtimeActivity: "running",
-        },
+    const liveStream = createLiveSessionStreamFixture([
+      createAgentSessionLiveSnapshotFixture({
+        title: "PLANNER task-1",
+        activity: "running",
       }),
-    ];
+    ]);
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
     });
 
     try {
       await harness.mount();
       await harness.waitFor((state) => listHarnessSessions(state).length === 1);
 
-      expect(subscribeCalls).toBe(1);
+      expect(liveStream.getAttachCount()).toBe(1);
+      expect(liveStream.getSubscribeCount()).toBe(1);
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
       host.agentSessionUpsert = originalAgentSessionUpsert;
-      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
-      opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
     }
   });
 
@@ -201,7 +187,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
-    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
@@ -217,7 +202,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
     });
-    OpencodeSdkAdapter.prototype.subscribeEvents = async () => () => {};
     OpencodeSdkAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
@@ -231,11 +215,13 @@ describe("use-agent-orchestrator-operations start and send", () => {
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
 
     const unavailableTask = createUnavailableBuildTaskFixture();
+    const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [unavailableTask],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
     });
 
     try {
@@ -269,7 +255,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
-      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
@@ -291,7 +276,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
-    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -338,8 +322,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
         status: "idle",
       } as const;
     };
-    OpencodeSdkAdapter.prototype.subscribeEvents =
-      async (_externalSessionId, _listener) => () => {};
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
       defaultModelsByProvider: {},
@@ -399,7 +381,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
 
       OpencodeSdkAdapter.prototype.startSession = originalStartSession;
-      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }
@@ -427,7 +408,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalBuildStart = host.buildStart;
 
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
-    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -468,8 +448,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       startCalls += 1;
       return startDeferred.promise;
     };
-    OpencodeSdkAdapter.prototype.subscribeEvents =
-      async (_externalSessionId, _listener) => () => {};
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
       defaultModelsByProvider: {},
@@ -534,7 +512,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.buildStart = originalBuildStart;
 
       OpencodeSdkAdapter.prototype.startSession = originalStartSession;
-      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }
@@ -604,14 +581,20 @@ describe("use-agent-orchestrator-operations start and send", () => {
       profiles: [],
     });
 
+    const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
+
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
     });
 
     try {
       await harness.mount();
+      await harness.waitFor((state) =>
+        listHarnessSessions(state).some((entry) => entry.externalSessionId === "external-1"),
+      );
 
       let externalSessionId = "";
       await harness.run(async () => {
@@ -630,9 +613,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
       expect(externalSessionId).toBe("external-1");
       expect(startCalls).toBe(0);
-      await harness.waitFor((state) =>
-        listHarnessSessions(state).some((entry) => entry.externalSessionId === "external-1"),
-      );
     } finally {
       await harness.unmount();
 

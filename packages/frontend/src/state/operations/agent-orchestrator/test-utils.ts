@@ -18,7 +18,6 @@ import {
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { createSessionObservers, type SessionObservers } from "./support/session-observers";
 
 const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   title: "Task",
@@ -27,34 +26,6 @@ const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
 };
 
 export const createDeferred = createSharedDeferred;
-
-type SessionObserversFixture = {
-  externalSessionId?: string;
-  repoPath?: string;
-  runtimeKind?: SessionRef["runtimeKind"];
-  workingDirectory?: string;
-};
-
-const toSessionObserverFixtureRef = ({
-  externalSessionId = "external-1",
-  repoPath = "/tmp/repo",
-  runtimeKind = "opencode",
-  workingDirectory = "/tmp/repo/worktree",
-}: SessionObserversFixture): SessionRef => ({
-  externalSessionId,
-  repoPath,
-  runtimeKind,
-  workingDirectory,
-});
-
-export const createSessionObserversRefFixture = (): { current: SessionObservers } => ({
-  current: createSessionObservers(),
-});
-
-export const hasSessionObserverFixture = (
-  observers: SessionObservers,
-  observer: SessionObserversFixture,
-): boolean => observers.has(toSessionObserverFixtureRef(observer));
 
 export const withTimeout = async <T>(
   promise: Promise<T>,

@@ -13,7 +13,6 @@ type CodexLocalSessionStateDeps = {
   threadStatusOverrides: { clear(runtimeId: string, threadId: string): void };
   runtimeEvents: {
     clearSession(externalSessionId: string, runtimeId?: string): void;
-    replayBufferedStreamEvents(externalSessionId: string): Promise<void>;
     stopRuntimeEventSubscription(runtimeId: string): void;
   };
 };
@@ -33,7 +32,6 @@ export class CodexLocalSessionState implements CodexSessionLookup {
 
   remember(session: CodexSessionState): void {
     this.sessions.set(session.threadId, session);
-    void this.deps.runtimeEvents.replayBufferedStreamEvents(session.threadId);
   }
 
   values(): IterableIterator<CodexSessionState> {
@@ -46,6 +44,21 @@ export class CodexLocalSessionState implements CodexSessionLookup {
       this.deps.runtimeEvents.stopRuntimeEventSubscription(session.runtimeId);
     }
     return session;
+  }
+
+  releaseRuntime(runtimeId: string): CodexSessionState[] {
+    const released: CodexSessionState[] = [];
+    for (const session of [...this.sessions.values()]) {
+      if (session.runtimeId !== runtimeId) {
+        continue;
+      }
+      const cleared = this.clearSessionState(session.threadId);
+      if (cleared) {
+        released.push(cleared);
+      }
+    }
+    this.deps.runtimeEvents.stopRuntimeEventSubscription(runtimeId);
+    return released;
   }
 
   private clearSessionState(externalSessionId: string): CodexSessionState | undefined {

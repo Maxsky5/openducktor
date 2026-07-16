@@ -26,7 +26,6 @@ const createStore = () => {
   const clearedRuntimeEvents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedSubagents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedThreadStatusOverrides: Array<{ runtimeId: string; threadId: string }> = [];
-  const replayedRuntimeEvents: string[] = [];
   const stoppedRuntimeSubscriptions: string[] = [];
   const activeTurnsBySessionId = new Map<string, unknown>();
   const store = new CodexLocalSessionState({
@@ -47,9 +46,6 @@ const createStore = () => {
     runtimeEvents: {
       clearSession: (externalSessionId, runtimeId) =>
         clearedRuntimeEvents.push({ externalSessionId, runtimeId }),
-      replayBufferedStreamEvents: async (externalSessionId) => {
-        replayedRuntimeEvents.push(externalSessionId);
-      },
       stopRuntimeEventSubscription: (runtimeId) => stoppedRuntimeSubscriptions.push(runtimeId),
     },
   });
@@ -61,14 +57,13 @@ const createStore = () => {
     clearedRuntimeEvents,
     clearedSubagents,
     clearedThreadStatusOverrides,
-    replayedRuntimeEvents,
     stoppedRuntimeSubscriptions,
   };
 };
 
 describe("CodexLocalSessionState", () => {
-  test("remembers sessions and replays buffered runtime events", async () => {
-    const { store, replayedRuntimeEvents } = createStore();
+  test("remembers sessions by runtime identity", async () => {
+    const { store } = createStore();
     store.remember(session("thread-1", "runtime-1"));
     store.remember(session("thread-2", "runtime-2"));
     await Promise.resolve();
@@ -76,7 +71,6 @@ describe("CodexLocalSessionState", () => {
     expect(store.get("thread-1")?.runtimeId).toBe("runtime-1");
     expect(store.has("thread-2")).toBe(true);
     expect([...store.values()].map((entry) => entry.threadId)).toEqual(["thread-1", "thread-2"]);
-    expect(replayedRuntimeEvents).toEqual(["thread-1", "thread-2"]);
   });
 
   test("clears local session-scoped state without touching other sessions", () => {
@@ -121,6 +115,38 @@ describe("CodexLocalSessionState", () => {
 
     store.release("thread-1");
 
+    expect(stoppedRuntimeSubscriptions).toEqual(["runtime-1"]);
+  });
+
+  test("releases every local session for one stopped runtime without affecting another", () => {
+    const {
+      store,
+      activeTurnsBySessionId,
+      clearedSessionEvents,
+      clearedRuntimeEvents,
+      stoppedRuntimeSubscriptions,
+    } = createStore();
+    store.remember(session("thread-1", "runtime-1"));
+    store.remember(session("thread-2", "runtime-1"));
+    store.remember(session("thread-3", "runtime-2"));
+    activeTurnsBySessionId.set("thread-1", {});
+    activeTurnsBySessionId.set("thread-2", {});
+    activeTurnsBySessionId.set("thread-3", {});
+
+    expect(store.releaseRuntime("runtime-1").map((entry) => entry.threadId)).toEqual([
+      "thread-1",
+      "thread-2",
+    ]);
+
+    expect([...store.values()].map((entry) => entry.threadId)).toEqual(["thread-3"]);
+    expect(activeTurnsBySessionId.has("thread-1")).toBe(false);
+    expect(activeTurnsBySessionId.has("thread-2")).toBe(false);
+    expect(activeTurnsBySessionId.has("thread-3")).toBe(true);
+    expect(clearedSessionEvents).toEqual(["thread-1", "thread-2"]);
+    expect(clearedRuntimeEvents).toEqual([
+      { externalSessionId: "thread-1", runtimeId: "runtime-1" },
+      { externalSessionId: "thread-2", runtimeId: "runtime-1" },
+    ]);
     expect(stoppedRuntimeSubscriptions).toEqual(["runtime-1"]);
   });
 

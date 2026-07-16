@@ -1,0 +1,679 @@
+import { describe, expect, test } from "bun:test";
+import type {
+  CodexAppServerAdapter,
+  CodexAppServerAdapterOptions,
+} from "@openducktor/adapters-codex-app-server";
+import {
+  type AgentSessionLiveSnapshot,
+  type AgentSessionWorkflowScope,
+  type CodexEffectivePolicy,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type RuntimeInstanceSummary,
+} from "@openducktor/contracts";
+import { Effect } from "effect";
+import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import type { HostError } from "../../effect/host-errors";
+import type {
+  AgentSessionLiveAdapterChange,
+  AgentSessionLiveAdapterMutation,
+} from "../../ports/agent-session-live-adapter-port";
+import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
+import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
+import { createCodexLiveSessionAdapterPreparer } from "./codex-live-session-adapter";
+import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
+
+const runtime: RuntimeInstanceSummary = {
+  kind: "codex",
+  runtimeId: "runtime-1",
+  repoPath: "/repo",
+  taskId: null,
+  role: "workspace",
+  workingDirectory: "/repo",
+  runtimeRoute: { type: "stdio", identity: "runtime-1" },
+  startedAt: "2026-07-16T10:00:00.000Z",
+  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+};
+
+const ref = {
+  repoPath: "/repo",
+  runtimeKind: "codex" as const,
+  workingDirectory: "/repo/worktree",
+  externalSessionId: "thread-1",
+};
+
+const codexPolicy: CodexEffectivePolicy = {
+  sandboxMode: "workspace-write",
+  approvalPolicy: "on-request",
+  approvalsReviewer: "user",
+  commandNetworkAccess: false,
+  approvalsReviewerApplies: true,
+};
+
+const resolveRuntimePolicy = (_scope: AgentSessionWorkflowScope) => Effect.succeed(codexPolicy);
+
+const liveSnapshot = (): AgentSessionLiveSnapshot => ({
+  ref,
+  activity: "waiting_for_permission",
+  title: "Live Codex session",
+  startedAt: "2026-07-16T10:01:00.000Z",
+  pendingApprovals: [
+    {
+      requestId: "pending-opaque-1",
+      requestType: "command_execution",
+      title: "Run command",
+      command: { command: "bun test", workingDirectory: "/repo/worktree" },
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    },
+  ],
+  pendingQuestions: [],
+  contextUsage: null,
+});
+
+const codexAppServer = {
+  request: () => Effect.dieMessage("Unexpected request"),
+  listLoadedThreads: () => Effect.dieMessage("Unexpected listLoadedThreads"),
+  listThreads: () => Effect.dieMessage("Unexpected listThreads"),
+  respond: () => Effect.dieMessage("Unexpected respond"),
+} satisfies CodexAppServerPort;
+
+const createLifecycle = (changes: AgentSessionLiveAdapterChange[]) =>
+  ({
+    registerRuntimeAdapter: () => Effect.void,
+    releaseRuntime: () => Effect.succeed([]),
+    runAdapterMutation: (mutation) =>
+      mutation.pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            changes.push(...result.changes);
+          }),
+        ),
+        Effect.map((result) => result.value),
+      ),
+  }) satisfies RuntimeLiveSessionLifecyclePort;
+
+const createControllerHarness = (
+  initialSnapshots: AgentSessionLiveSnapshot[] = [liveSnapshot()],
+  releaseRuntime: () => void = () => undefined,
+) => {
+  let options: CodexAppServerAdapterOptions | null = null;
+  let snapshots = initialSnapshots;
+  const rawEvents: unknown[] = [];
+  const liveContextLoads: unknown[] = [];
+  const policyBoundContextLoads: unknown[] = [];
+  const controlInputs = {
+    starts: [] as unknown[],
+    resumes: [] as unknown[],
+    forks: [] as unknown[],
+    sends: [] as unknown[],
+  };
+  const controlSummary = {
+    externalSessionId: "thread-1",
+    runtimeKind: "codex" as const,
+    workingDirectory: "/repo/worktree",
+    title: "Live Codex session",
+    role: "build" as const,
+    startedAt: "2026-07-16T10:01:00.000Z",
+    status: "running" as const,
+  };
+  return {
+    createController: (nextOptions: CodexAppServerAdapterOptions) => {
+      options = nextOptions;
+      return {
+        prepareRuntime: async (runtimeId: string) => {
+          await nextOptions.subscribeEvents?.(runtimeId, (event) => rawEvents.push(event));
+        },
+        listLiveSessionSnapshots: () => snapshots,
+        loadLiveSessionContextUsage: async (input: unknown) => {
+          liveContextLoads.push(input);
+          const usage = { totalTokens: 123, contextWindow: 1_000 };
+          const snapshot = snapshots[0];
+          if (!snapshot) {
+            throw new Error("Expected a retained Codex snapshot before loading context.");
+          }
+          snapshots = [{ ...snapshot, contextUsage: usage }];
+          return usage;
+        },
+        loadSessionContextUsage: async (
+          input: Parameters<CodexAppServerAdapter["loadSessionContextUsage"]>[0],
+        ) => {
+          policyBoundContextLoads.push(input);
+          const usage = { totalTokens: 456, contextWindow: 2_000 };
+          snapshots = [
+            {
+              ...liveSnapshot(),
+              ref: {
+                repoPath: input.repoPath,
+                runtimeKind: "codex",
+                workingDirectory: input.workingDirectory,
+                externalSessionId: input.externalSessionId,
+              },
+              contextUsage: usage,
+            },
+          ];
+          return usage;
+        },
+        replyLiveApproval: async () => {
+          const snapshot = snapshots[0];
+          if (!snapshot) {
+            throw new Error("Expected a retained Codex snapshot before replying to approval.");
+          }
+          snapshots = [
+            {
+              ...snapshot,
+              activity: "running",
+              pendingApprovals: [],
+            },
+          ];
+        },
+        replyLiveQuestion: async () => ({
+          type: "assistant_part" as const,
+          externalSessionId: "thread-1",
+          timestamp: "2026-07-16T10:02:00.000Z",
+          part: {
+            kind: "tool" as const,
+            messageId: "question-1",
+            partId: "question-1",
+            callId: "question-1",
+            tool: "request_user_input",
+            toolType: "question" as const,
+            status: "completed" as const,
+            input: {},
+            output: "{}",
+          },
+        }),
+        releaseRuntime: () => {
+          snapshots = [];
+          releaseRuntime();
+        },
+        startSession: async (input: unknown) => {
+          controlInputs.starts.push(input);
+          return controlSummary;
+        },
+        resumeSession: async (input: unknown) => {
+          controlInputs.resumes.push(input);
+          return controlSummary;
+        },
+        forkSession: async (input: unknown) => {
+          controlInputs.forks.push(input);
+          return controlSummary;
+        },
+        sendUserMessage: async (input: unknown) => {
+          controlInputs.sends.push(input);
+          return {
+            type: "user_message" as const,
+            externalSessionId: "thread-1",
+            timestamp: "2026-07-16T10:02:00.000Z",
+            messageId: "message-1",
+            message: "Hello",
+            parts: [{ kind: "text" as const, text: "Hello" }],
+            state: "queued" as const,
+          };
+        },
+        updateSessionModel: async () => {},
+        stopSession: async () => {
+          snapshots = [];
+        },
+        releaseSession: async () => {
+          snapshots = [];
+        },
+      };
+    },
+    getOptions: () => {
+      if (!options) {
+        throw new Error("Controller was not created.");
+      }
+      return options;
+    },
+    rawEvents,
+    liveContextLoads,
+    policyBoundContextLoads,
+    controlInputs,
+  };
+};
+
+describe("createCodexLiveSessionAdapterPreparer", () => {
+  test("resolves and injects Codex policy behind the normalized control boundary", async () => {
+    const policyScopes: AgentSessionWorkflowScope[] = [];
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        resolveRuntimePolicy: (scope) =>
+          Effect.sync(() => {
+            policyScopes.push(scope);
+            return codexPolicy;
+          }),
+        createController: harness.createController,
+      })(runtime),
+    );
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+
+    await Effect.runPromise(
+      prepared.adapter.startSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+        sessionScope,
+        systemPrompt: "Build",
+      }),
+    );
+    await Effect.runPromise(prepared.adapter.resumeSession({ ...ref, sessionScope }));
+    await Effect.runPromise(
+      prepared.adapter.forkSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+        sessionScope,
+        systemPrompt: "Build",
+        parentExternalSessionId: "parent-1",
+      }),
+    );
+    await Effect.runPromise(
+      prepared.adapter.sendUserMessage({
+        ...ref,
+        sessionScope,
+        parts: [{ kind: "text", text: "Hello" }],
+      }),
+    );
+
+    expect(policyScopes).toEqual([sessionScope, sessionScope, sessionScope, sessionScope]);
+    for (const inputs of Object.values(harness.controlInputs)) {
+      expect(inputs).toEqual([
+        expect.objectContaining({
+          runtimeKind: "codex",
+          sessionScope,
+          runtimePolicy: { kind: "codex", policy: codexPolicy },
+        }),
+      ]);
+    }
+  });
+
+  test("fails actionably when a direct Codex control omits workflow scope", async () => {
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+
+    await expect(
+      Effect.runPromise(
+        prepared.adapter.sendUserMessage({
+          ...ref,
+          parts: [{ kind: "text", text: "Hello" }],
+        } as never),
+      ),
+    ).rejects.toThrow("requires workflow session scope");
+    expect(harness.controlInputs.sends).toEqual([]);
+  });
+
+  test("releases through the host lifecycle without re-entering its coordinator", async () => {
+    const events: unknown[] = [];
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      publish: (event) => events.push(event),
+    });
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: service,
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+
+    await expect(
+      Effect.runPromise(service.releaseRuntime("runtime-1").pipe(Effect.timeout("100 millis"))),
+    ).resolves.toEqual([ref]);
+    expect(events.at(-1)).toMatchObject({ type: "session_removed", ref });
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
+  });
+
+  test("clears the retained projection when controller cleanup fails", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness([liveSnapshot()], () => {
+      throw new Error("controller cleanup failed");
+    });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    await expect(Effect.runPromise(prepared.adapter.releaseRuntime())).rejects.toThrow(
+      "controller cleanup failed",
+    );
+
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([]);
+  });
+
+  test("rehydrates three retained pending approvals in the first snapshot after renderer reload", async () => {
+    const snapshots = Array.from({ length: 3 }, (_, index) => {
+      const sessionNumber = index + 1;
+      const snapshot = liveSnapshot();
+      return {
+        ...snapshot,
+        ref: {
+          ...snapshot.ref,
+          externalSessionId: `thread-${sessionNumber}`,
+        },
+        title: `Live Codex session ${sessionNumber}`,
+        pendingApprovals: snapshot.pendingApprovals.map((approval) => ({
+          ...approval,
+          requestId: `pending-opaque-${sessionNumber}`,
+        })),
+      } satisfies AgentSessionLiveSnapshot;
+    });
+    const events: unknown[] = [];
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      publish: (event) => events.push(event),
+    });
+    const harness = createControllerHarness(snapshots);
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: service,
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots,
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+
+    await Effect.runPromise(service.attach({ attachmentId: "first-renderer", repoPath: "/repo" }));
+    await Effect.runPromise(service.detach({ attachmentId: "first-renderer" }));
+    await Effect.runPromise(
+      service.attach({ attachmentId: "reloaded-renderer", repoPath: "/repo" }),
+    );
+
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({
+      type: "snapshot",
+      attachmentId: "reloaded-renderer",
+      sessions: snapshots,
+    });
+    expect(harness.liveContextLoads).toEqual([]);
+    expect(harness.policyBoundContextLoads).toEqual([]);
+  });
+
+  test("prepares observation before transport delivery and atomically forwards the first projection", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+
+    prepared.emitRuntimeEvent({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      receivedAt: "2026-07-16T10:01:30.000Z",
+      message: {
+        method: "thread/status/changed",
+        params: { threadId: "thread-1", status: { type: "idle" } },
+      },
+    });
+    expect(harness.rawEvents).toHaveLength(1);
+
+    const firstMutation = harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    await Promise.resolve();
+    expect(changes).toEqual([]);
+
+    await Effect.runPromise(prepared.startForwarding());
+    await firstMutation;
+    expect(changes).toEqual([{ type: "session_upsert", snapshot: liveSnapshot() }]);
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([liveSnapshot()]);
+
+    const removeMutation = harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots: [],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    await removeMutation;
+    expect(changes.at(-1)).toEqual({ type: "session_removed", ref });
+  });
+
+  test("rejects malformed transcript events without partially committing a mutation", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    await expect(
+      harness.getOptions().onLiveSessionMutation?.({
+        runtimeId: "runtime-1",
+        snapshots: [liveSnapshot()],
+        transcriptEvents: [{ type: "session_status" } as never],
+        catalogInvalidated: false,
+      }),
+    ).rejects.toThrow("externalSessionId");
+    expect(changes).toEqual([]);
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([]);
+  });
+
+  test("drops an in-flight projection after runtime release", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    let allowMutation: () => void = () => undefined;
+    let signalMutationStarted: () => void = () => undefined;
+    const mutationBarrier = new Promise<void>((resolve) => {
+      allowMutation = resolve;
+    });
+    const mutationStarted = new Promise<void>((resolve) => {
+      signalMutationStarted = resolve;
+    });
+    const lifecycle = {
+      registerRuntimeAdapter: () => Effect.void,
+      releaseRuntime: () => Effect.succeed([]),
+      runAdapterMutation: <Success>(
+        mutation: Effect.Effect<AgentSessionLiveAdapterMutation<Success>, HostError>,
+      ) =>
+        Effect.gen(function* () {
+          signalMutationStarted();
+          yield* Effect.promise(() => mutationBarrier);
+          const result = yield* mutation;
+          changes.push(...result.changes);
+          return result.value;
+        }),
+    } satisfies RuntimeLiveSessionLifecyclePort;
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: lifecycle,
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    const mutation = harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    await mutationStarted;
+    await Effect.runPromise(prepared.adapter.releaseRuntime());
+    allowMutation();
+    await mutation;
+
+    expect(changes).toEqual([]);
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([]);
+  });
+
+  test("commits context and pending replies while leaving runtime removal to the lifecycle", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    changes.splice(0);
+
+    await expect(Effect.runPromise(prepared.adapter.loadContext({ ...ref }))).resolves.toEqual({
+      totalTokens: 123,
+      contextWindow: 1_000,
+    });
+    expect(harness.liveContextLoads).toHaveLength(1);
+    expect(harness.policyBoundContextLoads).toEqual([]);
+    expect(changes.at(-1)).toMatchObject({
+      type: "session_upsert",
+      snapshot: { contextUsage: { totalTokens: 123, contextWindow: 1_000 } },
+    });
+
+    await Effect.runPromise(
+      prepared.adapter.replyApproval({
+        ...ref,
+        requestId: "pending-opaque-1",
+        outcome: "approve_once",
+      }),
+    );
+    expect(changes.at(-1)).toMatchObject({
+      type: "session_upsert",
+      snapshot: { pendingApprovals: [] },
+    });
+
+    const changeCountBeforeRelease = changes.length;
+    const releasedRefs = await Effect.runPromise(prepared.adapter.releaseRuntime());
+    expect(releasedRefs).toEqual([ref]);
+    expect(changes).toHaveLength(changeCountBeforeRelease);
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([]);
+  });
+
+  test("loads an unmatched persisted session with host-resolved workflow policy", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness([]);
+    const policyScopes: AgentSessionWorkflowScope[] = [];
+    const qaPolicy: CodexEffectivePolicy = {
+      ...codexPolicy,
+      approvalPolicy: "never",
+      approvalsReviewerApplies: false,
+    };
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        resolveRuntimePolicy: (scope) =>
+          Effect.sync(() => {
+            policyScopes.push(scope);
+            return scope.role === "qa" ? qaPolicy : codexPolicy;
+          }),
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const persistedRef = {
+      ...ref,
+      externalSessionId: "persisted-thread",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" } as const,
+    };
+
+    await expect(Effect.runPromise(prepared.adapter.loadContext(persistedRef))).resolves.toEqual({
+      totalTokens: 456,
+      contextWindow: 2_000,
+    });
+    expect(policyScopes).toEqual([persistedRef.sessionScope]);
+    expect(harness.liveContextLoads).toEqual([]);
+    expect(harness.policyBoundContextLoads).toEqual([
+      expect.objectContaining({
+        ...persistedRef,
+        runtimePolicy: { kind: "codex", policy: qaPolicy },
+      }),
+    ]);
+    expect(changes.at(-1)).toMatchObject({
+      type: "session_upsert",
+      snapshot: {
+        ref: expect.objectContaining({ externalSessionId: "persisted-thread" }),
+        contextUsage: { totalTokens: 456, contextWindow: 2_000 },
+      },
+    });
+  });
+
+  test("rejects an unmatched context load without workflow scope", async () => {
+    const harness = createControllerHarness([]);
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+
+    await expect(
+      Effect.runPromise(
+        prepared.adapter.loadContext({ ...ref, externalSessionId: "persisted-thread" }),
+      ),
+    ).rejects.toThrow("requires workflow session scope");
+    expect(harness.liveContextLoads).toEqual([]);
+    expect(harness.policyBoundContextLoads).toEqual([]);
+  });
+});

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
-import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
@@ -45,7 +44,7 @@ describe("Codex App Server request parsing", () => {
     });
   });
 
-  test("keeps numeric string request ids distinct from numeric request ids", () => {
+  test("keeps native request ids out of pending projections", () => {
     const numericApproval = toApprovalRequest({
       id: 53,
       method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
@@ -73,10 +72,12 @@ describe("Codex App Server request parsing", () => {
       },
     });
 
-    expect(numericApproval.requestId).toBe(codexServerRequestKey(53));
-    expect(stringApproval.requestId).toBe(codexServerRequestKey("53"));
-    expect(stringQuestion.request.requestId).toBe(codexServerRequestKey("53"));
-    expect(numericApproval.requestId).not.toBe(stringApproval.requestId);
+    expect(numericApproval).not.toHaveProperty("requestId");
+    expect(numericApproval).not.toHaveProperty("metadata.codexServerRequestId");
+    expect(stringApproval).not.toHaveProperty("requestId");
+    expect(stringApproval).not.toHaveProperty("metadata.codexMethod");
+    expect(stringQuestion.request).not.toHaveProperty("requestId");
+    expect(stringQuestion.serverRequestId).toBe("53");
   });
 
   test("extracts legacy conversation ids as thread identifiers", () => {
@@ -91,10 +92,10 @@ describe("Codex MCP approval requests", () => {
     );
 
     expect(approval).toMatchObject({
-      requestId: "7",
       requestType: "runtime_tool",
       supportedReplyOutcomes: ["approve_once", "approve_session", "approve_always", "reject"],
       tool: { name: "search", title: "search" },
+      metadata: { serverName: "semble" },
     });
   });
 
@@ -250,7 +251,6 @@ describe("Codex MCP approval requests", () => {
     };
 
     expect(toApprovalRequest(request, "build")).toMatchObject({
-      requestId: "network-request-1",
       requestType: "command_execution",
       title: "Network access approval requested",
       summary: "Allow a shell network check?",

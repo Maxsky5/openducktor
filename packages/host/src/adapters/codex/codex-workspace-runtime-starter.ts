@@ -1,8 +1,7 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { Readable, Writable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
-import { Effect, Exit, Scope } from "effect";
+import { Cause, Effect, Exit, Scope } from "effect";
 import {
   HostOperationError,
   HostResourceError,
@@ -15,21 +14,18 @@ import {
   type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
-  waitForChildProcessClose,
 } from "../../infrastructure/process/process-tree";
+import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import type { CodexLiveSessionAdapterPreparer } from "../agent-sessions/codex-live-session-adapter";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import {
-  buildOpenDucktorMcpBridgeEnvironment,
-  OPENDUCKTOR_MCP_ENV_VAR_NAMES,
-} from "../mcp/openducktor-mcp-environment";
+import { buildOpenDucktorMcpBridgeEnvironment } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
-import type { CodexAppServerEventEmitter } from "./codex-app-server-transport-types";
-
-type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
+import { type CodexChildProcess, cleanupCodexRuntime } from "./codex-workspace-runtime-cleanup";
+import { buildCodexMcpConfigArgs } from "./codex-workspace-runtime-config";
 
 export type CodexMcpBridgeConnection = {
   workspaceId: string;
@@ -45,10 +41,11 @@ export type CodexMcpBridgeConnectionResolver = () => Effect.Effect<
 export type CreateCodexWorkspaceRuntimeStarterInput = {
   toolDiscovery: ToolDiscoveryPort;
   codexAppServer: CodexAppServerTransportRegistry;
+  liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
+  prepareLiveSessionAdapter: CodexLiveSessionAdapterPreparer;
   runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
-  eventEmitter?: CodexAppServerEventEmitter;
   clientVersion?: string;
   requestTimeoutMs?: number;
   stopTimeoutMs?: number;
@@ -61,97 +58,14 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
 const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
-const tomlString = (value: string): string =>
-  value.includes("'") ? `'''${value}'''` : `'${value}'`;
-
-const tomlStringArray = (values: readonly string[]): string =>
-  `[${values.map((value) => tomlString(value)).join(", ")}]`;
-const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
-  const [mcpBinary, ...mcpArgs] = mcpCommand;
-  if (!mcpBinary) {
-    throw new HostValidationError({
-      message: "OpenDucktor MCP command cannot be empty.",
-      field: "mcpCommand",
-    });
-  }
-
-  return [
-    `mcp_servers.openducktor.command=${tomlString(mcpBinary)}`,
-    `mcp_servers.openducktor.args=${tomlStringArray(mcpArgs)}`,
-    `mcp_servers.openducktor.env_vars=${tomlStringArray(OPENDUCKTOR_MCP_ENV_VAR_NAMES)}`,
-    `mcp_servers.openducktor.default_tools_approval_mode=${tomlString("prompt")}`,
-    "mcp_servers.openducktor.enabled=true",
-  ].flatMap((config) => ["--config", config]);
-};
-
-const cleanupCodexRuntime = ({
-  child,
-  closed,
-  codexAppServer,
-  nextRuntimeId,
-  pid,
-  processTreeTerminator,
-  stopTimeoutMs,
-  transport,
-}: {
-  child: CodexChildProcess;
-  closed: () => boolean;
-  codexAppServer: CodexAppServerTransportRegistry;
-  nextRuntimeId: string;
-  pid: number;
-  processTreeTerminator: ProcessTreeTerminator;
-  stopTimeoutMs: number;
-  transport: ReturnType<typeof createCodexAppServerTransport>;
-}) =>
-  Effect.gen(function* () {
-    const errors: string[] = [];
-    codexAppServer.unregisterTransport(nextRuntimeId);
-
-    const pendingRequestExit = yield* Effect.exit(transport.rejectPendingRequestsForShutdown());
-    if (pendingRequestExit._tag === "Failure") {
-      errors.push(`pending requests: ${pendingRequestExit.cause}`);
-    }
-
-    const processExit = yield* Effect.either(
-      processTreeTerminator({
-        pid,
-        label: `Codex app-server runtime ${nextRuntimeId}`,
-        isClosed: closed,
-        waitForExit: (timeoutMs) => waitForChildProcessClose(child, closed, timeoutMs),
-        stopTimeoutMs,
-      }).pipe(
-        Effect.mapError((cause) =>
-          toHostOperationError(cause, "codexWorkspaceRuntime.stopProcess"),
-        ),
-      ),
-    );
-    if (processExit._tag === "Left") {
-      errors.push(`process tree: ${processExit.left.message}`);
-    }
-
-    const transportExit = yield* Effect.exit(transport.close());
-    if (transportExit._tag === "Failure") {
-      errors.push(`transport: ${transportExit.cause}`);
-    }
-
-    if (errors.length > 0) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexWorkspaceRuntime.cleanup",
-          message: errors.join("\n"),
-          details: { runtimeId: nextRuntimeId },
-        }),
-      );
-    }
-  });
-
 export const createCodexWorkspaceRuntimeStarter = ({
   toolDiscovery,
   codexAppServer,
+  liveSessionLifecycle,
+  prepareLiveSessionAdapter,
   resolveMcpBridgeConnection,
   runtimeDistribution,
   processEnv = process.env,
-  eventEmitter,
   clientVersion = processEnv.npm_package_version ?? "0.0.0",
   requestTimeoutMs = DEFAULT_CODEX_REQUEST_TIMEOUT_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
@@ -212,8 +126,111 @@ export const createCodexWorkspaceRuntimeStarter = ({
           }),
       });
       const nextRuntimeId = runtimeId();
+      const runtime = yield* Effect.try({
+        try: () =>
+          runtimeInstanceSummarySchema.parse({
+            kind: "codex",
+            runtimeId: nextRuntimeId,
+            repoPath: input.repoPath,
+            taskId: null,
+            role: "workspace",
+            workingDirectory: input.workingDirectory,
+            runtimeRoute: {
+              type: "stdio",
+              identity: nextRuntimeId,
+            },
+            startedAt: now().toISOString(),
+            descriptor: input.descriptor,
+          } satisfies RuntimeInstanceSummary),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+            details: { runtimeKind: input.runtimeKind, runtimeId: nextRuntimeId },
+          }),
+      });
+      const preparedLiveSession = yield* prepareLiveSessionAdapter(runtime).pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "codexWorkspaceRuntime.prepareLiveSessionAdapter", {
+            runtimeId: nextRuntimeId,
+          }),
+        ),
+      );
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
+      let liveAdapterRegistered = false;
+      let liveAdapterReleaseRequested = false;
+      let liveAdapterReleasePromise: Promise<Exit.Exit<void, HostOperationError>> | null = null;
+      let preparedLiveAdapterDiscardPromise: Promise<Exit.Exit<void, HostOperationError>> | null =
+        null;
+      const startLiveAdapterRelease = (): Promise<Exit.Exit<void, HostOperationError>> => {
+        if (!liveAdapterReleasePromise) {
+          liveAdapterReleasePromise = Effect.runPromiseExit(
+            liveSessionLifecycle.releaseRuntime(nextRuntimeId).pipe(
+              Effect.asVoid,
+              Effect.mapError((cause) =>
+                toHostOperationError(cause, "codexWorkspaceRuntime.releaseLiveSessionAdapter", {
+                  runtimeId: nextRuntimeId,
+                }),
+              ),
+            ),
+          );
+        }
+        return liveAdapterReleasePromise;
+      };
+      const requestLiveAdapterRelease = (): void => {
+        liveAdapterReleaseRequested = true;
+        if (liveAdapterRegistered) {
+          void startLiveAdapterRelease();
+        }
+      };
+      const startPreparedLiveAdapterDiscard = (): Promise<Exit.Exit<void, HostOperationError>> => {
+        if (!preparedLiveAdapterDiscardPromise) {
+          preparedLiveAdapterDiscardPromise = Effect.runPromiseExit(
+            preparedLiveSession.discard().pipe(
+              Effect.mapError((cause) =>
+                toHostOperationError(cause, "codexWorkspaceRuntime.discardLiveSessionAdapter", {
+                  runtimeId: nextRuntimeId,
+                }),
+              ),
+            ),
+          );
+        }
+        return preparedLiveAdapterDiscardPromise;
+      };
+      const awaitLiveAdapterCleanup = Effect.suspend(() =>
+        Effect.promise(() =>
+          liveAdapterRegistered ? startLiveAdapterRelease() : startPreparedLiveAdapterDiscard(),
+        ).pipe(
+          Effect.flatMap((exit) =>
+            Exit.isFailure(exit)
+              ? Effect.fail(
+                  new HostOperationError({
+                    operation: "codexWorkspaceRuntime.releaseLiveSessionState",
+                    message: Cause.pretty(exit.cause),
+                    details: { runtimeId: nextRuntimeId },
+                  }),
+                )
+              : Effect.void,
+          ),
+        ),
+      );
+      const failAfterLiveAdapterCleanup = (failure: HostOperationError) =>
+        Effect.gen(function* () {
+          const cleanup = yield* Effect.either(awaitLiveAdapterCleanup);
+          if (cleanup._tag === "Left") {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: failure.operation,
+                message: `${failure.message}\nCleanup failed: ${cleanup.left.message}`,
+                cause: failure,
+                details: { runtimeId: nextRuntimeId },
+              }),
+            );
+          }
+          return yield* Effect.fail(failure);
+        });
+      yield* Scope.addFinalizer(runtimeScope, awaitLiveAdapterCleanup.pipe(Effect.ignore));
       const child = yield* Effect.try({
         try: () =>
           spawn(command.command, command.args, {
@@ -241,15 +258,24 @@ export const createCodexWorkspaceRuntimeStarter = ({
       }
 
       let closed = false;
-      child.once("close", () => {
+      let stopping = false;
+      let closeDescription: string | null = null;
+      child.once("close", (exitCode, signal) => {
         closed = true;
+        closeDescription =
+          signal === null
+            ? `process exited with code ${exitCode}`
+            : `process exited from signal ${signal}`;
+        if (!stopping) {
+          requestLiveAdapterRelease();
+        }
       });
 
       const transport = createCodexAppServerTransport(
         nextRuntimeId,
         child,
         requestTimeoutMs,
-        eventEmitter,
+        preparedLiveSession.emitRuntimeEvent,
       );
       codexAppServer.registerTransport(nextRuntimeId, transport);
 
@@ -269,7 +295,25 @@ export const createCodexWorkspaceRuntimeStarter = ({
           return;
         }
         released = true;
-        yield* cleanup;
+        stopping = true;
+        const liveExit = yield* Effect.exit(awaitLiveAdapterCleanup);
+        const cleanupExit = yield* Effect.exit(cleanup);
+        const errors: string[] = [];
+        if (liveExit._tag === "Failure") {
+          errors.push(`live session: ${liveExit.cause}`);
+        }
+        if (cleanupExit._tag === "Failure") {
+          errors.push(`runtime: ${cleanupExit.cause}`);
+        }
+        if (errors.length > 0) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "codexWorkspaceRuntime.close",
+              message: errors.join("\n"),
+              details: { runtimeId: nextRuntimeId },
+            }),
+          );
+        }
       });
       yield* Scope.addFinalizer(runtimeScope, closeRuntime.pipe(Effect.ignore));
 
@@ -307,30 +351,64 @@ export const createCodexWorkspaceRuntimeStarter = ({
         }
         return yield* Effect.fail(initialized.left);
       }
-
-      const runtime = yield* Effect.try({
-        try: () =>
-          runtimeInstanceSummarySchema.parse({
-            kind: "codex",
-            runtimeId: nextRuntimeId,
-            repoPath: input.repoPath,
-            taskId: null,
-            role: "workspace",
-            workingDirectory: input.workingDirectory,
-            runtimeRoute: {
-              type: "stdio",
-              identity: nextRuntimeId,
-            },
-            startedAt: now().toISOString(),
-            descriptor: input.descriptor,
-          } satisfies RuntimeInstanceSummary),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: { runtimeKind: input.runtimeKind, runtimeId: nextRuntimeId },
+      if (closed) {
+        return yield* failAfterLiveAdapterCleanup(
+          new HostOperationError({
+            operation: "codexWorkspaceRuntime.registerLiveSessionAdapter",
+            message: `Codex process exited before its live-session adapter was registered: ${
+              closeDescription ?? "process exited"
+            }`,
+            details: { runtimeId: nextRuntimeId, closeDescription },
           }),
-      });
+        );
+      }
+      const registration = yield* Effect.either(
+        liveSessionLifecycle.registerRuntimeAdapter(preparedLiveSession.adapter).pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(cause, "codexWorkspaceRuntime.registerLiveSessionAdapter", {
+              runtimeId: nextRuntimeId,
+            }),
+          ),
+        ),
+      );
+      if (registration._tag === "Left") {
+        return yield* failAfterLiveAdapterCleanup(registration.left);
+      }
+      liveAdapterRegistered = true;
+      if (closed || liveAdapterReleaseRequested) {
+        return yield* failAfterLiveAdapterCleanup(
+          new HostOperationError({
+            operation: "codexWorkspaceRuntime.registerLiveSessionAdapter",
+            message: `Codex process exited while its live-session adapter was being registered: ${
+              closeDescription ?? "process exited"
+            }`,
+            details: { runtimeId: nextRuntimeId, closeDescription },
+          }),
+        );
+      }
+      const forwarding = yield* Effect.either(
+        preparedLiveSession.startForwarding().pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(cause, "codexWorkspaceRuntime.startLiveSessionForwarding", {
+              runtimeId: nextRuntimeId,
+            }),
+          ),
+        ),
+      );
+      if (forwarding._tag === "Left") {
+        return yield* failAfterLiveAdapterCleanup(forwarding.left);
+      }
+      if (closed || liveAdapterReleaseRequested) {
+        return yield* failAfterLiveAdapterCleanup(
+          new HostOperationError({
+            operation: "codexWorkspaceRuntime.startLiveSessionForwarding",
+            message: `Codex process exited while live-session forwarding was starting: ${
+              closeDescription ?? "process exited"
+            }`,
+            details: { runtimeId: nextRuntimeId, closeDescription },
+          }),
+        );
+      }
 
       return {
         runtime,

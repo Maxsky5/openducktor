@@ -23,7 +23,6 @@ export type BufferedHostEventReplay = {
   events: BufferedHostEvent[];
   skippedEventCount: number;
 };
-type JsonRpcRequestId = string | number;
 type StopTypescriptHostBackendServicesInput = {
   disposeHost: () => Effect.Effect<void, unknown>;
   resolveExited: (exitCode: number) => void;
@@ -31,59 +30,13 @@ type StopTypescriptHostBackendServicesInput = {
 };
 
 const EVENT_BUFFER_CAPACITY = 256;
-const CODEX_APP_SERVER_EVENT_CHANNEL = "openducktor://codex-app-server-event";
 
 export const STREAM_PATH_TO_CHANNEL = new Map<string, HostEventChannel>([
   ["events", "openducktor://run-event"],
+  ["agent-session-live-events", "openducktor://agent-session-live-event"],
   ["dev-server-events", "openducktor://dev-server-event"],
   ["task-events", "openducktor://task-event"],
-  ["codex-app-server-events", CODEX_APP_SERVER_EVENT_CHANNEL],
 ]);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isJsonRpcRequestId = (value: unknown): value is JsonRpcRequestId =>
-  typeof value === "string" || typeof value === "number";
-
-const readCodexServerRequestRef = (
-  value: unknown,
-): { runtimeId: string; requestId: JsonRpcRequestId } | null => {
-  if (!isRecord(value) || value.kind !== "server_request" || typeof value.runtimeId !== "string") {
-    return null;
-  }
-  const message = value.message;
-  if (!isRecord(message) || !isJsonRpcRequestId(message.id)) {
-    return null;
-  }
-  return { runtimeId: value.runtimeId, requestId: message.id };
-};
-
-const readResolvedCodexServerRequestRef = (
-  value: unknown,
-): { runtimeId: string; requestId: JsonRpcRequestId } | null => {
-  if (!isRecord(value) || value.kind !== "notification" || typeof value.runtimeId !== "string") {
-    return null;
-  }
-  const message = value.message;
-  if (!isRecord(message) || message.method !== "serverRequest/resolved") {
-    return null;
-  }
-  const params = message.params;
-  if (!isRecord(params)) {
-    return null;
-  }
-  const requestId = params.requestId ?? params.request_id;
-  return isJsonRpcRequestId(requestId) ? { runtimeId: value.runtimeId, requestId } : null;
-};
-
-const isMatchingCodexServerRequestEvent =
-  (runtimeId: string, requestId: JsonRpcRequestId) =>
-  (event: BufferedHostEvent): boolean => {
-    const payload = JSON.parse(event.payload) as unknown;
-    const ref = readCodexServerRequestRef(payload);
-    return ref?.runtimeId === runtimeId && ref.requestId === requestId;
-  };
 
 export class BufferedHostEventStream {
   private nextId = 0;
@@ -107,30 +60,15 @@ export class BufferedHostEventStream {
     }
   }
 
-  removeRecent(predicate: (event: BufferedHostEvent) => boolean): void {
-    for (let index = this.recent.length - 1; index >= 0; index -= 1) {
-      const event = this.recent[index];
-      if (event && predicate(event)) {
-        this.recent.splice(index, 1);
-      }
-    }
-  }
-
-  replayAfter(
-    lastSeenId: number | null,
-    options: { includeRecentWhenNoLastEventId?: boolean } = {},
-  ): BufferedHostEvent[] {
+  replayAfter(lastSeenId: number | null): BufferedHostEvent[] {
     if (lastSeenId === null) {
-      return options.includeRecentWhenNoLastEventId ? [...this.recent] : [];
+      return [];
     }
     return this.recent.filter((event) => event.id > lastSeenId);
   }
 
-  replayAfterWithDiagnostics(
-    lastSeenId: number | null,
-    options: { includeRecentWhenNoLastEventId?: boolean } = {},
-  ): BufferedHostEventReplay {
-    const events = this.replayAfter(lastSeenId, options);
+  replayAfterWithDiagnostics(lastSeenId: number | null): BufferedHostEventReplay {
+    const events = this.replayAfter(lastSeenId);
     if (lastSeenId === null) {
       return { events, skippedEventCount: 0 };
     }
@@ -160,9 +98,6 @@ export class BufferedHostEventBus implements HostEventBusPort {
 
   publish(channel: string, payload: unknown): void {
     const hostChannel = this.requireChannel(channel);
-    if (hostChannel === CODEX_APP_SERVER_EVENT_CHANNEL) {
-      this.forgetResolvedCodexAppServerRequest(payload);
-    }
     this.streamFor(hostChannel).emit(payload);
     const listeners = this.listenersByChannel.get(hostChannel);
     if (!listeners) {
@@ -195,20 +130,6 @@ export class BufferedHostEventBus implements HostEventBusPort {
     const stream = new BufferedHostEventStream(EVENT_BUFFER_CAPACITY);
     this.streams.set(channel, stream);
     return stream;
-  }
-
-  forgetCodexAppServerRequest(runtimeId: string, requestId: JsonRpcRequestId): void {
-    this.streams
-      .get(CODEX_APP_SERVER_EVENT_CHANNEL)
-      ?.removeRecent(isMatchingCodexServerRequestEvent(runtimeId, requestId));
-  }
-
-  private forgetResolvedCodexAppServerRequest(payload: unknown): void {
-    const ref = readResolvedCodexServerRequestRef(payload);
-    if (!ref) {
-      return;
-    }
-    this.forgetCodexAppServerRequest(ref.runtimeId, ref.requestId);
   }
 
   private requireChannel(channel: string): HostEventChannel {

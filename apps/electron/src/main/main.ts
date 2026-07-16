@@ -49,6 +49,11 @@ import {
 } from "./app-updates/electron-app-update-service";
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
+import {
+  createElectronAgentSessionLiveAttachmentRegistry,
+  createElectronAgentSessionLiveLifecycleHandlers,
+  type ElectronAgentSessionLiveAttachmentRegistry,
+} from "./electron-agent-session-live-attachments";
 import { configureElectronAppIdentity } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import {
@@ -111,6 +116,7 @@ const shutdownController = createElectronMainShutdownController({
 });
 
 type ElectronPreReadyRuntime = {
+  agentSessionLiveAttachments: ElectronAgentSessionLiveAttachmentRegistry;
   hostCommandRouter: EffectHostCommandRouter;
 };
 
@@ -214,8 +220,15 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
       catch: (cause) =>
         mapStartupPreparationError(cause, "electron.main.create-host-router", errorMessage(cause)),
     });
+    const agentSessionLiveAttachments = createElectronAgentSessionLiveAttachmentRegistry({
+      detachAttachment: async (input) => {
+        await runElectronEffect(
+          hostCommandRouter.invoke("agent_session_live_detach", { ...input }),
+        );
+      },
+    });
     activeHostCommandRouter = hostCommandRouter;
-    return { hostCommandRouter };
+    return { agentSessionLiveAttachments, hostCommandRouter };
   });
 
 const getPreloadPath = (): string => path.join(distDirectory, "preload.cjs");
@@ -312,6 +325,7 @@ const openExternalUrlEffect = (
 
 const createMainWindowEffect = (
   rendererSession: ElectronSession,
+  agentSessionLiveAttachments: ElectronAgentSessionLiveAttachmentRegistry,
 ): Effect.Effect<ElectronBrowserWindow, ElectronOperationError> =>
   Effect.gen(function* () {
     const window = yield* Effect.try({
@@ -343,6 +357,25 @@ const createMainWindowEffect = (
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => {
       event.preventDefault();
+    });
+    const liveSessionLifecycle = createElectronAgentSessionLiveLifecycleHandlers({
+      ownerId: window.webContents.id,
+      registry: agentSessionLiveAttachments,
+      onCleanupError: (cause) => {
+        electronMainLogger.error("Electron live-session attachment cleanup failed", cause);
+      },
+    });
+    window.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+      void liveSessionLifecycle.onMainFrameNavigation({
+        isInPlace,
+        isMainFrame,
+      });
+    });
+    window.webContents.on("render-process-gone", () => {
+      void liveSessionLifecycle.onRenderProcessGone();
+    });
+    window.webContents.on("destroyed", () => {
+      void liveSessionLifecycle.onDestroyed();
     });
     registerWindowContextMenu(window, { isDevelopment });
     window.on("close", (event) => {
@@ -385,14 +418,31 @@ const createMainWindowEffect = (
     return window;
   });
 
-const createMainWindow = (rendererSession: ElectronSession): Promise<ElectronBrowserWindow> =>
-  runElectronEffect(createMainWindowEffect(rendererSession));
+const createMainWindow = (
+  rendererSession: ElectronSession,
+  agentSessionLiveAttachments: ElectronAgentSessionLiveAttachmentRegistry,
+): Promise<ElectronBrowserWindow> =>
+  runElectronEffect(createMainWindowEffect(rendererSession, agentSessionLiveAttachments));
 
-const registerHostEventForwarding = (): void => {
+const registerHostEventForwarding = (
+  agentSessionLiveAttachments: ElectronAgentSessionLiveAttachmentRegistry,
+): void => {
   for (const channel of HOST_EVENT_CHANNELS) {
     hostEventBus.subscribe(channel, (payload) => {
       const envelope: ElectronHostEventEnvelope = { channel, payload };
       for (const window of BrowserWindow.getAllWindows()) {
+        if (window.isDestroyed() || window.webContents.isDestroyed()) {
+          continue;
+        }
+        if (
+          !agentSessionLiveAttachments.shouldDeliverHostEvent(
+            window.webContents.id,
+            channel,
+            payload,
+          )
+        ) {
+          continue;
+        }
         window.webContents.send(ELECTRON_HOST_EVENT_CHANNEL, envelope);
       }
     });
@@ -545,9 +595,12 @@ const createRejectedAppUpdateCommandResult = (
 const registerIpcHandlers = (
   hostCommandRouter: EffectHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
+  agentSessionLiveAttachments: ElectronAgentSessionLiveAttachmentRegistry,
 ): void => {
-  ipcMain.handle(ELECTRON_HOST_INVOKE_CHANNEL, async (_event, request: ElectronHostInvokeRequest) =>
-    runElectronEffect(hostCommandRouter.invoke(request.command, request.args)),
+  ipcMain.handle(ELECTRON_HOST_INVOKE_CHANNEL, async (event, request: ElectronHostInvokeRequest) =>
+    agentSessionLiveAttachments.invoke(event.sender.id, request, () =>
+      runElectronEffect(hostCommandRouter.invoke(request.command, request.args)),
+    ),
   );
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {
@@ -684,6 +737,7 @@ const waitForElectronReadyEffect = (): Effect.Effect<void, ElectronLifecycleErro
   });
 
 const configureElectronReadyRuntimeEffect = ({
+  agentSessionLiveAttachments,
   hostCommandRouter,
 }: ElectronPreReadyRuntime): Effect.Effect<
   ElectronReadyRuntime,
@@ -737,11 +791,11 @@ const configureElectronReadyRuntimeEffect = ({
           void appUpdateService.check({ initiator: "menu" });
         },
       });
-      registerIpcHandlers(hostCommandRouter, appUpdateService);
-      registerHostEventForwarding();
+      registerIpcHandlers(hostCommandRouter, appUpdateService, agentSessionLiveAttachments);
+      registerHostEventForwarding(agentSessionLiveAttachments);
       registerAppUpdateStateForwarding(appUpdateService);
       configureElectronDockIcon();
-      return { appUpdateService, hostCommandRouter, rendererSession };
+      return { agentSessionLiveAttachments, appUpdateService, hostCommandRouter, rendererSession };
     },
     catch: (cause) =>
       mapStartupPreparationError(
@@ -753,20 +807,20 @@ const configureElectronReadyRuntimeEffect = ({
 
 const startupEffect = composeElectronMainStartupEffect({
   configureReady: configureElectronReadyRuntimeEffect,
-  createMainWindow: ({ appUpdateService, rendererSession }) =>
-    createMainWindowEffect(rendererSession).pipe(
+  createMainWindow: ({ agentSessionLiveAttachments, appUpdateService, rendererSession }) =>
+    createMainWindowEffect(rendererSession, agentSessionLiveAttachments).pipe(
       Effect.tap(() => Effect.sync(() => appUpdateService.startBackgroundChecks())),
       Effect.asVoid,
     ),
   initializeHost: ({ hostCommandRouter }) => initializeHostEffect(hostCommandRouter),
   preparePreReady: prepareElectronPreReadyRuntimeEffect,
-  registerActivateHandler: ({ rendererSession }) => {
+  registerActivateHandler: ({ agentSessionLiveAttachments, rendererSession }) => {
     app.on("activate", () => {
       if (shutdownController.isHostShutdownStarted()) {
         return;
       }
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createMainWindow(rendererSession);
+        void createMainWindow(rendererSession, agentSessionLiveAttachments);
       }
     });
   },

@@ -1,18 +1,55 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AcceptedAgentUserMessage,
   AgentModelDefault,
   AgentPromptOverride,
   AgentPromptTemplateId,
   AgentRole,
   AgentRuntimeConfig,
+  AgentRuntimeEvent,
   AgentRuntimes,
+  AgentSessionActivity,
+  AgentSessionContextUsage,
+  AgentSessionControlForkInput,
+  AgentSessionControlReleaseInput,
+  AgentSessionControlResumeInput,
+  AgentSessionControlSendInput,
+  AgentSessionControlStartInput,
+  AgentSessionControlStopInput,
+  AgentSessionControlSummary,
+  AgentSessionControlUpdateModelInput,
+  AgentSessionLiveAttachInput,
+  AgentSessionLiveDetachInput,
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveListInput,
+  AgentSessionLiveLoadContextInput,
+  AgentSessionLiveLoadContextResult,
+  AgentSessionLivePendingApprovalRequest,
+  AgentSessionLivePendingQuestionRequest,
+  AgentSessionLiveReadInput,
+  AgentSessionLiveReadResult,
+  AgentSessionLiveRef,
+  AgentSessionLiveReplyApprovalInput,
+  AgentSessionLiveReplyQuestionInput,
+  AgentSessionLiveScope,
+  AgentSessionLiveSnapshot,
   AgentSessionModelSelection,
   AgentSessionRecord,
   AgentSessionRole,
   AgentSessionStatus,
   AgentSessionStopTarget,
   AgentSessionTodoPayloadRecord,
+  AgentSessionTranscriptEvent,
+  AgentSessionUserMessagePart,
+  AgentSessionWorkflowScope,
   AgentToolName,
+  AgentTranscriptModelSelection,
+  AgentTranscriptPendingApprovalRequest,
+  AgentTranscriptPendingQuestionRequest,
+  AgentTranscriptSessionStatus,
+  AgentTranscriptSessionTodoItem,
+  AgentTranscriptStreamPart,
+  AgentTranscriptUserMessageDisplayPart,
   AgentWorkflowState,
   AgentWorkflows,
   AppearanceSettings,
@@ -182,11 +219,14 @@ import type {
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "acceptedAgentUserMessageSchema",
   "agentRoleSchema",
   "agentRoleValues",
   "agentModelDefaultSchema",
+  "agentModelSelectionSchema",
   "agentRuntimeConfigSchema",
   "agentRuntimeEnabledConfigSchema",
+  "agentRuntimeEventSchema",
   "agentRuntimesSchema",
   "agentToolNameSchema",
   "agentToolNameValues",
@@ -200,8 +240,33 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentPromptPlaceholderValues",
   "agentPromptTemplateIdSchema",
   "agentPromptTemplateIdValues",
+  "agentSessionActivitySchema",
   "agentSessionApprovalMutationSchema",
   "agentSessionApprovalRequestSchema",
+  "agentSessionContextUsageSchema",
+  "agentSessionControlForkInputSchema",
+  "agentSessionControlReleaseInputSchema",
+  "agentSessionControlResumeInputSchema",
+  "agentSessionControlSendInputSchema",
+  "agentSessionControlStartInputSchema",
+  "agentSessionControlStopInputSchema",
+  "agentSessionControlSummarySchema",
+  "agentSessionControlUpdateModelInputSchema",
+  "agentSessionLiveAttachInputSchema",
+  "agentSessionLiveDetachInputSchema",
+  "agentSessionLiveEnvelopeSchema",
+  "agentSessionLiveListInputSchema",
+  "agentSessionLiveLoadContextInputSchema",
+  "agentSessionLiveLoadContextResultSchema",
+  "agentSessionLivePendingApprovalRequestSchema",
+  "agentSessionLivePendingQuestionRequestSchema",
+  "agentSessionLiveReadInputSchema",
+  "agentSessionLiveReadResultSchema",
+  "agentSessionLiveRefSchema",
+  "agentSessionLiveReplyApprovalInputSchema",
+  "agentSessionLiveReplyQuestionInputSchema",
+  "agentSessionLiveScopeSchema",
+  "agentSessionLiveSnapshotSchema",
   "agentSessionModelSelectionSchema",
   "agentSessionQuestionItemSchema",
   "agentSessionQuestionOptionSchema",
@@ -212,6 +277,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStartModeValues",
   "agentSessionStatusSchema",
   "agentSessionStopTargetSchema",
+  "agentSessionTranscriptEventSchema",
+  "agentSessionUserMessagePartSchema",
+  "agentSessionWorkflowScopeSchema",
   "APP_PLATFORM_VALUES",
   "appUpdateCheckInputSchema",
   "appUpdateCheckInitiatorSchema",
@@ -273,6 +341,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "CODEX_SANDBOX_MODE_VALUES",
   "codexApprovalPolicySchema",
   "codexApprovalsReviewerSchema",
+  "codexEffectivePolicySchema",
   "codexPolicyFieldsSchema",
   "codexRuntimeConfigSchema",
   "codexSandboxModeSchema",
@@ -551,10 +620,47 @@ const EXPECTED_RUNTIME_EXPORTS = [
 ] as const;
 
 type ExportedTypeContract = {
+  AcceptedAgentUserMessage: AcceptedAgentUserMessage;
   AgentRole: AgentRole;
   AgentModelDefault: AgentModelDefault;
   AgentRuntimeConfig: AgentRuntimeConfig;
+  AgentRuntimeEvent: AgentRuntimeEvent;
   AgentRuntimes: AgentRuntimes;
+  AgentSessionActivity: AgentSessionActivity;
+  AgentSessionContextUsage: AgentSessionContextUsage;
+  AgentSessionControlForkInput: AgentSessionControlForkInput;
+  AgentSessionControlReleaseInput: AgentSessionControlReleaseInput;
+  AgentSessionControlResumeInput: AgentSessionControlResumeInput;
+  AgentSessionControlSendInput: AgentSessionControlSendInput;
+  AgentSessionControlStartInput: AgentSessionControlStartInput;
+  AgentSessionControlStopInput: AgentSessionControlStopInput;
+  AgentSessionControlSummary: AgentSessionControlSummary;
+  AgentSessionControlUpdateModelInput: AgentSessionControlUpdateModelInput;
+  AgentSessionLiveAttachInput: AgentSessionLiveAttachInput;
+  AgentSessionLiveDetachInput: AgentSessionLiveDetachInput;
+  AgentSessionLiveEnvelope: AgentSessionLiveEnvelope;
+  AgentSessionLiveListInput: AgentSessionLiveListInput;
+  AgentSessionLiveLoadContextInput: AgentSessionLiveLoadContextInput;
+  AgentSessionLiveLoadContextResult: AgentSessionLiveLoadContextResult;
+  AgentSessionLivePendingApprovalRequest: AgentSessionLivePendingApprovalRequest;
+  AgentSessionLivePendingQuestionRequest: AgentSessionLivePendingQuestionRequest;
+  AgentSessionLiveReadInput: AgentSessionLiveReadInput;
+  AgentSessionLiveReadResult: AgentSessionLiveReadResult;
+  AgentSessionLiveRef: AgentSessionLiveRef;
+  AgentSessionLiveReplyApprovalInput: AgentSessionLiveReplyApprovalInput;
+  AgentSessionLiveReplyQuestionInput: AgentSessionLiveReplyQuestionInput;
+  AgentSessionLiveScope: AgentSessionLiveScope;
+  AgentSessionLiveSnapshot: AgentSessionLiveSnapshot;
+  AgentSessionTranscriptEvent: AgentSessionTranscriptEvent;
+  AgentSessionUserMessagePart: AgentSessionUserMessagePart;
+  AgentSessionWorkflowScope: AgentSessionWorkflowScope;
+  AgentTranscriptPendingApprovalRequest: AgentTranscriptPendingApprovalRequest;
+  AgentTranscriptPendingQuestionRequest: AgentTranscriptPendingQuestionRequest;
+  AgentTranscriptModelSelection: AgentTranscriptModelSelection;
+  AgentTranscriptSessionStatus: AgentTranscriptSessionStatus;
+  AgentTranscriptSessionTodoItem: AgentTranscriptSessionTodoItem;
+  AgentTranscriptStreamPart: AgentTranscriptStreamPart;
+  AgentTranscriptUserMessageDisplayPart: AgentTranscriptUserMessageDisplayPart;
   AgentPromptOverride: AgentPromptOverride;
   AgentPromptTemplateId: AgentPromptTemplateId;
   AutopilotActionId: AutopilotActionId;

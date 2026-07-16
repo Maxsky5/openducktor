@@ -51,6 +51,83 @@ const codexPolicy = (
 });
 
 describe("CodexAppServerAdapter lifecycle", () => {
+  test("prepares one host-owned event subscription per runtime", async () => {
+    const subscribeEvents = mock(async () => () => undefined);
+    const { adapter } = createHarness({ subscribeEvents });
+
+    await Promise.all([
+      adapter.prepareRuntime("runtime-live"),
+      adapter.prepareRuntime("runtime-live"),
+      adapter.prepareRuntime("runtime-live"),
+    ]);
+
+    expect(subscribeEvents).toHaveBeenCalledTimes(1);
+    expect(subscribeEvents).toHaveBeenCalledWith("runtime-live", expect.any(Function));
+  });
+
+  test("rejects host runtime preparation when live event transport is unavailable", async () => {
+    const { adapter } = createHarness({ subscribeEvents: undefined });
+
+    await expect(adapter.prepareRuntime("runtime-live")).rejects.toThrow(
+      "Cannot prepare Codex runtime 'runtime-live' because live event subscription is unavailable.",
+    );
+  });
+
+  test("attempts every runtime-state cleanup when one component fails", () => {
+    const { adapter } = createHarness();
+    const cleanupCalls: string[] = [];
+    const internals = adapter as unknown as {
+      localSessions: { releaseRuntime(runtimeId: string): void };
+      pendingInput: { clearRuntime(runtimeId: string): void };
+      subagents: { clearRuntime(runtimeId: string): void };
+      runtimeEvents: { clearRuntime(runtimeId: string): void };
+      clearThreadInventory(runtimeId: string): void;
+    };
+    internals.localSessions.releaseRuntime = (runtimeId) => {
+      cleanupCalls.push(`sessions:${runtimeId}`);
+      throw new Error("unsubscribe failed");
+    };
+    internals.pendingInput.clearRuntime = (runtimeId) => {
+      cleanupCalls.push(`pending:${runtimeId}`);
+    };
+    internals.subagents.clearRuntime = (runtimeId) => {
+      cleanupCalls.push(`subagents:${runtimeId}`);
+    };
+    internals.runtimeEvents.clearRuntime = (runtimeId) => {
+      cleanupCalls.push(`events:${runtimeId}`);
+    };
+    internals.clearThreadInventory = (runtimeId) => {
+      cleanupCalls.push(`inventory:${runtimeId}`);
+    };
+
+    expect(() => adapter.releaseRuntime("runtime-live")).toThrow("unsubscribe failed");
+    expect(cleanupCalls).toEqual([
+      "sessions:runtime-live",
+      "pending:runtime-live",
+      "subagents:runtime-live",
+      "events:runtime-live",
+      "inventory:runtime-live",
+    ]);
+  });
+
+  test("supports read-only construction without renderer-owned live event plumbing", async () => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
+      },
+      transportFactory: () => transport,
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+    });
+
+    expect(catalog.runtime?.kind).toBe("codex");
+    expect(transport.calls.map((call) => call.method)).toEqual(["model/list"]);
+  });
+
   test("returns the Codex runtime definition", () => {
     const { adapter } = createHarness();
 
@@ -531,21 +608,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         effort: "high",
       },
     });
-
-    const history = await adapter.loadSessionHistory({
-      ...codexSessionRuntimeRef("thread/start-runtime-live"),
-    });
-    const assistantMessage = history.find(
-      (message) => message.role === "assistant" && message.messageId === "msg-1",
-    );
-    if (assistantMessage?.role !== "assistant") {
-      throw new Error("expected assistant history message");
-    }
-    expect(assistantMessage.model).toEqual({
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-    });
   });
 
   test("hydrates a saved session through the live runtime id", async () => {
@@ -746,7 +808,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         },
       },
       transportFactory: () => new RecordingTransport("runtime-live", false),
-      takeBufferedEvents: async () => [],
       respondServerRequest: async () => {},
     });
 
@@ -765,7 +826,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         }),
       },
       transportFactory: () => transport,
-      takeBufferedEvents: async () => [],
+      subscribeEvents: () => () => {},
       respondServerRequest: async () => {},
     });
 

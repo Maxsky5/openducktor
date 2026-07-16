@@ -1,3 +1,4 @@
+import { subscribeAgentSessionLiveEvents } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { host } from "../../shared/host";
 import type { AgentOrchestratorDependencies } from "./orchestrator-ports";
@@ -9,9 +10,6 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
       host.agentSessionDelete(repoPath, taskId, identity),
     agentSessionUpsert: (repoPath, taskId, record) =>
       host.agentSessionUpsert(repoPath, taskId, record),
-    agentSessionStop: async (target) => {
-      await host.agentSessionStop(target);
-    },
     taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
   },
   runtimeHostPort: {
@@ -23,5 +21,14 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
     taskSessionStartupLeasePrepare: (...args) => host.taskSessionStartupLeasePrepare(...args),
     taskSessionStartupLeaseComplete: (...args) => host.taskSessionStartupLeaseComplete(...args),
     taskSessionStartupLeaseAbort: (...args) => host.taskSessionStartupLeaseAbort(...args),
+  },
+  liveSessionHostPort: {
+    agentSessionLiveAttach: (...args) => host.agentSessionLiveAttach(...args),
+    agentSessionLiveDetach: (...args) => host.agentSessionLiveDetach(...args),
+    agentSessionLiveLoadContext: (...args) => host.agentSessionLiveLoadContext(...args),
+    agentSessionLiveRead: (...args) => host.agentSessionLiveRead(...args),
+    agentSessionLiveReplyApproval: (...args) => host.agentSessionLiveReplyApproval(...args),
+    agentSessionLiveReplyQuestion: (...args) => host.agentSessionLiveReplyQuestion(...args),
+    subscribeAgentSessionLiveEvents,
   },
 });

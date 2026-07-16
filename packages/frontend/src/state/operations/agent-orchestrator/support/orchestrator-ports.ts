@@ -1,10 +1,10 @@
 import type {
   AgentSessionIdentity,
   AgentSessionRecord,
-  AgentSessionStopTarget,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import type { HostLiveEventSubscription } from "@/lib/shell-bridge";
 import type { host } from "../../shared/host";
 
 export type AgentOrchestratorHostPort = {
@@ -18,7 +18,6 @@ export type AgentOrchestratorHostPort = {
     taskId: string,
     record: AgentSessionRecord,
   ) => Promise<void>;
-  agentSessionStop: (target: AgentSessionStopTarget) => Promise<void>;
   taskWorktreeGet: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
 };
 
@@ -33,8 +32,21 @@ export type AgentOrchestratorRuntimeHostPort = {
   taskSessionStartupLeaseAbort: typeof host.taskSessionStartupLeaseAbort;
 };
 
+export type AgentOrchestratorLiveSessionHostPort = {
+  agentSessionLiveAttach: typeof host.agentSessionLiveAttach;
+  agentSessionLiveDetach: typeof host.agentSessionLiveDetach;
+  agentSessionLiveLoadContext: typeof host.agentSessionLiveLoadContext;
+  agentSessionLiveRead: typeof host.agentSessionLiveRead;
+  agentSessionLiveReplyApproval: typeof host.agentSessionLiveReplyApproval;
+  agentSessionLiveReplyQuestion: typeof host.agentSessionLiveReplyQuestion;
+  subscribeAgentSessionLiveEvents: (
+    listener: (payload: unknown) => void,
+  ) => Promise<HostLiveEventSubscription>;
+};
+
 export type AgentOrchestratorDependencies = {
   queryClient: QueryClient;
   hostPort: AgentOrchestratorHostPort;
   runtimeHostPort: AgentOrchestratorRuntimeHostPort;
+  liveSessionHostPort: AgentOrchestratorLiveSessionHostPort;
 };

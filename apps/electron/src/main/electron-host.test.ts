@@ -1,6 +1,5 @@
 import type { GlobalConfig, RepoConfig, RuntimeInstanceSummary } from "@openducktor/contracts";
 import {
-  type CodexAppServerPort,
   createArtifactRuntimeDistribution,
   createRuntimeDefinitionsService,
   createRuntimeRegistry,
@@ -716,119 +715,6 @@ describe("createElectronHostCommandRouter", () => {
     await expect(router.invoke("runtime_stop", { runtimeId: "missing" })).rejects.toThrow(
       "Runtime not found: missing",
     );
-  });
-
-  test("registers migrated Codex app-server host commands", async () => {
-    const calls: unknown[] = [];
-    const modelListResponse = {
-      data: [
-        {
-          id: "gpt-5",
-          model: "gpt-5",
-          displayName: "GPT-5",
-          supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
-          inputModalities: ["text", "image"],
-          isDefault: true,
-        },
-      ],
-      nextCursor: null,
-    };
-    const codexAppServer: CodexAppServerPort = {
-      request: (input) =>
-        Effect.sync(() => {
-          calls.push({ method: "request", input });
-          return modelListResponse;
-        }),
-      takeBufferedEvents: (runtimeId) =>
-        Effect.sync(() => {
-          calls.push({ method: "takeBufferedEvents", runtimeId });
-          return [
-            {
-              runtimeId,
-              kind: "notification" as const,
-              message: { method: "codex/app-server/ready" },
-            },
-            {
-              runtimeId,
-              kind: "server_request" as const,
-              message: { id: 7, method: "approval/request" },
-            },
-          ];
-        }),
-      respond: (input) =>
-        Effect.sync(() => {
-          calls.push({ method: "respond", input });
-        }),
-    };
-    const router = createElectronHostCommandRouter({
-      codexAppServer,
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
-    });
-
-    await expect(
-      router.invoke("codex_app_server_request", {
-        runtimeId: "runtime-1",
-        method: "model/list",
-        params: { request: "catalog" },
-      }),
-    ).resolves.toEqual(modelListResponse);
-    await expect(
-      router.invoke("codex_app_server_take_buffered_events", { runtimeId: "runtime-1" }),
-    ).resolves.toEqual([
-      {
-        runtimeId: "runtime-1",
-        kind: "notification",
-        message: { method: "codex/app-server/ready" },
-      },
-      {
-        runtimeId: "runtime-1",
-        kind: "server_request",
-        message: { id: 7, method: "approval/request" },
-      },
-    ]);
-    await expect(
-      router.invoke("codex_app_server_respond", {
-        runtimeId: "runtime-1",
-        requestId: 7,
-        result: { approved: true },
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(calls).toEqual([
-      {
-        method: "request",
-        input: {
-          runtimeId: "runtime-1",
-          method: "model/list",
-          params: { request: "catalog" },
-        },
-      },
-      { method: "takeBufferedEvents", runtimeId: "runtime-1" },
-      {
-        method: "respond",
-        input: {
-          runtimeId: "runtime-1",
-          requestId: 7,
-          result: { approved: true },
-        },
-      },
-    ]);
-  });
-
-  test("keeps Codex app-server commands fail-fast without a registered transport", async () => {
-    const router = createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
-    });
-
-    await expect(
-      router.invoke("codex_app_server_take_buffered_events", { runtimeId: "runtime-1" }),
-    ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
   });
 
   test("registers migrated passive dev server state command", async () => {

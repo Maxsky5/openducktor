@@ -143,6 +143,8 @@
       "name": "@openducktor/host",
       "version": "0.4.3",
       "dependencies": {
+        "@openducktor/adapters-codex-app-server": "workspace:*",
+        "@openducktor/adapters-opencode-sdk": "workspace:*",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "drizzle-orm": "0.45.2",

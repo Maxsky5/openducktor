@@ -1,12 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { PolicyBoundSessionRef } from "@openducktor/core";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
-import {
-  createSessionObserversRefFixture,
-  createTaskCardFixture,
-  hasSessionObserverFixture,
-} from "../test-utils";
+import { createTaskCardFixture } from "../test-utils";
 import { createPrepareSessionSend } from "./prepare-session-send";
 import { buildSession } from "./session-actions.test-helpers";
 
@@ -25,14 +19,10 @@ const buildWorkflowSession = (
 const createPrepareSend = (
   overrides: Partial<Parameters<typeof createPrepareSessionSend>[0]> = {},
 ) => {
-  const observedRefs: PolicyBoundSessionRef[] = [];
   const ensureExistingRuntimeCalls: unknown[] = [];
-  const sessionObserversRef = overrides.sessionObserversRef ?? createSessionObserversRefFixture();
 
   return {
-    observedRefs,
     ensureExistingRuntimeCalls,
-    sessionObserversRef,
     prepareSend: createPrepareSessionSend({
       workspaceRepoPath: "/tmp/repo",
       workspaceId: "workspace-1",
@@ -49,75 +39,31 @@ const createPrepareSend = (
           }),
         ],
       },
-      sessionObserversRef,
-      observeAgentSession: async (sessionRef) => {
-        await sessionObserversRef.current.ensureObserver(sessionRef, async () => {
-          observedRefs.push(sessionRef);
-          return () => {};
-        });
-      },
       ensureExistingSessionRuntime: async (...args) => {
         ensureExistingRuntimeCalls.push(args);
       },
       loadRepoPromptOverrides: async () => ({}),
-      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       ...overrides,
     }),
   };
 };
 
 describe("prepare session send", () => {
-  test("ensures the session runtime and observes the exact durable session ref", async () => {
-    const { ensureExistingRuntimeCalls, observedRefs, prepareSend, sessionObserversRef } =
-      createPrepareSend();
+  test("ensures the session runtime and builds the durable session prompt", async () => {
+    const { ensureExistingRuntimeCalls, prepareSend } = createPrepareSend();
 
     const result = await prepareSend(buildWorkflowSession({ status: "idle" }));
 
     expect(result.repoPath).toBe("/tmp/repo");
     expect(result.systemPrompt).toContain("Build login");
     expect(ensureExistingRuntimeCalls).toEqual([["/tmp/repo", "opencode"]]);
-    expect(observedRefs).toEqual([
-      {
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        externalSessionId: "session-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        runtimePolicy: { kind: "opencode" },
-      },
-    ]);
-    expect(
-      hasSessionObserverFixture(sessionObserversRef.current, {
-        externalSessionId: "session-1",
-      }),
-    ).toBe(true);
   });
 
-  test("keeps existing observers instead of subscribing twice", async () => {
-    const sessionObserversRef = createSessionObserversRefFixture();
-    await sessionObserversRef.current.ensureObserver(
-      {
-        externalSessionId: "session-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-      async () => () => {},
-    );
-    const { observedRefs, prepareSend } = createPrepareSend({ sessionObserversRef });
-
-    await prepareSend(buildWorkflowSession({ status: "idle" }));
-
-    expect(observedRefs).toEqual([]);
-  });
-
-  test("removes a newly-added observer when the workspace changes during preparation", async () => {
+  test("rejects when the workspace changes during runtime preparation", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    const sessionObserversRef = createSessionObserversRefFixture();
     const { prepareSend } = createPrepareSend({
       currentWorkspaceRepoPathRef,
-      sessionObserversRef,
-      observeAgentSession: async (sessionRef) => {
-        await sessionObserversRef.current.ensureObserver(sessionRef, async () => () => {});
+      ensureExistingSessionRuntime: async () => {
         currentWorkspaceRepoPathRef.current = "/tmp/other";
       },
     });
@@ -125,37 +71,5 @@ describe("prepare session send", () => {
     await expect(prepareSend(buildWorkflowSession({ status: "idle" }))).rejects.toThrow(
       "Workspace changed while preparing session send.",
     );
-    expect(
-      hasSessionObserverFixture(sessionObserversRef.current, {
-        externalSessionId: "session-1",
-      }),
-    ).toBe(false);
-  });
-
-  test("removes an existing observer when the workspace changes during preparation", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    const sessionObserversRef = createSessionObserversRefFixture();
-    const sessionRef = {
-      externalSessionId: "session-1",
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/tmp/repo/worktree",
-    };
-    await sessionObserversRef.current.ensureObserver(sessionRef, async () => () => {});
-    const { prepareSend } = createPrepareSend({
-      currentWorkspaceRepoPathRef,
-      sessionObserversRef,
-      observeAgentSession: async () => {
-        currentWorkspaceRepoPathRef.current = "/tmp/other";
-      },
-    });
-
-    await expect(prepareSend(buildWorkflowSession({ status: "idle" }))).rejects.toThrow(
-      "Workspace changed while preparing session send.",
-    );
-    expect(
-      hasSessionObserverFixture(sessionObserversRef.current, {
-        externalSessionId: "session-1",
-      }),
-    ).toBe(false);
   });
 });

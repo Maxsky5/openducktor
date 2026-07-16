@@ -106,7 +106,7 @@ export const handleSessionStarted = (
 };
 
 export const handleAssistantMessage = (
-  context: SessionLifecycleEventContext,
+  context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
   event: AssistantMessageEvent,
 ): void => {
   context.store.updateSession(context.session.identity, (current) => {
@@ -131,7 +131,6 @@ export const handleAssistantMessage = (
     return {
       ...current,
       pendingUserMessageStartedAt: undefined,
-      contextUsage: nextSnapshot.contextUsage,
       messages: upsertSessionMessage(
         {
           externalSessionId: current.externalSessionId,
@@ -143,19 +142,6 @@ export const handleAssistantMessage = (
   });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
-};
-
-export const handleSessionContextUpdated = (
-  context: Pick<SessionLifecycleEventContext, "session" | "store">,
-  event: Extract<SessionEvent, { type: "session_context_updated" }>,
-): void => {
-  context.store.updateSession(context.session.identity, (current) => ({
-    ...current,
-    contextUsage: {
-      totalTokens: event.totalTokens,
-      ...(typeof event.contextWindow === "number" ? { contextWindow: event.contextWindow } : {}),
-    },
-  }));
 };
 
 export const handleUserMessage = (

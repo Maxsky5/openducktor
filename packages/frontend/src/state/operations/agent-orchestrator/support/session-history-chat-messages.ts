@@ -4,11 +4,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
-import type {
-  AgentChatMessage,
-  AgentSessionContextUsage,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { createAssistantMessageMeta } from "./assistant-meta";
 import {
@@ -281,37 +277,6 @@ export const historyToChatMessages = (
   return next;
 };
 
-export const historyToSessionContextUsage = (
-  history: AgentSessionHistoryMessage[],
-): AgentSessionContextUsage | null => {
-  for (let index = history.length - 1; index >= 0; index -= 1) {
-    const message = history[index];
-    if (message?.role !== "assistant") {
-      continue;
-    }
-    if (!isFinalAssistantHistoryMessage(message)) {
-      continue;
-    }
-    if (typeof message.totalTokens !== "number" || message.totalTokens <= 0) {
-      continue;
-    }
-
-    const effectiveModel = mergeModelSelection(null, message.model);
-    return {
-      totalTokens: message.totalTokens,
-      ...(typeof message.contextWindow === "number"
-        ? { contextWindow: message.contextWindow }
-        : {}),
-      ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
-      ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
-      ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
-      ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
-    };
-  }
-
-  return null;
-};
-
 export const applyLoadedSessionHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
@@ -320,12 +285,10 @@ export const applyLoadedSessionHistory = (
     role: session.role,
   });
   const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
-  const historyContextUsage = historyToSessionContextUsage(history);
 
   return {
     ...session,
     historyLoadState: "loaded",
-    contextUsage: session.contextUsage ?? historyContextUsage,
     messages: mergeHistoryMessages(session.externalSessionId, loadedMessages, session.messages),
   };
 };

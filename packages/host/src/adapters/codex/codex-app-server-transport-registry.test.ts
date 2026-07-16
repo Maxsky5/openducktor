@@ -1,27 +1,5 @@
 import { Effect } from "effect";
-import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
 import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
-
-const codexStatusNotification = {
-  method: "thread/status/changed",
-  params: { threadId: "thread-1", status: { type: "idle" } },
-} satisfies CodexAppServerProtocolMessage;
-
-const codexApprovalRequest = {
-  method: "execCommandApproval",
-  id: 7,
-  params: {
-    conversationId: "thread-1",
-    callId: "call-1",
-    approvalId: null,
-    command: ["true"],
-    cwd: "/repo",
-    reason: null,
-    parsedCmd: [],
-  },
-} satisfies CodexAppServerProtocolMessage;
-
-const receivedAt = "2026-07-06T12:00:00.000Z";
 
 describe("createCodexAppServerTransportRegistry", () => {
   test("routes app-server operations to the registered runtime transport", async () => {
@@ -65,23 +43,6 @@ describe("createCodexAppServerTransportRegistry", () => {
         }
         return Effect.succeed({ data: [], nextCursor: null });
       },
-      takeBufferedEvents() {
-        calls.push({ method: "takeBufferedEvents" });
-        return Effect.succeed([
-          {
-            runtimeId: "runtime-1",
-            kind: "notification" as const,
-            receivedAt,
-            message: codexStatusNotification,
-          },
-          {
-            runtimeId: "runtime-1",
-            kind: "server_request" as const,
-            receivedAt,
-            message: codexApprovalRequest,
-          },
-        ]);
-      },
       respond(input) {
         calls.push({ method: "respond", input });
         return Effect.succeed(undefined);
@@ -96,20 +57,6 @@ describe("createCodexAppServerTransportRegistry", () => {
         }),
       ),
     ).resolves.toEqual({ data: [], nextCursor: null });
-    await expect(Effect.runPromise(port.takeBufferedEvents("runtime-1"))).resolves.toEqual([
-      {
-        runtimeId: "runtime-1",
-        kind: "notification",
-        receivedAt,
-        message: codexStatusNotification,
-      },
-      {
-        runtimeId: "runtime-1",
-        kind: "server_request",
-        receivedAt,
-        message: codexApprovalRequest,
-      },
-    ]);
     await expect(
       Effect.runPromise(
         port.listLoadedThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 }),
@@ -136,7 +83,6 @@ describe("createCodexAppServerTransportRegistry", () => {
         method: "request",
         input: { method: "model/list", params: {} },
       },
-      { method: "takeBufferedEvents" },
       {
         method: "request",
         input: { method: "thread/loaded/list", params: { cursor: null, limit: 100 } },
@@ -153,9 +99,6 @@ describe("createCodexAppServerTransportRegistry", () => {
     await expect(
       Effect.runPromise(port.request({ runtimeId: "runtime-1", method: "model/list", params: {} })),
     ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
-    await expect(Effect.runPromise(port.takeBufferedEvents("runtime-1"))).rejects.toThrow(
-      "Codex app-server transport not found for runtime runtime-1",
-    );
     await expect(
       Effect.runPromise(
         port.listLoadedThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 }),
@@ -177,9 +120,6 @@ describe("createCodexAppServerTransportRegistry", () => {
       request() {
         return Effect.succeed({ data: [], nextCursor: null });
       },
-      takeBufferedEvents() {
-        return Effect.succeed([]);
-      },
       respond() {
         return Effect.succeed(undefined);
       },
@@ -189,8 +129,8 @@ describe("createCodexAppServerTransportRegistry", () => {
       "Codex app-server transport already registered for runtime runtime-1",
     );
     port.unregisterTransport("runtime-1");
-    await expect(Effect.runPromise(port.takeBufferedEvents("runtime-1"))).rejects.toThrow(
-      "Codex app-server transport not found for runtime runtime-1",
-    );
+    await expect(
+      Effect.runPromise(port.request({ runtimeId: "runtime-1", method: "model/list", params: {} })),
+    ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
   });
 });

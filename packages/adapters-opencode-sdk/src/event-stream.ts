@@ -37,6 +37,7 @@ type SubscribeGlobalEventsInput = {
   client: OpencodeClient;
   controller: AbortController;
   onEvent: (event: Event) => void | Promise<void>;
+  onReady?: () => void;
 };
 
 type LogEventInput = {
@@ -212,6 +213,7 @@ export const assertGlobalEventSupport = (client: OpencodeClient): void => {
 
 export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): Promise<void> => {
   const stream = await resolveGlobalEventStream(input.client, input.controller.signal);
+  input.onReady?.();
   for await (const event of stream) {
     if (input.controller.signal.aborted) {
       break;

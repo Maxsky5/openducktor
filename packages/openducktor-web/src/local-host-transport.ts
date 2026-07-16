@@ -1,4 +1,4 @@
-import type { DevServerEventSubscription } from "@openducktor/frontend";
+import type { DevServerEventSubscription, HostLiveEventSubscription } from "@openducktor/frontend";
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
@@ -20,7 +20,11 @@ import { readLocalHostErrorPayloadEffect } from "./local-host-errors";
 
 type BrowserSseListener = (payload: unknown) => void;
 
-const CONTROL_EVENT_SSE_PATHS = new Set(["dev-server-events", "task-events"]);
+const CONTROL_EVENT_SSE_PATHS = new Set([
+  "agent-session-live-events",
+  "dev-server-events",
+  "task-events",
+]);
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
 const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
@@ -242,7 +246,8 @@ const subscribeSseChannelEffect = (
           }),
       });
       const listeners = new Map<number, BrowserSseListener>();
-      const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
+      const [streamPath] = path.split("?", 1);
+      const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(streamPath ?? path);
       let hasOpened = false;
       let hasReportedPostOpenError = false;
       let transportEpoch: string | null = null;
@@ -374,63 +379,73 @@ export const subscribeLocalHostRunEvents = async (
   );
 };
 
+const subscribeReadyLocalHostEventsEffect = (
+  path: string,
+  listener: (payload: unknown) => void,
+): Effect.Effect<HostLiveEventSubscription, WebError> =>
+  Effect.gen(function* () {
+    yield* ensureLocalHostSessionDedupedEffect();
+    const subscription = yield* subscribeSseChannelEffect(path, listener);
+    const readyExit = yield* Effect.exit(
+      Effect.tryPromise({
+        try: () => {
+          let timeoutId: ReturnType<typeof setTimeout> | null = null;
+          const timeout = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(
+              () =>
+                reject(
+                  new WebDependencyError({
+                    dependency: "event-source",
+                    operation: "await-ready",
+                    message: `Timed out waiting for EventSource ${path} subscription to open.`,
+                    details: { path, timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS },
+                  }),
+                ),
+              INITIAL_SSE_READY_TIMEOUT_MS,
+            );
+          });
+          return Promise.race([subscription.ready, timeout]).finally(() => {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
+          });
+        },
+        catch: (cause) => {
+          if (isWebError(cause)) {
+            return cause;
+          }
+          return new WebDependencyError({
+            dependency: "event-source",
+            operation: "await-ready",
+            message: errorMessage(cause),
+            cause,
+            details: { path },
+          });
+        },
+      }),
+    );
+    if (readyExit._tag === "Failure") {
+      subscription.unsubscribe();
+      return yield* causeToWebBoundaryError(readyExit.cause);
+    }
+    return {
+      transportEpoch: readyExit.value,
+      unsubscribe: subscription.unsubscribe,
+    };
+  });
+
 export const subscribeLocalHostDevServerEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<DevServerEventSubscription> => {
+  return runWebBoundary(subscribeReadyLocalHostEventsEffect("dev-server-events", listener));
+};
+
+export const subscribeLocalHostAgentSessionLiveEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<HostLiveEventSubscription> => {
+  const query = new URLSearchParams({ subscriber: crypto.randomUUID() });
   return runWebBoundary(
-    Effect.gen(function* () {
-      yield* ensureLocalHostSessionDedupedEffect();
-      const subscription = yield* subscribeSseChannelEffect("dev-server-events", listener);
-      const readyExit = yield* Effect.exit(
-        Effect.tryPromise({
-          try: () => {
-            let timeoutId: ReturnType<typeof setTimeout> | null = null;
-            const timeout = new Promise<never>((_, reject) => {
-              timeoutId = setTimeout(
-                () =>
-                  reject(
-                    new WebDependencyError({
-                      dependency: "event-source",
-                      operation: "await-ready",
-                      message: `Timed out waiting for EventSource dev-server-events subscription to open.`,
-                      details: {
-                        path: "dev-server-events",
-                        timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
-                      },
-                    }),
-                  ),
-                INITIAL_SSE_READY_TIMEOUT_MS,
-              );
-            });
-            return Promise.race([subscription.ready, timeout]).finally(() => {
-              if (timeoutId) {
-                clearTimeout(timeoutId);
-              }
-            });
-          },
-          catch: (cause) => {
-            if (isWebError(cause)) {
-              return cause;
-            }
-            return new WebDependencyError({
-              dependency: "event-source",
-              operation: "await-ready",
-              message: errorMessage(cause),
-              cause,
-              details: { path: "dev-server-events" },
-            });
-          },
-        }),
-      );
-      if (readyExit._tag === "Failure") {
-        subscription.unsubscribe();
-        return yield* causeToWebBoundaryError(readyExit.cause);
-      }
-      return {
-        transportEpoch: readyExit.value,
-        unsubscribe: subscription.unsubscribe,
-      };
-    }),
+    subscribeReadyLocalHostEventsEffect(`agent-session-live-events?${query.toString()}`, listener),
   );
 };
 
@@ -441,17 +456,6 @@ export const subscribeLocalHostTaskEvents = async (
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
       return (yield* subscribeSseChannelEffect("task-events", listener)).unsubscribe;
-    }),
-  );
-};
-
-export const subscribeLocalHostCodexAppServerEvents = async (
-  listener: (payload: unknown) => void,
-): Promise<() => void> => {
-  return runWebBoundary(
-    Effect.gen(function* () {
-      yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect("codex-app-server-events", listener)).unsubscribe;
     }),
   );
 };

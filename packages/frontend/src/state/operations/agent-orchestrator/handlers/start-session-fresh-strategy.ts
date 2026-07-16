@@ -1,6 +1,5 @@
-import { toAgentRuntimePolicyBinding, workflowAgentSessionScope } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { readFreshSessionRuntimeKind } from "../support/session-runtime-kind";
-import { resolveAgentSessionRuntimePolicy } from "../support/session-runtime-policy";
 import type {
   StartAgentSessionInput,
   StartOrReuseResult,
@@ -45,19 +44,10 @@ export const executeFreshStart = async ({
   });
   try {
     const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
-    const loadSettingsSnapshot = deps.model.loadSettingsSnapshot;
-    const runtimePolicy = await resolveAgentSessionRuntimePolicy({
-      runtimeKind: selectedModelRuntimeKind,
-      sessionScope,
-      loadSettingsSnapshot,
-    });
 
     const summary = await deps.runtime.adapter.startSession({
       repoPath: ctx.repoPath,
-      ...toAgentRuntimePolicyBinding({
-        runtimeKind: selectedModelRuntimeKind,
-        runtimePolicy,
-      }),
+      runtimeKind: selectedModelRuntimeKind,
       workingDirectory: resolved.runtime.workingDirectory,
       sessionScope,
       systemPrompt: resolved.systemPrompt,
@@ -81,7 +71,6 @@ export const executeFreshStart = async ({
       ctx,
       startedCtx,
       runtimeInfo: resolved.runtime,
-      runtimePolicy,
       systemPrompt: resolved.systemPrompt,
       selectedModel: selectedModelWithRuntime,
       deps,

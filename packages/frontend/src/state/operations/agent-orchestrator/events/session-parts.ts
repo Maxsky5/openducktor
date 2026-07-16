@@ -1,5 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
+import { toAssistantMessageMeta } from "../support/assistant-meta";
 import { toReasoningMessageId } from "../support/chat-message-ids";
 import { sanitizeStreamingText } from "../support/core";
 import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
@@ -261,37 +261,6 @@ const handleSubagentPart = (
   });
 };
 
-const handleStepPart = (
-  context: SessionPartEventContext,
-  part: Extract<SessionPart, { kind: "step" }>,
-  prepareCurrent: PrepareCurrent,
-): void => {
-  if (part.phase !== "finish" || typeof part.totalTokens !== "number" || part.totalTokens <= 0) {
-    return;
-  }
-
-  context.store.updateSession(context.session.identity, (current) => {
-    const prepared = prepareCurrent(current);
-    const model = resolvePartModelSelection(context, prepared, part.messageId);
-    const baseContextUsage = toSessionContextUsage(prepared, part.totalTokens, model);
-    const nextContextUsage =
-      baseContextUsage && typeof part.contextWindow === "number"
-        ? { ...baseContextUsage, contextWindow: part.contextWindow }
-        : baseContextUsage;
-    if (!nextContextUsage) {
-      return withRunningStatus(prepared);
-    }
-
-    context.turn.turnMetadata.recordContextUsageMessageId(context.session.key, part.messageId);
-
-    return {
-      ...prepared,
-      status: "running",
-      contextUsage: nextContextUsage,
-    };
-  });
-};
-
 export const handleAssistantPart = (
   context: SessionPartEventContext,
   event: SessionPartEvent,
@@ -320,7 +289,6 @@ export const handleAssistantPart = (
       handleSubagentPart(context, event, part, prepareCurrent);
       return;
     case "step":
-      handleStepPart(context, part, prepareCurrent);
       return;
   }
 };

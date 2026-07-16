@@ -1,4 +1,5 @@
 import type { PlannerTools } from "@openducktor/core";
+import { HostAgentSessionLiveClient } from "./agent-session-live-client";
 import { HostAgentClient } from "./build-runtime-client";
 import { HostFilesystemClient } from "./filesystem-client";
 import { HostGitClient } from "./git-client";
@@ -89,8 +90,6 @@ const AGENT_METHODS = [
   "repoRuntimeHealth",
   "repoRuntimeHealthStatus",
   "codexAppServerRequest",
-  "codexAppServerRespond",
-  "takeCodexAppServerBufferedEvents",
   "buildStart",
   "taskSessionBootstrapPrepare",
   "taskSessionBootstrapComplete",
@@ -117,6 +116,23 @@ const AGENT_METHODS = [
   "humanApprove",
   "agentSessionStop",
 ] as const satisfies readonly MethodName<HostAgentClient>[];
+
+const AGENT_SESSION_LIVE_METHODS = [
+  "agentSessionControlFork",
+  "agentSessionControlRelease",
+  "agentSessionControlResume",
+  "agentSessionControlSend",
+  "agentSessionControlStart",
+  "agentSessionControlStop",
+  "agentSessionControlUpdateModel",
+  "agentSessionLiveAttach",
+  "agentSessionLiveDetach",
+  "agentSessionLiveList",
+  "agentSessionLiveLoadContext",
+  "agentSessionLiveRead",
+  "agentSessionLiveReplyApproval",
+  "agentSessionLiveReplyQuestion",
+] as const satisfies readonly MethodName<HostAgentSessionLiveClient>[];
 
 const GIT_METHODS = [
   "gitCanonicalizePath",
@@ -146,6 +162,7 @@ type PullRequestReviewMethodName = (typeof PULL_REQUEST_REVIEW_METHODS)[number];
 type SystemMethodName = (typeof SYSTEM_METHODS)[number];
 type TaskMethodName = (typeof TASK_METHODS)[number];
 type AgentMethodName = (typeof AGENT_METHODS)[number];
+type AgentSessionLiveMethodName = (typeof AGENT_SESSION_LIVE_METHODS)[number];
 type GitMethodName = (typeof GIT_METHODS)[number];
 
 type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
@@ -154,6 +171,7 @@ type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
   Pick<HostSystemClient, SystemMethodName> &
   Pick<HostTaskClient, TaskMethodName> &
   Pick<HostAgentClient, AgentMethodName> &
+  Pick<HostAgentSessionLiveClient, AgentSessionLiveMethodName> &
   Pick<HostGitClient, GitMethodName>;
 
 type MethodDelegate<TClient extends object, TMethodName extends MethodName<TClient>> = Extract<
@@ -197,6 +215,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const systemClient = new HostSystemClient(invokeFn);
   const taskClient = new HostTaskClient(invokeFn, metadataCache);
   const agentClient = new HostAgentClient(invokeFn, metadataCache);
+  const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
   const hostClient = {} as HostClientApi;
 
@@ -206,6 +225,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   bindDelegates(hostClient, systemClient, SYSTEM_METHODS);
   bindDelegates(hostClient, taskClient, TASK_METHODS);
   bindDelegates(hostClient, agentClient, AGENT_METHODS);
+  bindDelegates(hostClient, agentSessionLiveClient, AGENT_SESSION_LIVE_METHODS);
   bindDelegates(hostClient, gitClient, GIT_METHODS);
 
   return hostClient;

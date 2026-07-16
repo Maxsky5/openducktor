@@ -322,6 +322,48 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
+  test("resolves live-session subscriptions before attach and advances the reconnect epoch", async () => {
+    const { subscribeLocalHostAgentSessionLiveEvents } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const listener = mock(() => {});
+
+    const subscription = subscribeLocalHostAgentSessionLiveEvents(listener);
+    const eventSource = await waitForEventSourceInstance();
+    const eventSourceUrl = new URL(eventSource.url);
+    const subscriber = eventSourceUrl.searchParams.get("subscriber");
+    expect(eventSourceUrl.pathname).toBe("/agent-session-live-events");
+    expect(subscriber).not.toBeNull();
+    if (subscriber === null) {
+      throw new Error("Expected live-session EventSource subscriber identity.");
+    }
+    const subscriptionPath = `agent-session-live-events?${new URLSearchParams({
+      subscriber,
+    }).toString()}`;
+    let didResolve = false;
+    void subscription.then(() => {
+      didResolve = true;
+    });
+
+    await Promise.resolve();
+    expect(didResolve).toBe(false);
+
+    eventSource.emit("open", "");
+    const { transportEpoch, unsubscribe } = await subscription;
+    expect(transportEpoch).toBe(`${subscriptionPath}:0`);
+    expect(listener).not.toHaveBeenCalled();
+
+    eventSource.emit("open", "");
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+      transportEpoch: `${subscriptionPath}:1`,
+    });
+
+    unsubscribe();
+  });
+
   test("rejects dev-server subscriptions when EventSource errors before opening", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
     globalThis.fetch = mock(

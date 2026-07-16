@@ -1,9 +1,28 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@openducktor/core";
+import type { AcceptedAgentUserMessage, AgentSessionSummary } from "@openducktor/core";
 import { createAgentRuntimeServices } from "./agent-runtime-services";
 import { host } from "./operations/shared/host";
+
+const sessionSummary: AgentSessionSummary = {
+  externalSessionId: "external-started",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/worktree",
+  role: "build",
+  startedAt: "2026-02-22T09:00:00.000Z",
+  status: "running",
+};
+
+const acceptedUserMessage: AcceptedAgentUserMessage = {
+  type: "user_message",
+  externalSessionId: sessionSummary.externalSessionId,
+  timestamp: "2026-02-22T09:00:01.000Z",
+  messageId: "message-1",
+  message: "Continue",
+  parts: [],
+  state: "read",
+};
 
 describe("agent runtime services", () => {
   test("exposes the shipped runtime definitions through the engine boundary", () => {
@@ -26,7 +45,7 @@ describe("agent runtime services", () => {
     ).rejects.toThrow("Unsupported agent runtime 'test-runtime'.");
   });
 
-  test("rejects mismatched runtime policy bindings before dispatching to an adapter", async () => {
+  test("rejects mismatched runtime policy bindings before dispatching a pure adapter read", () => {
     const { agentEngine } = createAgentRuntimeServices();
 
     expect(() =>
@@ -46,69 +65,122 @@ describe("agent runtime services", () => {
           },
         },
       } as never),
-    ).toThrow("Cannot load session todos with runtime 'opencode' and 'codex' runtime policy.");
+    ).toThrow(
+      "Cannot load OpenCode session todos with runtime 'opencode' and 'codex' runtime policy.",
+    );
   });
 
-  test("returns adapter session summaries without repairing runtime identity", async () => {
-    const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
-    const adapterSummary: AgentSessionSummary = {
-      externalSessionId: "external-started",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktree",
-      role: "build",
-      startedAt: "2026-02-22T09:00:00.000Z",
-      status: "running" as const,
-    };
+  test("delegates every live session control to the generic host boundary", async () => {
+    const originalStart = host.agentSessionControlStart;
+    const originalResume = host.agentSessionControlResume;
+    const originalFork = host.agentSessionControlFork;
+    const originalSend = host.agentSessionControlSend;
+    const originalUpdateModel = host.agentSessionControlUpdateModel;
+    const originalStop = host.agentSessionControlStop;
+    const originalRelease = host.agentSessionControlRelease;
+    const start = mock(async () => sessionSummary);
+    const resume = mock(async () => sessionSummary);
+    const fork = mock(async () => sessionSummary);
+    const send = mock(async () => acceptedUserMessage);
+    const updateModel = mock(async () => undefined);
+    const stop = mock(async () => undefined);
+    const release = mock(async () => undefined);
 
-    OpencodeSdkAdapter.prototype.startSession = mock(async () => adapterSummary);
+    host.agentSessionControlStart = start;
+    host.agentSessionControlResume = resume;
+    host.agentSessionControlFork = fork;
+    host.agentSessionControlSend = send;
+    host.agentSessionControlUpdateModel = updateModel;
+    host.agentSessionControlStop = stop;
+    host.agentSessionControlRelease = release;
 
     try {
       const { agentEngine } = createAgentRuntimeServices();
+      const sessionRef = {
+        repoPath: "/repo",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo/worktree",
+        externalSessionId: sessionSummary.externalSessionId,
+      };
+      const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
 
       await expect(
         agentEngine.startSession({
-          repoPath: "/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          runtimePolicy: { kind: "opencode" },
-          systemPrompt: "Prompt",
+          repoPath: sessionRef.repoPath,
+          runtimeKind: sessionRef.runtimeKind,
+          workingDirectory: sessionRef.workingDirectory,
+          sessionScope,
+          systemPrompt: "Build",
         }),
-      ).resolves.toBe(adapterSummary);
+      ).resolves.toEqual(sessionSummary);
+      await agentEngine.resumeSession({ ...sessionRef, sessionScope });
+      await agentEngine.forkSession({
+        repoPath: sessionRef.repoPath,
+        runtimeKind: sessionRef.runtimeKind,
+        workingDirectory: sessionRef.workingDirectory,
+        sessionScope,
+        systemPrompt: "Build",
+        parentExternalSessionId: "parent-1",
+      });
+      await expect(
+        agentEngine.sendUserMessage({
+          ...sessionRef,
+          sessionScope,
+          parts: [{ kind: "text", text: "Continue" }],
+        }),
+      ).resolves.toEqual(acceptedUserMessage);
+      await agentEngine.updateSessionModel({ ...sessionRef, model: null });
+      await agentEngine.stopSession(sessionRef);
+      await agentEngine.releaseSession(sessionRef);
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        sessionScope,
+        systemPrompt: "Build",
+      });
+      expect(resume).toHaveBeenCalledTimes(1);
+      expect(resume).toHaveBeenCalledWith({ ...sessionRef, sessionScope });
+      expect(fork).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith({
+        ...sessionRef,
+        sessionScope,
+        parts: [{ kind: "text", text: "Continue" }],
+      });
+      expect(updateModel).toHaveBeenCalledTimes(1);
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(release).toHaveBeenCalledTimes(1);
     } finally {
-      OpencodeSdkAdapter.prototype.startSession = originalStartSession;
+      host.agentSessionControlStart = originalStart;
+      host.agentSessionControlResume = originalResume;
+      host.agentSessionControlFork = originalFork;
+      host.agentSessionControlSend = originalSend;
+      host.agentSessionControlUpdateModel = originalUpdateModel;
+      host.agentSessionControlStop = originalStop;
+      host.agentSessionControlRelease = originalRelease;
     }
   });
 
-  test("keeps runtime engine methods bound when passed as callbacks", async () => {
+  test("keeps pure runtime reads bound to their renderer adapters", async () => {
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalListAgentSessionRuntimeSnapshots =
-      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots;
     const listAvailableModels = mock(async () => ({
       models: [],
       defaultModelsByProvider: {},
     }));
     const loadSessionTodos = mock(async () => []);
-    const listSessionRuntimeSnapshots = mock(async () => []);
 
     try {
       OpencodeSdkAdapter.prototype.listAvailableModels = listAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = loadSessionTodos;
-      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots = listSessionRuntimeSnapshots;
 
       const { agentEngine } = createAgentRuntimeServices();
-      const {
-        listAvailableModels: readModels,
-        loadSessionTodos: readTodos,
-        listSessionRuntimeSnapshots: readSessionRuntimeSnapshots,
-      } = agentEngine;
+      const { listAvailableModels: readModels, loadSessionTodos: readTodos } = agentEngine;
 
-      await readModels({
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      });
-
+      await readModels({ runtimeKind: "opencode", repoPath: "/repo" });
       await readTodos({
         runtimeKind: "opencode",
         repoPath: "/repo",
@@ -117,84 +189,11 @@ describe("agent runtime services", () => {
         runtimePolicy: { kind: "opencode" },
       });
 
-      await readSessionRuntimeSnapshots({
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-        directories: ["/tmp/repo"],
-      });
-
       expect(listAvailableModels).toHaveBeenCalledTimes(1);
       expect(loadSessionTodos).toHaveBeenCalledTimes(1);
-      expect(listSessionRuntimeSnapshots).toHaveBeenCalledTimes(1);
     } finally {
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots =
-        originalListAgentSessionRuntimeSnapshots;
-    }
-  });
-
-  test("delegates session runtime snapshots without a frontend live-runtime probe", async () => {
-    const originalRuntimeList = host.runtimeList;
-    const originalListAgentSessionRuntimeSnapshots =
-      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots;
-    const listSessionRuntimeSnapshots = mock(async () => []);
-
-    try {
-      host.runtimeList = mock(async () => {
-        throw new Error("readiness belongs to the session read model");
-      });
-      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots = listSessionRuntimeSnapshots;
-
-      const { agentEngine } = createAgentRuntimeServices();
-
-      await expect(
-        agentEngine.listSessionRuntimeSnapshots({
-          runtimeKind: "opencode",
-          repoPath: "/repo",
-          directories: ["/repo/worktree"],
-        }),
-      ).resolves.toEqual([]);
-      expect(host.runtimeList).not.toHaveBeenCalled();
-      expect(listSessionRuntimeSnapshots).toHaveBeenCalledWith({
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-        directories: ["/repo/worktree"],
-      });
-    } finally {
-      host.runtimeList = originalRuntimeList;
-      OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots =
-        originalListAgentSessionRuntimeSnapshots;
-    }
-  });
-
-  test("routes event subscriptions through the explicit durable session ref", async () => {
-    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
-    const subscribedSessionRefs: unknown[] = [];
-
-    OpencodeSdkAdapter.prototype.subscribeEvents = async (sessionRef) => {
-      subscribedSessionRefs.push(sessionRef);
-      return () => {};
-    };
-
-    const { agentEngine } = createAgentRuntimeServices();
-
-    try {
-      const sessionRef = {
-        externalSessionId: "external-pending",
-        repoPath: "/repo",
-        workingDirectory: "/repo/worktree",
-        runtimeKind: "opencode",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        runtimePolicy: { kind: "opencode" },
-      } as const;
-
-      const unsubscribe = await agentEngine.subscribeEvents(sessionRef, () => {});
-      expect(subscribedSessionRefs).toEqual([sessionRef]);
-
-      unsubscribe();
-    } finally {
-      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
     }
   });
 });

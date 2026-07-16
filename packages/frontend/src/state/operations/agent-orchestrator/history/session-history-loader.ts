@@ -1,19 +1,13 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentSessionHistorySystemPromptContext,
-  PolicyBoundSessionRef,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
 import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
-import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import {
   requestedSessionHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
@@ -42,7 +36,6 @@ type CreateLoadAgentSessionHistoryArgs = {
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
-  observeAgentSession?: ObserveAgentSession;
 };
 
 type SessionHistoryLoadClaim = {
@@ -158,25 +151,7 @@ type LoadSessionHistoryIntoStoreArgs = {
   identity: AgentSessionIdentity;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
-  observeAgentSession?: ObserveAgentSession;
   isStaleRepoOperation: () => boolean;
-};
-
-const observeSelectedSessionWithoutBlockingHistory = (
-  observeAgentSession: ObserveAgentSession | undefined,
-  sessionRef: PolicyBoundSessionRef,
-): void => {
-  if (!observeAgentSession) {
-    return;
-  }
-
-  runOrchestratorSideEffect("selected-session-observe", observeAgentSession(sessionRef), {
-    tags: {
-      externalSessionId: sessionRef.externalSessionId,
-      runtimeKind: sessionRef.runtimeKind,
-      workingDirectory: sessionRef.workingDirectory,
-    },
-  });
 };
 
 const loadSessionHistoryIntoStoreWithPolicy = async ({
@@ -188,7 +163,6 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   policy,
   loadSettingsSnapshot,
   loadSystemPromptContext,
-  observeAgentSession,
   isStaleRepoOperation,
 }: LoadSessionHistoryIntoStoreArgs & {
   policy: SessionHistoryLoadPolicy;
@@ -239,7 +213,6 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
             );
           }),
       );
-      observeSelectedSessionWithoutBlockingHistory(observeAgentSession, sessionRef);
       if (isStaleRepoOperation()) {
         return finishStaleHistoryLoad();
       }
@@ -292,7 +265,6 @@ const createLoadSessionHistoryWithPolicy = ({
   taskRef,
   loadRepoPromptOverrides,
   loadSettingsSnapshot,
-  observeAgentSession,
   policy,
 }: CreateLoadAgentSessionHistoryArgs & {
   policy: SessionHistoryLoadPolicy;
@@ -333,7 +305,6 @@ const createLoadSessionHistoryWithPolicy = ({
           loadRepoPromptOverrides,
         }),
       ...(loadSettingsSnapshot ? { loadSettingsSnapshot } : {}),
-      ...(observeAgentSession ? { observeAgentSession } : {}),
       isStaleRepoOperation,
     });
   };
@@ -341,13 +312,11 @@ const createLoadSessionHistoryWithPolicy = ({
 
 export const createLoadAgentSessionHistory = (
   args: CreateLoadAgentSessionHistoryArgs,
-): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
-  const { observeAgentSession: _observeAgentSession, ...loaderArgs } = args;
-  return createLoadSessionHistoryWithPolicy({
-    ...loaderArgs,
+): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
+  createLoadSessionHistoryWithPolicy({
+    ...args,
     policy: requestedSessionHistoryLoadPolicy,
   });
-};
 
 export const createLoadSelectedSessionBaselineHistory = (
   args: CreateLoadAgentSessionHistoryArgs,

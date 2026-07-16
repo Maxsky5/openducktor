@@ -93,8 +93,12 @@ export type RuntimeEventTransportRecord = {
   runtimeId: string;
   runtimeEndpoint: string;
   controller: AbortController;
+  dispatch: (event: Event) => Promise<void>;
+  ready: Promise<void>;
   streamDone: Promise<void>;
   subscribers: Map<string, EventStreamSubscriber>;
+  observers: Set<(event: Event) => void | Promise<void>>;
+  terminalObservers: Set<(error: Error) => void | Promise<void>>;
 };
 
 export type ClientFactory = (input: {

@@ -1,16 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CodexRuntimeEventBuffer, CodexRuntimeEventSubscriptions } from "./codex-runtime-events";
-
-const request = (id: number, threadId: string) => ({
-  id,
-  method: "item/tool/requestUserInput",
-  params: { threadId, turnId: `turn-${id}` },
-});
-const notification = (threadId: string, status: "active" | "idle") => ({
-  method: "thread/status/changed",
-  params: { threadId, status: { type: status } },
-});
-const receivedAt = "2026-07-06T12:00:00.000Z";
+import { CodexRuntimeEventSubscriptions } from "./codex-runtime-events";
 
 describe("CodexRuntimeEventSubscriptions", () => {
   test("removes a failed synchronous subscription so the runtime can retry", async () => {
@@ -27,75 +16,22 @@ describe("CodexRuntimeEventSubscriptions", () => {
     await expect(subscriptions.ensure("runtime-1", () => undefined)).resolves.toBeUndefined();
     expect(subscribeAttempts).toBe(2);
   });
-});
 
-describe("CodexRuntimeEventBuffer", () => {
-  test("keeps buffered server requests isolated by runtime", () => {
-    const buffer = new CodexRuntimeEventBuffer();
-    buffer.bufferRuntimeStreamEvent("child-thread", {
-      runtimeId: "runtime-1",
-      kind: "server_request",
-      receivedAt,
-      message: request(1, "child-thread"),
+  test("removes a stopped subscription even when its unsubscribe callback fails", async () => {
+    let subscribeAttempts = 0;
+    const subscriptions = new CodexRuntimeEventSubscriptions(() => {
+      subscribeAttempts += 1;
+      if (subscribeAttempts === 1) {
+        return () => {
+          throw new Error("unsubscribe failed");
+        };
+      }
+      return () => undefined;
     });
-    buffer.bufferRuntimeStreamEvent("child-thread", {
-      runtimeId: "runtime-2",
-      kind: "server_request",
-      receivedAt,
-      message: request(2, "child-thread"),
-    });
+    await subscriptions.ensure("runtime-1", () => undefined);
 
-    expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([
-      { request: request(1, "child-thread"), receivedAt },
-    ]);
-    expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
-      { request: request(2, "child-thread"), receivedAt },
-    ]);
-  });
-
-  test("clears buffered server requests for one runtime only", () => {
-    const buffer = new CodexRuntimeEventBuffer();
-    buffer.bufferRuntimeStreamEvent("child-thread", {
-      runtimeId: "runtime-1",
-      kind: "server_request",
-      receivedAt,
-      message: request(1, "child-thread"),
-    });
-    buffer.bufferRuntimeStreamEvent("child-thread", {
-      runtimeId: "runtime-2",
-      kind: "server_request",
-      receivedAt,
-      message: request(2, "child-thread"),
-    });
-
-    buffer.clearSession("child-thread", "runtime-1");
-
-    expect(buffer.takeServerRequests("child-thread", "runtime-1")).toEqual([]);
-    expect(buffer.takeServerRequests("child-thread", "runtime-2")).toEqual([
-      { request: request(2, "child-thread"), receivedAt },
-    ]);
-  });
-
-  test("clears buffered notifications for one runtime only", () => {
-    const buffer = new CodexRuntimeEventBuffer();
-    buffer.bufferRuntimeStreamEvent("child-thread", {
-      runtimeId: "runtime-1",
-      kind: "notification",
-      receivedAt,
-      message: notification("child-thread", "active"),
-    });
-    buffer.bufferRuntimeStreamEvent("child-thread", {
-      runtimeId: "runtime-2",
-      kind: "notification",
-      receivedAt,
-      message: notification("child-thread", "idle"),
-    });
-
-    buffer.clearSession("child-thread", "runtime-1");
-
-    expect(buffer.takeNotifications("child-thread", "runtime-1")).toEqual([]);
-    expect(buffer.takeNotifications("child-thread", "runtime-2")).toEqual([
-      expect.objectContaining(notification("child-thread", "idle")),
-    ]);
+    expect(() => subscriptions.stop("runtime-1")).toThrow("unsubscribe failed");
+    await expect(subscriptions.ensure("runtime-1", () => undefined)).resolves.toBeUndefined();
+    expect(subscribeAttempts).toBe(2);
   });
 });

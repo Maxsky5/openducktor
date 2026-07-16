@@ -102,45 +102,16 @@ const createHookHarness = (initialArgs: HookArgs) => {
 };
 
 describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
-  test("clears sessions and drains all unsubscribers on repo change", async () => {
+  test("clears sessions on repo change", async () => {
     const harness = createHookHarness({
       workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
     });
     const session = createSessionFixture();
-    const unsubscribeCalls: string[] = [];
-
     try {
       await harness.mount();
-      await harness.run(async (hook) => {
+      await harness.run((hook) => {
         hook.sessionStore.setSessionCollection(() => createAgentSessionCollection([session]));
-
-        const observers = hook.sessionObserversRef.current;
-        await observers.ensureObserver(
-          {
-            externalSessionId: "first",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo-a",
-          },
-          async () => () => {
-            unsubscribeCalls.push("first");
-            observers.remove({
-              externalSessionId: "second",
-              runtimeKind: "opencode",
-              workingDirectory: "/tmp/repo-a",
-            });
-          },
-        );
-        await observers.ensureObserver(
-          {
-            externalSessionId: "second",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo-a",
-          },
-          async () => () => {
-            unsubscribeCalls.push("second");
-          },
-        );
       });
 
       await harness.update({
@@ -148,22 +119,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
         tasks: [taskFixture],
       });
 
-      expect(unsubscribeCalls).toEqual(["first", "second"]);
       expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBeNull();
-      expect(
-        harness.getLatest().sessionObserversRef.current.has({
-          externalSessionId: "first",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo-a",
-        }),
-      ).toBe(false);
-      expect(
-        harness.getLatest().sessionObserversRef.current.has({
-          externalSessionId: "second",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo-a",
-        }),
-      ).toBe(false);
     } finally {
       await harness.unmount();
     }

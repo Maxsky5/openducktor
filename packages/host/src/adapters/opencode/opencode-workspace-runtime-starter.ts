@@ -2,8 +2,9 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
-import { Effect, Exit, Schedule, Scope } from "effect";
+import { Cause, Effect, Exit, Schedule, Scope } from "effect";
 import {
+  type HostError,
   HostOperationError,
   HostResourceError,
   HostValidationError,
@@ -17,14 +18,17 @@ import {
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../../infrastructure/process/process-tree";
+import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type {
   RuntimeEnsureWorkspaceInput,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import type { OpenCodeLiveSessionAdapterPreparer } from "../agent-sessions/opencode-live-session-adapter";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { buildOpenDucktorMcpBridgeEnvironment } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
+import { startOpenCodeLiveSessionState } from "./opencode-live-session-startup";
 import { canConnect, pickFreePort } from "./opencode-local-port";
 
 export type OpenCodeMcpBridgeConnection = {
@@ -47,6 +51,8 @@ type LocalPortProbe = (
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   toolDiscovery: ToolDiscoveryPort;
   runtimeDistribution: HostRuntimeDistribution;
+  liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
+  prepareLiveSessionAdapter: OpenCodeLiveSessionAdapterPreparer;
   resolveMcpBridgeConnection?: OpenCodeMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
   startupTimeoutMs?: number;
@@ -111,6 +117,8 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   toolDiscovery,
   resolveMcpBridgeConnection,
   runtimeDistribution,
+  liveSessionLifecycle,
+  prepareLiveSessionAdapter,
   processEnv = process.env,
   startupTimeoutMs = DEFAULT_STARTUP_TIMEOUT_MS,
   connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
@@ -190,6 +198,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         runtimeEnv,
         platform,
       );
+      const nextRuntimeId = runtimeId();
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
       const child = yield* Effect.try({
@@ -223,6 +232,40 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       let spawnError: Error | null = null;
       let stdout = "";
       let stderr = "";
+      let liveSessionRegistered = false;
+      let liveSessionReleasePromise: Promise<Exit.Exit<void, HostError>> | null = null;
+
+      const requestLiveSessionRelease = (): Promise<Exit.Exit<void, HostError>> | null => {
+        if (!liveSessionRegistered) {
+          return null;
+        }
+        if (!liveSessionReleasePromise) {
+          liveSessionReleasePromise = Effect.runPromiseExit(
+            liveSessionLifecycle.releaseRuntime(nextRuntimeId).pipe(Effect.asVoid),
+          );
+        }
+        return liveSessionReleasePromise;
+      };
+      const awaitLiveSessionRelease = (): Effect.Effect<void, HostOperationError> =>
+        Effect.suspend(() => {
+          const releasePromise = requestLiveSessionRelease();
+          if (!releasePromise) {
+            return Effect.void;
+          }
+          return Effect.promise(() => releasePromise).pipe(
+            Effect.flatMap((exit) =>
+              Exit.isFailure(exit)
+                ? Effect.fail(
+                    new HostOperationError({
+                      operation: "opencodeWorkspaceRuntime.releaseLiveSessionState",
+                      message: Cause.pretty(exit.cause),
+                      details: { runtimeId: nextRuntimeId },
+                    }),
+                  )
+                : Effect.void,
+            ),
+          );
+        });
 
       child.stdout.on("data", (chunk: Buffer) => {
         stdout = appendCapturedOutput(stdout, chunk);
@@ -239,6 +282,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           signal === null
             ? `process exited with code ${exitCode}`
             : `process exited from signal ${signal}`;
+        requestLiveSessionRelease();
       });
       const stopRuntimeProcess = (operation: string) =>
         processTreeTerminator({
@@ -263,6 +307,23 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         "opencodeWorkspaceRuntime.stopTimedOutProcess",
       );
       const stopRuntime = closeRuntime();
+      const stopRuntimeAndReleaseLiveState = Effect.gen(function* () {
+        const liveStateExit = yield* Effect.exit(awaitLiveSessionRelease());
+        const processExit = yield* Effect.exit(stopRuntime);
+        yield* Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore);
+        const failures = [liveStateExit, processExit]
+          .filter(Exit.isFailure)
+          .map((exit) => Cause.pretty(exit.cause));
+        if (failures.length > 0) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "opencodeWorkspaceRuntime.stop",
+              message: failures.join("\n"),
+              details: { runtimeId: nextRuntimeId, failures },
+            }),
+          );
+        }
+      });
 
       const startupProbeDriver = yield* Schedule.driver(
         startupProbeSchedule(startupTimeoutMs, retryDelayMs),
@@ -298,7 +359,6 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             ),
           )
         ) {
-          const nextRuntimeId = runtimeId();
           const runtime = yield* Effect.try({
             try: () =>
               runtimeInstanceSummarySchema.parse({
@@ -323,16 +383,26 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
               }),
           });
 
+          yield* startOpenCodeLiveSessionState({
+            runtime,
+            runtimeId: nextRuntimeId,
+            prepareLiveSessionAdapter,
+            liveSessionLifecycle,
+            isRuntimeClosed: () => closed,
+            closeDescription: () => closeDescription,
+            markRegistered: () => {
+              liveSessionRegistered = true;
+            },
+            releaseLiveSessionState: awaitLiveSessionRelease(),
+          });
+
           return {
             runtime,
             isAlive() {
               return !closed;
             },
             stop() {
-              return stopRuntime.pipe(
-                Effect.zipRight(
-                  Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore),
-                ),
+              return stopRuntimeAndReleaseLiveState.pipe(
                 Effect.mapError((cause) =>
                   toHostOperationError(cause, "opencodeWorkspaceRuntime.stop"),
                 ),

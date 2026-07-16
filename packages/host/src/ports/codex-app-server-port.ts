@@ -91,9 +91,6 @@ export type CodexAppServerPort = {
   listThreads(
     input: CodexAppServerThreadListInput,
   ): Effect.Effect<CodexAppServerThreadListResponse, CodexAppServerError>;
-  takeBufferedEvents(
-    runtimeId: string,
-  ): Effect.Effect<CodexAppServerStreamEvent[], CodexAppServerError>;
   respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerError>;
 };
 

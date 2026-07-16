@@ -1,10 +1,7 @@
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
-import type {
-  CodexAppServerProtocolMessage,
-  CodexAppServerRequestResult,
-} from "../../ports/codex-app-server-port";
+import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
@@ -15,13 +12,6 @@ import { createCodexAppServerCommandHandlers } from "./codex-app-server-command-
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
-
-const codexStatusNotification = {
-  method: "thread/status/changed",
-  params: { threadId: "thread-1", status: { type: "idle" } },
-} satisfies CodexAppServerProtocolMessage;
-
-const receivedAt = "2026-07-06T12:00:00.000Z";
 
 describe("createCodexAppServerCommandHandlers", () => {
   test("forwards thread compaction requests to the Codex service", async () => {
@@ -36,12 +26,6 @@ describe("createCodexAppServerCommandHandlers", () => {
       },
       listThreads() {
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
-      },
-      takeBufferedEvents() {
-        return Effect.succeed([]);
-      },
-      respond() {
-        return Effect.void;
       },
     };
     const router = createHostCommandRouter({
@@ -115,12 +99,6 @@ describe("createCodexAppServerCommandHandlers", () => {
       },
       listThreads() {
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
-      },
-      takeBufferedEvents() {
-        return Effect.succeed([]);
-      },
-      respond() {
-        return Effect.void;
       },
     };
     const router = createHostCommandRouter({
@@ -209,21 +187,6 @@ describe("createCodexAppServerCommandHandlers", () => {
         calls.push({ method: "listThreads", input });
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
       },
-      takeBufferedEvents(input) {
-        calls.push({ method: "takeBufferedEvents", input });
-        return Effect.succeed([
-          {
-            runtimeId: input.runtimeId,
-            kind: "notification" as const,
-            receivedAt,
-            message: codexStatusNotification,
-          },
-        ]);
-      },
-      respond(input) {
-        calls.push({ method: "respond", input });
-        return Effect.void;
-      },
     };
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service),
@@ -263,30 +226,6 @@ describe("createCodexAppServerCommandHandlers", () => {
         params: { threadId: "thread-1", name: "BUILD task-1" },
       }),
     ).resolves.toEqual({});
-    await expect(
-      router.invoke("codex_app_server_take_buffered_events", { runtimeId: "runtime-1" }),
-    ).resolves.toEqual([
-      {
-        runtimeId: "runtime-1",
-        kind: "notification",
-        receivedAt,
-        message: codexStatusNotification,
-      },
-    ]);
-    await expect(
-      router.invoke("codex_app_server_respond", {
-        runtimeId: "runtime-1",
-        requestId: 7,
-        result: { decision: "approved" },
-      }),
-    ).resolves.toBeUndefined();
-    await expect(
-      router.invoke("codex_app_server_respond", {
-        runtimeId: "runtime-1",
-        requestId: "permission-request-1",
-        result: { permissions: { network: { enabled: true } }, scope: "turn" },
-      }),
-    ).resolves.toBeUndefined();
     expect(calls).toEqual([
       {
         method: "request",
@@ -322,26 +261,6 @@ describe("createCodexAppServerCommandHandlers", () => {
           runtimeId: "runtime-1",
           method: "thread/name/set",
           params: { threadId: "thread-1", name: "BUILD task-1" },
-        },
-      },
-      {
-        method: "takeBufferedEvents",
-        input: { runtimeId: "runtime-1" },
-      },
-      {
-        method: "respond",
-        input: {
-          runtimeId: "runtime-1",
-          requestId: 7,
-          result: { decision: "approved" },
-        },
-      },
-      {
-        method: "respond",
-        input: {
-          runtimeId: "runtime-1",
-          requestId: "permission-request-1",
-          result: { permissions: { network: { enabled: true } }, scope: "turn" },
         },
       },
     ]);
@@ -381,12 +300,6 @@ describe("createCodexAppServerCommandHandlers", () => {
           }),
         );
       },
-      takeBufferedEvents(input) {
-        return unexpectedCall(input);
-      },
-      respond(input) {
-        return unexpectedCall(input);
-      },
     };
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service),
@@ -402,25 +315,12 @@ describe("createCodexAppServerCommandHandlers", () => {
       }),
     ).rejects.toThrow("Unsupported Codex app-server request method: fuzzyFileSearch/sessionStart");
     await expect(
-      router.invoke("codex_app_server_respond", { runtimeId: "runtime-1", requestId: 1.5 }),
-    ).rejects.toThrow("requestId must be a non-empty string or non-negative integer.");
-    await expect(
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",
         method: "model/list",
         params: { omitted: undefined },
       }),
     ).rejects.toThrow("params must be JSON-serializable.");
-    await expect(
-      router.invoke("codex_app_server_respond", {
-        runtimeId: "runtime-1",
-        requestId: 1,
-        result: { omitted: undefined },
-      }),
-    ).rejects.toThrow("result must be JSON-serializable.");
-    await expect(router.invoke("codex_app_server_take_buffered_events")).rejects.toThrow(
-      "codex_app_server_take_buffered_events input must be an object.",
-    );
     expect(calls).toEqual([]);
   });
 });

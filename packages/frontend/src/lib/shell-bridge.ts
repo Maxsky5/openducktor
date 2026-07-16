@@ -3,17 +3,21 @@ import { createHostClient, type HostClient } from "@openducktor/host-client";
 
 export type HostEventListener = (payload: unknown) => void;
 
-export type DevServerEventSubscription = {
+export type HostLiveEventSubscription = {
   transportEpoch: string;
   unsubscribe: () => void;
 };
+
+export type DevServerEventSubscription = HostLiveEventSubscription;
 
 export type HostBridge = {
   client: HostClient;
   subscribeRunEvents: (listener: HostEventListener) => Promise<() => void>;
   subscribeDevServerEvents: (listener: HostEventListener) => Promise<DevServerEventSubscription>;
+  subscribeAgentSessionLiveEvents: (
+    listener: HostEventListener,
+  ) => Promise<HostLiveEventSubscription>;
   subscribeTaskEvents: (listener: HostEventListener) => Promise<() => void>;
-  subscribeCodexAppServerEvents?: (listener: HostEventListener) => Promise<() => void>;
 };
 
 export type ShellCapabilities = {
@@ -89,8 +93,8 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   client: createHostClient(unavailable),
   subscribeRunEvents: failUnavailable,
   subscribeDevServerEvents: failUnavailable,
+  subscribeAgentSessionLiveEvents: failUnavailable,
   subscribeTaskEvents: failUnavailable,
-  subscribeCodexAppServerEvents: failUnavailable,
   appUpdates: createDisabledAppUpdateBridge({
     status: "disabled",
     currentVersion: "unknown",

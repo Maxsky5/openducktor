@@ -9,10 +9,9 @@ import type {
   TaskDocuments,
 } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
-import type { SessionObservers } from "../support/session-observers";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
-import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import type { SessionTurnState } from "../support/session-turn-state";
+import type { PendingInputActionDependencies } from "./pending-input-actions";
 import { createPendingInputActions } from "./pending-input-actions";
 import { createPrepareSessionSend } from "./prepare-session-send";
 import { createSendAgentMessage } from "./send-agent-message";
@@ -32,10 +31,8 @@ type SessionActionsDependencies = {
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
   sessionStartGateRef: { current: SessionStartGate<AgentSessionIdentity> };
-  sessionObserversRef: { current: SessionObservers };
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
-  observeAgentSession: ObserveAgentSession;
   canonicalizePath: RuntimeDependencies["canonicalizePath"];
   prepareTaskSessionStartupLease: RuntimeDependencies["prepareTaskSessionStartupLease"];
   completeTaskSessionStartupLease: RuntimeDependencies["completeTaskSessionStartupLease"];
@@ -46,6 +43,7 @@ type SessionActionsDependencies = {
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
+  liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   refreshTaskData: (
@@ -55,7 +53,6 @@ type SessionActionsDependencies = {
   ) => Promise<void>;
   persistSessionRecord: StopAgentSessionDependencies["persistSessionRecord"];
   deleteSessionRecord: SessionDependencies["deleteSessionRecord"];
-  stopAuthoritativeSession: StopAgentSessionDependencies["stopAuthoritativeSession"];
   invalidateSessionStopQueries: StopAgentSessionDependencies["invalidateSessionStopQueries"];
 };
 
@@ -70,10 +67,8 @@ export const createAgentSessionActions = ({
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   sessionStartGateRef,
-  sessionObserversRef,
   sessionTurnState,
   updateSession,
-  observeAgentSession,
   canonicalizePath,
   prepareTaskSessionStartupLease,
   completeTaskSessionStartupLease,
@@ -84,12 +79,12 @@ export const createAgentSessionActions = ({
   loadTaskDocuments,
   loadRepoPromptOverrides,
   loadSettingsSnapshot,
+  liveSessionHost,
   loadSourceSession,
   loadAgentSessionHistory,
   refreshTaskData,
   persistSessionRecord,
   deleteSessionRecord,
-  stopAuthoritativeSession,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
   const prepareSessionSend = createPrepareSessionSend({
@@ -98,11 +93,8 @@ export const createAgentSessionActions = ({
     repoEpochRef,
     currentWorkspaceRepoPathRef,
     taskRef,
-    sessionObserversRef,
-    observeAgentSession,
     ensureExistingSessionRuntime,
     loadRepoPromptOverrides,
-    loadSettingsSnapshot,
   });
 
   const sendAgentMessage = createSendAgentMessage({
@@ -115,7 +107,6 @@ export const createAgentSessionActions = ({
     turnMetadata: sessionTurnState.metadata,
     clearSessionTurnState: sessionTurnState.clearSession,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
-    loadSettingsSnapshot,
   });
 
   const startAgentSession = createStartAgentSession({
@@ -134,11 +125,7 @@ export const createAgentSessionActions = ({
       loadAgentSessionHistory,
       persistSessionRecord,
       deleteSessionRecord,
-      observeAgentSession,
-      clearSessionObservationState: (identity) => {
-        sessionObserversRef.current.remove(identity);
-        sessionTurnState.clearSession(identity);
-      },
+      clearSessionObservationState: sessionTurnState.clearSession,
     },
     runtime: {
       adapter,
@@ -166,23 +153,19 @@ export const createAgentSessionActions = ({
     adapter,
     readSessionSnapshot,
     updateSession,
-    sessionObserversRef,
     clearSessionTurnState: sessionTurnState.clearSession,
     persistSessionRecord,
-    stopAuthoritativeSession,
     invalidateSessionStopQueries,
     refreshTaskData,
   });
 
   const pendingInputActions = createPendingInputActions({
     workspaceRepoPath,
-    adapter,
+    liveSessionHost,
     readSessionSnapshot,
-    updateSession,
     turnMetadata: sessionTurnState.metadata,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
     readTurnUserMessageStartedAtMs: sessionTurnState.timing.readTurnUserMessageStartedAtMs,
-    loadSettingsSnapshot,
   });
 
   const modelActions = createSessionModelActions({
@@ -190,7 +173,6 @@ export const createAgentSessionActions = ({
     adapter,
     readSessionSnapshot,
     updateSession,
-    isSessionObserved: (identity) => sessionObserversRef.current.has(identity),
   });
 
   return {

@@ -57,8 +57,11 @@ export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge 
     transportEpoch: "test:0",
     unsubscribe: () => {},
   }),
+  subscribeAgentSessionLiveEvents: async () => ({
+    transportEpoch: "test:0",
+    unsubscribe: () => {},
+  }),
   subscribeTaskEvents: async () => () => {},
-  subscribeCodexAppServerEvents: async () => () => {},
   appUpdates,
   capabilities: {
     canOpenExternalUrls: true,

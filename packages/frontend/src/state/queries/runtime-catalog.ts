@@ -24,14 +24,20 @@ export const runtimeCatalogQueryKeys = {
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
     ] as const,
-  repoSkills: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
+  repoSkillsScope: ({
+    repoPath,
+    runtimeKind,
+    workingDirectory,
+  }: RepoRuntimeRef & { workingDirectory?: string }) =>
     [
       ...runtimeCatalogQueryKeys.all,
       "skills",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
-      normalizeWorkingDirectory(workingDirectory),
+      ...(workingDirectory !== undefined ? [normalizeWorkingDirectory(workingDirectory)] : []),
     ] as const,
+  repoSkills: (runtimeRef: RuntimeWorkingDirectoryRef) =>
+    runtimeCatalogQueryKeys.repoSkillsScope(runtimeRef),
   repoSubagents: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
     [
       ...runtimeCatalogQueryKeys.all,

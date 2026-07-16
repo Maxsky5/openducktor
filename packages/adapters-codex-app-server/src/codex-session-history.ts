@@ -1,20 +1,12 @@
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
-  type AgentModelSelection,
   type AgentSessionHistoryMessage,
-  type AgentSessionTodoItem,
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
-import { codexTurnKey } from "./codex-app-server-requests";
 import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
-import {
-  type CodexTokenUsageTotals,
-  codexTodosFromThreadRead,
-  codexTurnItemsFromThreadRead,
-  toHistoryMessage,
-} from "./codex-app-server-transcript";
-import type { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
+import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
+import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import {
   type CodexForkBoundary,
   codexForkBoundaryHistoryMessage,
@@ -36,14 +28,6 @@ type CodexSessionHistoryInput = {
   session: CodexSessionState | undefined;
   runtime: CodexSessionHistoryRuntime;
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
-  eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
-  modelByTurnKey: ReadonlyMap<string, AgentModelSelection>;
-  tokenUsageByTurnKey: ReadonlyMap<string, CodexTokenUsageTotals>;
-  collectThreadReadTokenUsage: (
-    runtimeId: string,
-    threadId: string,
-  ) => Promise<Map<string, CodexTokenUsageTotals>>;
-  rememberTodos: (externalSessionId: string, todos: AgentSessionTodoItem[]) => void;
 };
 
 const codexSystemPromptHistoryMessage = ({
@@ -94,20 +78,14 @@ const projectCodexThreadReadToHistory = ({
   input,
   session,
   response,
-  tokenUsageByTurnId,
   eventMapperPipeline,
-  modelByTurnKey,
-  tokenUsageByTurnKey,
   runtimeId,
   forkBoundary,
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
   response: unknown;
-  tokenUsageByTurnId: Map<string, CodexTokenUsageTotals>;
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
-  modelByTurnKey: ReadonlyMap<string, AgentModelSelection>;
-  tokenUsageByTurnKey: ReadonlyMap<string, CodexTokenUsageTotals>;
   runtimeId: string;
   forkBoundary: CodexForkBoundary | null;
 }): AgentSessionHistoryMessage[] => {
@@ -124,7 +102,6 @@ const projectCodexThreadReadToHistory = ({
         {
           item,
           turnIndex,
-          turnId,
           timestamp,
           timestampIsApproximate,
           isFinalAgentMessage,
@@ -137,16 +114,7 @@ const projectCodexThreadReadToHistory = ({
           forkBoundaryProjection && turnIndex < forkBoundaryProjection.beforeTurnIndex
             ? forkBoundaryProjection.parentThreadId
             : input.externalSessionId;
-        const turnModel =
-          model ??
-          (turnId ? modelByTurnKey.get(codexTurnKey(itemOwnerThreadId, turnId)) : undefined);
-        let finalTokenUsage: CodexTokenUsageTotals | null = null;
-        if (isFinalAgentMessage && turnId) {
-          finalTokenUsage =
-            tokenUsageByTurnId.get(turnId) ??
-            tokenUsageByTurnKey.get(codexTurnKey(itemOwnerThreadId, turnId)) ??
-            null;
-        }
+        const turnModel = model;
         const canonicalEvents = eventMapperPipeline.runThreadItem(
           {
             item,
@@ -166,7 +134,7 @@ const projectCodexThreadReadToHistory = ({
           history = projectCodexCanonicalEventsToHistory(canonicalEvents, turnModel);
           if (isFinalAgentMessage) {
             history = history.map((message) =>
-              applyFinalAssistantTurnMetadata(message, turnTiming, finalTokenUsage),
+              applyFinalAssistantTurnMetadata(message, turnTiming, null),
             );
           }
         } else {
@@ -177,7 +145,7 @@ const projectCodexThreadReadToHistory = ({
             timestamp ?? undefined,
             isFinalAgentMessage,
             turnTiming,
-            finalTokenUsage,
+            null,
           );
           history = message ? [message] : [];
         }
@@ -210,11 +178,6 @@ export const loadCodexSessionHistory = async ({
   session,
   runtime,
   threadInventory,
-  eventMapperPipeline,
-  modelByTurnKey,
-  tokenUsageByTurnKey,
-  collectThreadReadTokenUsage,
-  rememberTodos,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
   const response = await threadInventory.readThreadHistory(client, {
@@ -224,7 +187,6 @@ export const loadCodexSessionHistory = async ({
   if (!response) {
     return [];
   }
-  rememberTodos(input.externalSessionId, codexTodosFromThreadRead(response));
   const forkedFromThreadId = codexForkedFromThreadId(response);
   const parentTurnIdsPromise: Promise<ReadonlySet<string> | null> = forkedFromThreadId
     ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((error: unknown) => {
@@ -234,19 +196,13 @@ export const loadCodexSessionHistory = async ({
         throw error;
       })
     : Promise.resolve(null);
-  const [tokenUsageByTurnId, parentTurnIds] = await Promise.all([
-    collectThreadReadTokenUsage(runtimeId, input.externalSessionId),
-    parentTurnIdsPromise,
-  ]);
+  const parentTurnIds = await parentTurnIdsPromise;
   const forkBoundary = parentTurnIds ? resolveCodexForkBoundary(response, parentTurnIds) : null;
   return projectCodexThreadReadToHistory({
     input,
     session,
     response,
-    tokenUsageByTurnId,
-    eventMapperPipeline,
-    modelByTurnKey,
-    tokenUsageByTurnKey,
+    eventMapperPipeline: createCodexEventMapperPipeline(),
     runtimeId,
     forkBoundary,
   });

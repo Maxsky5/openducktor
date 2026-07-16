@@ -24,11 +24,11 @@ Current scope:
 | Layer | Primary modules | Owns | Must not own |
 |---|---|---|---|
 | UI presentation | `packages/frontend/src/pages`, `packages/frontend/src/components` | Rendering, local interaction state, visual workflow affordances | Workflow authority, status transition rules |
-| Frontend state/orchestration | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | App-level state slices, async operation orchestration, session read model and history loading | Persisted schema definitions, task-store mutation semantics |
+| Frontend state/orchestration | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | App-level state slices, async operation orchestration, projection of host-owned live sessions, and selected-session history loading | Persisted schema definitions, task-store mutation semantics, authoritative runtime live state |
 | Shared contracts | `packages/contracts/src/*` | Runtime-validated schemas for tasks, sessions, workflows, host commands, and MCP payloads | Runtime orchestration, host process control |
-| Core services and ports | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | `AgentEnginePort`, role/tool policy, tool normalization, prompt composition helpers | Shell invocation details, task-store adapter calls |
-| Host client and runtime adapters | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*`, `packages/adapters-codex-app-server/src/*` | Typed host-command client plus OpenCode/Codex `AgentEnginePort` adapters | Business workflow policy ownership, shell transport ownership |
-| TypeScript host | `packages/host/src/*` | Electron/web host command router, Effect-native application services, ports, infrastructure adapters, runtime/process/filesystem/git/MCP orchestration | Frontend cache ownership, public contract schema ownership |
+| Core services and ports | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | History/catalog/inspection ports, normalized live-session port, role/tool policy, tool normalization, prompt composition helpers | Shell invocation details, task-store adapter calls |
+| Host client and runtime protocol adapters | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*`, `packages/adapters-codex-app-server/src/*` | Typed host-command client plus runtime-native history/catalog/protocol integration | Business workflow policy ownership, shell transport ownership, shared frontend live-state ownership |
+| TypeScript host | `packages/host/src/*` | Electron/web host command router, Effect-native application services, host-owned live-session projection and runtime adapters, runtime/process/filesystem/git/MCP orchestration | Frontend cache ownership, public contract schema ownership, durable persistence of live runtime state |
 | Shells | `apps/electron/src/*`, `packages/openducktor-web/src/*` | Electron IPC/preload, browser HTTP/SSE bridge, renderer entrypoints, open-url/local-preview behavior | Domain workflow policy, task-store ownership |
 | MCP workflow service | `packages/openducktor-mcp/src/*` | MCP stdio transport, shared schema validation, host-bridge readiness checks, host-backed `odt_*` task/workflow calls | Frontend rendering/state, task-store persistence ownership |
 
@@ -52,7 +52,7 @@ The intended boundary is:
 - Zod owns public data contracts.
 - Effect owns host-side execution and failure modeling.
 - TanStack Query owns frontend server-read caching.
-- React context and local UI stores own transient UI state and live interaction state.
+- React context and local UI stores own transient UI state and the latest rendered projection of live interactions. Runtime adapters in the host own the authoritative ephemeral live-session state.
 
 See [ADR 0002](adr/0002-use-effect-in-the-typescript-host.md) and [TanStack Query Cache Strategy](tanstack-query-cache-strategy.md).
 
@@ -86,14 +86,17 @@ Key boundary:
 5. Runtime acquisition uses the role-neutral task-session bootstrap for every fresh `spec`, `planner`, `build`, and `qa` session. The first fresh role creates the canonical task worktree and runs configured copy paths and pre-start hooks once; later roles strictly validate and reuse it. The runtime itself remains repository-scoped, the adapter session uses the worktree, and only successful Builder completion advances the task to `in_progress`.
 6. The active host resolves the requested runtime kind, then runs runtime-specific startup. The shared contract is runtime descriptors plus `RuntimeInstanceSummary`; startup mechanics are runtime-specific (`local_http` for OpenCode, stdio/app-server identity for Codex).
 7. The runtime-launched MCP process uses only the host-bridge contract. It is host-scoped and forbids explicit `workspaceId`; public external MCP clients may pass `workspaceId`, but all MCP calls still go through the host bridge and never receive task-store database coordinates.
-8. The selected runtime adapter starts, resumes, or forks the session and subscribes to runtime events.
-9. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` and runtime-owned descriptor data, then sends the runtime-native request.
-10. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
+8. The host selects the registered runtime-specific live-session adapter, starts, resumes, or forks the session, and updates the normalized host projection.
+9. The renderer consumes that projection through one ordered attachment: its initial snapshot is the first envelope, followed by normalized changes and transcript events on the same channel.
+10. On prompt send, the host adapter applies the effective role-scoped runtime policy and sends the runtime-native request.
+11. Only the durable session record is persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity. Pending input, activity, context usage, routes, and reply identities remain ephemeral host state.
 
 Critical session invariants:
 
 - Read-only roles (`spec`, `planner`, `qa`) must auto-reject mutating permission prompts; on auto-reply failure, permission remains actionable and a system error is emitted.
 - Stale workspace protection must roll back newly started/resumed sessions with best-effort `stopSession` cleanup.
+- The runtime-specific live adapter must be registered and observing before its runtime can emit events, and it must be released when that runtime ends.
+- Transcript history is an on-demand read for the selected session. It must not discover pending input, recover context implicitly, or delay live-session hydration.
 
 ### 3. Workflow Transition
 
@@ -149,14 +152,18 @@ Key boundary:
 | Persisted task lifecycle state | SQLite `tasks.status` field | `packages/host/src/adapters/sqlite/*` through host task-store implementations |
 | Workspace task-store database identity | `<config-root>/task-stores/<workspaceId>/database.sqlite` | `packages/host/src/infrastructure/sqlite/*` |
 | Agent-authored docs and session snapshots | SQLite task-document rows and durable task fields | `packages/host/src/adapters/sqlite/*` and host task services |
+| Ephemeral session activity, pending input, context usage, and reply routing | Registered runtime-specific live-session adapter projection | `packages/host/src/application/agent-sessions/*` and `packages/host/src/adapters/agent-sessions/*`; never persisted |
+| Renderer session collection | Latest committed normalized host snapshot and ordered changes | `packages/frontend/src/state/operations/agent-orchestrator/session-read-model/*`; projection only |
+| Transcript history | Explicit runtime history read for one requested session | Runtime history adapters plus selected-session frontend history loader; independent of live hydration |
 | Host execution and expected host failures | Effect programs and tagged host errors under `packages/host/src` | `@openducktor/host`; Promise interop only at explicit transport/package boundaries |
 | Frontend server-read cache | TanStack Query keys/options under frontend query modules | `@openducktor/frontend`; host/runtime Effect code must not duplicate this cache |
 
 ## Replaceable Boundaries
 
-- TS port: `AgentEnginePort` (`packages/core/src/ports/agent-engine.ts`)
-- `AgentEnginePort` adapter: `OpencodeSdkAdapter` (`packages/adapters-opencode-sdk`)
-- `AgentEnginePort` adapter: `CodexAppServerAdapter` (`packages/adapters-codex-app-server`)
+- TS history/catalog/inspection ports in `packages/core/src/ports/agent-engine.ts`
+- Normalized live-session port in `packages/core/src/ports/agent-engine.ts`
+- Host live-session adapter boundary in `packages/host/src/ports/agent-session-live-adapter-port.ts`
+- Runtime protocol implementations in `packages/adapters-opencode-sdk` and `packages/adapters-codex-app-server`, composed behind host adapters in `packages/host/src/adapters/agent-sessions`
 - Host storage: SQLite-backed `TaskStorePort` adapter under `packages/host/src/adapters/sqlite`
 
 ## Cross-Layer Change Checklist
