@@ -27,12 +27,6 @@ export type OrchestratorDependencies = NonNullable<
   Parameters<typeof useAgentOrchestratorOperations>[0]["dependencies"]
 >;
 
-type AgentSessionLiveEnvelopePayload = AgentSessionLiveEnvelope extends infer Envelope
-  ? Envelope extends { attachmentId: string }
-    ? Omit<Envelope, "attachmentId">
-    : never
-  : never;
-
 export const createAgentSessionLiveSnapshotFixture = (
   overrides: Omit<Partial<AgentSessionLiveSnapshot>, "ref"> & {
     ref?: Partial<AgentSessionLiveSnapshot["ref"]>;
@@ -60,42 +54,23 @@ export const createAgentSessionLiveSnapshotFixture = (
 export const createLiveSessionStreamFixture = (
   initialSessions: AgentSessionLiveSnapshot[] = [],
 ) => {
-  let listener: ((payload: unknown) => void) | null = null;
-  let attachmentId: string | null = null;
-  let attachCount = 0;
-  let detachCount = 0;
-  let subscribeCount = 0;
+  let listener: ((payload: AgentSessionLiveEnvelope) => void) | null = null;
+  let observeCount = 0;
 
   const portOverrides: Partial<OrchestratorDependencies["liveSessionHostPort"]> = {
-    subscribeAgentSessionLiveEvents: async (nextListener) => {
-      subscribeCount += 1;
+    observeAgentSessionLive: async (input, nextListener) => {
+      observeCount += 1;
       listener = nextListener;
-      return {
-        transportEpoch: `test:${subscribeCount}`,
-        unsubscribe: () => {
-          if (listener === nextListener) {
-            listener = null;
-          }
-        },
-      };
-    },
-    agentSessionLiveAttach: async (input) => {
-      if (!listener) {
-        throw new Error("Live-session attach ran before the test listener was ready.");
-      }
-      attachCount += 1;
-      attachmentId = input.attachmentId;
-      listener({
+      nextListener({
         type: "snapshot",
-        attachmentId,
+        repoPath: input.repoPath,
         sessions: initialSessions,
       } satisfies AgentSessionLiveEnvelope);
-    },
-    agentSessionLiveDetach: async (input) => {
-      detachCount += 1;
-      if (attachmentId === input.attachmentId) {
-        attachmentId = null;
-      }
+      return () => {
+        if (listener === nextListener) {
+          listener = null;
+        }
+      };
     },
     agentSessionLiveRead: async (ref) => {
       const session = initialSessions.find(
@@ -111,15 +86,13 @@ export const createLiveSessionStreamFixture = (
 
   return {
     portOverrides,
-    emit: (payload: AgentSessionLiveEnvelopePayload) => {
-      if (!listener || !attachmentId) {
-        throw new Error("Live-session test stream is not attached.");
+    emit: (payload: AgentSessionLiveEnvelope) => {
+      if (!listener) {
+        throw new Error("Live-session test stream is not observed.");
       }
-      listener({ ...payload, attachmentId } as AgentSessionLiveEnvelope);
+      listener(payload);
     },
-    getAttachCount: () => attachCount,
-    getDetachCount: () => detachCount,
-    getSubscribeCount: () => subscribeCount,
+    getObserveCount: () => observeCount,
   };
 };
 
@@ -128,7 +101,6 @@ export const createTestDependencies = (
   runtimeHostOverrides: Partial<OrchestratorDependencies["runtimeHostPort"]> = {},
   liveSessionHostOverrides: Partial<OrchestratorDependencies["liveSessionHostPort"]> = {},
 ): OrchestratorDependencies => {
-  let liveEventListener: ((payload: unknown) => void) | null = null;
   return {
     queryClient: new QueryClient({
       defaultOptions: {
@@ -154,29 +126,18 @@ export const createTestDependencies = (
       ...runtimeHostOverrides,
     },
     liveSessionHostPort: {
-      agentSessionLiveAttach: async ({ attachmentId }) => {
-        liveEventListener?.({
+      observeAgentSessionLive: async ({ repoPath }, listener) => {
+        listener({
           type: "snapshot",
-          attachmentId,
+          repoPath,
           sessions: [],
         });
+        return () => {};
       },
-      agentSessionLiveDetach: async () => undefined,
       agentSessionLiveLoadContext: async () => null,
       agentSessionLiveRead: async (ref) => ({ type: "missing", ref }),
       agentSessionLiveReplyApproval: async () => undefined,
       agentSessionLiveReplyQuestion: async () => undefined,
-      subscribeAgentSessionLiveEvents: async (listener) => {
-        liveEventListener = listener;
-        return {
-          transportEpoch: "test:0",
-          unsubscribe: () => {
-            if (liveEventListener === listener) {
-              liveEventListener = null;
-            }
-          },
-        };
-      },
       ...liveSessionHostOverrides,
     },
   };

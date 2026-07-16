@@ -1,8 +1,9 @@
-import type {
-  HostEventBusPort,
-  HostEventChannel,
-  HostEventListener,
-  HostEventUnsubscribe,
+import {
+  type HostEventBusPort,
+  type HostEventChannel,
+  type HostEventListener,
+  type HostEventUnsubscribe,
+  parseHostEventChannel,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
@@ -30,13 +31,6 @@ type StopTypescriptHostBackendServicesInput = {
 };
 
 const EVENT_BUFFER_CAPACITY = 256;
-
-export const STREAM_PATH_TO_CHANNEL = new Map<string, HostEventChannel>([
-  ["events", "openducktor://run-event"],
-  ["agent-session-live-events", "openducktor://agent-session-live-event"],
-  ["dev-server-events", "openducktor://dev-server-event"],
-  ["task-events", "openducktor://task-event"],
-]);
 
 export class BufferedHostEventStream {
   private nextId = 0;
@@ -93,12 +87,12 @@ export class BufferedHostEventStream {
 }
 
 export class BufferedHostEventBus implements HostEventBusPort {
-  private readonly streams = new Map<HostEventChannel, BufferedHostEventStream>();
+  private readonly eventStream = new BufferedHostEventStream(EVENT_BUFFER_CAPACITY);
   private readonly listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
 
   publish(channel: string, payload: unknown): void {
     const hostChannel = this.requireChannel(channel);
-    this.streamFor(hostChannel).emit(payload);
+    this.eventStream.emit({ channel: hostChannel, payload });
     const listeners = this.listenersByChannel.get(hostChannel);
     if (!listeners) {
       return;
@@ -122,28 +116,22 @@ export class BufferedHostEventBus implements HostEventBusPort {
     };
   }
 
-  streamFor(channel: HostEventChannel): BufferedHostEventStream {
-    const existing = this.streams.get(channel);
-    if (existing) {
-      return existing;
-    }
-    const stream = new BufferedHostEventStream(EVENT_BUFFER_CAPACITY);
-    this.streams.set(channel, stream);
-    return stream;
+  stream(): BufferedHostEventStream {
+    return this.eventStream;
   }
 
   private requireChannel(channel: string): HostEventChannel {
-    for (const knownChannel of STREAM_PATH_TO_CHANNEL.values()) {
-      if (knownChannel === channel) {
-        return knownChannel;
-      }
+    try {
+      return parseHostEventChannel(channel);
+    } catch (cause) {
+      throw new WebResourceError({
+        resource: "host-event-channel",
+        operation: "host-event-bus.require-channel",
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+        details: { channel },
+      });
     }
-    throw new WebResourceError({
-      resource: "host-event-channel",
-      operation: "host-event-bus.require-channel",
-      message: `Unknown OpenDucktor host event channel: ${channel}`,
-      details: { channel },
-    });
   }
 }
 

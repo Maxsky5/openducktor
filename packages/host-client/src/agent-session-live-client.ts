@@ -9,12 +9,11 @@ import {
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
-  type AgentSessionLiveAttachInput,
-  type AgentSessionLiveDetachInput,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveReadInput,
   type AgentSessionLiveReadResult,
+  type AgentSessionLiveRefreshInput,
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
@@ -28,12 +27,11 @@ import {
   agentSessionControlStopInputSchema,
   agentSessionControlSummarySchema,
   agentSessionControlUpdateModelInputSchema,
-  agentSessionLiveAttachInputSchema,
-  agentSessionLiveDetachInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
   agentSessionLiveReadInputSchema,
   agentSessionLiveReadResultSchema,
+  agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
   agentSessionLiveSnapshotSchema,
@@ -105,17 +103,10 @@ export class HostAgentSessionLiveClient {
     );
   }
 
-  async agentSessionLiveAttach(input: AgentSessionLiveAttachInput): Promise<void> {
+  async agentSessionLiveRefresh(input: AgentSessionLiveRefreshInput): Promise<void> {
     await this.invokeFn(
-      "agent_session_live_attach",
-      agentSessionLiveAttachInputSchema.parse(input),
-    );
-  }
-
-  async agentSessionLiveDetach(input: AgentSessionLiveDetachInput): Promise<void> {
-    await this.invokeFn(
-      "agent_session_live_detach",
-      agentSessionLiveDetachInputSchema.parse(input),
+      "agent_session_live_refresh",
+      agentSessionLiveRefreshInputSchema.parse(input),
     );
   }
 

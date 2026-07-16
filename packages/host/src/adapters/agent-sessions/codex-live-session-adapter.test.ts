@@ -334,7 +334,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       transcriptEvents: [],
       catalogInvalidated: false,
     });
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     await expect(
       Effect.runPromise(service.releaseRuntime("runtime-1").pipe(Effect.timeout("100 millis"))),
@@ -412,16 +412,14 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       catalogInvalidated: false,
     });
 
-    await Effect.runPromise(service.attach({ attachmentId: "first-renderer", repoPath: "/repo" }));
-    await Effect.runPromise(service.detach({ attachmentId: "first-renderer" }));
-    await Effect.runPromise(
-      service.attach({ attachmentId: "reloaded-renderer", repoPath: "/repo" }),
-    );
+    events.length = 0;
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     expect(events).toHaveLength(2);
     expect(events[1]).toMatchObject({
       type: "snapshot",
-      attachmentId: "reloaded-renderer",
+      repoPath: "/repo",
       sessions: snapshots,
     });
     expect(harness.liveContextLoads).toEqual([]);

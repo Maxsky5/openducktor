@@ -1,4 +1,4 @@
-import { subscribeAgentSessionLiveEvents } from "@/lib/host-client";
+import { observeAgentSessionLive } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { host } from "../../shared/host";
 import type { AgentOrchestratorDependencies } from "./orchestrator-ports";
@@ -23,12 +23,10 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
     taskSessionStartupLeaseAbort: (...args) => host.taskSessionStartupLeaseAbort(...args),
   },
   liveSessionHostPort: {
-    agentSessionLiveAttach: (...args) => host.agentSessionLiveAttach(...args),
-    agentSessionLiveDetach: (...args) => host.agentSessionLiveDetach(...args),
     agentSessionLiveLoadContext: (...args) => host.agentSessionLiveLoadContext(...args),
     agentSessionLiveRead: (...args) => host.agentSessionLiveRead(...args),
     agentSessionLiveReplyApproval: (...args) => host.agentSessionLiveReplyApproval(...args),
     agentSessionLiveReplyQuestion: (...args) => host.agentSessionLiveReplyQuestion(...args),
-    subscribeAgentSessionLiveEvents,
+    observeAgentSessionLive,
   },
 });

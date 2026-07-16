@@ -231,30 +231,63 @@ describe("createLocalHostClient", () => {
 });
 
 describe("local host SSE subscriptions", () => {
-  test("shares one EventSource for multiple run-event subscribers", async () => {
-    const { subscribeLocalHostRunEvents } = await loadLocalHostTransport();
+  test("shares one EventSource across every host event channel", async () => {
+    const {
+      observeLocalHostAgentSessions,
+      subscribeLocalHostDevServerEvents,
+      subscribeLocalHostRunEvents,
+      subscribeLocalHostTaskEvents,
+    } = await loadLocalHostTransport();
     const fetchMock = mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
-    const listenerA = mock(() => {});
-    const listenerB = mock(() => {});
+    const runListener = mock(() => {});
+    const devServerListener = mock(() => {});
+    const taskListener = mock(() => {});
+    const liveSessionListener = mock(() => {});
 
-    const unsubscribeA = await subscribeLocalHostRunEvents(listenerA);
-    const unsubscribeB = await subscribeLocalHostRunEvents(listenerB);
+    const unsubscribeRun = await subscribeLocalHostRunEvents(runListener);
+    const unsubscribeTask = await subscribeLocalHostTaskEvents(taskListener);
+    const devServerSubscription = subscribeLocalHostDevServerEvents(devServerListener);
+    const liveSessionObservation = observeLocalHostAgentSessions(
+      { repoPath: "/repo" },
+      liveSessionListener,
+    );
 
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events");
     expect(FakeEventSource.instances[0]?.options).toEqual({ withCredentials: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    FakeEventSource.instances[0]?.emit("open", "");
+    const { unsubscribe: unsubscribeDevServer } = await devServerSubscription;
+    const stopObservingLiveSessions = await liveSessionObservation;
 
-    FakeEventSource.instances[0]?.emit("message", JSON.stringify({ type: "run" }));
+    const emitHostEvent = (channel: string, payload: unknown): void => {
+      FakeEventSource.instances[0]?.emit("message", JSON.stringify({ channel, payload }));
+    };
+    emitHostEvent("openducktor://run-event", { type: "run" });
+    emitHostEvent("openducktor://dev-server-event", { type: "dev-server" });
+    emitHostEvent("openducktor://task-event", { type: "task" });
+    emitHostEvent("openducktor://agent-session-live-event", {
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+    });
 
-    expect(listenerA).toHaveBeenCalledWith({ type: "run" });
-    expect(listenerB).toHaveBeenCalledWith({ type: "run" });
+    expect(runListener).toHaveBeenCalledWith({ type: "run" });
+    expect(devServerListener).toHaveBeenCalledWith({ type: "dev-server" });
+    expect(taskListener).toHaveBeenCalledWith({ type: "task" });
+    expect(liveSessionListener).toHaveBeenCalledWith({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+    });
 
-    unsubscribeA();
+    unsubscribeRun();
+    unsubscribeTask();
+    unsubscribeDevServer();
     expect(FakeEventSource.instances[0]?.closed).toBe(false);
 
-    unsubscribeB();
+    stopObservingLiveSessions();
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
   });
 
@@ -279,7 +312,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "task-events:1",
+      transportEpoch: "events:1",
     });
     expect(listener).toHaveBeenNthCalledWith(2, {
       __openducktorBrowserLive: true,
@@ -309,59 +342,85 @@ describe("local host SSE subscriptions", () => {
 
     eventSource.emit("open", "");
     const { transportEpoch, unsubscribe } = await subscription;
-    expect(transportEpoch).toBe("dev-server-events:0");
+    expect(transportEpoch).toBe("events:0");
     expect(listener).not.toHaveBeenCalled();
 
     eventSource.emit("open", "");
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "dev-server-events:1",
+      transportEpoch: "events:1",
     });
 
     unsubscribe();
   });
 
-  test("resolves live-session subscriptions before attach and advances the reconnect epoch", async () => {
-    const { subscribeLocalHostAgentSessionLiveEvents } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
+  test("refreshes live-session state on the shared connection before exposing deltas", async () => {
+    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    let refreshCallCount = 0;
+    let resolveSecondRefresh: () => void = () => {};
+    const secondRefresh = new Promise<void>((resolve) => {
+      resolveSecondRefresh = resolve;
+    });
+    const fetchMock = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/invoke/agent_session_live_refresh")) {
+        refreshCallCount += 1;
+        if (refreshCallCount === 2) {
+          resolveSecondRefresh();
+        }
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
     const listener = mock(() => {});
 
-    const subscription = subscribeLocalHostAgentSessionLiveEvents(listener);
+    const observation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
     const eventSource = await waitForEventSourceInstance();
-    const eventSourceUrl = new URL(eventSource.url);
-    const subscriber = eventSourceUrl.searchParams.get("subscriber");
-    expect(eventSourceUrl.pathname).toBe("/agent-session-live-events");
-    expect(subscriber).not.toBeNull();
-    if (subscriber === null) {
-      throw new Error("Expected live-session EventSource subscriber identity.");
-    }
-    const subscriptionPath = `agent-session-live-events?${new URLSearchParams({
-      subscriber,
-    }).toString()}`;
-    let didResolve = false;
-    void subscription.then(() => {
-      didResolve = true;
-    });
-
-    await Promise.resolve();
-    expect(didResolve).toBe(false);
+    expect(new URL(eventSource.url).pathname).toBe("/events");
 
     eventSource.emit("open", "");
-    const { transportEpoch, unsubscribe } = await subscription;
-    expect(transportEpoch).toBe(`${subscriptionPath}:0`);
+    const stopObserving = await observation;
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:14327/invoke/agent_session_live_refresh",
+      expect.objectContaining({ body: JSON.stringify({ repoPath: "/repo" }) }),
+    );
+
+    eventSource.emit(
+      "message",
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: {
+          type: "session_removed",
+          ref: {
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "thread-1",
+          },
+        },
+      }),
+    );
     expect(listener).not.toHaveBeenCalled();
 
-    eventSource.emit("open", "");
-    expect(listener).toHaveBeenNthCalledWith(1, {
-      __openducktorBrowserLive: true,
-      kind: "reconnected",
-      transportEpoch: `${subscriptionPath}:1`,
-    });
+    const snapshot = { type: "snapshot", repoPath: "/repo", sessions: [] };
+    eventSource.emit(
+      "message",
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: snapshot,
+      }),
+    );
+    expect(listener).toHaveBeenCalledWith(snapshot);
 
-    unsubscribe();
+    eventSource.emit("open", "");
+    await secondRefresh;
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        url.toString().endsWith("/invoke/agent_session_live_refresh"),
+      ),
+    ).toHaveLength(2);
+
+    stopObserving();
   });
 
   test("rejects dev-server subscriptions when EventSource errors before opening", async () => {
@@ -386,7 +445,7 @@ describe("local host SSE subscriptions", () => {
     const retryEventSource = await waitForEventSourceInstance(1);
     retryEventSource.emit("open", "");
     const { transportEpoch, unsubscribe } = await retrySubscription;
-    expect(transportEpoch).toBe("dev-server-events:0");
+    expect(transportEpoch).toBe("events:0");
     unsubscribe();
     expect(retryEventSource.closed).toBe(true);
   });
@@ -408,7 +467,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "stream-warning",
-      message: "EventSource dev-server-events reported an error after opening.",
+      message: "EventSource events reported an error after opening.",
     });
 
     eventSource.emit("error", "still disconnected");
@@ -418,14 +477,14 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenNthCalledWith(2, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
-      transportEpoch: "dev-server-events:1",
+      transportEpoch: "events:1",
     });
 
     eventSource.emit("error", "lost again");
     expect(listener).toHaveBeenNthCalledWith(3, {
       __openducktorBrowserLive: true,
       kind: "stream-warning",
-      message: "EventSource dev-server-events reported an error after opening.",
+      message: "EventSource events reported an error after opening.",
     });
 
     unsubscribe();
@@ -451,7 +510,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "stream-warning",
-      message: "EventSource dev-server-events reported an error after opening.",
+      message: "EventSource events reported an error after opening.",
     });
 
     eventSource.emit("error", "still disconnected");

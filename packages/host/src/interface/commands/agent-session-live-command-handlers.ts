@@ -6,11 +6,10 @@ import {
   agentSessionControlStartInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
-  agentSessionLiveAttachInputSchema,
-  agentSessionLiveDetachInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
   agentSessionLiveReadInputSchema,
+  agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
 } from "@openducktor/contracts";
@@ -78,13 +77,9 @@ export const createAgentSessionLiveCommandHandlers = (
       args,
       "agent_session_control_update_model",
     ).pipe(Effect.flatMap(service.updateSessionModel)),
-  agent_session_live_attach: (args) =>
-    parseCommandInput(agentSessionLiveAttachInputSchema, args, "agent_session_live_attach").pipe(
-      Effect.flatMap(service.attach),
-    ),
-  agent_session_live_detach: (args) =>
-    parseCommandInput(agentSessionLiveDetachInputSchema, args, "agent_session_live_detach").pipe(
-      Effect.flatMap(service.detach),
+  agent_session_live_refresh: (args) =>
+    parseCommandInput(agentSessionLiveRefreshInputSchema, args, "agent_session_live_refresh").pipe(
+      Effect.flatMap(service.refresh),
     ),
   agent_session_live_list: (args) =>
     parseCommandInput(agentSessionLiveListInputSchema, args, "agent_session_live_list").pipe(

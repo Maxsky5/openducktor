@@ -18,8 +18,6 @@ import type {
   AgentSessionControlStopInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
-  AgentSessionLiveAttachInput,
-  AgentSessionLiveDetachInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveListInput,
   AgentSessionLiveLoadContextInput,
@@ -29,6 +27,7 @@ import type {
   AgentSessionLiveReadInput,
   AgentSessionLiveReadResult,
   AgentSessionLiveRef,
+  AgentSessionLiveRefreshInput,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveScope,
@@ -252,8 +251,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionControlStopInputSchema",
   "agentSessionControlSummarySchema",
   "agentSessionControlUpdateModelInputSchema",
-  "agentSessionLiveAttachInputSchema",
-  "agentSessionLiveDetachInputSchema",
   "agentSessionLiveEnvelopeSchema",
   "agentSessionLiveListInputSchema",
   "agentSessionLiveLoadContextInputSchema",
@@ -263,6 +260,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionLiveReadInputSchema",
   "agentSessionLiveReadResultSchema",
   "agentSessionLiveRefSchema",
+  "agentSessionLiveRefreshInputSchema",
   "agentSessionLiveReplyApprovalInputSchema",
   "agentSessionLiveReplyQuestionInputSchema",
   "agentSessionLiveScopeSchema",
@@ -636,8 +634,6 @@ type ExportedTypeContract = {
   AgentSessionControlStopInput: AgentSessionControlStopInput;
   AgentSessionControlSummary: AgentSessionControlSummary;
   AgentSessionControlUpdateModelInput: AgentSessionControlUpdateModelInput;
-  AgentSessionLiveAttachInput: AgentSessionLiveAttachInput;
-  AgentSessionLiveDetachInput: AgentSessionLiveDetachInput;
   AgentSessionLiveEnvelope: AgentSessionLiveEnvelope;
   AgentSessionLiveListInput: AgentSessionLiveListInput;
   AgentSessionLiveLoadContextInput: AgentSessionLiveLoadContextInput;
@@ -647,6 +643,7 @@ type ExportedTypeContract = {
   AgentSessionLiveReadInput: AgentSessionLiveReadInput;
   AgentSessionLiveReadResult: AgentSessionLiveReadResult;
   AgentSessionLiveRef: AgentSessionLiveRef;
+  AgentSessionLiveRefreshInput: AgentSessionLiveRefreshInput;
   AgentSessionLiveReplyApprovalInput: AgentSessionLiveReplyApprovalInput;
   AgentSessionLiveReplyQuestionInput: AgentSessionLiveReplyQuestionInput;
   AgentSessionLiveScope: AgentSessionLiveScope;

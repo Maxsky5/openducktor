@@ -97,7 +97,10 @@ describe("electron shell bridge", () => {
     const listener = mock(() => {});
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
     const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
-    const liveSessionSubscription = await bridge.subscribeAgentSessionLiveEvents(listener);
+    const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
+      { repoPath: "/repo" },
+      listener,
+    );
     const unsubscribeTaskEvents = await bridge.subscribeTaskEvents(listener);
 
     expect(bridge.capabilities).toEqual({
@@ -109,14 +112,16 @@ describe("electron shell bridge", () => {
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://task-event", listener);
     expect(electronApi.subscribe).toHaveBeenCalledWith(
       "openducktor://agent-session-live-event",
-      listener,
+      expect.any(Function),
     );
+    expect(electronApi.invoke).toHaveBeenCalledWith("agent_session_live_refresh", {
+      repoPath: "/repo",
+    });
 
     unsubscribeRunEvents();
     expect(devServerSubscription.transportEpoch).toMatch(/^electron:\d+$/);
     devServerSubscription.unsubscribe();
-    expect(liveSessionSubscription.transportEpoch).toMatch(/^electron-agent-session-live:\d+$/);
-    liveSessionSubscription.unsubscribe();
+    stopObservingLiveSessions();
     unsubscribeTaskEvents();
     expect(unsubscribeSpy).toHaveBeenCalledTimes(4);
   });

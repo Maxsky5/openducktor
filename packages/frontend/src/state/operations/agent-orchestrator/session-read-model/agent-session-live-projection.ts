@@ -303,15 +303,17 @@ const materializePersistedSessions = ({
 }): AgentSessionCollection => {
   const loadedTaskIds = new Set(taskSessionRecords.taskIds);
   const persistedKeys = persistedRecordKeys(taskSessionRecords);
-  const carried = listAgentSessions(current)
-    .filter(
-      (session) =>
-        session.role !== null &&
-        (!loadedTaskIds.has(session.taskId) ||
-          session.status === "starting" ||
-          persistedKeys.has(agentSessionIdentityKey(session))),
-    )
-    .map(resetSessionLiveStateForSnapshot);
+  const carried: AgentSessionState[] = [];
+  for (const session of listAgentSessions(current)) {
+    const shouldCarrySession =
+      session.role !== null &&
+      (!loadedTaskIds.has(session.taskId) ||
+        session.status === "starting" ||
+        persistedKeys.has(agentSessionIdentityKey(session)));
+    if (shouldCarrySession) {
+      carried.push(resetSessionLiveStateForSnapshot(session));
+    }
+  }
   let collection = createAgentSessionCollection(carried);
   for (const { taskId, record } of taskSessionRecords.records) {
     const identity = toPersistedSessionIdentity(record);

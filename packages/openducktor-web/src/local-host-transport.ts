@@ -1,9 +1,18 @@
-import type { DevServerEventSubscription, HostLiveEventSubscription } from "@openducktor/frontend";
+import {
+  type AgentSessionLiveEnvelope,
+  type AgentSessionLiveRefreshInput,
+  agentSessionLiveEnvelopeSchema,
+} from "@openducktor/contracts";
+import type { DevServerEventSubscription } from "@openducktor/frontend";
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@openducktor/frontend/lib/browser-live/constants";
-import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
+import {
+  browserLiveControlEvent,
+  isBrowserLiveControlEvent,
+} from "@openducktor/frontend/lib/browser-live-control-events";
+import type { HostEventChannel } from "@openducktor/host";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 import { Effect } from "effect";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
@@ -19,19 +28,24 @@ import {
 import { readLocalHostErrorPayloadEffect } from "./local-host-errors";
 
 type BrowserSseListener = (payload: unknown) => void;
+type BrowserSseListenerRegistration = {
+  channel: HostEventChannel;
+  listener: BrowserSseListener;
+  receivesControlEvents: boolean;
+};
 
-const CONTROL_EVENT_SSE_PATHS = new Set([
-  "agent-session-live-events",
-  "dev-server-events",
-  "task-events",
-]);
+const RUN_EVENT_CHANNEL = "openducktor://run-event";
+const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
+const TASK_EVENT_CHANNEL = "openducktor://task-event";
+const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
+const HOST_EVENT_STREAM_PATH = "events";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
 const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
 
 type BrowserSseChannel = {
   eventSource: EventSource;
-  listeners: Map<number, BrowserSseListener>;
+  listeners: Map<number, BrowserSseListenerRegistration>;
   ready: Promise<void>;
   readTransportEpoch: () => string | null;
   handleMessage: (event: MessageEvent<string>) => void;
@@ -45,7 +59,7 @@ type BrowserSseSubscription = {
   unsubscribe: () => void;
 };
 
-const sseChannels = new Map<string, BrowserSseChannel>();
+let sseChannel: BrowserSseChannel | null = null;
 let nextSseListenerId = 0;
 let nextSseTransportEpoch = 0;
 let sessionPromise: Promise<void> | null = null;
@@ -179,12 +193,16 @@ const createHttpInvoke =
 
 export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
 
-const parseSsePayload = (raw: string): unknown => {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
+const parseHostEvent = (raw: string): { channel: string; payload: unknown } => {
+  const value: unknown = JSON.parse(raw);
+  if (!value || typeof value !== "object") {
+    throw new Error("Host event payload must be an object.");
   }
+  const record = value as Record<string, unknown>;
+  if (typeof record.channel !== "string" || !("payload" in record)) {
+    throw new Error("Host event payload must contain channel and payload fields.");
+  }
+  return { channel: record.channel, payload: record.payload };
 };
 
 const dispatchBrowserSseWarning = (
@@ -210,7 +228,7 @@ const dispatchBrowserSseWarning = (
   }
 };
 
-const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
+const closeSseChannelIfUnused = (channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
   }
@@ -222,32 +240,34 @@ const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void
     channel.handleStreamWarning as EventListener,
   );
   channel.eventSource.close();
-  sseChannels.delete(path);
+  if (sseChannel === channel) {
+    sseChannel = null;
+  }
 };
 
 const subscribeSseChannelEffect = (
-  path: string,
+  eventChannel: HostEventChannel,
   listener: BrowserSseListener,
+  receivesControlEvents = false,
 ): Effect.Effect<BrowserSseSubscription, WebError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
-    let channel = sseChannels.get(path);
+    let channel = sseChannel;
 
     if (!channel) {
       const eventSource = yield* Effect.try({
-        try: () => new EventSource(`${baseUrl}/${path}`, { withCredentials: true }),
+        try: () =>
+          new EventSource(`${baseUrl}/${HOST_EVENT_STREAM_PATH}`, { withCredentials: true }),
         catch: (cause) =>
           new WebDependencyError({
             dependency: "event-source",
             operation: "subscribe",
             message: errorMessage(cause),
             cause,
-            details: { path },
+            details: { path: HOST_EVENT_STREAM_PATH },
           }),
       });
-      const listeners = new Map<number, BrowserSseListener>();
-      const [streamPath] = path.split("?", 1);
-      const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(streamPath ?? path);
+      const listeners = new Map<number, BrowserSseListenerRegistration>();
       let hasOpened = false;
       let hasReportedPostOpenError = false;
       let transportEpoch: string | null = null;
@@ -259,13 +279,15 @@ const subscribeSseChannelEffect = (
       });
       void ready.catch(() => {});
       const handleMessage = (event: MessageEvent<string>): void => {
-        const payload = parseSsePayload(event.data);
-        for (const currentListener of listeners.values()) {
-          currentListener(payload);
+        const hostEvent = parseHostEvent(event.data);
+        for (const registration of listeners.values()) {
+          if (registration.channel === hostEvent.channel) {
+            registration.listener(hostEvent.payload);
+          }
         }
       };
       const handleOpen = (): void => {
-        transportEpoch = `${path}:${nextSseTransportEpoch}`;
+        transportEpoch = `${HOST_EVENT_STREAM_PATH}:${nextSseTransportEpoch}`;
         nextSseTransportEpoch += 1;
         if (!hasOpened) {
           hasOpened = true;
@@ -274,26 +296,30 @@ const subscribeSseChannelEffect = (
           return;
         }
         hasReportedPostOpenError = false;
-        if (!shouldEmitControlEvents) {
-          return;
-        }
-        for (const currentListener of listeners.values()) {
-          currentListener(
-            browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
-          );
+        for (const registration of listeners.values()) {
+          if (registration.receivesControlEvents) {
+            registration.listener(
+              browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND, transportEpoch),
+            );
+          }
         }
       };
       const handleError = (event: Event): void => {
         if (hasOpened) {
-          if (!shouldEmitControlEvents || hasReportedPostOpenError) {
+          if (hasReportedPostOpenError) {
             return;
           }
           const warningPayload = browserLiveControlEvent(
             BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-            `EventSource ${path} reported an error after opening.`,
+            `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`,
           );
           try {
-            dispatchBrowserSseWarning(listeners.values(), warningPayload);
+            dispatchBrowserSseWarning(
+              [...listeners.values()]
+                .filter((registration) => registration.receivesControlEvents)
+                .map((registration) => registration.listener),
+              warningPayload,
+            );
           } finally {
             hasReportedPostOpenError = true;
           }
@@ -303,21 +329,23 @@ const subscribeSseChannelEffect = (
           new WebDependencyError({
             dependency: "event-source",
             operation: "await-ready",
-            message: `EventSource failed before opening ${path}.`,
+            message: `EventSource failed before opening ${HOST_EVENT_STREAM_PATH}.`,
             cause: event,
-            details: { path },
+            details: { path: HOST_EVENT_STREAM_PATH },
           }),
         );
       };
       const handleStreamWarning = (event: MessageEvent<string>): void => {
-        if (!shouldEmitControlEvents) {
-          return;
-        }
         const warningPayload = browserLiveControlEvent(
           BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
           event.data,
         );
-        dispatchBrowserSseWarning(listeners.values(), warningPayload);
+        dispatchBrowserSseWarning(
+          [...listeners.values()]
+            .filter((registration) => registration.receivesControlEvents)
+            .map((registration) => registration.listener),
+          warningPayload,
+        );
       };
 
       eventSource.addEventListener("message", handleMessage as EventListener);
@@ -334,12 +362,12 @@ const subscribeSseChannelEffect = (
         handleError,
         handleStreamWarning,
       };
-      sseChannels.set(path, channel);
+      sseChannel = channel;
     }
 
     const listenerId = nextSseListenerId;
     nextSseListenerId += 1;
-    channel.listeners.set(listenerId, listener);
+    channel.listeners.set(listenerId, { channel: eventChannel, listener, receivesControlEvents });
     const activeChannel = channel;
     const subscriptionReady = activeChannel.ready.then(() => {
       const transportEpoch = activeChannel.readTransportEpoch();
@@ -347,8 +375,8 @@ const subscribeSseChannelEffect = (
         throw new WebDependencyError({
           dependency: "event-source",
           operation: "read-transport-epoch",
-          message: `EventSource ${path} opened without a transport epoch.`,
-          details: { path },
+          message: `EventSource ${HOST_EVENT_STREAM_PATH} opened without a transport epoch.`,
+          details: { path: HOST_EVENT_STREAM_PATH },
         });
       }
       return transportEpoch;
@@ -358,12 +386,12 @@ const subscribeSseChannelEffect = (
     return {
       ready: subscriptionReady,
       unsubscribe: () => {
-        const currentChannel = sseChannels.get(path);
+        const currentChannel = sseChannel;
         if (!currentChannel) {
           return;
         }
         currentChannel.listeners.delete(listenerId);
-        closeSseChannelIfUnused(path, currentChannel);
+        closeSseChannelIfUnused(currentChannel);
       },
     };
   });
@@ -374,18 +402,18 @@ export const subscribeLocalHostRunEvents = async (
   return runWebBoundary(
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect("events", listener)).unsubscribe;
+      return (yield* subscribeSseChannelEffect(RUN_EVENT_CHANNEL, listener)).unsubscribe;
     }),
   );
 };
 
 const subscribeReadyLocalHostEventsEffect = (
-  path: string,
+  channel: HostEventChannel,
   listener: (payload: unknown) => void,
-): Effect.Effect<HostLiveEventSubscription, WebError> =>
+): Effect.Effect<DevServerEventSubscription, WebError> =>
   Effect.gen(function* () {
     yield* ensureLocalHostSessionDedupedEffect();
-    const subscription = yield* subscribeSseChannelEffect(path, listener);
+    const subscription = yield* subscribeSseChannelEffect(channel, listener, true);
     const readyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
@@ -397,8 +425,11 @@ const subscribeReadyLocalHostEventsEffect = (
                   new WebDependencyError({
                     dependency: "event-source",
                     operation: "await-ready",
-                    message: `Timed out waiting for EventSource ${path} subscription to open.`,
-                    details: { path, timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS },
+                    message: `Timed out waiting for EventSource ${HOST_EVENT_STREAM_PATH} subscription to open.`,
+                    details: {
+                      path: HOST_EVENT_STREAM_PATH,
+                      timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
+                    },
                   }),
                 ),
               INITIAL_SSE_READY_TIMEOUT_MS,
@@ -419,7 +450,7 @@ const subscribeReadyLocalHostEventsEffect = (
             operation: "await-ready",
             message: errorMessage(cause),
             cause,
-            details: { path },
+            details: { path: HOST_EVENT_STREAM_PATH },
           });
         },
       }),
@@ -437,15 +468,100 @@ const subscribeReadyLocalHostEventsEffect = (
 export const subscribeLocalHostDevServerEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<DevServerEventSubscription> => {
-  return runWebBoundary(subscribeReadyLocalHostEventsEffect("dev-server-events", listener));
+  return runWebBoundary(subscribeReadyLocalHostEventsEffect(DEV_SERVER_EVENT_CHANNEL, listener));
 };
 
-export const subscribeLocalHostAgentSessionLiveEvents = async (
-  listener: (payload: unknown) => void,
-): Promise<HostLiveEventSubscription> => {
-  const query = new URLSearchParams({ subscriber: crypto.randomUUID() });
+const liveEnvelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
+  switch (envelope.type) {
+    case "snapshot":
+    case "fault":
+      return envelope.repoPath;
+    case "session_upsert":
+      return envelope.session.ref.repoPath;
+    case "session_removed":
+      return envelope.ref.repoPath;
+    case "transcript_event":
+      return envelope.event.sessionRef.repoPath;
+    case "catalog_invalidated":
+      return envelope.scope.repoPath;
+  }
+};
+
+export const observeLocalHostAgentSessions = async (
+  input: AgentSessionLiveRefreshInput,
+  listener: (envelope: AgentSessionLiveEnvelope) => void,
+): Promise<() => void> => {
   return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(`agent-session-live-events?${query.toString()}`, listener),
+    Effect.gen(function* () {
+      const client = createLocalHostClient();
+      let closed = false;
+      let awaitingSnapshot = true;
+      let refreshTail = Promise.resolve();
+      const refresh = (): void => {
+        awaitingSnapshot = true;
+        refreshTail = refreshTail
+          .then(async () => {
+            if (!closed) {
+              await client.agentSessionLiveRefresh(input);
+            }
+          })
+          .catch((cause: unknown) => {
+            if (!closed) {
+              listener({
+                type: "fault",
+                repoPath: input.repoPath,
+                operation: "agent-session-live.refresh",
+                message: errorMessage(cause),
+              } satisfies AgentSessionLiveEnvelope);
+            }
+          });
+      };
+      const subscription = yield* subscribeReadyLocalHostEventsEffect(
+        AGENT_SESSION_LIVE_EVENT_CHANNEL,
+        (payload) => {
+          if (isBrowserLiveControlEvent(payload)) {
+            if (payload.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
+              refresh();
+            }
+            return;
+          }
+          const envelope = agentSessionLiveEnvelopeSchema.parse(payload);
+          if (liveEnvelopeRepoPath(envelope) !== input.repoPath) {
+            return;
+          }
+          if (envelope.type === "snapshot") {
+            awaitingSnapshot = false;
+            listener(envelope);
+            return;
+          }
+          if (!awaitingSnapshot) {
+            listener(envelope);
+          }
+        },
+      );
+      const initialRefreshExit = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => client.agentSessionLiveRefresh(input),
+          catch: (cause) =>
+            isWebError(cause)
+              ? cause
+              : new WebDependencyError({
+                  dependency: "local-web-host",
+                  operation: "agent-session-live.refresh",
+                  message: errorMessage(cause),
+                  cause,
+                }),
+        }),
+      );
+      if (initialRefreshExit._tag === "Failure") {
+        subscription.unsubscribe();
+        return yield* causeToWebBoundaryError(initialRefreshExit.cause);
+      }
+      return () => {
+        closed = true;
+        subscription.unsubscribe();
+      };
+    }),
   );
 };
 
@@ -455,7 +571,7 @@ export const subscribeLocalHostTaskEvents = async (
   return runWebBoundary(
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect("task-events", listener)).unsubscribe;
+      return (yield* subscribeSseChannelEffect(TASK_EVENT_CHANNEL, listener, true)).unsubscribe;
     }),
   );
 };

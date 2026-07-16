@@ -18,14 +18,13 @@ import type {
   AgentPendingQuestionRequest,
   AgentRole,
   AgentSessionActivity,
-  AgentSessionLiveAttachInput,
-  AgentSessionLiveDetachInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveListInput,
   AgentSessionLiveLoadContextInput,
   AgentSessionLiveLoadContextResult,
   AgentSessionLiveReadInput,
   AgentSessionLiveReadResult,
+  AgentSessionLiveRefreshInput,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveSnapshot,
@@ -283,11 +282,10 @@ export interface AgentCatalogPort {
 export interface AgentSessionLivePort {
   listLiveSessions(input: AgentSessionLiveListInput): Promise<AgentSessionLiveSnapshot[]>;
   readLiveSession(input: AgentSessionLiveReadInput): Promise<AgentSessionLiveReadResult>;
-  attachLiveSessions(
-    input: AgentSessionLiveAttachInput,
+  observeLiveSessions(
+    input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ): Promise<EventUnsubscribe>;
-  detachLiveSessions(input: AgentSessionLiveDetachInput): Promise<void>;
   loadLiveSessionContext(
     input: AgentSessionLiveLoadContextInput,
   ): Promise<AgentSessionLiveLoadContextResult>;

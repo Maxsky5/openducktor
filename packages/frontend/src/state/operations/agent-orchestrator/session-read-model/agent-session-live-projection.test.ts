@@ -137,11 +137,10 @@ describe("agent session live projection", () => {
         }),
       ],
     });
-    const resolved: AgentSessionLiveEnvelope = {
+    const resolved = {
       type: "session_upsert",
-      attachmentId: "attachment-1",
       session: snapshot("thread-1", { pendingApprovals: [] }),
-    };
+    } satisfies AgentSessionLiveEnvelope;
 
     const afterResolution = applyAgentSessionLiveDelta({
       current: initial,
@@ -217,7 +216,6 @@ describe("agent session live projection", () => {
       taskSessionRecords: tasks,
       envelope: {
         type: "session_upsert",
-        attachmentId: "attachment-1",
         session: snapshot("thread-1", { pendingApprovals: [] }),
       },
     });
@@ -241,7 +239,6 @@ describe("agent session live projection", () => {
       taskSessionRecords: tasks,
       envelope: {
         type: "session_removed",
-        attachmentId: "attachment-1",
         ref: snapshot("thread-1").ref,
       },
     });
@@ -256,7 +253,6 @@ describe("agent session live projection", () => {
       taskSessionRecords: tasks,
       envelope: {
         type: "session_upsert",
-        attachmentId: "attachment-1",
         session: snapshot("thread-1", {
           activity: "idle",
           pendingApprovals: [

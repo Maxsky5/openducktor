@@ -318,7 +318,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(preparer(runtime));
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
     await Effect.runPromise(prepared.startForwarding());
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    envelopes.length = 0;
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     let resolveCoordinatorHeld: () => void = () => undefined;
     let releaseCoordinator: () => void = () => undefined;
@@ -420,7 +421,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     );
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
     await Effect.runPromise(prepared.startForwarding());
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    envelopes.length = 0;
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     rejectNextDelivery = true;
     native.emit({
@@ -611,7 +613,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     };
     await Effect.runPromise(service.registerRuntimeAdapter(otherAdapter));
     await Effect.runPromise(prepared.startForwarding());
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    envelopes.length = 0;
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     await harness.emit({
       type: "runtime_fault",

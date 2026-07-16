@@ -710,8 +710,6 @@ export const agentSessionTranscriptEventSchema: z.ZodType<AgentSessionTranscript
     },
   ) as unknown as z.ZodType<AgentSessionTranscriptEvent>;
 
-const attachmentIdSchema = nonEmptyStringSchema;
-
 export const agentSessionLiveScopeSchema = z
   .object({
     repoPath: nonEmptyStringSchema,
@@ -725,42 +723,38 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("snapshot"),
-      attachmentId: attachmentIdSchema,
+      repoPath: nonEmptyStringSchema,
       sessions: z.array(agentSessionLiveSnapshotSchema),
     })
     .strict(),
   z
     .object({
       type: z.literal("session_upsert"),
-      attachmentId: attachmentIdSchema,
       session: agentSessionLiveSnapshotSchema,
     })
     .strict(),
   z
     .object({
       type: z.literal("session_removed"),
-      attachmentId: attachmentIdSchema,
       ref: agentSessionLiveRefSchema,
     })
     .strict(),
   z
     .object({
       type: z.literal("transcript_event"),
-      attachmentId: attachmentIdSchema,
       event: agentSessionTranscriptEventSchema,
     })
     .strict(),
   z
     .object({
       type: z.literal("catalog_invalidated"),
-      attachmentId: attachmentIdSchema,
       scope: agentSessionLiveScopeSchema,
     })
     .strict(),
   z
     .object({
       type: z.literal("fault"),
-      attachmentId: attachmentIdSchema,
+      repoPath: nonEmptyStringSchema,
       message: nonEmptyStringSchema,
       operation: nonEmptyStringSchema.optional(),
       ref: agentSessionLiveRefSchema.optional(),
@@ -776,23 +770,11 @@ export const agentSessionLiveListInputSchema = z
   .strict();
 export type AgentSessionLiveListInput = z.infer<typeof agentSessionLiveListInputSchema>;
 
+export const agentSessionLiveRefreshInputSchema = agentSessionLiveListInputSchema;
+export type AgentSessionLiveRefreshInput = AgentSessionLiveListInput;
+
 export const agentSessionLiveReadInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionLiveReadInput = z.infer<typeof agentSessionLiveReadInputSchema>;
-
-export const agentSessionLiveAttachInputSchema = z
-  .object({
-    attachmentId: attachmentIdSchema,
-    repoPath: nonEmptyStringSchema,
-  })
-  .strict();
-export type AgentSessionLiveAttachInput = z.infer<typeof agentSessionLiveAttachInputSchema>;
-
-export const agentSessionLiveDetachInputSchema = z
-  .object({
-    attachmentId: attachmentIdSchema,
-  })
-  .strict();
-export type AgentSessionLiveDetachInput = z.infer<typeof agentSessionLiveDetachInputSchema>;
 
 export const agentSessionLiveLoadContextInputSchema = agentSessionLiveRefSchema
   .extend({

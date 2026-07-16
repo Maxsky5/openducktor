@@ -98,19 +98,19 @@ Files:
 Owns:
 
 - consuming query-backed durable task session records for the active task set
-- opening the generic host live-event transport before requesting attachment
-- accepting exactly one initial host snapshot as the first item for an attachment
+- observing the generic host live-event transport before requesting a repository refresh
+- accepting the repository snapshot as the first item for each initial load or reconnect
 - merging durable records with normalized live snapshots in one collection commit
 - applying ordered live upserts, removals, transcript events, and catalog invalidations
 - projecting parent/child pending input from normalized host relationships
 
-Invariant: the transport subscription must exist before `agentSessionLiveAttach`.
-Only envelopes whose `attachmentId` matches the active attachment may mutate the
-collection. A delta before the initial snapshot, or a second initial snapshot, is
-an attachment failure rather than something the renderer attempts to reconcile.
-Reconnect creates a new attachment identity; stale envelopes from an older
-attachment cannot mutate the current projection.
-The initial host snapshot is committed once so session rows, activity, pending
+Invariant: the shared host-event listener must exist before `agentSessionLiveRefresh`.
+The browser uses one channel-tagged SSE connection for all host event families;
+Electron uses its existing generic host-event IPC envelope. Live-session observers
+filter by repository, ignore replayed deltas while awaiting a refresh snapshot,
+and accept later refresh snapshots as authoritative collection resets. No renderer
+or transport attachment identity is required.
+Each host snapshot is committed once so session rows, activity, pending
 input, context usage, and sidebar counters all derive from the same collection.
 The renderer must not keep observer registries, snapshot/event overlap counters,
 pending-input tombstones, or runtime-specific recovery caches.
@@ -337,7 +337,7 @@ Owns two shapes:
   `taskId`, `role`, optional model, and optional purpose
 
 Do not pass prompts, task roles, models, runtime IDs, or native request IDs into
-the generic live attachment contract.
+the generic live observation contract.
 
 ### Existing Session Send Preparation
 
@@ -839,7 +839,7 @@ Owns:
 
 Must not own:
 
-- creating global sessions or live-state attachments
+- creating global sessions or live-state observers
 - runtime route resolution
 - workflow session status
 - parent-observed copies of pending permissions/questions
@@ -893,16 +893,16 @@ applies ordered deltas without a second frontend cache.
 1. The app loads task IDs from the task store.
 2. `use-task-session-records.ts` reads per-task session records through the
    shared task-session query keys.
-3. The renderer installs the generic live-event listener, then requests one host
-   attachment for the active repository.
-4. The attachment's first envelope is the complete normalized host snapshot.
+3. The renderer observes the existing generic host-event channel, then requests
+   one live-state refresh for the active repository.
+4. The refresh publishes the complete normalized host snapshot before later deltas.
    `buildAgentSessionLiveCollection` merges it with durable shells and commits the
    session collection once.
 5. Session rows, activity, pending input, retained context usage, and sidebar
    counters all derive from that same committed collection.
 6. Subsequent ordered upserts, removals, transcript events, faults, and catalog
-   invalidations arrive on the same attachment channel. Reconnect uses a new
-   attachment id, so an old stream cannot mutate current state.
+   invalidations arrive on the same generic host-event connection. On browser
+   reconnect, replayed live deltas are ignored until a fresh snapshot arrives.
 7. Transcript history and missing context are independent selected-session reads.
    Neither blocks session discovery or pending-input hydration.
 
@@ -920,7 +920,7 @@ Use these compact tests as the first-line safety net:
 | Child pending input survives reload on a materialized parent | `session-read-model/agent-session-live-projection.test.ts` and host Codex live-adapter tests |
 | Selected-session history remains on demand | `history/use-selected-session-history-load.test.tsx` and `history/session-history-loader.test.ts` |
 | Missing context is selected-session-only and independent of history | `history/use-selected-session-context-load.test.tsx` and runtime-adapter context tests |
-| Transient live attachment failure can recover without polling | `hooks/use-repo-session-read-model.test.tsx` |
+| Browser reconnect refreshes live state without another SSE connection | `local-host-transport.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `components/features/agents/agent-chat/agent-chat-thread-state.test.ts`, `components/features/agents/agent-chat/agent-chat-thread.test.ts`, `pages/agents/selected-session/selected-session-view-projection.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `pages/agents/use-agent-studio-page-models.test.tsx` |
 | Selected-session runtime-data ref eligibility | `support/session-runtime-data-refs.test.ts` and `hooks/use-session-runtime-data.test.tsx` |

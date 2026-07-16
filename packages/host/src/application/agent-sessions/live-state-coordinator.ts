@@ -7,7 +7,7 @@ export type LiveStateCoordinator = {
 };
 
 /**
- * Serializes live-projection mutations and attachment handshakes through one
+ * Serializes live-projection mutations and repository refreshes through one
  * host-owned queue. Runtime adapters retain the state; this coordinator only
  * defines the order in which state changes become observable.
  */

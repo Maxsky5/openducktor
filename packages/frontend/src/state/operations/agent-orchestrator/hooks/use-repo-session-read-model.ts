@@ -1,18 +1,9 @@
-import {
-  type AgentSessionLiveEnvelope,
-  agentSessionLiveEnvelopeSchema,
-} from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  BROWSER_LIVE_RECONNECTED_EVENT_KIND,
-  BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-} from "@/lib/browser-live/constants";
-import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
-import type { HostLiveEventSubscription } from "@/lib/shell-bridge";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import {
@@ -36,13 +27,11 @@ import { useTaskSessionRecords } from "../session-read-model/use-task-session-re
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
 
-export type AgentSessionLiveFrontendPort = Pick<
-  HostClient,
-  "agentSessionLiveAttach" | "agentSessionLiveDetach" | "agentSessionLiveReplyApproval"
-> & {
-  subscribeAgentSessionLiveEvents: (
-    listener: (payload: unknown) => void,
-  ) => Promise<HostLiveEventSubscription>;
+export type AgentSessionLiveFrontendPort = Pick<HostClient, "agentSessionLiveReplyApproval"> & {
+  observeAgentSessionLive: (
+    input: { repoPath: string },
+    listener: (envelope: AgentSessionLiveEnvelope) => void,
+  ) => Promise<() => void>;
 };
 
 type UseRepoSessionReadModelArgs = {
@@ -61,9 +50,6 @@ export type RepoSessionReadModelState = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   reloadSessionReadModel: () => void;
 };
-
-const createAttachmentId = (transportEpoch: string): string =>
-  `${transportEpoch}:${crypto.randomUUID()}`;
 
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
@@ -128,14 +114,11 @@ export const useRepoSessionReadModel = ({
     });
     const effectReloadGeneration = reloadGeneration;
     let cancelled = false;
-    let subscription: HostLiveEventSubscription | null = null;
-    let attachmentId: string | null = null;
-    let transportEpoch: string | null = null;
+    let unsubscribe: (() => void) | null = null;
     let awaitingInitialSnapshot = true;
-    let attachmentCommand = Promise.resolve();
     const isStaleRepoOperation = (): boolean =>
       cancelled || isRepoStale() || latestReloadGenerationRef.current !== effectReloadGeneration;
-    const failAttachment = (message: string): void => {
+    const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
         setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
       }
@@ -181,22 +164,16 @@ export const useRepoSessionReadModel = ({
       }
     };
     const applyEnvelope = (envelope: AgentSessionLiveEnvelope): void => {
-      if (isStaleRepoOperation() || envelope.attachmentId !== attachmentId) {
+      if (isStaleRepoOperation()) {
         return;
       }
       if (envelope.type === "snapshot") {
-        if (!awaitingInitialSnapshot) {
-          failAttachment(
-            `Live-session attachment '${envelope.attachmentId}' delivered more than one initial snapshot.`,
-          );
-          return;
-        }
         commitInitialSnapshot(envelope);
         return;
       }
       if (awaitingInitialSnapshot) {
-        failAttachment(
-          `Live-session attachment '${envelope.attachmentId}' delivered '${envelope.type}' before its initial snapshot.`,
+        failObservation(
+          `Live-session observation delivered '${envelope.type}' before its initial snapshot.`,
         );
         return;
       }
@@ -250,102 +227,37 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "fault") {
-        failAttachment(
+        failObservation(
           `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`,
         );
       }
     };
-    const attach = async (nextAttachmentId: string): Promise<void> => {
-      if (isStaleRepoOperation()) {
-        return;
-      }
-      attachmentId = nextAttachmentId;
-      awaitingInitialSnapshot = true;
-      setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
-      await liveSessionPort.agentSessionLiveAttach({ attachmentId: nextAttachmentId, repoPath });
-    };
-    const replaceAttachment = async (nextTransportEpoch: string): Promise<void> => {
-      const previousAttachmentId = attachmentId;
-      attachmentId = null;
-      if (previousAttachmentId !== null) {
-        await liveSessionPort.agentSessionLiveDetach({ attachmentId: previousAttachmentId });
-      }
-      if (isStaleRepoOperation()) {
-        return;
-      }
-      transportEpoch = nextTransportEpoch;
-      await attach(createAttachmentId(nextTransportEpoch));
-    };
-    const queueReattach = (nextTransportEpoch: string, reason: string): void => {
-      attachmentCommand = attachmentCommand
-        .then(() => replaceAttachment(nextTransportEpoch))
-        .catch((error) => {
-          failAttachment(
-            `Failed to reattach live-session observation for repo '${repoPath}' after ${reason}: ${errorMessage(error)}`,
-          );
-        });
-    };
 
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     void liveSessionPort
-      .subscribeAgentSessionLiveEvents((payload) => {
+      .observeAgentSessionLive({ repoPath }, (envelope) => {
         if (isStaleRepoOperation()) {
           return;
         }
-        if (isBrowserLiveControlEvent(payload)) {
-          if (payload.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
-            queueReattach(payload.transportEpoch, "browser transport reconnect");
-          } else if (
-            payload.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND &&
-            transportEpoch !== null
-          ) {
-            queueReattach(transportEpoch, payload.message ?? "browser stream warning");
-          }
-          return;
-        }
-        const parsed = agentSessionLiveEnvelopeSchema.safeParse(payload);
-        if (!parsed.success) {
-          failAttachment(`Received an invalid live-session event: ${errorMessage(parsed.error)}`);
-          return;
-        }
-        applyEnvelope(parsed.data);
+        applyEnvelope(envelope);
       })
-      .then((nextSubscription) => {
+      .then((stopObserving) => {
         if (isStaleRepoOperation()) {
-          nextSubscription.unsubscribe();
+          stopObserving();
           return;
         }
-        subscription = nextSubscription;
-        transportEpoch = nextSubscription.transportEpoch;
-        attachmentCommand = attach(createAttachmentId(nextSubscription.transportEpoch)).catch(
-          (error) => {
-            failAttachment(
-              `Failed to attach live-session observation for repo '${repoPath}': ${errorMessage(error)}`,
-            );
-          },
-        );
+        unsubscribe = stopObserving;
       })
       .catch((error) => {
-        failAttachment(
-          `Failed to subscribe to live-session events for repo '${repoPath}': ${errorMessage(error)}`,
+        failObservation(
+          `Failed to observe live sessions for repo '${repoPath}': ${errorMessage(error)}`,
         );
       });
 
     return () => {
       cancelled = true;
-      subscription?.unsubscribe();
+      unsubscribe?.();
       transcriptEvents.close();
-      runOrchestratorSideEffect(
-        "agent-session-live-detach",
-        attachmentCommand.then(async () => {
-          const attachedId = attachmentId;
-          attachmentId = null;
-          if (attachedId !== null) {
-            await liveSessionPort.agentSessionLiveDetach({ attachmentId: attachedId });
-          }
-        }),
-        { tags: { repoPath } },
-      );
     };
   }, [
     commitSessionCollection,

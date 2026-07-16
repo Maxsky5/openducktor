@@ -1,6 +1,8 @@
 import {
+  type AgentSessionLiveEnvelope,
   type AppUpdateCommandResult,
   type AppUpdateState,
+  agentSessionLiveEnvelopeSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
 } from "@openducktor/contracts";
@@ -13,7 +15,22 @@ const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 let nextDevServerTransportEpoch = 0;
-let nextAgentSessionLiveTransportEpoch = 0;
+
+const liveEnvelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
+  switch (envelope.type) {
+    case "snapshot":
+    case "fault":
+      return envelope.repoPath;
+    case "session_upsert":
+      return envelope.session.ref.repoPath;
+    case "session_removed":
+      return envelope.ref.repoPath;
+    case "transcript_event":
+      return envelope.event.sessionRef.repoPath;
+    case "catalog_invalidated":
+      return envelope.scope.repoPath;
+  }
+};
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
   constructor() {
@@ -60,11 +77,29 @@ export const createElectronShellBridge = (): ShellBridge => {
       nextDevServerTransportEpoch += 1;
       return { transportEpoch, unsubscribe };
     },
-    subscribeAgentSessionLiveEvents: async (listener) => {
-      const unsubscribe = electronApi.subscribe(AGENT_SESSION_LIVE_EVENT_CHANNEL, listener);
-      const transportEpoch = `electron-agent-session-live:${nextAgentSessionLiveTransportEpoch}`;
-      nextAgentSessionLiveTransportEpoch += 1;
-      return { transportEpoch, unsubscribe };
+    observeAgentSessionLive: async (input, listener) => {
+      let awaitingSnapshot = true;
+      const unsubscribe = electronApi.subscribe(AGENT_SESSION_LIVE_EVENT_CHANNEL, (payload) => {
+        const envelope = agentSessionLiveEnvelopeSchema.parse(payload);
+        if (liveEnvelopeRepoPath(envelope) !== input.repoPath) {
+          return;
+        }
+        if (envelope.type === "snapshot") {
+          awaitingSnapshot = false;
+          listener(envelope);
+          return;
+        }
+        if (!awaitingSnapshot) {
+          listener(envelope);
+        }
+      });
+      try {
+        await client.agentSessionLiveRefresh(input);
+      } catch (cause) {
+        unsubscribe();
+        throw cause;
+      }
+      return unsubscribe;
     },
     subscribeTaskEvents: subscribeElectronEvent(electronApi, TASK_EVENT_CHANNEL),
     appUpdates: {

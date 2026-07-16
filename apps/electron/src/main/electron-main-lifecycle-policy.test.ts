@@ -66,9 +66,7 @@ describe("Electron main lifecycle policy", () => {
   test("startup starts scheduled app update checks after the main window is created", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
-    expect(source).toContain(
-      "createMainWindowEffect(rendererSession, agentSessionLiveAttachments).pipe(",
-    );
+    expect(source).toContain("createMainWindowEffect(rendererSession).pipe(");
     expect(source).toContain("appUpdateService.startBackgroundChecks()");
   });
 

@@ -40,10 +40,9 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
 });
 
 const createState = (
-  duringAttach: (
+  duringObservation: (
     emit: (event: AgentSessionLiveEnvelope) => void,
-    attachmentId: string,
-    attachIndex: number,
+    observeIndex: number,
   ) => void,
   taskRecords: AgentSessionRecord | AgentSessionRecord[] = record,
 ) => {
@@ -51,32 +50,24 @@ const createState = (
   const records = Array.isArray(taskRecords) ? taskRecords : [taskRecords];
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), records);
   const sessionStore = createAgentSessionsStore("/repo");
-  let listener: ((payload: unknown) => void) | null = null;
+  let listener: ((payload: AgentSessionLiveEnvelope) => void) | null = null;
   const callOrder: string[] = [];
-  const subscribeAgentSessionLiveEvents = mock(async (nextListener: (payload: unknown) => void) => {
-    callOrder.push("listener-ready");
-    listener = nextListener;
-    return {
-      transportEpoch: "test-epoch",
-      unsubscribe: mock(() => undefined),
-    };
-  });
-  const agentSessionLiveAttach = mock(async ({ attachmentId }: { attachmentId: string }) => {
-    callOrder.push("attach");
-    const emit = listener;
-    if (!emit) {
-      throw new Error("Attach ran before the event listener was ready.");
-    }
-    duringAttach(emit, attachmentId, agentSessionLiveAttach.mock.calls.length);
-  });
-  const agentSessionLiveDetach = mock(async () => undefined);
+  const observeAgentSessionLive = mock(
+    async (
+      _input: { repoPath: string },
+      nextListener: (payload: AgentSessionLiveEnvelope) => void,
+    ) => {
+      callOrder.push("observe");
+      listener = nextListener;
+      duringObservation(nextListener, observeAgentSessionLive.mock.calls.length);
+      return mock(() => undefined);
+    },
+  );
   const agentSessionLiveReplyApproval = mock(
     async (_input: AgentSessionLiveReplyApprovalInput) => undefined,
   );
   const liveSessionPort: AgentSessionLiveFrontendPort = {
-    subscribeAgentSessionLiveEvents,
-    agentSessionLiveAttach,
-    agentSessionLiveDetach,
+    observeAgentSessionLive,
     agentSessionLiveReplyApproval,
   };
   const transcriptEvents: AgentSessionTranscriptEventConsumer = {
@@ -106,10 +97,9 @@ const createState = (
     getActivitySummary: () =>
       summarizeAgentActivity({ sessions: sessionStore.getActivitySnapshot().sessions }),
     harness: createHookHarness(useRepoSessionReadModel, props),
-    agentSessionLiveAttach,
-    agentSessionLiveDetach,
+    observeAgentSessionLive,
     agentSessionLiveReplyApproval,
-    emit: (payload: unknown) => {
+    emit: (payload: AgentSessionLiveEnvelope) => {
       if (!listener) {
         throw new Error("Live-session listener is not ready.");
       }
@@ -120,16 +110,15 @@ const createState = (
 };
 
 describe("useRepoSessionReadModel", () => {
-  test("registers the listener before attach and commits snapshot plus ordered creation once", async () => {
-    const state = createState((emit, attachmentId) => {
+  test("observes the repository and commits snapshot plus ordered creation once", async () => {
+    const state = createState((emit) => {
       emit({
         type: "snapshot",
-        attachmentId,
+        repoPath: "/repo",
         sessions: [snapshot()],
       });
       emit({
         type: "session_upsert",
-        attachmentId,
         session: snapshot({
           activity: "waiting_for_permission",
           pendingApprovals: [
@@ -147,11 +136,14 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
-      expect(state.callOrder).toEqual(["listener-ready", "attach"]);
+      expect(state.callOrder).toEqual(["observe"]);
       expect(state.getSession()?.pendingApprovals).toEqual([
         expect.objectContaining({ requestId: "opaque-1" }),
       ]);
-      expect(state.agentSessionLiveAttach).toHaveBeenCalledTimes(1);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledWith(
+        { repoPath: "/repo" },
+        expect.any(Function),
+      );
     } finally {
       await state.harness.unmount();
     }
@@ -180,10 +172,10 @@ describe("useRepoSessionReadModel", () => {
           },
         ],
       });
-    const state = createState((emit, attachmentId) => {
+    const state = createState((emit) => {
       emit({
         type: "snapshot",
-        attachmentId,
+        repoPath: "/repo",
         sessions: records.map(waitingSnapshot),
       });
     }, records);
@@ -207,11 +199,11 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("does not resurrect a request resolved during attachment", async () => {
-    const state = createState((emit, attachmentId) => {
+  test("does not resurrect a request resolved during observation", async () => {
+    const state = createState((emit) => {
       emit({
         type: "snapshot",
-        attachmentId,
+        repoPath: "/repo",
         sessions: [
           snapshot({
             pendingApprovals: [
@@ -226,7 +218,6 @@ describe("useRepoSessionReadModel", () => {
       });
       emit({
         type: "session_upsert",
-        attachmentId,
         session: snapshot({ pendingApprovals: [] }),
       });
     });
@@ -240,94 +231,9 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("reconnects with a new attachment identity from the new transport epoch", async () => {
-    const state = createState((emit, attachmentId) => {
-      emit({ type: "snapshot", attachmentId, sessions: [snapshot()] });
-    });
-
-    try {
-      await state.harness.mount();
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      const firstAttachmentId = state.agentSessionLiveAttach.mock.calls[0]?.[0].attachmentId;
-      expect(firstAttachmentId).toStartWith("test-epoch:");
-
-      await state.harness.run(async () => {
-        state.emit({
-          __openducktorBrowserLive: true,
-          kind: "reconnected",
-          transportEpoch: "test-epoch-2",
-        });
-      });
-      await state.harness.waitFor(
-        (value) =>
-          value.sessionReadModelLoadState.kind === "ready" &&
-          state.agentSessionLiveAttach.mock.calls.length === 2,
-      );
-
-      const secondAttachmentId = state.agentSessionLiveAttach.mock.calls[1]?.[0].attachmentId;
-      expect(secondAttachmentId).toStartWith("test-epoch-2:");
-      expect(secondAttachmentId).not.toBe(firstAttachmentId);
-      expect(state.agentSessionLiveDetach).toHaveBeenCalledWith({
-        attachmentId: firstAttachmentId,
-      });
-
-      state.emit({
-        type: "session_upsert",
-        attachmentId: firstAttachmentId ?? "missing",
-        session: snapshot({
-          pendingApprovals: [
-            {
-              requestId: "stale-request",
-              requestType: "command_execution",
-              title: "Stale approval",
-            },
-          ],
-        }),
-      });
-      expect(state.getSession()?.pendingApprovals).toEqual([]);
-    } finally {
-      await state.harness.unmount();
-    }
-  });
-
-  test("recovers a stream warning through one detach and fresh attachment handshake", async () => {
-    const state = createState((emit, attachmentId) => {
-      emit({ type: "snapshot", attachmentId, sessions: [snapshot()] });
-    });
-
-    try {
-      await state.harness.mount();
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      const firstAttachmentId = state.agentSessionLiveAttach.mock.calls[0]?.[0].attachmentId;
-
-      await state.harness.run(async () => {
-        state.emit({
-          __openducktorBrowserLive: true,
-          kind: "stream-warning",
-          message: "Replay gap",
-        });
-      });
-      await state.harness.waitFor(
-        (value) =>
-          value.sessionReadModelLoadState.kind === "ready" &&
-          state.agentSessionLiveAttach.mock.calls.length === 2,
-      );
-
-      const secondAttachmentId = state.agentSessionLiveAttach.mock.calls[1]?.[0].attachmentId;
-      expect(secondAttachmentId).toStartWith("test-epoch:");
-      expect(secondAttachmentId).not.toBe(firstAttachmentId);
-      expect(state.agentSessionLiveDetach).toHaveBeenCalledTimes(1);
-      expect(state.agentSessionLiveDetach).toHaveBeenCalledWith({
-        attachmentId: firstAttachmentId,
-      });
-    } finally {
-      await state.harness.unmount();
-    }
-  });
-
   test("invalidates the normalized skills query scope from the ordered stream", async () => {
-    const state = createState((emit, attachmentId) => {
-      emit({ type: "snapshot", attachmentId, sessions: [snapshot()] });
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
     const invalidateQueries = mock(async () => undefined);
     state.queryClient.invalidateQueries =
@@ -336,12 +242,9 @@ describe("useRepoSessionReadModel", () => {
     try {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      const attachmentId = state.agentSessionLiveAttach.mock.calls[0]?.[0].attachmentId;
-
       await state.harness.run(async () => {
         state.emit({
           type: "catalog_invalidated",
-          attachmentId: attachmentId ?? "missing",
           scope: {
             repoPath: "/repo",
             runtimeKind: "codex",
@@ -370,10 +273,10 @@ describe("useRepoSessionReadModel", () => {
       requestId: "later-mutating",
     };
     const state = createState(
-      (emit, attachmentId) => {
+      (emit) => {
         emit({
           type: "snapshot",
-          attachmentId,
+          repoPath: "/repo",
           sessions: [snapshot({ pendingApprovals: [initialApproval] })],
         });
       },
@@ -400,11 +303,9 @@ describe("useRepoSessionReadModel", () => {
         "initial-mutating",
       ]);
 
-      const attachmentId = state.agentSessionLiveAttach.mock.calls[0]?.[0].attachmentId;
       await state.harness.run(async () => {
         state.emit({
           type: "session_upsert",
-          attachmentId: attachmentId ?? "missing",
           session: snapshot({ pendingApprovals: [initialApproval, laterApproval] }),
         });
       });

@@ -125,11 +125,10 @@ const AGENT_SESSION_LIVE_METHODS = [
   "agentSessionControlStart",
   "agentSessionControlStop",
   "agentSessionControlUpdateModel",
-  "agentSessionLiveAttach",
-  "agentSessionLiveDetach",
   "agentSessionLiveList",
   "agentSessionLiveLoadContext",
   "agentSessionLiveRead",
+  "agentSessionLiveRefresh",
   "agentSessionLiveReplyApproval",
   "agentSessionLiveReplyQuestion",
 ] as const satisfies readonly MethodName<HostAgentSessionLiveClient>[];

@@ -33,15 +33,12 @@ describe("AgentSessionLivePort", () => {
         calls.push("read");
         return { type: "live", session: snapshot };
       },
-      async attachLiveSessions(input, listener) {
-        calls.push(`attach:${input.attachmentId}`);
-        listener({ type: "snapshot", attachmentId: input.attachmentId, sessions: [snapshot] });
+      async observeLiveSessions(input, listener) {
+        calls.push(`observe:${input.repoPath}`);
+        listener({ type: "snapshot", repoPath: input.repoPath, sessions: [snapshot] });
         return () => {
-          calls.push(`unsubscribe:${input.attachmentId}`);
+          calls.push(`unsubscribe:${input.repoPath}`);
         };
-      },
-      async detachLiveSessions(input) {
-        calls.push(`detach:${input.attachmentId}`);
       },
       async loadLiveSessionContext() {
         calls.push("context");
@@ -57,12 +54,10 @@ describe("AgentSessionLivePort", () => {
 
     expect(await port.listLiveSessions({ repoPath: "/repo" })).toEqual([snapshot]);
     expect(await port.readLiveSession(snapshot.ref)).toEqual({ type: "live", session: snapshot });
-    const unsubscribe = await port.attachLiveSessions(
-      { attachmentId: "attachment-1", repoPath: "/repo" },
-      (envelope) => envelopes.push(envelope),
+    const unsubscribe = await port.observeLiveSessions({ repoPath: "/repo" }, (envelope) =>
+      envelopes.push(envelope),
     );
     unsubscribe();
-    await port.detachLiveSessions({ attachmentId: "attachment-1" });
     expect(await port.loadLiveSessionContext(snapshot.ref)).toBeNull();
     await port.replyLiveSessionApproval({
       ...snapshot.ref,
@@ -75,15 +70,12 @@ describe("AgentSessionLivePort", () => {
       answers: [["Yes"]],
     });
 
-    expect(envelopes).toEqual([
-      { type: "snapshot", attachmentId: "attachment-1", sessions: [snapshot] },
-    ]);
+    expect(envelopes).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [snapshot] }]);
     expect(calls).toEqual([
       "list",
       "read",
-      "attach:attachment-1",
-      "unsubscribe:attachment-1",
-      "detach:attachment-1",
+      "observe:/repo",
+      "unsubscribe:/repo",
       "context",
       "approval:opaque-approval",
       "question:opaque-question",

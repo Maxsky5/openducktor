@@ -1,22 +1,26 @@
-import type { AppUpdateCommandResult, AppUpdateState } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveRefreshInput,
+  AppUpdateCommandResult,
+  AppUpdateState,
+} from "@openducktor/contracts";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 
 export type HostEventListener = (payload: unknown) => void;
 
-export type HostLiveEventSubscription = {
+export type DevServerEventSubscription = {
   transportEpoch: string;
   unsubscribe: () => void;
 };
-
-export type DevServerEventSubscription = HostLiveEventSubscription;
 
 export type HostBridge = {
   client: HostClient;
   subscribeRunEvents: (listener: HostEventListener) => Promise<() => void>;
   subscribeDevServerEvents: (listener: HostEventListener) => Promise<DevServerEventSubscription>;
-  subscribeAgentSessionLiveEvents: (
-    listener: HostEventListener,
-  ) => Promise<HostLiveEventSubscription>;
+  observeAgentSessionLive: (
+    input: AgentSessionLiveRefreshInput,
+    listener: (envelope: AgentSessionLiveEnvelope) => void,
+  ) => Promise<() => void>;
   subscribeTaskEvents: (listener: HostEventListener) => Promise<() => void>;
 };
 
@@ -93,7 +97,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   client: createHostClient(unavailable),
   subscribeRunEvents: failUnavailable,
   subscribeDevServerEvents: failUnavailable,
-  subscribeAgentSessionLiveEvents: failUnavailable,
+  observeAgentSessionLive: failUnavailable,
   subscribeTaskEvents: failUnavailable,
   appUpdates: createDisabledAppUpdateBridge({
     status: "disabled",

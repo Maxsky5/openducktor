@@ -9,14 +9,13 @@ import {
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
-  type AgentSessionLiveAttachInput,
-  type AgentSessionLiveDetachInput,
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveReadInput,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
+  type AgentSessionLiveRefreshInput,
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
@@ -44,8 +43,7 @@ import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-st
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
 
 export type AgentSessionLiveStateService = {
-  readonly attach: (input: AgentSessionLiveAttachInput) => Effect.Effect<void, HostError>;
-  readonly detach: (input: AgentSessionLiveDetachInput) => Effect.Effect<void>;
+  readonly refresh: (input: AgentSessionLiveRefreshInput) => Effect.Effect<void, HostError>;
   readonly list: (
     input: AgentSessionLiveListInput,
   ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
@@ -97,11 +95,6 @@ export type CreateAgentSessionLiveStateServiceInput = {
   readonly coordinator?: LiveStateCoordinator;
 };
 
-type Attachment = {
-  readonly attachmentId: string;
-  readonly repoPath: string;
-};
-
 const sessionRefKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
 
@@ -120,35 +113,17 @@ const parseAdapterOutput = <Output>(
       }),
   });
 
-const changeRepoPath = (change: AgentSessionLiveAdapterChange): string => {
+const toEnvelope = (change: AgentSessionLiveAdapterChange): AgentSessionLiveEnvelope => {
   switch (change.type) {
     case "session_upsert":
-      return change.snapshot.ref.repoPath;
+      return { type: "session_upsert", session: change.snapshot };
     case "session_removed":
-      return change.ref.repoPath;
+      return { type: "session_removed", ref: change.ref };
     case "transcript_event":
-      return change.event.sessionRef.repoPath;
-    case "catalog_invalidated":
-    case "fault":
-      return change.repoPath;
-  }
-};
-
-const toEnvelope = (
-  attachmentId: string,
-  change: AgentSessionLiveAdapterChange,
-): AgentSessionLiveEnvelope => {
-  switch (change.type) {
-    case "session_upsert":
-      return { type: "session_upsert", attachmentId, session: change.snapshot };
-    case "session_removed":
-      return { type: "session_removed", attachmentId, ref: change.ref };
-    case "transcript_event":
-      return { type: "transcript_event", attachmentId, event: change.event };
+      return { type: "transcript_event", event: change.event };
     case "catalog_invalidated":
       return {
         type: "catalog_invalidated",
-        attachmentId,
         scope: {
           repoPath: change.repoPath,
           runtimeKind: change.runtimeKind,
@@ -158,7 +133,7 @@ const toEnvelope = (
     case "fault":
       return {
         type: "fault",
-        attachmentId,
+        repoPath: change.repoPath,
         message: change.message,
         ...(change.operation ? { operation: change.operation } : {}),
       };
@@ -170,8 +145,6 @@ export const createAgentSessionLiveStateService = ({
   publish,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
-  const attachments = new Map<string, Attachment>();
-
   const publishEnvelope = (envelope: AgentSessionLiveEnvelope) =>
     Effect.try({
       try: () => publish(agentSessionLiveEnvelopeSchema.parse(envelope)),
@@ -182,20 +155,14 @@ export const createAgentSessionLiveStateService = ({
               operation: "agent-session-live.publish",
               message: cause instanceof Error ? cause.message : String(cause),
               cause,
-              details: { attachmentId: envelope.attachmentId, eventType: envelope.type },
+              details: { eventType: envelope.type },
             }),
     });
 
   const publishChanges = (changes: ReadonlyArray<AgentSessionLiveAdapterChange>) =>
     Effect.gen(function* () {
       for (const change of changes) {
-        const repoPath = changeRepoPath(change);
-        for (const attachment of attachments.values()) {
-          if (attachment.repoPath !== repoPath) {
-            continue;
-          }
-          yield* publishEnvelope(toEnvelope(attachment.attachmentId, change));
-        }
+        yield* publishEnvelope(toEnvelope(change));
       }
     });
 
@@ -229,43 +196,15 @@ export const createAgentSessionLiveStateService = ({
     });
 
   const service: AgentSessionLiveStateService = {
-    attach: (input) =>
+    refresh: (input) =>
       coordinator.run(
         Effect.gen(function* () {
-          if (attachments.has(input.attachmentId)) {
-            return yield* Effect.fail(
-              new HostValidationError({
-                message: `Live-session attachment '${input.attachmentId}' already exists.`,
-                field: "attachmentId",
-                details: { attachmentId: input.attachmentId },
-              }),
-            );
-          }
-          attachments.set(input.attachmentId, input);
-          const snapshots = yield* listSnapshots(input.repoPath).pipe(
-            Effect.onError(() =>
-              Effect.sync(() => {
-                attachments.delete(input.attachmentId);
-              }),
-            ),
-          );
+          const snapshots = yield* listSnapshots(input.repoPath);
           yield* publishEnvelope({
             type: "snapshot",
-            attachmentId: input.attachmentId,
+            repoPath: input.repoPath,
             sessions: [...snapshots],
-          }).pipe(
-            Effect.onError(() =>
-              Effect.sync(() => {
-                attachments.delete(input.attachmentId);
-              }),
-            ),
-          );
-        }),
-      ),
-    detach: (input) =>
-      coordinator.run(
-        Effect.sync(() => {
-          attachments.delete(input.attachmentId);
+          });
         }),
       ),
     list: (input) => coordinator.run(listSnapshots(input.repoPath)),

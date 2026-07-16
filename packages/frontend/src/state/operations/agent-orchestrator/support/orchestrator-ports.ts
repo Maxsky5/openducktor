@@ -1,10 +1,10 @@
 import type {
   AgentSessionIdentity,
+  AgentSessionLiveEnvelope,
   AgentSessionRecord,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import type { HostLiveEventSubscription } from "@/lib/shell-bridge";
 import type { host } from "../../shared/host";
 
 export type AgentOrchestratorHostPort = {
@@ -33,15 +33,14 @@ export type AgentOrchestratorRuntimeHostPort = {
 };
 
 export type AgentOrchestratorLiveSessionHostPort = {
-  agentSessionLiveAttach: typeof host.agentSessionLiveAttach;
-  agentSessionLiveDetach: typeof host.agentSessionLiveDetach;
   agentSessionLiveLoadContext: typeof host.agentSessionLiveLoadContext;
   agentSessionLiveRead: typeof host.agentSessionLiveRead;
   agentSessionLiveReplyApproval: typeof host.agentSessionLiveReplyApproval;
   agentSessionLiveReplyQuestion: typeof host.agentSessionLiveReplyQuestion;
-  subscribeAgentSessionLiveEvents: (
-    listener: (payload: unknown) => void,
-  ) => Promise<HostLiveEventSubscription>;
+  observeAgentSessionLive: (
+    input: { repoPath: string },
+    listener: (envelope: AgentSessionLiveEnvelope) => void,
+  ) => Promise<() => void>;
 };
 
 export type AgentOrchestratorDependencies = {

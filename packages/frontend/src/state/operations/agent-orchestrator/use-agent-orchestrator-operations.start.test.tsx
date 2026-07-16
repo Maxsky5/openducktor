@@ -112,7 +112,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
           .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]);
       });
 
-      expect(liveStream.getAttachCount()).toBe(1);
+      expect(liveStream.getObserveCount()).toBe(1);
       expect(sendCalls).toBe(1);
     } finally {
       await harness.unmount();
@@ -164,8 +164,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.mount();
       await harness.waitFor((state) => listHarnessSessions(state).length === 1);
 
-      expect(liveStream.getAttachCount()).toBe(1);
-      expect(liveStream.getSubscribeCount()).toBe(1);
+      expect(liveStream.getObserveCount()).toBe(1);
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;

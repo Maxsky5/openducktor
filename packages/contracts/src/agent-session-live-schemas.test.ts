@@ -3,10 +3,10 @@ import {
   type AgentSessionLiveRef,
   agentRuntimeEventSchema,
   agentSessionContextUsageSchema,
-  agentSessionLiveAttachInputSchema,
   agentSessionLiveEnvelopeSchema,
   agentSessionLiveLoadContextInputSchema,
   agentSessionLiveReadResultSchema,
+  agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveSnapshotSchema,
   agentSessionTranscriptEventSchema,
@@ -90,8 +90,7 @@ describe("agent-session live contracts", () => {
 
   test("rejects runtime-native routing fields from public inputs and pending requests", () => {
     expect(
-      agentSessionLiveAttachInputSchema.safeParse({
-        attachmentId: "attachment-1",
+      agentSessionLiveRefreshInputSchema.safeParse({
         repoPath: "/repo",
         runtimeId: "runtime-private",
       }).success,
@@ -139,9 +138,9 @@ describe("agent-session live contracts", () => {
     }
   });
 
-  test("requires attachment identity on every ordered envelope variant", () => {
+  test("routes ordered envelope variants by repository without attachment identity", () => {
     const variants = [
-      { type: "snapshot", sessions: [snapshot] },
+      { type: "snapshot", repoPath: ref.repoPath, sessions: [snapshot] },
       { type: "session_upsert", session: snapshot },
       { type: "session_removed", ref },
       {
@@ -165,6 +164,7 @@ describe("agent-session live contracts", () => {
       },
       {
         type: "fault",
+        repoPath: ref.repoPath,
         message: "Runtime disconnected",
         operation: "agentSessionLive.observe",
         ref,
@@ -172,10 +172,13 @@ describe("agent-session live contracts", () => {
     ] as const;
 
     for (const variant of variants) {
+      expect(agentSessionLiveEnvelopeSchema.parse(variant)).toEqual(variant);
       expect(
-        agentSessionLiveEnvelopeSchema.parse({ ...variant, attachmentId: "attachment-1" }),
-      ).toEqual({ ...variant, attachmentId: "attachment-1" });
-      expect(agentSessionLiveEnvelopeSchema.safeParse(variant).success).toBe(false);
+        agentSessionLiveEnvelopeSchema.safeParse({
+          ...variant,
+          attachmentId: "obsolete-attachment",
+        }).success,
+      ).toBe(false);
     }
   });
 });

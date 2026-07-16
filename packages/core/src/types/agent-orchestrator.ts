@@ -3,8 +3,6 @@ import type {
   AgentRuntimeEvent as ContractsAgentRuntimeEvent,
   AgentSessionActivity as ContractsAgentSessionActivity,
   AgentSessionContextUsage as ContractsAgentSessionContextUsage,
-  AgentSessionLiveAttachInput as ContractsAgentSessionLiveAttachInput,
-  AgentSessionLiveDetachInput as ContractsAgentSessionLiveDetachInput,
   AgentSessionLiveEnvelope as ContractsAgentSessionLiveEnvelope,
   AgentSessionLiveListInput as ContractsAgentSessionLiveListInput,
   AgentSessionLiveLoadContextInput as ContractsAgentSessionLiveLoadContextInput,
@@ -14,6 +12,7 @@ import type {
   AgentSessionLiveReadInput as ContractsAgentSessionLiveReadInput,
   AgentSessionLiveReadResult as ContractsAgentSessionLiveReadResult,
   AgentSessionLiveRef as ContractsAgentSessionLiveRef,
+  AgentSessionLiveRefreshInput as ContractsAgentSessionLiveRefreshInput,
   AgentSessionLiveReplyApprovalInput as ContractsAgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput as ContractsAgentSessionLiveReplyQuestionInput,
   AgentSessionLiveScope as ContractsAgentSessionLiveScope,
@@ -45,8 +44,6 @@ export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 
 export type AgentSessionActivity = ContractsAgentSessionActivity;
 export type AgentSessionContextUsage = ContractsAgentSessionContextUsage;
-export type AgentSessionLiveAttachInput = ContractsAgentSessionLiveAttachInput;
-export type AgentSessionLiveDetachInput = ContractsAgentSessionLiveDetachInput;
 export type AgentSessionLiveEnvelope = ContractsAgentSessionLiveEnvelope;
 export type AgentSessionLiveListInput = ContractsAgentSessionLiveListInput;
 export type AgentSessionLiveLoadContextInput = ContractsAgentSessionLiveLoadContextInput;
@@ -58,6 +55,7 @@ export type AgentSessionLivePendingQuestionRequest =
 export type AgentSessionLiveReadInput = ContractsAgentSessionLiveReadInput;
 export type AgentSessionLiveReadResult = ContractsAgentSessionLiveReadResult;
 export type AgentSessionLiveRef = ContractsAgentSessionLiveRef;
+export type AgentSessionLiveRefreshInput = ContractsAgentSessionLiveRefreshInput;
 export type AgentSessionLiveReplyApprovalInput = ContractsAgentSessionLiveReplyApprovalInput;
 export type AgentSessionLiveReplyQuestionInput = ContractsAgentSessionLiveReplyQuestionInput;
 export type AgentSessionLiveScope = ContractsAgentSessionLiveScope;

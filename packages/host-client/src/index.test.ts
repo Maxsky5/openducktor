@@ -250,11 +250,10 @@ describe("HostClient", () => {
       "qaRejected",
       "agentSessionsList",
       "agentSessionUpsert",
-      "agentSessionLiveAttach",
-      "agentSessionLiveDetach",
       "agentSessionLiveList",
       "agentSessionLiveLoadContext",
       "agentSessionLiveRead",
+      "agentSessionLiveRefresh",
       "agentSessionLiveReplyApproval",
       "agentSessionLiveReplyQuestion",
       "systemCheck",
@@ -320,7 +319,7 @@ describe("HostClient", () => {
       contextUsage: null,
     };
     const { client, calls } = createClient((command) => {
-      if (command === "agent_session_live_attach") {
+      if (command === "agent_session_live_refresh") {
         return undefined;
       }
       if (command === "agent_session_live_list") {
@@ -329,12 +328,12 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await client.agentSessionLiveAttach({ attachmentId: "attachment-1", repoPath: "/repo" });
+    await client.agentSessionLiveRefresh({ repoPath: "/repo" });
     await expect(client.agentSessionLiveList({ repoPath: "/repo" })).resolves.toEqual([session]);
     expect(calls).toEqual([
       {
-        command: "agent_session_live_attach",
-        args: { attachmentId: "attachment-1", repoPath: "/repo" },
+        command: "agent_session_live_refresh",
+        args: { repoPath: "/repo" },
       },
       { command: "agent_session_live_list", args: { repoPath: "/repo" } },
     ]);

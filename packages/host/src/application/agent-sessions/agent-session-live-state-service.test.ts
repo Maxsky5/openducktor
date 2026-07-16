@@ -84,7 +84,7 @@ const createHarness = () => {
 };
 
 describe("createAgentSessionLiveStateService", () => {
-  test("publishes exactly one snapshot before a change queued during attachment", async () => {
+  test("publishes exactly one snapshot before a change queued during refresh", async () => {
     const { events, service } = createHarness();
     const entered = await Effect.runPromise(Deferred.make<void>());
     const release = await Effect.runPromise(Deferred.make<void>());
@@ -105,10 +105,9 @@ describe("createAgentSessionLiveStateService", () => {
         }),
     });
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+    events.length = 0;
 
-    const attachFiber = Effect.runFork(
-      service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }),
-    );
+    const refreshFiber = Effect.runFork(service.refresh({ repoPath: "/repo" }));
     await Effect.runPromise(Deferred.await(entered));
     const updated = { ...liveSnapshot("session-1"), activity: "running" as const };
     const changeFiber = Effect.runFork(
@@ -126,18 +125,17 @@ describe("createAgentSessionLiveStateService", () => {
     await Effect.runPromise(Effect.yieldNow());
     expect(events).toEqual([]);
     await Effect.runPromise(Deferred.succeed(release, undefined));
-    await Effect.runPromise(Fiber.join(attachFiber));
+    await Effect.runPromise(Fiber.join(refreshFiber));
     await Effect.runPromise(Fiber.join(changeFiber));
 
     expect(events.map((event) => event.type)).toEqual(["snapshot", "session_upsert"]);
     expect(events[0]).toMatchObject({
       type: "snapshot",
-      attachmentId: "attachment-1",
+      repoPath: "/repo",
       sessions: [expect.objectContaining({ activity: "idle" })],
     });
     expect(events[1]).toMatchObject({
       type: "session_upsert",
-      attachmentId: "attachment-1",
       session: expect.objectContaining({ activity: "running" }),
     });
   });
@@ -162,8 +160,9 @@ describe("createAgentSessionLiveStateService", () => {
         }),
       ),
     );
+    events.length = 0;
 
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -172,7 +171,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
   });
 
-  test("publishes a resolution after an older attachment snapshot so it cannot resurrect pending input", async () => {
+  test("publishes a resolution after an older refresh snapshot so it cannot resurrect pending input", async () => {
     const { events, service } = createHarness();
     const entered = await Effect.runPromise(Deferred.make<void>());
     const release = await Effect.runPromise(Deferred.make<void>());
@@ -199,20 +198,19 @@ describe("createAgentSessionLiveStateService", () => {
             if (listCallCount === 1) {
               return Effect.succeed(snapshots);
             }
-            const attachmentSnapshot = snapshots;
+            const refreshSnapshot = snapshots;
             return Effect.gen(function* () {
               yield* Deferred.succeed(entered, undefined);
               yield* Deferred.await(release);
-              return attachmentSnapshot;
+              return refreshSnapshot;
             });
           },
         }),
       ),
     );
+    events.length = 0;
 
-    const attachFiber = Effect.runFork(
-      service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }),
-    );
+    const refreshFiber = Effect.runFork(service.refresh({ repoPath: "/repo" }));
     await Effect.runPromise(Deferred.await(entered));
     const resolved = {
       ...pending,
@@ -232,7 +230,7 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     await Effect.runPromise(Deferred.succeed(release, undefined));
-    await Effect.runPromise(Fiber.join(attachFiber));
+    await Effect.runPromise(Fiber.join(refreshFiber));
     await Effect.runPromise(Fiber.join(resolutionFiber));
 
     expect(events).toHaveLength(2);
@@ -256,7 +254,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
   });
 
-  test("orders a newer context notification after an older attachment snapshot", async () => {
+  test("orders a newer context notification after an older refresh snapshot", async () => {
     const { events, service } = createHarness();
     const entered = await Effect.runPromise(Deferred.make<void>());
     const release = await Effect.runPromise(Deferred.make<void>());
@@ -276,20 +274,19 @@ describe("createAgentSessionLiveStateService", () => {
             if (listCallCount === 1) {
               return Effect.succeed(snapshots);
             }
-            const attachmentSnapshot = snapshots;
+            const refreshSnapshot = snapshots;
             return Effect.gen(function* () {
               yield* Deferred.succeed(entered, undefined);
               yield* Deferred.await(release);
-              return attachmentSnapshot;
+              return refreshSnapshot;
             });
           },
         }),
       ),
     );
+    events.length = 0;
 
-    const attachFiber = Effect.runFork(
-      service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }),
-    );
+    const refreshFiber = Effect.runFork(service.refresh({ repoPath: "/repo" }));
     await Effect.runPromise(Deferred.await(entered));
     const updated = {
       ...retained,
@@ -308,7 +305,7 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     await Effect.runPromise(Deferred.succeed(release, undefined));
-    await Effect.runPromise(Fiber.join(attachFiber));
+    await Effect.runPromise(Fiber.join(refreshFiber));
     await Effect.runPromise(Fiber.join(contextFiber));
 
     expect(events[0]).toMatchObject({
@@ -321,30 +318,34 @@ describe("createAgentSessionLiveStateService", () => {
     });
   });
 
-  test("renderer detach preserves retained runtime state for the next attachment", async () => {
+  test("repeated refreshes do not multiply later delta publication", async () => {
     const { events, service } = createHarness();
-    const snapshots = [
-      {
-        ...liveSnapshot("session-1"),
-        contextUsage: { totalTokens: 42, contextWindow: 200_000 },
-      },
-    ];
+    const initial: AgentSessionLiveSnapshot = {
+      ...liveSnapshot("session-1"),
+      contextUsage: { totalTokens: 42, contextWindow: 200_000 },
+    };
+    let snapshots: AgentSessionLiveSnapshot[] = [initial];
     await Effect.runPromise(
       service.registerRuntimeAdapter(
         fakeAdapter({ runtimeId: "runtime-1", snapshots: () => snapshots }),
       ),
     );
-    await Effect.runPromise(service.attach({ attachmentId: "first", repoPath: "/repo" }));
-    await Effect.runPromise(service.detach({ attachmentId: "first" }));
-    await Effect.runPromise(service.attach({ attachmentId: "second", repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    events.length = 0;
 
-    expect(events).toHaveLength(2);
-    expect(events[1]?.type).toBe("snapshot");
-    if (events[1]?.type !== "snapshot") {
-      throw new Error("Expected the second attachment snapshot.");
-    }
-    expect(events[1].attachmentId).toBe("second");
-    expect(events[1].sessions[0]?.contextUsage?.totalTokens).toBe(42);
+    const updated: AgentSessionLiveSnapshot = { ...initial, activity: "running" };
+    snapshots = [updated];
+    await Effect.runPromise(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [{ type: "session_upsert" as const, snapshot: updated }],
+        }),
+      ),
+    );
+
+    expect(events).toEqual([{ type: "session_upsert", session: updated }]);
   });
 
   test("context failure does not make retained pending/session state unreadable", async () => {
@@ -362,11 +363,12 @@ describe("createAgentSessionLiveStateService", () => {
         ),
     });
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+    events.length = 0;
 
     await expect(Effect.runPromise(service.loadContext(snapshot.ref))).rejects.toThrow(
       "context replay failed",
     );
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     expect(events[0]).toMatchObject({
       type: "snapshot",
@@ -436,10 +438,11 @@ describe("createAgentSessionLiveStateService", () => {
         }),
       ),
     );
+    events.length = 0;
 
     const contextFiber = Effect.runFork(service.loadContext(snapshot.ref));
     await Effect.runPromise(Deferred.await(contextStarted));
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     expect(events[0]).toMatchObject({
       type: "snapshot",
@@ -512,7 +515,7 @@ describe("createAgentSessionLiveStateService", () => {
         }),
       ),
     );
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     await Effect.runPromise(service.releaseRuntime("runtime-1"));
 
@@ -550,7 +553,7 @@ describe("createAgentSessionLiveStateService", () => {
         }),
     } satisfies AgentSessionLiveAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
-    await Effect.runPromise(service.attach({ attachmentId: "attachment-1", repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
     failRetainedRead = true;
 
     await expect(Effect.runPromise(service.releaseRuntime("runtime-1"))).rejects.toThrow(

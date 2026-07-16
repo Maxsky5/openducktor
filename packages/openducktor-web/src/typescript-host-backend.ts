@@ -11,10 +11,6 @@ import {
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
-  type AgentSessionLiveSseLeaseRegistry,
-  createAgentSessionLiveSseLeaseRegistry,
-} from "./agent-session-live-sse-lease";
-import {
   errorMessage,
   runWebBoundary,
   toWebOperationError,
@@ -27,7 +23,6 @@ import {
   type BufferedHostEvent,
   BufferedHostEventBus,
   type BufferedHostEventStream,
-  STREAM_PATH_TO_CHANNEL,
   stopTypescriptHostBackendServices,
   validateWebFrontendOriginEffect,
 } from "./typescript-host-backend-support";
@@ -59,7 +54,7 @@ const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const LAST_EVENT_ID_HEADER = "last-event-id";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
-const AGENT_SESSION_LIVE_STREAM_PATH = "agent-session-live-events";
+const HOST_EVENT_STREAM_PATH = "events";
 
 const jsonResponseBody = (payload: unknown): string => {
   const serialized = JSON.stringify(payload);
@@ -274,67 +269,41 @@ const writeSseNamedEvent = (eventName: string, data: string): string =>
   [`event: ${eventName}`, ...data.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join("\n");
 const SSE_READY_COMMENT = ": openducktor-ready\n\n";
 
-const streamWarningSubject = (streamPath: string): string => {
-  if (streamPath === "dev-server-events") {
-    return "Dev server stream";
-  }
-  if (streamPath === "task-events") {
-    return "Task stream";
-  }
-  return "Event stream";
-};
-
-const skippedReplayWarningMessage = (streamPath: string, skippedEventCount: number): string => {
+const skippedReplayWarningMessage = (skippedEventCount: number): string => {
   const eventLabel = skippedEventCount === 1 ? "event" : "events";
-  return `${streamWarningSubject(streamPath)} skipped ${skippedEventCount} ${eventLabel}; reconnect will replay buffered events.`;
+  return `Host event stream skipped ${skippedEventCount} ${eventLabel}; reconnect will replay buffered events.`;
 };
 
 const createSseResponse = (
   stream: BufferedHostEventStream,
-  streamPath: string,
   lastEventId: number | null,
   corsHeaders: HeadersInit,
-  options: {
-    readonly acceptsEvent?: (event: BufferedHostEvent) => boolean;
-    readonly onCancel?: () => Promise<void>;
-    readonly replay?: boolean;
-  } = {},
 ): Response => {
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
-  const acceptsEvent = options.acceptsEvent ?? (() => true);
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(SSE_READY_COMMENT));
-      if (options.replay !== false) {
-        const replay = stream.replayAfterWithDiagnostics(lastEventId);
-        if (replay.skippedEventCount > 0) {
-          controller.enqueue(
-            encoder.encode(
-              writeSseNamedEvent(
-                "stream-warning",
-                skippedReplayWarningMessage(streamPath, replay.skippedEventCount),
-              ),
+      const replay = stream.replayAfterWithDiagnostics(lastEventId);
+      if (replay.skippedEventCount > 0) {
+        controller.enqueue(
+          encoder.encode(
+            writeSseNamedEvent(
+              "stream-warning",
+              skippedReplayWarningMessage(replay.skippedEventCount),
             ),
-          );
-        }
-        for (const event of replay.events) {
-          if (!acceptsEvent(event)) {
-            continue;
-          }
-          controller.enqueue(encoder.encode(writeSseEvent(event)));
-        }
+          ),
+        );
+      }
+      for (const event of replay.events) {
+        controller.enqueue(encoder.encode(writeSseEvent(event)));
       }
       unsubscribe = stream.subscribe((event) => {
-        if (!acceptsEvent(event)) {
-          return;
-        }
         controller.enqueue(encoder.encode(writeSseEvent(event)));
       });
     },
     cancel() {
       unsubscribe?.();
-      return options.onCancel?.();
     },
   });
 
@@ -470,11 +439,11 @@ const localAttachmentPreviewResponse = (
   });
 
 const routeCorsRequest = ({
-  agentSessionLiveSseLeases,
   appToken,
   controlToken,
   corsHeaders,
   eventBus,
+  hostCommandRouter,
   localAttachments,
   request,
   requestTimeouts,
@@ -482,11 +451,11 @@ const routeCorsRequest = ({
   beginShutdown,
   stop,
 }: {
-  agentSessionLiveSseLeases: AgentSessionLiveSseLeaseRegistry;
   appToken: string;
   controlToken: string;
   corsHeaders: HeadersInit;
   eventBus: BufferedHostEventBus;
+  hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
@@ -526,9 +495,7 @@ const routeCorsRequest = ({
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
     }
 
-    const streamChannel = STREAM_PATH_TO_CHANNEL.get(requestUrl.pathname.replace(/^\//, ""));
-    if (streamChannel && request.method === "GET") {
-      const streamPath = requestUrl.pathname.replace(/^\//, "");
+    if (requestUrl.pathname === `/${HOST_EVENT_STREAM_PATH}` && request.method === "GET") {
       yield* validateAppCookieOrHeader(request, appToken);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
@@ -537,23 +504,7 @@ const routeCorsRequest = ({
         );
       }
       requestTimeouts?.timeout(request, 0);
-      const liveSessionLease =
-        streamPath === AGENT_SESSION_LIVE_STREAM_PATH
-          ? yield* agentSessionLiveSseLeases.createLease(requestUrl)
-          : null;
-      return createSseResponse(
-        eventBus.streamFor(streamChannel),
-        streamPath,
-        yield* parseLastEventId(request),
-        corsHeaders,
-        liveSessionLease
-          ? {
-              acceptsEvent: liveSessionLease.acceptsEvent,
-              onCancel: liveSessionLease.release,
-              replay: false,
-            }
-          : undefined,
-      );
+      return createSseResponse(eventBus.stream(), yield* parseLastEventId(request), corsHeaders);
     }
 
     if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
@@ -584,7 +535,7 @@ const routeCorsRequest = ({
             cause,
           }),
       });
-      const result = yield* agentSessionLiveSseLeases
+      const result = yield* hostCommandRouter
         .invoke(decodedCommand, args)
         .pipe(
           Effect.mapError((error) =>
@@ -600,11 +551,11 @@ const routeCorsRequest = ({
   });
 
 export const handleTypescriptHostBackendRequest = ({
-  agentSessionLiveSseLeases,
   allowedOrigins,
   appToken,
   controlToken,
   eventBus,
+  hostCommandRouter,
   localAttachments,
   request,
   requestTimeouts,
@@ -612,11 +563,11 @@ export const handleTypescriptHostBackendRequest = ({
   beginShutdown,
   stop,
 }: {
-  agentSessionLiveSseLeases: AgentSessionLiveSseLeaseRegistry;
   allowedOrigins: Set<string>;
   appToken: string;
   controlToken: string;
   eventBus: BufferedHostEventBus;
+  hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
@@ -635,11 +586,11 @@ export const handleTypescriptHostBackendRequest = ({
     }
 
     return yield* routeCorsRequest({
-      agentSessionLiveSseLeases,
       appToken,
       controlToken,
       corsHeaders,
       eventBus,
+      hostCommandRouter,
       localAttachments,
       request,
       requestTimeouts,
@@ -676,7 +627,6 @@ export const startTypescriptHostBackendEffect = ({
       ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
     });
-    const agentSessionLiveSseLeases = createAgentSessionLiveSseLeaseRegistry(hostCommandRouter);
     let shutdownStarted = false;
     const beginShutdown = (): void => {
       shutdownStarted = true;
@@ -725,11 +675,11 @@ export const startTypescriptHostBackendEffect = ({
               fetch(request, server) {
                 return Effect.runPromise(
                   handleTypescriptHostBackendRequest({
-                    agentSessionLiveSseLeases,
                     allowedOrigins,
                     appToken,
                     controlToken,
                     eventBus,
+                    hostCommandRouter,
                     localAttachments,
                     request,
                     requestTimeouts: server,

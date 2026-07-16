@@ -230,7 +230,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(0);
       expect(sendCalls).toBe(0);
-      expect(liveStream.getAttachCount()).toBe(1);
+      expect(liveStream.getObserveCount()).toBe(1);
       expect(recoveredSession?.pendingApprovals).toHaveLength(1);
       expect(recoveredSession?.pendingQuestions).toHaveLength(1);
     } finally {
@@ -731,8 +731,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         listHarnessSessions(resolved).find((session) => session.externalSessionId === "external-1")
           ?.status,
       ).toBe("running");
-      expect(liveStream.getAttachCount()).toBe(1);
-      expect(liveStream.getSubscribeCount()).toBe(1);
+      expect(liveStream.getObserveCount()).toBe(1);
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
@@ -888,7 +887,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.waitFor((state) =>
         listHarnessSessions(state).some((session) => session.externalSessionId === "external-1"),
       );
-      expect(liveStream.getAttachCount()).toBe(1);
+      expect(liveStream.getObserveCount()).toBe(1);
       expect(resumeCalls).toBe(0);
     } finally {
       await harness.unmount();
