@@ -1,14 +1,21 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { failureKindSchema, TERMINAL_PROTOCOL_SUBPROTOCOL } from "@openducktor/contracts";
+import {
+  failureKindSchema,
+  type HostInvokeFailure,
+  hostInvokeFailureSchema,
+  TERMINAL_PROTOCOL_SUBPROTOCOL,
+} from "@openducktor/contracts";
 import {
   createLocalAttachmentAdapter,
   createNodeEffectHostCommandRouter,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
+  TerminalServiceError,
   type ToolDiscoveryId,
+  terminalServiceErrorToFailure,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
@@ -155,12 +162,14 @@ const errorResponse = (
   status: number,
   corsHeaders?: HeadersInit,
   failureKind?: string,
+  failure?: HostInvokeFailure,
 ): Response =>
   jsonResponse(
     {
       error: message,
       message,
       ...(failureKind ? { failureKind } : {}),
+      ...(failure ? { failure } : {}),
     },
     { status },
     corsHeaders,
@@ -250,6 +259,13 @@ const extractHostCommandFailureKind = (
 const hostCommandFailureToWebError = (command: string, error: unknown): WebHostRequestError => {
   const failureKind = extractHostCommandFailureKind(error);
   const details = readStructuredDetails(error);
+  const hostInvokeFailure =
+    error instanceof TerminalServiceError
+      ? {
+          kind: "terminal" as const,
+          terminalFailure: terminalServiceErrorToFailure(error),
+        }
+      : undefined;
   return new WebHostRequestError({
     message: errorMessage(error),
     status: 500,
@@ -257,6 +273,7 @@ const hostCommandFailureToWebError = (command: string, error: unknown): WebHostR
     details: {
       command,
       ...(details ? { hostDetails: details } : {}),
+      ...(hostInvokeFailure ? { hostInvokeFailure } : {}),
     },
     ...(failureKind ? { failureKind } : {}),
   });
@@ -409,7 +426,20 @@ const rejectWebHostRequest = (
 const webHostRequestErrorResponse = (
   error: WebHostRequestError,
   corsHeaders: HeadersInit,
-): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
+): Response => {
+  const hostInvokeFailureValue = error.details?.hostInvokeFailure;
+  const hostInvokeFailure =
+    hostInvokeFailureValue === undefined
+      ? undefined
+      : hostInvokeFailureSchema.parse(hostInvokeFailureValue);
+  return errorResponse(
+    error.message,
+    error.status,
+    corsHeaders,
+    error.failureKind,
+    hostInvokeFailure,
+  );
+};
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
 

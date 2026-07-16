@@ -216,9 +216,9 @@ const createTaskService = (
     ...rest,
     terminalService:
       rest.terminalService ??
-      ({ closeByTaskIds: () => Effect.succeed({ closedTerminalIds: [] }) } satisfies NonNullable<
-        CreateTaskServiceInput["terminalService"]
-      >),
+      ({
+        acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+      } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),

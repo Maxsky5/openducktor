@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { HostTerminalClient } from "./terminal-client";
+import { HostInvokeError } from "./invoke-utils";
+import { HostTerminalClient, HostTerminalClientError } from "./terminal-client";
 
 const summary = {
   terminalId: "terminal-1",
@@ -64,5 +65,32 @@ describe("HostTerminalClient", () => {
   test("rejects malformed host responses", async () => {
     const client = new HostTerminalClient(async () => ({ terminals: [] }));
     await expect(client.terminalList({ filter: { kind: "all" } })).rejects.toThrow();
+  });
+
+  test("preserves structured terminal failures without parsing their message", async () => {
+    const client = new HostTerminalClient(async () => {
+      throw new HostInvokeError("This copy can change without affecting behavior.", {
+        kind: "terminal",
+        terminalFailure: {
+          code: "unsupported_runtime",
+          message: "Interactive terminals are unavailable in this runtime.",
+        },
+      });
+    });
+
+    const result = await client
+      .terminalCreate({ workingDir: "/repo/worktree", context: { taskId: "task-1" } })
+      .then(
+        () => ({ ok: true as const }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected terminalCreate to reject.");
+    expect(result.error).toBeInstanceOf(HostTerminalClientError);
+    expect(result.error).toMatchObject({
+      code: "unsupported_runtime",
+      message: "Interactive terminals are unavailable in this runtime.",
+    });
   });
 });

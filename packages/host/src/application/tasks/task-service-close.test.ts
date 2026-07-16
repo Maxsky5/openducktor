@@ -29,9 +29,9 @@ const createTaskService = (input: CreateTaskServiceInput) =>
     ...input,
     terminalService:
       input.terminalService ??
-      ({ closeByTaskIds: () => Effect.succeed({ closedTerminalIds: [] }) } satisfies NonNullable<
-        CreateTaskServiceInput["terminalService"]
-      >),
+      ({
+        acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+      } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
   });
 
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
@@ -549,7 +549,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
       terminalService: {
-        closeByTaskIds: (taskIds) => {
+        acquireTaskCleanup: (taskIds) => {
           calls.push(`terminals:${taskIds.join(",")}`);
           return Effect.fail(
             new TerminalServiceError({
@@ -571,6 +571,35 @@ describe("TaskService.closeTask", () => {
     expect(calls).toContain("terminals:task-1");
     expect(calls).not.toContain("stop-dev:task-1");
     expect(calls).not.toContain("transition:task-1:closed");
+  });
+
+  test("holds task terminal cleanup admission through destructive close cleanup", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(),
+      taskWorktreeService: createTaskWorktreeService(null),
+      terminalService: {
+        acquireTaskCleanup: (taskIds) =>
+          Effect.acquireRelease(
+            Effect.sync(() => calls.push(`terminals:acquire:${taskIds.join(",")}`)),
+            () => Effect.sync(() => calls.push("terminals:release")),
+          ).pipe(Effect.as({ closedTerminalIds: ["terminal-1"] })),
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(calls.indexOf("terminals:acquire:task-1")).toBeLessThan(
+      calls.indexOf("stop-dev:task-1"),
+    );
+    expect(calls.indexOf("terminals:release")).toBeGreaterThan(
+      calls.indexOf("transition:task-1:closed"),
+    );
   });
 
   test("guards and cleans legacy Planner worktrees", async () => {

@@ -4,7 +4,7 @@ import {
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   createTerminalKeyEventHandler,
-  enqueueParsedTerminalWrite,
+  createTerminalOutputSequencer,
   handleTerminalMetadataFrame,
   normalizeTerminalTitle,
   resolveTerminalKeyAction,
@@ -162,7 +162,6 @@ describe("InteractiveTerminal policies", () => {
     const handlers = {
       reset: () => events.push("reset"),
       onAttention: (message: string | null) => events.push(`attention:${message}`),
-      onConnectionState: (state: string) => events.push(`connection:${state}`),
       onLifecycle: (lifecycle: string) => events.push(`lifecycle:${lifecycle}`),
       onForgotten: () => undefined,
       onFailure: () => undefined,
@@ -207,10 +206,8 @@ describe("InteractiveTerminal policies", () => {
     if (!outputHandled) events.push("output");
 
     expect(events).toEqual([
-      "connection:incomplete_replay",
       "lifecycle:running",
       "reset",
-      "connection:incomplete_replay",
       "attention:Incomplete replay: output 0–10 is unavailable.",
       "output",
     ]);
@@ -221,7 +218,6 @@ describe("InteractiveTerminal policies", () => {
     const handlers = {
       reset: () => undefined,
       onAttention: (message: string | null) => events.push(`attention:${message}`),
-      onConnectionState: (state: string) => events.push(`connection:${state}`),
       onLifecycle: () => undefined,
       onForgotten: (message: string) => events.push(`forgotten:${message}`),
       onFailure: (message: string) => events.push(`failure:${message}`),
@@ -276,9 +272,7 @@ describe("InteractiveTerminal policies", () => {
     );
 
     expect(events).toEqual([
-      "connection:disconnected",
       "forgotten:This terminal is no longer available from the host.",
-      "connection:disconnected",
       "forgotten:Terminal was lost during host restart.",
       "failure:Terminal input was rejected.",
       "failure:Terminal attachment was not found.",
@@ -288,13 +282,15 @@ describe("InteractiveTerminal policies", () => {
   test("acknowledges output only after the terminal parser callback", async () => {
     const parsed: { value: (() => void) | null } = { value: null };
     const acknowledgements: number[] = [];
-    const completed = enqueueParsedTerminalWrite(
-      Promise.resolve(),
-      (_payload, callback) => {
+    const sequencer = createTerminalOutputSequencer({
+      write: (_payload, callback) => {
         parsed.value = callback;
       },
+      onConsumed: (sequenceEnd) => acknowledgements.push(sequenceEnd),
+    });
+    const completed = sequencer.enqueue(
+      { sequenceStart: 0, sequenceEnd: 2 },
       new Uint8Array([1, 2]),
-      () => acknowledgements.push(2),
     );
     await Promise.resolve();
     expect(acknowledgements).toEqual([]);
@@ -303,5 +299,66 @@ describe("InteractiveTerminal policies", () => {
     parsedCallback();
     await completed;
     expect(acknowledgements).toEqual([2]);
+  });
+
+  test("renders a replayed range only once when reconnect happens before ACK", async () => {
+    const parserCallbacks: Array<() => void> = [];
+    const writes: number[][] = [];
+    const acknowledgements: number[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (payload, parsed) => {
+        writes.push([...payload]);
+        parserCallbacks.push(parsed);
+      },
+      onConsumed: (sequenceEnd) => acknowledgements.push(sequenceEnd),
+    });
+
+    const original = sequencer.enqueue(
+      { sequenceStart: 0, sequenceEnd: 2 },
+      new Uint8Array([1, 2]),
+    );
+    await Promise.resolve();
+    const replay = sequencer.enqueue({ sequenceStart: 0, sequenceEnd: 2 }, new Uint8Array([1, 2]));
+    parserCallbacks[0]?.();
+    await Promise.all([original, replay]);
+
+    expect(writes).toEqual([[1, 2]]);
+    expect(acknowledgements).toEqual([2]);
+  });
+
+  test("resets after an in-flight pre-gap write without regressing the ACK", async () => {
+    const parserCallbacks: Array<() => void> = [];
+    const events: string[] = [];
+    const acknowledgements: number[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (payload, parsed) => {
+        events.push(`write:${[...payload].join(",")}`);
+        parserCallbacks.push(() => {
+          events.push(`parsed:${[...payload].join(",")}`);
+          parsed();
+        });
+      },
+      onConsumed: (sequenceEnd) => acknowledgements.push(sequenceEnd),
+    });
+
+    const staleWrite = sequencer.enqueue(
+      { sequenceStart: 0, sequenceEnd: 5 },
+      new Uint8Array([1, 2, 3, 4, 5]),
+    );
+    await Promise.resolve();
+    const reset = sequencer.skipTo(10, () => events.push("reset"));
+    const currentWrite = sequencer.enqueue(
+      { sequenceStart: 10, sequenceEnd: 12 },
+      new Uint8Array([11, 12]),
+    );
+
+    parserCallbacks[0]?.();
+    await Promise.all([staleWrite, reset]);
+    expect(events).toEqual(["write:1,2,3,4,5", "parsed:1,2,3,4,5", "reset", "write:11,12"]);
+    expect(acknowledgements).toEqual([]);
+
+    parserCallbacks[1]?.();
+    await currentWrite;
+    expect(acknowledgements).toEqual([12]);
   });
 });

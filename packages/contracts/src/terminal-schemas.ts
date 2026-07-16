@@ -114,6 +114,16 @@ export const terminalFailureSchema = z
   .strict();
 export type TerminalFailure = z.infer<typeof terminalFailureSchema>;
 
+export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("terminal"),
+      terminalFailure: terminalFailureSchema,
+    })
+    .strict(),
+]);
+export type HostInvokeFailure = z.infer<typeof hostInvokeFailureSchema>;
+
 export const terminalCreateRequestSchema = terminalLaunchSpecSchema;
 export type TerminalCreateRequest = z.infer<typeof terminalCreateRequestSchema>;
 

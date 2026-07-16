@@ -75,11 +75,15 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
   };
 };
 
-const makeService = async (pty = makePty(), idFactory: () => string = () => "terminal-1") => ({
+const makeService = async (
+  pty = makePty(),
+  idFactory: () => string = () => "terminal-1",
+  filesystemPort: FilesystemPort = filesystem,
+) => ({
   pty,
   service: await Effect.runPromise(
     createTerminalService({
-      filesystem,
+      filesystem: filesystemPort,
       ptyPort: pty.port,
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({
         processEnv: { SHELL: "/bin/zsh", PATH: "/usr/bin" },
@@ -403,5 +407,161 @@ describe("TerminalService", () => {
       releaseTerminations();
       await disposing;
     }
+  });
+
+  test("waits for an admitted creation before completing host shutdown", async () => {
+    let releaseCanonicalize = (): void => undefined;
+    let reportCanonicalizeStarted = (): void => undefined;
+    const canonicalizeStarted = new Promise<void>((resolve) => {
+      reportCanonicalizeStarted = resolve;
+    });
+    const canonicalizeReleased = new Promise<void>((resolve) => {
+      releaseCanonicalize = resolve;
+    });
+    const delayedFilesystem: FilesystemPort = {
+      ...filesystem,
+      canonicalize: (path) =>
+        Effect.promise(async () => {
+          reportCanonicalizeStarted();
+          await canonicalizeReleased;
+          return `/canonical${path}`;
+        }),
+    };
+    const { service, pty } = await makeService(makePty(), () => "terminal-1", delayedFilesystem);
+
+    const creating = Effect.runPromise(
+      service.create({ workingDir: "/repo", context: { taskId: "task-1" } }),
+    );
+    await canonicalizeStarted;
+    let disposed = false;
+    const disposing = Effect.runPromise(service.dispose()).then(() => {
+      disposed = true;
+    });
+
+    await Bun.sleep(0);
+    expect(disposed).toBe(false);
+    releaseCanonicalize();
+    await creating;
+    await disposing;
+
+    expect(pty.operations).toContain("terminate");
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
+  });
+
+  test("reserves task capacity across concurrent terminal creation", async () => {
+    let canonicalizeCount = 0;
+    let releaseCanonicalize = (): void => undefined;
+    let reportAllCanonicalizing = (): void => undefined;
+    const allCanonicalizing = new Promise<void>((resolve) => {
+      reportAllCanonicalizing = resolve;
+    });
+    const canonicalizeReleased = new Promise<void>((resolve) => {
+      releaseCanonicalize = resolve;
+    });
+    const delayedFilesystem: FilesystemPort = {
+      ...filesystem,
+      canonicalize: (path) =>
+        Effect.promise(async () => {
+          canonicalizeCount += 1;
+          if (canonicalizeCount === TERMINAL_LIMITS.livePerTask) reportAllCanonicalizing();
+          await canonicalizeReleased;
+          return `/canonical${path}`;
+        }),
+    };
+    let terminalId = 0;
+    const { service } = await makeService(
+      makePty(),
+      () => `terminal-${++terminalId}`,
+      delayedFilesystem,
+    );
+
+    const creations = Array.from({ length: TERMINAL_LIMITS.livePerTask + 1 }, () =>
+      Effect.runPromise(
+        Effect.either(service.create({ workingDir: "/repo", context: { taskId: "task-1" } })),
+      ),
+    );
+    await allCanonicalizing;
+    releaseCanonicalize();
+    const results = await Promise.all(creations);
+
+    expect(results.filter((result) => result._tag === "Right")).toHaveLength(
+      TERMINAL_LIMITS.livePerTask,
+    );
+    expect(results.filter((result) => result._tag === "Left")).toHaveLength(1);
+    expect(results.find((result) => result._tag === "Left")?.left.code).toBe(
+      "context_terminal_limit",
+    );
+  });
+
+  test("holds task admission closed while scoped cleanup is active", async () => {
+    let releaseCanonicalize = (): void => undefined;
+    let reportCanonicalizeStarted = (): void => undefined;
+    const canonicalizeStarted = new Promise<void>((resolve) => {
+      reportCanonicalizeStarted = resolve;
+    });
+    const canonicalizeReleased = new Promise<void>((resolve) => {
+      releaseCanonicalize = resolve;
+    });
+    let shouldDelayCanonicalize = true;
+    const delayedFilesystem: FilesystemPort = {
+      ...filesystem,
+      canonicalize: (path) =>
+        Effect.promise(async () => {
+          if (shouldDelayCanonicalize) {
+            reportCanonicalizeStarted();
+            await canonicalizeReleased;
+          }
+          return `/canonical${path}`;
+        }),
+    };
+    let terminalId = 0;
+    const { service } = await makeService(
+      makePty(),
+      () => `terminal-${++terminalId}`,
+      delayedFilesystem,
+    );
+    const creating = Effect.runPromise(
+      service.create({ workingDir: "/repo", context: { taskId: "task-1" } }),
+    );
+    await canonicalizeStarted;
+    let releaseCleanup = (): void => undefined;
+    const cleanupReleased = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    let reportCleanupAcquired = (): void => undefined;
+    const cleanupAcquired = new Promise<void>((resolve) => {
+      reportCleanupAcquired = resolve;
+    });
+    const cleanup = Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* service.acquireTaskCleanup(["task-1"]);
+          reportCleanupAcquired();
+          yield* Effect.promise(() => cleanupReleased);
+        }),
+      ),
+    );
+
+    await Bun.sleep(0);
+    const blocked = await Effect.runPromise(
+      Effect.either(service.create({ workingDir: "/repo", context: { taskId: "task-1" } })),
+    );
+    expect(blocked._tag).toBe("Left");
+    if (blocked._tag === "Left") expect(blocked.left.code).toBe("close_failed");
+
+    releaseCanonicalize();
+    await creating;
+    await cleanupAcquired;
+    expect(
+      (await Effect.runPromise(service.list({ kind: "task", taskId: "task-1" }))).terminals,
+    ).toEqual([]);
+
+    shouldDelayCanonicalize = false;
+    releaseCleanup();
+    await cleanup;
+    const createdAfterCleanup = await Effect.runPromise(
+      service.create({ workingDir: "/repo", context: { taskId: "task-1" } }),
+    );
+    expect(createdAfterCleanup.summary.context.taskId).toBe("task-1");
   });
 });

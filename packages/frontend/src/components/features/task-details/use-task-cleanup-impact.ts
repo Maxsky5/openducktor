@@ -205,12 +205,5 @@ export function useTaskCleanupImpact(taskIds: string[], open: boolean): TaskClea
         0,
       ),
     };
-  }, [
-    workspaceRepoPath,
-    open,
-    taskIds,
-    taskSessionQueries,
-    taskWorktreeQueries,
-    terminalQueries,
-  ]);
+  }, [workspaceRepoPath, open, taskIds, taskSessionQueries, taskWorktreeQueries, terminalQueries]);
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { TerminalSummary } from "@openducktor/contracts";
+import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
@@ -207,6 +208,49 @@ describe("useAgentStudioTerminals", () => {
           terminalId: "terminal-created",
         },
       });
+      view.unmount();
+    }
+  });
+
+  test("uses the typed terminal failure code for unsupported runtimes", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [] }),
+        terminalCreate: async () => {
+          throw new HostTerminalClientError(
+            {
+              code: "unsupported_runtime",
+              message: "The runtime cannot launch an interactive terminal.",
+            },
+            null,
+          );
+        },
+      },
+    };
+    let latest: ReturnType<typeof useAgentStudioTerminals> | null = null;
+    const getLatest = (): ReturnType<typeof useAgentStudioTerminals> => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().isLoading).toBe(false));
+      act(() => getLatest().onCreate());
+      await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("unsupported_runtime"));
+      expect(getLatest().tabs[0]?.error).toBe("The runtime cannot launch an interactive terminal.");
+    } finally {
       view.unmount();
     }
   });

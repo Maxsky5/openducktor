@@ -631,6 +631,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "TERMINAL_ID_MAX_LENGTH",
   "decodeTerminalProtocolFrame",
   "encodeTerminalProtocolFrame",
+  "hostInvokeFailureSchema",
   "terminalAttentionStateSchema",
   "terminalClientMessageSchema",
   "terminalCloseRequestSchema",

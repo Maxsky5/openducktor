@@ -12,6 +12,7 @@ import {
   createLocalAttachmentAdapter,
   createSourceRuntimeDistribution,
   type EffectHostCommandRouter,
+  TerminalServiceError,
 } from "@openducktor/host";
 import { Deferred, Effect, TestClock, TestContext } from "effect";
 import { createWebLogger, type WebLogger } from "./logger";
@@ -458,6 +459,45 @@ describe("TypeScript web host backend", () => {
       error: "Failed to invoke runtime_ensure.",
       failureKind: "timeout",
       message: "Failed to invoke runtime_ensure.",
+    });
+  });
+
+  test("preserves structured terminal failures in invoke error responses", async () => {
+    const hostCommandRouter = createTestHostCommandRouter(() =>
+      Effect.fail(
+        new TerminalServiceError({
+          code: "unsupported_runtime",
+          operation: "create",
+          message: "Interactive terminals are unavailable in this runtime.",
+          workingDir: "/repo/worktree",
+        }),
+      ),
+    );
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/terminal_create", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({ workingDir: "/repo/worktree", context: {} }),
+      }),
+      { hostCommandRouter },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "Interactive terminals are unavailable in this runtime.",
+      message: "Interactive terminals are unavailable in this runtime.",
+      failure: {
+        kind: "terminal",
+        terminalFailure: {
+          code: "unsupported_runtime",
+          message: "Interactive terminals are unavailable in this runtime.",
+          workingDir: "/repo/worktree",
+        },
+      },
     });
   });
 

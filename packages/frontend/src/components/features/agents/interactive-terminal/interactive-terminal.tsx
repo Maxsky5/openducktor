@@ -1,9 +1,5 @@
 import "@xterm/xterm/css/xterm.css";
-import type {
-  TerminalConnectionState,
-  TerminalLifecycle,
-  TerminalServerMessage,
-} from "@openducktor/contracts";
+import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useRef, useState } from "react";
@@ -12,7 +8,7 @@ import {
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   createTerminalKeyEventHandler,
-  enqueueParsedTerminalWrite,
+  createTerminalOutputSequencer,
   handleTerminalMetadataFrame,
   normalizeTerminalTitle,
 } from "./interactive-terminal-policy";
@@ -38,7 +34,6 @@ export function InteractiveTerminal({
   active,
   focusRequest,
   onAttention,
-  onConnectionState,
   onLifecycle,
   onForgotten,
   onTitleChange,
@@ -48,7 +43,6 @@ export function InteractiveTerminal({
   active: boolean;
   focusRequest: number;
   onAttention: (message: string | null) => void;
-  onConnectionState: (state: TerminalConnectionState) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
   onForgotten: (message: string) => void;
   onTitleChange: (title: string) => void;
@@ -57,7 +51,6 @@ export function InteractiveTerminal({
   const terminalRef = useRef<Terminal | null>(null);
   const callbacksRef = useRef({
     onAttention,
-    onConnectionState,
     onLifecycle,
     onForgotten,
     onTitleChange,
@@ -67,18 +60,16 @@ export function InteractiveTerminal({
   useEffect(() => {
     callbacksRef.current = {
       onAttention,
-      onConnectionState,
       onLifecycle,
       onForgotten,
       onTitleChange,
     };
-  }, [onAttention, onConnectionState, onForgotten, onLifecycle, onTitleChange]);
+  }, [onAttention, onForgotten, onLifecycle, onTitleChange]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let generation = 0;
-    let writeQueue = Promise.resolve();
     const terminal = new Terminal({
       allowTransparency: true,
       convertEol: false,
@@ -97,6 +88,13 @@ export function InteractiveTerminal({
     const reportInteractionFailure = (cause: unknown): void => {
       setInteractionError(cause instanceof Error ? cause.message : String(cause));
     };
+    const outputSequencer = createTerminalOutputSequencer({
+      write: (payload, parsed) => terminal.write(payload, parsed),
+      onConsumed: (sequenceEnd) => {
+        if (generation !== 0) return;
+        void controller.acknowledge(terminalId, sequenceEnd).catch(reportInteractionFailure);
+      },
+    });
     const enqueueInput = createTerminalInputSequencer({
       writeInput: (data) => controller.write(terminalId, data),
       reportFailure: reportInteractionFailure,
@@ -128,32 +126,24 @@ export function InteractiveTerminal({
       }),
     );
     const handleFrame = (message: TerminalServerMessage, payload: Uint8Array): void => {
+      const isReplayGap = message.type === "replay_gap";
+      if (isReplayGap) {
+        void outputSequencer
+          .skipTo(message.missingSequenceEnd, () => terminal.reset())
+          .catch(reportInteractionFailure);
+      }
       if (
         handleTerminalMetadataFrame(message, {
-          reset: () => terminal.reset(),
+          reset: isReplayGap ? () => undefined : () => terminal.reset(),
           onAttention: callbacksRef.current.onAttention,
-          onConnectionState: callbacksRef.current.onConnectionState,
           onLifecycle: callbacksRef.current.onLifecycle,
           onForgotten: callbacksRef.current.onForgotten,
           onFailure: callbacksRef.current.onAttention,
         })
       )
         return;
-      const expectedGeneration = generation;
-      writeQueue = enqueueParsedTerminalWrite(
-        writeQueue,
-        (bytes, parsed) => terminal.write(bytes, parsed),
-        payload,
-        () => {
-          if (generation === expectedGeneration) {
-            void controller
-              .acknowledge(terminalId, message.sequenceEnd)
-              .catch(reportInteractionFailure);
-          }
-        },
-      );
+      void outputSequencer.enqueue(message, payload).catch(reportInteractionFailure);
     };
-    callbacksRef.current.onConnectionState("attaching");
     const unsubscribe = controller.subscribe(terminalId, handleFrame);
     const observer = new ResizeObserver(() => fitAddon.fit());
     observer.observe(container);

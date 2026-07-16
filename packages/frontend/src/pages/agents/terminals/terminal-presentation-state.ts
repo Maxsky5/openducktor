@@ -47,9 +47,9 @@ export type TerminalPresentationEvent =
       targetTabId: string;
       position: "before" | "after";
     }
-  | { type: "closeStarted"; scopeKey: string; tabId: string; closesLastTab: boolean }
-  | { type: "closeRejected"; scopeKey: string; tabId: string; restoresLastTab: boolean }
-  | { type: "closeCompleted"; scopeKey: string; tabId: string; closedLastTab: boolean }
+  | { type: "closeStarted"; scopeKey: string; tabId: string }
+  | { type: "closeRejected"; scopeKey: string; tabId: string }
+  | { type: "closeCompleted"; scopeKey: string; tabId: string }
   | { type: "titleChanged"; scopeKey: string; terminalId: string; title: string }
   | { type: "lifecycleChanged"; scopeKey: string; terminalId: string; lifecycle: TerminalLifecycle }
   | { type: "terminalForgotten"; scopeKey: string; terminalId: string; message: string };
@@ -226,15 +226,20 @@ export const terminalPresentationReducer = (
         ...scope,
         closingTabIds,
         activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
-        visibility: event.closesLastTab ? { value: false, isExplicit: true } : scope.visibility,
+        visibility:
+          selectableTabs.length === 0 ? { value: false, isExplicit: true } : scope.visibility,
       };
     }
     if (event.type === "closeRejected") {
+      const closingTabIds = scope.closingTabIds.filter((tabId) => tabId !== event.tabId);
+      const closingTabIdSet = new Set(closingTabIds);
+      const selectableTabs = scope.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
       return {
         ...scope,
-        closingTabIds: scope.closingTabIds.filter((tabId) => tabId !== event.tabId),
+        closingTabIds,
         activeTabId: event.tabId,
-        visibility: event.restoresLastTab ? { value: true, isExplicit: true } : scope.visibility,
+        visibility:
+          selectableTabs.length > 0 ? { value: true, isExplicit: true } : scope.visibility,
       };
     }
     if (event.type === "closeCompleted") {
@@ -247,7 +252,8 @@ export const terminalPresentationReducer = (
         tabs,
         closingTabIds,
         activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
-        visibility: event.closedLastTab ? { value: false, isExplicit: true } : scope.visibility,
+        visibility:
+          selectableTabs.length === 0 ? { value: false, isExplicit: true } : scope.visibility,
       };
     }
     if (event.type === "titleChanged") {

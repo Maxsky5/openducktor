@@ -52,6 +52,7 @@ import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
+import { runElectronHostInvoke } from "./electron-host-invoke";
 import {
   createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -627,8 +628,12 @@ const registerIpcHandlers = (
   };
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
-    invoke: (command, args) =>
-      electronMainRuntimeBindings.runHostCommand(command, hostCommandRouter.invoke(command, args)),
+    invoke: (command, args) => {
+      const operation = hostCommandRouter.invoke(command, args);
+      return runElectronHostInvoke(operation, (effect) =>
+        electronMainRuntimeBindings.runHostCommand(command, effect),
+      );
+    },
   });
 
   ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, frame: unknown) => {

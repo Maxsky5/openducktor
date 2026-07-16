@@ -1,4 +1,19 @@
+import type { HostInvokeFailure } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
+
+export class HostInvokeError extends Error {
+  override readonly cause: unknown;
+
+  constructor(
+    message: string,
+    readonly failure: HostInvokeFailure | null = null,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "HostInvokeError";
+    this.cause = cause;
+  }
+}
 
 export type InvokeFn = (
   command: HostCommandName,

@@ -36,6 +36,7 @@ export {
   createTerminalService,
   type TerminalService,
   TerminalServiceError,
+  terminalServiceErrorToFailure,
 } from "./application/terminals/terminal-service";
 export {
   type CreateNodeHostCommandRouterInput,

@@ -1,4 +1,4 @@
-import type { TerminalConnectionState, TerminalLifecycle } from "@openducktor/contracts";
+import type { TerminalLifecycle } from "@openducktor/contracts";
 import { Loader2, Plus } from "lucide-react";
 import { type ReactElement, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,6 @@ import type {
 } from "@/pages/agents/terminals/use-agent-studio-terminals";
 import { InteractiveTerminal } from "./interactive-terminal";
 import { TerminalTabStrip } from "./terminal-tab-strip";
-
-const ignoreConnectionState = (_state: TerminalConnectionState): void => undefined;
 
 function TerminalViewport({
   tab,
@@ -95,7 +93,6 @@ function TerminalViewport({
       active={active}
       focusRequest={model.focusRequest}
       onAttention={handleAttention}
-      onConnectionState={ignoreConnectionState}
       onLifecycle={handleLifecycle}
       onForgotten={handleForgotten}
       onTitleChange={handleTitleChange}

@@ -229,6 +229,36 @@ describe("createLocalHostClient", () => {
       }),
     );
   });
+
+  test("preserves structured terminal failures through the local web transport", async () => {
+    const { createLocalHostClient } = await loadLocalHostTransport();
+    globalThis.fetch = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/session")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "Interactive terminals are unavailable in this runtime.",
+          failure: {
+            kind: "terminal",
+            terminalFailure: {
+              code: "unsupported_runtime",
+              message: "Interactive terminals are unavailable in this runtime.",
+            },
+          },
+        }),
+        { status: 500 },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    await expect(
+      createLocalHostClient().terminalCreate({ workingDir: "/repo", context: {} }),
+    ).rejects.toMatchObject({
+      name: "HostTerminalClientError",
+      code: "unsupported_runtime",
+    });
+  });
 });
 
 describe("local host SSE subscriptions", () => {

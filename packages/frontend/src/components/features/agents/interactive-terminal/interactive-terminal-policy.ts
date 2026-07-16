@@ -1,8 +1,4 @@
-import type {
-  TerminalConnectionState,
-  TerminalLifecycle,
-  TerminalServerMessage,
-} from "@openducktor/contracts";
+import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
 
 export type TerminalKeyAction = "copy" | "interrupt" | "paste" | "passthrough";
 
@@ -124,20 +120,17 @@ export const handleTerminalMetadataFrame = (
   handlers: {
     reset: () => void;
     onAttention: (message: string | null) => void;
-    onConnectionState: (state: TerminalConnectionState) => void;
     onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
     onForgotten: (message: string) => void;
     onFailure: (message: string) => void;
   },
 ): message is Exclude<TerminalServerMessage, { type: "output" }> => {
   if (message.type === "snapshot") {
-    handlers.onConnectionState(message.complete ? "connected" : "incomplete_replay");
     handlers.onLifecycle(message.lifecycle, null);
     return true;
   }
   if (message.type === "replay_gap") {
     handlers.reset();
-    handlers.onConnectionState("incomplete_replay");
     handlers.onAttention(
       `Incomplete replay: output ${message.missingSequenceStart}–${message.missingSequenceEnd} is unavailable.`,
     );
@@ -157,13 +150,11 @@ export const handleTerminalMetadataFrame = (
     return true;
   }
   if (message.type === "terminal_forgotten") {
-    handlers.onConnectionState("disconnected");
     handlers.onForgotten("This terminal is no longer available from the host.");
     return true;
   }
   if (message.type === "protocol_error") {
     if (message.failure.code === "terminal_forgotten") {
-      handlers.onConnectionState("disconnected");
       handlers.onForgotten(message.failure.message);
       return true;
     }
@@ -173,18 +164,49 @@ export const handleTerminalMetadataFrame = (
   return message.type !== "output";
 };
 
-export const enqueueParsedTerminalWrite = (
-  queue: Promise<void>,
-  write: (payload: Uint8Array, parsed: () => void) => void,
-  payload: Uint8Array,
-  parsed: () => void,
-): Promise<void> =>
-  queue.then(
-    () =>
-      new Promise<void>((resolve) => {
-        write(payload, () => {
-          parsed();
-          resolve();
+export const createTerminalOutputSequencer = ({
+  write,
+  onConsumed,
+}: {
+  write: (payload: Uint8Array, parsed: () => void) => void;
+  onConsumed: (sequenceEnd: number) => void;
+}) => {
+  let consumedSequence = 0;
+  let epoch = 0;
+  let queue = Promise.resolve();
+  return {
+    enqueue(
+      frame: { sequenceStart: number; sequenceEnd: number },
+      payload: Uint8Array,
+    ): Promise<void> {
+      const writeEpoch = epoch;
+      queue = queue.then(() => {
+        if (writeEpoch !== epoch) return;
+        if (frame.sequenceEnd <= consumedSequence) return;
+        const consumedBytes = Math.max(0, consumedSequence - frame.sequenceStart);
+        const remainingPayload = payload.subarray(Math.min(consumedBytes, payload.byteLength));
+        return new Promise<void>((resolve) => {
+          write(remainingPayload, () => {
+            if (writeEpoch !== epoch) {
+              resolve();
+              return;
+            }
+            consumedSequence = Math.max(consumedSequence, frame.sequenceEnd);
+            onConsumed(frame.sequenceEnd);
+            resolve();
+          });
         });
-      }),
-  );
+      });
+      return queue;
+    },
+    skipTo(sequence: number, reset: () => void): Promise<void> {
+      epoch += 1;
+      const resetEpoch = epoch;
+      consumedSequence = Math.max(consumedSequence, sequence);
+      queue = queue.then(() => {
+        if (resetEpoch === epoch) reset();
+      });
+      return queue;
+    },
+  };
+};

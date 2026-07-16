@@ -12,6 +12,10 @@ import { HostSystemClient } from "./system-client";
 import { HostTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
 import { HostTerminalClient } from "./terminal-client";
+
+export { HostInvokeError } from "./invoke-utils";
+export { HostTerminalClientError } from "./terminal-client";
+
 import { HostWorkspaceClient } from "./workspace-client";
 
 type MethodName<TClient extends object> = {

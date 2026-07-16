@@ -2,6 +2,7 @@ import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveRefreshInput,
   agentSessionLiveEnvelopeSchema,
+  hostInvokeFailureSchema,
 } from "@openducktor/contracts";
 import type { DevServerEventSubscription } from "@openducktor/frontend";
 import {
@@ -17,6 +18,7 @@ import {
   createAgentSessionLiveAttachment,
   createHostClient,
   type HostClient,
+  HostInvokeError,
 } from "@openducktor/host-client";
 import { Effect } from "effect";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
@@ -91,6 +93,33 @@ const localHostRequestErrorEffect = (
     });
   });
 
+const localHostInvokeErrorEffect = (
+  response: Response,
+): Effect.Effect<never, WebDependencyError | WebHostRequestError | HostInvokeError> =>
+  Effect.gen(function* () {
+    const { message, payload } = yield* readLocalHostErrorPayloadEffect(response);
+    if (payload && typeof payload === "object" && "failure" in payload) {
+      const failure = yield* Effect.try({
+        try: () => hostInvokeFailureSchema.parse(payload.failure),
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "local-web-host",
+            operation: "parse-invoke-failure",
+            message: "The local host returned an invalid invoke failure envelope.",
+            cause,
+          }),
+      });
+      return yield* Effect.fail(new HostInvokeError(message, failure));
+    }
+    const failureKind = payload !== null ? readFailureKind(payload) : undefined;
+    return yield* new WebHostRequestError({
+      message,
+      status: response.status,
+      ...(payload !== null ? { cause: payload } : {}),
+      ...(failureKind ? { failureKind } : {}),
+    });
+  });
+
 export const ensureLocalHostSessionEffect = (): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
@@ -148,7 +177,7 @@ export const ensureLocalHostSessionDedupedEffect = (): Effect.Effect<void, WebEr
 const invokeLocalHostEffect = <T>(
   command: string,
   args?: Record<string, unknown>,
-): Effect.Effect<T, WebError> =>
+): Effect.Effect<T, WebError | HostInvokeError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
     const appToken = yield* getBrowserAuthTokenEffect();
@@ -175,7 +204,7 @@ const invokeLocalHostEffect = <T>(
     });
 
     if (!response.ok) {
-      return yield* localHostRequestErrorEffect(response);
+      return yield* localHostInvokeErrorEffect(response);
     }
 
     return yield* Effect.tryPromise({

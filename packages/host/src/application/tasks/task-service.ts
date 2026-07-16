@@ -195,7 +195,7 @@ export type RepoPullRequestSyncResult = {
   ran: boolean;
   changedTaskIds: string[];
 };
-export type TaskTerminalCleanupPort = Pick<TerminalService, "closeByTaskIds">;
+export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
   devServerService?: DevServerService;
   terminalService?: TaskTerminalCleanupPort;

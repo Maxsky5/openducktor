@@ -9,15 +9,15 @@ import {
   terminalCreateRequestSchema,
   terminalListFilterSchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, type Scope } from "effect";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
+import { createTerminalAdmission } from "./terminal-admission";
 import {
   createTerminalLaunchPolicy,
   type TerminalLaunchEnvironmentPort,
 } from "./terminal-launch-policy";
-import { TERMINAL_LIMITS } from "./terminal-limits";
-import { TerminalServiceError } from "./terminal-service-error";
+import type { TerminalServiceError } from "./terminal-service-error";
 import {
   createTerminalSessionEngine,
   type TerminalSessionAttachInput,
@@ -46,6 +46,9 @@ export type TerminalService = {
   closeByTaskIds(
     taskIds: readonly string[],
   ): Effect.Effect<TerminalCloseByTaskResult, TerminalServiceError>;
+  acquireTaskCleanup(
+    taskIds: readonly string[],
+  ): Effect.Effect<TerminalCloseByTaskResult, TerminalServiceError, Scope.Scope>;
   dispose(): Effect.Effect<void, TerminalServiceError>;
 };
 
@@ -73,62 +76,40 @@ export const createTerminalService = ({
       filesystem,
       resolveEnvironment: resolveLaunchEnvironment,
     });
-    let accepting = true;
-
-    const serviceFailure = (
-      code: ConstructorParameters<typeof TerminalServiceError>[0]["code"],
-      operation: ConstructorParameters<typeof TerminalServiceError>[0]["operation"],
-      message: string,
-    ): TerminalServiceError => new TerminalServiceError({ code, operation, message });
+    const admission = createTerminalAdmission({
+      countLive: engine.countLive,
+      countLiveForContext: engine.countLiveForContext,
+    });
 
     const service: TerminalService = {
       hostInstanceId,
       create: (rawInput) =>
         Effect.gen(function* () {
-          if (!accepting) {
-            return yield* Effect.fail(
-              serviceFailure("close_failed", "create", "Terminal service is shutting down."),
-            );
-          }
           const input = terminalCreateRequestSchema.parse(rawInput);
-          if (engine.countLive() >= TERMINAL_LIMITS.livePerHost) {
-            return yield* Effect.fail(
-              serviceFailure(
-                "host_terminal_limit",
-                "create",
-                "The host terminal limit has been reached.",
-              ),
-            );
-          }
-          const contextLimit = input.context.taskId
-            ? TERMINAL_LIMITS.livePerTask
-            : TERMINAL_LIMITS.liveUnassociated;
-          if (engine.countLiveForContext(input.context.taskId) >= contextLimit) {
-            return yield* Effect.fail(
-              serviceFailure(
-                "context_terminal_limit",
-                "create",
-                "The terminal limit for this context has been reached.",
-              ),
-            );
-          }
-          const plan = yield* launch(input, DEFAULT_GRID);
-          const terminalId = idFactory();
-          const summary: TerminalSummary = {
-            terminalId,
-            hostInstanceId,
-            label: plan.cwd,
-            context: input.context,
-            initialWorkingDir: plan.cwd,
-            initialWorkingDirAvailable: true,
-            createdAt: now().toISOString(),
-            lifecycle: "starting",
-            connectionState: "disconnected",
-            attentionState: "none",
-            exit: null,
-          };
-          const started = yield* engine.start(summary, plan);
-          return { ref: { terminalId }, summary: started };
+          return yield* Effect.acquireUseRelease(
+            admission.reserve(input.context.taskId),
+            () =>
+              Effect.gen(function* () {
+                const plan = yield* launch(input, DEFAULT_GRID);
+                const terminalId = idFactory();
+                const summary: TerminalSummary = {
+                  terminalId,
+                  hostInstanceId,
+                  label: plan.cwd,
+                  context: input.context,
+                  initialWorkingDir: plan.cwd,
+                  initialWorkingDirAvailable: true,
+                  createdAt: now().toISOString(),
+                  lifecycle: "starting",
+                  connectionState: "disconnected",
+                  attentionState: "none",
+                  exit: null,
+                };
+                const started = yield* engine.start(summary, plan);
+                return { ref: { terminalId }, summary: started };
+              }),
+            (reservation) => Effect.sync(() => reservation.release()),
+          );
         }),
       list: (rawFilter) =>
         Effect.gen(function* () {
@@ -157,13 +138,24 @@ export const createTerminalService = ({
         engine
           .closeByTaskIds(taskIds)
           .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
+      acquireTaskCleanup: (taskIds) =>
+        Effect.acquireRelease(admission.acquireTaskCleanupLease(taskIds), (lease) =>
+          Effect.sync(() => lease.release()),
+        ).pipe(
+          Effect.tap((lease) => lease.awaitPending),
+          Effect.zipRight(
+            engine
+              .closeByTaskIds(taskIds)
+              .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
+          ),
+        ),
       dispose: () =>
         Effect.gen(function* () {
-          accepting = false;
+          yield* admission.stopAccepting();
           yield* engine.dispose();
         }),
     };
     return service;
   });
 
-export { TerminalServiceError } from "./terminal-service-error";
+export { TerminalServiceError, terminalServiceErrorToFailure } from "./terminal-service-error";

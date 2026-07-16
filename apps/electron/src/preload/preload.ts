@@ -1,4 +1,9 @@
-import { appUpdateCommandResultSchema, appUpdateStateSchema } from "@openducktor/contracts";
+import {
+  appUpdateCommandResultSchema,
+  appUpdateStateSchema,
+  hostInvokeFailureSchema,
+} from "@openducktor/contracts";
+import { HostInvokeError } from "@openducktor/host-client";
 import electron from "electron";
 import {
   ELECTRON_APP_UPDATE_CHECK_CHANNEL,
@@ -13,6 +18,7 @@ import {
   ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
+  type ElectronHostInvokeResult,
   type OpenDucktorElectronApi,
   type OpenDucktorElectronAppUpdateApi,
   type OpenDucktorElectronTerminalApi,
@@ -20,6 +26,7 @@ import {
 import { createElectronHostInvoke } from "./electron-host-invoke";
 
 const { contextBridge, ipcRenderer } = electron;
+const invokeHost = createElectronHostInvoke(ipcRenderer);
 
 const appUpdates: OpenDucktorElectronAppUpdateApi = {
   async getState() {
@@ -76,7 +83,16 @@ const terminals: OpenDucktorElectronTerminalApi = {
 };
 
 const electronApi: OpenDucktorElectronApi = {
-  invoke: createElectronHostInvoke(ipcRenderer),
+  async invoke(command, args) {
+    const response = (await invokeHost(command, args)) as ElectronHostInvokeResult;
+    if (!response.ok) {
+      const failure = response.error.failure
+        ? hostInvokeFailureSchema.parse(response.error.failure)
+        : null;
+      throw new HostInvokeError(response.error.message, failure);
+    }
+    return response.value;
+  },
   subscribe(channel, listener) {
     const handleEvent = (
       _event: Electron.IpcRendererEvent,

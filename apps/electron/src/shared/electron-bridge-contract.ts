@@ -2,6 +2,7 @@ import type {
   AppUpdateCheckInput,
   AppUpdateCommandResult,
   AppUpdateState,
+  HostInvokeFailure,
 } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
 
@@ -23,6 +24,16 @@ export type ElectronHostInvokeRequest = {
   command: string;
   args?: Record<string, unknown>;
 };
+
+export type ElectronHostInvokeResult =
+  | { ok: true; value: unknown }
+  | {
+      ok: false;
+      error: {
+        message: string;
+        failure?: HostInvokeFailure;
+      };
+    };
 
 export type ElectronHostInvokeResponse =
   | {

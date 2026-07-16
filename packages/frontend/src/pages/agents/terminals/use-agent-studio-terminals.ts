@@ -1,4 +1,5 @@
 import type { TerminalCloseResponse, TerminalLifecycle } from "@openducktor/contracts";
+import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -170,9 +171,10 @@ export const useAgentStudioTerminals = (
         });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        const requestState = message.includes("unsupported_runtime")
-          ? "unsupported_runtime"
-          : "creation_failed";
+        const requestState =
+          cause instanceof HostTerminalClientError && cause.code === "unsupported_runtime"
+            ? "unsupported_runtime"
+            : "creation_failed";
         dispatch({ type: "creationFailed", scopeKey, tabId, requestState, error: message });
       }
     },
@@ -248,21 +250,15 @@ export const useAgentStudioTerminals = (
       },
       onClose: async (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => {
         if (!scopeKey) throw new Error("Terminal scope is unavailable.");
-        const closesLastTab = visibleTabs.length === 1 && visibleTabs[0]?.tabId === tab.tabId;
         if (!tab.terminalId) {
-          dispatch({
-            type: "closeCompleted",
-            scopeKey,
-            tabId: tab.tabId,
-            closedLastTab: closesLastTab,
-          });
+          dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
           return { closed: true };
         }
         const terminalId = tab.terminalId;
         if (!controller) {
           throw new Error("Terminal transport is unavailable for this task.");
         }
-        dispatch({ type: "closeStarted", scopeKey, tabId: tab.tabId, closesLastTab });
+        dispatch({ type: "closeStarted", scopeKey, tabId: tab.tabId });
         let closeResult: TerminalCloseResponse;
         try {
           closeResult = await controller.closeTerminal(terminalId, () =>
@@ -272,29 +268,14 @@ export const useAgentStudioTerminals = (
             }),
           );
         } catch (cause) {
-          dispatch({
-            type: "closeRejected",
-            scopeKey,
-            tabId: tab.tabId,
-            restoresLastTab: closesLastTab,
-          });
+          dispatch({ type: "closeRejected", scopeKey, tabId: tab.tabId });
           throw cause;
         }
         if (!closeResult.closed) {
-          dispatch({
-            type: "closeRejected",
-            scopeKey,
-            tabId: tab.tabId,
-            restoresLastTab: closesLastTab,
-          });
+          dispatch({ type: "closeRejected", scopeKey, tabId: tab.tabId });
           return closeResult;
         }
-        dispatch({
-          type: "closeCompleted",
-          scopeKey,
-          tabId: tab.tabId,
-          closedLastTab: closesLastTab,
-        });
+        dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
         if (repoPath && taskId)
           await queryClient.invalidateQueries({
             queryKey: terminalQueryKeys.task({ repoPath, taskId }),

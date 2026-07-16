@@ -4,9 +4,8 @@ import {
   type TerminalSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { TerminalPtyError, TerminalPtyHandle } from "../../ports/terminal-pty-port";
+import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
-import type { TerminalServiceError } from "./terminal-service-error";
 
 const OUTPUT_CHUNK_BYTES = 64 * 1024;
 const EMPTY_PAYLOAD = new Uint8Array(0);
@@ -44,52 +43,61 @@ export type TerminalSessionAttachInput = {
   sink: TerminalAttachment["sink"];
 };
 
+export type TerminalStreamEvent =
+  | { type: "attachments_empty" }
+  | { type: "incomplete_replay" }
+  | { type: "overflow" }
+  | { type: "pause_requested" };
+
+export type TerminalStreamEvents = TerminalStreamEvent[];
+
+const streamEvent = (type: TerminalStreamEvent["type"]): TerminalStreamEvents => [{ type }];
+
+const mergeStreamEvents = (
+  left: TerminalStreamEvents,
+  right: TerminalStreamEvents,
+): TerminalStreamEvents => {
+  const eventTypes = new Set(left.map((event) => event.type));
+  return [...left, ...right.filter((event) => !eventTypes.has(event.type))];
+};
+
 export const isLiveTerminal = (session: TerminalSession): boolean =>
   session.summary.lifecycle === "starting" ||
   session.summary.lifecycle === "running" ||
   session.summary.lifecycle === "closing" ||
   session.summary.lifecycle === "close_failed";
 
-type CreateTerminalSessionStreamInput = {
-  emitLifecycle: (session: TerminalSession) => void;
-  handleExit: (session: TerminalSession, exitCode: number | null, signal: string | null) => void;
-  handleFailure: (session: TerminalSession) => void;
-  resumeFailure: (
-    session: TerminalSession,
-    operation: "ack" | "detach",
-    cause: TerminalPtyError,
-  ) => TerminalServiceError;
-};
-
-export const createTerminalSessionStream = ({
-  emitLifecycle,
-  handleExit,
-  handleFailure,
-  resumeFailure,
-}: CreateTerminalSessionStreamInput) => {
+export const createTerminalSessionStream = () => {
   const publish = (
     attachment: TerminalAttachment,
     event: TerminalServerMessage,
     payload: Uint8Array = EMPTY_PAYLOAD,
   ): void => attachment.sink(event, payload);
 
+  const tryPublish = (
+    session: TerminalSession,
+    attachment: TerminalAttachment,
+    event: TerminalServerMessage,
+    payload: Uint8Array = EMPTY_PAYLOAD,
+  ): { delivered: boolean; events: TerminalStreamEvents } => {
+    try {
+      publish(attachment, event, payload);
+      return { delivered: true, events: [] };
+    } catch {
+      session.attachments.delete(attachment.attachmentId);
+      return {
+        delivered: false,
+        events: session.attachments.size === 0 ? streamEvent("attachments_empty") : [],
+      };
+    }
+  };
+
   const publishSafely = (
     session: TerminalSession,
     attachment: TerminalAttachment,
     event: TerminalServerMessage,
     payload: Uint8Array = EMPTY_PAYLOAD,
-  ): boolean => {
-    try {
-      publish(attachment, event, payload);
-      return true;
-    } catch {
-      session.attachments.delete(attachment.attachmentId);
-      if (session.attachments.size === 0) {
-        session.summary.connectionState = "disconnected";
-      }
-      return false;
-    }
-  };
+  ): TerminalStreamEvents => tryPublish(session, attachment, event, payload).events;
 
   const appendReplay = (session: TerminalSession, chunk: ReplayChunk): void => {
     session.replay.push(chunk);
@@ -103,45 +111,13 @@ export const createTerminalSessionStream = ({
     }
   };
 
-  const terminateForOverflow = (session: TerminalSession): void => {
-    if (session.overflowed) {
-      return;
-    }
-    session.overflowed = true;
-    session.summary.attentionState = "overflow";
-    for (const attachment of session.attachments.values()) {
-      publishSafely(session, attachment, {
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "output_overflow",
-        terminalId: session.summary.terminalId,
-      });
-    }
-    if (session.handle) {
-      session.summary.lifecycle = "closing";
-      emitLifecycle(session);
-      Effect.runFork(
-        session.handle.terminate().pipe(
-          Effect.tap(() => Effect.sync(() => handleExit(session, null, "output_overflow"))),
-          Effect.tapError(() => Effect.sync(() => handleFailure(session))),
-        ),
-      );
-    }
-  };
-
-  const pause = (session: TerminalSession): void => {
-    if (session.paused || !session.handle) {
-      return;
-    }
+  const requestPause = (session: TerminalSession): TerminalStreamEvents => {
+    if (session.paused || !session.handle) return [];
     if (!session.handle.supportsOutputPause) {
-      terminateForOverflow(session);
-      return;
+      return streamEvent("overflow");
     }
     session.paused = true;
-    Effect.runFork(
-      session.handle
-        .pauseOutput()
-        .pipe(Effect.tapError(() => Effect.sync(() => terminateForOverflow(session)))),
-    );
+    return streamEvent("pause_requested");
   };
 
   const deliverChunk = (
@@ -149,75 +125,73 @@ export const createTerminalSessionStream = ({
     attachment: TerminalAttachment,
     chunk: ReplayChunk,
     replay: boolean,
-  ): boolean => {
+  ): { delivered: boolean; events: TerminalStreamEvents } => {
     if (chunk.sequenceEnd <= attachment.deliveredSequence) {
-      return true;
+      return { delivered: true, events: [] };
     }
     const start = Math.max(chunk.sequenceStart, attachment.deliveredSequence);
     const payload = chunk.data.subarray(start - chunk.sequenceStart);
     if (attachment.pendingBytes + payload.byteLength > TERMINAL_LIMITS.pendingOutputBytes) {
-      pause(session);
-      return false;
+      return { delivered: false, events: requestPause(session) };
     }
-    if (
-      !publishSafely(
-        session,
-        attachment,
-        {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "output",
-          terminalId: session.summary.terminalId,
-          sequenceStart: start,
-          sequenceEnd: chunk.sequenceEnd,
-          replay,
-        },
-        payload,
-      )
-    ) {
-      return false;
-    }
+    const published = tryPublish(
+      session,
+      attachment,
+      {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "output",
+        terminalId: session.summary.terminalId,
+        sequenceStart: start,
+        sequenceEnd: chunk.sequenceEnd,
+        replay,
+      },
+      payload,
+    );
+    if (!published.delivered) return published;
     attachment.deliveredSequence = chunk.sequenceEnd;
     attachment.pendingBytes = attachment.deliveredSequence - attachment.acknowledgedSequence;
-    if (attachment.pendingBytes >= TERMINAL_LIMITS.pendingOutputBytes) {
-      pause(session);
-    }
-    return true;
+    const pressureEvents =
+      attachment.pendingBytes >= TERMINAL_LIMITS.pendingOutputBytes ? requestPause(session) : [];
+    return {
+      delivered: true,
+      events: mergeStreamEvents(published.events, pressureEvents),
+    };
   };
 
   const flushAttachment = (
     session: TerminalSession,
     attachment: TerminalAttachment,
     replay: boolean,
-  ): void => {
+  ): TerminalStreamEvents => {
+    let events: TerminalStreamEvents = [];
     const earliest = session.replay[0]?.sequenceStart ?? session.nextSequence;
     if (attachment.deliveredSequence < earliest) {
-      if (
-        !publishSafely(session, attachment, {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "replay_gap",
-          terminalId: session.summary.terminalId,
-          missingSequenceStart: attachment.deliveredSequence,
-          missingSequenceEnd: earliest,
-        })
-      ) {
-        return;
-      }
+      const published = tryPublish(session, attachment, {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "replay_gap",
+        terminalId: session.summary.terminalId,
+        missingSequenceStart: attachment.deliveredSequence,
+        missingSequenceEnd: earliest,
+      });
+      events = mergeStreamEvents(events, published.events);
+      if (!published.delivered) return events;
       attachment.deliveredSequence = earliest;
       attachment.acknowledgedSequence = earliest;
       attachment.pendingBytes = 0;
-      session.summary.connectionState = "incomplete_replay";
-      session.summary.attentionState = "incomplete_replay";
+      events = mergeStreamEvents(events, streamEvent("incomplete_replay"));
     }
     for (const chunk of session.replay) {
-      if (!deliverChunk(session, attachment, chunk, replay)) {
-        break;
-      }
+      const delivered = deliverChunk(session, attachment, chunk, replay);
+      events = mergeStreamEvents(events, delivered.events);
+      if (!delivered.delivered) break;
     }
+    return events;
   };
 
-  const handleOutput = (session: TerminalSession, data: Uint8Array): void => {
+  const handleOutput = (session: TerminalSession, data: Uint8Array): TerminalStreamEvents => {
+    let events: TerminalStreamEvents = [];
     if (data.byteLength === 0 || session.overflowed) {
-      return;
+      return events;
     }
     for (let offset = 0; offset < data.byteLength; offset += OUTPUT_CHUNK_BYTES) {
       const bytes = data.slice(offset, Math.min(data.byteLength, offset + OUTPUT_CHUNK_BYTES));
@@ -229,18 +203,20 @@ export const createTerminalSessionStream = ({
       session.nextSequence = chunk.sequenceEnd;
       appendReplay(session, chunk);
       for (const attachment of session.attachments.values()) {
-        deliverChunk(session, attachment, chunk, false);
+        const delivered = deliverChunk(session, attachment, chunk, false);
+        events = mergeStreamEvents(events, delivered.events);
       }
-      if (session.overflowed) {
-        return;
-      }
+      if (events.some((event) => event.type === "overflow")) return events;
     }
+    return events;
   };
 
   const resumeOutputIfUnblocked = (
     session: TerminalSession,
-    operation: "ack" | "detach",
-  ): Effect.Effect<void, TerminalServiceError> =>
+  ): Effect.Effect<
+    TerminalStreamEvents,
+    import("../../ports/terminal-pty-port").TerminalPtyError
+  > =>
     Effect.gen(function* () {
       if (
         !session.paused ||
@@ -248,17 +224,17 @@ export const createTerminalSessionStream = ({
           (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
         )
       ) {
-        return;
+        return [];
       }
       if (session.handle) {
-        yield* session.handle
-          .resumeOutput()
-          .pipe(Effect.mapError((cause) => resumeFailure(session, operation, cause)));
+        yield* session.handle.resumeOutput();
       }
       session.paused = false;
+      let events: TerminalStreamEvents = [];
       for (const candidate of session.attachments.values()) {
-        flushAttachment(session, candidate, false);
+        events = mergeStreamEvents(events, flushAttachment(session, candidate, false));
       }
+      return events;
     });
 
   return {
