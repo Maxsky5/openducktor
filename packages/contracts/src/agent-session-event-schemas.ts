@@ -509,6 +509,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
 export type AgentRuntimeEvent = ExactOptional<z.infer<typeof agentRuntimeEventSchema>>;
 
 type AgentSessionTranscriptEventType =
+  | "session_started"
   | "assistant_delta"
   | "assistant_message"
   | "user_message"
@@ -516,9 +517,14 @@ type AgentSessionTranscriptEventType =
   | "session_todos_updated"
   | "session_compaction_started"
   | "session_compacted"
-  | "mcp_reconnect_started";
+  | "mcp_reconnect_started"
+  | "session_status"
+  | "session_error"
+  | "session_idle"
+  | "session_finished";
 
 const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventType> = new Set([
+  "session_started",
   "assistant_delta",
   "assistant_message",
   "user_message",
@@ -527,6 +533,10 @@ const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventT
   "session_compaction_started",
   "session_compacted",
   "mcp_reconnect_started",
+  "session_status",
+  "session_error",
+  "session_idle",
+  "session_finished",
 ]);
 
 export type AgentSessionTranscriptEvent = Extract<
@@ -543,6 +553,6 @@ export const agentSessionTranscriptEventSchema: z.ZodType<AgentSessionTranscript
       event.sessionRef !== undefined,
     {
       message:
-        "A transcript event must contain a session ref and must not duplicate live projection state.",
+        "A transcript event must contain a session ref and belong to the ordered session stream.",
     },
   ) as unknown as z.ZodType<AgentSessionTranscriptEvent>;

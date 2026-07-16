@@ -13,7 +13,11 @@ import {
   isBrowserLiveControlEvent,
 } from "@openducktor/frontend/lib/browser-live-control-events";
 import type { HostEventChannel } from "@openducktor/host";
-import { createHostClient, type HostClient } from "@openducktor/host-client";
+import {
+  createAgentSessionLiveAttachment,
+  createHostClient,
+  type HostClient,
+} from "@openducktor/host-client";
 import { Effect } from "effect";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
 import {
@@ -471,22 +475,6 @@ export const subscribeLocalHostDevServerEvents = async (
   return runWebBoundary(subscribeReadyLocalHostEventsEffect(DEV_SERVER_EVENT_CHANNEL, listener));
 };
 
-const liveEnvelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
-  switch (envelope.type) {
-    case "snapshot":
-    case "fault":
-      return envelope.repoPath;
-    case "session_upsert":
-      return envelope.session.ref.repoPath;
-    case "session_removed":
-      return envelope.ref.repoPath;
-    case "transcript_event":
-      return envelope.event.sessionRef.repoPath;
-    case "catalog_invalidated":
-      return envelope.scope.repoPath;
-  }
-};
-
 export const observeLocalHostAgentSessions = async (
   input: AgentSessionLiveRefreshInput,
   listener: (envelope: AgentSessionLiveEnvelope) => void,
@@ -495,10 +483,10 @@ export const observeLocalHostAgentSessions = async (
     Effect.gen(function* () {
       const client = createLocalHostClient();
       let closed = false;
-      let awaitingSnapshot = true;
       let refreshTail = Promise.resolve();
+      const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
       const refresh = (): void => {
-        awaitingSnapshot = true;
+        attachment.restart();
         refreshTail = refreshTail
           .then(async () => {
             if (!closed) {
@@ -526,17 +514,7 @@ export const observeLocalHostAgentSessions = async (
             return;
           }
           const envelope = agentSessionLiveEnvelopeSchema.parse(payload);
-          if (liveEnvelopeRepoPath(envelope) !== input.repoPath) {
-            return;
-          }
-          if (envelope.type === "snapshot") {
-            awaitingSnapshot = false;
-            listener(envelope);
-            return;
-          }
-          if (!awaitingSnapshot) {
-            listener(envelope);
-          }
+          attachment.accept(envelope);
         },
       );
       const initialRefreshExit = yield* Effect.exit(

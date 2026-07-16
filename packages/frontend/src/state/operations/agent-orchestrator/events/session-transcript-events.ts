@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { SessionTurnState } from "../support/session-turn-state";
 import {
+  closesQueuedSessionEvents,
   createSessionEventBatcher,
   isImmediateSessionEvent,
   type QueuedSessionEvent,
@@ -20,6 +21,11 @@ import {
   handleAssistantMessage,
   handleSessionCompacted,
   handleSessionCompactionStarted,
+  handleSessionError,
+  handleSessionFinished,
+  handleSessionIdle,
+  handleSessionStarted,
+  handleSessionStatus,
   handleSessionTodosUpdated,
   handleUserMessage,
 } from "./session-lifecycle";
@@ -98,6 +104,9 @@ const dispatchTranscriptEvent = (
   }
   const context = transcriptEventContext(dependencies, event);
   switch (event.type) {
+    case "session_started":
+      handleSessionStarted(context, event);
+      return;
     case "assistant_delta":
       handleAssistantDelta(context, event);
       return;
@@ -121,6 +130,18 @@ const dispatchTranscriptEvent = (
       return;
     case "mcp_reconnect_started":
       notifyMcpReconnectStarted(event);
+      return;
+    case "session_status":
+      handleSessionStatus(context, event);
+      return;
+    case "session_error":
+      handleSessionError(context, event);
+      return;
+    case "session_idle":
+      handleSessionIdle(context, event);
+      return;
+    case "session_finished":
+      handleSessionFinished(context, event);
       return;
   }
 };
@@ -190,7 +211,14 @@ export const createAgentSessionTranscriptEventConsumer = (
     handle: (event) => {
       const sessionKey = agentSessionIdentityKey(toAgentSessionIdentity(event.sessionRef));
       if (isImmediateSessionEvent(event)) {
-        forceFlushSession(sessionKey);
+        if (closesQueuedSessionEvents(event)) {
+          queuedEventsBySession.delete(sessionKey);
+          if (queuedEventsBySession.size === 0) {
+            cancelScheduledFlush();
+          }
+        } else {
+          forceFlushSession(sessionKey);
+        }
         dispatchTranscriptEvent(dependencies, event);
         return;
       }

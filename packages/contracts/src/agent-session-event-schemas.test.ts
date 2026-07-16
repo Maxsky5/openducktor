@@ -82,9 +82,8 @@ describe("agent session transcript event contract", () => {
     }
   });
 
-  test("keeps live projection changes out of transcript envelopes", () => {
+  test("keeps retained projection state changes out of transcript envelopes", () => {
     const liveProjectionEvents = [
-      { ...base, type: "session_started", message: "Started" },
       { ...base, type: "session_context_updated", totalTokens: 12 },
       {
         ...base,
@@ -101,15 +100,29 @@ describe("agent session transcript event contract", () => {
         questions: [{ header: "Choice", question: "Pick", options: [] }],
       },
       { ...base, type: "question_resolved", requestId: "native-2" },
-      { ...base, type: "session_status", status: { type: "idle" } },
-      { ...base, type: "session_error", message: "Failed" },
-      { ...base, type: "session_idle" },
-      { ...base, type: "session_finished", message: "Finished" },
     ] as const;
 
     for (const event of liveProjectionEvents) {
       expect(agentRuntimeEventSchema.safeParse(event).success).toBe(true);
       expect(agentSessionTranscriptEventSchema.safeParse(event).success).toBe(false);
+    }
+  });
+
+  test("keeps lifecycle details on the ordered session stream", () => {
+    const lifecycleEvents = [
+      { ...base, type: "session_started", message: "Started" },
+      {
+        ...base,
+        type: "session_status",
+        status: { type: "retry", attempt: 2, message: "Busy", nextEpochMs: 123 },
+      },
+      { ...base, type: "session_error", message: "Failed" },
+      { ...base, type: "session_idle" },
+      { ...base, type: "session_finished", message: "Finished" },
+    ] as const;
+
+    for (const event of lifecycleEvents) {
+      expect(agentSessionTranscriptEventSchema.parse(event)).toEqual(event);
     }
   });
 

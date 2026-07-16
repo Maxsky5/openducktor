@@ -1,5 +1,4 @@
 import {
-  type AgentSessionLiveEnvelope,
   type AppUpdateCommandResult,
   type AppUpdateState,
   agentSessionLiveEnvelopeSchema,
@@ -7,7 +6,7 @@ import {
   appUpdateStateSchema,
 } from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
-import { createHostClient } from "@openducktor/host-client";
+import { createAgentSessionLiveAttachment, createHostClient } from "@openducktor/host-client";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -15,22 +14,6 @@ const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 let nextDevServerTransportEpoch = 0;
-
-const liveEnvelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
-  switch (envelope.type) {
-    case "snapshot":
-    case "fault":
-      return envelope.repoPath;
-    case "session_upsert":
-      return envelope.session.ref.repoPath;
-    case "session_removed":
-      return envelope.ref.repoPath;
-    case "transcript_event":
-      return envelope.event.sessionRef.repoPath;
-    case "catalog_invalidated":
-      return envelope.scope.repoPath;
-  }
-};
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
   constructor() {
@@ -78,20 +61,9 @@ export const createElectronShellBridge = (): ShellBridge => {
       return { transportEpoch, unsubscribe };
     },
     observeAgentSessionLive: async (input, listener) => {
-      let awaitingSnapshot = true;
+      const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
       const unsubscribe = electronApi.subscribe(AGENT_SESSION_LIVE_EVENT_CHANNEL, (payload) => {
-        const envelope = agentSessionLiveEnvelopeSchema.parse(payload);
-        if (liveEnvelopeRepoPath(envelope) !== input.repoPath) {
-          return;
-        }
-        if (envelope.type === "snapshot") {
-          awaitingSnapshot = false;
-          listener(envelope);
-          return;
-        }
-        if (!awaitingSnapshot) {
-          listener(envelope);
-        }
+        attachment.accept(agentSessionLiveEnvelopeSchema.parse(payload));
       });
       try {
         await client.agentSessionLiveRefresh(input);

@@ -88,6 +88,7 @@ export type CodexRuntimeLiveSessionMutation = {
 };
 
 const LIVE_TRANSCRIPT_EVENT_TYPES: ReadonlySet<AgentSessionTranscriptEvent["type"]> = new Set([
+  "session_started",
   "assistant_delta",
   "assistant_message",
   "user_message",
@@ -96,6 +97,10 @@ const LIVE_TRANSCRIPT_EVENT_TYPES: ReadonlySet<AgentSessionTranscriptEvent["type
   "session_compaction_started",
   "session_compacted",
   "mcp_reconnect_started",
+  "session_status",
+  "session_error",
+  "session_idle",
+  "session_finished",
 ]);
 
 type RetainedContextUsage = {
@@ -147,6 +152,19 @@ const serverRequestFromRuntimeEvent = (
 ): CodexServerRequestEnvelope => ({
   request: parseServerRequestRecord(event.message),
   receivedAt: event.receivedAt,
+});
+
+const routedChildSession = (
+  parentSession: CodexSessionState,
+  route: CodexSubagentRoute,
+): CodexSessionState => ({
+  ...parentSession,
+  summary: {
+    ...parentSession.summary,
+    externalSessionId: route.childExternalSessionId,
+    title: route.childExternalSessionId,
+  },
+  threadId: route.childExternalSessionId,
 });
 
 export class CodexRuntimeSessionEvents {
@@ -650,11 +668,11 @@ export class CodexRuntimeSessionEvents {
     }
     const session = this.deps.sessions.get(threadId);
     if (!session) {
+      const route = this.deps.subagents.routeForChild(threadId, event.runtimeId);
+      const parentSession = route
+        ? this.deps.sessions.get(route.parentExternalSessionId)
+        : undefined;
       if (event.kind === "server_request") {
-        const route = this.deps.subagents.routeForChild(threadId, event.runtimeId);
-        const parentSession = route
-          ? this.deps.sessions.get(route.parentExternalSessionId)
-          : undefined;
         if (route?.runtimeId && route.runtimeId !== event.runtimeId) {
           throw new Error(
             `Cannot route Codex server request for thread '${threadId}' from runtime '${event.runtimeId}' because its subagent route belongs to runtime '${route.runtimeId}'.`,
@@ -677,6 +695,17 @@ export class CodexRuntimeSessionEvents {
         event.runtimeId,
         parseNotificationRecord(event.message, event.receivedAt),
       );
+      if (route && parentSession) {
+        if (parentSession.runtimeId !== event.runtimeId) {
+          throw new Error(
+            `Cannot route Codex notification for thread '${threadId}' from runtime '${event.runtimeId}' because parent '${parentSession.threadId}' belongs to runtime '${parentSession.runtimeId}'.`,
+          );
+        }
+        await this.processRuntimeStreamEventForSession(
+          routedChildSession(parentSession, route),
+          event,
+        );
+      }
       return;
     }
     if (session.runtimeId !== event.runtimeId) {
@@ -920,10 +949,10 @@ export class CodexRuntimeSessionEvents {
     session: CodexSessionState,
     notifications: CodexNotificationRecord[],
   ): Promise<void> {
-    await handleCodexPendingNotifications(this.streamingContext(), session, notifications);
+    await handleCodexPendingNotifications(this.streamingContext(session), session, notifications);
   }
 
-  private streamingContext(): CodexStreamingContext {
+  private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {
     return {
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       startedItemTimestampsByKey: this.startedItemTimestampsByKey,
@@ -933,8 +962,13 @@ export class CodexRuntimeSessionEvents {
       modelByTurnKey: this.modelByTurnKey,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
-      emitSessionEvent: (externalSessionId, event) =>
-        this.emitSessionEvent(externalSessionId, event),
+      emitSessionEvent: (externalSessionId, event) => {
+        if (scopedSession?.threadId === externalSessionId) {
+          this.emitSessionEventForSession(scopedSession, event);
+          return;
+        }
+        this.emitSessionEvent(externalSessionId, event);
+      },
       bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
         this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       flushQueuedUserMessagesLater: (activeTurn) =>

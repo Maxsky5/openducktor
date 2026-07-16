@@ -297,19 +297,22 @@ const resetSessionLiveStateForSnapshot = (session: AgentSessionState): AgentSess
 const materializePersistedSessions = ({
   current,
   taskSessionRecords,
+  liveSnapshotKeys,
 }: {
   current: AgentSessionCollection;
   taskSessionRecords: TaskSessionRecords;
+  liveSnapshotKeys: ReadonlySet<string>;
 }): AgentSessionCollection => {
   const loadedTaskIds = new Set(taskSessionRecords.taskIds);
   const persistedKeys = persistedRecordKeys(taskSessionRecords);
   const carried: AgentSessionState[] = [];
   for (const session of listAgentSessions(current)) {
     const shouldCarrySession =
-      session.role !== null &&
-      (!loadedTaskIds.has(session.taskId) ||
-        session.status === "starting" ||
-        persistedKeys.has(agentSessionIdentityKey(session)));
+      (session.role === null && liveSnapshotKeys.has(agentSessionIdentityKey(session))) ||
+      (session.role !== null &&
+        (!loadedTaskIds.has(session.taskId) ||
+          session.status === "starting" ||
+          persistedKeys.has(agentSessionIdentityKey(session))));
     if (shouldCarrySession) {
       carried.push(resetSessionLiveStateForSnapshot(session));
     }
@@ -339,7 +342,14 @@ export const buildAgentSessionLiveCollection = ({
   taskSessionRecords: TaskSessionRecords;
   snapshots: readonly AgentSessionLiveSnapshot[];
 }): AgentSessionCollection => {
-  let collection = materializePersistedSessions({ current, taskSessionRecords });
+  const liveSnapshotKeys = new Set(
+    snapshots.map((snapshot) => agentSessionIdentityKey(toSessionIdentity(snapshot.ref))),
+  );
+  let collection = materializePersistedSessions({
+    current,
+    taskSessionRecords,
+    liveSnapshotKeys,
+  });
 
   for (const snapshot of snapshots) {
     const session = getAgentSession(collection, toSessionIdentity(snapshot.ref));

@@ -458,6 +458,51 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
+  test("forwards normalized lifecycle details through the shared live-session signal", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    let resolveStatusSignal: () => void = () => undefined;
+    const statusSignal = new Promise<void>((resolve) => {
+      resolveStatusSignal = resolve;
+    });
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+      if (signal.type === "transcript_event" && signal.event.type === "session_status") {
+        resolveStatusSignal();
+      }
+    });
+
+    await harness.emitAndWait({
+      type: "session.status",
+      properties: {
+        sessionID: "session-1",
+        status: {
+          type: "retry",
+          attempt: 2,
+          message: "Retrying request",
+          next: 250,
+        },
+      },
+    } as Event);
+    await statusSignal;
+
+    expect(signals).toContainEqual({
+      type: "transcript_event",
+      externalSessionId: "session-1",
+      event: expect.objectContaining({
+        type: "session_status",
+        status: {
+          type: "retry",
+          attempt: 2,
+          message: "Retrying request",
+          nextEpochMs: 250,
+        },
+      }),
+    });
+    await prepared.release();
+  });
+
   test("retains initialization context and reads genuinely missing context on demand", async () => {
     let resolveListStarted: () => void = () => undefined;
     let releaseList: () => void = () => undefined;

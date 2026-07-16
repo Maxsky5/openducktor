@@ -10,6 +10,7 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
@@ -190,6 +191,50 @@ describe("agent session live projection", () => {
 
     expect(getAgentSession(reconnected, identity("parent-thread"))?.pendingApprovals).toEqual([]);
     expect(getAgentSession(reconnected, identity("child-thread"))).toBeNull();
+  });
+
+  test("preserves a live child's loaded transcript across an authoritative snapshot refresh", () => {
+    const tasks = taskSessionRecords({ taskId: "task-1", record: record("parent-thread") });
+    const initial = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: tasks,
+      snapshots: [
+        snapshot("parent-thread"),
+        snapshot("child-thread", { parentExternalSessionId: "parent-thread" }),
+      ],
+    });
+    const child = getAgentSession(initial, identity("child-thread"));
+    if (!child) {
+      throw new Error("Expected live child session.");
+    }
+    const withLoadedChild = replaceAgentSession(initial, {
+      ...child,
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("child-thread", [
+        {
+          id: "assistant-child-1",
+          role: "assistant",
+          content: "Still visible after reconnect",
+          timestamp: "2026-07-16T08:00:01.000Z",
+        },
+      ]),
+    });
+
+    const refreshed = buildAgentSessionLiveCollection({
+      current: withLoadedChild,
+      taskSessionRecords: tasks,
+      snapshots: [
+        snapshot("parent-thread"),
+        snapshot("child-thread", { parentExternalSessionId: "parent-thread" }),
+      ],
+    });
+
+    expect(getAgentSession(refreshed, identity("child-thread"))).toMatchObject({
+      historyLoadState: "loaded",
+      messages: {
+        items: [expect.objectContaining({ content: "Still visible after reconnect" })],
+      },
+    });
   });
 
   test("keeps overlapping request ids isolated by normalized session identity", () => {

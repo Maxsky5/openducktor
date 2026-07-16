@@ -611,10 +611,7 @@ export class CodexAppServerAdapter
         if (localSessionIds.has(route.childExternalSessionId)) {
           continue;
         }
-        const childSnapshot = this.toRoutedChildLiveSessionSnapshot(parentSession, route);
-        if (childSnapshot) {
-          snapshots.push(childSnapshot);
-        }
+        snapshots.push(this.toRoutedChildLiveSessionSnapshot(parentSession, route));
       }
     }
     return snapshots;
@@ -901,7 +898,7 @@ export class CodexAppServerAdapter
   private toRoutedChildLiveSessionSnapshot(
     parentSession: CodexSessionState,
     route: CodexSubagentRoute,
-  ): AgentSessionLiveSnapshot | null {
+  ): AgentSessionLiveSnapshot {
     const pendingApprovals = this.pendingInput
       .pendingApprovalsForSession(route.childExternalSessionId, parentSession.runtimeId)
       .map(toLivePendingApproval);
@@ -917,14 +914,6 @@ export class CodexAppServerAdapter
       parentSession.runtimeId,
     );
     const isRunning = childStatus === "pending" || childStatus === "running";
-    if (
-      pendingApprovals.length === 0 &&
-      pendingQuestions.length === 0 &&
-      contextUsage === null &&
-      !isRunning
-    ) {
-      return null;
-    }
     return agentSessionLiveSnapshotSchema.parse({
       ref: {
         ...codexSessionRef(parentSession),

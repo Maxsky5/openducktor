@@ -126,6 +126,44 @@ describe("electron shell bridge", () => {
     expect(unsubscribeSpy).toHaveBeenCalledTimes(4);
   });
 
+  test("delivers transcript events received during live-session attachment after its snapshot", async () => {
+    const { electronApi } = createElectronApi();
+    setElectronApi(electronApi);
+    const bridge = createElectronShellBridge();
+    const listener = mock(() => {});
+
+    await bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
+    const subscription = (electronApi.subscribe as ReturnType<typeof mock>).mock.calls.find(
+      ([channel]) => channel === "openducktor://agent-session-live-event",
+    )?.[1] as ((payload: unknown) => void) | undefined;
+    if (!subscription) {
+      throw new Error("Expected live-session subscription.");
+    }
+    const transcriptEvent = {
+      type: "transcript_event",
+      event: {
+        type: "assistant_message",
+        externalSessionId: "child-thread",
+        messageId: "assistant-1",
+        message: "New child output",
+        timestamp: "2026-07-17T08:00:00.000Z",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "child-thread",
+        },
+      },
+    };
+    const snapshot = { type: "snapshot", repoPath: "/repo", sessions: [] };
+
+    subscription(transcriptEvent);
+    expect(listener).not.toHaveBeenCalled();
+    subscription(snapshot);
+
+    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([snapshot, transcriptEvent]);
+  });
+
   test("uses the preload bridge for app update state and actions", async () => {
     const { electronApi, unsubscribeAppUpdates } = createElectronApi();
     setElectronApi(electronApi);

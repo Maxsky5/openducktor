@@ -95,7 +95,7 @@ export type SessionEventContext = {
 
 export type SessionLifecycleEventContext = Pick<
   SessionEventContext,
-  "session" | "store" | "turn" | "approvals" | "todos"
+  "session" | "store" | "turn" | "todos"
 >;
 
 export type SessionTranscriptEventContext = Pick<

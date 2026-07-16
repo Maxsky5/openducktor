@@ -807,6 +807,46 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     ]);
   });
 
+  test("retains a completed routed child in the live projection until runtime release", async () => {
+    const { adapter } = createHarness();
+    await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      externalSessionId: "parent-thread",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const adapterState = adapter as unknown as {
+      subagents: {
+        upsertLink(input: {
+          runtimeId: string;
+          parentThreadId: string;
+          childThreadId: string;
+          itemId: string;
+          status: "completed";
+        }): unknown;
+      };
+    };
+    adapterState.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "completed",
+    });
+
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
+      expect.objectContaining({
+        activity: "idle",
+        parentExternalSessionId: "parent-thread",
+        ref: expect.objectContaining({ externalSessionId: "child-thread" }),
+      }),
+    );
+  });
+
   test("replays mirrored pending input when subscribing an idle parent without a local session", async () => {
     const { adapter } = createHarness({
       transportFactory: mock(() => new IdleParentThreadListTransport("runtime-live", false)),

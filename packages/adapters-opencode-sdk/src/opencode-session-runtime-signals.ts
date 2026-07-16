@@ -10,6 +10,7 @@ export type OpencodeSessionContextUsage = {
 };
 
 type OpencodeSessionTranscriptEventType =
+  | "session_started"
   | "assistant_delta"
   | "assistant_message"
   | "user_message"
@@ -17,7 +18,11 @@ type OpencodeSessionTranscriptEventType =
   | "session_todos_updated"
   | "session_compaction_started"
   | "session_compacted"
-  | "mcp_reconnect_started";
+  | "mcp_reconnect_started"
+  | "session_status"
+  | "session_error"
+  | "session_idle"
+  | "session_finished";
 
 export type OpencodeSessionTranscriptEvent = Extract<
   AgentEvent,
@@ -39,6 +44,7 @@ export type OpencodeSessionRuntimeSignal =
   | { readonly type: "fault"; readonly message: string };
 
 const TRANSCRIPT_EVENT_TYPES: ReadonlySet<OpencodeSessionTranscriptEventType> = new Set([
+  "session_started",
   "assistant_delta",
   "assistant_message",
   "user_message",
@@ -47,6 +53,10 @@ const TRANSCRIPT_EVENT_TYPES: ReadonlySet<OpencodeSessionTranscriptEventType> = 
   "session_compaction_started",
   "session_compacted",
   "mcp_reconnect_started",
+  "session_status",
+  "session_error",
+  "session_idle",
+  "session_finished",
 ]);
 
 const SESSION_INVALIDATION_EVENT_TYPES: ReadonlySet<string> = new Set([

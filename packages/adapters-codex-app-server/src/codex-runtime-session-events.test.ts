@@ -107,6 +107,7 @@ const createSession = (threadId: string): CodexSessionState => ({
     title: threadId,
     status: "running",
     role: "build",
+    runtimeKind: "codex",
     startedAt: "2026-06-13T00:00:00.000Z",
   },
   systemPrompt: "",
@@ -868,6 +869,103 @@ describe("CodexRuntimeSessionEvents", () => {
         externalSessionId: session.threadId,
         messageId: "message-1",
         delta: "Working",
+      }),
+    ]);
+  });
+
+  test("forwards normalized lifecycle details through the live mutation", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("thread-lifecycle");
+    const liveMutations: Array<{ transcriptEvents: Array<{ type?: string; message?: string }> }> =
+      [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[session.threadId, session]]),
+      onLiveSessionMutation: (mutation) => {
+        liveMutations.push(mutation);
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "turn/completed",
+        params: {
+          threadId: session.threadId,
+          turn: {
+            id: "turn-1",
+            status: "failed",
+            error: { message: "Child execution failed" },
+          },
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(liveMutations.flatMap((mutation) => mutation.transcriptEvents)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "session_error", message: "Child execution failed" }),
+        expect.objectContaining({ type: "session_idle" }),
+      ]),
+    );
+  });
+
+  test("forwards routed child transcript events without a separately loaded child session", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: parentSession.threadId,
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    const liveMutations: Array<{ transcriptEvents: unknown[] }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[parentSession.threadId, parentSession]]),
+      subagents,
+      onLiveSessionMutation: (mutation) => {
+        liveMutations.push(mutation);
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "child-thread",
+          turnId: "child-turn-1",
+          itemId: "child-message-1",
+          delta: "Child progress",
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(liveMutations).toHaveLength(1);
+    expect(liveMutations[0]?.transcriptEvents).toEqual([
+      expect.objectContaining({
+        type: "assistant_delta",
+        externalSessionId: "child-thread",
+        messageId: "child-message-1",
+        delta: "Child progress",
+        sessionRef: expect.objectContaining({
+          externalSessionId: "child-thread",
+          runtimeKind: "codex",
+        }),
       }),
     ]);
   });

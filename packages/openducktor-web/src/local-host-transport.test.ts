@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 
 type FakeEventSourceListener = (event: MessageEvent<string>) => void;
@@ -355,7 +356,7 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
-  test("refreshes live-session state on the shared connection before exposing deltas", async () => {
+  test("refreshes live-session state on the shared connection without losing ordered deltas", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
     let refreshCallCount = 0;
     let resolveSecondRefresh: () => void = () => {};
@@ -372,7 +373,7 @@ describe("local host SSE subscriptions", () => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
-    const listener = mock(() => {});
+    const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
 
     const observation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
     const eventSource = await waitForEventSourceInstance();
@@ -385,24 +386,36 @@ describe("local host SSE subscriptions", () => {
       expect.objectContaining({ body: JSON.stringify({ repoPath: "/repo" }) }),
     );
 
+    const transcriptEvent = {
+      type: "transcript_event",
+      event: {
+        type: "assistant_message",
+        externalSessionId: "child-thread",
+        messageId: "assistant-1",
+        message: "New child output",
+        timestamp: "2026-07-17T08:00:00.000Z",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "child-thread",
+        },
+      },
+    } satisfies AgentSessionLiveEnvelope;
     eventSource.emit(
       "message",
       JSON.stringify({
         channel: "openducktor://agent-session-live-event",
-        payload: {
-          type: "session_removed",
-          ref: {
-            repoPath: "/repo",
-            runtimeKind: "codex",
-            workingDirectory: "/repo/worktree",
-            externalSessionId: "thread-1",
-          },
-        },
+        payload: transcriptEvent,
       }),
     );
     expect(listener).not.toHaveBeenCalled();
 
-    const snapshot = { type: "snapshot", repoPath: "/repo", sessions: [] };
+    const snapshot = {
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+    } satisfies AgentSessionLiveEnvelope;
     eventSource.emit(
       "message",
       JSON.stringify({
@@ -410,7 +423,7 @@ describe("local host SSE subscriptions", () => {
         payload: snapshot,
       }),
     );
-    expect(listener).toHaveBeenCalledWith(snapshot);
+    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([snapshot, transcriptEvent]);
 
     eventSource.emit("open", "");
     await secondRefresh;
@@ -419,6 +432,36 @@ describe("local host SSE subscriptions", () => {
         url.toString().endsWith("/invoke/agent_session_live_refresh"),
       ),
     ).toHaveLength(2);
+
+    const reconnectTranscriptEvent = {
+      ...transcriptEvent,
+      event: {
+        ...transcriptEvent.event,
+        messageId: "assistant-2",
+        message: "Output during reconnect",
+      },
+    } satisfies AgentSessionLiveEnvelope;
+    eventSource.emit(
+      "message",
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: reconnectTranscriptEvent,
+      }),
+    );
+    expect(listener).toHaveBeenCalledTimes(2);
+    eventSource.emit(
+      "message",
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: snapshot,
+      }),
+    );
+    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
+      snapshot,
+      transcriptEvent,
+      snapshot,
+      reconnectTranscriptEvent,
+    ]);
 
     stopObserving();
   });
