@@ -4,7 +4,10 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { createDeferred } from "./codex-app-server-adapter.test-harness";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
-import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
+import {
+  CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS,
+  CodexRuntimeSessionEvents,
+} from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
@@ -47,6 +50,54 @@ const createRuntimeEvents = (
     flushQueuedUserMessagesLater: () => undefined,
     ...overrides,
   });
+
+type FakeScheduledTimeout = {
+  callback: () => void;
+  cleared: boolean;
+  timeoutMs: number;
+};
+
+const createFakeTimeoutScheduler = () => {
+  const clearedTimeouts: FakeScheduledTimeout[] = [];
+  const timeouts: FakeScheduledTimeout[] = [];
+  const scheduledWaiters = new Map<number, ReturnType<typeof createDeferred<void>>>();
+  const scheduler = {
+    clearTimeout(handle: unknown): void {
+      const timeout = handle as FakeScheduledTimeout;
+      timeout.cleared = true;
+      clearedTimeouts.push(timeout);
+    },
+    setTimeout(callback: () => void, timeoutMs: number): FakeScheduledTimeout {
+      const timeout = { callback, cleared: false, timeoutMs };
+      timeouts.push(timeout);
+      scheduledWaiters.get(timeouts.length)?.resolve(undefined);
+      return timeout;
+    },
+  };
+  const waitForScheduledCount = (count: number): Promise<void> => {
+    if (timeouts.length >= count) {
+      return Promise.resolve();
+    }
+    const waiter = createDeferred<void>();
+    scheduledWaiters.set(count, waiter);
+    return waiter.promise;
+  };
+
+  return {
+    runTimeout(index: number): void {
+      const timeout = timeouts[index];
+      if (!timeout || timeout.cleared) {
+        throw new Error(`Context usage replay timeout ${index} is unavailable.`);
+      }
+      timeout.cleared = true;
+      timeout.callback();
+    },
+    clearedTimeouts,
+    scheduler,
+    timeouts,
+    waitForScheduledCount,
+  };
+};
 
 const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
 
@@ -569,6 +620,90 @@ describe("CodexRuntimeSessionEvents", () => {
       status: "resolved",
       usage: { totalTokens: 300, contextWindow: 200_000 },
     });
+  });
+
+  test("fails a successful resume with no usage replay and allows an explicit retry", async () => {
+    let listener: RuntimeListener | null = null;
+    const replayScheduler = createFakeTimeoutScheduler();
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      contextUsageReplayScheduler: replayScheduler.scheduler,
+    });
+    let resumeAttempts = 0;
+    const resumeWithTurns = async (): Promise<void> => {
+      resumeAttempts += 1;
+    };
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    const firstAttempt = runtimeEvents.loadSessionContextUsage(
+      "runtime-1",
+      "thread-target",
+      resumeWithTurns,
+    );
+    const concurrentAttempt = runtimeEvents.loadSessionContextUsage(
+      "runtime-1",
+      "thread-target",
+      resumeWithTurns,
+    );
+    expect(concurrentAttempt).toBe(firstAttempt);
+    const firstAttemptOutcomes = Promise.all(
+      [firstAttempt, concurrentAttempt].map((attempt) =>
+        attempt.then(
+          (usage) => ({ status: "resolved" as const, usage }),
+          (error: unknown) => ({ status: "rejected" as const, error }),
+        ),
+      ),
+    );
+    await replayScheduler.waitForScheduledCount(1);
+    expect(resumeAttempts).toBe(1);
+    expect(replayScheduler.timeouts[0]?.timeoutMs).toBe(CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS);
+    replayScheduler.runTimeout(0);
+
+    const outcomes = await firstAttemptOutcomes;
+    expect(outcomes).toHaveLength(2);
+    for (const outcome of outcomes) {
+      expect(outcome.status).toBe("rejected");
+      if (outcome.status === "rejected") {
+        expect(outcome.error).toBeInstanceOf(Error);
+        expect((outcome.error as Error).message).toContain(
+          `Timed out waiting for Codex context usage replay for runtime 'runtime-1' session 'thread-target' after ${CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS}ms: thread/resume completed but no matching thread/tokenUsage/updated notification arrived.`,
+        );
+      }
+    }
+    expect(replayScheduler.timeouts[0]?.cleared).toBe(true);
+    expect(replayScheduler.clearedTimeouts).toEqual([replayScheduler.timeouts[0]]);
+
+    const retry = runtimeEvents.loadSessionContextUsage(
+      "runtime-1",
+      "thread-target",
+      resumeWithTurns,
+    );
+    expect(resumeAttempts).toBe(2);
+    await replayScheduler.waitForScheduledCount(2);
+    expect(resumeAttempts).toBe(2);
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "thread/tokenUsage/updated",
+        params: {
+          threadId: "thread-target",
+          turnId: "thread-target-turn",
+          tokenUsage: {
+            total: { totalTokens: 400 },
+            last: { totalTokens: 400 },
+            modelContextWindow: 200_000,
+          },
+        },
+      },
+    });
+
+    await expect(retry).resolves.toEqual({ totalTokens: 400, contextWindow: 200_000 });
+    expect(replayScheduler.timeouts[1]?.cleared).toBe(true);
+    expect(resumeAttempts).toBe(2);
   });
 
   test("routes buffered child server requests through a loaded linked parent", async () => {

@@ -58,6 +58,7 @@ import type {
 type CodexRuntimeSessionEventsDeps = {
   subscribeEvents: CodexAppServerAdapterOptions["subscribeEvents"];
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
+  contextUsageReplayScheduler?: CodexContextUsageReplayScheduler;
   onLiveSessionMutation?: (mutation: CodexRuntimeLiveSessionMutation) => void | Promise<void>;
   onCatalogInvalidated?: CodexAppServerAdapterOptions["onCatalogInvalidated"];
   sessions: CodexSessionLookup;
@@ -67,6 +68,11 @@ type CodexRuntimeSessionEventsDeps = {
   subagents: CodexSubagentLinkState;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
+};
+
+type CodexContextUsageReplayScheduler = {
+  clearTimeout(handle: unknown): void;
+  setTimeout(callback: () => void, timeoutMs: number): unknown;
 };
 
 type CodexServerRequestEnvelope = {
@@ -116,6 +122,15 @@ type ContextUsageRecovery = {
 
 const contextUsageKey = (runtimeId: string, threadId: string): string =>
   JSON.stringify([runtimeId, threadId]);
+
+export const CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS = 10_000;
+
+const defaultContextUsageReplayScheduler: CodexContextUsageReplayScheduler = {
+  clearTimeout: (handle) => {
+    clearTimeout(handle as ReturnType<typeof setTimeout>);
+  },
+  setTimeout: (callback, timeoutMs) => setTimeout(callback, timeoutMs),
+};
 
 const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
   const receivedAtMs = Date.parse(receivedAt);
@@ -275,7 +290,7 @@ export class CodexRuntimeSessionEvents {
       // Codex sends restored usage after thread/resume responds, so response
       // completion cannot establish that the connection-scoped replay is absent.
       if (!this.latestContextUsage(recovery.runtimeId, recovery.threadId)) {
-        await Promise.race([recovery.observed, recovery.released]);
+        await this.waitForContextUsageReplay(recovery);
       }
       await Promise.race([this.waitForRuntimeEventBarrier(recovery.runtimeId), recovery.released]);
       const retained = this.latestContextUsage(recovery.runtimeId, recovery.threadId);
@@ -292,6 +307,28 @@ export class CodexRuntimeSessionEvents {
     } finally {
       if (this.contextUsageRecoveriesByKey.get(key) === recovery) {
         this.contextUsageRecoveriesByKey.delete(key);
+      }
+    }
+  }
+
+  private async waitForContextUsageReplay(recovery: ContextUsageRecovery): Promise<void> {
+    const scheduler = this.deps.contextUsageReplayScheduler ?? defaultContextUsageReplayScheduler;
+    let timeoutHandle: unknown | null = null;
+    const timedOut = new Promise<never>((_resolve, reject) => {
+      timeoutHandle = scheduler.setTimeout(() => {
+        reject(
+          new Error(
+            `Timed out waiting for Codex context usage replay for runtime '${recovery.runtimeId}' session '${recovery.threadId}' after ${CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS}ms: thread/resume completed but no matching thread/tokenUsage/updated notification arrived.`,
+          ),
+        );
+      }, CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS);
+    });
+
+    try {
+      await Promise.race([recovery.observed, recovery.released, timedOut]);
+    } finally {
+      if (timeoutHandle !== null) {
+        scheduler.clearTimeout(timeoutHandle);
       }
     }
   }
