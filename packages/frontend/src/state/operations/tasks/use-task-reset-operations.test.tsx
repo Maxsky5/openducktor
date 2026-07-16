@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { PropsWithChildren, ReactElement } from "react";
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionReadPort } from "../../queries/agent-sessions";
@@ -14,16 +13,12 @@ const createHarness = ({
   agentSessionsList: AgentSessionReadPort["agentSessionsList"];
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
 }) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const taskReset = mock(async () => createTaskCardFixture({ id: "A", status: "open" }));
   const taskResetImplementation = mock(async () =>
     createTaskCardFixture({ id: "A", status: "ready_for_dev" }),
   );
   const error = mock(() => "error-toast");
   const success = mock(() => "success-toast");
-  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
   const harness = createHookHarness(
     () =>
       useTaskResetOperations({
@@ -34,13 +29,12 @@ const createHarness = ({
         notificationPort: { error, success },
       }),
     undefined,
-    { wrapper },
+    { wrapper: IsolatedQueryWrapper },
   );
 
   return {
     error,
     harness,
-    queryClient,
     taskReset,
     taskResetImplementation,
   };
@@ -69,7 +63,6 @@ describe("useTaskResetOperations", () => {
       );
     } finally {
       await setup.harness.unmount();
-      setup.queryClient.clear();
     }
   });
 
@@ -96,7 +89,6 @@ describe("useTaskResetOperations", () => {
       });
     } finally {
       await setup.harness.unmount();
-      setup.queryClient.clear();
     }
   });
 });
