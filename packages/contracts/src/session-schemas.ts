@@ -116,7 +116,7 @@ export type AgentSessionIdentity = Pick<
 >;
 
 export const taskAgentSessionsSchema = z.object({
-  taskId: z.string(),
+  taskId: nonEmptyStringSchema,
   agentSessions: z.array(agentSessionRecordSchema),
 });
 export type TaskAgentSessions = z.infer<typeof taskAgentSessionsSchema>;

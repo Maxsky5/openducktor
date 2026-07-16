@@ -151,7 +151,7 @@ describe("createSessionCacheEffects", () => {
     ).toBeUndefined();
   });
 
-  test("invalidates stop-related queries on the injected query client", async () => {
+  test("invalidates stop-related task queries without superseding session refreshes", async () => {
     const queryClient = createQueryClient();
     const invalidatedKeys: unknown[] = [];
     const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
@@ -175,7 +175,7 @@ describe("createSessionCacheEffects", () => {
     });
 
     expect(invalidatedKeys).toContainEqual(taskQueryKeys.repoDataPrefix("/repo"));
-    expect(invalidatedKeys).toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
+    expect(invalidatedKeys).not.toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
   });
 
   test("deletes through the injected host port and authoritatively refetches the task query", async () => {

@@ -75,7 +75,17 @@ export const parseListAgentSessionsForTasksInput = (
       details: { value: record.taskIds },
     });
   }
-  const taskIds = record.taskIds.map((taskId, index) => requireString(taskId, `taskIds[${index}]`));
+  const taskIds = record.taskIds.map((taskId, index) => {
+    const field = `taskIds[${index}]`;
+    if (typeof taskId !== "string") {
+      throw new HostValidationError({
+        message: `${field} must be a string.`,
+        field,
+        details: { value: taskId },
+      });
+    }
+    return requireString(taskId, field);
+  });
 
   return {
     repoPath: requireString(record.repoPath, "repoPath"),

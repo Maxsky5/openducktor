@@ -90,6 +90,19 @@ describe("agent session query cache helpers", () => {
     expect(queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "task-2"))).toBeUndefined();
   });
 
+  test("batch hydration fails when the host returns a task more than once", async () => {
+    const queryClient = new QueryClient();
+    const readPort = createReadPort(async () => [
+      { taskId: "task-1", agentSessions: [sessionFixture] },
+      { taskId: "task-1", agentSessions: [] },
+    ]);
+
+    await expect(
+      hydrateAgentSessionListQueries(queryClient, "/repo", ["task-1"], readPort),
+    ).rejects.toThrow('Batch session response included task "task-1" more than once.');
+    expect(queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "task-1"))).toBeUndefined();
+  });
+
   test("batch hydration does not overwrite a task cache updated while the batch is in flight", async () => {
     const queryClient = new QueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
@@ -194,6 +207,18 @@ describe("agent session query cache helpers", () => {
     expect(
       queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-2")),
     ).toEqual([]);
+  });
+
+  test("loadAgentSessionListsFromQuery returns an empty result for empty normalized task IDs", async () => {
+    const queryClient = new QueryClient();
+    const agentSessionsListForTasksMock = mock(async () => []);
+
+    await expect(
+      loadAgentSessionListsFromQuery(queryClient, "/repo", ["", " "], {
+        readPort: createReadPort(agentSessionsListForTasksMock),
+      }),
+    ).resolves.toEqual({});
+    expect(agentSessionsListForTasksMock).not.toHaveBeenCalled();
   });
 
   test("loadAgentSessionListsFromQuery batch-hydrates only missing per-task caches", async () => {

@@ -178,20 +178,22 @@ export const loadAgentSessionListsFromQuery = async (
     return {};
   }
 
-  const taskIdsToHydrate = normalizedTaskIds.filter((taskId) => {
+  const taskIdsToHydrate: string[] = [];
+  let refreshesInvalidatedData = false;
+  for (const taskId of normalizedTaskIds) {
     const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-    return (
+    const queryState = queryClient.getQueryState(queryKey);
+    const shouldHydrate =
       options?.forceFresh === true ||
       queryClient.getQueryData(queryKey) === undefined ||
-      queryClient.getQueryState(queryKey)?.isInvalidated === true
-    );
-  });
+      queryState?.isInvalidated === true;
+    if (!shouldHydrate) {
+      continue;
+    }
+    taskIdsToHydrate.push(taskId);
+    refreshesInvalidatedData ||= queryState?.isInvalidated === true;
+  }
   if (taskIdsToHydrate.length > 0) {
-    const refreshesInvalidatedData = taskIdsToHydrate.some(
-      (taskId) =>
-        queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId))?.isInvalidated ===
-        true,
-    );
     await queryClient.fetchQuery({
       ...agentSessionListHydrationQueryOptions(
         queryClient,

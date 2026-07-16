@@ -1646,6 +1646,15 @@ describe("runtime schemas", () => {
     ).toThrow();
   });
 
+  test("task agent sessions rejects blank task IDs", () => {
+    expect(() =>
+      taskAgentSessionsSchema.parse({
+        taskId: " ",
+        agentSessions: [],
+      }),
+    ).toThrow();
+  });
+
   test("agent session record parses compact persisted payload with explicit runtime kind", () => {
     const parsed = agentSessionRecordSchema.parse({
       externalSessionId: "obp-session-2",

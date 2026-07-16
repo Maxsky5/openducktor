@@ -2,10 +2,7 @@ import type { AgentSessionIdentity, AgentSessionRecord } from "@openducktor/cont
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import {
-  invalidateAgentSessionListQuery,
-  refreshAgentSessionListQuery,
-} from "@/state/queries/agent-sessions";
+import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 import { requireWorkspaceRepoPath } from "./session-invariants";
@@ -82,15 +79,11 @@ export const createSessionCacheEffects = ({
 
   const invalidateSessionStopQueries = async ({
     repoPath,
-    taskId,
   }: {
     repoPath: string;
     taskId: string;
   }): Promise<void> => {
-    await Promise.all([
-      invalidateRepoTaskQueries(queryClient, repoPath),
-      invalidateAgentSessionListQuery(queryClient, repoPath, taskId),
-    ]);
+    await invalidateRepoTaskQueries(queryClient, repoPath);
   };
 
   return { deleteSessionRecord, persistSessionRecord, invalidateSessionStopQueries };

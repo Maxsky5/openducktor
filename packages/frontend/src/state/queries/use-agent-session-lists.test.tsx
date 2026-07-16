@@ -15,6 +15,74 @@ const sessionFixture: AgentSessionRecord = {
 };
 
 describe("useAgentSessionLists", () => {
+  test("stays pending without reading when disabled", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const batchList = mock(async () => []);
+    const singleList = mock(async () => []);
+    const harness = createHookHarness(
+      () =>
+        useAgentSessionLists({
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          enabled: false,
+          queryClient,
+          readPort: {
+            agentSessionsList: singleList,
+            agentSessionsListForTasks: batchList,
+          },
+        }),
+      undefined,
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest()).toEqual({
+        data: { "task-1": [] },
+        error: null,
+        isPending: true,
+      });
+      expect(batchList).not.toHaveBeenCalled();
+      expect(singleList).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("stays pending without reading when no repository is selected", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const batchList = mock(async () => []);
+    const singleList = mock(async () => []);
+    const harness = createHookHarness(
+      () =>
+        useAgentSessionLists({
+          repoPath: null,
+          taskIds: ["task-1"],
+          enabled: true,
+          queryClient,
+          readPort: {
+            agentSessionsList: singleList,
+            agentSessionsListForTasks: batchList,
+          },
+        }),
+      undefined,
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest()).toEqual({
+        data: { "task-1": [] },
+        error: null,
+        isPending: true,
+      });
+      expect(batchList).not.toHaveBeenCalled();
+      expect(singleList).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
   test("batches initial missing tasks once and leaves exact invalidation to the per-task query", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
