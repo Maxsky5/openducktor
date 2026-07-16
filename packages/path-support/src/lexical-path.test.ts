@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   basenameForPath,
+  canonicalPathsEqual,
   isAbsolutePath,
   normalizePathForComparison,
   normalizePathSeparators,
@@ -55,6 +56,17 @@ describe("lexical path helpers", () => {
     ["..", ""],
   ])("normalizes %p to %p for comparison", (input, expected) => {
     expect(normalizePathForComparison(input)).toBe(expected);
+  });
+
+  test("compares canonical paths using platform filesystem semantics", () => {
+    expect(
+      canonicalPathsEqual(String.raw`C:\Repo\Worktree\Task`, "c:/repo/worktree/task", "windows"),
+    ).toBe(true);
+    expect(canonicalPathsEqual(String.raw`\\NAS\Dev\Task`, "//nas/dev/task", "windows")).toBe(true);
+    expect(canonicalPathsEqual(String.raw`/tmp/worktrees/a\b`, "/tmp/worktrees/a/b", "posix")).toBe(
+      false,
+    );
+    expect(canonicalPathsEqual("/tmp/worktrees/task ", "/tmp/worktrees/task", "posix")).toBe(false);
   });
 
   test("normalizes separators and trims trailing separators without collapsing roots", () => {

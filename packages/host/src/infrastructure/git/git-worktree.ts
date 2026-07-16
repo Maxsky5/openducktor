@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { type CanonicalPathPlatform, canonicalPathsEqual } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   combineOutput,
@@ -8,6 +9,9 @@ import {
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
+
+const HOST_PATH_PLATFORM: CanonicalPathPlatform =
+  process.platform === "win32" ? "windows" : "posix";
 
 const gitOperationError = (
   message: string,
@@ -56,7 +60,9 @@ export const isRegisteredWorktree = (
       .split("\0")
       .filter((entry) => entry.startsWith("worktree "))
       .map((entry) => entry.slice("worktree ".length));
-    return registeredPaths.includes(targetPath);
+    return registeredPaths.some((registeredPath) =>
+      canonicalPathsEqual(registeredPath, targetPath, HOST_PATH_PLATFORM),
+    );
   });
 export const deleteReference = (runner: GitCommandRunner, repoPath: string, reference: string) =>
   Effect.gen(function* () {
