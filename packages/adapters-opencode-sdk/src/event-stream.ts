@@ -213,12 +213,16 @@ export const assertGlobalEventSupport = (client: OpencodeClient): void => {
 
 export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): Promise<void> => {
   const stream = await resolveGlobalEventStream(input.client, input.controller.signal);
-  input.onReady?.();
+  let ready = false;
   for await (const event of stream) {
     if (input.controller.signal.aborted) {
       break;
     }
     await input.onEvent(toDirectoryScopedEvent(event));
+    if (!ready) {
+      ready = true;
+      input.onReady?.();
+    }
   }
 };
 

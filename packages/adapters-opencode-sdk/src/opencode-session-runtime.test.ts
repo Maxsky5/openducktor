@@ -56,7 +56,15 @@ const createLiveClientHarness = (
   let pendingApproval = input.pendingQuestion !== true;
   let pendingQuestion = input.pendingQuestion === true;
   let signal: AbortSignal | null = null;
-  const queuedEvents: QueuedStreamEntry[] = [];
+  const queuedEvents: QueuedStreamEntry[] = [
+    {
+      type: "event",
+      event: {
+        type: "server.connected",
+        properties: {},
+      } as unknown as Event,
+    },
+  ];
   let wakeStream: (() => void) | null = null;
 
   const client = {
@@ -198,6 +206,9 @@ const createLiveClientHarness = (
                 entry.consumed();
                 throw entry.error;
               }
+              if (entry.event.type === "server.connected") {
+                callOrder.push("connected");
+              }
               yield { directory: "/repo", payload: entry.event };
               entry.consumed?.();
             }
@@ -278,7 +289,7 @@ describe("OpenCode session runtime connection", () => {
 
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    expect(harness.callOrder.slice(0, 2)).toEqual(["subscribe", "list"]);
+    expect(harness.callOrder.slice(0, 3)).toEqual(["subscribe", "connected", "list"]);
     expect(prepared.initialSources).toHaveLength(1);
     expect(prepared.initialSources[0]?.pendingApprovals[0]?.requestId).toBe("native-request-1");
     expect(harness.messageCalls).toEqual([]);

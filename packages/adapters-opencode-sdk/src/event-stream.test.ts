@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
-import { isRelevantSubscriberEvent, processOpencodeEvent } from "./event-stream";
+import {
+  isRelevantSubscriberEvent,
+  processOpencodeEvent,
+  subscribeGlobalEvents,
+} from "./event-stream";
 import {
   type EventStreamRuntime,
   flushPendingSubagentInputEventsForSession,
@@ -41,6 +45,48 @@ const PDF_ATTACHMENT_DISPLAY_PART = {
     mime: "application/pdf",
   },
 };
+
+test("global event observation becomes ready only after the lazy SSE stream connects", async () => {
+  let connect: (() => void) | undefined;
+  const connected = new Promise<void>((resolve) => {
+    connect = resolve;
+  });
+  const client = {
+    global: {
+      event: async () => ({
+        stream: (async function* () {
+          await connected;
+          yield {
+            directory: "/repo",
+            payload: {
+              type: "server.connected",
+              properties: {},
+            } as unknown as Event,
+          };
+        })(),
+      }),
+    },
+  } as unknown as Parameters<typeof subscribeGlobalEvents>[0]["client"];
+  const order: string[] = [];
+  const observation = subscribeGlobalEvents({
+    client,
+    controller: new AbortController(),
+    onReady: () => {
+      order.push("ready");
+    },
+    onEvent: (event) => {
+      order.push(event.type);
+    },
+  });
+
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(order).toEqual([]);
+
+  connect?.();
+  await observation;
+  expect(order).toEqual(["server.connected", "ready"]);
+});
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
   const parts: AgentUserMessagePart[] = [{ kind: "text", text: message }];
