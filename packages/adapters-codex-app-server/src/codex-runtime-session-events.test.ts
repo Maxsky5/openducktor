@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
+import { createDeferred } from "./codex-app-server-adapter.test-harness";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -506,6 +507,67 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(runtimeEvents.latestContextUsage("runtime-1", "thread/other")).toEqual({
       totalTokens: 200,
       contextWindow: 200_000,
+    });
+  });
+
+  test("waits only for context usage from the matching runtime and thread", async () => {
+    const listeners = new Map<string, RuntimeListener>();
+    let processedMutation = createDeferred<void>();
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (runtimeId, next) => {
+        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
+        return () => undefined;
+      },
+      onLiveSessionMutation: () => {
+        processedMutation.resolve(undefined);
+      },
+    });
+    const emitUsageAndWait = async (
+      runtimeId: string,
+      threadId: string,
+      totalTokens: number,
+    ): Promise<void> => {
+      const currentMutation = processedMutation;
+      listeners.get(runtimeId)?.({
+        runtimeId,
+        kind: "notification",
+        message: {
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId,
+            turnId: `${threadId}-turn`,
+            tokenUsage: {
+              total: { totalTokens },
+              last: { totalTokens },
+              modelContextWindow: 200_000,
+            },
+          },
+        },
+      });
+      await currentMutation.promise;
+      processedMutation = createDeferred<void>();
+    };
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
+    const loading = runtimeEvents.loadSessionContextUsage(
+      "runtime-1",
+      "thread-target",
+      async () => undefined,
+    );
+    const outcome = loading.then(
+      (usage) => ({ status: "resolved" as const, usage }),
+      (error: unknown) => ({ status: "rejected" as const, error }),
+    );
+
+    await emitUsageAndWait("runtime-1", "thread-other", 100);
+    await emitUsageAndWait("runtime-2", "thread-target", 200);
+    expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toBeNull();
+
+    await emitUsageAndWait("runtime-1", "thread-target", 300);
+    await expect(outcome).resolves.toEqual({
+      status: "resolved",
+      usage: { totalTokens: 300, contextWindow: 200_000 },
     });
   });
 

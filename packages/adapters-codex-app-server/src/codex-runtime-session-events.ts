@@ -107,6 +107,8 @@ type ContextUsageRecovery = {
   threadId: string;
   released: Promise<never>;
   rejectReleased(error: Error): void;
+  observed: Promise<void>;
+  resolveObserved(): void;
   observationGenerationAtStart: number;
   resumeCompletedObservationGeneration: number | null;
   promise?: Promise<CodexSessionContextUsage>;
@@ -114,12 +116,6 @@ type ContextUsageRecovery = {
 
 const contextUsageKey = (runtimeId: string, threadId: string): string =>
   JSON.stringify([runtimeId, threadId]);
-
-// Codex replays restored usage immediately after the thread/resume response.
-// Yield once so the ordered transport can enqueue that next notification before
-// the runtime-processing barrier decides whether the replay was missing.
-const waitForPostResumeNotificationTurn = (): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, 0));
 
 const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
   const receivedAtMs = Date.parse(receivedAt);
@@ -246,11 +242,17 @@ export class CodexRuntimeSessionEvents {
     const released = new Promise<never>((_resolve, reject) => {
       rejectReleased = reject;
     });
+    let resolveObserved!: () => void;
+    const observed = new Promise<void>((resolve) => {
+      resolveObserved = resolve;
+    });
     const recovery: ContextUsageRecovery = {
       runtimeId,
       threadId,
       released,
       rejectReleased: (error) => rejectReleased?.(error),
+      observed,
+      resolveObserved,
       observationGenerationAtStart: this.contextUsageObservationGenerationByKey.get(key) ?? 0,
       resumeCompletedObservationGeneration: null,
     };
@@ -270,11 +272,15 @@ export class CodexRuntimeSessionEvents {
       recovery.resumeCompletedObservationGeneration =
         this.contextUsageObservationGenerationByKey.get(key) ??
         recovery.observationGenerationAtStart;
-      await Promise.race([waitForPostResumeNotificationTurn(), recovery.released]);
-      await this.waitForRuntimeEventBarrier(recovery.runtimeId);
+      // Codex sends restored usage after thread/resume responds, so response
+      // completion cannot establish that the connection-scoped replay is absent.
+      if (!this.latestContextUsage(recovery.runtimeId, recovery.threadId)) {
+        await Promise.race([recovery.observed, recovery.released]);
+      }
+      await Promise.race([this.waitForRuntimeEventBarrier(recovery.runtimeId), recovery.released]);
       const retained = this.latestContextUsage(recovery.runtimeId, recovery.threadId);
       if (!retained) {
-        throw new Error("Codex resumed the session without reporting context usage.");
+        throw new Error("Codex context usage was observed without retained context state.");
       }
       return retained;
     } catch (error) {
@@ -374,6 +380,7 @@ export class CodexRuntimeSessionEvents {
       usage,
       observationGeneration: observation.generation,
     });
+    recovery?.resolveObserved();
   }
 
   private reserveContextUsageObservation(
