@@ -121,9 +121,13 @@ Persisted records store durable session context. `selectedModel`, when present, 
 
 ### Ephemeral live-session state
 
-Defined by the normalized schemas in `packages/contracts/src/agent-session-live-schemas.ts` and exposed through the core live-session port.
+The public contract is deliberately split by responsibility:
 
-The host owns one runtime-specific live adapter for each running runtime. That adapter retains only ephemeral state:
+- `agent-session-schemas.ts` defines shared session identity and workflow scope,
+- `agent-session-event-schemas.ts` defines ordered runtime/transcript events,
+- `agent-session-live-schemas.ts` defines live snapshots, attachment envelopes, context reads, and pending-input replies.
+
+The host owns one runtime-specific live adapter for each running runtime. The adapter retains only ephemeral state:
 
 - normalized session activity and identity,
 - unresolved approvals and questions,
@@ -136,6 +140,8 @@ The adapter is registered before runtime events can arrive and is released when 
 Renderer attachment is atomic: the current snapshot is the first envelope on an attachment, and every later change follows on that same ordered channel. A runtime integration must not expose separate snapshot-then-subscribe operations or require the frontend to reconcile them.
 
 Pending-request identities exposed by this contract are opaque and runtime-neutral. Native request IDs stay private to the runtime adapter and must be validated together with runtime, session, request kind, and unresolved instance when a reply is routed.
+
+Runtime SDK packages provide native session connections and signals; they do not retain a second normalized live projection. The host adapter is the single owner of normalized snapshots, context state, and opaque pending-request routes.
 
 ### Session routing behavior
 

@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
+import { agentRuntimeEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
-  agentRuntimeEventSchema,
   agentSessionLiveRefSchema,
   agentSessionWorkflowScopeSchema,
-} from "./agent-session-live-schemas";
+} from "./agent-session-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandDescriptorSchema } from "./slash-command-schemas";
