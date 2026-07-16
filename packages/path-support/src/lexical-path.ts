@@ -2,6 +2,8 @@ const WINDOWS_DRIVE_PATH_PATTERN = /^[A-Za-z]:(?:[\\/]|$)/;
 const WINDOWS_DRIVE_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
 const WINDOWS_DRIVE_ROOT_PATTERN = /^[A-Za-z]:[\\/]$/;
 
+export type CanonicalPathPlatform = "posix" | "windows";
+
 type LexicalPath = {
   path: string;
   comparisonPath: string;
@@ -68,6 +70,20 @@ const toLexicalPath = (
 
 export const normalizePathForComparison = (value: string): string =>
   toLexicalPath(value, { preserveLeadingParents: false }).comparisonPath;
+
+const normalizeWindowsCanonicalPath = (value: string): string =>
+  value.replaceAll("\\", "/").toLowerCase();
+
+export const canonicalPathsEqual = (
+  left: string,
+  right: string,
+  platform: CanonicalPathPlatform,
+): boolean => {
+  if (platform === "posix") {
+    return left === right;
+  }
+  return normalizeWindowsCanonicalPath(left) === normalizeWindowsCanonicalPath(right);
+};
 
 const normalizePathForContainment = (value: string): LexicalPath =>
   toLexicalPath(value, { preserveLeadingParents: true });

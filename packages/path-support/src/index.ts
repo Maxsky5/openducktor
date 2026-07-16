@@ -1,5 +1,7 @@
 export {
   basenameForPath,
+  type CanonicalPathPlatform,
+  canonicalPathsEqual,
   isAbsolutePath,
   normalizePathForComparison,
   normalizePathSeparators,

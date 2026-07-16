@@ -551,6 +551,8 @@ describe("createGitCliAdapter", () => {
           "worktree /repo\0HEAD abc\0branch refs/heads/main\0\0",
           "worktree /worktrees/task\0HEAD def\0branch refs/heads/task\0\0",
           "worktree C:/Users/dev/worktrees/task\0HEAD ghi\0branch refs/heads/windows-task\0\0",
+          "worktree //nas/dev/task\0HEAD jkl\0branch refs/heads/unc-task\0\0",
+          "worktree /worktrees/a/b\0HEAD mno\0branch refs/heads/posix-task\0\0",
         ].join(""),
       }),
     });
@@ -558,14 +560,25 @@ describe("createGitCliAdapter", () => {
     await expect(
       Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/task")),
     ).resolves.toBe(true);
-    await expect(
-      Effect.runPromise(
-        git.isRegisteredWorktree(
-          String.raw`C:\Users\dev\repo`,
-          String.raw`C:\Users\dev\worktrees\task`,
+    if (process.platform === "win32") {
+      await expect(
+        Effect.runPromise(
+          git.isRegisteredWorktree(
+            String.raw`C:\Users\dev\repo`,
+            String.raw`C:\Users\dev\worktrees\task`,
+          ),
         ),
-      ),
-    ).resolves.toBe(true);
+      ).resolves.toBe(true);
+      await expect(
+        Effect.runPromise(
+          git.isRegisteredWorktree(String.raw`\\NAS\Dev\Repo`, String.raw`\\NAS\Dev\Task`),
+        ),
+      ).resolves.toBe(true);
+    } else {
+      await expect(
+        Effect.runPromise(git.isRegisteredWorktree("/repo", String.raw`/worktrees/a\b`)),
+      ).resolves.toBe(false);
+    }
     await expect(
       Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/missing")),
     ).resolves.toBe(false);
