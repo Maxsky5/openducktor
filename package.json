@@ -14,7 +14,6 @@
     "electron:package": "bun run --filter @openducktor/electron package",
     "browser:dev": "cd packages/openducktor-web && bun run dev",
     "hooks:install": "husky",
-    "postinstall": "bun run apps/electron/scripts/prepare-node-pty.ts",
     "prepare": "bun run hooks:install",
     "release:version:set": "bun run scripts/release-version.ts set",
     "release:version:check": "bun run scripts/release-version.ts check",

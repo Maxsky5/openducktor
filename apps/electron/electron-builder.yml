@@ -34,9 +34,6 @@ extraMetadata:
   dependencies:
     node-pty: 1.1.0
 
-afterPack: scripts/verify-packaged-node-pty.mjs
-afterSign: scripts/verify-packaged-node-pty.mjs
-
 mac:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
   icon: resources/icon.icns
