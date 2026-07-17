@@ -1,7 +1,7 @@
 type ElectronAppUpdateLogger = {
-  error(message: string, error?: unknown): void;
-  info(message: string): void;
-  warn(message: string, details?: unknown): void;
+  error(message: string, error?: unknown): void | Promise<void>;
+  info(message: string): void | Promise<void>;
+  warn(message: string, details?: unknown): void | Promise<void>;
 };
 
 export type ElectronUpdaterConfigureOptions = {
@@ -10,6 +10,7 @@ export type ElectronUpdaterConfigureOptions = {
   autoInstallOnAppQuit: false;
   channel: string | null;
   logger: ElectronAppUpdateLogger;
+  onLogFailure(cause: unknown): void;
 };
 
 export type ElectronUpdaterUpdateInfo = {

@@ -81,11 +81,8 @@ const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
 
 const electronMainLogger = await Effect.runPromise(createElectronMainLogger());
-const reportElectronMainLogFailure = (operation: Promise<void>): void => {
-  void operation.catch((cause: unknown) => {
-    process.stderr.write(`OpenDucktor Electron log persistence failed: ${errorMessage(cause)}\n`);
-    process.exit(1);
-  });
+const reportElectronMainFailure = (cause: unknown): void => {
+  process.stderr.write(`OpenDucktor Electron fatal boundary: ${errorMessage(cause)}\n`);
 };
 const hostEventBus = createHostEventBus();
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
@@ -114,7 +111,39 @@ const shutdownController = createElectronMainShutdownController({
   quitApp: () => {
     app.quit();
   },
+  reportFailure: reportElectronMainFailure,
 });
+
+const reportElectronMainFatalFailure = (cause: unknown): void => {
+  reportElectronMainFailure(cause);
+  shutdownController.markHostShutdownFailed();
+  if (shutdownController.isHostShutdownComplete()) {
+    process.exit(1);
+    return;
+  }
+  if (shutdownController.isHostShutdownStarted()) {
+    return;
+  }
+  void shutdownController
+    .shutdownHostAndQuit({ exitAfterShutdown: true, reason: "fatal-boundary" })
+    .catch((shutdownCause: unknown) => {
+      reportElectronMainFailure(shutdownCause);
+      process.exit(1);
+    });
+};
+
+const runElectronMainTask = (operation: void | Promise<void>): void => {
+  void Promise.resolve(operation).catch(reportElectronMainFatalFailure);
+};
+
+const runElectronMainOperation = async <Result>(operation: Promise<Result>): Promise<Result> => {
+  try {
+    return await operation;
+  } catch (cause) {
+    reportElectronMainFatalFailure(cause);
+    throw cause;
+  }
+};
 
 type ElectronPreReadyRuntime = {
   hostCommandRouter: EffectHostCommandRouter;
@@ -364,7 +393,7 @@ const createMainWindowEffect = (
       if (shutdownController.isHostShutdownStarted()) {
         return;
       }
-      void shutdownController.shutdownHostAndQuit({ reason: "window-close" });
+      runElectronMainTask(shutdownController.shutdownHostAndQuit({ reason: "window-close" }));
     });
 
     if (rendererDevUrl) {
@@ -418,7 +447,7 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
     try {
       parsedState = readAppUpdateStateForIpc(state);
     } catch (cause) {
-      reportElectronMainLogFailure(
+      runElectronMainTask(
         electronMainLogger.error("OpenDucktor update state forwarding failed", cause),
       );
       return;
@@ -430,7 +459,7 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
       try {
         window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
       } catch (cause) {
-        reportElectronMainLogFailure(
+        runElectronMainTask(
           electronMainLogger.error("OpenDucktor update state forwarding failed", cause),
         );
       }
@@ -594,15 +623,24 @@ const registerIpcHandlers = (
         "check",
       );
     }
-    return readAppUpdateCommandResultForIpc(await appUpdateService.check(checkInput), "check");
+    return readAppUpdateCommandResultForIpc(
+      await runElectronMainOperation(appUpdateService.check(checkInput)),
+      "check",
+    );
   });
 
   ipcMain.handle(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL, async () =>
-    readAppUpdateCommandResultForIpc(await appUpdateService.download(), "download"),
+    readAppUpdateCommandResultForIpc(
+      await runElectronMainOperation(appUpdateService.download()),
+      "download",
+    ),
   );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_INSTALL_CHANNEL, async () =>
-    readAppUpdateCommandResultForIpc(await appUpdateService.install(), "install"),
+    readAppUpdateCommandResultForIpc(
+      await runElectronMainOperation(appUpdateService.install()),
+      "install",
+    ),
   );
 };
 
@@ -679,7 +717,9 @@ const initializeHostEffect = (hostCommandRouter: EffectHostCommandRouter) =>
   );
 
 const shutdownHostForSignal = (signal: NodeJS.Signals): void => {
-  void shutdownController.shutdownHostAndQuit({ exitAfterShutdown: true, reason: signal });
+  runElectronMainTask(
+    shutdownController.shutdownHostAndQuit({ exitAfterShutdown: true, reason: signal }),
+  );
 };
 
 const hideWindowsForShutdown = (): void => {
@@ -734,6 +774,7 @@ const configureElectronReadyRuntimeEffect = ({
           }),
         isPackaged: app.isPackaged,
         logger: electronMainLogger,
+        onFatalError: reportElectronMainFatalFailure,
         platform: process.platform,
         resourcesPath: process.resourcesPath,
       });
@@ -752,7 +793,7 @@ const configureElectronReadyRuntimeEffect = ({
         isDevelopment,
         appName: app.name || APPLICATION_NAME,
         onCheckForUpdates: () => {
-          void appUpdateService.check({ initiator: "menu" });
+          runElectronMainTask(appUpdateService.check({ initiator: "menu" }).then(() => {}));
         },
       });
       registerIpcHandlers(hostCommandRouter, appUpdateService);
@@ -784,7 +825,7 @@ const startupEffect = composeElectronMainStartupEffect({
         return;
       }
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createMainWindow(rendererSession);
+        runElectronMainTask(createMainWindow(rendererSession).then(() => {}));
       }
     });
   },
@@ -792,19 +833,22 @@ const startupEffect = composeElectronMainStartupEffect({
   waitUntilReady: waitForElectronReadyEffect,
 });
 
-void runElectronMainStartupBoundary({
-  cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure"),
-  exitProcess: (exitCode) => {
-    process.exit(exitCode);
-  },
-  logger: electronMainLogger,
-  markShutdownComplete: shutdownController.markHostShutdownComplete,
-  markShutdownStarted: shutdownController.markHostShutdownStarted,
-  startupEffect,
-});
+runElectronMainTask(
+  runElectronMainStartupBoundary({
+    cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure"),
+    exitProcess: (exitCode) => {
+      process.exit(exitCode);
+    },
+    logger: electronMainLogger,
+    markShutdownComplete: shutdownController.markHostShutdownComplete,
+    markShutdownStarted: shutdownController.markHostShutdownStarted,
+    reportFailure: reportElectronMainFailure,
+    startupEffect,
+  }),
+);
 
 app.on("window-all-closed", () => {
-  void shutdownController.shutdownHostAndQuit({ reason: "window-all-closed" });
+  runElectronMainTask(shutdownController.shutdownHostAndQuit({ reason: "window-all-closed" }));
 });
 
 app.on("before-quit", (event) => {
@@ -813,7 +857,7 @@ app.on("before-quit", (event) => {
   }
   event.preventDefault();
   hideWindowsForShutdown();
-  void shutdownController.shutdownHostAndQuit({ reason: "before-quit" });
+  runElectronMainTask(shutdownController.shutdownHostAndQuit({ reason: "before-quit" }));
 });
 
 process.once("SIGINT", shutdownHostForSignal);

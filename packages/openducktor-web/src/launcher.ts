@@ -58,6 +58,72 @@ const flushProcessOutput = async (): Promise<void> => {
   ]);
 };
 
+type WebSignalProcessBoundary = {
+  exit(exitCode: number): void;
+  flush(): Promise<void>;
+  reportFailure(cause: unknown): void;
+};
+
+const defaultWebSignalProcessBoundary: WebSignalProcessBoundary = {
+  exit: (exitCode) => process.exit(exitCode),
+  flush: flushProcessOutput,
+  reportFailure: (cause) => {
+    console.error(`OpenDucktor web fatal boundary: ${errorMessage(cause)}`);
+  },
+};
+
+const stopLauncherForSignalEffect = (
+  signal: NodeJS.Signals,
+  logger: WebLogger,
+  stop: Effect.Effect<void, WebError>,
+): Effect.Effect<void, WebError> =>
+  Effect.gen(function* () {
+    const signalLogExit = yield* Effect.exit(
+      writeWebLogEffect(logger, "info", `Stopping OpenDucktor web after ${signal}...`),
+    );
+    const stopExit = yield* Effect.exit(stop);
+    if (signalLogExit._tag === "Failure") {
+      return yield* causeToWebBoundaryError(signalLogExit.cause);
+    }
+    if (stopExit._tag === "Failure") {
+      return yield* causeToWebBoundaryError(stopExit.cause);
+    }
+  });
+
+export const runWebSignalShutdown = async ({
+  boundary = defaultWebSignalProcessBoundary,
+  exitCode,
+  logger,
+  signal,
+  stop,
+}: {
+  boundary?: WebSignalProcessBoundary;
+  exitCode: number;
+  logger: WebLogger;
+  signal: NodeJS.Signals;
+  stop: Effect.Effect<void, WebError>;
+}): Promise<void> => {
+  try {
+    await runWebBoundary(
+      keepProcessAliveDuringEffect(stopLauncherForSignalEffect(signal, logger, stop)),
+    );
+    await boundary.flush();
+    boundary.exit(exitCode);
+  } catch (cause) {
+    if (cause instanceof WebResourceError && cause.resource === "persistent-log") {
+      boundary.reportFailure(cause);
+    } else {
+      try {
+        await logger.error(errorMessage(cause));
+      } catch (loggingCause) {
+        boundary.reportFailure(loggingCause);
+      }
+    }
+    await boundary.flush();
+    boundary.exit(1);
+  }
+};
+
 const contentTypeForPath = (filePath: string): string => {
   switch (path.extname(filePath)) {
     case ".css":
@@ -323,23 +389,45 @@ export const runLauncherEffect = (
           let stopStarted = false;
           let terminationStarted = false;
           let duplicateTerminationNoticeLogged = false;
+          let duplicateTerminationLogFailed = false;
 
           const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
             Effect.gen(function* () {
-              yield* writeWebLogEffect(logger, "info", "Stopping OpenDucktor frontend server...");
-              yield* writeWebLogEffect(
-                logger,
-                "info",
-                "Stopping OpenDucktor TypeScript host services...",
+              let loggingFailure: WebError | undefined;
+              const frontendLogExit = yield* Effect.exit(
+                writeWebLogEffect(logger, "info", "Stopping OpenDucktor frontend server..."),
               );
+              if (frontendLogExit._tag === "Failure") {
+                loggingFailure = causeToWebBoundaryError(frontendLogExit.cause);
+              }
+              if (loggingFailure === undefined) {
+                const hostLogExit = yield* Effect.exit(
+                  writeWebLogEffect(
+                    logger,
+                    "info",
+                    "Stopping OpenDucktor TypeScript host services...",
+                  ),
+                );
+                if (hostLogExit._tag === "Failure") {
+                  loggingFailure = causeToWebBoundaryError(hostLogExit.cause);
+                }
+              }
 
-              yield* stopLauncherServicesEffect(
-                { frontendServer, hostBackend, logger },
-                {
-                  closeServer: (server) => runWebBoundary(closeFrontendOnceEffect(server)),
-                  stopHost: (backend) => backend.stop(),
-                },
+              const stopExit = yield* Effect.exit(
+                stopLauncherServicesEffect(
+                  { frontendServer, hostBackend, logger },
+                  {
+                    closeServer: (server) => runWebBoundary(closeFrontendOnceEffect(server)),
+                    stopHost: (backend) => backend.stop(),
+                  },
+                ),
               );
+              if (loggingFailure !== undefined) {
+                return yield* loggingFailure;
+              }
+              if (stopExit._tag === "Failure") {
+                return yield* causeToWebBoundaryError(stopExit.cause);
+              }
               yield* writeWebLogEffect(logger, "success", "OpenDucktor web stopped.");
             });
 
@@ -358,9 +446,6 @@ export const runLauncherEffect = (
             });
           stopEffectRef = stopEffect;
 
-          const stopForSignal = (): Promise<void> =>
-            runWebBoundary(keepProcessAliveDuringEffect(stopEffect()));
-
           const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
             if (terminationStarted) {
               if (!duplicateTerminationNoticeLogged) {
@@ -372,28 +457,29 @@ export const runLauncherEffect = (
                     "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
                   ),
                 ).catch((error: unknown) => {
-                  console.error(errorMessage(error));
-                  process.exit(1);
+                  duplicateTerminationLogFailed = true;
+                  console.error(`OpenDucktor web fatal boundary: ${errorMessage(error)}`);
                 });
               }
               return;
             }
             terminationStarted = true;
-            void runWebBoundary(
-              writeWebLogEffect(logger, "info", `Stopping OpenDucktor web after ${signal}...`),
-            )
-              .then(stopForSignal)
-              .then(
-                async () => {
-                  await flushProcessOutput();
-                  process.exit(exitCode);
+            void runWebSignalShutdown({
+              boundary: {
+                exit: (resolvedExitCode) => {
+                  process.exit(duplicateTerminationLogFailed ? 1 : resolvedExitCode);
                 },
-                async (error: unknown) => {
-                  await logger.error(errorMessage(error));
-                  await flushProcessOutput();
-                  process.exit(1);
-                },
-              );
+                flush: flushProcessOutput,
+                reportFailure: defaultWebSignalProcessBoundary.reportFailure,
+              },
+              exitCode,
+              logger,
+              signal,
+              stop: stopEffect(),
+            }).catch((cause: unknown) => {
+              console.error(`OpenDucktor web fatal boundary: ${errorMessage(cause)}`);
+              process.exit(1);
+            });
           };
 
           const handleSigint = (): void => handleTerminationSignal("SIGINT", 130);

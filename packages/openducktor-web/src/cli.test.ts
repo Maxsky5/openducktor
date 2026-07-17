@@ -95,6 +95,44 @@ describe("web CLI argument parsing", () => {
     expect(stderr).toBe("");
   }, 5_000);
 
+  test("persists invalid option errors through the web logger", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-cli-error-"));
+    const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
+    try {
+      const subprocess = Bun.spawn([process.execPath, cliPath, "--unexpected"], {
+        env: {
+          ...process.env,
+          NO_COLOR: "1",
+          OPENDUCKTOR_CONFIG_DIR: configDirectory,
+        },
+        stderr: "pipe",
+        stdout: "pipe",
+      });
+
+      const [exitCode, stderr] = await Promise.all([
+        subprocess.exited,
+        new Response(subprocess.stderr).text(),
+      ]);
+
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2} {2}ERROR Unknown option: --unexpected/m,
+      );
+      const logDirectory = path.join(configDirectory, "logs");
+      const logFileName = (await readdir(logDirectory)).find(
+        (name) => name.startsWith("openducktor-web-") && name.endsWith(".log"),
+      );
+      expect(logFileName).toBeDefined();
+      if (!logFileName) {
+        throw new Error("Expected invalid CLI input to create a web log file.");
+      }
+      const persisted = await readFile(path.join(logDirectory, logFileName), "utf8");
+      expect(persisted).toContain("ERROR Unknown option: --unexpected");
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
+  }, 5_000);
+
   test("persists real launcher and host lifecycle logs through readiness and shutdown", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-launcher-"));
     const reservePort = (): number => {

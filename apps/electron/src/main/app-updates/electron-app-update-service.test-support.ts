@@ -185,6 +185,7 @@ export const createService = (
       warn: mock(() => {}),
     },
     now: () => fixedNow,
+    onFatalError: mock(() => {}),
     platform: "darwin",
     readUpdateConfig: async () => "provider: github\n",
     resourcesPath: "/Applications/OpenDucktor.app/Contents/Resources",

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
+import { runWebSignalShutdown } from "./launcher";
 import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
@@ -251,6 +253,53 @@ describe("launcher internals", () => {
     expect(source).toContain('process.on("SIGINT"');
     expect(source).toContain('process.on("SIGTERM"');
     expect(source).toContain("OpenDucktor web shutdown is already in progress");
+  });
+
+  test("signal logging failures still run cleanup and exit through the explicit boundary", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const exitCodes: number[] = [];
+    const reportedFailures: unknown[] = [];
+    let cleanupCalls = 0;
+    let flushCalls = 0;
+
+    await runWebSignalShutdown({
+      boundary: {
+        exit: (exitCode) => {
+          exitCodes.push(exitCode);
+        },
+        flush: async () => {
+          flushCalls += 1;
+        },
+        reportFailure: (cause) => {
+          reportedFailures.push(cause);
+        },
+      },
+      exitCode: 143,
+      logger: {
+        error: async () => {
+          throw new Error("The failed persistent logger must not be retried.");
+        },
+        info: async () => {
+          throw persistenceError;
+        },
+        success() {},
+      },
+      signal: "SIGTERM",
+      stop: Effect.sync(() => {
+        cleanupCalls += 1;
+      }),
+    });
+
+    expect(cleanupCalls).toBe(1);
+    expect(flushCalls).toBe(1);
+    expect(exitCodes).toEqual([1]);
+    expect(reportedFailures).toEqual([
+      expect.objectContaining({
+        _tag: "WebResourceError",
+        cause: persistenceError,
+        resource: "persistent-log",
+      }),
+    ]);
   });
 
   test("registers launcher resource cleanup in Effect finalizers", async () => {

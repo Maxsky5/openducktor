@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { AppUpdateState } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { createElectronMainLogger } from "../electron-main-logger";
 import { DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS } from "./electron-app-update-service";
 import {
   createFakeScheduler,
@@ -273,6 +278,33 @@ describe("electron app update service", () => {
     expect(adapter.checkCalls).toBe(2);
   });
 
+  test("routes background logging failures to the owning fatal boundary", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    const fakeScheduler = createFakeScheduler();
+    const { service } = createService({
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {
+          throw persistenceError;
+        },
+        warn() {},
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    service.startBackgroundChecks();
+    await fakeScheduler.runTimeout();
+    await flushAsyncWork();
+
+    expect(fatalErrors).toEqual([persistenceError]);
+  });
+
   test("does not register duplicate background check intervals", async () => {
     const fakeScheduler = createFakeScheduler();
     const { adapter, service } = createService({
@@ -359,6 +391,37 @@ describe("electron app update service", () => {
     });
     expect(states.map((state) => state.status)).toEqual(["checking", "available"]);
     expect(adapter.downloadCalls).toBe(0);
+  });
+
+  test("persists a real Electron update event through the main logger", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-update-log-"));
+    let consoleOutput = "";
+    try {
+      const logger = await Effect.runPromise(
+        createElectronMainLogger({
+          env: { NO_COLOR: "1", OPENDUCKTOR_CONFIG_DIR: configDirectory },
+          now: () => new Date(2026, 6, 8, 22, 0, 0),
+          stream: {
+            write(chunk) {
+              consoleOutput += chunk;
+            },
+          },
+        }),
+      );
+      const { service } = createService({ logger });
+
+      await service.check({ initiator: "settings" });
+      await service.dispose();
+
+      const persisted = await readFile(
+        path.join(configDirectory, "logs", "openducktor-electron-2026-07-08.log"),
+        "utf8",
+      );
+      expect(consoleOutput).toContain("OpenDucktor update check completed (settings)");
+      expect(persisted).toContain("OpenDucktor update check completed (settings)");
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
   });
 
   test("promotes an active background check when the menu requests a manual check", async () => {

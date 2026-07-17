@@ -28,6 +28,7 @@ import {
 import type {
   ElectronAppUpdaterAdapter,
   ElectronInstallHandoff,
+  ElectronUpdaterCheckResult,
   ElectronUpdaterDownloadProgress,
   ElectronUpdaterUpdateInfo,
 } from "./electron-app-updater-adapter";
@@ -65,6 +66,7 @@ export type ElectronAppUpdateServiceOptions = {
   isPackaged: boolean;
   logger: ElectronAppUpdateLogger;
   now?: () => string;
+  onFatalError(cause: unknown): void;
   platform: NodeJS.Platform;
   readUpdateConfig?: (path: string) => Promise<string | null>;
   resourcesPath: string;
@@ -223,6 +225,7 @@ export const createElectronAppUpdateService = ({
   isPackaged,
   logger,
   now = defaultNow,
+  onFatalError,
   platform,
   readUpdateConfig = defaultReadUpdateConfig,
   resourcesPath,
@@ -242,6 +245,36 @@ export const createElectronAppUpdateService = ({
   let initializationAttempted = false;
   let updaterReady = false;
   let state: AppUpdateState = { status: "idle", currentVersion };
+  let firstDetachedLogFailure: unknown | undefined;
+  const pendingDetachedLogs = new Set<Promise<void>>();
+
+  const trackDetachedLog = (operation: () => void | Promise<void>): void => {
+    const pending = Promise.resolve()
+      .then(operation)
+      .then(
+        () => {},
+        (cause: unknown) => {
+          firstDetachedLogFailure ??= cause;
+          onFatalError(cause);
+        },
+      );
+    pendingDetachedLogs.add(pending);
+    void pending.then(
+      () => {
+        pendingDetachedLogs.delete(pending);
+      },
+      () => {
+        pendingDetachedLogs.delete(pending);
+      },
+    );
+  };
+
+  const drainDetachedLogs = async (): Promise<void> => {
+    await Promise.all(pendingDetachedLogs);
+    if (firstDetachedLogFailure !== undefined) {
+      throw firstDetachedLogFailure;
+    }
+  };
 
   if (!isPackaged) {
     state = createDisabledUpdateState({
@@ -476,7 +509,9 @@ export const createElectronAppUpdateService = ({
     }
     const previousState = state;
     if (previousState.status === "downloaded" && previousState.installRetryDisabled === true) {
-      logger.warn("Ignoring Electron updater error after terminal install failure", cause);
+      trackDetachedLog(() =>
+        logger.warn("Ignoring Electron updater error after terminal install failure", cause),
+      );
       return;
     }
     if (previousState.status === "downloading") {
@@ -579,6 +614,7 @@ export const createElectronAppUpdateService = ({
         autoInstallOnAppQuit: false,
         channel: updateChannel,
         logger,
+        onLogFailure: onFatalError,
       });
       registerAdapterEvents();
       updaterReady = true;
@@ -598,7 +634,7 @@ export const createElectronAppUpdateService = ({
     if (disposed || state.status === "disabled" || (initializationAttempted && !updaterReady)) {
       return;
     }
-    void service.check({ initiator: "background" });
+    void service.check({ initiator: "background" }).catch(onFatalError);
   };
 
   const service: ElectronAppUpdateService = {
@@ -656,7 +692,23 @@ export const createElectronAppUpdateService = ({
           return rejectUpdaterUnavailable("check");
         }
 
-        const result = await adapter.checkForUpdates();
+        let result: ElectronUpdaterCheckResult;
+        try {
+          result = await adapter.checkForUpdates();
+        } catch (cause) {
+          if (disposed) {
+            return rejectDisposed("check");
+          }
+          await logger.error("OpenDucktor update check failed", cause);
+          setErrorState({
+            checkedAt: now(),
+            code: "check_failed",
+            cause,
+            message: appUpdateErrorMessage("check", cause),
+            operation: "check",
+          });
+          return commandAccepted();
+        }
         if (disposed) {
           return rejectDisposed("check");
         }
@@ -668,19 +720,6 @@ export const createElectronAppUpdateService = ({
           }
         }
         await logger.info(`OpenDucktor update check completed (${initiator})`);
-        return commandAccepted();
-      } catch (cause) {
-        if (disposed) {
-          return rejectDisposed("check");
-        }
-        await logger.error("OpenDucktor update check failed", cause);
-        setErrorState({
-          checkedAt: now(),
-          code: "check_failed",
-          cause,
-          message: appUpdateErrorMessage("check", cause),
-          operation: "check",
-        });
         return commandAccepted();
       } finally {
         activeOperation = null;
@@ -704,7 +743,16 @@ export const createElectronAppUpdateService = ({
       for (const unsubscribe of unsubscribeAdapterListeners.splice(0)) {
         unsubscribe();
       }
-      await adapter.dispose();
+      const [detachedLogsResult, adapterResult] = await Promise.allSettled([
+        drainDetachedLogs(),
+        adapter.dispose(),
+      ]);
+      if (detachedLogsResult.status === "rejected") {
+        throw detachedLogsResult.reason;
+      }
+      if (adapterResult.status === "rejected") {
+        throw adapterResult.reason;
+      }
     },
     download: async () => {
       if (disposed) {
@@ -737,28 +785,31 @@ export const createElectronAppUpdateService = ({
         }),
       );
       try {
-        const result = await adapter.downloadUpdate();
+        let result: ElectronUpdaterUpdateInfo;
+        try {
+          result = await adapter.downloadUpdate();
+        } catch (cause) {
+          if (disposed) {
+            return rejectDisposed("download");
+          }
+          clearDownloadProgressThrottle();
+          await logger.error("OpenDucktor update download failed", cause);
+          const checkedAt = checkedAtFromState(state);
+          setErrorState({
+            ...(availableVersion ? { availableVersion } : {}),
+            ...(checkedAt ? { checkedAt } : {}),
+            code: "download_failed",
+            cause,
+            message: appUpdateErrorMessage("download", cause),
+            operation: "download",
+          });
+          return commandAccepted();
+        }
         if (disposed) {
           return rejectDisposed("download");
         }
         applyDownloaded(result);
         await logger.info("OpenDucktor update download completed");
-        return commandAccepted();
-      } catch (cause) {
-        if (disposed) {
-          return rejectDisposed("download");
-        }
-        clearDownloadProgressThrottle();
-        await logger.error("OpenDucktor update download failed", cause);
-        const checkedAt = checkedAtFromState(state);
-        setErrorState({
-          ...(availableVersion ? { availableVersion } : {}),
-          ...(checkedAt ? { checkedAt } : {}),
-          code: "download_failed",
-          cause,
-          message: appUpdateErrorMessage("download", cause),
-          operation: "download",
-        });
         return commandAccepted();
       } finally {
         activeOperation = null;

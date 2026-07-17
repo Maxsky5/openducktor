@@ -158,6 +158,20 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("OpenDucktor update state forwarding failed");
   });
 
+  test("main owns detached lifecycle and update promises at one fatal boundary", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("const reportElectronMainFatalFailure");
+    expect(source).toContain(
+      'runElectronMainTask(appUpdateService.check({ initiator: "menu" }).then(() => {}))',
+    );
+    expect(source).toContain(
+      'runElectronMainTask(shutdownController.shutdownHostAndQuit({ reason: "before-quit" }))',
+    );
+    expect(source).not.toContain("void appUpdateService.check(");
+    expect(source).not.toContain("void shutdownController.shutdownHostAndQuit(");
+  });
+
   test("startup creates the window before initializing background host services", async () => {
     const calls: string[] = [];
 
@@ -286,6 +300,7 @@ describe("Electron main lifecycle policy", () => {
       markShutdownStarted: () => {
         shutdownStarted = true;
       },
+      reportFailure: () => {},
       startupEffect: Effect.fail(startupError),
     });
 
@@ -299,6 +314,52 @@ describe("Electron main lifecycle policy", () => {
         error: startupError,
       },
     ]);
+  });
+
+  test("startup boundary still cleans up and exits when persistent logging fails", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const reportedFailures: unknown[] = [];
+    const exitCodes: number[] = [];
+    let cleanupCalls = 0;
+    let shutdownStarted = false;
+    let shutdownComplete = false;
+
+    await runElectronMainStartupBoundary({
+      cleanupAfterFailure: () =>
+        Effect.sync(() => {
+          cleanupCalls += 1;
+        }),
+      exitProcess: (exitCode) => {
+        exitCodes.push(exitCode);
+      },
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info() {},
+      },
+      markShutdownComplete: () => {
+        shutdownComplete = true;
+      },
+      markShutdownStarted: () => {
+        shutdownStarted = true;
+      },
+      reportFailure: (cause) => {
+        reportedFailures.push(cause);
+      },
+      startupEffect: Effect.fail(
+        new ElectronLifecycleError({
+          operation: "electron.main.integration-startup",
+          message: "startup failed",
+        }),
+      ),
+    });
+
+    expect(cleanupCalls).toBe(1);
+    expect(shutdownStarted).toBe(true);
+    expect(shutdownComplete).toBe(true);
+    expect(reportedFailures).toEqual([persistenceError]);
+    expect(exitCodes).toEqual([1]);
   });
 
   test("persists real startup failure and shutdown lifecycle events with console parity", async () => {
@@ -327,6 +388,7 @@ describe("Electron main lifecycle policy", () => {
         logger,
         markShutdownComplete: () => {},
         markShutdownStarted: () => {},
+        reportFailure: () => {},
         startupEffect: Effect.fail(startupError),
       });
       const controller = createElectronMainShutdownController({
@@ -334,6 +396,7 @@ describe("Electron main lifecycle policy", () => {
         exitProcess: () => {},
         logger,
         quitApp: () => {},
+        reportFailure: () => {},
       });
       await controller.shutdownHostAndQuit({ reason: "integration-shutdown" });
 
@@ -383,11 +446,13 @@ describe("Electron main lifecycle policy", () => {
       quitApp: () => {
         quitCalls.push("quit");
       },
+      reportFailure: () => {},
     });
 
     const firstShutdown = controller.shutdownHostAndQuit({ reason: "window-all-closed" });
     const secondShutdown = controller.shutdownHostAndQuit({ reason: "before-quit" });
 
+    await Promise.resolve();
     await Promise.resolve();
     expect(disposeReasons).toEqual(["window-all-closed"]);
     expect(controller.isHostShutdownStarted()).toBe(true);
@@ -423,6 +488,7 @@ describe("Electron main lifecycle policy", () => {
       quitApp: () => {
         throw new Error("Expected signal shutdown to exit instead of quitting the app.");
       },
+      reportFailure: () => {},
     });
 
     await controller.shutdownHostAndQuit({ exitAfterShutdown: true, reason: "SIGTERM" });
@@ -434,6 +500,46 @@ describe("Electron main lifecycle policy", () => {
         error: disposalError,
       },
     ]);
+  });
+
+  test("shutdown controller disposes and exits when persistent logging fails", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const reportedFailures: unknown[] = [];
+    const exitCodes: number[] = [];
+    let disposeCalls = 0;
+    let quitCalls = 0;
+
+    const controller = createElectronMainShutdownController({
+      disposeHost: () =>
+        Effect.sync(() => {
+          disposeCalls += 1;
+        }),
+      exitProcess: (exitCode) => {
+        exitCodes.push(exitCode);
+      },
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {
+          throw persistenceError;
+        },
+      },
+      quitApp: () => {
+        quitCalls += 1;
+      },
+      reportFailure: (cause) => {
+        reportedFailures.push(cause);
+      },
+    });
+
+    await controller.shutdownHostAndQuit({ reason: "window-all-closed" });
+
+    expect(disposeCalls).toBe(1);
+    expect(controller.isHostShutdownComplete()).toBe(true);
+    expect(reportedFailures).toEqual([persistenceError]);
+    expect(exitCodes).toEqual([1]);
+    expect(quitCalls).toBe(0);
   });
 
   test("shutdown controller preserves a failed host disposal outcome across run retries", async () => {
@@ -456,6 +562,7 @@ describe("Electron main lifecycle policy", () => {
         info() {},
       },
       quitApp: () => {},
+      reportFailure: () => {},
     });
 
     await expect(
@@ -496,6 +603,7 @@ describe("Electron main lifecycle policy", () => {
         info() {},
       },
       quitApp: () => {},
+      reportFailure: () => {},
     });
 
     await expect(

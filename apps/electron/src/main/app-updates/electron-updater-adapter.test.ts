@@ -58,6 +58,7 @@ const configure = (adapter: ReturnType<typeof createElectronUpdaterAdapter>): vo
       info: mock(() => {}),
       warn: mock(() => {}),
     },
+    onLogFailure: mock(() => {}),
   });
 };
 
@@ -105,6 +106,7 @@ describe("electron updater adapter", () => {
       autoInstallOnAppQuit: false,
       channel: "beta",
       logger,
+      onLogFailure: mock(() => {}),
     });
 
     await adapter.checkForUpdates();
@@ -117,7 +119,43 @@ describe("electron updater adapter", () => {
     expect(nativeUpdater.autoDownload).toBe(false);
     expect(nativeUpdater.autoInstallOnAppQuit).toBe(false);
     expect(nativeUpdater.channel).toBe("beta");
-    expect(nativeUpdater.logger).toBe(logger);
+    expect(nativeUpdater.logger).not.toBe(logger);
+  });
+
+  test("owns native updater logger promises and drains failures on disposal", async () => {
+    const nativeUpdater = new FakeNativeUpdater();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    const adapter = createElectronUpdaterAdapter({
+      currentVersion: "0.4.4",
+      loadUpdater: async () => nativeUpdater,
+      platform: "win32",
+      releaseSource: createReleaseSource(),
+    });
+    adapter.configure({
+      allowPrerelease: false,
+      autoDownload: false,
+      autoInstallOnAppQuit: false,
+      channel: null,
+      logger: {
+        error() {},
+        info: async () => {
+          throw persistenceError;
+        },
+        warn() {},
+      },
+      onLogFailure: (cause) => {
+        fatalErrors.push(cause);
+      },
+    });
+
+    await adapter.checkForUpdates();
+    await adapter.downloadUpdate();
+    nativeUpdater.logger?.info("native updater event");
+
+    await expect(adapter.dispose()).rejects.toBe(persistenceError);
+    expect(fatalErrors).toEqual([persistenceError]);
+    expect(nativeUpdater.logger).toBeNull();
   });
 
   test("does not finish pending native updater initialization after disposal", async () => {

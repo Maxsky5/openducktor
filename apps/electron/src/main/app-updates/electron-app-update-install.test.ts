@@ -384,6 +384,38 @@ describe("electron app update install handoff", () => {
     expect(canDownloadAppUpdate(service.getState())).toBe(false);
   });
 
+  test("owns rejected warning logs emitted by synchronous updater callbacks", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({
+      adapter,
+      logger: {
+        error() {},
+        info() {},
+        warn: async () => {
+          throw persistenceError;
+        },
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+    adapter.emit("error", new Error("native install failed"));
+
+    adapter.emit("error", new Error("native install still failed"));
+
+    await expect(service.dispose()).rejects.toBe(persistenceError);
+    expect(fatalErrors).toEqual([persistenceError]);
+  });
+
   test("host shutdown failures disable same-process install retry", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
