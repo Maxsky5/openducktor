@@ -12,8 +12,12 @@ const createLogger = (): HostLifecycleLogger & { infos: string[]; errors: string
   return {
     infos,
     errors,
-    info: (message) => infos.push(message),
-    error: (message) => errors.push(message),
+    info: (message) => {
+      infos.push(message);
+    },
+    error: (message) => {
+      errors.push(message);
+    },
   };
 };
 

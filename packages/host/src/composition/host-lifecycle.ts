@@ -12,8 +12,8 @@ import {
 import type { RuntimeRegistryPort } from "../ports/runtime-registry-port";
 
 export type HostLifecycleLogger = {
-  info(message: string): void;
-  error(message: string): void;
+  info(message: string): void | Promise<void>;
+  error(message: string): void | Promise<void>;
 };
 
 export type HostShutdownStep = {
@@ -23,6 +23,21 @@ export type HostShutdownStep = {
 
 const formatRuntimeTaskLabel = (taskId: string | null): string => taskId ?? "workspace";
 
+export const writeHostLifecycleLog = (
+  logger: HostLifecycleLogger,
+  level: "error" | "info",
+  message: string,
+): Effect.Effect<void, HostOperationError> =>
+  Effect.tryPromise({
+    try: async () => logger[level](message),
+    catch: (cause) =>
+      new HostOperationError({
+        operation: `host.lifecycle.log-${level}`,
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+
 export const runShutdownSteps = (
   steps: HostShutdownStep[],
   logger: HostLifecycleLogger,
@@ -30,15 +45,15 @@ export const runShutdownSteps = (
   Effect.gen(function* () {
     const errors: string[] = [];
     for (const step of steps) {
-      logger.info(`Stopping ${step.label}...`);
+      yield* writeHostLifecycleLog(logger, "info", `Stopping ${step.label}...`);
       const result = yield* Effect.exit(step.run());
       if (result._tag === "Failure") {
         const cause = causeToHostBoundaryError(result.cause);
         const message = cause instanceof Error ? cause.message : String(cause);
-        logger.error(`Failed to stop ${step.label}: ${message}`);
+        yield* writeHostLifecycleLog(logger, "error", `Failed to stop ${step.label}: ${message}`);
         errors.push(`${step.label}: ${message}`);
       } else {
-        logger.info(`Stopped ${step.label}`);
+        yield* writeHostLifecycleLog(logger, "info", `Stopped ${step.label}`);
       }
     }
     if (errors.length > 0) {
@@ -61,12 +76,14 @@ export const createStopDevServersStep = (
     return Effect.gen(function* () {
       const result = yield* devServerService.stopAll();
       if (result.stoppedScripts.length === 0) {
-        logger.info("No dev servers are running");
+        yield* writeHostLifecycleLog(logger, "info", "No dev servers are running");
         return;
       }
 
       for (const script of result.stoppedScripts) {
-        logger.info(
+        yield* writeHostLifecycleLog(
+          logger,
+          "info",
           `Stopped dev server ${script.name} (${script.scriptId}) for task ${script.taskId} with pid ${script.pid}`,
         );
       }
@@ -81,14 +98,16 @@ export const createStopRuntimesStep = (
   label: "active agent runtimes",
   run() {
     return Effect.gen(function* () {
-      logger.info("Stopping registered agent runtimes");
+      yield* writeHostLifecycleLog(logger, "info", "Stopping registered agent runtimes");
       const stoppedRuntimes = yield* runtimeRegistry.stopAllRuntimes();
       if (stoppedRuntimes.length === 0) {
-        logger.info("No active agent runtimes are registered");
+        yield* writeHostLifecycleLog(logger, "info", "No active agent runtimes are registered");
         return;
       }
       for (const runtime of stoppedRuntimes) {
-        logger.info(
+        yield* writeHostLifecycleLog(
+          logger,
+          "info",
           `Stopped ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
             runtime.taskId,
           )} (${runtime.role})`,
@@ -118,11 +137,13 @@ export const createStopMcpHostBridgeStep = (
           )
         : Effect.succeed(null);
       if (!result?.closed) {
-        logger.info("No MCP host bridge server is running");
+        yield* writeHostLifecycleLog(logger, "info", "No MCP host bridge server is running");
         return;
       }
 
-      logger.info(
+      yield* writeHostLifecycleLog(
+        logger,
+        "info",
         result.baseUrl ? `Stopped MCP host bridge at ${result.baseUrl}` : "Stopped MCP host bridge",
       );
     });

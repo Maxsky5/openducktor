@@ -1,4 +1,6 @@
 import { createOpenDucktorDailyLogWriter, type OpenDucktorDailyLogWriter } from "@openducktor/host";
+import { Effect } from "effect";
+import { errorMessage, WebResourceError } from "./effect/web-errors";
 
 type LogLevel = "INFO" | "ERROR";
 
@@ -20,10 +22,26 @@ type WebLoggerInput = {
 };
 
 export type WebLogger = {
-  error(message: string): void;
-  info(message: string): void;
-  success(message: string): void;
+  error(message: string): void | Promise<void>;
+  info(message: string): void | Promise<void>;
+  success(message: string): void | Promise<void>;
 };
+
+export const writeWebLogEffect = (
+  logger: WebLogger,
+  level: keyof WebLogger,
+  message: string,
+): Effect.Effect<void, WebResourceError> =>
+  Effect.tryPromise({
+    try: async () => logger[level](message),
+    catch: (cause) =>
+      new WebResourceError({
+        resource: "persistent-log",
+        operation: `web.log-${level}`,
+        message: errorMessage(cause),
+        cause,
+      }),
+  });
 
 const RESET = "\u001b[0m";
 const BOLD = "\u001b[1m";
@@ -95,43 +113,62 @@ const colorSuccessMessage = (useColor: boolean, message: string): string => {
   return `${GREEN}${message}${RESET}`;
 };
 
+const runLogEffect = async <Failure>(effect: Effect.Effect<void, Failure>): Promise<void> => {
+  const result = await Effect.runPromise(Effect.either(effect));
+  if (result._tag === "Left") {
+    throw result.left;
+  }
+};
+
 export const createWebLogger = ({
   console: consoleOutput = console,
   environment = process.env,
   now = () => new Date(),
   stdout = process.stdout,
-  writer = createOpenDucktorDailyLogWriter({ surface: "web", environment, clock: now }),
-}: WebLoggerInput = {}): WebLogger => {
-  const writeLog = (
-    level: LogLevel,
-    message: string,
-    renderMessage: (useColor: boolean, message: string) => string,
-  ): void => {
-    const recordedAt = now();
-    const useColor = supportsColor(environment, stdout);
-    const plainTimestamp = timestamp(recordedAt);
-    const renderedTimestamp = useColor ? `${DIM}${plainTimestamp}${RESET}` : plainTimestamp;
-    const line = `${renderedTimestamp}  ${colorLevel(useColor, level)} ${renderMessage(
-      useColor,
-      message,
-    )}`;
-    if (level === "ERROR") {
-      consoleOutput.error(line);
-    } else {
-      consoleOutput.log(line);
-    }
-    writer.append(recordedAt, `${plainTimestamp}  ${level} ${message}`);
-  };
+  writer,
+}: WebLoggerInput = {}) =>
+  (writer
+    ? Effect.succeed(writer)
+    : createOpenDucktorDailyLogWriter({ surface: "web", environment, clock: now })
+  ).pipe(
+    Effect.map((resolvedWriter): WebLogger => {
+      const writeLog = (
+        level: LogLevel,
+        message: string,
+        renderMessage: (useColor: boolean, message: string) => string,
+      ): Promise<void> => {
+        const recordedAt = now();
+        const useColor = supportsColor(environment, stdout);
+        const plainTimestamp = timestamp(recordedAt);
+        const renderedTimestamp = useColor ? `${DIM}${plainTimestamp}${RESET}` : plainTimestamp;
+        const line = `${renderedTimestamp}  ${colorLevel(useColor, level)} ${renderMessage(
+          useColor,
+          message,
+        )}`;
+        if (level === "ERROR") {
+          consoleOutput.error(line);
+        } else {
+          consoleOutput.log(line);
+        }
+        return runLogEffect(
+          resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`),
+        );
+      };
 
-  return {
-    error(message) {
-      writeLog("ERROR", message, (useColor, value) => colorMessage(useColor, value, RED));
-    },
-    info(message) {
-      writeLog("INFO", message, (useColor, value) => colorMessage(useColor, value, null));
-    },
-    success(message) {
-      writeLog("INFO", message, colorSuccessMessage);
-    },
-  };
-};
+      return {
+        error(message) {
+          return writeLog("ERROR", message, (useColor, value) =>
+            colorMessage(useColor, value, RED),
+          );
+        },
+        info(message) {
+          return writeLog("INFO", message, (useColor, value) =>
+            colorMessage(useColor, value, null),
+          );
+        },
+        success(message) {
+          return writeLog("INFO", message, colorSuccessMessage);
+        },
+      };
+    }),
+  );

@@ -1,3 +1,6 @@
+import { createOpenDucktorDailyLogWriter, type OpenDucktorDailyLogWriter } from "@openducktor/host";
+import { Effect } from "effect";
+
 const ANSI_RESET = "\u001b[0m";
 const ANSI_DIM = "\u001b[2m";
 const ANSI_BLUE = "\u001b[34m";
@@ -20,9 +23,9 @@ type ElectronMainLoggerInput = {
 };
 
 export type ElectronMainLogger = {
-  error(message: string, error?: unknown): void;
-  info(message: string): void;
-  warn(message: string): void;
+  error(message: string, error?: unknown): Promise<void>;
+  info(message: string): Promise<void>;
+  warn(message: string): Promise<void>;
 };
 
 const pad = (value: number, length = 2): string => value.toString().padStart(length, "0");
@@ -103,34 +106,47 @@ const formatError = (error: unknown): string => {
   return String(error);
 };
 
+const runLogEffect = async <Failure>(effect: Effect.Effect<void, Failure>): Promise<void> => {
+  const result = await Effect.runPromise(Effect.either(effect));
+  if (result._tag === "Left") {
+    throw result.left;
+  }
+};
+
 export const createElectronMainLogger = ({
   env = process.env,
   now = () => new Date(),
   stream = process.stderr,
-  writer = createOpenDucktorDailyLogWriter({ surface: "electron", environment: env, clock: now }),
-}: ElectronMainLoggerInput = {}): ElectronMainLogger => {
-  const log = (level: LogLevel, message: string): void => {
-    const recordedAt = now();
-    const useAnsi = shouldUseAnsi(env, stream);
-    const plainTimestamp = timestamp(recordedAt);
-    const renderedTimestamp = colorize(useAnsi, ANSI_DIM, plainTimestamp);
-    const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
-    const renderedMessage = colorMessage(useAnsi, level, message);
-    stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
-    writer.append(recordedAt, `${plainTimestamp}  ${level} ${message}`);
-  };
+  writer,
+}: ElectronMainLoggerInput = {}) =>
+  (writer
+    ? Effect.succeed(writer)
+    : createOpenDucktorDailyLogWriter({ surface: "electron", environment: env, clock: now })
+  ).pipe(
+    Effect.map((resolvedWriter): ElectronMainLogger => {
+      const log = async (level: LogLevel, message: string): Promise<void> => {
+        const recordedAt = now();
+        const useAnsi = shouldUseAnsi(env, stream);
+        const plainTimestamp = timestamp(recordedAt);
+        const renderedTimestamp = colorize(useAnsi, ANSI_DIM, plainTimestamp);
+        const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
+        const renderedMessage = colorMessage(useAnsi, level, message);
+        stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
+        await runLogEffect(
+          resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`),
+        );
+      };
 
-  return {
-    error(message, error) {
-      log("ERROR", error === undefined ? message : `${message}: ${formatError(error)}`);
-    },
-    info(message) {
-      log("INFO", message);
-    },
-    warn(message) {
-      log("WARN", message);
-    },
-  };
-};
-
-import { createOpenDucktorDailyLogWriter, type OpenDucktorDailyLogWriter } from "@openducktor/host";
+      return {
+        error(message, error) {
+          return log("ERROR", error === undefined ? message : `${message}: ${formatError(error)}`);
+        },
+        info(message) {
+          return log("INFO", message);
+        },
+        warn(message) {
+          return log("WARN", message);
+        },
+      };
+    }),
+  );

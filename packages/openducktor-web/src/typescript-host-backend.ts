@@ -17,7 +17,7 @@ import {
   WebHostRequestError,
   WebOperationError,
 } from "./effect/web-errors";
-import type { WebLogger } from "./logger";
+import { type WebLogger, writeWebLogEffect } from "./logger";
 import {
   allowedOriginsForFrontendOrigin,
   type BufferedHostEvent,
@@ -491,7 +491,10 @@ const routeCorsRequest = ({
         beginShutdown();
         setTimeout(() => {
           void stop().catch((error: unknown) => {
-            logger.error(errorMessage(error));
+            void Promise.resolve(logger.error(errorMessage(error))).catch((logError: unknown) => {
+              console.error(errorMessage(logError));
+              process.exitCode = 1;
+            });
           });
         }, 10);
       });
@@ -664,11 +667,13 @@ export const startTypescriptHostBackendEffect = ({
         const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
         yield* Effect.sync(() => server.stop(true));
         if (disposeExit._tag === "Failure") {
-          logger.error(
+          yield* writeWebLogEffect(
+            logger,
+            "error",
             `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
               disposeExit.cause,
             )}`,
-          );
+          ).pipe(Effect.orDie);
         }
       });
 

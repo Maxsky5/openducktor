@@ -24,7 +24,7 @@ import {
   stopLauncherServicesEffect,
   waitForBackendEffect,
 } from "./launcher-support";
-import type { WebLogger } from "./logger";
+import { type WebLogger, writeWebLogEffect } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import { startTypescriptHostBackendEffect } from "./typescript-host-backend";
 import { resolveWebRuntimeDistributionEffect } from "./web-runtime-distribution";
@@ -39,11 +39,23 @@ export type LauncherOptions = {
   readinessTimeoutMs?: number;
 };
 
-const logFrontendAvailability = (port: number, logger: WebLogger): void => {
-  logger.success("OpenDucktor web is ready:");
-  for (const url of buildFrontendDisplayUrls(port)) {
-    logger.success(`  ➜  Local:   ${url}`);
-  }
+const logFrontendAvailability = (port: number, logger: WebLogger): Effect.Effect<void, WebError> =>
+  Effect.gen(function* () {
+    yield* writeWebLogEffect(logger, "success", "OpenDucktor web is ready:");
+    for (const url of buildFrontendDisplayUrls(port)) {
+      yield* writeWebLogEffect(logger, "success", `  ➜  Local:   ${url}`);
+    }
+  });
+
+const flushProcessOutput = async (): Promise<void> => {
+  await Promise.all([
+    new Promise<void>((resolve, reject) =>
+      process.stdout.write("", (error) => (error ? reject(error) : resolve())),
+    ),
+    new Promise<void>((resolve, reject) =>
+      process.stderr.write("", (error) => (error ? reject(error) : resolve())),
+    ),
+  ]);
 };
 
 const contentTypeForPath = (filePath: string): string => {
@@ -77,11 +89,15 @@ const contentTypeForPath = (filePath: string): string => {
 const cleanupStartedFrontendServerEffect = (
   server: FrontendServer,
   logger: WebLogger,
-): Effect.Effect<void> =>
+): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     const closeExit = yield* Effect.exit(closeFrontendServerEffect(server));
     if (closeExit._tag === "Failure") {
-      logger.error(errorMessage(causeToWebBoundaryError(closeExit.cause)));
+      yield* writeWebLogEffect(
+        logger,
+        "error",
+        errorMessage(causeToWebBoundaryError(closeExit.cause)),
+      );
     }
   });
 
@@ -159,7 +175,9 @@ const startViteServerEffect = (
               return yield* error;
             }),
           ),
-          Effect.onInterrupt(() => cleanupStartedFrontendServerEffect(server, logger)),
+          Effect.onInterrupt(() =>
+            cleanupStartedFrontendServerEffect(server, logger).pipe(Effect.orDie),
+          ),
         );
         return server;
       }),
@@ -308,8 +326,12 @@ export const runLauncherEffect = (
 
           const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
             Effect.gen(function* () {
-              logger.info("Stopping OpenDucktor frontend server...");
-              logger.info("Stopping OpenDucktor TypeScript host services...");
+              yield* writeWebLogEffect(logger, "info", "Stopping OpenDucktor frontend server...");
+              yield* writeWebLogEffect(
+                logger,
+                "info",
+                "Stopping OpenDucktor TypeScript host services...",
+              );
 
               yield* stopLauncherServicesEffect(
                 { frontendServer, hostBackend, logger },
@@ -318,7 +340,7 @@ export const runLauncherEffect = (
                   stopHost: (backend) => backend.stop(),
                 },
               );
-              logger.success("OpenDucktor web stopped.");
+              yield* writeWebLogEffect(logger, "success", "OpenDucktor web stopped.");
             });
 
           const stopEffect = (): Effect.Effect<void, WebError> =>
@@ -343,24 +365,35 @@ export const runLauncherEffect = (
             if (terminationStarted) {
               if (!duplicateTerminationNoticeLogged) {
                 duplicateTerminationNoticeLogged = true;
-                logger.info(
-                  "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
-                );
+                void runWebBoundary(
+                  writeWebLogEffect(
+                    logger,
+                    "info",
+                    "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
+                  ),
+                ).catch((error: unknown) => {
+                  console.error(errorMessage(error));
+                  process.exit(1);
+                });
               }
               return;
             }
             terminationStarted = true;
-            logger.info(`Stopping OpenDucktor web after ${signal}...`);
-
-            void stopForSignal().then(
-              () => {
-                process.exit(exitCode);
-              },
-              (error: unknown) => {
-                logger.error(errorMessage(error));
-                process.exit(1);
-              },
-            );
+            void runWebBoundary(
+              writeWebLogEffect(logger, "info", `Stopping OpenDucktor web after ${signal}...`),
+            )
+              .then(stopForSignal)
+              .then(
+                async () => {
+                  await flushProcessOutput();
+                  process.exit(exitCode);
+                },
+                async (error: unknown) => {
+                  await logger.error(errorMessage(error));
+                  await flushProcessOutput();
+                  process.exit(1);
+                },
+              );
           };
 
           const handleSigint = (): void => handleTerminationSignal("SIGINT", 130);
@@ -375,21 +408,33 @@ export const runLauncherEffect = (
               Effect.gen(function* () {
                 const launcherExit = yield* Effect.exit(
                   Effect.gen(function* () {
-                    logger.info("Starting OpenDucktor TypeScript host...");
-                    logger.info("Waiting for OpenDucktor TypeScript host readiness...");
+                    yield* writeWebLogEffect(
+                      logger,
+                      "info",
+                      "Starting OpenDucktor TypeScript host...",
+                    );
+                    yield* writeWebLogEffect(
+                      logger,
+                      "info",
+                      "Waiting for OpenDucktor TypeScript host readiness...",
+                    );
                     yield* waitForBackendEffect(
                       backendUrl,
                       appToken,
                       readinessTimeoutMs,
                       hostBackend,
                     );
-                    logger.info("Starting OpenDucktor frontend server...");
+                    yield* writeWebLogEffect(
+                      logger,
+                      "info",
+                      "Starting OpenDucktor frontend server...",
+                    );
                     return yield* Effect.acquireUseRelease(
                       startFrontendServerEffect(options, backendUrl, appToken, logger),
                       (server) =>
                         Effect.gen(function* () {
                           frontendServer = server;
-                          logFrontendAvailability(options.frontendPort, logger);
+                          yield* logFrontendAvailability(options.frontendPort, logger);
 
                           const exitCode = yield* Effect.tryPromise({
                             try: () => hostBackend.exited,
@@ -404,11 +449,13 @@ export const runLauncherEffect = (
                           if (stopStarted) {
                             yield* stopEffect();
                           } else {
-                            logger.info(
+                            yield* writeWebLogEffect(
+                              logger,
+                              "info",
                               "OpenDucktor TypeScript host exited; stopping frontend server...",
                             );
                             yield* closeFrontendOnceEffect(server);
-                            logger.success("OpenDucktor web stopped.");
+                            yield* writeWebLogEffect(logger, "success", "OpenDucktor web stopped.");
                             servicesReleased = true;
                           }
                           return exitCode;
@@ -417,7 +464,11 @@ export const runLauncherEffect = (
                         Effect.gen(function* () {
                           const closeExit = yield* Effect.exit(closeFrontendOnceEffect(server));
                           if (closeExit._tag === "Failure") {
-                            logger.error(errorMessage(causeToWebBoundaryError(closeExit.cause)));
+                            yield* writeWebLogEffect(
+                              logger,
+                              "error",
+                              errorMessage(causeToWebBoundaryError(closeExit.cause)),
+                            ).pipe(Effect.orDie);
                           }
                         }),
                     );
@@ -430,7 +481,11 @@ export const runLauncherEffect = (
 
                 const stopExit = yield* Effect.exit(stopEffect());
                 if (stopExit._tag === "Failure") {
-                  logger.error(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+                  yield* writeWebLogEffect(
+                    logger,
+                    "error",
+                    errorMessage(causeToWebBoundaryError(stopExit.cause)),
+                  );
                 }
                 return yield* causeToWebBoundaryError(launcherExit.cause);
               }),
@@ -441,7 +496,11 @@ export const runLauncherEffect = (
                 if (!servicesReleased) {
                   const stopExit = yield* Effect.exit(stopEffect());
                   if (stopExit._tag === "Failure") {
-                    logger.error(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+                    yield* writeWebLogEffect(
+                      logger,
+                      "error",
+                      errorMessage(causeToWebBoundaryError(stopExit.cause)),
+                    ).pipe(Effect.orDie);
                   }
                 }
               }),
@@ -459,7 +518,11 @@ export const runLauncherEffect = (
           );
           servicesReleased = true;
           if (stopExit._tag === "Failure") {
-            logger.error(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+            yield* writeWebLogEffect(
+              logger,
+              "error",
+              errorMessage(causeToWebBoundaryError(stopExit.cause)),
+            ).pipe(Effect.orDie);
           }
         }),
     );

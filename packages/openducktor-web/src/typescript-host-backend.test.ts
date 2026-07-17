@@ -122,14 +122,16 @@ describe("TypeScript web host backend", () => {
     process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
     const consoleLines: string[] = [];
-    const logger = createWebLogger({
-      console: {
-        error: (message) => consoleLines.push(message),
-        log: (message) => consoleLines.push(message),
-      },
-      environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
-      now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
-    });
+    const logger = await Effect.runPromise(
+      createWebLogger({
+        console: {
+          error: (message) => consoleLines.push(message),
+          log: (message) => consoleLines.push(message),
+        },
+        environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
+        now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
+      }),
+    );
 
     try {
       backend = await startTypescriptHostBackend({

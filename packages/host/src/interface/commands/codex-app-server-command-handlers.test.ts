@@ -104,7 +104,10 @@ describe("createCodexAppServerCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service, {
         logger: {
-          info: (message) => infos.push(message),
+          info: (message) => {
+            infos.push(message);
+          },
+          error: () => {},
         },
       }),
     });

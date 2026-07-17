@@ -51,6 +51,7 @@ export {
 export {
   createOpenDucktorDailyLogWriter,
   type OpenDucktorDailyLogWriter,
+  OpenDucktorLogPersistenceError,
   type OpenDucktorLogSurface,
 } from "./infrastructure/logging/openducktor-daily-log-writer";
 export {

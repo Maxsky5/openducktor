@@ -9,7 +9,7 @@ import {
   type WebError,
   WebOperationError,
 } from "./effect/web-errors";
-import type { WebLogger } from "./logger";
+import { type WebLogger, writeWebLogEffect } from "./logger";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
@@ -381,7 +381,7 @@ export const stopLauncherServicesEffect = (
       .filter((result) => result._tag === "Failure")
       .map((result) => causeToWebBoundaryError(result.cause));
     for (const failure of shutdownFailures) {
-      logger.error(errorMessage(failure));
+      yield* writeWebLogEffect(logger, "error", errorMessage(failure));
     }
     if (hostStopExit._tag === "Failure") {
       const failure = launcherShutdownFailure(shutdownFailures);

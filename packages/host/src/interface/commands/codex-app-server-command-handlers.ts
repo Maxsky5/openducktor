@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
-import type { HostLifecycleLogger } from "../../composition/host-lifecycle";
-import { HostValidationError } from "../../effect/host-errors";
+import { type HostLifecycleLogger, writeHostLifecycleLog } from "../../composition/host-lifecycle";
+import { type HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   CodexAppServerRequestInput,
   CodexAppServerRequestMethod,
@@ -16,7 +16,7 @@ import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 
 type CodexAppServerCommandHandlerOptions = {
-  logger?: Pick<HostLifecycleLogger, "info">;
+  logger?: HostLifecycleLogger;
 };
 
 const CODEX_POLICY_REQUEST_METHODS = new Set<CodexAppServerRequestMethod>([
@@ -97,12 +97,12 @@ const threadIdFromResult = (result: unknown): string | undefined => {
 };
 
 const logCodexPolicyRequest = (
-  logger: Pick<HostLifecycleLogger, "info"> | undefined,
+  logger: HostLifecycleLogger | undefined,
   input: CodexAppServerRequestInput,
   result: CodexAppServerRequestResult,
-): void => {
+): Effect.Effect<void, HostOperationError> => {
   if (!logger || !CODEX_POLICY_REQUEST_METHODS.has(input.method)) {
-    return;
+    return Effect.void;
   }
   const params = recordFromValue(input.params);
   const resultRecord = recordFromValue(result);
@@ -122,7 +122,9 @@ const logCodexPolicyRequest = (
     stringField(resultRecord, "cwd") ??
     cwdFromSandboxPolicy(sandboxPolicy);
 
-  logger.info(
+  return writeHostLifecycleLog(
+    logger,
+    "info",
     [
       `Codex session policy ${input.method}`,
       `runtime=${input.runtimeId}`,
@@ -186,10 +188,6 @@ export const createCodexAppServerCommandHandlers = (
     const input = parseRequestInput(args);
     return codexAppServerService
       .request(input)
-      .pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => logCodexPolicyRequest(options.logger, input, result)),
-        ),
-      );
+      .pipe(Effect.tap((result) => logCodexPolicyRequest(options.logger, input, result)));
   },
 });

@@ -117,11 +117,10 @@ export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, We
     return options;
   });
 
-const runCliEffect = (logger: WebLogger): Effect.Effect<number, WebError> =>
+const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<number, WebError> =>
   Effect.gen(function* () {
     const __filename = fileURLToPath(import.meta.url);
     const packageRoot = path.resolve(path.dirname(__filename), "..");
-    const cliOptions = yield* parseCliArgsEffect(process.argv.slice(2));
     const launcherOptions = {
       packageRoot,
       ...(cliOptions.workspaceMode ? { workspaceRoot: path.resolve(packageRoot, "../..") } : {}),
@@ -133,18 +132,28 @@ const runCliEffect = (logger: WebLogger): Effect.Effect<number, WebError> =>
   });
 
 const runCli = async (): Promise<void> => {
-  let logger: WebLogger;
+  let cliOptions: CliOptions;
   try {
-    logger = createWebLogger();
+    cliOptions = await runWebBoundary(parseCliArgsEffect(process.argv.slice(2)));
   } catch (error) {
     console.error(errorMessage(error));
     process.exit(1);
     return;
   }
-  const exitCode = await runWebBoundary(runCliEffect(logger)).catch((error: unknown) => {
-    logger.error(errorMessage(error));
-    return 1;
-  });
+  let logger: WebLogger;
+  try {
+    logger = await runWebBoundary(createWebLogger());
+  } catch (error) {
+    console.error(errorMessage(error));
+    process.exit(1);
+    return;
+  }
+  const exitCode = await runWebBoundary(runCliEffect(cliOptions, logger)).catch(
+    async (error: unknown) => {
+      await logger.error(errorMessage(error));
+      return 1;
+    },
+  );
   process.exit(exitCode);
 };
 

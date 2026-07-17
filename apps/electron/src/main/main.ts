@@ -80,7 +80,13 @@ const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
 
-const electronMainLogger = createElectronMainLogger();
+const electronMainLogger = await Effect.runPromise(createElectronMainLogger());
+const reportElectronMainLogFailure = (operation: Promise<void>): void => {
+  void operation.catch((cause: unknown) => {
+    process.stderr.write(`OpenDucktor Electron log persistence failed: ${errorMessage(cause)}\n`);
+    process.exit(1);
+  });
+};
 const hostEventBus = createHostEventBus();
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
@@ -412,7 +418,9 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
     try {
       parsedState = readAppUpdateStateForIpc(state);
     } catch (cause) {
-      electronMainLogger.error("OpenDucktor update state forwarding failed", cause);
+      reportElectronMainLogFailure(
+        electronMainLogger.error("OpenDucktor update state forwarding failed", cause),
+      );
       return;
     }
     for (const window of BrowserWindow.getAllWindows()) {
@@ -422,7 +430,9 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
       try {
         window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL, parsedState);
       } catch (cause) {
-        electronMainLogger.error("OpenDucktor update state forwarding failed", cause);
+        reportElectronMainLogFailure(
+          electronMainLogger.error("OpenDucktor update state forwarding failed", cause),
+        );
       }
     }
   });

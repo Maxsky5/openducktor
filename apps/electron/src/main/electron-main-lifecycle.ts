@@ -7,8 +7,8 @@ import {
 } from "../effect/electron-errors";
 
 type ElectronMainLifecycleLogger = {
-  error(message: string, error?: unknown): void;
-  info(message: string): void;
+  error(message: string, error?: unknown): void | Promise<void>;
+  info(message: string): void | Promise<void>;
 };
 
 export type ElectronMainStartupSteps<PreReady, Ready> = {
@@ -95,14 +95,14 @@ export const runElectronMainStartupBoundary = async ({
     return;
   }
 
-  logger.error(
+  await logger.error(
     "OpenDucktor Electron startup failed",
     causeToElectronBoundaryError(startupExit.cause),
   );
   markShutdownStarted();
   const cleanupExit = await Effect.runPromiseExit(cleanupAfterFailure());
   if (Exit.isFailure(cleanupExit)) {
-    logger.error(
+    await logger.error(
       "OpenDucktor host cleanup after startup failure failed",
       causeToElectronBoundaryError(cleanupExit.cause),
     );
@@ -167,16 +167,16 @@ export const createElectronMainShutdownController = ({
 
     hostShutdownStarted = true;
     let exitCode = 0;
-    logger.info(`OpenDucktor host shutdown started (${reason})`);
+    await logger.info(`OpenDucktor host shutdown started (${reason})`);
     const disposeExit = await Effect.runPromiseExit(disposeHost(reason));
     if (Exit.isFailure(disposeExit)) {
       exitCode = 1;
-      logger.error(
+      await logger.error(
         "OpenDucktor host shutdown failed",
         causeToElectronBoundaryError(disposeExit.cause),
       );
     } else {
-      logger.info("OpenDucktor host shutdown complete");
+      await logger.info("OpenDucktor host shutdown complete");
     }
 
     hostShutdownComplete = true;

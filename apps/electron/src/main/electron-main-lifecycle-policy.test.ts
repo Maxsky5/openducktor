@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Cause, Chunk, Effect, Exit } from "effect";
 import { runElectronEffect } from "../effect/electron-boundary";
@@ -9,6 +10,7 @@ import {
   createElectronMainShutdownController,
   runElectronMainStartupBoundary,
 } from "./electron-main-lifecycle";
+import { createElectronMainLogger } from "./electron-main-logger";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
 
@@ -19,7 +21,7 @@ describe("Electron main lifecycle policy", () => {
   test("one persistent main logger is created before host resources and shared by lifecycle consumers", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
     const loggerCreationIndex = source.indexOf(
-      "const electronMainLogger = createElectronMainLogger();",
+      "const electronMainLogger = await Effect.runPromise(createElectronMainLogger());",
     );
 
     expect(loggerCreationIndex).toBeGreaterThanOrEqual(0);
@@ -297,6 +299,59 @@ describe("Electron main lifecycle policy", () => {
         error: startupError,
       },
     ]);
+  });
+
+  test("persists real startup failure and shutdown lifecycle events with console parity", async () => {
+    const configDirectory = mkdtempSync(resolve(tmpdir(), "openducktor-electron-lifecycle-"));
+    let consoleOutput = "";
+    try {
+      const logger = await Effect.runPromise(
+        createElectronMainLogger({
+          env: { NO_COLOR: "1", OPENDUCKTOR_CONFIG_DIR: configDirectory },
+          now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
+          stream: {
+            write(chunk) {
+              consoleOutput += chunk;
+            },
+          },
+        }),
+      );
+      const startupError = new ElectronLifecycleError({
+        operation: "electron.main.integration-startup",
+        message: "integration startup failed",
+      });
+
+      await runElectronMainStartupBoundary({
+        cleanupAfterFailure: () => Effect.void,
+        exitProcess: () => {},
+        logger,
+        markShutdownComplete: () => {},
+        markShutdownStarted: () => {},
+        startupEffect: Effect.fail(startupError),
+      });
+      const controller = createElectronMainShutdownController({
+        disposeHost: () => Effect.void,
+        exitProcess: () => {},
+        logger,
+        quitApp: () => {},
+      });
+      await controller.shutdownHostAndQuit({ reason: "integration-shutdown" });
+
+      const persisted = readFileSync(
+        resolve(configDirectory, "logs", "openducktor-electron-2026-05-13.log"),
+        "utf8",
+      );
+      for (const message of [
+        "OpenDucktor Electron startup failed",
+        "OpenDucktor host shutdown started (integration-shutdown)",
+        "OpenDucktor host shutdown complete",
+      ]) {
+        expect(consoleOutput).toContain(message);
+        expect(persisted).toContain(message);
+      }
+    } finally {
+      rmSync(configDirectory, { force: true, recursive: true });
+    }
   });
 
   test("shutdown controller disposes the host once for concurrent shutdown triggers", async () => {

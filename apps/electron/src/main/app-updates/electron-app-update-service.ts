@@ -33,9 +33,9 @@ import type {
 } from "./electron-app-updater-adapter";
 
 type ElectronAppUpdateLogger = {
-  error(message: string, error?: unknown): void;
-  info(message: string): void;
-  warn(message: string, details?: unknown): void;
+  error(message: string, error?: unknown): void | Promise<void>;
+  info(message: string): void | Promise<void>;
+  warn(message: string, details?: unknown): void | Promise<void>;
 };
 
 export type ElectronAppUpdateService = {
@@ -667,13 +667,13 @@ export const createElectronAppUpdateService = ({
             applyUpToDate();
           }
         }
-        logger.info(`OpenDucktor update check completed (${initiator})`);
+        await logger.info(`OpenDucktor update check completed (${initiator})`);
         return commandAccepted();
       } catch (cause) {
         if (disposed) {
           return rejectDisposed("check");
         }
-        logger.error("OpenDucktor update check failed", cause);
+        await logger.error("OpenDucktor update check failed", cause);
         setErrorState({
           checkedAt: now(),
           code: "check_failed",
@@ -742,14 +742,14 @@ export const createElectronAppUpdateService = ({
           return rejectDisposed("download");
         }
         applyDownloaded(result);
-        logger.info("OpenDucktor update download completed");
+        await logger.info("OpenDucktor update download completed");
         return commandAccepted();
       } catch (cause) {
         if (disposed) {
           return rejectDisposed("download");
         }
         clearDownloadProgressThrottle();
-        logger.error("OpenDucktor update download failed", cause);
+        await logger.error("OpenDucktor update download failed", cause);
         const checkedAt = checkedAtFromState(state);
         setErrorState({
           ...(availableVersion ? { availableVersion } : {}),
@@ -804,7 +804,7 @@ export const createElectronAppUpdateService = ({
         if (disposed) {
           return rejectDisposed("install");
         }
-        logger.error("OpenDucktor update install failed", cause);
+        await logger.error("OpenDucktor update install failed", cause);
         const previousState = state.status === "downloaded" ? state : downloadedState;
         applyInstallFailure(cause, previousState);
         return commandAccepted();

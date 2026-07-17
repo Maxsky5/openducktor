@@ -11,12 +11,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
 import {
   createOpenDucktorDailyLogWriter,
-  createOpenDucktorDailyLogWriterWithDependencies,
-  type OpenDucktorDailyLogWriterDependencies,
   OpenDucktorLogPersistenceError,
 } from "./openducktor-daily-log-writer";
+import {
+  createOpenDucktorDailyLogWriterWithDependencies,
+  type OpenDucktorDailyLogWriterDependencies,
+} from "./openducktor-daily-log-writer.internal";
 
 const temporaryDirectories: string[] = [];
 
@@ -50,23 +53,29 @@ afterEach(() => {
 });
 
 describe("createOpenDucktorDailyLogWriter", () => {
-  test("writes separate daily surface files under the resolved config directory", () => {
+  test("writes separate daily surface files under the resolved config directory", async () => {
     const configDirectory = createTemporaryConfigDirectory();
     const environment = environmentFor(configDirectory);
     const recordedAt = localDate(2026, 5, 13, 23, 45, 12);
-    const electronWriter = createOpenDucktorDailyLogWriter({
-      surface: "electron",
-      environment,
-      clock: () => recordedAt,
-    });
-    const webWriter = createOpenDucktorDailyLogWriter({
-      surface: "web",
-      environment,
-      clock: () => recordedAt,
-    });
+    const electronWriter = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        environment,
+        clock: () => recordedAt,
+      }),
+    );
+    const webWriter = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "web",
+        environment,
+        clock: () => recordedAt,
+      }),
+    );
 
-    electronWriter.append(recordedAt, "\u001b[31mERROR\u001b[0m electron failed\ntrace");
-    webWriter.append(recordedAt, "INFO web ready\n\n");
+    await Effect.runPromise(
+      electronWriter.append(recordedAt, "\u001b[31mERROR\u001b[0m electron failed\ntrace"),
+    );
+    await Effect.runPromise(webWriter.append(recordedAt, "INFO web ready\n\n"));
 
     const logDirectory = path.join(configDirectory, "logs");
     expect(
@@ -77,24 +86,28 @@ describe("createOpenDucktorDailyLogWriter", () => {
     );
   });
 
-  test("appends across same-day restarts and multiple writer instances", () => {
+  test("appends across same-day restarts and multiple writer instances", async () => {
     const configDirectory = createTemporaryConfigDirectory();
     const environment = environmentFor(configDirectory);
     const recordedAt = localDate(2026, 5, 13);
-    const firstWriter = createOpenDucktorDailyLogWriter({
-      surface: "electron",
-      environment,
-      clock: () => recordedAt,
-    });
-    firstWriter.append(recordedAt, "first");
+    const firstWriter = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        environment,
+        clock: () => recordedAt,
+      }),
+    );
+    await Effect.runPromise(firstWriter.append(recordedAt, "first"));
 
-    const secondWriter = createOpenDucktorDailyLogWriter({
-      surface: "electron",
-      environment,
-      clock: () => recordedAt,
-    });
-    secondWriter.append(recordedAt, "second");
-    firstWriter.append(recordedAt, "third");
+    const secondWriter = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        environment,
+        clock: () => recordedAt,
+      }),
+    );
+    await Effect.runPromise(secondWriter.append(recordedAt, "second"));
+    await Effect.runPromise(firstWriter.append(recordedAt, "third"));
 
     expect(
       readFileSync(
@@ -104,19 +117,23 @@ describe("createOpenDucktorDailyLogWriter", () => {
     ).toBe("first\nsecond\nthird\n");
   });
 
-  test("routes each record by its observed local date", () => {
+  test("routes each record by its observed local date", async () => {
     const configDirectory = createTemporaryConfigDirectory();
     const beforeMidnight = localDate(2026, 5, 13, 23, 59, 59);
     const afterMidnight = localDate(2026, 5, 14, 0, 0, 0);
-    const writer = createOpenDucktorDailyLogWriter({
-      surface: "web",
-      environment: environmentFor(configDirectory),
-      clock: () => beforeMidnight,
-    });
+    const writer = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "web",
+        environment: environmentFor(configDirectory),
+        clock: () => beforeMidnight,
+      }),
+    );
 
-    writer.append(beforeMidnight, "before");
-    writer.append(afterMidnight, "after");
-    writer.append(new Date(afterMidnight.getTime() + 60 * 60 * 1000), "same local date");
+    await Effect.runPromise(writer.append(beforeMidnight, "before"));
+    await Effect.runPromise(writer.append(afterMidnight, "after"));
+    await Effect.runPromise(
+      writer.append(new Date(afterMidnight.getTime() + 60 * 60 * 1000), "same local date"),
+    );
 
     const logDirectory = path.join(configDirectory, "logs");
     expect(readFileSync(path.join(logDirectory, "openducktor-web-2026-05-13.log"), "utf8")).toBe(
@@ -127,7 +144,55 @@ describe("createOpenDucktorDailyLogWriter", () => {
     );
   });
 
-  test("retains the current local date and preceding 29 dates for both surfaces", () => {
+  test("shares one config root across surfaces, restarts, and midnight rollover", async () => {
+    const configDirectory = createTemporaryConfigDirectory();
+    const environment = environmentFor(configDirectory);
+    const beforeMidnight = localDate(2026, 5, 13, 23, 59, 59);
+    const afterMidnight = localDate(2026, 5, 14, 0, 0, 1);
+    const firstElectronWriter = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        environment,
+        clock: () => beforeMidnight,
+      }),
+    );
+    const webWriter = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "web",
+        environment,
+        clock: () => beforeMidnight,
+      }),
+    );
+
+    await Effect.runPromise(firstElectronWriter.append(beforeMidnight, "electron-before"));
+    await Effect.runPromise(webWriter.append(beforeMidnight, "web-before"));
+
+    const restartedElectronWriter = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        environment,
+        clock: () => afterMidnight,
+      }),
+    );
+    await Effect.runPromise(restartedElectronWriter.append(afterMidnight, "electron-after"));
+    await Effect.runPromise(webWriter.append(afterMidnight, "web-after"));
+
+    const logDirectory = path.join(configDirectory, "logs");
+    expect(
+      readFileSync(path.join(logDirectory, "openducktor-electron-2026-05-13.log"), "utf8"),
+    ).toBe("electron-before\n");
+    expect(readFileSync(path.join(logDirectory, "openducktor-web-2026-05-13.log"), "utf8")).toBe(
+      "web-before\n",
+    );
+    expect(
+      readFileSync(path.join(logDirectory, "openducktor-electron-2026-05-14.log"), "utf8"),
+    ).toBe("electron-after\n");
+    expect(readFileSync(path.join(logDirectory, "openducktor-web-2026-05-14.log"), "utf8")).toBe(
+      "web-after\n",
+    );
+  });
+
+  test("retains the current local date and preceding 29 dates for both surfaces", async () => {
     const configDirectory = createTemporaryConfigDirectory();
     const logDirectory = path.join(configDirectory, "logs");
     mkdirSync(logDirectory, { recursive: true });
@@ -136,11 +201,13 @@ describe("createOpenDucktorDailyLogWriter", () => {
     createManagedFile(logDirectory, "openducktor-electron-2026-05-01.log");
     createManagedFile(logDirectory, "openducktor-web-2025-12-31.log");
 
-    createOpenDucktorDailyLogWriter({
-      surface: "electron",
-      environment: environmentFor(configDirectory),
-      clock: () => localDate(2026, 5, 31),
-    });
+    await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        environment: environmentFor(configDirectory),
+        clock: () => localDate(2026, 5, 31),
+      }),
+    );
 
     expect(existsSync(path.join(logDirectory, "openducktor-electron-2026-05-31.log"))).toBeTrue();
     expect(existsSync(path.join(logDirectory, "openducktor-web-2026-05-02.log"))).toBeTrue();
@@ -148,24 +215,26 @@ describe("createOpenDucktorDailyLogWriter", () => {
     expect(existsSync(path.join(logDirectory, "openducktor-web-2025-12-31.log"))).toBeFalse();
   });
 
-  test("prunes newly expired managed files on rollover", () => {
+  test("prunes newly expired managed files on rollover", async () => {
     const configDirectory = createTemporaryConfigDirectory();
     const logDirectory = path.join(configDirectory, "logs");
     mkdirSync(logDirectory, { recursive: true });
     createManagedFile(logDirectory, "openducktor-web-2026-05-01.log");
-    const writer = createOpenDucktorDailyLogWriter({
-      surface: "electron",
-      environment: environmentFor(configDirectory),
-      clock: () => localDate(2026, 5, 30),
-    });
+    const writer = await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        environment: environmentFor(configDirectory),
+        clock: () => localDate(2026, 5, 30),
+      }),
+    );
     expect(existsSync(path.join(logDirectory, "openducktor-web-2026-05-01.log"))).toBeTrue();
 
-    writer.append(localDate(2026, 5, 31), "rollover");
+    await Effect.runPromise(writer.append(localDate(2026, 5, 31), "rollover"));
 
     expect(existsSync(path.join(logDirectory, "openducktor-web-2026-05-01.log"))).toBeFalse();
   });
 
-  test("preserves unrelated, malformed, future-dated, directory, and symlink entries", () => {
+  test("preserves unrelated, malformed, future-dated, directory, and symlink entries", async () => {
     const configDirectory = createTemporaryConfigDirectory();
     const logDirectory = path.join(configDirectory, "logs");
     mkdirSync(logDirectory, { recursive: true });
@@ -185,11 +254,13 @@ describe("createOpenDucktorDailyLogWriter", () => {
       path.join(logDirectory, "openducktor-electron-2025-01-01.log"),
     );
 
-    createOpenDucktorDailyLogWriter({
-      surface: "web",
-      environment: environmentFor(configDirectory),
-      clock: () => localDate(2026, 5, 31),
-    });
+    await Effect.runPromise(
+      createOpenDucktorDailyLogWriter({
+        surface: "web",
+        environment: environmentFor(configDirectory),
+        clock: () => localDate(2026, 5, 31),
+      }),
+    );
 
     for (const name of preservedNames) {
       expect(Bun.file(path.join(logDirectory, name)).size).toBeGreaterThan(0);
@@ -202,13 +273,17 @@ describe("createOpenDucktorDailyLogWriter", () => {
     ).toBeTrue();
   });
 
-  test("preserves canonical config validation failures", () => {
-    expect(() =>
-      createOpenDucktorDailyLogWriter({
-        surface: "electron",
-        environment: { OPENDUCKTOR_CONFIG_DIR: "   " },
-      }),
-    ).toThrow(expect.objectContaining({ _tag: "HostValidationError" }));
+  test("preserves canonical config validation failures", async () => {
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          createOpenDucktorDailyLogWriter({
+            surface: "electron",
+            environment: { OPENDUCKTOR_CONFIG_DIR: "   " },
+          }),
+        ),
+      ),
+    ).resolves.toEqual(expect.objectContaining({ _tag: "HostValidationError" }));
   });
 
   test.each([
@@ -216,34 +291,25 @@ describe("createOpenDucktorDailyLogWriter", () => {
     ["openducktor.logs.read-directory", "readDirectory"],
     ["openducktor.logs.remove-expired", "removeFile"],
     ["openducktor.logs.append", "appendFile"],
-  ] as const)("surfaces actionable %s failures", (operation, failingDependency) => {
+  ] as const)("surfaces actionable %s failures", async (operation, failingDependency) => {
     const configDirectory = createTemporaryConfigDirectory();
     const logDirectory = path.join(configDirectory, "logs");
     const recordedAt = localDate(2026, 5, 31);
     const failure = new Error(`${failingDependency} failed`);
     const dependencies: Partial<OpenDucktorDailyLogWriterDependencies> = {};
     if (failingDependency === "createDirectory") {
-      dependencies.createDirectory = () => {
-        throw failure;
-      };
+      dependencies.createDirectory = () => Promise.reject(failure);
     }
     if (failingDependency === "readDirectory") {
-      dependencies.readDirectory = () => {
-        throw failure;
-      };
+      dependencies.readDirectory = () => Promise.reject(failure);
     }
     if (failingDependency === "removeFile") {
-      dependencies.readDirectory = () => [
-        { name: "openducktor-web-2025-01-01.log", isFile: () => true },
-      ];
-      dependencies.removeFile = () => {
-        throw failure;
-      };
+      dependencies.readDirectory = () =>
+        Promise.resolve([{ name: "openducktor-web-2025-01-01.log", isFile: () => true }]);
+      dependencies.removeFile = () => Promise.reject(failure);
     }
     if (failingDependency === "appendFile") {
-      dependencies.appendFile = () => {
-        throw failure;
-      };
+      dependencies.appendFile = () => Promise.reject(failure);
     }
 
     const createWriter = () =>
@@ -257,8 +323,10 @@ describe("createOpenDucktorDailyLogWriter", () => {
       );
 
     if (failingDependency === "appendFile") {
-      const writer = createWriter();
-      expect(() => writer.append(recordedAt, "record")).toThrow(
+      const writer = await Effect.runPromise(createWriter());
+      await expect(
+        Effect.runPromise(Effect.flip(writer.append(recordedAt, "record"))),
+      ).resolves.toEqual(
         expect.objectContaining({
           _tag: "OpenDucktorLogPersistenceError",
           operation,
@@ -268,7 +336,7 @@ describe("createOpenDucktorDailyLogWriter", () => {
       return;
     }
 
-    expect(createWriter).toThrow(
+    await expect(Effect.runPromise(Effect.flip(createWriter()))).resolves.toEqual(
       expect.objectContaining({
         _tag: "OpenDucktorLogPersistenceError",
         operation,
@@ -278,11 +346,8 @@ describe("createOpenDucktorDailyLogWriter", () => {
             : logDirectory,
       }),
     );
-    try {
-      createWriter();
-    } catch (error) {
-      expect(error).toBeInstanceOf(OpenDucktorLogPersistenceError);
-      expect(String(error)).toContain(failingDependency);
-    }
+    const error = await Effect.runPromise(Effect.flip(createWriter()));
+    expect(error).toBeInstanceOf(OpenDucktorLogPersistenceError);
+    expect(String(error)).toContain(failingDependency);
   });
 });

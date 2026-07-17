@@ -76,6 +76,7 @@ import {
   createStopRuntimesStep,
   type HostLifecycleLogger,
   runShutdownSteps,
+  writeHostLifecycleLog,
 } from "../host-lifecycle";
 import {
   type CreateNodeHostDefaultPortsInput,
@@ -309,13 +310,17 @@ export const createNodeEffectHostCommandRouter = (
   const stopPullRequestSyncLoop = () =>
     Effect.gen(function* () {
       if (!pullRequestSyncLoop) {
-        lifecycleLogger.info("No pull request sync loop is running");
+        yield* writeHostLifecycleLog(
+          lifecycleLogger,
+          "info",
+          "No pull request sync loop is running",
+        );
         return;
       }
 
       yield* pullRequestSyncLoop.stop();
       pullRequestSyncLoop = null;
-      lifecycleLogger.info("Pull request sync loop stopped");
+      yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");
     });
 
   return createEffectHostCommandRouter({
@@ -339,7 +344,11 @@ export const createNodeEffectHostCommandRouter = (
       }),
     dispose: () =>
       Effect.gen(function* () {
-        lifecycleLogger.info("Shutting down OpenDucktor host services");
+        yield* writeHostLifecycleLog(
+          lifecycleLogger,
+          "info",
+          "Shutting down OpenDucktor host services",
+        );
         yield* runShutdownSteps(
           [
             { label: "pull request sync loop", run: stopPullRequestSyncLoop },
@@ -349,7 +358,7 @@ export const createNodeEffectHostCommandRouter = (
           ],
           lifecycleLogger,
         );
-        lifecycleLogger.info("OpenDucktor host services stopped");
+        yield* writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped");
       }),
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionLiveStateService),
