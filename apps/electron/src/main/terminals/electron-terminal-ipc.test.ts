@@ -6,7 +6,10 @@ import {
 } from "@openducktor/contracts";
 import { type TerminalService, TerminalServiceError } from "@openducktor/host";
 import { Effect } from "effect";
-import { createElectronTerminalIpcController } from "./electron-terminal-ipc";
+import {
+  createElectronTerminalIpcController,
+  shouldDetachTerminalSenderForNavigation,
+} from "./electron-terminal-ipc";
 
 describe("Electron terminal IPC", () => {
   test("validates frames and scopes attachments to the sender", async () => {
@@ -34,6 +37,73 @@ describe("Electron terminal IPC", () => {
     await expect(Effect.runPromise(controller.handleFrame(sender, "bad"))).rejects.toThrow(
       "Uint8Array",
     );
+  });
+
+  test("keeps live attachments during same-document main-frame navigation", async () => {
+    const attachments = new Set<string>();
+    const terminalService = {
+      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+        Effect.sync(() => attachments.add(input.attachmentId)),
+      detach: (_terminalId: string, attachmentId: string) =>
+        Effect.sync(() => attachments.delete(attachmentId)),
+      acknowledge: (terminalId: string, attachmentId: string) =>
+        attachments.has(attachmentId)
+          ? Effect.void
+          : Effect.fail(
+              new TerminalServiceError({
+                code: "terminal_not_found",
+                operation: "ack",
+                message: `Terminal attachment not found: ${attachmentId}`,
+                terminalId,
+              }),
+            ),
+    } as TerminalService;
+    const controller = createElectronTerminalIpcController(terminalService);
+    const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
+    await Effect.runPromise(
+      controller.handleFrame(
+        sender,
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "attach",
+            terminalId: "terminal-1",
+            lastConsumedSequence: null,
+          },
+          payload: new Uint8Array(),
+        }),
+      ),
+    );
+
+    if (shouldDetachTerminalSenderForNavigation({ isMainFrame: true, isSameDocument: true })) {
+      await Effect.runPromise(controller.detachSender(sender.id));
+    }
+
+    await expect(
+      Effect.runPromise(
+        controller.handleFrame(
+          sender,
+          encodeTerminalProtocolFrame({
+            message: {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "ack",
+              terminalId: "terminal-1",
+              sequenceEnd: 1,
+            },
+            payload: new Uint8Array(),
+          }),
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("detaches terminal senders only for cross-document main-frame navigation", () => {
+    expect(
+      shouldDetachTerminalSenderForNavigation({ isMainFrame: true, isSameDocument: false }),
+    ).toBe(true);
+    expect(
+      shouldDetachTerminalSenderForNavigation({ isMainFrame: false, isSameDocument: false }),
+    ).toBe(false);
   });
 
   test("reports repeated stale attaches without retaining sender attachments", async () => {

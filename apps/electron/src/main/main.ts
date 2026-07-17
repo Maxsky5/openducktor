@@ -74,7 +74,10 @@ import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindi
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
-import { createElectronTerminalIpcController } from "./terminals/electron-terminal-ipc";
+import {
+  createElectronTerminalIpcController,
+  shouldDetachTerminalSenderForNavigation,
+} from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
 const { app, BrowserWindow, ipcMain, nativeImage, net, protocol, session, shell } = electron;
@@ -624,7 +627,9 @@ const registerIpcHandlers = (
       void runElectronEffect(terminalIpc.detachSender(sender.id));
     };
     sender.once("destroyed", detach);
-    sender.on("did-start-navigation", detach);
+    sender.on("did-start-navigation", (details) => {
+      if (shouldDetachTerminalSenderForNavigation(details)) detach();
+    });
   };
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,

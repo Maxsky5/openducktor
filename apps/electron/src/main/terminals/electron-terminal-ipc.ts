@@ -22,6 +22,11 @@ const isClientMessage = (message: { type: string }): message is TerminalClientMe
   message.type === "ack" ||
   message.type === "detach";
 
+export const shouldDetachTerminalSenderForNavigation = (details: {
+  isMainFrame: boolean;
+  isSameDocument: boolean;
+}): boolean => details.isMainFrame && !details.isSameDocument;
+
 export const createElectronTerminalIpcController = (terminalService: TerminalService) => {
   const attachedBySender = new Map<number, Set<string>>();
   const senderOperations = new Map<number, Effect.Semaphore>();
