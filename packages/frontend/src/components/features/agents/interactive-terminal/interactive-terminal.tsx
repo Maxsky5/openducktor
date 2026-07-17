@@ -2,7 +2,8 @@ import "@xterm/xterm/css/xterm.css";
 import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { type IDisposable, Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
@@ -15,6 +16,7 @@ import {
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
+import { attachInteractiveTerminalRenderer } from "./interactive-terminal-renderer";
 import { createTerminalKeyEventHandler } from "./terminal-keyboard-policy";
 
 export function InteractiveTerminal({
@@ -67,6 +69,9 @@ export function InteractiveTerminal({
     const container = containerRef.current;
     if (!container) return;
     setIsHydrated(false);
+    const reportInteractionFailure = (cause: unknown): void => {
+      setInteractionError(cause instanceof Error ? cause.message : String(cause));
+    };
     let generation = 0;
     const terminal = new Terminal(
       createTerminalOptions(container, {
@@ -77,6 +82,22 @@ export function InteractiveTerminal({
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(container);
+    let rendererContextLossSubscription: IDisposable;
+    try {
+      rendererContextLossSubscription = attachInteractiveTerminalRenderer({
+        terminal,
+        renderer: new WebglAddon(),
+        onContextLoss: () => {
+          reportInteractionFailure(
+            new Error("The terminal renderer was lost. Reopen this terminal tab."),
+          );
+        },
+      });
+    } catch (cause) {
+      terminal.dispose();
+      reportInteractionFailure(cause);
+      return;
+    }
     terminalRef.current = terminal;
     activateViewportRef.current = createTerminalViewportActivator({
       fit: () => fitAddon.fit(),
@@ -84,9 +105,6 @@ export function InteractiveTerminal({
       refresh: (start, end) => terminal.refresh(start, end),
       readRows: () => terminal.rows,
     });
-    const reportInteractionFailure = (cause: unknown): void => {
-      setInteractionError(cause instanceof Error ? cause.message : String(cause));
-    };
     const outputSequencer = createTerminalOutputSequencer({
       write: (payload, parsed) => terminal.write(payload, parsed),
       onConsumed: (sequenceEnd) => {
@@ -159,6 +177,7 @@ export function InteractiveTerminal({
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();
+      rendererContextLossSubscription.dispose();
       fitAddon.dispose();
       terminal.dispose();
       terminalRef.current = null;
