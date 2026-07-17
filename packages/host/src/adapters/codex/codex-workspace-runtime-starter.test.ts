@@ -390,7 +390,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           "--config",
           "mcp_servers.openducktor.env_vars=['ODT_WORKSPACE_ID', 'ODT_HOST_URL', 'ODT_HOST_TOKEN', 'ODT_FORBID_WORKSPACE_ID_INPUT', 'ODT_ALLOWED_TOOLS']",
           "--config",
-          "mcp_servers.openducktor.default_tools_approval_mode='prompt'",
+          "mcp_servers.openducktor.default_tools_approval_mode='approve'",
           "--config",
           "mcp_servers.openducktor.enabled=true",
         ]),
