@@ -321,6 +321,54 @@ describe("launcher internals", () => {
     ]);
   });
 
+  test("closes duplicate-signal log admission before the final output flush", async () => {
+    const exitCodes: number[] = [];
+    let admissionOpen = true;
+    let duplicateLogStarts = 0;
+    let markFlushStarted: () => void = () => {};
+    const flushStarted = new Promise<void>((resolve) => {
+      markFlushStarted = resolve;
+    });
+    let releaseFlush: () => void = () => {};
+    const flushReleased = new Promise<void>((resolve) => {
+      releaseFlush = resolve;
+    });
+
+    const shutdown = runWebSignalShutdown({
+      awaitDuplicateTerminationLog: async () => false,
+      boundary: {
+        exit: (exitCode) => exitCodes.push(exitCode),
+        flush: async () => {
+          if (admissionOpen) {
+            duplicateLogStarts += 1;
+          }
+          markFlushStarted();
+          await flushReleased;
+        },
+        reportFailure: () => {},
+      },
+      closeDuplicateTerminationLogAdmission: () => {
+        admissionOpen = false;
+      },
+      exitCode: 143,
+      logger: {
+        error: () => Effect.void,
+        info: () => Effect.void,
+        success: () => Effect.void,
+      },
+      signal: "SIGTERM",
+      stop: Effect.void,
+    });
+
+    await flushStarted;
+    expect(duplicateLogStarts).toBe(0);
+    expect(exitCodes).toEqual([]);
+
+    releaseFlush();
+    await shutdown;
+    expect(exitCodes).toEqual([143]);
+  });
+
   test("signal logging failures still run cleanup and exit through the explicit boundary", async () => {
     const persistenceError = new Error("openducktor.logs.append failed");
     const exitCodes: number[] = [];

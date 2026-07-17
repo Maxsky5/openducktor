@@ -116,6 +116,7 @@ const stopLauncherForSignalEffect = (
 export const runWebSignalShutdown = async ({
   awaitDuplicateTerminationLog = async () => false,
   boundary = defaultWebSignalProcessBoundary,
+  closeDuplicateTerminationLogAdmission = () => {},
   exitCode,
   logger,
   signal,
@@ -123,6 +124,7 @@ export const runWebSignalShutdown = async ({
 }: {
   awaitDuplicateTerminationLog?: () => Promise<boolean>;
   boundary?: WebSignalProcessBoundary;
+  closeDuplicateTerminationLogAdmission?: () => void;
   exitCode: number;
   logger: WebLogger;
   signal: NodeJS.Signals;
@@ -147,6 +149,7 @@ export const runWebSignalShutdown = async ({
   }
 
   try {
+    closeDuplicateTerminationLogAdmission();
     const duplicateTerminationLogFailed = await awaitDuplicateTerminationLog();
     resolvedExitCode = resolveWebSignalExitCode(resolvedExitCode, duplicateTerminationLogFailed);
   } catch (duplicateLogCause) {
@@ -427,6 +430,7 @@ export const runLauncherEffect = (
           const stopDeferred = yield* Deferred.make<void, WebError>();
           let stopStarted = false;
           let terminationStarted = false;
+          let duplicateTerminationLogAdmissionOpen = true;
           let duplicateTerminationNoticeLogged = false;
           let duplicateTerminationLog: Promise<boolean> | null = null;
 
@@ -487,7 +491,7 @@ export const runLauncherEffect = (
 
           const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
             if (terminationStarted) {
-              if (!duplicateTerminationNoticeLogged) {
+              if (duplicateTerminationLogAdmissionOpen && !duplicateTerminationNoticeLogged) {
                 duplicateTerminationNoticeLogged = true;
                 duplicateTerminationLog = runWebBoundary(
                   logDuplicateWebTerminationNotice(
@@ -502,6 +506,9 @@ export const runLauncherEffect = (
             void runWebSignalShutdown({
               awaitDuplicateTerminationLog: async () =>
                 duplicateTerminationLog ? await duplicateTerminationLog : false,
+              closeDuplicateTerminationLogAdmission: () => {
+                duplicateTerminationLogAdmissionOpen = false;
+              },
               exitCode,
               logger,
               signal,
@@ -607,6 +614,7 @@ export const runLauncherEffect = (
               }),
             () =>
               Effect.gen(function* () {
+                duplicateTerminationLogAdmissionOpen = false;
                 process.off("SIGINT", handleSigint);
                 process.off("SIGTERM", handleSigterm);
                 if (!servicesReleased) {

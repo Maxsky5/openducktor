@@ -186,6 +186,54 @@ describe("createTaskSyncService", () => {
     await Effect.runPromise(loop.stop());
     expect(calls).toEqual([]);
   });
+  test("executes lifecycle logging Effects and returns logging failures from the loop owner", async () => {
+    const { eventBus } = createEventBus();
+    const persistenceError = new HostOperationError({
+      operation: "host.lifecycle.log-error",
+      message: "persistent task-sync log failed",
+    });
+    let loggerEffects = 0;
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      intervalMs: 1,
+      logger: {
+        error: () =>
+          Effect.sync(() => {
+            loggerEffects += 1;
+          }).pipe(Effect.zipRight(Effect.fail(persistenceError))),
+      },
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed() {
+          return Effect.succeed({ ran: true, changedTaskIds: [] });
+        },
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.task-sync.list-workspaces",
+              message: "workspace read failed",
+            }),
+          );
+        },
+      }),
+    });
+
+    const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
+    await sleep(20);
+
+    expect(loggerEffects).toBe(1);
+    const stopResult = await Effect.runPromise(Effect.either(loop.stop()));
+    expect(stopResult._tag).toBe("Left");
+    if (stopResult._tag === "Right") {
+      throw new Error("expected task-sync loop logging failure");
+    }
+    expect(stopResult.left).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "task-sync.log-iteration-failure",
+      cause: persistenceError,
+    });
+  });
   test("stops without waiting for an in-flight pull request sync iteration", async () => {
     const { eventBus, events } = createEventBus();
     let resolveSyncStarted: () => void = () => {};

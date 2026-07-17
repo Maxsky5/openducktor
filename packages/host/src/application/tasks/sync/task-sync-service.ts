@@ -1,5 +1,5 @@
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { Effect, Fiber, Ref } from "effect";
+import { Cause, Effect, Fiber, Option, Ref } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { HostEventBusPort } from "../../../events/host-event-bus";
 import type {
@@ -11,11 +11,11 @@ import type { TaskService, TaskServiceError } from "../task-service";
 const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 export type TaskSyncLifecycleLogger = {
-  error(message: string): void;
+  error(message: string): Effect.Effect<void, unknown>;
 };
 export type TaskSyncLoopHandle = {
   /** Request loop shutdown without waiting for an active sync iteration to finish. */
-  stop(): Effect.Effect<void, never>;
+  stop(): Effect.Effect<void, HostOperationError>;
 };
 export type TaskSyncService = {
   publishExternalTaskCreated(
@@ -34,6 +34,9 @@ export type CreateTaskSyncServiceInput = {
   logger?: TaskSyncLifecycleLogger;
   taskService: Pick<TaskService, "repoPullRequestSyncDetailed">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "listWorkspaces">;
+};
+const defaultTaskSyncLifecycleLogger: TaskSyncLifecycleLogger = {
+  error: (message) => Effect.sync(() => console.error(message)),
 };
 type PullRequestSyncResult = {
   changedTaskIds: string[];
@@ -66,7 +69,7 @@ export const createTaskSyncService = ({
   eventBus,
   eventIdFactory = () => crypto.randomUUID(),
   intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
-  logger = console,
+  logger = defaultTaskSyncLifecycleLogger,
   taskService,
   workspaceSettingsService,
 }: CreateTaskSyncServiceInput): TaskSyncService => {
@@ -124,11 +127,20 @@ export const createTaskSyncService = ({
     readActiveWorkspacePullRequestSync().pipe(
       Effect.flatMap((result) => publishPullRequestSyncResultIfRunning(stopped, result)),
       Effect.catchAll((error) =>
-        Effect.sync(() => {
-          logger.error(
+        logger
+          .error(
             `Pull request sync iteration failed; the scheduler will retry on the next interval: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }),
+          )
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new HostOperationError({
+                  operation: "task-sync.log-iteration-failure",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause,
+                }),
+            ),
+          ),
       ),
     );
   const runPullRequestSyncLoop = (stopped: Ref.Ref<boolean>) =>
@@ -153,12 +165,19 @@ export const createTaskSyncService = ({
         const stopped = yield* Ref.make(false);
         const fiber = yield* Effect.forkDaemon(runPullRequestSyncLoop(stopped));
         return {
-          stop() {
-            return Ref.set(stopped, true).pipe(
-              Effect.zipRight(Fiber.interruptFork(fiber)),
-              Effect.asVoid,
-            );
-          },
+          stop: () =>
+            Effect.gen(function* () {
+              yield* Ref.set(stopped, true);
+              const completed = yield* Fiber.poll(fiber);
+              yield* Fiber.interruptFork(fiber);
+              if (Option.isNone(completed) || completed.value._tag === "Success") {
+                return;
+              }
+              const failure = Cause.failureOption(completed.value.cause);
+              if (Option.isSome(failure)) {
+                return yield* Effect.fail(failure.value);
+              }
+            }),
         };
       });
     },
