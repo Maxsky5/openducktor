@@ -6,6 +6,7 @@ import {
   createTerminalKeyEventHandler,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
+  detectTerminalPlatform,
   handleTerminalMetadataFrame,
   resolveTerminalKeyAction,
 } from "./interactive-terminal-policy";
@@ -56,18 +57,29 @@ describe("InteractiveTerminal policies", () => {
   });
 
   test("keeps copy, paste, and Ctrl+C interrupt semantics distinct", () => {
-    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), false, true)).toBe(
+    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), "linux", true)).toBe(
       "copy",
     );
-    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), false, false)).toBe(
+    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), "linux", false)).toBe(
       "interrupt",
     );
     expect(
-      resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "v", shiftKey: true }), false, false),
+      resolveTerminalKeyAction(
+        keyEvent({ ctrlKey: true, key: "v", shiftKey: true }),
+        "linux",
+        false,
+      ),
     ).toBe("paste");
-    expect(resolveTerminalKeyAction(keyEvent({ key: "c", metaKey: true }), true, true)).toBe(
+    expect(resolveTerminalKeyAction(keyEvent({ key: "c", metaKey: true }), "macos", true)).toBe(
       "copy",
     );
+  });
+
+  test("detects the desktop terminal platform without treating unknown platforms as Linux", () => {
+    expect(detectTerminalPlatform("MacIntel")).toBe("macos");
+    expect(detectTerminalPlatform("Win32")).toBe("windows");
+    expect(detectTerminalPlatform("Linux x86_64")).toBe("linux");
+    expect(detectTerminalPlatform("iPhone")).toBe("other");
   });
 
   test("wires copy, paste, and interrupt to clipboard and terminal input", async () => {
@@ -87,7 +99,7 @@ describe("InteractiveTerminal policies", () => {
       return inputIdle;
     };
     const handleKey = createTerminalKeyEventHandler({
-      isMac: false,
+      platform: "linux",
       hasSelection: () => selected,
       getSelection: () => "selected output",
       writeClipboard: async (text) => {
@@ -119,7 +131,7 @@ describe("InteractiveTerminal policies", () => {
       reportFailure: () => undefined,
     });
     const handleKey = createTerminalKeyEventHandler({
-      isMac: true,
+      platform: "macos",
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,
@@ -141,6 +153,60 @@ describe("InteractiveTerminal policies", () => {
     expect(inputWrites).toEqual([[1], [5], [21], [27, 98], [27, 102]]);
   });
 
+  test("maps Linux Ctrl navigation shortcuts to portable shell editing sequences", async () => {
+    const inputWrites: number[][] = [];
+    let inputIdle = Promise.resolve();
+    const sequenceInput = createTerminalInputSequencer({
+      writeInput: async (data) => {
+        inputWrites.push([...data]);
+      },
+      reportFailure: () => undefined,
+    });
+    const handleKey = createTerminalKeyEventHandler({
+      platform: "linux",
+      hasSelection: () => false,
+      getSelection: () => "",
+      writeClipboard: async () => undefined,
+      readClipboard: async () => "",
+      enqueueInput: (operation) => {
+        inputIdle = sequenceInput(operation);
+        return inputIdle;
+      },
+      reportFailure: () => undefined,
+    });
+
+    expect(handleKey(keyEvent({ ctrlKey: true, key: "ArrowLeft" }))).toBe(false);
+    expect(handleKey(keyEvent({ ctrlKey: true, key: "ArrowRight" }))).toBe(false);
+    expect(handleKey(keyEvent({ ctrlKey: true, key: "Backspace" }))).toBe(false);
+    expect(handleKey(keyEvent({ ctrlKey: true, key: "Delete" }))).toBe(false);
+    await inputIdle;
+
+    expect(inputWrites).toEqual([[27, 98], [27, 102], [23], [27, 100]]);
+  });
+
+  test("delegates Windows Ctrl navigation shortcuts to xterm's native VT encoding", () => {
+    const shortcuts = [
+      keyEvent({ ctrlKey: true, key: "ArrowLeft" }),
+      keyEvent({ ctrlKey: true, key: "ArrowRight" }),
+      keyEvent({ ctrlKey: true, key: "Backspace" }),
+      keyEvent({ ctrlKey: true, key: "Delete" }),
+    ];
+
+    for (const shortcut of shortcuts) {
+      expect(resolveTerminalKeyAction(shortcut, "windows", false)).toBe("passthrough");
+    }
+  });
+
+  test("preserves modified selection shortcuts for xterm on Linux", () => {
+    expect(
+      resolveTerminalKeyAction(
+        keyEvent({ ctrlKey: true, key: "ArrowLeft", shiftKey: true }),
+        "linux",
+        false,
+      ),
+    ).toBe("passthrough");
+  });
+
   test("surfaces clipboard failures without injecting terminal input", async () => {
     const inputWrites: number[][] = [];
     const failures: string[] = [];
@@ -157,7 +223,7 @@ describe("InteractiveTerminal policies", () => {
       return inputIdle;
     };
     const handleKey = createTerminalKeyEventHandler({
-      isMac: true,
+      platform: "macos",
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,

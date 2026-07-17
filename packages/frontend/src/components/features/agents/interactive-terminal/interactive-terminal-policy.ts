@@ -3,6 +3,8 @@ import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/cont
 export type TerminalKeyAction =
   | "copy"
   | "interrupt"
+  | "kill-next-word"
+  | "kill-previous-word"
   | "kill-to-line-start"
   | "line-end"
   | "line-start"
@@ -11,8 +13,12 @@ export type TerminalKeyAction =
   | "passthrough"
   | "previous-word";
 
+export type TerminalPlatform = "linux" | "macos" | "other" | "windows";
+
 const TERMINAL_INPUT_BY_KEY_ACTION: Partial<Record<TerminalKeyAction, readonly number[]>> = {
   interrupt: [3],
+  "kill-next-word": [27, 100],
+  "kill-previous-word": [23],
   "kill-to-line-start": [21],
   "line-end": [5],
   "line-start": [1],
@@ -44,7 +50,7 @@ export const createTerminalViewportActivator = ({
 };
 
 type TerminalKeyEventHandlerInput = {
-  isMac: boolean;
+  platform: TerminalPlatform;
   hasSelection: () => boolean;
   getSelection: () => string;
   writeClipboard: (text: string) => Promise<void>;
@@ -53,13 +59,22 @@ type TerminalKeyEventHandlerInput = {
   reportFailure: (cause: unknown) => void;
 };
 
+export const detectTerminalPlatform = (platform: string): TerminalPlatform => {
+  const lowerCasePlatform = platform.toLowerCase();
+  if (lowerCasePlatform.includes("mac")) return "macos";
+  if (lowerCasePlatform.includes("win")) return "windows";
+  if (lowerCasePlatform.includes("linux")) return "linux";
+  return "other";
+};
+
 export const resolveTerminalKeyAction = (
   event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey" | "type">,
-  isMac: boolean,
+  platform: TerminalPlatform,
   hasSelection: boolean,
 ): TerminalKeyAction => {
   if (event.type !== "keydown") return "passthrough";
   const key = event.key.toLowerCase();
+  const isMac = platform === "macos";
   const copy =
     (isMac && event.metaKey && key === "c") ||
     (!isMac && event.ctrlKey && event.shiftKey && key === "c") ||
@@ -77,11 +92,17 @@ export const resolveTerminalKeyAction = (
   const optionOnly = isMac && event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey;
   if (optionOnly && key === "arrowleft") return "previous-word";
   if (optionOnly && key === "arrowright") return "next-word";
+  const linuxControlOnly =
+    platform === "linux" && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+  if (linuxControlOnly && key === "arrowleft") return "previous-word";
+  if (linuxControlOnly && key === "arrowright") return "next-word";
+  if (linuxControlOnly && key === "backspace") return "kill-previous-word";
+  if (linuxControlOnly && key === "delete") return "kill-next-word";
   return "passthrough";
 };
 
 export const createTerminalKeyEventHandler = ({
-  isMac,
+  platform,
   hasSelection,
   getSelection,
   writeClipboard,
@@ -90,7 +111,7 @@ export const createTerminalKeyEventHandler = ({
   reportFailure,
 }: TerminalKeyEventHandlerInput) => {
   return (event: KeyboardEvent): boolean => {
-    const action = resolveTerminalKeyAction(event, isMac, hasSelection());
+    const action = resolveTerminalKeyAction(event, platform, hasSelection());
     if (action === "copy") {
       void writeClipboard(getSelection()).catch(reportFailure);
       return false;

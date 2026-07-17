@@ -12,6 +12,7 @@ import {
   createTerminalKeyEventHandler,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
+  detectTerminalPlatform,
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
 
@@ -107,7 +108,7 @@ export function InteractiveTerminal({
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
     terminal.attachCustomKeyEventHandler(
       createTerminalKeyEventHandler({
-        isMac: navigator.platform.toLowerCase().includes("mac"),
+        platform: detectTerminalPlatform(navigator.platform),
         hasSelection: () => terminal.hasSelection(),
         getSelection: () => terminal.getSelection(),
         writeClipboard: (text) => navigator.clipboard.writeText(text),
