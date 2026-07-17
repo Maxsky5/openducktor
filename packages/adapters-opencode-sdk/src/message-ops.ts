@@ -7,7 +7,6 @@ import type {
 } from "@openducktor/core";
 import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { bindSubagentExternalSession, bindSubagentPartCorrelation } from "./event-stream/shared";
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
@@ -24,7 +23,7 @@ import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
-import type { ClientFactory, SessionRecord } from "./types";
+import type { ClientFactory } from "./types";
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -369,73 +368,6 @@ const normalizeHistoryStreamParts = (
   return normalized;
 };
 
-const seedSubagentCorrelationFromHistory = (
-  session: Pick<
-    SessionRecord,
-    | "subagentCorrelationKeyByPartId"
-    | "subagentCorrelationKeyByExternalSessionId"
-    | "subagentPartIdByCorrelationKey"
-    | "subagentPartIdByExternalSessionId"
-    | "pendingSubagentCorrelationKeysBySignature"
-    | "pendingSubagentCorrelationKeys"
-  >,
-  parts: AgentStreamPart[],
-): void => {
-  for (const part of parts) {
-    if (part.kind !== "subagent") {
-      continue;
-    }
-
-    bindSubagentPartCorrelation(session, part.partId, part.correlationKey);
-    if (part.externalSessionId) {
-      bindSubagentExternalSession(
-        session,
-        part.externalSessionId,
-        part.correlationKey,
-        part.partId,
-      );
-    }
-
-    const signature = buildSubagentSignature(part);
-    if (!signature) {
-      continue;
-    }
-
-    if (part.status === "pending" || part.status === "running") {
-      if (part.externalSessionId) {
-        removePendingSubagentCorrelationKey(
-          session.pendingSubagentCorrelationKeysBySignature,
-          part.correlationKey,
-        );
-        const pendingIndex = session.pendingSubagentCorrelationKeys.indexOf(part.correlationKey);
-        if (pendingIndex >= 0) {
-          session.pendingSubagentCorrelationKeys.splice(pendingIndex, 1);
-        }
-        continue;
-      }
-
-      if (!session.pendingSubagentCorrelationKeys.includes(part.correlationKey)) {
-        session.pendingSubagentCorrelationKeys.push(part.correlationKey);
-      }
-      enqueuePendingSubagentCorrelationKey(
-        session.pendingSubagentCorrelationKeysBySignature,
-        signature,
-        part.correlationKey,
-      );
-      continue;
-    }
-
-    removePendingSubagentCorrelationKey(
-      session.pendingSubagentCorrelationKeysBySignature,
-      part.correlationKey,
-    );
-    const pendingIndex = session.pendingSubagentCorrelationKeys.indexOf(part.correlationKey);
-    if (pendingIndex >= 0) {
-      session.pendingSubagentCorrelationKeys.splice(pendingIndex, 1);
-    }
-  }
-};
-
 export const loadSessionHistory = async (
   createClient: ClientFactory,
   now: () => string,
@@ -572,38 +504,6 @@ export const loadSessionHistory = async (
       ...(item.model ? { model: item.model } : {}),
       parts: item.parts,
     });
-  }
-
-  return history;
-};
-
-export const loadAndSeedSessionHistory = async (
-  createClient: ClientFactory,
-  now: () => string,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-    externalSessionId: string;
-    limit?: number;
-    preservedDisplayPartsByMessageId?: Map<string, AgentUserMessageDisplayPart[]>;
-    session: Pick<
-      SessionRecord,
-      | "subagentCorrelationKeyByPartId"
-      | "subagentCorrelationKeyByExternalSessionId"
-      | "subagentPartIdByCorrelationKey"
-      | "subagentPartIdByExternalSessionId"
-      | "pendingSubagentCorrelationKeysBySignature"
-      | "pendingSubagentCorrelationKeys"
-    >;
-  },
-): Promise<AgentSessionHistoryMessage[]> => {
-  const history = await loadSessionHistory(createClient, now, input);
-
-  for (const entry of history) {
-    if (entry.role !== "assistant") {
-      continue;
-    }
-    seedSubagentCorrelationFromHistory(input.session, entry.parts);
   }
 
   return history;

@@ -36,7 +36,7 @@ const contextUsageKey = (runtimeId: string, threadId: string): string =>
 
 const parseContextUsageKey = (key: string): [string, string] => JSON.parse(key) as [string, string];
 
-export const CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS = 10_000;
+const CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS = 10_000;
 
 const defaultContextUsageReplayScheduler: CodexContextUsageReplayScheduler = {
   clearTimeout: (handle) => {

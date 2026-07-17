@@ -37,8 +37,6 @@ import {
   CodexContextUsageTracker,
 } from "./codex-context-usage-tracker";
 
-export { CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS } from "./codex-context-usage-tracker";
-
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";

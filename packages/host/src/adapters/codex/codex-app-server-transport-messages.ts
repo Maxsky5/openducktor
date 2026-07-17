@@ -16,7 +16,6 @@ import {
   isCodexAppServerRequestPermissionProfile,
 } from "../../ports/codex-app-server-protocol";
 
-const MAX_BUFFERED_STREAM_MESSAGES = 1_000;
 const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
 export const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
@@ -95,13 +94,6 @@ export const resolveAfterQueuedMessages = (
   value: CodexAppServerRequestResult,
 ): void => {
   setImmediate(() => resolve(value));
-};
-
-export const pushBoundedMessage = <Message>(messages: Message[], message: Message): void => {
-  messages.push(message);
-  if (messages.length > MAX_BUFFERED_STREAM_MESSAGES) {
-    messages.splice(0, messages.length - MAX_BUFFERED_STREAM_MESSAGES);
-  }
 };
 
 export const appendCapturedStderr = (current: string, line: string): string => {

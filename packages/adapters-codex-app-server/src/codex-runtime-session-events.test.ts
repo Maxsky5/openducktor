@@ -4,10 +4,7 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { createDeferred } from "./codex-app-server-adapter.test-harness";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
-import {
-  CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS,
-  CodexRuntimeSessionEvents,
-} from "./codex-runtime-session-events";
+import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
@@ -21,6 +18,7 @@ const flushRuntimeEvents = async (): Promise<void> => {
 };
 
 const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
+const expectedContextUsageReplayTimeoutMs = 10_000;
 
 type RuntimeEventInput = {
   runtimeId: string;
@@ -660,7 +658,7 @@ describe("CodexRuntimeSessionEvents", () => {
     );
     await replayScheduler.waitForScheduledCount(1);
     expect(resumeAttempts).toBe(1);
-    expect(replayScheduler.timeouts[0]?.timeoutMs).toBe(CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS);
+    expect(replayScheduler.timeouts[0]?.timeoutMs).toBe(expectedContextUsageReplayTimeoutMs);
     replayScheduler.runTimeout(0);
 
     const outcomes = await firstAttemptOutcomes;
@@ -670,7 +668,7 @@ describe("CodexRuntimeSessionEvents", () => {
       if (outcome.status === "rejected") {
         expect(outcome.error).toBeInstanceOf(Error);
         expect((outcome.error as Error).message).toContain(
-          `Timed out waiting for Codex context usage replay for runtime 'runtime-1' session 'thread-target' after ${CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS}ms: thread/resume completed but no matching thread/tokenUsage/updated notification arrived.`,
+          `Timed out waiting for Codex context usage replay for runtime 'runtime-1' session 'thread-target' after ${expectedContextUsageReplayTimeoutMs}ms: thread/resume completed but no matching thread/tokenUsage/updated notification arrived.`,
         );
       }
     }
