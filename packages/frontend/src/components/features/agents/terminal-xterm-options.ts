@@ -24,7 +24,7 @@ export const createTerminalOptions = (
   convertEol: false,
   fontFamily: TERMINAL_FONT_FAMILY,
   fontSize: 12,
-  lineHeight: 1.35,
+  lineHeight: 1,
   scrollback: 2000,
   theme: createTerminalTheme(container),
   ...options,
