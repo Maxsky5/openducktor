@@ -12,15 +12,20 @@ import type {
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalServiceError } from "./terminal-service-error";
 import {
+  activateTerminalSession,
+  createTerminalSession,
+  disposeTerminalSession,
+  isLiveTerminal,
+  type TerminalAttachment,
+  type TerminalSession,
+} from "./terminal-session";
+import {
   createTerminalSessionLifecycle,
   terminalFailure,
   terminalOperationFailure,
 } from "./terminal-session-lifecycle";
 import {
   createTerminalSessionStream,
-  isLiveTerminal,
-  type TerminalAttachment,
-  type TerminalSession,
   type TerminalSessionAttachInput,
 } from "./terminal-session-stream";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
@@ -86,18 +91,11 @@ export const createTerminalSessionEngine = ({
           (title) => publishTitle(session, title),
           scheduleTitleSettlement,
         );
-        session = {
+        session = createTerminalSession({
           summary,
           titleTracker,
-          handle: null,
-          replay: [],
-          replayBytes: 0,
-          nextSequence: 0,
-          attachments: new Map(),
-          paused: false,
-          overflowed: false,
           operations: yield* Effect.makeSemaphore(1),
-        };
+        });
         sessions.set(summary.terminalId, session);
         const handleResult = yield* Effect.either(
           ptyPort.start(plan, {
@@ -110,7 +108,7 @@ export const createTerminalSessionEngine = ({
           }),
         );
         if (handleResult._tag === "Left") {
-          session.titleTracker.dispose();
+          disposeTerminalSession(session);
           sessions.delete(summary.terminalId);
           return yield* Effect.fail(
             terminalFailure(
@@ -124,8 +122,7 @@ export const createTerminalSessionEngine = ({
             ),
           );
         }
-        session.handle = handleResult.right;
-        if (session.summary.lifecycle === "starting") session.summary.lifecycle = "running";
+        activateTerminalSession(session, handleResult.right);
         return { ...session.summary, context: { ...session.summary.context } };
       }),
     list: (filter: TerminalListFilter): TerminalSummary[] => {

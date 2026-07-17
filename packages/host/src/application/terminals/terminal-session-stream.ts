@@ -1,42 +1,10 @@
-import {
-  TERMINAL_PROTOCOL_VERSION,
-  type TerminalServerMessage,
-  type TerminalSummary,
-} from "@openducktor/contracts";
+import { TERMINAL_PROTOCOL_VERSION, type TerminalServerMessage } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
-import type { TerminalTitleTracker } from "./terminal-title-tracker";
+import type { ReplayChunk, TerminalAttachment, TerminalSession } from "./terminal-session";
 
 const OUTPUT_CHUNK_BYTES = 64 * 1024;
 const EMPTY_PAYLOAD = new Uint8Array(0);
-
-export type ReplayChunk = {
-  sequenceStart: number;
-  sequenceEnd: number;
-  data: Uint8Array;
-};
-
-export type TerminalAttachment = {
-  attachmentId: string;
-  sink: (event: TerminalServerMessage, payload: Uint8Array) => void;
-  acknowledgedSequence: number;
-  deliveredSequence: number;
-  pendingBytes: number;
-};
-
-export type TerminalSession = {
-  summary: TerminalSummary;
-  titleTracker: TerminalTitleTracker;
-  handle: TerminalPtyHandle | null;
-  replay: ReplayChunk[];
-  replayBytes: number;
-  nextSequence: number;
-  attachments: Map<string, TerminalAttachment>;
-  paused: boolean;
-  overflowed: boolean;
-  operations: Effect.Semaphore;
-};
 
 export type TerminalSessionAttachInput = {
   terminalId: string;
@@ -62,12 +30,6 @@ const mergeStreamEvents = (
   const eventTypes = new Set(left.map((event) => event.type));
   return [...left, ...right.filter((event) => !eventTypes.has(event.type))];
 };
-
-export const isLiveTerminal = (session: TerminalSession): boolean =>
-  session.summary.lifecycle === "starting" ||
-  session.summary.lifecycle === "running" ||
-  session.summary.lifecycle === "closing" ||
-  session.summary.lifecycle === "close_failed";
 
 export const createTerminalSessionStream = () => {
   const publish = (

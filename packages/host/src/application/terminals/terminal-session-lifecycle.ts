@@ -3,10 +3,15 @@ import { Effect } from "effect";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalServiceError } from "./terminal-service-error";
 import {
+  beginTerminalClose,
+  disposeTerminalSession,
+  exitTerminalSession,
   isLiveTerminal,
+  markTerminalCloseFailed,
+  markTerminalOverflowed,
   type TerminalSession,
-  type TerminalStreamEvents,
-} from "./terminal-session-stream";
+} from "./terminal-session";
+import type { TerminalStreamEvents } from "./terminal-session-stream";
 
 export type TerminalOperation = ConstructorParameters<typeof TerminalServiceError>[0]["operation"];
 
@@ -87,7 +92,7 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const handleFailure = (session: TerminalSession): void => {
-    session.summary.lifecycle = "close_failed";
+    markTerminalCloseFailed(session);
     emitLifecycle(session);
   };
 
@@ -105,7 +110,7 @@ export const createTerminalSessionLifecycle = ({
       Math.max(0, exited.length - TERMINAL_LIMITS.retainedExited),
     );
     for (const session of new Set([...expired, ...overCapacity])) {
-      session.titleTracker.dispose();
+      disposeTerminalSession(session);
       for (const attachment of session.attachments.values()) {
         applyStreamEvents(
           session,
@@ -125,23 +130,20 @@ export const createTerminalSessionLifecycle = ({
     exitCode: number | null,
     signal: string | null,
   ): void => {
-    if (session.summary.lifecycle === "exited") return;
-    session.titleTracker.dispose();
-    session.handle = null;
-    session.summary.lifecycle = "exited";
-    session.summary.exit = {
-      exitCode,
-      signal,
-      finalSequence: session.nextSequence,
-      exitedAt: now().toISOString(),
-    };
+    if (
+      !exitTerminalSession(session, {
+        exitCode,
+        signal,
+        exitedAt: now().toISOString(),
+      })
+    )
+      return;
     emitLifecycle(session);
     pruneExited();
   };
 
   function terminateForOverflow(session: TerminalSession): void {
-    if (session.overflowed) return;
-    session.overflowed = true;
+    if (!markTerminalOverflowed(session)) return;
     for (const attachment of session.attachments.values()) {
       applyStreamEvents(
         session,
@@ -153,7 +155,7 @@ export const createTerminalSessionLifecycle = ({
       );
     }
     if (!session.handle) return;
-    session.summary.lifecycle = "closing";
+    beginTerminalClose(session);
     emitLifecycle(session);
     Effect.runFork(
       session.handle.terminate().pipe(
@@ -205,7 +207,7 @@ export const createTerminalSessionLifecycle = ({
         }
       }
       if (session.handle) {
-        session.summary.lifecycle = "closing";
+        beginTerminalClose(session);
         emitLifecycle(session);
         const result = yield* Effect.either(session.handle.terminate());
         if (result._tag === "Left") {
@@ -221,7 +223,7 @@ export const createTerminalSessionLifecycle = ({
           );
         }
       }
-      session.titleTracker.dispose();
+      disposeTerminalSession(session);
       sessions.delete(terminalId);
     });
 
