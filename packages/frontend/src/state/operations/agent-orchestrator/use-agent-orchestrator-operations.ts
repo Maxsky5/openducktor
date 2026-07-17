@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
@@ -17,6 +18,7 @@ import { createAgentSessionActions } from "./handlers/session-actions";
 import {
   createLoadAgentSessionHistory,
   createLoadSelectedSessionBaselineHistory,
+  createReloadAgentSessionHistory,
 } from "./history/session-history-loader";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
@@ -183,6 +185,7 @@ export function useAgentOrchestratorOperations({
     return {
       loadAgentSessionHistory: createLoadAgentSessionHistory(loaderArgs),
       loadSelectedSessionBaselineHistory: createLoadSelectedSessionBaselineHistory(loaderArgs),
+      reloadAgentSessionHistory: createReloadAgentSessionHistory(loaderArgs),
     };
   }, [
     agentEngine,
@@ -196,6 +199,25 @@ export function useAgentOrchestratorOperations({
     workspaceId,
     workspaceRepoPath,
   ]);
+  const recoverTranscriptGap = useCallback(async (): Promise<void> => {
+    const loadedSessions = sessionStore
+      .listSessionSnapshots()
+      .filter((session) => session.historyLoadState === "loaded");
+
+    await Promise.all([
+      ...loadedSessions.map((session) =>
+        sessionHistoryLoaders.reloadAgentSessionHistory({
+          externalSessionId: session.externalSessionId,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+        }),
+      ),
+      queryClient.invalidateQueries({
+        queryKey: agentSessionHistoryQueryKeys.all,
+        refetchType: "active",
+      }),
+    ]);
+  }, [queryClient, sessionHistoryLoaders, sessionStore]);
   const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,
     taskIds,
@@ -205,6 +227,7 @@ export function useAgentOrchestratorOperations({
     commitSessionCollection: sessionStore.commitSessionCollection,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,
+    recoverTranscriptGap,
     queryClient,
   });
   const ensureRuntime = useMemo(

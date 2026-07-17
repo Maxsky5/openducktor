@@ -70,19 +70,31 @@ describe("CodexAppServerAdapter context loading", () => {
       subscribeEvents: runtimeStream.subscribeEvents,
     });
     await adapter.startSession(codexStartSessionInput());
+    const resumeResponseDelivered = createDeferred<void>();
+    const transport = transports.get("runtime-live");
+    expect(transport).toBeDefined();
+    const originalRequest = transport?.request.bind(transport);
+    if (transport && originalRequest) {
+      transport.request = async <Response>(request): Promise<Response> => {
+        const response = await originalRequest<Response>(request);
+        if (request.method === "thread/resume") {
+          resumeResponseDelivered.resolve(undefined);
+        }
+        return response;
+      };
+    }
 
     const first = adapter.loadSessionContextUsage(codexSessionRef());
     const second = adapter.loadSessionContextUsage(codexSessionRef());
-    await Promise.resolve();
+    await resumeResponseDelivered.promise;
+    await flushCodexAdapterWork();
     runtimeStream.emitNotification(tokenUsageNotification(2_000));
 
     await expect(Promise.all([first, second])).resolves.toEqual([
       { totalTokens: 2_000, contextWindow: 200_000 },
       { totalTokens: 2_000, contextWindow: 200_000 },
     ]);
-    expect(
-      transports.get("runtime-live")?.calls.filter((call) => call.method === "thread/resume"),
-    ).toEqual([
+    expect(transport?.calls.filter((call) => call.method === "thread/resume")).toEqual([
       expect.objectContaining({
         params: expect.objectContaining({
           threadId: "thread/start-runtime-live",
@@ -130,11 +142,12 @@ describe("CodexAppServerAdapter context loading", () => {
   test("retains a previously unloaded session after successful include-turns recovery", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const transport = new RecordingTransport("runtime-live", false);
+    const resumeResponseDelivered = createDeferred<void>();
     const originalRequest = transport.request.bind(transport);
     transport.request = async <Response>(request): Promise<Response> => {
       const response = await originalRequest<Response>(request);
       if (request.method === "thread/resume") {
-        runtimeStream.emitNotification(tokenUsageNotification(2_250, 200_000, "thread-idle"));
+        resumeResponseDelivered.resolve(undefined);
       }
       return response;
     };
@@ -143,7 +156,12 @@ describe("CodexAppServerAdapter context loading", () => {
       transportFactory: () => transport,
     });
 
-    await expect(adapter.loadSessionContextUsage(codexSessionRef("thread-idle"))).resolves.toEqual({
+    const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    await resumeResponseDelivered.promise;
+    await flushCodexAdapterWork();
+    runtimeStream.emitNotification(tokenUsageNotification(2_250, 200_000, "thread-idle"));
+
+    await expect(loading).resolves.toEqual({
       totalTokens: 2_250,
       contextWindow: 200_000,
     });
@@ -165,7 +183,7 @@ describe("CodexAppServerAdapter context loading", () => {
     ]);
   });
 
-  test("preserves the first replayed usage when resume-window notifications overlap", async () => {
+  test("preserves the latest live usage when updates arrive before the persisted replay", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
@@ -191,9 +209,12 @@ describe("CodexAppServerAdapter context loading", () => {
     }
     runtimeStream.emitNotification(tokenUsageNotification(2_000));
     runtimeStream.emitNotification(tokenUsageNotification(2_500));
+    await flushCodexAdapterWork();
     resumeResponse.resolve(undefined);
+    await flushCodexAdapterWork();
+    runtimeStream.emitNotification(tokenUsageNotification(1_000));
 
-    await expect(loading).resolves.toEqual({ totalTokens: 2_000, contextWindow: 200_000 });
+    await expect(loading).resolves.toEqual({ totalTokens: 2_500, contextWindow: 200_000 });
   });
 
   test("does not let a later persisted replay overwrite a live update during recovery", async () => {
@@ -221,8 +242,11 @@ describe("CodexAppServerAdapter context loading", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     runtimeStream.emitNotification(tokenUsageNotification(3_000));
-    runtimeStream.emitNotification(tokenUsageNotification(1_000));
+    await flushCodexAdapterWork();
     resumeResponse.resolve(undefined);
+    await flushCodexAdapterWork();
+    runtimeStream.emitNotification(tokenUsageNotification(1_000));
+    await flushCodexAdapterWork();
 
     await expect(loading).resolves.toEqual({ totalTokens: 3_000, contextWindow: 200_000 });
     expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.contextUsage).toEqual({
@@ -240,6 +264,7 @@ describe("CodexAppServerAdapter context loading", () => {
     const transport = transports.get("runtime-live");
     expect(transport).toBeDefined();
     const originalRequest = transport?.request.bind(transport);
+    const retryResumeResponseDelivered = createDeferred<void>();
     let resumeAttempts = 0;
     if (transport && originalRequest) {
       transport.request = async <Response>(request): Promise<Response> => {
@@ -249,7 +274,11 @@ describe("CodexAppServerAdapter context loading", () => {
             throw new Error("resume unavailable");
           }
         }
-        return originalRequest<Response>(request);
+        const response = await originalRequest<Response>(request);
+        if (request.method === "thread/resume") {
+          retryResumeResponseDelivered.resolve(undefined);
+        }
+        return response;
       };
     }
 
@@ -258,7 +287,8 @@ describe("CodexAppServerAdapter context loading", () => {
     );
 
     const retry = adapter.loadSessionContextUsage(codexSessionRef());
-    await Promise.resolve();
+    await retryResumeResponseDelivered.promise;
+    await flushCodexAdapterWork();
     runtimeStream.emitNotification(tokenUsageNotification(3_000));
     await expect(retry).resolves.toEqual({ totalTokens: 3_000, contextWindow: 200_000 });
     expect(resumeAttempts).toBe(2);
@@ -365,22 +395,29 @@ describe("CodexAppServerAdapter live child projection", () => {
     const transport = transports.get("runtime-live");
     expect(transport).toBeDefined();
     const originalRequest = transport?.request.bind(transport);
+    const resumeResponseDelivered = createDeferred<void>();
     if (transport && originalRequest) {
       transport.request = async <Response>(request): Promise<Response> => {
+        const response = await originalRequest<Response>(request);
         if (request.method === "thread/resume") {
-          runtimeStream.emitNotification(
-            tokenUsageNotification(4_200, 200_000, route.childExternalSessionId),
-          );
+          resumeResponseDelivered.resolve(undefined);
         }
-        return originalRequest<Response>(request);
+        return response;
       };
     }
-    await expect(
-      adapter.loadLiveSessionContextUsage({
-        runtimeId: "runtime-live",
-        externalSessionId: route.childExternalSessionId,
-      }),
-    ).resolves.toEqual({ totalTokens: 4_200, contextWindow: 200_000 });
+    const contextLoading = adapter.loadLiveSessionContextUsage({
+      runtimeId: "runtime-live",
+      externalSessionId: route.childExternalSessionId,
+    });
+    await resumeResponseDelivered.promise;
+    await flushCodexAdapterWork();
+    runtimeStream.emitNotification(
+      tokenUsageNotification(4_200, 200_000, route.childExternalSessionId),
+    );
+    await expect(contextLoading).resolves.toEqual({
+      totalTokens: 4_200,
+      contextWindow: 200_000,
+    });
     expect(transport?.calls.filter((call) => call.method === "thread/resume")).toEqual([
       expect.objectContaining({
         params: expect.objectContaining({

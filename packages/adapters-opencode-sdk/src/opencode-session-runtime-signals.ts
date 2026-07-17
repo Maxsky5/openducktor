@@ -1,4 +1,8 @@
 import type { Event } from "@opencode-ai/sdk/v2/client";
+import {
+  type AgentSessionTranscriptEventType,
+  isAgentSessionTranscriptEventType,
+} from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import { readEventSessionId } from "./event-stream/shared";
 import { asUnknownRecord, readRecordProp } from "./guards";
@@ -9,24 +13,9 @@ export type OpencodeSessionContextUsage = {
   readonly model?: AgentModelSelection;
 };
 
-type OpencodeSessionTranscriptEventType =
-  | "session_started"
-  | "assistant_delta"
-  | "assistant_message"
-  | "user_message"
-  | "assistant_part"
-  | "session_todos_updated"
-  | "session_compaction_started"
-  | "session_compacted"
-  | "mcp_reconnect_started"
-  | "session_status"
-  | "session_error"
-  | "session_idle"
-  | "session_finished";
-
 export type OpencodeSessionTranscriptEvent = Extract<
   AgentEvent,
-  { type: OpencodeSessionTranscriptEventType }
+  { type: AgentSessionTranscriptEventType }
 >;
 
 export type OpencodeSessionRuntimeSignal =
@@ -42,22 +31,6 @@ export type OpencodeSessionRuntimeSignal =
       readonly event: OpencodeSessionTranscriptEvent;
     }
   | { readonly type: "fault"; readonly message: string };
-
-const TRANSCRIPT_EVENT_TYPES: ReadonlySet<OpencodeSessionTranscriptEventType> = new Set([
-  "session_started",
-  "assistant_delta",
-  "assistant_message",
-  "user_message",
-  "assistant_part",
-  "session_todos_updated",
-  "session_compaction_started",
-  "session_compacted",
-  "mcp_reconnect_started",
-  "session_status",
-  "session_error",
-  "session_idle",
-  "session_finished",
-]);
 
 const SESSION_INVALIDATION_EVENT_TYPES: ReadonlySet<string> = new Set([
   "session.created",
@@ -75,8 +48,7 @@ const SESSION_INVALIDATION_EVENT_TYPES: ReadonlySet<string> = new Set([
 
 export const isOpencodeSessionTranscriptEvent = (
   event: AgentEvent,
-): event is OpencodeSessionTranscriptEvent =>
-  TRANSCRIPT_EVENT_TYPES.has(event.type as OpencodeSessionTranscriptEventType);
+): event is OpencodeSessionTranscriptEvent => isAgentSessionTranscriptEventType(event.type);
 
 export const opencodeEventInvalidatesSessions = (event: Event): boolean =>
   SESSION_INVALIDATION_EVENT_TYPES.has(String(event.type));

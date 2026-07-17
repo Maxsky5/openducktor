@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   agentRuntimeEventSchema,
   agentSessionTranscriptEventSchema,
+  isAgentSessionTranscriptEventType,
 } from "./agent-session-event-schemas";
 import type { AgentSessionLiveRef } from "./agent-session-schemas";
 
@@ -106,6 +107,13 @@ describe("agent session transcript event contract", () => {
       expect(agentRuntimeEventSchema.safeParse(event).success).toBe(true);
       expect(agentSessionTranscriptEventSchema.safeParse(event).success).toBe(false);
     }
+  });
+
+  test("classifies ordered transcript event types from the contract-owned list", () => {
+    expect(isAgentSessionTranscriptEventType("assistant_message")).toBe(true);
+    expect(isAgentSessionTranscriptEventType("session_finished")).toBe(true);
+    expect(isAgentSessionTranscriptEventType("approval_required")).toBe(false);
+    expect(isAgentSessionTranscriptEventType("session_context_updated")).toBe(false);
   });
 
   test("keeps lifecycle details on the ordered session stream", () => {

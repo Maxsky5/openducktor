@@ -19,6 +19,7 @@ import {
   createLoadAgentSessionHistory,
   loadSelectedSessionBaselineHistoryIntoStore,
   loadSessionHistoryIntoStore,
+  reloadSessionHistoryIntoStore,
 } from "./session-history-loader";
 
 const taskFixture: TaskCard = {
@@ -336,6 +337,81 @@ describe("session history loader", () => {
     expect(loadSessionHistory).not.toHaveBeenCalled();
     expect(loadSystemPromptContext).not.toHaveBeenCalled();
     expect(harness.session.historyLoadState).toBe("loaded");
+  });
+
+  test("reloads a loaded transcript after a live-stream gap without dropping later messages", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "Recovered from history",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "live-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:02.000Z",
+          content: "Arrived after the gap",
+        },
+      ]),
+    });
+
+    await reloadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Recovered from history",
+      "Arrived after the gap",
+    ]);
+  });
+
+  test("keeps the last loaded transcript when stream-gap recovery fails", async () => {
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "existing-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          content: "Last known transcript",
+        },
+      ]),
+    });
+
+    await expect(
+      reloadSessionHistoryIntoStore({
+        repoPath: "/repo",
+        adapter: {
+          loadSessionHistory: async () => {
+            throw new Error("history unavailable");
+          },
+        },
+        readSessionSnapshot: harness.readSessionSnapshot,
+        updateSession: harness.updateSession,
+        identity: sessionTarget,
+        isStaleRepoOperation: () => false,
+      }),
+    ).rejects.toThrow("history unavailable");
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Last known transcript",
+    ]);
   });
 
   test("loads transcript history without owning live input state", async () => {

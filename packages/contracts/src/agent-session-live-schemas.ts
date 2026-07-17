@@ -160,6 +160,13 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      type: z.literal("transcript_gap"),
+      repoPath: nonEmptyStringSchema,
+      message: nonEmptyStringSchema,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("fault"),
       repoPath: nonEmptyStringSchema,
       message: nonEmptyStringSchema,

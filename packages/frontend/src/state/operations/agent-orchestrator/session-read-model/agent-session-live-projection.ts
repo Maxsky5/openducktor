@@ -128,6 +128,7 @@ const toContextUsage = (
 const applyDirectSnapshot = (
   current: AgentSessionState,
   snapshot: AgentSessionLiveSnapshot,
+  statusMode: "hydrate" | "preserve",
 ): AgentSessionState => {
   if (isTerminalSessionStatus(current.status)) {
     return {
@@ -138,8 +139,10 @@ const applyDirectSnapshot = (
       runtimeStatusMessage: null,
     };
   }
-  const status = agentSessionStatusFromActivity(snapshot.activity);
-  const nextStatus = current.status === "starting" && status === "idle" ? "starting" : status;
+  const snapshotStatus = agentSessionStatusFromActivity(snapshot.activity);
+  const hydratedStatus =
+    current.status === "starting" && snapshotStatus === "idle" ? "starting" : snapshotStatus;
+  const nextStatus = statusMode === "hydrate" ? hydratedStatus : current.status;
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
   const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
@@ -179,6 +182,7 @@ const createLiveOnlySession = (
       selectedModel: null,
     },
     snapshot,
+    "hydrate",
   );
 };
 
@@ -354,7 +358,10 @@ export const buildAgentSessionLiveCollection = ({
   for (const snapshot of snapshots) {
     const session = getAgentSession(collection, toSessionIdentity(snapshot.ref));
     if (session) {
-      collection = replaceAgentSession(collection, applyDirectSnapshot(session, snapshot));
+      collection = replaceAgentSession(
+        collection,
+        applyDirectSnapshot(session, snapshot, "hydrate"),
+      );
       continue;
     }
     const parent = snapshot.parentExternalSessionId
@@ -387,7 +394,7 @@ export const applyAgentSessionLiveDelta = ({
     const withDirectSnapshot = replaceAgentSession(
       current,
       session
-        ? applyDirectSnapshot(session, envelope.session)
+        ? applyDirectSnapshot(session, envelope.session, "preserve")
         : createLiveOnlySession(envelope.session, parent),
     );
     return applyChildSnapshot(withDirectSnapshot, envelope.session);

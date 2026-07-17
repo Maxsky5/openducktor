@@ -356,6 +356,31 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
+  test("keeps the shared connection usable when a retained task subscriber sees an error before open", async () => {
+    const { observeLocalHostAgentSessions, subscribeLocalHostTaskEvents } =
+      await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+
+    const unsubscribeTask = await subscribeLocalHostTaskEvents(mock(() => {}));
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.emit("error", "initial connection failed");
+
+    const liveSessionObservation = observeLocalHostAgentSessions(
+      { repoPath: "/repo" },
+      mock(() => {}),
+    );
+    eventSource.emit("open", "");
+
+    const stopObserving = await liveSessionObservation;
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    stopObserving();
+    unsubscribeTask();
+    expect(eventSource.closed).toBe(true);
+  });
+
   test("refreshes live-session state on the shared connection without losing ordered deltas", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
     let refreshCallCount = 0;
@@ -433,6 +458,14 @@ describe("local host SSE subscriptions", () => {
       ),
     ).toHaveLength(2);
 
+    const transcriptGap = {
+      type: "transcript_gap",
+      repoPath: "/repo",
+      message: "Host event stream skipped 2 events; reconnect will replay buffered events.",
+    } satisfies AgentSessionLiveEnvelope;
+    eventSource.emit("stream-warning", transcriptGap.message);
+    expect(listener).toHaveBeenNthCalledWith(3, transcriptGap);
+
     const reconnectTranscriptEvent = {
       ...transcriptEvent,
       event: {
@@ -448,7 +481,7 @@ describe("local host SSE subscriptions", () => {
         payload: reconnectTranscriptEvent,
       }),
     );
-    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(3);
     eventSource.emit(
       "message",
       JSON.stringify({
@@ -459,6 +492,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
       snapshot,
       transcriptEvent,
+      transcriptGap,
       snapshot,
       reconnectTranscriptEvent,
     ]);
@@ -466,31 +500,64 @@ describe("local host SSE subscriptions", () => {
     stopObserving();
   });
 
-  test("rejects dev-server subscriptions when EventSource errors before opening", async () => {
+  test("delivers replay gaps to every live-session observer when one listener fails", async () => {
+    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const throwingListener = mock((envelope: AgentSessionLiveEnvelope) => {
+      if (envelope.type === "transcript_gap") {
+        throw new Error("listener failed");
+      }
+    });
+    const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
+
+    const firstObservation = observeLocalHostAgentSessions({ repoPath: "/repo" }, throwingListener);
+    const eventSource = await waitForEventSourceInstance();
+    const secondObservation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
+    eventSource.emit("open", "");
+    const stopFirstObservation = await firstObservation;
+    const stopSecondObservation = await secondObservation;
+
+    expect(() =>
+      eventSource.emit("stream-warning", "Host event replay skipped transcript events."),
+    ).toThrow("listener failed");
+    expect(listener).toHaveBeenCalledWith({
+      type: "transcript_gap",
+      repoPath: "/repo",
+      message: "Host event replay skipped transcript events.",
+    });
+
+    stopFirstObservation();
+    stopSecondObservation();
+  });
+
+  test("waits for the native EventSource reconnect when the initial open fails", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
     ) as unknown as typeof globalThis.fetch;
+    const listener = mock(() => {});
 
-    const subscription = subscribeLocalHostDevServerEvents(mock(() => {}));
+    const subscription = subscribeLocalHostDevServerEvents(listener);
     const eventSource = await waitForEventSourceInstance();
 
     eventSource.emit("error", "failed");
+    eventSource.emit("error", "still failed");
 
-    await expect(subscription).rejects.toMatchObject({
-      _tag: "WebDependencyError",
-      dependency: "event-source",
-      operation: "await-ready",
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      __openducktorBrowserLive: true,
+      kind: "stream-warning",
+      message: "EventSource events reported an error before opening.",
     });
-    expect(eventSource.closed).toBe(true);
+    expect(eventSource.closed).toBe(false);
 
-    const retrySubscription = subscribeLocalHostDevServerEvents(mock(() => {}));
-    const retryEventSource = await waitForEventSourceInstance(1);
-    retryEventSource.emit("open", "");
-    const { transportEpoch, unsubscribe } = await retrySubscription;
+    eventSource.emit("open", "");
+    const { transportEpoch, unsubscribe } = await subscription;
     expect(transportEpoch).toBe("events:0");
     unsubscribe();
-    expect(retryEventSource.closed).toBe(true);
+    expect(eventSource.closed).toBe(true);
   });
 
   test("emits a stream-warning control payload when dev-server EventSource errors after opening", async () => {

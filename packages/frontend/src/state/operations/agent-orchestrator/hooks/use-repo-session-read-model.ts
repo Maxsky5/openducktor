@@ -43,6 +43,7 @@ type UseRepoSessionReadModelArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
+  recoverTranscriptGap: (message: string) => Promise<void>;
   queryClient: QueryClient;
 };
 
@@ -60,6 +61,7 @@ export const useRepoSessionReadModel = ({
   commitSessionCollection,
   liveSessionPort,
   transcriptEvents,
+  recoverTranscriptGap,
   queryClient,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
@@ -200,6 +202,14 @@ export const useRepoSessionReadModel = ({
         transcriptEvents.handle(envelope.event);
         return;
       }
+      if (envelope.type === "transcript_gap") {
+        void recoverTranscriptGap(envelope.message).catch((error: unknown) => {
+          failObservation(
+            `Failed to recover transcript history after a live-stream gap: ${errorMessage(error)}`,
+          );
+        });
+        return;
+      }
       if (envelope.type === "catalog_invalidated") {
         const catalogScope =
           envelope.scope.workingDirectory === undefined
@@ -265,6 +275,7 @@ export const useRepoSessionReadModel = ({
     isLoadingTasks,
     liveSessionPort,
     queryClient,
+    recoverTranscriptGap,
     reloadGeneration,
     repoEpochRef,
     taskSessionRecordsState,

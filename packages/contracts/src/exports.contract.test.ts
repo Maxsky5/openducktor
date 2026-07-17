@@ -309,6 +309,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "autopilotEventIdSchema",
   "autopilotRuleSchema",
   "autopilotSettingsSchema",
+  "isAgentSessionTranscriptEventType",
   "isCodexAppServerJsonValue",
   "isCodexAppServerCommandAction",
   "isCodexAppServerCommandRequestMethod",

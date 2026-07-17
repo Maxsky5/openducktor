@@ -161,6 +161,11 @@ describe("agent-session live contracts", () => {
         },
       },
       {
+        type: "transcript_gap",
+        repoPath: ref.repoPath,
+        message: "Host event replay skipped transcript events.",
+      },
+      {
         type: "fault",
         repoPath: ref.repoPath,
         message: "Runtime disconnected",

@@ -508,7 +508,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
 ]);
 export type AgentRuntimeEvent = ExactOptional<z.infer<typeof agentRuntimeEventSchema>>;
 
-type AgentSessionTranscriptEventType =
+export type AgentSessionTranscriptEventType =
   | "session_started"
   | "assistant_delta"
   | "assistant_message"
@@ -539,6 +539,11 @@ const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventT
   "session_finished",
 ]);
 
+export const isAgentSessionTranscriptEventType = (
+  type: AgentRuntimeEvent["type"] | string,
+): type is AgentSessionTranscriptEventType =>
+  agentSessionTranscriptEventTypes.has(type as AgentSessionTranscriptEventType);
+
 export type AgentSessionTranscriptEvent = Extract<
   AgentRuntimeEvent,
   { type: AgentSessionTranscriptEventType }
@@ -548,9 +553,7 @@ export type AgentSessionTranscriptEvent = Extract<
 
 export const agentSessionTranscriptEventSchema: z.ZodType<AgentSessionTranscriptEvent> =
   agentRuntimeEventSchema.refine(
-    (event) =>
-      agentSessionTranscriptEventTypes.has(event.type as AgentSessionTranscriptEventType) &&
-      event.sessionRef !== undefined,
+    (event) => isAgentSessionTranscriptEventType(event.type) && event.sessionRef !== undefined,
     {
       message:
         "A transcript event must contain a session ref and belong to the ordered session stream.",

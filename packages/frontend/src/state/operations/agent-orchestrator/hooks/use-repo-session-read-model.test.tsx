@@ -74,6 +74,7 @@ const createState = (
     handle: mock(() => undefined),
     close: mock(() => undefined),
   };
+  const recoverTranscriptGap = mock(async (_message: string) => undefined);
   const props = {
     workspaceRepoPath: "/repo",
     taskIds: ["task-1"],
@@ -83,6 +84,7 @@ const createState = (
     commitSessionCollection: sessionStore.commitSessionCollection,
     liveSessionPort,
     transcriptEvents,
+    recoverTranscriptGap,
     queryClient,
   };
 
@@ -99,6 +101,7 @@ const createState = (
     harness: createHookHarness(useRepoSessionReadModel, props),
     observeAgentSessionLive,
     agentSessionLiveReplyApproval,
+    recoverTranscriptGap,
     emit: (payload: AgentSessionLiveEnvelope) => {
       if (!listener) {
         throw new Error("Live-session listener is not ready.");
@@ -255,6 +258,62 @@ describe("useRepoSessionReadModel", () => {
 
       expect(invalidateQueries).toHaveBeenCalledWith({
         queryKey: ["runtime-catalog", "skills", "/repo", "codex", "/repo/worktree"],
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("recovers loaded transcripts when the live stream reports a replay gap", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(async () => {
+        state.emit({
+          type: "transcript_gap",
+          repoPath: "/repo",
+          message: "Host event replay skipped transcript events.",
+        });
+      });
+
+      expect(state.recoverTranscriptGap).toHaveBeenCalledWith(
+        "Host event replay skipped transcript events.",
+      );
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("surfaces transcript-gap recovery failures in the read-model state", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    state.recoverTranscriptGap.mockImplementation(async () => {
+      throw new Error("history reload failed");
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(async () => {
+        state.emit({
+          type: "transcript_gap",
+          repoPath: "/repo",
+          message: "Host event replay skipped transcript events.",
+        });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message:
+          "Failed to recover transcript history after a live-stream gap: history reload failed",
       });
     } finally {
       await state.harness.unmount();

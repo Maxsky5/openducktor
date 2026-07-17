@@ -1,4 +1,8 @@
-import type { AgentSessionTranscriptEvent, CodexAppServerRequestId } from "@openducktor/contracts";
+import {
+  type AgentSessionTranscriptEvent,
+  type CodexAppServerRequestId,
+  isAgentSessionTranscriptEventType,
+} from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -26,10 +30,15 @@ import {
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
 import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
+import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
 import {
-  type CodexTokenUsageTotals,
-  extractCodexTokenUsageTotals,
-} from "./codex-app-server-transcript";
+  type CodexContextUsageObservation,
+  type CodexContextUsageReplayScheduler,
+  CodexContextUsageTracker,
+} from "./codex-context-usage-tracker";
+
+export { CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS } from "./codex-context-usage-tracker";
+
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
@@ -70,11 +79,6 @@ type CodexRuntimeSessionEventsDeps = {
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
 };
 
-type CodexContextUsageReplayScheduler = {
-  clearTimeout(handle: unknown): void;
-  setTimeout(callback: () => void, timeoutMs: number): unknown;
-};
-
 type CodexServerRequestEnvelope = {
   request: CodexServerRequestRecord;
   receivedAt: string;
@@ -85,56 +89,6 @@ export type CodexRuntimeLiveSessionMutation = {
   transcriptEvents: AgentSessionTranscriptEvent[];
   catalogInvalidated: boolean;
   fault?: string;
-};
-
-const LIVE_TRANSCRIPT_EVENT_TYPES: ReadonlySet<AgentSessionTranscriptEvent["type"]> = new Set([
-  "session_started",
-  "assistant_delta",
-  "assistant_message",
-  "user_message",
-  "assistant_part",
-  "session_todos_updated",
-  "session_compaction_started",
-  "session_compacted",
-  "mcp_reconnect_started",
-  "session_status",
-  "session_error",
-  "session_idle",
-  "session_finished",
-]);
-
-type RetainedContextUsage = {
-  usage: CodexSessionContextUsage;
-  observationGeneration: number;
-};
-
-type ContextUsageObservation = {
-  key: string;
-  generation: number;
-};
-
-type ContextUsageRecovery = {
-  runtimeId: string;
-  threadId: string;
-  released: Promise<never>;
-  rejectReleased(error: Error): void;
-  observed: Promise<void>;
-  resolveObserved(): void;
-  observationGenerationAtStart: number;
-  resumeCompletedObservationGeneration: number | null;
-  promise?: Promise<CodexSessionContextUsage>;
-};
-
-const contextUsageKey = (runtimeId: string, threadId: string): string =>
-  JSON.stringify([runtimeId, threadId]);
-
-export const CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS = 10_000;
-
-const defaultContextUsageReplayScheduler: CodexContextUsageReplayScheduler = {
-  clearTimeout: (handle) => {
-    clearTimeout(handle as ReturnType<typeof setTimeout>);
-  },
-  setTimeout: (callback, timeoutMs) => setTimeout(callback, timeoutMs),
 };
 
 const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
@@ -178,20 +132,22 @@ export class CodexRuntimeSessionEvents {
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
   private readonly startedItemTimestampsByKey = new Map<string, number>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
-  private readonly latestContextUsageByKey = new Map<string, RetainedContextUsage>();
-  private readonly contextUsageObservationGenerationByKey = new Map<string, number>();
-  private readonly contextUsageRecoveriesByKey = new Map<string, ContextUsageRecovery>();
   private readonly runtimeEventProcessingByRuntimeId = new Map<string, Promise<void>>();
   private readonly activeMutationByRuntimeId = new Map<string, CodexRuntimeLiveSessionMutation>();
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
   private readonly subagentLifecycle: CodexSubagentLifecycleProjector;
+  private readonly contextUsage: CodexContextUsageTracker;
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
     this.eventMapperPipeline = createCodexEventMapperPipeline(
       createCodexEventMappers(deps.subagents),
     );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
+    this.contextUsage = new CodexContextUsageTracker(
+      (runtimeId) => this.waitForRuntimeEventBarrier(runtimeId),
+      deps.contextUsageReplayScheduler,
+    );
     this.subagentLifecycle = new CodexSubagentLifecycleProjector({
       sessions: deps.sessions,
       subagents: deps.subagents,
@@ -213,7 +169,7 @@ export class CodexRuntimeSessionEvents {
     try {
       this.runtimeEventSubscriptions.stop(runtimeId);
     } finally {
-      this.releaseRuntimeContextUsage(
+      this.contextUsage.releaseRuntime(
         runtimeId,
         new Error(`Codex runtime '${runtimeId}' stopped while context usage was loading.`),
       );
@@ -247,7 +203,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   latestContextUsage(runtimeId: string, threadId: string): CodexSessionContextUsage | null {
-    return this.latestContextUsageByKey.get(contextUsageKey(runtimeId, threadId))?.usage ?? null;
+    return this.contextUsage.latest(runtimeId, threadId);
   }
 
   loadSessionContextUsage(
@@ -255,104 +211,11 @@ export class CodexRuntimeSessionEvents {
     threadId: string,
     resumeWithTurns: () => Promise<void>,
   ): Promise<CodexSessionContextUsage> {
-    const retained = this.latestContextUsage(runtimeId, threadId);
-    if (retained) {
-      return Promise.resolve(retained);
-    }
-
-    const key = contextUsageKey(runtimeId, threadId);
-    const existing = this.contextUsageRecoveriesByKey.get(key);
-    if (existing) {
-      if (!existing.promise) {
-        throw new Error(
-          `Codex context usage recovery for runtime '${runtimeId}' session '${threadId}' was not initialized.`,
-        );
-      }
-      return existing.promise;
-    }
-
-    let rejectReleased: ((error: Error) => void) | undefined;
-    const released = new Promise<never>((_resolve, reject) => {
-      rejectReleased = reject;
-    });
-    let resolveObserved!: () => void;
-    const observed = new Promise<void>((resolve) => {
-      resolveObserved = resolve;
-    });
-    const recovery: ContextUsageRecovery = {
-      runtimeId,
-      threadId,
-      released,
-      rejectReleased: (error) => rejectReleased?.(error),
-      observed,
-      resolveObserved,
-      observationGenerationAtStart: this.contextUsageObservationGenerationByKey.get(key) ?? 0,
-      resumeCompletedObservationGeneration: null,
-    };
-    this.contextUsageRecoveriesByKey.set(key, recovery);
-    const promise = this.performContextUsageRecovery(recovery, resumeWithTurns);
-    recovery.promise = promise;
-    return promise;
-  }
-
-  private async performContextUsageRecovery(
-    recovery: ContextUsageRecovery,
-    resumeWithTurns: () => Promise<void>,
-  ): Promise<CodexSessionContextUsage> {
-    const key = contextUsageKey(recovery.runtimeId, recovery.threadId);
-    try {
-      await Promise.race([resumeWithTurns(), recovery.released]);
-      recovery.resumeCompletedObservationGeneration =
-        this.contextUsageObservationGenerationByKey.get(key) ??
-        recovery.observationGenerationAtStart;
-      // Codex sends restored usage after thread/resume responds, so response
-      // completion cannot establish that the connection-scoped replay is absent.
-      if (!this.latestContextUsage(recovery.runtimeId, recovery.threadId)) {
-        await this.waitForContextUsageReplay(recovery);
-      }
-      await Promise.race([this.waitForRuntimeEventBarrier(recovery.runtimeId), recovery.released]);
-      const retained = this.latestContextUsage(recovery.runtimeId, recovery.threadId);
-      if (!retained) {
-        throw new Error("Codex context usage was observed without retained context state.");
-      }
-      return retained;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to load Codex context usage for runtime '${recovery.runtimeId}' session '${recovery.threadId}': ${message}`,
-        { cause: error },
-      );
-    } finally {
-      if (this.contextUsageRecoveriesByKey.get(key) === recovery) {
-        this.contextUsageRecoveriesByKey.delete(key);
-      }
-    }
-  }
-
-  private async waitForContextUsageReplay(recovery: ContextUsageRecovery): Promise<void> {
-    const scheduler = this.deps.contextUsageReplayScheduler ?? defaultContextUsageReplayScheduler;
-    let timeoutHandle: unknown | null = null;
-    const timedOut = new Promise<never>((_resolve, reject) => {
-      timeoutHandle = scheduler.setTimeout(() => {
-        reject(
-          new Error(
-            `Timed out waiting for Codex context usage replay for runtime '${recovery.runtimeId}' session '${recovery.threadId}' after ${CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS}ms: thread/resume completed but no matching thread/tokenUsage/updated notification arrived.`,
-          ),
-        );
-      }, CODEX_CONTEXT_USAGE_REPLAY_TIMEOUT_MS);
-    });
-
-    try {
-      await Promise.race([recovery.observed, recovery.released, timedOut]);
-    } finally {
-      if (timeoutHandle !== null) {
-        scheduler.clearTimeout(timeoutHandle);
-      }
-    }
+    return this.contextUsage.load(runtimeId, threadId, resumeWithTurns);
   }
 
   private enqueueRuntimeStreamEvent(event: CodexRuntimeStreamEvent): void {
-    const contextUsageObservation = this.reserveContextUsageObservation(event);
+    const contextUsageObservation = this.contextUsage.reserveObservation(event);
     const previous =
       this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) ?? Promise.resolve();
     const processing = previous
@@ -368,7 +231,7 @@ export class CodexRuntimeSessionEvents {
 
   private async processRuntimeStreamEventMutation(
     event: CodexRuntimeStreamEvent,
-    contextUsageObservation: ContextUsageObservation | null,
+    contextUsageObservation: CodexContextUsageObservation | null,
   ): Promise<void> {
     const mutation: CodexRuntimeLiveSessionMutation = {
       runtimeId: event.runtimeId,
@@ -398,89 +261,6 @@ export class CodexRuntimeSessionEvents {
     return this.runtimeEventProcessingByRuntimeId.get(runtimeId) ?? Promise.resolve();
   }
 
-  private observeContextUsageNotification(
-    runtimeId: string,
-    notification: CodexNotificationRecord,
-    reservedObservation?: ContextUsageObservation | null,
-  ): void {
-    if (notification.method !== "thread/tokenUsage/updated") {
-      return;
-    }
-    const threadId = extractThreadIdFromParams(notification.params);
-    const usage = extractCodexTokenUsageTotals(notification.params);
-    if (!threadId || !usage) {
-      return;
-    }
-    const key = contextUsageKey(runtimeId, threadId);
-    const observation =
-      reservedObservation?.key === key
-        ? reservedObservation
-        : this.nextContextUsageObservation(key);
-    const retained = this.latestContextUsageByKey.get(key);
-    const recovery = this.contextUsageRecoveriesByKey.get(key);
-    const observationIsWithinResume = recovery
-      ? recovery.resumeCompletedObservationGeneration === null ||
-        observation.generation <= recovery.resumeCompletedObservationGeneration
-      : false;
-    const alreadyObservedSinceRecoveryStarted = recovery
-      ? (retained?.observationGeneration ?? 0) > recovery.observationGenerationAtStart
-      : false;
-    if (
-      (retained && retained.observationGeneration > observation.generation) ||
-      (observationIsWithinResume && alreadyObservedSinceRecoveryStarted)
-    ) {
-      return;
-    }
-    this.latestContextUsageByKey.set(key, {
-      usage,
-      observationGeneration: observation.generation,
-    });
-    recovery?.resolveObserved();
-  }
-
-  private reserveContextUsageObservation(
-    event: Pick<CodexRuntimeStreamEvent, "runtimeId" | "kind" | "message">,
-  ): ContextUsageObservation | null {
-    if (
-      event.kind !== "notification" ||
-      !isPlainObject(event.message) ||
-      event.message.method !== "thread/tokenUsage/updated"
-    ) {
-      return null;
-    }
-    const threadId = extractThreadIdFromParams(event.message.params);
-    if (!threadId) {
-      return null;
-    }
-    return this.nextContextUsageObservation(contextUsageKey(event.runtimeId, threadId));
-  }
-
-  private nextContextUsageObservation(key: string): ContextUsageObservation {
-    const generation = (this.contextUsageObservationGenerationByKey.get(key) ?? 0) + 1;
-    this.contextUsageObservationGenerationByKey.set(key, generation);
-    return { key, generation };
-  }
-
-  private releaseRuntimeContextUsage(runtimeId: string, error: Error): void {
-    for (const [key] of this.latestContextUsageByKey) {
-      const parsed = JSON.parse(key) as [string, string];
-      if (parsed[0] === runtimeId) {
-        this.latestContextUsageByKey.delete(key);
-      }
-    }
-    for (const key of this.contextUsageObservationGenerationByKey.keys()) {
-      const parsed = JSON.parse(key) as [string, string];
-      if (parsed[0] === runtimeId) {
-        this.contextUsageObservationGenerationByKey.delete(key);
-      }
-    }
-    for (const recovery of this.contextUsageRecoveriesByKey.values()) {
-      if (recovery.runtimeId === runtimeId) {
-        recovery.rejectReleased(error);
-      }
-    }
-  }
-
   latestTodos(externalSessionId: string): AgentSessionTodoItem[] | undefined {
     return this.latestTodosBySessionId.get(externalSessionId);
   }
@@ -494,32 +274,10 @@ export class CodexRuntimeSessionEvents {
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
-    this.clearSessionContextUsage(externalSessionId, runtimeId);
+    this.contextUsage.clearSession(externalSessionId, runtimeId);
     this.clearTurnScopedMap(this.completedAgentMessagesByTurnKey, externalSessionId);
     this.clearTurnScopedMap(this.tokenUsageByTurnKey, externalSessionId);
     this.clearTurnScopedMap(this.modelByTurnKey, externalSessionId);
-  }
-
-  private clearSessionContextUsage(threadId: string, runtimeId?: string): void {
-    for (const [key] of this.latestContextUsageByKey) {
-      const [retainedRuntimeId, retainedThreadId] = JSON.parse(key) as [string, string];
-      if (retainedThreadId === threadId && (!runtimeId || retainedRuntimeId === runtimeId)) {
-        this.latestContextUsageByKey.delete(key);
-      }
-    }
-    for (const key of this.contextUsageObservationGenerationByKey.keys()) {
-      const [retainedRuntimeId, retainedThreadId] = JSON.parse(key) as [string, string];
-      if (retainedThreadId === threadId && (!runtimeId || retainedRuntimeId === runtimeId)) {
-        this.contextUsageObservationGenerationByKey.delete(key);
-      }
-    }
-    for (const recovery of this.contextUsageRecoveriesByKey.values()) {
-      if (recovery.threadId === threadId && (!runtimeId || recovery.runtimeId === runtimeId)) {
-        recovery.rejectReleased(
-          new Error(`Codex session '${threadId}' was released while context usage was loading.`),
-        );
-      }
-    }
   }
 
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean {
@@ -645,7 +403,7 @@ export class CodexRuntimeSessionEvents {
 
   private async handleRuntimeStreamEvent(
     event: CodexRuntimeStreamEvent,
-    contextUsageObservation: ContextUsageObservation | null,
+    contextUsageObservation: CodexContextUsageObservation | null,
   ): Promise<void> {
     this.assertRuntimeStreamEventReceivedAt(event);
     if (event.kind === "notification") {
@@ -660,7 +418,7 @@ export class CodexRuntimeSessionEvents {
     }
     if (event.kind === "notification") {
       const notification = parseNotificationRecord(event.message, event.receivedAt);
-      this.observeContextUsageNotification(event.runtimeId, notification, contextUsageObservation);
+      this.contextUsage.observeNotification(event.runtimeId, notification, contextUsageObservation);
       if (notification.method === "serverRequest/resolved") {
         this.handleServerRequestResolvedNotification(event.runtimeId, notification);
         return;
@@ -1056,9 +814,7 @@ export class CodexRuntimeSessionEvents {
     const sessionRef = codexSessionRef(session);
     const normalizedEvent = withAgentSessionRef(sessionRef, event);
     this.deps.sessionEvents.emit(sessionRef, normalizedEvent);
-    if (
-      LIVE_TRANSCRIPT_EVENT_TYPES.has(normalizedEvent.type as AgentSessionTranscriptEvent["type"])
-    ) {
+    if (isAgentSessionTranscriptEventType(normalizedEvent.type)) {
       this.activeMutationByRuntimeId
         .get(session.runtimeId)
         ?.transcriptEvents.push(normalizedEvent as AgentSessionTranscriptEvent);

@@ -36,6 +36,7 @@ type BrowserSseListenerRegistration = {
   channel: HostEventChannel;
   listener: BrowserSseListener;
   receivesControlEvents: boolean;
+  onReplayGap?: (message: string) => void;
 };
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -209,16 +210,16 @@ const parseHostEvent = (raw: string): { channel: string; payload: unknown } => {
   return { channel: record.channel, payload: record.payload };
 };
 
-const dispatchBrowserSseWarning = (
-  listeners: Iterable<BrowserSseListener>,
-  warningPayload: unknown,
+const dispatchBrowserSseListeners = <Payload>(
+  listeners: Iterable<(payload: Payload) => void>,
+  payload: Payload,
 ): void => {
   let didListenerThrow = false;
   let firstListenerError: unknown;
 
   for (const currentListener of listeners) {
     try {
-      currentListener(warningPayload);
+      currentListener(payload);
     } catch (error) {
       if (!didListenerThrow) {
         firstListenerError = error;
@@ -253,6 +254,7 @@ const subscribeSseChannelEffect = (
   eventChannel: HostEventChannel,
   listener: BrowserSseListener,
   receivesControlEvents = false,
+  onReplayGap?: (message: string) => void,
 ): Effect.Effect<BrowserSseSubscription, WebError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
@@ -273,15 +275,12 @@ const subscribeSseChannelEffect = (
       });
       const listeners = new Map<number, BrowserSseListenerRegistration>();
       let hasOpened = false;
-      let hasReportedPostOpenError = false;
+      let hasReportedConnectionError = false;
       let transportEpoch: string | null = null;
       let resolveReady: () => void = () => {};
-      let rejectReady: (error: unknown) => void = () => {};
-      const ready = new Promise<void>((resolve, reject) => {
+      const ready = new Promise<void>((resolve) => {
         resolveReady = resolve;
-        rejectReady = reject;
       });
-      void ready.catch(() => {});
       const handleMessage = (event: MessageEvent<string>): void => {
         const hostEvent = parseHostEvent(event.data);
         for (const registration of listeners.values()) {
@@ -295,11 +294,11 @@ const subscribeSseChannelEffect = (
         nextSseTransportEpoch += 1;
         if (!hasOpened) {
           hasOpened = true;
-          hasReportedPostOpenError = false;
+          hasReportedConnectionError = false;
           resolveReady();
           return;
         }
-        hasReportedPostOpenError = false;
+        hasReportedConnectionError = false;
         for (const registration of listeners.values()) {
           if (registration.receivesControlEvents) {
             registration.listener(
@@ -308,48 +307,52 @@ const subscribeSseChannelEffect = (
           }
         }
       };
-      const handleError = (event: Event): void => {
+      const handleError = (): void => {
+        if (hasReportedConnectionError) {
+          return;
+        }
         if (hasOpened) {
-          if (hasReportedPostOpenError) {
-            return;
-          }
           const warningPayload = browserLiveControlEvent(
             BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
             `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`,
           );
           try {
-            dispatchBrowserSseWarning(
+            dispatchBrowserSseListeners(
               [...listeners.values()]
                 .filter((registration) => registration.receivesControlEvents)
                 .map((registration) => registration.listener),
               warningPayload,
             );
           } finally {
-            hasReportedPostOpenError = true;
+            hasReportedConnectionError = true;
           }
           return;
         }
-        rejectReady(
-          new WebDependencyError({
-            dependency: "event-source",
-            operation: "await-ready",
-            message: `EventSource failed before opening ${HOST_EVENT_STREAM_PATH}.`,
-            cause: event,
-            details: { path: HOST_EVENT_STREAM_PATH },
-          }),
+        dispatchBrowserSseListeners(
+          [...listeners.values()]
+            .filter((registration) => registration.receivesControlEvents)
+            .map((registration) => registration.listener),
+          browserLiveControlEvent(
+            BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+            `EventSource ${HOST_EVENT_STREAM_PATH} reported an error before opening.`,
+          ),
         );
+        hasReportedConnectionError = true;
       };
       const handleStreamWarning = (event: MessageEvent<string>): void => {
         const warningPayload = browserLiveControlEvent(
           BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
           event.data,
         );
-        dispatchBrowserSseWarning(
-          [...listeners.values()]
-            .filter((registration) => registration.receivesControlEvents)
-            .map((registration) => registration.listener),
-          warningPayload,
+        const replayGapListeners = [...listeners.values()].flatMap((registration) =>
+          registration.onReplayGap ? [registration.onReplayGap] : [],
         );
+        const controlListeners = [...listeners.values()]
+          .filter((registration) => registration.receivesControlEvents)
+          .map((registration) => (_message: string): void => {
+            registration.listener(warningPayload);
+          });
+        dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], event.data);
       };
 
       eventSource.addEventListener("message", handleMessage as EventListener);
@@ -371,7 +374,12 @@ const subscribeSseChannelEffect = (
 
     const listenerId = nextSseListenerId;
     nextSseListenerId += 1;
-    channel.listeners.set(listenerId, { channel: eventChannel, listener, receivesControlEvents });
+    channel.listeners.set(listenerId, {
+      channel: eventChannel,
+      listener,
+      receivesControlEvents,
+      ...(onReplayGap ? { onReplayGap } : {}),
+    });
     const activeChannel = channel;
     const subscriptionReady = activeChannel.ready.then(() => {
       const transportEpoch = activeChannel.readTransportEpoch();
@@ -414,10 +422,11 @@ export const subscribeLocalHostRunEvents = async (
 const subscribeReadyLocalHostEventsEffect = (
   channel: HostEventChannel,
   listener: (payload: unknown) => void,
+  onReplayGap?: (message: string) => void,
 ): Effect.Effect<DevServerEventSubscription, WebError> =>
   Effect.gen(function* () {
     yield* ensureLocalHostSessionDedupedEffect();
-    const subscription = yield* subscribeSseChannelEffect(channel, listener, true);
+    const subscription = yield* subscribeSseChannelEffect(channel, listener, true, onReplayGap);
     const readyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
@@ -515,6 +524,9 @@ export const observeLocalHostAgentSessions = async (
           }
           const envelope = agentSessionLiveEnvelopeSchema.parse(payload);
           attachment.accept(envelope);
+        },
+        (message) => {
+          listener({ type: "transcript_gap", repoPath: input.repoPath, message });
         },
       );
       const initialRefreshExit = yield* Effect.exit(

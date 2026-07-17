@@ -10,11 +10,27 @@ type SessionHistoryLoadPolicySession = Pick<
 
 export type SessionHistoryLoadPolicy = {
   canClaimLoad(session: SessionHistoryLoadPolicySession): boolean;
+  propagateFailure: boolean;
+  abandonLoad(session: AgentSessionState): AgentSessionState;
+  failLoad(session: AgentSessionState): AgentSessionState;
   applyLoadedHistory(
     session: AgentSessionState,
     history: AgentSessionHistoryMessage[],
   ): AgentSessionState;
 };
+
+const abandonBaselineLoad = (session: AgentSessionState): AgentSessionState =>
+  session.historyLoadState === "loading"
+    ? { ...session, historyLoadState: "not_requested" }
+    : session;
+
+const failBaselineLoad = (session: AgentSessionState): AgentSessionState =>
+  session.historyLoadState === "loaded" ? session : { ...session, historyLoadState: "failed" };
+
+const restoreLoadedHistoryState = (session: AgentSessionState): AgentSessionState => ({
+  ...session,
+  historyLoadState: "loaded",
+});
 
 export const shouldRequestSelectedSessionBaselineHistory = (
   session: SessionHistoryLoadPolicySession,
@@ -22,10 +38,24 @@ export const shouldRequestSelectedSessionBaselineHistory = (
 
 export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
   canClaimLoad: (session) => !hasLoadedSessionHistory(session),
+  propagateFailure: false,
+  abandonLoad: abandonBaselineLoad,
+  failLoad: failBaselineLoad,
   applyLoadedHistory: applyLoadedSessionHistory,
 };
 
 export const selectedSessionBaselineHistoryLoadPolicy: SessionHistoryLoadPolicy = {
   canClaimLoad: shouldRequestSelectedSessionBaselineHistory,
+  propagateFailure: false,
+  abandonLoad: abandonBaselineLoad,
+  failLoad: failBaselineLoad,
+  applyLoadedHistory: applyLoadedSessionHistory,
+};
+
+export const transcriptGapRecoveryHistoryLoadPolicy: SessionHistoryLoadPolicy = {
+  canClaimLoad: hasLoadedSessionHistory,
+  propagateFailure: true,
+  abandonLoad: restoreLoadedHistoryState,
+  failLoad: restoreLoadedHistoryState,
   applyLoadedHistory: applyLoadedSessionHistory,
 };

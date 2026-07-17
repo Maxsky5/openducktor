@@ -87,6 +87,7 @@ const createActivityStore = (
     },
     getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
     getSessionSnapshot: (): AgentSessionState | null => null,
+    listSessionSnapshots: (): AgentSessionState[] => [],
     getVisiblePendingInputSnapshot: () => EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT,
     commitSessionCollection: () => {
       throw new Error("commitSessionCollection is not used in this test");

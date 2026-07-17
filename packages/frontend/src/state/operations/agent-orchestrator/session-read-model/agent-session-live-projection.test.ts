@@ -269,6 +269,34 @@ describe("agent session live projection", () => {
     expect(getAgentSession(next, identity("thread-2"))?.pendingApprovals).toEqual([approval]);
   });
 
+  test("does not overwrite transcript-owned lifecycle status during a live upsert", () => {
+    const tasks = taskSessionRecords({ taskId: "task-1", record: record("thread-1") });
+    const initial = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: tasks,
+      snapshots: [snapshot("thread-1")],
+    });
+    const current = getAgentSession(initial, identity("thread-1"));
+    if (!current) {
+      throw new Error("Expected projected session.");
+    }
+    const transcriptMarkedRunning = replaceAgentSession(initial, {
+      ...current,
+      status: "running",
+    });
+
+    const afterIdleSnapshot = applyAgentSessionLiveDelta({
+      current: transcriptMarkedRunning,
+      taskSessionRecords: tasks,
+      envelope: {
+        type: "session_upsert",
+        session: snapshot("thread-1", { activity: "idle" }),
+      },
+    });
+
+    expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("running");
+  });
+
   test.each([
     "stopped",
     "error",
