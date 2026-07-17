@@ -6,11 +6,17 @@ import type { WorkspaceSettingsService } from "../../workspaces/workspace-settin
 import type { TaskService } from "../task-service";
 import { createTaskSyncService } from "./task-sync-service";
 
-const sleep = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, durationMs));
+type TaskSyncServiceTestInput = Omit<
+  Parameters<typeof createTaskSyncService>[0],
+  "onBackgroundFailure"
+> &
+  Partial<Pick<Parameters<typeof createTaskSyncService>[0], "onBackgroundFailure">>;
 
-const createTaskSyncServiceForTest = (input: Parameters<typeof createTaskSyncService>[0]) =>
-  createTaskSyncService(input);
+const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
+  createTaskSyncService({
+    ...input,
+    onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
+  });
 const createEventBus = () => {
   const events: Array<{
     channel: string;
@@ -186,22 +192,26 @@ describe("createTaskSyncService", () => {
     await Effect.runPromise(loop.stop());
     expect(calls).toEqual([]);
   });
-  test("executes lifecycle logging Effects and returns logging failures from the loop owner", async () => {
+  test("reports lifecycle logging failures to the live owner before shutdown", async () => {
     const { eventBus } = createEventBus();
     const persistenceError = new HostOperationError({
       operation: "host.lifecycle.log-error",
       message: "persistent task-sync log failed",
     });
-    let loggerEffects = 0;
+    let resolveFailureReported: (failure: HostOperationError) => void = () => {};
+    const failureReported = new Promise<HostOperationError>((resolve) => {
+      resolveFailureReported = resolve;
+    });
     const service = createTaskSyncServiceForTest({
       eventBus,
-      intervalMs: 1,
+      intervalMs: 0,
       logger: {
-        error: () =>
-          Effect.sync(() => {
-            loggerEffects += 1;
-          }).pipe(Effect.zipRight(Effect.fail(persistenceError))),
+        error: () => Effect.fail(persistenceError),
       },
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          resolveFailureReported(failure);
+        }),
       taskService: createTaskServiceFake({
         repoPullRequestSyncDetailed() {
           return Effect.succeed({ ran: true, changedTaskIds: [] });
@@ -220,9 +230,13 @@ describe("createTaskSyncService", () => {
     });
 
     const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
-    await sleep(20);
+    const reportedFailure = await failureReported;
 
-    expect(loggerEffects).toBe(1);
+    expect(reportedFailure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "task-sync.log-iteration-failure",
+      cause: persistenceError,
+    });
     const stopResult = await Effect.runPromise(Effect.either(loop.stop()));
     expect(stopResult._tag).toBe("Left");
     if (stopResult._tag === "Right") {
@@ -233,6 +247,122 @@ describe("createTaskSyncService", () => {
       operation: "task-sync.log-iteration-failure",
       cause: persistenceError,
     });
+  });
+  test("waits for an admitted lifecycle log append before shutdown completes", async () => {
+    const { eventBus } = createEventBus();
+    let resolveLogStarted: () => void = () => {};
+    const logStarted = new Promise<void>((resolve) => {
+      resolveLogStarted = resolve;
+    });
+    let releaseLog: () => void = () => {};
+    const logReleased = new Promise<void>((resolve) => {
+      releaseLog = resolve;
+    });
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      intervalMs: 0,
+      logger: {
+        error: () =>
+          Effect.promise(async () => {
+            resolveLogStarted();
+            await logReleased;
+          }),
+      },
+      onBackgroundFailure: () => Effect.void,
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed() {
+          return Effect.succeed({ ran: true, changedTaskIds: [] });
+        },
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.task-sync.list-workspaces",
+              message: "workspace read failed",
+            }),
+          );
+        },
+      }),
+    });
+
+    const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
+    await logStarted;
+    let stopSettled = false;
+    const stopPromise = Effect.runPromise(loop.stop()).finally(() => {
+      stopSettled = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(stopSettled).toBe(false);
+    releaseLog();
+    await stopPromise;
+  });
+  test("does not lose an admitted lifecycle logging failure racing shutdown", async () => {
+    const { eventBus } = createEventBus();
+    const persistenceError = new HostOperationError({
+      operation: "host.lifecycle.log-error",
+      message: "persistent task-sync log failed during shutdown",
+    });
+    let resolveLogStarted: () => void = () => {};
+    const logStarted = new Promise<void>((resolve) => {
+      resolveLogStarted = resolve;
+    });
+    let releaseLog: () => void = () => {};
+    const logReleased = new Promise<void>((resolve) => {
+      releaseLog = resolve;
+    });
+    const reportedFailures: HostOperationError[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      intervalMs: 0,
+      logger: {
+        error: () =>
+          Effect.promise(async () => {
+            resolveLogStarted();
+            await logReleased;
+          }).pipe(Effect.zipRight(Effect.fail(persistenceError))),
+      },
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          reportedFailures.push(failure);
+        }),
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed() {
+          return Effect.succeed({ ran: true, changedTaskIds: [] });
+        },
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.task-sync.list-workspaces",
+              message: "workspace read failed",
+            }),
+          );
+        },
+      }),
+    });
+
+    const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
+    await logStarted;
+    let stopSettled = false;
+    const stopPromise = Effect.runPromise(Effect.either(loop.stop())).finally(() => {
+      stopSettled = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(stopSettled).toBe(false);
+    releaseLog();
+    const stopResult = await stopPromise;
+    expect(stopResult._tag).toBe("Left");
+    expect(reportedFailures).toEqual([
+      expect.objectContaining({
+        _tag: "HostOperationError",
+        operation: "task-sync.log-iteration-failure",
+        cause: persistenceError,
+      }),
+    ]);
   });
   test("stops without waiting for an in-flight pull request sync iteration", async () => {
     const { eventBus, events } = createEventBus();
@@ -285,13 +415,7 @@ describe("createTaskSyncService", () => {
     await syncStarted;
 
     try {
-      const stopPromise = Effect.runPromise(loop.stop()).then(() => "stopped" as const);
-      const stopBeforeRelease = await Promise.race([
-        stopPromise,
-        sleep(50).then(() => "waiting" as const),
-      ]);
-
-      expect(stopBeforeRelease).toBe("stopped");
+      await Effect.runPromise(loop.stop());
       expect(events).toEqual([]);
       releaseSync();
       await syncFinished;

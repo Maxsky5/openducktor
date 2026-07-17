@@ -88,6 +88,7 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   eventBus?: HostEventBusPort;
   lifecycleLogger?: HostLifecycleLogger;
   mcpHostBridge?: McpHostBridgeServer;
+  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   runtimeRegistry?: RuntimeRegistryPort;
   taskStore?: TaskStorePort;
 };
@@ -105,6 +106,7 @@ export const createNodeEffectHostCommandRouter = (
     eventBus,
     lifecycleLogger = defaultLifecycleLogger,
     mcpHostBridge,
+    onBackgroundFailure,
     runtimeRegistry,
     taskStore: configuredTaskStore,
   } = input;
@@ -275,6 +277,7 @@ export const createNodeEffectHostCommandRouter = (
     ? createTaskSyncService({
         eventBus,
         logger: lifecycleLogger,
+        onBackgroundFailure,
         taskService,
         workspaceSettingsService,
       })

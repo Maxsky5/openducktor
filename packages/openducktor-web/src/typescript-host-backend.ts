@@ -33,6 +33,7 @@ export type TypescriptHostBackendOptions = {
   controlToken: string;
   appToken: string;
   logger: WebLogger;
+  onBackgroundFailure(failure: unknown): void;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
 };
@@ -619,6 +620,7 @@ export const startTypescriptHostBackendEffect = ({
   controlToken,
   appToken,
   logger,
+  onBackgroundFailure,
   providedToolPaths,
   runtimeDistribution,
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
@@ -629,6 +631,18 @@ export const startTypescriptHostBackendEffect = ({
     const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
     const eventBus = new BufferedHostEventBus();
     const localAttachments = createLocalAttachmentAdapter();
+    let shutdownStarted = false;
+    const beginShutdown = (): void => {
+      shutdownStarted = true;
+    };
+    let stopPromise: Promise<void> | null = null;
+    let rejectExited: (failure: unknown) => void = () => {};
+    let resolveExited: (exitCode: number) => void = () => {};
+    let server: TypescriptHostBackendServer;
+    const exited = new Promise<number>((resolve, reject) => {
+      rejectExited = reject;
+      resolveExited = resolve;
+    });
     const hostCommandRouter: EffectHostCommandRouter = createNodeEffectHostCommandRouter({
       eventBus,
       lifecycleLogger: {
@@ -636,18 +650,13 @@ export const startTypescriptHostBackendEffect = ({
         info: logger.info,
       },
       localAttachments,
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          rejectExited(failure);
+          onBackgroundFailure(failure);
+        }),
       ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
-    });
-    let shutdownStarted = false;
-    const beginShutdown = (): void => {
-      shutdownStarted = true;
-    };
-    let stopPromise: Promise<void> | null = null;
-    let resolveExited: (exitCode: number) => void = () => {};
-    let server: TypescriptHostBackendServer;
-    const exited = new Promise<number>((resolve) => {
-      resolveExited = resolve;
     });
 
     const stop = async (): Promise<void> => {

@@ -34,6 +34,7 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
 
 const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) =>
   createProductionElectronHostCommandRouter({
+    onBackgroundFailure: () => Effect.void,
     processEnv: { PATH: "/usr/bin:/bin" },
     runtimeDistribution: testRuntimeDistribution,
     ...input,

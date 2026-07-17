@@ -140,6 +140,7 @@ describe("TypeScript web host backend", () => {
         controlToken: CONTROL_TOKEN,
         appToken: APP_TOKEN,
         logger,
+        onBackgroundFailure: () => {},
         runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
       });
       const backendUrl = `http://127.0.0.1:${backend.port}`;

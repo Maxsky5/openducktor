@@ -421,6 +421,7 @@ export const runLauncherEffect = (
         frontendOrigin: frontendUrl,
         controlToken,
         appToken,
+        onBackgroundFailure: defaultWebSignalProcessBoundary.reportFailure,
         providedToolPaths,
         runtimeDistribution,
         logger,

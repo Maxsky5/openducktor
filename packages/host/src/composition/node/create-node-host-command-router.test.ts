@@ -7,7 +7,10 @@ import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostLifecycleLogger } from "../host-lifecycle";
-import { createNodeEffectHostCommandRouter } from "./create-node-host-command-router";
+import {
+  type CreateNodeHostCommandRouterInput,
+  createNodeEffectHostCommandRouter,
+} from "./create-node-host-command-router";
 
 const runtimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../../../.."),
@@ -47,12 +50,14 @@ const createLogger = () => {
 const createRouter = (input: {
   eventBus?: HostEventBusPort;
   logger: HostLifecycleLogger;
+  onBackgroundFailure?: CreateNodeHostCommandRouterInput["onBackgroundFailure"];
   runtimeRegistry?: RuntimeRegistryPort;
 }) =>
   createNodeEffectHostCommandRouter({
     ...(input.eventBus ? { eventBus: input.eventBus } : {}),
     lifecycleLogger: input.logger,
     mcpHostBridge: createMcpHostBridge(),
+    onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     runtimeDistribution,
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
     taskStore: {} as TaskStorePort,

@@ -194,6 +194,10 @@ const createElectronHostCommandRouter = (
     clientVersion: app.getVersion(),
     eventBus: hostEventBus,
     lifecycleLogger: electronMainLogger,
+    onBackgroundFailure: (failure) =>
+      Effect.sync(() => {
+        reportElectronMainFatalFailure(failure);
+      }),
     runtimeDistribution,
   });
 

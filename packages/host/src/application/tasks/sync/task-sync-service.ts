@@ -1,5 +1,5 @@
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { Cause, Effect, Fiber, Option, Ref } from "effect";
+import { type Cause, Deferred, Effect, Exit, Fiber, Ref } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { HostEventBusPort } from "../../../events/host-event-bus";
 import type {
@@ -32,6 +32,7 @@ export type CreateTaskSyncServiceInput = {
   eventIdFactory?: () => string;
   intervalMs?: number;
   logger?: TaskSyncLifecycleLogger;
+  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   taskService: Pick<TaskService, "repoPullRequestSyncDetailed">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "listWorkspaces">;
 };
@@ -42,6 +43,11 @@ type PullRequestSyncResult = {
   changedTaskIds: string[];
   repoPath: string;
 } | null;
+type TaskSyncLoopState = {
+  activeLog: Deferred.Deferred<void, HostOperationError> | null;
+  stopped: boolean;
+  terminalLogCause: Cause.Cause<HostOperationError> | null;
+};
 const nowIso = (): string => new Date().toISOString();
 const buildExternalTaskCreatedEvent = (
   eventIdFactory: () => string,
@@ -70,6 +76,7 @@ export const createTaskSyncService = ({
   eventIdFactory = () => crypto.randomUUID(),
   intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
   logger = defaultTaskSyncLifecycleLogger,
+  onBackgroundFailure,
   taskService,
   workspaceSettingsService,
 }: CreateTaskSyncServiceInput): TaskSyncService => {
@@ -112,41 +119,71 @@ export const createTaskSyncService = ({
     return publish(buildTasksUpdatedEvent(eventIdFactory, result.repoPath, result.changedTaskIds));
   };
   const publishPullRequestSyncResultIfRunning = (
-    stopped: Ref.Ref<boolean>,
+    state: Ref.Ref<TaskSyncLoopState>,
     result: PullRequestSyncResult,
   ): Effect.Effect<void, HostOperationError> => {
-    return Ref.get(stopped).pipe(
-      Effect.flatMap((isStopped) =>
-        isStopped ? Effect.void : publishPullRequestSyncResult(result),
+    return Ref.get(state).pipe(
+      Effect.flatMap(({ stopped }) =>
+        stopped ? Effect.void : publishPullRequestSyncResult(result),
       ),
     );
   };
   const syncActiveWorkspacePullRequests = () =>
     readActiveWorkspacePullRequestSync().pipe(Effect.flatMap(publishPullRequestSyncResult));
-  const runPullRequestSyncLoopIteration = (stopped: Ref.Ref<boolean>) =>
-    readActiveWorkspacePullRequestSync().pipe(
-      Effect.flatMap((result) => publishPullRequestSyncResultIfRunning(stopped, result)),
-      Effect.catchAll((error) =>
-        logger
-          .error(
-            `Pull request sync iteration failed; the scheduler will retry on the next interval: ${error instanceof Error ? error.message : String(error)}`,
-          )
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new HostOperationError({
-                  operation: "task-sync.log-iteration-failure",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause,
-                }),
+  const writePullRequestSyncIterationFailure = (
+    state: Ref.Ref<TaskSyncLoopState>,
+    error: TaskSyncError,
+  ): Effect.Effect<void, HostOperationError> =>
+    Effect.uninterruptible(
+      Effect.gen(function* () {
+        const completion = yield* Deferred.make<void, HostOperationError>();
+        const admitted = yield* Ref.modify(state, (current) => {
+          if (current.stopped) {
+            return [false, current];
+          }
+          return [true, { ...current, activeLog: completion }];
+        });
+        if (!admitted) {
+          return;
+        }
+
+        const ownedLogExit = yield* Effect.exit(
+          logger
+            .error(
+              `Pull request sync iteration failed; the scheduler will retry on the next interval: ${error instanceof Error ? error.message : String(error)}`,
+            )
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation: "task-sync.log-iteration-failure",
+                    message: cause instanceof Error ? cause.message : String(cause),
+                    cause,
+                  }),
+              ),
+              Effect.tapError(onBackgroundFailure),
             ),
-          ),
-      ),
+        );
+        yield* Ref.update(state, (current) => ({
+          ...current,
+          activeLog: null,
+          terminalLogCause: Exit.isFailure(ownedLogExit) ? ownedLogExit.cause : null,
+        }));
+        yield* Deferred.done(completion, ownedLogExit);
+        if (Exit.isFailure(ownedLogExit)) {
+          return yield* Effect.failCause(ownedLogExit.cause);
+        }
+      }),
     );
-  const runPullRequestSyncLoop = (stopped: Ref.Ref<boolean>) =>
+  const runPullRequestSyncLoopIteration = (state: Ref.Ref<TaskSyncLoopState>) =>
+    readActiveWorkspacePullRequestSync().pipe(
+      Effect.flatMap((result) => publishPullRequestSyncResultIfRunning(state, result)),
+      Effect.catchAll((error) => writePullRequestSyncIterationFailure(state, error)),
+    );
+  const runPullRequestSyncLoop = (state: Ref.Ref<TaskSyncLoopState>) =>
     Effect.forever(
       Effect.sleep(`${intervalMs} millis`).pipe(
-        Effect.zipRight(runPullRequestSyncLoopIteration(stopped)),
+        Effect.zipRight(runPullRequestSyncLoopIteration(state)),
       ),
     );
   return {
@@ -162,20 +199,28 @@ export const createTaskSyncService = ({
     syncActiveWorkspacePullRequests,
     startPullRequestSyncLoop() {
       return Effect.gen(function* () {
-        const stopped = yield* Ref.make(false);
-        const fiber = yield* Effect.forkDaemon(runPullRequestSyncLoop(stopped));
+        const state = yield* Ref.make<TaskSyncLoopState>({
+          activeLog: null,
+          stopped: false,
+          terminalLogCause: null,
+        });
+        const fiber = yield* Effect.forkDaemon(runPullRequestSyncLoop(state));
         return {
           stop: () =>
             Effect.gen(function* () {
-              yield* Ref.set(stopped, true);
-              const completed = yield* Fiber.poll(fiber);
+              const shutdown = yield* Ref.modify(state, (current) => [
+                {
+                  activeLog: current.activeLog,
+                  terminalLogCause: current.terminalLogCause,
+                },
+                { ...current, stopped: true },
+              ]);
               yield* Fiber.interruptFork(fiber);
-              if (Option.isNone(completed) || completed.value._tag === "Success") {
-                return;
+              if (shutdown.activeLog) {
+                return yield* Deferred.await(shutdown.activeLog);
               }
-              const failure = Cause.failureOption(completed.value.cause);
-              if (Option.isSome(failure)) {
-                return yield* Effect.fail(failure.value);
+              if (shutdown.terminalLogCause) {
+                return yield* Effect.failCause(shutdown.terminalLogCause);
               }
             }),
         };
