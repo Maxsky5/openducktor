@@ -3,34 +3,41 @@ import {
   encodeTerminalProtocolFrame,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
-  type TerminalServerMessage,
 } from "@openducktor/contracts";
 import type {
   TerminalBridge,
   TerminalTransportConnection,
   TerminalTransportState,
 } from "@/lib/shell-bridge";
+import {
+  createTerminalTransportChannelRegistry,
+  type TerminalFrameListener,
+} from "./terminal-transport-channel-registry";
 
-export type TerminalFrameListener = (message: TerminalServerMessage, payload: Uint8Array) => void;
+export type { TerminalFrameListener } from "./terminal-transport-channel-registry";
 
 export type TerminalTransportController = ReturnType<typeof createTerminalTransportController>;
+
+type TerminalConnectionState =
+  | { status: "disconnected" }
+  | {
+      status: "connecting";
+      generation: number;
+      pending: Promise<TerminalTransportConnection>;
+    }
+  | { status: "connected"; generation: number; connection: TerminalTransportConnection }
+  | { status: "disposed" };
 
 export const createTerminalTransportController = (
   bridge: TerminalBridge,
   onStateChange: (state: TerminalTransportState) => void,
   onProtocolFailure: (failure: TerminalFailure) => void = () => undefined,
 ) => {
-  const listeners = new Map<string, Set<TerminalFrameListener>>();
-  const consumedSequences = new Map<string, number>();
-  const terminalOperationQueues = new Map<string, Promise<void>>();
-  const closingTerminals = new Set<string>();
-  const discardedTerminalOperations = new Set<string>();
-  let connection: TerminalTransportConnection | null = null;
-  let pendingConnection: Promise<TerminalTransportConnection> | null = null;
+  const terminalChannels = createTerminalTransportChannelRegistry();
+  let connectionState: TerminalConnectionState = { status: "disconnected" };
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
   let connectionGeneration = 0;
-  let disposed = false;
   const emptyPayload: Uint8Array = new Uint8Array(0);
 
   const reportConnectionFailure = (cause: unknown): void => {
@@ -46,12 +53,16 @@ export const createTerminalTransportController = (
     await activeConnection?.close();
   };
 
+  const activeConnection = (): TerminalTransportConnection | null =>
+    connectionState.status === "connected" ? connectionState.connection : null;
+  const isDisposed = (): boolean => connectionState.status === "disposed";
+
   const getConnection = async (): Promise<TerminalTransportConnection> => {
-    if (connection) return connection;
-    const pending = pendingConnection;
-    if (!pending) throw new Error("Terminal transport is disconnected.");
-    const connected = await pending;
-    if (pendingConnection !== pending && connection !== connected)
+    const state = connectionState;
+    if (state.status === "connected") return state.connection;
+    if (state.status !== "connecting") throw new Error("Terminal transport is disconnected.");
+    const connected = await state.pending;
+    if (connectionState.status !== "connected" || connectionState.connection !== connected)
       throw new Error("Terminal transport is disconnected.");
     return connected;
   };
@@ -67,21 +78,7 @@ export const createTerminalTransportController = (
   const enqueueTerminalOperation = (
     terminalId: string,
     operation: () => Promise<void>,
-  ): Promise<void> => {
-    const previous = terminalOperationQueues.get(terminalId);
-    const run = (): Promise<void> =>
-      discardedTerminalOperations.has(terminalId) ? Promise.resolve() : operation();
-    const pending = previous ? previous.then(run) : run();
-    terminalOperationQueues.set(terminalId, pending);
-    const clearCompletedOperation = (): void => {
-      if (terminalOperationQueues.get(terminalId) === pending) {
-        terminalOperationQueues.delete(terminalId);
-        if (!listeners.has(terminalId)) discardedTerminalOperations.delete(terminalId);
-      }
-    };
-    void pending.then(clearCompletedOperation, clearCompletedOperation);
-    return pending;
-  };
+  ): Promise<void> => terminalChannels.enqueue(terminalId, operation);
 
   const attach = (terminalId: string): Promise<void> =>
     enqueueTerminalOperation(terminalId, () =>
@@ -89,7 +86,7 @@ export const createTerminalTransportController = (
         version: TERMINAL_PROTOCOL_VERSION,
         type: "attach",
         terminalId,
-        lastConsumedSequence: consumedSequences.get(terminalId) ?? null,
+        lastConsumedSequence: terminalChannels.lastConsumedSequence(terminalId),
       }),
     );
   const handleFrame = (frame: Uint8Array): void => {
@@ -104,21 +101,20 @@ export const createTerminalTransportController = (
       throw new Error("Terminal transport received a client-directed frame.");
     }
     if (decoded.message.type === "protocol_error" && !decoded.message.terminalId) {
-      const activeConnection = connection;
-      connection = null;
-      pendingConnection = null;
+      const failedConnection = activeConnection();
+      connectionState = { status: "disconnected" };
       onStateChange("disconnected");
       onProtocolFailure(decoded.message.failure);
-      void closeConnection(activeConnection).then(scheduleReconnect, reportConnectionFailure);
+      void closeConnection(failedConnection).then(scheduleReconnect, reportConnectionFailure);
       return;
     }
-    for (const listener of listeners.get(decoded.message.terminalId ?? "") ?? []) {
+    for (const listener of terminalChannels.listeners(decoded.message.terminalId ?? "")) {
       listener(decoded.message, decoded.payload);
     }
   };
 
   const scheduleReconnect = (): void => {
-    if (disposed || connection || pendingConnection || reconnectTimer) return;
+    if (connectionState.status !== "disconnected" || reconnectTimer) return;
     const delayMs = reconnectAttempt === 0 ? 0 : Math.min(250 * 2 ** (reconnectAttempt - 1), 2_000);
     reconnectAttempt += 1;
     reconnectTimer = setTimeout(() => {
@@ -128,9 +124,10 @@ export const createTerminalTransportController = (
   };
 
   const establishConnection = async (replaceExisting: boolean): Promise<void> => {
-    if (disposed) throw new Error("Terminal transport controller is disposed.");
-    if (!replaceExisting && (connection || pendingConnection)) {
-      if (pendingConnection) await pendingConnection;
+    if (connectionState.status === "disposed")
+      throw new Error("Terminal transport controller is disposed.");
+    if (!replaceExisting && connectionState.status !== "disconnected") {
+      if (connectionState.status === "connecting") await connectionState.pending;
       return;
     }
     if (reconnectTimer) {
@@ -139,77 +136,68 @@ export const createTerminalTransportController = (
     }
     connectionGeneration += 1;
     const generation = connectionGeneration;
-    const previousConnection = connection;
-    connection = null;
-    pendingConnection = null;
+    const previousConnection = activeConnection();
+    connectionState = { status: "disconnected" };
     if (replaceExisting && previousConnection) await closeConnection(previousConnection);
     const pending = bridge.connect(handleFrame, (state) => {
-      if (disposed || generation !== connectionGeneration) return;
+      if (connectionState.status === "disposed" || generation !== connectionGeneration) return;
       onStateChange(state);
       if (state === "disconnected") {
-        connection = null;
-        pendingConnection = null;
+        connectionState = { status: "disconnected" };
         scheduleReconnect();
       }
     });
-    pendingConnection = pending;
+    connectionState = { status: "connecting", generation, pending };
     let connected: TerminalTransportConnection;
     try {
       connected = await pending;
     } catch (cause) {
-      if (!disposed && generation === connectionGeneration) {
-        pendingConnection = null;
+      if (!isDisposed() && generation === connectionGeneration) {
+        connectionState = { status: "disconnected" };
         onStateChange("disconnected");
         scheduleReconnect();
       }
       throw cause;
     }
-    if (disposed || generation !== connectionGeneration) {
+    if (isDisposed() || generation !== connectionGeneration) {
       await closeConnection(connected);
       return;
     }
-    connection = connected;
-    pendingConnection = null;
+    connectionState = { status: "connected", generation, connection: connected };
     reconnectAttempt = 0;
-    await Promise.all([...listeners.keys()].map((terminalId) => attach(terminalId)));
+    const attachments = terminalChannels.activeTerminalIds().map(attach);
+    await Promise.all(attachments);
   };
 
   const connect = (): Promise<void> => establishConnection(true);
   const reportTransportFailure = (cause: unknown): void => {
-    if (disposed) return;
-    const activeConnection = connection;
-    connection = null;
-    pendingConnection = null;
+    if (connectionState.status === "disposed") return;
+    const failedConnection = activeConnection();
+    connectionState = { status: "disconnected" };
     onStateChange("disconnected");
     reportConnectionFailure(cause);
-    void closeConnection(activeConnection).then(scheduleReconnect, reportConnectionFailure);
+    void closeConnection(failedConnection).then(scheduleReconnect, reportConnectionFailure);
   };
 
   return {
     connect,
     subscribe(terminalId: string, listener: TerminalFrameListener): () => void {
-      const current = listeners.get(terminalId) ?? new Set<TerminalFrameListener>();
-      const shouldAttach = current.size === 0;
-      current.add(listener);
-      listeners.set(terminalId, current);
-      if (shouldAttach && connection) void attach(terminalId).catch(reportTransportFailure);
+      const shouldAttach = terminalChannels.addListener(terminalId, listener);
+      if (shouldAttach && connectionState.status === "connected")
+        void attach(terminalId).catch(reportTransportFailure);
       return () => {
-        const terminalListeners = listeners.get(terminalId);
-        terminalListeners?.delete(listener);
-        if (terminalListeners?.size === 0) {
-          listeners.delete(terminalId);
-          const isClosing = closingTerminals.delete(terminalId);
-          if (!terminalOperationQueues.has(terminalId))
-            discardedTerminalOperations.delete(terminalId);
-          if (connection && !isClosing) {
-            void enqueueTerminalOperation(terminalId, () =>
-              send({
-                version: TERMINAL_PROTOCOL_VERSION,
-                type: "detach",
-                terminalId,
-              }),
-            ).catch(reportTransportFailure);
-          }
+        const { lastListenerRemoved, wasClosing } = terminalChannels.removeListener(
+          terminalId,
+          listener,
+        );
+        if (lastListenerRemoved && connectionState.status === "connected" && !wasClosing) {
+          void enqueueTerminalOperation(terminalId, () =>
+            send({
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "detach",
+              terminalId,
+            }),
+          ).catch(reportTransportFailure);
         }
       };
     },
@@ -228,9 +216,7 @@ export const createTerminalTransportController = (
         }),
       ),
     acknowledge: async (terminalId: string, sequenceEnd: number) => {
-      const consumedSequence = consumedSequences.get(terminalId);
-      if (consumedSequence !== undefined && sequenceEnd <= consumedSequence) return;
-      consumedSequences.set(terminalId, sequenceEnd);
+      if (!terminalChannels.advanceConsumedSequence(terminalId, sequenceEnd)) return;
       await enqueueTerminalOperation(terminalId, () =>
         send({
           version: TERMINAL_PROTOCOL_VERSION,
@@ -244,39 +230,32 @@ export const createTerminalTransportController = (
       terminalId: string,
       closeHostTerminal: () => Promise<Result>,
     ): Promise<Result> {
-      closingTerminals.add(terminalId);
+      terminalChannels.beginClose(terminalId);
       try {
         const result = await closeHostTerminal();
         if (!result.closed) {
-          closingTerminals.delete(terminalId);
+          terminalChannels.cancelClose(terminalId);
           return result;
         }
-        discardedTerminalOperations.add(terminalId);
-        consumedSequences.delete(terminalId);
-        if (!listeners.has(terminalId)) closingTerminals.delete(terminalId);
+        terminalChannels.completeClose(terminalId);
         return result;
       } catch (cause) {
-        closingTerminals.delete(terminalId);
+        terminalChannels.cancelClose(terminalId);
         throw cause;
       }
     },
     releaseEmulator(terminalId: string): void {
-      if ((listeners.get(terminalId)?.size ?? 0) <= 1) consumedSequences.delete(terminalId);
+      terminalChannels.releaseEmulator(terminalId);
     },
     async dispose(): Promise<void> {
-      disposed = true;
       connectionGeneration += 1;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = null;
-      const activeConnection = connection;
-      connection = null;
-      pendingConnection = null;
-      listeners.clear();
-      terminalOperationQueues.clear();
-      closingTerminals.clear();
-      discardedTerminalOperations.clear();
+      const connectionToClose = activeConnection();
+      connectionState = { status: "disposed" };
+      terminalChannels.clear();
       onStateChange("disconnected");
-      await closeConnection(activeConnection);
+      await closeConnection(connectionToClose);
     },
   };
 };
