@@ -12,6 +12,8 @@
     "lint": "biome check src drizzle.task-store.config.ts"
   },
   "dependencies": {
+    "@openducktor/adapters-codex-app-server": "workspace:*",
+    "@openducktor/adapters-opencode-sdk": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/path-support": "workspace:*",
     "drizzle-orm": "0.45.2",

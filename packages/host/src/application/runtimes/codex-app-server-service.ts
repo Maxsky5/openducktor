@@ -6,8 +6,6 @@ import type {
   CodexAppServerPort,
   CodexAppServerRequestInput,
   CodexAppServerRequestResult,
-  CodexAppServerRespondInput,
-  CodexAppServerStreamEvent,
   CodexAppServerThreadListInput,
   CodexAppServerThreadListResponse,
 } from "../../ports/codex-app-server-port";
@@ -24,13 +22,6 @@ export type CodexAppServerService = {
   listThreads(
     input: CodexAppServerThreadListInput,
   ): Effect.Effect<CodexAppServerThreadListResponse, CodexAppServerServiceError>;
-  takeBufferedEvents(
-    input: CodexAppServerRuntimeInput,
-  ): Effect.Effect<CodexAppServerStreamEvent[], CodexAppServerServiceError>;
-  respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerServiceError>;
-};
-export type CodexAppServerRuntimeInput = {
-  runtimeId: string;
 };
 export const createCodexAppServerService = (
   codexAppServerPort: CodexAppServerPort,
@@ -38,6 +29,4 @@ export const createCodexAppServerService = (
   request: (input) => codexAppServerPort.request(input),
   listLoadedThreads: (input) => codexAppServerPort.listLoadedThreads(input),
   listThreads: (input) => codexAppServerPort.listThreads(input),
-  takeBufferedEvents: (input) => codexAppServerPort.takeBufferedEvents(input.runtimeId),
-  respond: (input) => codexAppServerPort.respond(input),
 });

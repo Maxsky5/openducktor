@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionTodoItem, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { getAgentSession } from "@/state/agent-session-collection";
-import { createSessionEventRouter } from "./session-event-router";
+import { createSessionEventRouter } from "./session-event-router.test-harness";
 import {
   type AgentSessionState,
   buildSession,

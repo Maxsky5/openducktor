@@ -250,6 +250,12 @@ describe("HostClient", () => {
       "qaRejected",
       "agentSessionsList",
       "agentSessionUpsert",
+      "agentSessionLiveList",
+      "agentSessionLiveLoadContext",
+      "agentSessionLiveRead",
+      "agentSessionLiveRefresh",
+      "agentSessionLiveReplyApproval",
+      "agentSessionLiveReplyQuestion",
       "systemCheck",
       "runtimeCheck",
       "taskStoreCheck",
@@ -259,8 +265,6 @@ describe("HostClient", () => {
       "runtimeStop",
       "runtimeEnsure",
       "codexAppServerRequest",
-      "codexAppServerRespond",
-      "takeCodexAppServerBufferedEvents",
       "buildStart",
       "buildBlocked",
       "buildResumed",
@@ -297,6 +301,101 @@ describe("HostClient", () => {
     for (const methodName of expectedMethods) {
       expect(typeof client[methodName]).toBe("function");
     }
+  });
+
+  test("uses the normalized live-session command surface", async () => {
+    const session = {
+      ref: {
+        repoPath: "/repo",
+        runtimeKind: "codex" as const,
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      activity: "idle" as const,
+      title: "Build session",
+      startedAt: "2026-07-16T10:00:00.000Z",
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "agent_session_live_refresh") {
+        return undefined;
+      }
+      if (command === "agent_session_live_list") {
+        return [session];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.agentSessionLiveRefresh({ repoPath: "/repo" });
+    await expect(client.agentSessionLiveList({ repoPath: "/repo" })).resolves.toEqual([session]);
+    expect(calls).toEqual([
+      {
+        command: "agent_session_live_refresh",
+        args: { repoPath: "/repo" },
+      },
+      { command: "agent_session_live_list", args: { repoPath: "/repo" } },
+    ]);
+  });
+
+  test("uses strict normalized session-control commands", async () => {
+    const summary = {
+      externalSessionId: "session-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      title: "Build session",
+      role: "build" as const,
+      startedAt: "2026-07-16T10:00:00.000Z",
+      status: "idle" as const,
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "agent_session_control_start") {
+        return summary;
+      }
+      if (command === "agent_session_control_stop") {
+        return undefined;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.agentSessionControlStart({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        systemPrompt: "Build the feature",
+      }),
+    ).resolves.toEqual(summary);
+    await client.agentSessionControlStop({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    });
+
+    expect(calls).toEqual([
+      {
+        command: "agent_session_control_start",
+        args: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build the feature",
+        },
+      },
+      {
+        command: "agent_session_control_stop",
+        args: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+      },
+    ]);
   });
 
   test("saveSpecDocument uses dedicated non-transition IPC route", async () => {
@@ -1586,7 +1685,7 @@ describe("HostClient", () => {
     expect(await client.taskWorktreeGet("/repo", "task-1")).toBe(null);
   });
 
-  test("codex app-server commands use expected IPC routes", async () => {
+  test("codex app-server requests use the expected IPC route", async () => {
     const modelListResponse = {
       data: [
         {
@@ -1601,35 +1700,15 @@ describe("HostClient", () => {
       nextCursor: null,
     };
     const { client, calls } = createClient((command) => {
-      switch (command) {
-        case "codex_app_server_request":
-          return modelListResponse;
-        case "codex_app_server_respond":
-          return null;
-        case "codex_app_server_take_buffered_events":
-          return [
-            {
-              runtimeId: "runtime-1",
-              kind: "notification",
-              message: { method: "codex/app-server/ready" },
-              receivedAt: "2026-02-22T09:00:00.000Z",
-            },
-          ];
-        default:
-          throw new Error(`Unexpected command: ${command}`);
+      if (command === "codex_app_server_request") {
+        return modelListResponse;
       }
+      throw new Error(`Unexpected command: ${command}`);
     });
 
     await expect(
       client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" }),
     ).resolves.toEqual(modelListResponse);
-    await client.codexAppServerRespond("runtime-1", 7, { ok: true });
-    await client.codexAppServerRespond("runtime-1", "permission-request-1", {
-      permissions: { network: { enabled: true } },
-      scope: "turn",
-    });
-    await client.takeCodexAppServerBufferedEvents("runtime-1");
-
     expect(calls).toEqual([
       {
         command: "codex_app_server_request",
@@ -1639,59 +1718,7 @@ describe("HostClient", () => {
           params: { request: "catalog" },
         },
       },
-      {
-        command: "codex_app_server_respond",
-        args: {
-          runtimeId: "runtime-1",
-          requestId: 7,
-          result: { ok: true },
-        },
-      },
-      {
-        command: "codex_app_server_respond",
-        args: {
-          runtimeId: "runtime-1",
-          requestId: "permission-request-1",
-          result: { permissions: { network: { enabled: true } }, scope: "turn" },
-        },
-      },
-      {
-        command: "codex_app_server_take_buffered_events",
-        args: { runtimeId: "runtime-1" },
-      },
     ]);
-  });
-
-  test("codex app-server buffered events reject malformed host payloads", async () => {
-    const cases = [
-      {
-        payload: [{ runtimeId: "runtime-1", kind: "invalid", message: {} }],
-        expected: "Expected Codex app-server buffered event kind",
-      },
-      {
-        payload: [{ runtimeId: "runtime-1", kind: "notification", message: {} }],
-        expected: "Expected Codex app-server buffered event receivedAt",
-      },
-      {
-        payload: [{ runtimeId: "runtime-1", kind: "notification", message: {}, receivedAt: "" }],
-        expected: "Expected Codex app-server buffered event receivedAt",
-      },
-      {
-        payload: [{ runtimeId: "runtime-1", kind: "notification", message: {}, receivedAt: 123 }],
-        expected: "Expected Codex app-server buffered event receivedAt",
-      },
-    ];
-
-    for (const { payload, expected } of cases) {
-      const { client } = createClient((command) => {
-        if (command === "codex_app_server_take_buffered_events") {
-          return payload;
-        }
-        throw new Error(`Unexpected command: ${command}`);
-      });
-
-      await expect(client.takeCodexAppServerBufferedEvents("runtime-1")).rejects.toThrow(expected);
-    }
   });
 
   test("runtime and session ack commands reject malformed host payloads", async () => {

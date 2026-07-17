@@ -15,7 +15,7 @@ import {
   buildLocalAttachmentPreviewUrl,
   createLocalHostClient,
   ensureLocalHostSessionDedupedEffect,
-  subscribeLocalHostCodexAppServerEvents,
+  observeLocalHostAgentSessions,
   subscribeLocalHostDevServerEvents,
   subscribeLocalHostRunEvents,
   subscribeLocalHostTaskEvents,
@@ -83,8 +83,8 @@ export const createBrowserShellBridge = (): ShellBridge => {
     },
     subscribeRunEvents: subscribeLocalHostRunEvents,
     subscribeDevServerEvents: subscribeLocalHostDevServerEvents,
+    observeAgentSessionLive: observeLocalHostAgentSessions,
     subscribeTaskEvents: subscribeLocalHostTaskEvents,
-    subscribeCodexAppServerEvents: subscribeLocalHostCodexAppServerEvents,
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
     resolveLocalAttachmentPreviewSrc: (path) =>
       runWebBoundary(resolveLocalAttachmentPreviewSrcEffect(client, path)),

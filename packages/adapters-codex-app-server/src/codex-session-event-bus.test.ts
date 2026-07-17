@@ -19,7 +19,7 @@ const sessionErrorEvent = (message: string): SessionErrorEvent => ({
 });
 
 describe("CodexSessionEventBus", () => {
-  test("replays buffered non-pending events to a late subscriber once", () => {
+  test("does not retain unobserved events for a late renderer subscriber", () => {
     const bus = new CodexSessionEventBus();
     const firstEvents: AgentEvent[] = [];
     const secondEvents: AgentEvent[] = [];
@@ -28,7 +28,7 @@ describe("CodexSessionEventBus", () => {
     bus.subscribe(sessionRef, (event) => firstEvents.push(event));
     bus.subscribe(sessionRef, (event) => secondEvents.push(event));
 
-    expect(firstEvents.map((event) => event.type)).toEqual(["session_error"]);
+    expect(firstEvents).toEqual([]);
     expect(secondEvents).toEqual([]);
   });
 

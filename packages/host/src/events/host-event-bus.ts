@@ -4,7 +4,7 @@ export const HOST_EVENT_CHANNELS = [
   "openducktor://run-event",
   "openducktor://dev-server-event",
   "openducktor://task-event",
-  "openducktor://codex-app-server-event",
+  "openducktor://agent-session-live-event",
 ] as const;
 
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];

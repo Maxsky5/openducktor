@@ -1,11 +1,8 @@
-import type { PolicyBoundSessionRef } from "@openducktor/core";
-import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 import type {
-  SessionDependencies,
   StartAgentSessionInput,
   StartAgentSessionResult,
   StartOrReuseResult,
@@ -35,32 +32,6 @@ const resolveFreshStartTarget = ({ input }: { input: StartAgentSessionInput }) =
     targetWorkingDirectory: input.targetWorkingDirectory,
     normalizedTargetWorkingDirectory: normalizeWorkingDirectory(input.targetWorkingDirectory),
   };
-};
-
-const observeAgentSessionAndGuard = async ({
-  startResult,
-  session,
-}: {
-  startResult: Extract<StartOrReuseResult, { kind: "started" }>;
-  session: SessionDependencies;
-}): Promise<void> => {
-  const { ctx: startedCtx, runtimeInfo } = startResult;
-  const observerTarget: PolicyBoundSessionRef = {
-    externalSessionId: startedCtx.summary.externalSessionId,
-    repoPath: startedCtx.repoPath,
-    ...toAgentRuntimePolicyBinding({
-      runtimeKind: runtimeInfo.runtimeKind,
-      runtimePolicy: startResult.runtimePolicy,
-    }),
-    workingDirectory: runtimeInfo.workingDirectory,
-  };
-
-  await session.observeAgentSession(observerTarget);
-
-  if (!startedCtx.isStaleRepoOperation()) {
-    return;
-  }
-  throw new Error(STALE_START_ERROR);
 };
 
 export const createStartAgentSession = ({
@@ -149,10 +120,9 @@ export const createStartAgentSession = ({
       let bootstrapCompletionAttempted = false;
       let bootstrapCompleted = false;
       try {
-        await observeAgentSessionAndGuard({
-          startResult,
-          session,
-        });
+        if (startResult.ctx.isStaleRepoOperation()) {
+          throw new Error(STALE_START_ERROR);
+        }
         bootstrapCompletionAttempted = !!startResult.runtimeInfo.bootstrap;
         await startResult.runtimeInfo.bootstrap?.complete();
         bootstrapCompleted = !!startResult.runtimeInfo.bootstrap;
@@ -176,7 +146,7 @@ export const createStartAgentSession = ({
           identity,
           session,
           runtime,
-          stopReason: "start-session-stop-after-observer-or-bootstrap-failure",
+          stopReason: "start-session-stop-after-bootstrap-failure",
           ...(startResult.runtimeInfo.bootstrap && !bootstrapCompleted
             ? {
                 bootstrap: startResult.runtimeInfo.bootstrap,

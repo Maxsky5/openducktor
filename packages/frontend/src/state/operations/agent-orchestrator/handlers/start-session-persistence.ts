@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentSessionRuntimePolicy } from "@openducktor/core";
+import type { AgentModelSelection } from "@openducktor/core";
 import type { RuntimeInfo } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import type {
@@ -19,7 +19,6 @@ export const registerStartedSession = async ({
   ctx,
   startedCtx,
   runtimeInfo,
-  runtimePolicy,
   systemPrompt,
   selectedModel,
   initialMessages,
@@ -29,7 +28,6 @@ export const registerStartedSession = async ({
   ctx: StartSessionContext;
   startedCtx: StartedSessionContext;
   runtimeInfo: RuntimeInfo;
-  runtimePolicy: AgentSessionRuntimePolicy;
   systemPrompt: string;
   selectedModel: AgentModelSelection;
   initialMessages?: import("@/types/agent-orchestrator").AgentSessionState["messages"];
@@ -78,7 +76,6 @@ export const registerStartedSession = async ({
   return {
     kind: "started",
     runtimeInfo,
-    runtimePolicy,
     taskCard,
     ctx: startedCtx,
   };

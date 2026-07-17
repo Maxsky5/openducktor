@@ -23,7 +23,6 @@ import { requireModelSelection, toTransportModelSelection } from "./model-catalo
 import type { CodexAppServerClient, CodexSessionState } from "./types";
 
 export type CodexTurnLifecycleContext = {
-  subscribeEvents: boolean;
   sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
@@ -36,10 +35,6 @@ export type CodexTurnLifecycleContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
-  handleBufferedRuntimeEvents(
-    session: CodexSessionState,
-    handledRequestKeys: Set<string>,
-  ): Promise<boolean>;
   emitUserMessage(
     event: AcceptedAgentUserMessage,
     sourceParts: AgentUserMessagePart[],
@@ -74,9 +69,6 @@ const emitAcceptedUserMessage = (
   acceptedUserMessage: AcceptedAgentUserMessage,
   parts: AgentUserMessagePart[],
 ): AcceptedAgentUserMessage => {
-  if (!context.subscribeEvents) {
-    return acceptedUserMessage;
-  }
   return context.emitUserMessage(acceptedUserMessage, parts);
 };
 
@@ -101,9 +93,6 @@ const steerActiveTurn = async (
   acceptedUserMessage: AcceptedAgentUserMessage,
 ): Promise<AcceptedAgentUserMessage | null> => {
   const input = toCodexTurnInputList(parts);
-  if (!activeTurn.turnId && !context.subscribeEvents) {
-    await context.handleBufferedRuntimeEvents(activeTurn.session, activeTurn.handledRequestKeys);
-  }
   if (activeTurn.isTurnSettled()) {
     return null;
   }
@@ -253,19 +242,7 @@ export const startCodexTurnForSession = async (
     });
   activeTurnState.turnStartPromise = turnStartPromise;
 
-  if (context.subscribeEvents) {
-    context.emitUserMessage(acceptedUserMessage, parts);
-    emitTurnStartErrorLater(context, session, turnStartPromise);
-    return acceptedUserMessage;
-  }
-
-  const hasPendingInput = await context.handleBufferedRuntimeEvents(session, handledRequestKeys);
-  if (hasPendingInput && !turnSettled) {
-    context.bindPendingInputToActiveTurn(session.threadId, activeTurnState);
-    emitTurnStartErrorLater(context, session, turnStartPromise);
-    return acceptedUserMessage;
-  }
-
-  await turnStartPromise;
+  context.emitUserMessage(acceptedUserMessage, parts);
+  emitTurnStartErrorLater(context, session, turnStartPromise);
   return acceptedUserMessage;
 };

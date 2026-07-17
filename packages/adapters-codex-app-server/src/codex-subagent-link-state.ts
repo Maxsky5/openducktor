@@ -412,6 +412,18 @@ export class CodexSubagentLinkState {
     }
   }
 
+  clearRuntime(runtimeId: string): void {
+    const linksToClear = new Set<CodexStoredSubagentLink>();
+    for (const link of this.linksByCorrelationKey.values()) {
+      if (link.runtimeId === runtimeId) {
+        linksToClear.add(link);
+      }
+    }
+    for (const link of linksToClear) {
+      this.deleteLink(link);
+    }
+  }
+
   private emitRouteLearned(route: CodexSubagentRoute): void {
     for (const listener of this.routeListeners) {
       listener(route);

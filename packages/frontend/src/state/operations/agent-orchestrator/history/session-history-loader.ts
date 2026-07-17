@@ -1,23 +1,18 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentSessionHistorySystemPromptContext,
-  PolicyBoundSessionRef,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
 import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
-import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import {
   requestedSessionHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
   selectedSessionBaselineHistoryLoadPolicy,
+  transcriptGapRecoveryHistoryLoadPolicy,
 } from "./session-history-load-policy";
 
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
@@ -42,7 +37,6 @@ type CreateLoadAgentSessionHistoryArgs = {
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
-  observeAgentSession?: ObserveAgentSession;
 };
 
 type SessionHistoryLoadClaim = {
@@ -68,17 +62,13 @@ const markSessionHistoryLoading = ({
     return { session: null, claimedLoad: false };
   }
 
-  if (currentSession.historyLoadState === "loaded") {
-    return { session: currentSession, claimedLoad: false };
-  }
-
   if (!policy.canClaimLoad(currentSession)) {
     return { session: currentSession, claimedLoad: false };
   }
 
   let claimedLoad = false;
   const loadingSession = updateSession(identity, (current) => {
-    if (current.historyLoadState === "loaded" || !policy.canClaimLoad(current)) {
+    if (!policy.canClaimLoad(current)) {
       claimedLoad = false;
       return current;
     }
@@ -97,23 +87,14 @@ const markSessionHistoryLoading = ({
 const resetLoadingSessionHistory = (
   identity: AgentSessionIdentity,
   updateSession: UpdateSession,
-): AgentSessionState | null =>
-  updateSession(identity, (current) =>
-    current.historyLoadState === "loading"
-      ? {
-          ...current,
-          historyLoadState: "not_requested",
-        }
-      : current,
-  );
+  policy: SessionHistoryLoadPolicy,
+): AgentSessionState | null => updateSession(identity, policy.abandonLoad);
 
 const failSessionHistoryLoad = (
   identity: AgentSessionIdentity,
   updateSession: UpdateSession,
-): AgentSessionState | null =>
-  updateSession(identity, (current) =>
-    current.historyLoadState === "loaded" ? current : { ...current, historyLoadState: "failed" },
-  );
+  policy: SessionHistoryLoadPolicy,
+): AgentSessionState | null => updateSession(identity, policy.failLoad);
 
 const buildSessionHistorySystemPromptContext = async ({
   workspaceId,
@@ -158,25 +139,7 @@ type LoadSessionHistoryIntoStoreArgs = {
   identity: AgentSessionIdentity;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
-  observeAgentSession?: ObserveAgentSession;
   isStaleRepoOperation: () => boolean;
-};
-
-const observeSelectedSessionWithoutBlockingHistory = (
-  observeAgentSession: ObserveAgentSession | undefined,
-  sessionRef: PolicyBoundSessionRef,
-): void => {
-  if (!observeAgentSession) {
-    return;
-  }
-
-  runOrchestratorSideEffect("selected-session-observe", observeAgentSession(sessionRef), {
-    tags: {
-      externalSessionId: sessionRef.externalSessionId,
-      runtimeKind: sessionRef.runtimeKind,
-      workingDirectory: sessionRef.workingDirectory,
-    },
-  });
 };
 
 const loadSessionHistoryIntoStoreWithPolicy = async ({
@@ -188,7 +151,6 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   policy,
   loadSettingsSnapshot,
   loadSystemPromptContext,
-  observeAgentSession,
   isStaleRepoOperation,
 }: LoadSessionHistoryIntoStoreArgs & {
   policy: SessionHistoryLoadPolicy;
@@ -213,7 +175,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
 
   const loadingSession = loadClaim.session;
   const finishStaleHistoryLoad = (): null => {
-    resetLoadingSessionHistory(identity, updateSession);
+    resetLoadingSessionHistory(identity, updateSession, policy);
     return null;
   };
 
@@ -223,44 +185,46 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
 
     const systemPromptContext = await loadSystemPromptContext?.(loadingSession);
-
-    if (!isStaleRepoOperation()) {
-      const sessionForHistory = readSessionSnapshot(identity);
-      if (!sessionForHistory) {
-        return finishStaleHistoryLoad();
-      }
-      const sessionRef = await resolveRuntimeSessionContextRef(
-        repoPath,
-        sessionForHistory,
-        loadSettingsSnapshot ??
-          (() => {
-            throw new Error(
-              "Settings snapshot loader is required to resolve session runtime policy.",
-            );
-          }),
-      );
-      observeSelectedSessionWithoutBlockingHistory(observeAgentSession, sessionRef);
-      if (isStaleRepoOperation()) {
-        return finishStaleHistoryLoad();
-      }
-
-      const history = await adapter.loadSessionHistory({
-        ...sessionRef,
-        ...(systemPromptContext ? { systemPromptContext } : {}),
-        limit: SESSION_HISTORY_LOAD_LIMIT,
-      });
-
-      if (!isStaleRepoOperation()) {
-        return updateSession(identity, (current) => policy.applyLoadedHistory(current, history));
-      }
-    }
-
-    return finishStaleHistoryLoad();
-  } catch {
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
-    const failedSession = failSessionHistoryLoad(identity, updateSession);
+
+    const sessionForHistory = readSessionSnapshot(identity);
+    if (!sessionForHistory) {
+      return finishStaleHistoryLoad();
+    }
+    const sessionRef = await resolveRuntimeSessionContextRef(
+      repoPath,
+      sessionForHistory,
+      loadSettingsSnapshot ??
+        (() => {
+          throw new Error(
+            "Settings snapshot loader is required to resolve session runtime policy.",
+          );
+        }),
+    );
+    if (isStaleRepoOperation()) {
+      return finishStaleHistoryLoad();
+    }
+
+    const history = await adapter.loadSessionHistory({
+      ...sessionRef,
+      ...(systemPromptContext ? { systemPromptContext } : {}),
+      limit: SESSION_HISTORY_LOAD_LIMIT,
+    });
+    if (isStaleRepoOperation()) {
+      return finishStaleHistoryLoad();
+    }
+
+    return updateSession(identity, (current) => policy.applyLoadedHistory(current, history));
+  } catch (error) {
+    if (isStaleRepoOperation()) {
+      return finishStaleHistoryLoad();
+    }
+    const failedSession = failSessionHistoryLoad(identity, updateSession, policy);
+    if (policy.propagateFailure) {
+      throw error;
+    }
     return failedSession?.historyLoadState === "loaded" ? failedSession : null;
   }
 };
@@ -281,6 +245,14 @@ export const loadSelectedSessionBaselineHistoryIntoStore = async (
     policy: selectedSessionBaselineHistoryLoadPolicy,
   });
 
+export const reloadSessionHistoryIntoStore = async (
+  args: LoadSessionHistoryIntoStoreArgs,
+): Promise<AgentSessionState | null> =>
+  loadSessionHistoryIntoStoreWithPolicy({
+    ...args,
+    policy: transcriptGapRecoveryHistoryLoadPolicy,
+  });
+
 const createLoadSessionHistoryWithPolicy = ({
   workspaceRepoPath,
   workspaceId,
@@ -292,7 +264,6 @@ const createLoadSessionHistoryWithPolicy = ({
   taskRef,
   loadRepoPromptOverrides,
   loadSettingsSnapshot,
-  observeAgentSession,
   policy,
 }: CreateLoadAgentSessionHistoryArgs & {
   policy: SessionHistoryLoadPolicy;
@@ -333,7 +304,6 @@ const createLoadSessionHistoryWithPolicy = ({
           loadRepoPromptOverrides,
         }),
       ...(loadSettingsSnapshot ? { loadSettingsSnapshot } : {}),
-      ...(observeAgentSession ? { observeAgentSession } : {}),
       isStaleRepoOperation,
     });
   };
@@ -341,13 +311,11 @@ const createLoadSessionHistoryWithPolicy = ({
 
 export const createLoadAgentSessionHistory = (
   args: CreateLoadAgentSessionHistoryArgs,
-): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
-  const { observeAgentSession: _observeAgentSession, ...loaderArgs } = args;
-  return createLoadSessionHistoryWithPolicy({
-    ...loaderArgs,
+): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
+  createLoadSessionHistoryWithPolicy({
+    ...args,
     policy: requestedSessionHistoryLoadPolicy,
   });
-};
 
 export const createLoadSelectedSessionBaselineHistory = (
   args: CreateLoadAgentSessionHistoryArgs,
@@ -355,4 +323,12 @@ export const createLoadSelectedSessionBaselineHistory = (
   createLoadSessionHistoryWithPolicy({
     ...args,
     policy: selectedSessionBaselineHistoryLoadPolicy,
+  });
+
+export const createReloadAgentSessionHistory = (
+  args: CreateLoadAgentSessionHistoryArgs,
+): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
+  createLoadSessionHistoryWithPolicy({
+    ...args,
+    policy: transcriptGapRecoveryHistoryLoadPolicy,
   });

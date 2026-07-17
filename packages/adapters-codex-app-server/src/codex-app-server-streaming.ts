@@ -59,7 +59,6 @@ export type CompletedAgentMessage = {
 };
 
 export type CodexStreamingContext = {
-  subscribeEvents: boolean;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   startedItemTimestampsByKey: Map<string, number>;
   syntheticUserMessageTextsByThreadId: Map<string, string[]>;
@@ -71,8 +70,6 @@ export type CodexStreamingContext = {
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
-  takeBufferedNotifications(threadId: string, runtimeId: string): CodexNotificationRecord[];
-  bufferNotification(runtimeId: string, notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
   failUnlinkedSubagentSpawns(
     parentThreadId: string,
@@ -295,16 +292,14 @@ export const emitCodexUserMessage = (
   event: AcceptedAgentUserMessage,
   sourceParts: AgentUserMessagePart[],
 ): AcceptedAgentUserMessage => {
-  if (context.subscribeEvents) {
-    const codexEchoText = codexUserInputListToText(toCodexUserInputList(sourceParts));
-    const pendingTexts =
-      context.syntheticUserMessageTextsByThreadId.get(event.externalSessionId) ?? [];
-    pendingTexts.push(codexEchoText);
-    if (pendingTexts.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-      pendingTexts.splice(0, pendingTexts.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-    }
-    context.syntheticUserMessageTextsByThreadId.set(event.externalSessionId, pendingTexts);
+  const codexEchoText = codexUserInputListToText(toCodexUserInputList(sourceParts));
+  const pendingTexts =
+    context.syntheticUserMessageTextsByThreadId.get(event.externalSessionId) ?? [];
+  pendingTexts.push(codexEchoText);
+  if (pendingTexts.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
+    pendingTexts.splice(0, pendingTexts.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
   }
+  context.syntheticUserMessageTextsByThreadId.set(event.externalSessionId, pendingTexts);
   emitCodexSessionEvent(context, event.externalSessionId, event);
   return event;
 };
@@ -574,14 +569,8 @@ const emitCodexCompletedTurnTiming = (
 export const handleCodexPendingNotifications = async (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  notificationsFromBatch?: CodexNotificationRecord[],
+  notifications: CodexNotificationRecord[],
 ): Promise<void> => {
-  const bufferedNotifications = context.takeBufferedNotifications(
-    session.threadId,
-    session.runtimeId,
-  );
-  const takenNotifications = notificationsFromBatch ?? [];
-  const notifications = [...bufferedNotifications, ...takenNotifications];
   for (const notification of notifications) {
     const notificationThreadId = extractThreadIdFromParams(notification.params);
     if (!notificationThreadId) {
@@ -593,8 +582,9 @@ export const handleCodexPendingNotifications = async (
       );
     }
     if (notificationThreadId !== session.threadId) {
-      context.bufferNotification(session.runtimeId, notification);
-      continue;
+      throw new Error(
+        `Codex notification '${notification.method}' belongs to thread '${notificationThreadId}', not session '${session.threadId}'.`,
+      );
     }
     const timestamp = timestampFromCodexNotification(notification);
     const notificationTurnId = extractTurnId(notification.params);

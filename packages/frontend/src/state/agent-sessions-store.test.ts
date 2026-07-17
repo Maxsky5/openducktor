@@ -103,6 +103,21 @@ describe("createAgentSessionsStore session snapshots", () => {
     ).toBeNull();
   });
 
+  test("lists the current session snapshots without exposing the collection", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+    });
+    replaceStoreSessions(store, [session]);
+
+    const snapshots = store.listSessionSnapshots();
+    snapshots.length = 0;
+
+    expect(store.listSessionSnapshots()).toEqual([session]);
+  });
+
   test("replaces and removes sessions through store-owned mutations", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({

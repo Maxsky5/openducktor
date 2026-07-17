@@ -1,23 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type {
-  AgentSessionRuntimeSnapshot,
-  PolicyBoundSessionRef,
-  SessionRef,
-} from "@openducktor/core";
-import {
-  toAgentSessionRuntimeSnapshot,
-  toMissingAgentSessionRuntimeSnapshot,
-} from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
   emptyAgentSessionCollection,
+  getAgentSession,
   listAgentSessions,
 } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import { createSessionMessagesState } from "../support/messages";
 import { createLoadSourceSession } from "./source-session-loader";
@@ -37,21 +30,6 @@ const sourceSession = {
   workingDirectory: record.workingDirectory,
 };
 
-const runtimeSnapshot = (
-  ref: SessionRef,
-  runtimeActivity: "running" | "idle" = "running",
-): AgentSessionRuntimeSnapshot =>
-  toAgentSessionRuntimeSnapshot({
-    ref,
-    snapshot: {
-      title: "Builder",
-      startedAt: "2026-06-12T08:00:00.000Z",
-      runtimeActivity,
-      pendingApprovals: [],
-      pendingQuestions: [],
-    },
-  });
-
 const createCommitSessionCollection = (
   initialSessionCollection = emptyAgentSessionCollection(),
 ) => {
@@ -67,6 +45,8 @@ const createCommitSessionCollection = (
       listAgentSessions(sessionCollection).find(
         (session) => session.externalSessionId === externalSessionId,
       ) ?? null,
+    getSessionSnapshot: (identity: Parameters<AgentSessionsStore["getSessionSnapshot"]>[0]) =>
+      getAgentSession(sessionCollection, identity),
     collection: () => sessionCollection,
   };
 };
@@ -74,46 +54,33 @@ const createCommitSessionCollection = (
 const createLoaderHarness = ({
   initialSessionCollection,
   records = [record],
-  readSessionRuntimeSnapshot = async (ref: SessionRef) => runtimeSnapshot(ref),
+  loadRecords,
 }: {
   initialSessionCollection?: AgentSessionCollection;
   records?: AgentSessionRecord[];
-  readSessionRuntimeSnapshot?: (ref: SessionRef) => Promise<AgentSessionRuntimeSnapshot>;
+  loadRecords?: (taskId: string) => Promise<AgentSessionRecord[]>;
 } = {}) => {
   const queryClient = new QueryClient();
   const collection = createCommitSessionCollection(initialSessionCollection);
-  const observedSessions: PolicyBoundSessionRef[] = [];
-  const runtimeSnapshotReads: SessionRef[] = [];
   const persistedSessionReads: string[] = [];
 
   host.agentSessionsList = async (_repoPath, taskId) => {
     persistedSessionReads.push(taskId);
-    return records;
+    return loadRecords ? loadRecords(taskId) : records;
   };
 
   const loadSourceSession = createLoadSourceSession({
     workspaceRepoPath: "/repo",
-    adapter: {
-      readSessionRuntimeSnapshot: async (ref) => {
-        runtimeSnapshotReads.push(ref);
-        return readSessionRuntimeSnapshot(ref);
-      },
-    },
     repoEpochRef: { current: 0 },
     currentWorkspaceRepoPathRef: { current: "/repo" },
-    commitSessionCollection: collection.commitSessionCollection,
-    observeAgentSession: async (session) => {
-      observedSessions.push(session);
-    },
+    readSessionSnapshot: collection.getSessionSnapshot,
     queryClient,
   });
 
   return {
     ...collection,
     loadSourceSession,
-    observedSessions,
     persistedSessionReads,
-    runtimeSnapshotReads,
   };
 };
 
@@ -128,8 +95,18 @@ describe("source session loader", () => {
     host.agentSessionsList = originalAgentSessionsList;
   });
 
-  test("loads exactly the requested persisted source session and runtime snapshot", async () => {
+  test("returns exactly the requested source session from the ordered projection", async () => {
+    const attachedSession = createAgentSessionFixture({
+      externalSessionId: record.externalSessionId,
+      taskId: "task-1",
+      role: record.role,
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+      startedAt: record.startedAt,
+      status: "running",
+    });
     const harness = createLoaderHarness({
+      initialSessionCollection: createAgentSessionCollection([attachedSession]),
       records: [
         { ...record, externalSessionId: "other-session" },
         record,
@@ -152,25 +129,7 @@ describe("source session loader", () => {
       }),
     );
     expect(harness.persistedSessionReads).toEqual(["task-1"]);
-    expect(harness.runtimeSnapshotReads).toEqual([
-      {
-        repoPath: "/repo",
-        externalSessionId: record.externalSessionId,
-        runtimeKind: "opencode",
-        workingDirectory: record.workingDirectory,
-      },
-    ]);
     expect(harness.getSession(record.externalSessionId)).toBe(session);
-    expect(harness.observedSessions).toEqual([
-      {
-        repoPath: "/repo",
-        externalSessionId: record.externalSessionId,
-        runtimeKind: "opencode",
-        workingDirectory: record.workingDirectory,
-        runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      },
-    ]);
   });
 
   test("returns null when the persisted record does not match the source identity and role", async () => {
@@ -188,19 +147,18 @@ describe("source session loader", () => {
         sourceSession,
       }),
     ).resolves.toBeNull();
-    expect(harness.runtimeSnapshotReads).toEqual([]);
     expect(harness.getSession(record.externalSessionId)).toBeNull();
   });
 
-  test("preserves mounted transcript data while replacing durable persisted fields", async () => {
+  test("preserves the attachment-owned session and mounted transcript data", async () => {
     const mountedSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
-        taskId: "old-task",
-        role: "planner",
+        taskId: "task-1",
+        role: "build",
         runtimeKind: "opencode",
         status: "running",
-        startedAt: "2026-06-11T08:00:00.000Z",
+        startedAt: record.startedAt,
         workingDirectory: record.workingDirectory,
         historyLoadState: "loaded",
       }),
@@ -223,22 +181,12 @@ describe("source session loader", () => {
       sourceSession,
     });
 
-    expect(session).toEqual(
-      expect.objectContaining({
-        taskId: "task-1",
-        role: "build",
-        startedAt: record.startedAt,
-        workingDirectory: record.workingDirectory,
-        historyLoadState: "loaded",
-      }),
-    );
+    expect(session).toBe(mountedSession);
     expect(session?.messages).toBe(mountedSession.messages);
   });
 
-  test("settles a missing runtime snapshot to idle without observing it", async () => {
-    const harness = createLoaderHarness({
-      readSessionRuntimeSnapshot: async (ref) => toMissingAgentSessionRuntimeSnapshot(ref),
-    });
+  test("returns null while the ordered projection does not contain the source session", async () => {
+    const harness = createLoaderHarness();
 
     const session = await harness.loadSourceSession({
       taskId: "task-1",
@@ -246,7 +194,66 @@ describe("source session loader", () => {
       sourceSession,
     });
 
-    expect(session?.status).toBe("idle");
-    expect(harness.observedSessions).toEqual([]);
+    expect(session).toBeNull();
+  });
+
+  test("reads the attachment-owned session committed while persisted records are loading", async () => {
+    let resolveRecords!: (records: AgentSessionRecord[]) => void;
+    let markRecordReadStarted: (() => void) | null = null;
+    const recordReadStarted = new Promise<void>((resolve) => {
+      markRecordReadStarted = resolve;
+    });
+    const delayedRecords = new Promise<AgentSessionRecord[]>((resolve) => {
+      resolveRecords = resolve;
+    });
+    const initialSession = createAgentSessionFixture({
+      externalSessionId: record.externalSessionId,
+      taskId: "task-1",
+      role: "build",
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+      status: "idle",
+    });
+    const harness = createLoaderHarness({
+      initialSessionCollection: createAgentSessionCollection([initialSession]),
+      loadRecords: async () => {
+        markRecordReadStarted?.();
+        return delayedRecords;
+      },
+    });
+
+    const loading = harness.loadSourceSession({
+      taskId: "task-1",
+      role: "build",
+      sourceSession,
+    });
+    await recordReadStarted;
+
+    const attachmentSession: AgentSessionState = {
+      ...initialSession,
+      status: "running",
+      pendingApprovals: [
+        {
+          requestId: "attachment-request",
+          requestType: "command_execution",
+          title: "Run current command",
+        },
+      ],
+      contextUsage: { totalTokens: 321 },
+    };
+    harness.commitSessionCollection(() => ({
+      collection: createAgentSessionCollection([attachmentSession]),
+      result: undefined,
+    }));
+    resolveRecords([record]);
+
+    const loaded = await loading;
+
+    expect(loaded).toBe(attachmentSession);
+    expect(harness.getSession(record.externalSessionId)).toBe(attachmentSession);
+    expect(loaded?.pendingApprovals).toEqual([
+      expect.objectContaining({ requestId: "attachment-request" }),
+    ]);
+    expect(loaded?.contextUsage).toEqual({ totalTokens: 321 });
   });
 });

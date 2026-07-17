@@ -1,30 +1,6 @@
 import { Effect } from "effect";
-import type {
-  CodexAppServerPort,
-  CodexAppServerProtocolMessage,
-} from "../../ports/codex-app-server-port";
+import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import { createCodexAppServerService as createEffectCodexAppServerService } from "./codex-app-server-service";
-
-const codexStatusNotification = {
-  method: "thread/status/changed",
-  params: { threadId: "thread-1", status: { type: "idle" } },
-} satisfies CodexAppServerProtocolMessage;
-
-const codexApprovalRequest = {
-  method: "execCommandApproval",
-  id: 7,
-  params: {
-    conversationId: "thread-1",
-    callId: "call-1",
-    approvalId: null,
-    command: ["true"],
-    cwd: "/repo",
-    reason: null,
-    parsedCmd: [],
-  },
-} satisfies CodexAppServerProtocolMessage;
-
-const receivedAt = "2026-07-06T12:00:00.000Z";
 
 const createCodexAppServerService = (
   ...args: Parameters<typeof createEffectCodexAppServerService>
@@ -53,18 +29,6 @@ const createPort = (): {
           backwardsCursor: null,
         });
       },
-      takeBufferedEvents(runtimeId) {
-        calls.push({ method: "takeBufferedEvents", runtimeId });
-        return Effect.succeed([
-          {
-            runtimeId,
-            kind: "notification" as const,
-            receivedAt,
-            message: codexStatusNotification,
-          },
-          { runtimeId, kind: "server_request" as const, receivedAt, message: codexApprovalRequest },
-        ]);
-      },
       respond(input) {
         calls.push({ method: "respond", input });
         return Effect.void;
@@ -86,22 +50,6 @@ describe("createCodexAppServerService", () => {
       ),
     ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(
-      Effect.runPromise(service.takeBufferedEvents({ runtimeId: "runtime-1" })),
-    ).resolves.toEqual([
-      {
-        runtimeId: "runtime-1",
-        kind: "notification",
-        receivedAt,
-        message: codexStatusNotification,
-      },
-      {
-        runtimeId: "runtime-1",
-        kind: "server_request",
-        receivedAt,
-        message: codexApprovalRequest,
-      },
-    ]);
-    await expect(
       Effect.runPromise(
         service.listLoadedThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 }),
       ),
@@ -113,15 +61,6 @@ describe("createCodexAppServerService", () => {
       nextCursor: null,
       backwardsCursor: null,
     });
-    await expect(
-      Effect.runPromise(
-        service.respond({
-          runtimeId: "runtime-1",
-          requestId: 7,
-          error: { code: -32000, message: "denied" },
-        }),
-      ),
-    ).resolves.toBeUndefined();
     expect(calls).toEqual([
       {
         method: "request",
@@ -131,7 +70,6 @@ describe("createCodexAppServerService", () => {
           params: {},
         },
       },
-      { method: "takeBufferedEvents", runtimeId: "runtime-1" },
       {
         method: "listLoadedThreads",
         input: { runtimeId: "runtime-1", cursor: null, limit: 100 },
@@ -139,14 +77,6 @@ describe("createCodexAppServerService", () => {
       {
         method: "listThreads",
         input: { runtimeId: "runtime-1", cursor: null, limit: 100 },
-      },
-      {
-        method: "respond",
-        input: {
-          runtimeId: "runtime-1",
-          requestId: 7,
-          error: { code: -32000, message: "denied" },
-        },
       },
     ]);
   });

@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
+import { useSelectedSessionContextLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-context-load";
 import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
@@ -215,6 +216,25 @@ export function useAgentStudioSelectionController({
     session: selectedSessionView.selectedSession.loadedSession,
     repoReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
+  const contextLoadError = useSelectedSessionContextLoad({
+    session: selectedSessionView.selectedSession.loadedSession,
+    repoReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
+  });
+  const selectedSessionViewWithContextError = useMemo<AgentStudioSelectedSessionView>(() => {
+    if (contextLoadError === null) {
+      return selectedSessionView;
+    }
+    return {
+      ...selectedSessionView,
+      selectedSession: {
+        ...selectedSessionView.selectedSession,
+        runtimeData: {
+          ...selectedSessionView.selectedSession.runtimeData,
+          error: contextLoadError,
+        },
+      },
+    };
+  }, [contextLoadError, selectedSessionView]);
   const isActiveTaskReady = Boolean(activeWorkspaceId && navigationState.view.taskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(
@@ -240,7 +260,7 @@ export function useAgentStudioSelectionController({
         selectedTask: navigationState.view.selectedTask,
         sessionsForTask: navigationState.view.sessionsForTask,
         isTaskReady: isActiveTaskReady,
-        ...selectedSessionView,
+        ...selectedSessionViewWithContextError,
       },
     }),
     [
@@ -253,7 +273,7 @@ export function useAgentStudioSelectionController({
       isActiveTaskReady,
       isLoadingTasks,
       navigationState,
-      selectedSessionView,
+      selectedSessionViewWithContextError,
       sessions,
       taskTabs,
     ],

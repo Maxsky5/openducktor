@@ -203,6 +203,17 @@ export type CodexEffectivePolicy = CodexPolicyFields & {
   adjustmentReason?: string;
 };
 
+export const codexEffectivePolicySchema = z
+  .object({
+    sandboxMode: codexSandboxModeSchema,
+    approvalPolicy: codexApprovalPolicySchema,
+    approvalsReviewer: codexApprovalsReviewerSchema,
+    commandNetworkAccess: z.boolean(),
+    approvalsReviewerApplies: z.boolean(),
+    adjustmentReason: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
 export const resolveCodexEffectivePolicy = (
   config: CodexRuntimeConfig,
   role?: AgentRole | null,

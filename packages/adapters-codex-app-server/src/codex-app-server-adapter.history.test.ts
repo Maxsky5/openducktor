@@ -1,27 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-  bufferedNotificationEvent,
   createAdapterWithTransport,
-  createDeferred,
   createHarness,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
-
-const restoredTokenUsageNotification = (threadId: string, turnId = "turn-1") => ({
-  method: "thread/tokenUsage/updated",
-  params: {
-    threadId,
-    turnId,
-    tokenUsage: {
-      total: { totalTokens: 42_000 },
-      last: { totalTokens: 1_000 },
-      modelContextWindow: 200_000,
-    },
-  },
-});
 
 describe("CodexAppServerAdapter history loading", () => {
   test("keeps a hydrated subagent at its exact thread item position", async () => {
@@ -202,191 +187,6 @@ describe("CodexAppServerAdapter history loading", () => {
     ).toBeUndefined();
   });
 
-  test("preserves inherited Codex history and inserts the exact subagent fork boundary", async () => {
-    const calls: CodexJsonRpcRequest[] = [];
-    const childTurns = [
-      {
-        id: "parent-turn",
-        startedAt: 10,
-        completedAt: 20,
-        status: "interrupted",
-        items: [
-          {
-            id: "parent-user",
-            type: "userMessage",
-            content: [{ type: "text", text: "Parent prompt" }],
-          },
-          {
-            id: "parent-spawn",
-            type: "subAgentActivity",
-            agentThreadId: "child-thread",
-            agentPath: "/root/child",
-            kind: "started",
-          },
-          {
-            id: "parent-answer",
-            type: "agentMessage",
-            phase: "commentary",
-            text: "Parent answer",
-          },
-        ],
-      },
-      {
-        id: "parent-final-turn",
-        startedAt: 21,
-        completedAt: 24,
-        status: "completed",
-        items: [
-          {
-            id: "parent-final-answer",
-            type: "agentMessage",
-            phase: "final_answer",
-            text: "Parent final answer",
-          },
-        ],
-      },
-      {
-        id: "child-turn",
-        startedAt: 30,
-        completedAt: 40,
-        status: "completed",
-        items: [
-          {
-            id: "child-user",
-            type: "userMessage",
-            content: [{ type: "text", text: "Child task" }],
-          },
-          {
-            id: "child-answer",
-            type: "agentMessage",
-            phase: "final_answer",
-            text: "Child result",
-          },
-        ],
-      },
-    ];
-    const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
-        calls.push(request);
-        if (request.method === "thread/read") {
-          const params = request.params as { threadId?: string };
-          if (params.threadId === "parent-thread") {
-            return {
-              thread: {
-                id: "parent-thread",
-                cwd: "/repo",
-                createdAt: 1,
-                status: { type: "idle" },
-                turns: childTurns.slice(0, 2),
-              },
-            } as Response;
-          }
-          return {
-            thread: {
-              id: "child-thread",
-              cwd: "/repo",
-              createdAt: 25,
-              status: { type: "idle" },
-              forkedFromId: "parent-thread",
-              parentThreadId: "parent-thread",
-              turns: childTurns,
-            },
-          } as Response;
-        }
-        if (request.method === "thread/turns/list") {
-          const params = request.params as {
-            threadId: string;
-            itemsView: string;
-          };
-          if (params.threadId === "parent-thread") {
-            return {
-              data: [
-                { id: "parent-turn", status: "completed", items: [] },
-                { id: "parent-final-turn", status: "completed", items: [] },
-              ],
-              nextCursor: null,
-            } as Response;
-          }
-          return { data: childTurns, nextCursor: null } as Response;
-        }
-        throw new Error(`Unexpected method '${request.method}'.`);
-      },
-    };
-    let shouldReturnParentUsage = true;
-    const adapter = createAdapterWithTransport(transport, {
-      takeBufferedEvents: async () => {
-        if (!shouldReturnParentUsage) {
-          return [];
-        }
-        shouldReturnParentUsage = false;
-        return [
-          bufferedNotificationEvent(
-            restoredTokenUsageNotification("parent-thread", "parent-final-turn"),
-          ),
-        ];
-      },
-    });
-
-    await adapter.loadSessionHistory({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      externalSessionId: "parent-thread",
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-    });
-
-    const history = await adapter.loadSessionHistory({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      externalSessionId: "child-thread",
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-    });
-
-    expect(history.map((message) => message.messageId)).toEqual([
-      "parent-user",
-      "codex-subagent:parent-thread:child-thread",
-      "parent-answer",
-      "parent-final-answer",
-      "codex-fork-boundary:child-thread",
-      "child-user",
-      "child-answer",
-    ]);
-    expect(history[4]).toEqual({
-      messageId: "codex-fork-boundary:child-thread",
-      role: "system",
-      timestamp: "1970-01-01T00:00:30.000Z",
-      text: "Session forked here",
-      notice: {
-        tone: "info",
-        reason: "session_forked",
-        title: "Session forked here",
-        parentExternalSessionId: "parent-thread",
-      },
-      parts: [],
-    });
-    expect(history.find((message) => message.messageId === "parent-final-answer")).toMatchObject({
-      totalTokens: 1_000,
-      contextWindow: 200_000,
-      parts: [
-        expect.objectContaining({
-          kind: "step",
-          phase: "finish",
-          totalTokens: 1_000,
-          contextWindow: 200_000,
-        }),
-      ],
-    });
-    expect(
-      calls.some(
-        (call) =>
-          call.method === "thread/turns/list" &&
-          (call.params as { threadId?: string; itemsView?: string }).threadId === "parent-thread" &&
-          (call.params as { itemsView?: string }).itemsView === "summary",
-      ),
-    ).toBe(true);
-  });
-
   test("loads child history when its fork parent is no longer readable", async () => {
     let parentReadError = "thread not loaded: missing-parent";
     const transport: CodexJsonRpcTransport = {
@@ -511,216 +311,6 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).rejects.toThrow("thread not loaded: missing-parent");
-  });
-
-  test("loads Codex history and diff from App Server reads", async () => {
-    const { adapter, takeBufferedEvents, transports } = createHarness();
-
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-
-    takeBufferedEvents.mockImplementation(async () => [
-      bufferedNotificationEvent(restoredTokenUsageNotification("thread/start-runtime-live")),
-    ]);
-
-    const history = await adapter.loadSessionHistory({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      externalSessionId: "thread/start-runtime-live",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-    });
-
-    expect(history).toEqual([
-      {
-        messageId: "codex-system-prompt:thread/start-runtime-live",
-        role: "system",
-        timestamp: "2026-05-07T00:00:00.000Z",
-        text: "System prompt:\n\nUse the repo rules.",
-        parts: [],
-      },
-      expect.objectContaining({
-        messageId: "user-history-1",
-        role: "user",
-        timestamp: "2026-05-07T00:00:01.000Z",
-        text: "Hello Codex",
-      }),
-      expect.objectContaining({
-        messageId: "reason-1",
-        role: "assistant",
-        parts: [expect.objectContaining({ kind: "reasoning", text: "Thinking" })],
-      }),
-      expect.objectContaining({
-        messageId: "cmd-read-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "read",
-            toolType: "read",
-            title: "Read",
-            preview: "/repo/src/app.ts",
-            input: expect.objectContaining({ path: "/repo/src/app.ts" }),
-            output: "export const app = true;",
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "cmd-bash-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "bash",
-            toolType: "bash",
-            title: "Bash",
-            preview: "bun test",
-            input: expect.objectContaining({ command: "bun test" }),
-            output: "1 pass",
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "file-change-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "apply_patch",
-            toolType: "file_edit",
-            input: expect.objectContaining({ patch: expect.stringContaining("@@") }),
-            output: expect.stringContaining("@@"),
-            fileDiffs: [
-              {
-                file: "/repo/src/app.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 1,
-                diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
-              },
-            ],
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "file-change-failed-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "apply_patch",
-            toolType: "file_edit",
-            status: "error",
-            error: "patch failed",
-            output: expect.stringContaining("broken"),
-            input: expect.objectContaining({ patch: expect.stringContaining("broken") }),
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "dynamic-tool-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "codex.read",
-            input: { path: "/repo/README.md" },
-            output: expect.stringContaining("README"),
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "web-search-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "webSearch",
-            toolType: "web",
-            input: { query: "OpenDucktor Codex runtime" },
-            output: expect.stringContaining("search results"),
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "tool-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "odt_read_task",
-            toolType: "workflow",
-            title: "read_task",
-            input: { taskId: "task-1" },
-            output: expect.stringContaining("ok"),
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "tool-failed-1",
-        role: "assistant",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            tool: "odt_read_task",
-            toolType: "workflow",
-            status: "error",
-            error: "task missing",
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "msg-1",
-        role: "assistant",
-        timestamp: "2026-05-07T00:00:31.000Z",
-        text: "Hello from history",
-        totalTokens: 1_000,
-        contextWindow: 200_000,
-        parts: [
-          expect.objectContaining({
-            kind: "step",
-            phase: "finish",
-            reason: "stop",
-            totalTokens: 1_000,
-            contextWindow: 200_000,
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        messageId: "msg-commentary-1",
-        role: "assistant",
-        timestamp: "2026-05-07T00:00:31.000Z",
-        text: "Later commentary",
-        parts: [],
-      }),
-    ]);
-    expect(
-      transports.get("runtime-live")?.calls.some((call) => call.method === "thread/turns/list"),
-    ).toBe(true);
-    await expect(
-      adapter.loadSessionDiff({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread/start-runtime-live",
-      }),
-    ).resolves.toEqual([
-      {
-        file: "src/app.ts",
-        type: "modified",
-        additions: 1,
-        deletions: 0,
-        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n",
-      },
-    ]);
   });
 
   test("keeps the runtime-owned system prompt after observing a live session ref", async () => {
@@ -1035,63 +625,8 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("loads idle history through the fast read path before restoring context", async () => {
-    const { adapter, takeBufferedEvents, transports } = createHarness();
-
-    takeBufferedEvents.mockImplementation(async () => {
-      const didRequestRestoredUsage = transports
-        .get("runtime-live")
-        ?.calls.some(
-          (call) =>
-            call.method === "thread/resume" &&
-            (call.params as { threadId?: string }).threadId === "thread-idle" &&
-            (call.params as { excludeTurns?: boolean }).excludeTurns === false,
-        );
-      return didRequestRestoredUsage
-        ? [bufferedNotificationEvent(restoredTokenUsageNotification("thread-idle"))]
-        : [];
-    });
-
-    const history = await adapter.loadSessionHistory({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      externalSessionId: "thread-idle",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-    });
-
-    expect(
-      transports
-        .get("runtime-live")
-        ?.calls.some(
-          (call) =>
-            call.method === "thread/read" &&
-            (call.params as { threadId?: string }).threadId === "thread-idle",
-        ),
-    ).toBe(true);
-    expect(history.find((message) => message.messageId === "msg-1")).toEqual(
-      expect.objectContaining({
-        role: "assistant",
-        text: "Hello from history",
-      }),
-    );
-
-    await flushCodexAdapterWork();
-    expect(transports.get("runtime-live")?.calls).toContainEqual(
-      expect.objectContaining({
-        method: "thread/resume",
-        params: expect.objectContaining({
-          threadId: "thread-idle",
-          excludeTurns: false,
-        }),
-      }),
-    );
-  });
-
-  test("does not block unloaded idle history on restored context replay", async () => {
+  test("does not request context while reading unloaded idle history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
-    const resume = createDeferred<unknown>();
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
@@ -1138,18 +673,10 @@ describe("CodexAppServerAdapter history loading", () => {
             nextCursor: null,
           } as Response;
         }
-        if (request.method === "thread/resume") {
-          return resume.promise as Promise<Response>;
-        }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
     };
-    const adapter = createAdapterWithTransport(transport, {
-      takeBufferedEvents: async () =>
-        calls.some((call) => call.method === "thread/resume")
-          ? [bufferedNotificationEvent(restoredTokenUsageNotification("thread-unloaded-idle"))]
-          : [],
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -1167,18 +694,8 @@ describe("CodexAppServerAdapter history loading", () => {
     );
     await flushCodexAdapterWork();
     const methods = calls.map((call) => call.method);
-    expect(methods.indexOf("thread/read")).toBeLessThan(methods.indexOf("thread/resume"));
-    resume.resolve({
-      thread: {
-        id: "thread-unloaded-idle",
-        cwd: "/repo",
-        createdAt: 1_778_112_000,
-        status: { type: "idle" },
-        turns: [],
-      },
-      startedAt: "2026-05-07T00:00:00.000Z",
-    });
-    await flushCodexAdapterWork();
+    expect(methods).toContain("thread/read");
+    expect(methods).not.toContain("thread/resume");
   });
 
   test("loads paginated stored history when the thread is absent from inventory", async () => {
@@ -1657,7 +1174,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("reuses todos discovered while loading Codex session history", async () => {
+  test("loads todos independently after loading Codex session history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const completedAtMs = Date.parse("2026-05-20T10:00:02.000Z");
     const transport: CodexJsonRpcTransport = {
@@ -1757,7 +1274,7 @@ describe("CodexAppServerAdapter history loading", () => {
       expect.objectContaining({ content: "Load transcript once", status: "completed" }),
       expect.objectContaining({ content: "Reuse todos", status: "in_progress" }),
     ]);
-    expect(calls).toEqual([]);
+    expect(calls.filter((call) => call.method === "thread/read")).toHaveLength(2);
   });
 
   test("rejects Codex todo policy mismatches before returning cached todos", async () => {
@@ -1839,7 +1356,7 @@ describe("CodexAppServerAdapter history loading", () => {
     expect(calls).toEqual([]);
   });
 
-  test("reuses empty todos discovered while loading Codex session history", async () => {
+  test("loads empty todos independently after loading Codex session history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -1914,7 +1431,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([]);
-    expect(calls).toEqual([]);
+    expect(calls.some((call) => call.method === "thread/read")).toBe(true);
   });
 
   test("loads only the selected final Codex agent message as finished", async () => {

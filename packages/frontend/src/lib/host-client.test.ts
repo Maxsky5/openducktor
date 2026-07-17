@@ -30,6 +30,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
     transportEpoch: "test:0",
     unsubscribe: () => {},
   }),
+  observeAgentSessionLive: async () => () => {},
   subscribeTaskEvents: async () => () => {},
   appUpdates: createDisabledAppUpdateBridge({
     status: "disabled",

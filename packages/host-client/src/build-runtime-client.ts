@@ -4,7 +4,6 @@ import {
   agentSessionStopTargetSchema,
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
-  type CodexAppServerRequestId,
   type DevServerGroupState,
   devServerGroupStateSchema,
   type FailureKind,
@@ -43,13 +42,6 @@ import { parseArray, parseOkResult } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
 
 type RuntimeEnsureFailureKind = FailureKind;
-
-export type CodexAppServerBufferedEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  message: unknown;
-  receivedAt: string;
-};
 
 type RuntimeEnsureErrorInit = {
   failureKind: RuntimeEnsureFailureKind;
@@ -269,65 +261,6 @@ const codexAppServerRequest = async (
     method,
     ...(params !== undefined ? { params } : {}),
   });
-};
-
-const codexAppServerRespond = async (
-  invokeFn: InvokeFn,
-  runtimeId: string,
-  requestId: CodexAppServerRequestId,
-  result?: unknown,
-  error?: unknown,
-): Promise<void> => {
-  await invokeFn("codex_app_server_respond", {
-    runtimeId,
-    requestId,
-    ...(result !== undefined ? { result } : {}),
-    ...(error !== undefined ? { error } : {}),
-  });
-};
-
-const parseCodexAppServerBufferedEvent = (value: unknown): CodexAppServerBufferedEvent => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Expected Codex app-server buffered event payload");
-  }
-
-  const event = value as {
-    runtimeId?: unknown;
-    kind?: unknown;
-    message?: unknown;
-    receivedAt?: unknown;
-  };
-  if (typeof event.runtimeId !== "string" || event.runtimeId.trim().length === 0) {
-    throw new Error("Expected Codex app-server buffered event runtimeId");
-  }
-  if (event.kind !== "notification" && event.kind !== "server_request") {
-    throw new Error("Expected Codex app-server buffered event kind");
-  }
-  if (typeof event.receivedAt !== "string" || event.receivedAt.trim().length === 0) {
-    throw new Error("Expected Codex app-server buffered event receivedAt");
-  }
-  if (!("message" in value)) {
-    throw new Error("Expected Codex app-server buffered event message");
-  }
-
-  return {
-    runtimeId: event.runtimeId,
-    kind: event.kind,
-    message: event.message,
-    receivedAt: event.receivedAt,
-  };
-};
-
-const takeCodexAppServerBufferedEvents = async (
-  invokeFn: InvokeFn,
-  runtimeId: string,
-): Promise<CodexAppServerBufferedEvent[]> => {
-  const payload = await invokeFn("codex_app_server_take_buffered_events", { runtimeId });
-  return parseArray(
-    { parse: parseCodexAppServerBufferedEvent },
-    payload,
-    "codex_app_server_take_buffered_events",
-  );
 };
 
 const buildStart = async (
@@ -661,21 +594,6 @@ export class HostAgentClient {
     params?: unknown,
   ): Promise<unknown> {
     return codexAppServerRequest(this.invokeFn, runtimeId, method, params);
-  }
-
-  async codexAppServerRespond(
-    runtimeId: string,
-    requestId: CodexAppServerRequestId,
-    result?: unknown,
-    error?: unknown,
-  ): Promise<void> {
-    return codexAppServerRespond(this.invokeFn, runtimeId, requestId, result, error);
-  }
-
-  async takeCodexAppServerBufferedEvents(
-    runtimeId: string,
-  ): Promise<CodexAppServerBufferedEvent[]> {
-    return takeCodexAppServerBufferedEvents(this.invokeFn, runtimeId);
   }
 
   async buildStart(

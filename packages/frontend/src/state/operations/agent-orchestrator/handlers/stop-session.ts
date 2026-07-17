@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, AgentSessionStopTarget } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -12,19 +12,16 @@ import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
-import type { SessionObservers } from "../support/session-observers";
 import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 
 export type StopAgentSessionDependencies = {
   workspaceRepoPath: string | null;
-  adapter: Pick<AgentEnginePort, "releaseSession">;
+  adapter: Pick<AgentEnginePort, "stopSession">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  sessionObserversRef: { current: SessionObservers };
   clearSessionTurnState: (session: AgentSessionIdentity) => void;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  stopAuthoritativeSession: (target: AgentSessionStopTarget) => Promise<void>;
   invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
   refreshTaskData: (
     repoPath: string,
@@ -53,10 +50,8 @@ export const createStopAgentSession = ({
   adapter,
   readSessionSnapshot,
   updateSession,
-  sessionObserversRef,
   clearSessionTurnState,
   persistSessionRecord,
-  stopAuthoritativeSession,
   invalidateSessionStopQueries,
   refreshTaskData,
 }: StopAgentSessionDependencies) => {
@@ -76,13 +71,7 @@ export const createStopAgentSession = ({
     try {
       stopRepoPath = requireWorkspaceRepoPath(workspaceRepoPath);
 
-      await stopAuthoritativeSession({
-        repoPath: stopRepoPath,
-        taskId: session.taskId,
-        externalSessionId,
-        runtimeKind: session.runtimeKind,
-        workingDirectory: session.workingDirectory,
-      });
+      await adapter.stopSession(toRuntimeSessionRef(stopRepoPath, session));
     } catch (error) {
       updateSession(session, (current) => ({
         ...current,
@@ -94,15 +83,6 @@ export const createStopAgentSession = ({
     }
 
     const stoppedSessionRef = toRuntimeSessionRef(stopRepoPath, session);
-    try {
-      await adapter.releaseSession(stoppedSessionRef);
-    } catch (error) {
-      console.warn(
-        `Failed to release local session '${externalSessionId}' after authoritative stop: ${errorMessage(error)}`,
-      );
-    }
-
-    sessionObserversRef.current.remove(stoppedSessionRef);
     clearSessionTurnState(stoppedSessionRef);
 
     const stoppedAt = now();

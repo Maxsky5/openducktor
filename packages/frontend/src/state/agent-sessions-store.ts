@@ -6,6 +6,7 @@ import {
   emptyAgentSessionCollection,
   getAgentSession,
   hasAgentSessionStateChanges,
+  listAgentSessions,
   removeAgentSession,
   replaceAgentSession,
   replaceAgentSessionByIdentity,
@@ -36,6 +37,7 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
+  listSessionSnapshots: () => AgentSessionState[];
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
   getVisiblePendingInputSnapshot: (
     identity: AgentSessionIdentity | null,
@@ -103,6 +105,7 @@ export const createAgentSessionsStore = (
       };
     },
     getActivitySnapshot: () => activitySnapshot,
+    listSessionSnapshots: () => listAgentSessions(sessionCollection),
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
     getVisiblePendingInputSnapshot: (identity) => {
       const identityKey = identity ? agentSessionIdentityKey(identity) : null;

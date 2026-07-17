@@ -69,25 +69,28 @@ const createTestHostCommandRouter = (
   invoke: (command, args) => invoke(command, args) as ReturnType<EffectHostCommandRouter["invoke"]>,
 });
 
+type TestRequestOptions = Partial<{
+  appToken: string;
+  controlToken: string;
+  eventBus: BufferedHostEventBus;
+  hostCommandRouter: EffectHostCommandRouter;
+  beginShutdown: () => void;
+  shutdownStarted: boolean;
+  stop: () => Promise<void>;
+}>;
+
 const handleTestRequest = (
   request: Request,
-  options: Partial<{
-    appToken: string;
-    controlToken: string;
-    eventBus: BufferedHostEventBus;
-    hostCommandRouter: EffectHostCommandRouter;
-    beginShutdown: () => void;
-    shutdownStarted: boolean;
-    stop: () => Promise<void>;
-  }> = {},
-): Promise<Response> =>
-  Effect.runPromise(
+  options: TestRequestOptions = {},
+): Promise<Response> => {
+  const hostCommandRouter = options.hostCommandRouter ?? createTestHostCommandRouter();
+  return Effect.runPromise(
     handleTypescriptHostBackendRequest({
       allowedOrigins: new Set(),
       appToken: options.appToken ?? APP_TOKEN,
       controlToken: options.controlToken ?? CONTROL_TOKEN,
       eventBus: options.eventBus ?? new BufferedHostEventBus(),
-      hostCommandRouter: options.hostCommandRouter ?? createTestHostCommandRouter(),
+      hostCommandRouter,
       localAttachments: createLocalAttachmentAdapter(),
       request,
       shutdownStarted: options.shutdownStarted ?? false,
@@ -95,6 +98,7 @@ const handleTestRequest = (
       stop: options.stop ?? (async () => {}),
     }),
   );
+};
 
 describe("TypeScript web host backend", () => {
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
@@ -199,49 +203,9 @@ describe("TypeScript web host backend", () => {
     });
   });
 
-  test("replays recent Codex app-server events to first SSE subscribers", async () => {
-    const eventBus = new BufferedHostEventBus();
-    eventBus.publish("openducktor://codex-app-server-event", {
-      runtimeId: "runtime-live",
-      kind: "server_request",
-      message: {
-        id: "approval-1",
-        method: "item/commandExecution/requestApproval",
-        params: { threadId: "thread-1" },
-      },
-    });
-
+  test("flushes an initial SSE frame for the shared host event stream", async () => {
     const response = await handleTestRequest(
-      new Request("http://127.0.0.1/codex-app-server-events", {
-        method: "GET",
-        headers: { "x-openducktor-app-token": APP_TOKEN },
-      }),
-      { eventBus },
-    );
-
-    expect(response.status).toBe(200);
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Expected SSE response body.");
-    }
-    try {
-      const readyChunk = await readImmediateStreamChunk(reader);
-      expect(readyChunk.done).toBe(false);
-      expect(new TextDecoder().decode(readyChunk.value)).toBe(": openducktor-ready\n\n");
-
-      const chunk = await readImmediateStreamChunk(reader);
-      expect(chunk.done).toBe(false);
-      expect(new TextDecoder().decode(chunk.value)).toContain(
-        'data: {"runtimeId":"runtime-live","kind":"server_request"',
-      );
-    } finally {
-      await reader.cancel();
-    }
-  });
-
-  test("flushes an initial SSE frame for idle dev-server streams", async () => {
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/dev-server-events", {
+      new Request("http://127.0.0.1/events", {
         method: "GET",
         headers: { "x-openducktor-app-token": APP_TOKEN },
       }),
@@ -262,7 +226,58 @@ describe("TypeScript web host backend", () => {
     }
   });
 
-  test("emits a stream warning when dev-server SSE replay cannot cover the reconnect gap", async () => {
+  test("multiplexes every host event channel through the shared SSE endpoint", async () => {
+    const eventBus = new BufferedHostEventBus();
+    const events = [
+      ["openducktor://run-event", { type: "run" }],
+      ["openducktor://dev-server-event", { type: "dev-server" }],
+      ["openducktor://task-event", { type: "task" }],
+      [
+        "openducktor://agent-session-live-event",
+        {
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [],
+        },
+      ],
+    ] as const;
+    for (const [channel, payload] of events) {
+      eventBus.publish(channel, payload);
+    }
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/events", {
+        method: "GET",
+        headers: {
+          "last-event-id": "0",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+      }),
+      { eventBus },
+    );
+
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Expected SSE response body.");
+    }
+    try {
+      expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toBe(
+        ": openducktor-ready\n\n",
+      );
+      let replay = "";
+      for (const _event of events) {
+        replay += new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
+      }
+      for (const [channel, payload] of events) {
+        expect(replay).toContain(JSON.stringify({ channel, payload }));
+      }
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  test("emits a stream warning when shared SSE replay cannot cover the reconnect gap", async () => {
     const eventBus = new BufferedHostEventBus();
     for (let index = 0; index < 258; index += 1) {
       eventBus.publish("openducktor://dev-server-event", {
@@ -279,7 +294,7 @@ describe("TypeScript web host backend", () => {
     }
 
     const response = await handleTestRequest(
-      new Request("http://127.0.0.1/dev-server-events", {
+      new Request("http://127.0.0.1/events", {
         method: "GET",
         headers: {
           "last-event-id": "1",
@@ -303,7 +318,7 @@ describe("TypeScript web host backend", () => {
       expect(warningChunk.done).toBe(false);
       expect(new TextDecoder().decode(warningChunk.value)).toBe(
         "event: stream-warning\n" +
-          "data: Dev server stream skipped 1 event; reconnect will replay buffered events.\n\n",
+          "data: Host event stream skipped 1 event; reconnect will replay buffered events.\n\n",
       );
 
       const replayChunk = await readImmediateStreamChunk(reader);
@@ -312,71 +327,6 @@ describe("TypeScript web host backend", () => {
     } finally {
       await reader.cancel();
     }
-  });
-
-  test("does not replay Codex app-server requests after resolved notifications", () => {
-    const eventBus = new BufferedHostEventBus();
-    eventBus.publish("openducktor://codex-app-server-event", {
-      runtimeId: "runtime-live",
-      kind: "server_request",
-      message: {
-        id: "approval-1",
-        method: "item/commandExecution/requestApproval",
-        params: { threadId: "thread-1" },
-      },
-    });
-    eventBus.publish("openducktor://codex-app-server-event", {
-      runtimeId: "runtime-live",
-      kind: "notification",
-      message: {
-        method: "serverRequest/resolved",
-        params: { requestId: "approval-1" },
-      },
-    });
-
-    const replay = eventBus
-      .streamFor("openducktor://codex-app-server-event")
-      .replayAfter(null, { includeRecentWhenNoLastEventId: true });
-
-    expect(replay).toHaveLength(1);
-    expect(replay[0]?.payload).toContain('"method":"serverRequest/resolved"');
-    expect(replay[0]?.payload).not.toContain('"kind":"server_request"');
-  });
-
-  test("does not replay Codex app-server requests after explicit responses", async () => {
-    const eventBus = new BufferedHostEventBus();
-    eventBus.publish("openducktor://codex-app-server-event", {
-      runtimeId: "runtime-live",
-      kind: "server_request",
-      message: {
-        id: 53,
-        method: "item/commandExecution/requestApproval",
-        params: { threadId: "thread-1" },
-      },
-    });
-
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/codex_app_server_respond", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({
-          runtimeId: "runtime-live",
-          requestId: 53,
-          result: { decision: "approved" },
-        }),
-      }),
-      { eventBus },
-    );
-
-    expect(response.status).toBe(200);
-    expect(
-      eventBus
-        .streamFor("openducktor://codex-app-server-event")
-        .replayAfter(null, { includeRecentWhenNoLastEventId: true }),
-    ).toEqual([]);
   });
 
   test("rejects malformed invoke command URI components as typed host request errors", async () => {

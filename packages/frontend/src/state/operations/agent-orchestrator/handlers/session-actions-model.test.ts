@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import type { UpdateSession } from "../events/session-event-types";
-import { createSessionObserversRefFixture } from "../test-utils";
 import {
   buildSession,
   createSessionActions,
@@ -11,11 +10,11 @@ import {
 } from "./session-actions.test-helpers";
 
 describe("agent-orchestrator/handlers/session-actions model", () => {
-  test("updates and persists selected model for an unobserved idle session without runtime sync", () => {
+  test("updates the host session and persists the selected model for an idle session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
-    adapter.updateSessionModel = (input) => {
+    adapter.updateSessionModel = async (input) => {
       modelCalls.push(input);
     };
 
@@ -38,13 +37,13 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     });
 
     try {
-      actions.updateAgentSessionModel(getSession(sessionsRef), {
+      await actions.updateAgentSessionModel(getSession(sessionsRef), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
       });
 
-      expect(modelCalls).toHaveLength(0);
+      expect(modelCalls).toHaveLength(1);
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
       expect(updateSessionOptions).toEqual([{ persist: true }]);
     } finally {
@@ -56,19 +55,16 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
-    adapter.updateSessionModel = (input) => {
+    adapter.updateSessionModel = async (input) => {
       modelCalls.push(input);
     };
 
     const sessionsRef = createSessionsRef([buildSession()]);
-    const sessionObserversRef = createSessionObserversRefFixture();
-    await sessionObserversRef.current.ensureObserver(getSession(sessionsRef), async () => () => {});
     const updateSessionOptions: Array<Parameters<UpdateSession>[2]> = [];
 
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef,
       updateSession: (identity, updater, options) => {
         const current = getAgentSession(sessionsRef.current, identity);
         if (!current) {
@@ -82,7 +78,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     });
 
     try {
-      actions.updateAgentSessionModel(getSession(sessionsRef), {
+      await actions.updateAgentSessionModel(getSession(sessionsRef), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
@@ -107,42 +103,38 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     }
   });
 
-  test("keeps the durable model selection when observed runtime sync throws", async () => {
+  test("keeps the durable model unchanged when host runtime sync fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalUpdateSessionModel = adapter.updateSessionModel;
-    adapter.updateSessionModel = () => {
+    adapter.updateSessionModel = async () => {
       throw new Error("Unknown session: session-1");
     };
 
     const sessionsRef = createSessionsRef([buildSession()]);
-    const sessionObserversRef = createSessionObserversRefFixture();
-    await sessionObserversRef.current.ensureObserver(getSession(sessionsRef), async () => () => {});
-
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      sessionObserversRef,
     });
 
     try {
-      expect(() =>
+      await expect(
         actions.updateAgentSessionModel(getSession(sessionsRef), {
           runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
         }),
-      ).toThrow("Unknown session: session-1");
-      expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
+      ).rejects.toThrow("Unknown session: session-1");
+      expect(getSession(sessionsRef)?.selectedModel).toBeNull();
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
   });
 
-  test("fails instead of silently ignoring model changes for an unloaded session", () => {
+  test("fails instead of silently ignoring model changes for an unloaded session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
-    adapter.updateSessionModel = (input) => {
+    adapter.updateSessionModel = async (input) => {
       modelCalls.push(input);
     };
 
@@ -152,7 +144,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     });
 
     try {
-      expect(() =>
+      await expect(
         actions.updateAgentSessionModel(
           {
             externalSessionId: "missing-session",
@@ -165,7 +157,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
             modelId: "gpt-5",
           },
         ),
-      ).toThrow("Session 'missing-session' is not loaded.");
+      ).rejects.toThrow("Session 'missing-session' is not loaded.");
       expect(modelCalls).toHaveLength(0);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;

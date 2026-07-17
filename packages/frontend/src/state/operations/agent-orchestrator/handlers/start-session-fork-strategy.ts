@@ -1,4 +1,4 @@
-import { toAgentRuntimePolicyBinding, workflowAgentSessionScope } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { throwIfRepoStale } from "../support/core";
@@ -104,16 +104,10 @@ export const executeForkStart = async ({
 
     const runtimeKind = sourceRuntimeKind;
     const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
-    const loadSettingsSnapshot = deps.model.loadSettingsSnapshot;
-    const runtimePolicy = await resolveAgentSessionRuntimePolicy({
-      runtimeKind,
-      sessionScope,
-      loadSettingsSnapshot,
-    });
 
     const summary = await deps.runtime.adapter.forkSession({
       repoPath: ctx.repoPath,
-      ...toAgentRuntimePolicyBinding({ runtimeKind, runtimePolicy }),
+      runtimeKind,
       workingDirectory,
       sessionScope,
       systemPrompt,
@@ -134,6 +128,11 @@ export const executeForkStart = async ({
       });
     }
 
+    const runtimePolicy = await resolveAgentSessionRuntimePolicy({
+      runtimeKind,
+      sessionScope,
+      loadSettingsSnapshot: deps.model.loadSettingsSnapshot,
+    });
     const forkHistory = await deps.runtime.adapter
       .loadSessionHistory({
         ...toRuntimeSessionRefWithPolicy(
@@ -190,7 +189,6 @@ export const executeForkStart = async ({
       ctx,
       startedCtx,
       runtimeInfo: forkedRuntime,
-      runtimePolicy,
       systemPrompt,
       selectedModel,
       initialMessages,

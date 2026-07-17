@@ -2,10 +2,7 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { Effect, Fiber } from "effect";
-import type {
-  CodexAppServerProtocolMessage,
-  CodexAppServerStreamEvent,
-} from "../../ports/codex-app-server-port";
+import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
 import type { CodexAppServerServerNotificationMethod } from "../../ports/codex-app-server-protocol";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 
@@ -37,9 +34,6 @@ const serverRequestEvent = (message: unknown) =>
     message,
   });
 
-const receivedAtFrom = (event: unknown): string =>
-  (event as Pick<CodexAppServerStreamEvent, "receivedAt">).receivedAt;
-
 const recordClearTimeouts = () => {
   const originalClearTimeout = globalThis.clearTimeout;
   const clearedTimeouts: ReturnType<typeof globalThis.setTimeout>[] = [];
@@ -58,7 +52,7 @@ const recordClearTimeouts = () => {
 };
 
 describe("createCodexAppServerTransport", () => {
-  test("keeps emitted notifications available as buffered events after a request response", async () => {
+  test("delivers notifications to the prepared event sink after a request response", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -102,9 +96,6 @@ describe("createCodexAppServerTransport", () => {
 
     await expect(response).resolves.toEqual({ data: [], nextCursor: null });
     expect(emitted).toEqual([notificationEvent(notification)]);
-    const bufferedEvents = await Effect.runPromise(transport.takeBufferedEvents());
-    expect(bufferedEvents).toEqual([notificationEvent(notification)]);
-    expect(bufferedEvents[0]?.receivedAt).toBe(receivedAtFrom(emitted[0]));
 
     await Effect.runPromise(transport.close());
   });
@@ -129,9 +120,6 @@ describe("createCodexAppServerTransport", () => {
     await waitForStreamEvents();
 
     expect(emitted).toEqual([notificationEvent(notification)]);
-    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      notificationEvent(notification),
-    ]);
 
     await Effect.runPromise(transport.close());
   });
@@ -188,7 +176,7 @@ describe("createCodexAppServerTransport", () => {
 
   test("still fails fast for unknown server requests", async () => {
     const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
 
     try {
       child.stdout.write(
@@ -213,7 +201,7 @@ describe("createCodexAppServerTransport", () => {
 
   test("fails fast when a known server request is missing its id", async () => {
     const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
 
     try {
       child.stdout.write(
@@ -248,7 +236,7 @@ describe("createCodexAppServerTransport", () => {
     }
   });
 
-  test("keeps emitted server requests available as buffered events until OpenDucktor responds", async () => {
+  test("delivers every server-request occurrence directly to the prepared event sink", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -271,19 +259,16 @@ describe("createCodexAppServerTransport", () => {
     child.stdout.write(`${JSON.stringify(request)}\n`);
 
     expect(emitted).toEqual([serverRequestEvent(request)]);
-    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      serverRequestEvent(request),
-    ]);
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
     await waitForStreamEvents();
     await Effect.runPromise(transport.respond({ requestId: 1, result: { decision: "denied" } }));
-    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([]);
+    expect(emitted).toEqual([serverRequestEvent(request), serverRequestEvent(request)]);
 
     await Effect.runPromise(transport.close());
   });
 
-  test("drops buffered server requests when Codex reports them resolved before a reply", async () => {
+  test("delivers server-request resolution notifications in transport order", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -319,16 +304,16 @@ describe("createCodexAppServerTransport", () => {
     await waitForStreamEvents();
 
     expect(emitted).toEqual([serverRequestEvent(request), notificationEvent(resolved)]);
-    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
-      notificationEvent(resolved),
-    ]);
 
     await Effect.runPromise(transport.close());
   });
 
-  test("matches buffered server request ids by JSON-RPC id type", async () => {
+  test("preserves JSON-RPC id types when delivering ordered events", async () => {
     const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
     const stringRequest = {
       id: "53",
       method: "item/permissions/requestApproval",
@@ -367,8 +352,9 @@ describe("createCodexAppServerTransport", () => {
     child.stdout.write(`${JSON.stringify(resolvedNumericRequest)}\n`);
     await waitForStreamEvents();
 
-    await expect(Effect.runPromise(transport.takeBufferedEvents())).resolves.toEqual([
+    expect(emitted).toEqual([
       serverRequestEvent(stringRequest),
+      serverRequestEvent(numericRequest),
       notificationEvent(resolvedNumericRequest),
     ]);
 
@@ -406,7 +392,7 @@ describe("createCodexAppServerTransport", () => {
 
   test("bounds captured stderr bytes used in process-close diagnostics", async () => {
     const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
 
     child.stderr.write("first-error-line\n");
     child.stderr.write(`${"é".repeat(40 * 1024)}\n`);
@@ -432,7 +418,7 @@ describe("createCodexAppServerTransport", () => {
       },
     });
     const child = createChild(stdin);
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const clearTimeoutRecorder = recordClearTimeouts();
 
     try {
@@ -468,7 +454,7 @@ describe("createCodexAppServerTransport", () => {
       destroy() {},
     } as unknown as Writable;
     const child = createChild(stdin);
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
 
     try {
       const interruptedFiber = Effect.runFork(
@@ -506,7 +492,7 @@ describe("createCodexAppServerTransport", () => {
 
   test("still fails fast for responses with genuinely unexpected ids", async () => {
     const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
 
     try {
       child.stdout.write(
@@ -536,7 +522,7 @@ describe("createCodexAppServerTransport", () => {
       destroy() {},
     } as unknown as Writable;
     const child = createChild(stdin);
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const clearTimeoutRecorder = recordClearTimeouts();
 
     try {
@@ -558,7 +544,7 @@ describe("createCodexAppServerTransport", () => {
 
   test("clears the pending request timeout when serialization fails", async () => {
     const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const clearTimeoutRecorder = recordClearTimeouts();
     const circularParams: Record<string, unknown> = {};
     circularParams.self = circularParams;

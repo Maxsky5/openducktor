@@ -185,7 +185,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     }
   });
 
-  test("holds the task startup lease until the fork is observed and durably persisted", async () => {
+  test("holds the task startup lease until the fork is durably persisted", async () => {
     const adapter = new OpencodeSdkAdapter();
     const events: string[] = [];
     let finishPersistence: (() => void) | undefined;
@@ -220,9 +220,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         await persistenceBlocked;
         events.push("persist-complete");
       },
-      observeAgentSession: async () => {
-        events.push("observe");
-      },
       completeTaskSessionStartupLease: async () => {
         events.push("lease-complete");
       },
@@ -244,13 +241,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
 
     finishPersistence?.();
     await started;
-    expect(events).toEqual([
-      "prepare",
-      "persist-start",
-      "persist-complete",
-      "observe",
-      "lease-complete",
-    ]);
+    expect(events).toEqual(["prepare", "persist-start", "persist-complete", "lease-complete"]);
   });
 
   test("rolls back a stale fork after lease completion without aborting the completed lease", async () => {

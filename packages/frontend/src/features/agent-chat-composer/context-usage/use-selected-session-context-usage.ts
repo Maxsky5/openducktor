@@ -29,7 +29,6 @@ export const useSelectedSessionContextUsage = ({
       typeof selectedModelEntry?.outputLimit === "number" ? selectedModelEntry.outputLimit : null;
 
     return extractLatestSessionContextUsage({
-      session: selectedSession,
       liveContextUsage: selectedSession?.contextUsage ?? null,
       modelDescriptorByKey: selectedSessionModelDescriptorByKey,
       ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),

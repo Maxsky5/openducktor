@@ -1,13 +1,39 @@
 import { describe, expect, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { createRef, type PropsWithChildren, type ReactElement } from "react";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createRef, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
-import { ActiveWorkspaceContext } from "@/state/app-state-contexts";
-import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRepoRuntimeHealthContextValue,
+  createRuntimeDefinitionsContextValue,
+} from "@/pages/agents/agent-studio-test-utils";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import {
+  ActiveWorkspaceContext,
+  AgentOperationsContext,
+  AgentSessionsContext,
+  RepoRuntimeHealthContext,
+  RuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
+import {
+  appendSessionMessage,
+  createSessionMessagesState,
+} from "@/state/operations/agent-orchestrator/support/messages";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import {
+  createAgentSessionFixture,
+  createChatSettingsFixture,
+  createRepoRuntimeHealthFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage, buildSession, buildThreadTranscriptState } from "./agent-chat-test-fixtures";
+import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,
   type OpenAgentSessionTranscriptRequest,
@@ -66,6 +92,102 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
 };
 
 describe("AgentSessionTranscriptDialogHost", () => {
+  for (const runtimeKind of ["codex", "opencode"] as const) {
+    test(`updates an already-open ${runtimeKind} subagent transcript`, async () => {
+      const sessionStore = createAgentSessionsStore("/repo-a");
+      const target = { ...transcriptTarget, runtimeKind };
+      const childSession = createAgentSessionFixture({
+        externalSessionId: "session-child-1",
+        runtimeKind,
+        role: null,
+        status: "running",
+        workingDirectory: "/repo-a",
+        historyLoadState: "loaded",
+        messages: createSessionMessagesState("session-child-1", [
+          buildMessage("assistant", "Current child message", {
+            id: "child-message-1",
+          }),
+        ]),
+      });
+      sessionStore.replaceSession(childSession);
+      const queryClient = createQueryClient();
+      queryClient.setQueryData(
+        settingsSnapshotQueryOptions().queryKey,
+        createSettingsSnapshotFixture(),
+      );
+      const runtimeDefinitionsContext = createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      });
+      const repoRuntimeHealthContext = createRepoRuntimeHealthContextValue({
+        runtimeHealthByRuntime: {
+          codex: createRepoRuntimeHealthFixture(),
+          opencode: createRepoRuntimeHealthFixture(),
+        },
+      });
+      const operations: AgentOperationsContextValue = {
+        readSessionTodos: async () => [],
+        readSessionHistory: async () => [],
+        loadAgentSessionHistory: async () => null,
+        loadAgentSessionContext: async () => undefined,
+        startAgentSession: async () => {
+          throw new Error("Not configured");
+        },
+        sendAgentMessage: async () => undefined,
+        stopAgentSession: async () => undefined,
+        updateAgentSessionModel: () => undefined,
+        replyAgentApproval: async () => undefined,
+        answerAgentQuestion: async () => undefined,
+      };
+      const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+        <QueryClientProvider client={queryClient}>
+          <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
+            <RepoRuntimeHealthContext.Provider value={repoRuntimeHealthContext}>
+              <AgentSessionsContext.Provider value={sessionStore}>
+                <AgentOperationsContext.Provider value={operations}>
+                  {children}
+                </AgentOperationsContext.Provider>
+              </AgentSessionsContext.Provider>
+            </RepoRuntimeHealthContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </QueryClientProvider>
+      );
+      const rendered = render(
+        <AgentSessionTranscriptDialog
+          workspaceRepoPath="/repo-a"
+          target={target}
+          open
+          onOpenChange={() => undefined}
+          title="Subagent activity"
+          description="View what this subagent did."
+        />,
+        { wrapper },
+      );
+
+      try {
+        expect(await screen.findByText("Current child message")).toBeTruthy();
+
+        await act(async () => {
+          sessionStore.updateSession(target, (current) => ({
+            ...current,
+            messages: appendSessionMessage(
+              current,
+              buildMessage("assistant", "New child message while open", {
+                id: "child-message-2",
+              }),
+            ),
+          }));
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText("New child message while open")).toBeTruthy();
+        });
+      } finally {
+        rendered.unmount();
+      }
+    });
+  }
+
   const ActiveWorkspaceTestProvider = ({ children }: PropsWithChildren): ReactElement => (
     <ActiveWorkspaceContext.Provider
       value={{

@@ -1,4 +1,9 @@
-import type { FileContent, FileDiff, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveLoadContextInput,
+  FileContent,
+  FileDiff,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
@@ -194,3 +199,5 @@ export type AgentSessionIdentity = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
+
+export type AgentSessionContextLoadTarget = Omit<AgentSessionLiveLoadContextInput, "repoPath">;

@@ -186,6 +186,11 @@ const ensureRuntimeEventTransport = (input: {
 }): RuntimeEventTransportRecord => {
   const existingTransport = input.runtimeEventTransports.get(input.runtimeId);
   if (existingTransport) {
+    if (existingTransport.runtimeEndpoint !== input.runtimeEndpoint) {
+      throw new Error(
+        `OpenCode runtime '${input.runtimeId}' changed endpoint while its live event transport is active.`,
+      );
+    }
     return existingTransport;
   }
 
@@ -194,17 +199,18 @@ const ensureRuntimeEventTransport = (input: {
   });
   assertGlobalEventSupport(streamClient);
   const controller = new AbortController();
+  let resolveReady: () => void = () => undefined;
+  let rejectReady: (error: unknown) => void = () => undefined;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  void ready.catch(() => undefined);
   const streamRecord: RuntimeEventTransportRecord = {
     runtimeId: input.runtimeId,
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
-    streamDone: Promise.resolve(),
-    subscribers: new Map(),
-  };
-  streamRecord.streamDone = subscribeGlobalEvents({
-    client: streamClient,
-    controller,
-    onEvent: async (event) => {
+    dispatch: async (event) => {
       for (const subscriber of streamRecord.subscribers.values()) {
         let eventForSubscriber = event;
         let relevant = isRelevantSubscriberEvent(subscriber, event, {
@@ -251,9 +257,33 @@ const ensureRuntimeEventTransport = (input: {
         });
       }
     },
+    ready,
+    streamDone: Promise.resolve(),
+    subscribers: new Map(),
+    observers: new Set(),
+    terminalObservers: new Set(),
+  };
+  streamRecord.streamDone = subscribeGlobalEvents({
+    client: streamClient,
+    controller,
+    onReady: resolveReady,
+    onEvent: async (event) => {
+      await streamRecord.dispatch(event);
+      for (const observer of streamRecord.observers) {
+        await observer(event);
+      }
+    },
   })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "Event stream failed";
+    .then(() => {
+      if (!controller.signal.aborted && streamRecord.terminalObservers.size > 0) {
+        throw new Error("OpenCode live event observation ended unexpectedly.");
+      }
+    })
+    .catch(async (error: unknown) => {
+      const failure =
+        error instanceof Error ? error : new Error("OpenCode live event observation failed.");
+      rejectReady(failure);
+      const message = failure.message;
       for (const subscriber of streamRecord.subscribers.values()) {
         input.emit(subscriber.externalSessionId, {
           type: "session_error",
@@ -262,12 +292,81 @@ const ensureRuntimeEventTransport = (input: {
           message,
         });
       }
+      const terminalObservers = [...streamRecord.terminalObservers];
+      for (const observer of terminalObservers) {
+        await observer(failure);
+      }
+      if (terminalObservers.length > 0) {
+        throw failure;
+      }
     })
     .finally(() => {
-      input.runtimeEventTransports.delete(input.runtimeId);
+      if (input.runtimeEventTransports.get(input.runtimeId) === streamRecord) {
+        input.runtimeEventTransports.delete(input.runtimeId);
+      }
     });
+  void streamRecord.streamDone.catch(() => undefined);
   input.runtimeEventTransports.set(input.runtimeId, streamRecord);
   return streamRecord;
+};
+
+const releaseRuntimeEventTransportIfUnused = async (
+  eventTransport: RuntimeEventTransportRecord,
+): Promise<void> => {
+  if (
+    eventTransport.subscribers.size > 0 ||
+    eventTransport.observers.size > 0 ||
+    eventTransport.terminalObservers.size > 0
+  ) {
+    return;
+  }
+  eventTransport.controller.abort();
+  await eventTransport.streamDone.catch(() => undefined);
+};
+
+export const observeRuntimeEvents = async (input: {
+  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+  createClient: ClientFactory;
+  runtimeId: string;
+  runtimeEndpoint: string;
+  sessions: Map<string, SessionRecord>;
+  now: () => string;
+  emit: (sessionId: string, event: AgentEvent) => void;
+  observer: (event: Event) => void | Promise<void>;
+  terminalObserver: (error: Error) => void | Promise<void>;
+  logEvent?: OpencodeEventLogger;
+}): Promise<{ dispatch: (event: Event) => Promise<void>; release: () => Promise<void> }> => {
+  const eventTransport = ensureRuntimeEventTransport(input);
+  eventTransport.observers.add(input.observer);
+  eventTransport.terminalObservers.add(input.terminalObserver);
+  try {
+    await eventTransport.ready;
+  } catch (error) {
+    eventTransport.observers.delete(input.observer);
+    eventTransport.terminalObservers.delete(input.terminalObserver);
+    await releaseRuntimeEventTransportIfUnused(eventTransport);
+    throw error;
+  }
+  return {
+    dispatch: eventTransport.dispatch,
+    release: async () => {
+      eventTransport.observers.delete(input.observer);
+      eventTransport.terminalObservers.delete(input.terminalObserver);
+      if (
+        eventTransport.subscribers.size === 0 &&
+        eventTransport.observers.size === 0 &&
+        eventTransport.terminalObservers.size === 0
+      ) {
+        // The stream may be delivering through the host coordinator that initiated release.
+        // Detach it before aborting so the same runtime id can be prepared again while the old
+        // iterator finishes. Its streamDone owner observes the terminal result asynchronously.
+        if (input.runtimeEventTransports.get(input.runtimeId) === eventTransport) {
+          input.runtimeEventTransports.delete(input.runtimeId);
+        }
+        eventTransport.controller.abort();
+      }
+    },
+  };
 };
 
 export const subscribeSessionToRuntimeEvents = (input: {
@@ -418,11 +517,7 @@ export const releaseSessionRuntime = async (
     return;
   }
   eventTransport.subscribers.delete(session.summary.externalSessionId);
-  if (eventTransport.subscribers.size > 0) {
-    return;
-  }
-  eventTransport.controller.abort();
-  await eventTransport.streamDone.catch(() => undefined);
+  await releaseRuntimeEventTransportIfUnused(eventTransport);
 };
 
 export const stopSessionRuntime = async (

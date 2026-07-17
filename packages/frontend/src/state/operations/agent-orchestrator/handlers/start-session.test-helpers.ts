@@ -1,6 +1,6 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
@@ -218,7 +218,6 @@ export const toStartSessionDependencies = (
       loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => null),
       persistSessionRecord: deps.persistSessionRecord,
       deleteSessionRecord: deps.deleteSessionRecord,
-      observeAgentSession: deps.observeAgentSession,
       clearSessionObservationState: deps.clearSessionObservationState,
     },
     runtime: {
@@ -251,8 +250,9 @@ export const toStartSessionDependencies = (
 
 type StartSessionHarnessOptions = Omit<
   Partial<FlatStartSessionDependencies>,
-  "replaceSession" | "removeSession"
+  "adapter" | "replaceSession" | "removeSession"
 > & {
+  adapter?: AgentEnginePort | OpencodeSdkAdapter;
   sessionsRef?: { current: AgentSessionCollection };
   replaceSession?: StartSessionDependencies["session"]["replaceSession"];
   removeSession?: StartSessionDependencies["session"]["removeSession"];
@@ -268,7 +268,6 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     taskRef = { current: [] },
     repoEpochRef = { current: 1 },
     currentWorkspaceRepoPathRef = { current: "/tmp/repo" },
-    observeAgentSession = async () => undefined,
     clearSessionObservationState = () => undefined,
     loadSourceSession = async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
@@ -310,14 +309,13 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     toStartSessionDependencies({
       activeRepo,
       workspaceId,
-      adapter,
+      adapter: adapter as AgentEnginePort,
       sessionsRef,
       replaceSession,
       removeSession,
       taskRef,
       repoEpochRef,
       currentWorkspaceRepoPathRef,
-      observeAgentSession,
       clearSessionObservationState,
       loadSourceSession,
       loadAgentSessionHistory,

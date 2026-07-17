@@ -5,10 +5,7 @@ import {
   sessionMessageAt,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import {
-  historyToChatMessages,
-  historyToSessionContextUsage,
-} from "./session-history-chat-messages";
+import { historyToChatMessages } from "./session-history-chat-messages";
 
 const historyOwner = (messages: AgentChatMessage[]) => ({
   externalSessionId: "external-1",
@@ -128,92 +125,6 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
         },
       },
     ]);
-  });
-
-  test("extracts latest final assistant context usage from loaded history", () => {
-    const contextUsage = historyToSessionContextUsage([
-      {
-        messageId: "m-assistant-1",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:02.000Z",
-        text: "Working",
-        totalTokens: 50,
-        model: {
-          providerId: "openai",
-          modelId: "gpt-5",
-          profileId: "Ares",
-          variant: "high",
-        },
-        parts: [
-          {
-            kind: "step",
-            messageId: "m-assistant-1",
-            partId: "p-step-intermediate",
-            phase: "finish",
-            reason: "length",
-          },
-        ],
-      },
-      {
-        messageId: "m-assistant-2",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:05.000Z",
-        text: "Done",
-        totalTokens: 123,
-        contextWindow: 1_000,
-        model: {
-          providerId: "anthropic",
-          modelId: "claude-3-7-sonnet",
-          profileId: "Hephaestus",
-          variant: "max",
-        },
-        parts: [
-          {
-            kind: "step",
-            messageId: "m-assistant-2",
-            partId: "p-step-finish",
-            phase: "finish",
-            reason: "stop",
-          },
-        ],
-      },
-    ]);
-
-    expect(contextUsage).toEqual({
-      totalTokens: 123,
-      contextWindow: 1_000,
-      providerId: "anthropic",
-      modelId: "claude-3-7-sonnet",
-      profileId: "Hephaestus",
-      variant: "max",
-    });
-  });
-
-  test("does not invent history-loaded context usage model metadata from the selected session model", () => {
-    const contextUsage = historyToSessionContextUsage([
-      {
-        messageId: "m-assistant",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:05.000Z",
-        text: "Done",
-        totalTokens: 123,
-        contextWindow: 1_000,
-        parts: [
-          {
-            kind: "step",
-            messageId: "m-assistant",
-            partId: "p-step-finish",
-            phase: "finish",
-            reason: "stop",
-          },
-        ],
-      },
-    ]);
-
-    expect(contextUsage).toEqual({
-      totalTokens: 123,
-      contextWindow: 1_000,
-    });
   });
 
   test("maps history parts into chat timeline entries", () => {

@@ -1,17 +1,18 @@
 import {
   type AppUpdateCommandResult,
   type AppUpdateState,
+  agentSessionLiveEnvelopeSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
 } from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
-import { createHostClient } from "@openducktor/host-client";
+import { createAgentSessionLiveAttachment, createHostClient } from "@openducktor/host-client";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 const TASK_EVENT_CHANNEL = "openducktor://task-event";
-const CODEX_APP_SERVER_EVENT_CHANNEL = "openducktor://codex-app-server-event";
+const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 let nextDevServerTransportEpoch = 0;
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
@@ -59,11 +60,20 @@ export const createElectronShellBridge = (): ShellBridge => {
       nextDevServerTransportEpoch += 1;
       return { transportEpoch, unsubscribe };
     },
+    observeAgentSessionLive: async (input, listener) => {
+      const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
+      const unsubscribe = electronApi.subscribe(AGENT_SESSION_LIVE_EVENT_CHANNEL, (payload) => {
+        attachment.accept(agentSessionLiveEnvelopeSchema.parse(payload));
+      });
+      try {
+        await client.agentSessionLiveRefresh(input);
+      } catch (cause) {
+        unsubscribe();
+        throw cause;
+      }
+      return unsubscribe;
+    },
     subscribeTaskEvents: subscribeElectronEvent(electronApi, TASK_EVENT_CHANNEL),
-    subscribeCodexAppServerEvents: subscribeElectronEvent(
-      electronApi,
-      CODEX_APP_SERVER_EVENT_CHANNEL,
-    ),
     appUpdates: {
       getState: async () => readAppUpdateState(await electronApi.appUpdates.getState()),
       check: async (input) => readAppUpdateCommandResult(await electronApi.appUpdates.check(input)),

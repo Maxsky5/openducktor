@@ -1,13 +1,11 @@
 import type { AgentToolName } from "@openducktor/contracts";
 import type {
-  AgentEnginePort,
   AgentEvent,
   AgentRole,
   AgentSessionTodoItem,
-  PolicyBoundSessionRef,
+  ReplyApprovalInput,
   SessionRef,
 } from "@openducktor/core";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
@@ -43,40 +41,9 @@ export type UpdateSessionTodos = (
   updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
 ) => void;
 
-export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyApproval">;
-
 export type SessionEvent = AgentEvent;
 export type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;
 export type SessionPart = SessionPartEvent["part"];
-
-export type ObserveAgentSessionParams = {
-  adapter: SessionEventAdapter;
-  sessionRef: PolicyBoundSessionRef;
-  eventBatchWindowMs?: number;
-  turnMetadata: SessionTurnMetadata;
-  readSession: ReadSession;
-  ensureSession: EnsureSession;
-  updateSession: UpdateSession;
-  updateSessionTodos: UpdateSessionTodos;
-  isSessionObserved: (sessionIdentity: AgentSessionIdentity) => boolean;
-  recordTurnActivityTimestamp: RecordTurnTimestamp;
-  recordTurnUserMessageTimestamp: RecordTurnTimestamp;
-  resolveTurnDurationMs: ResolveTurnDuration;
-  clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
-  buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
-  loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
-  readOnlyApprovalAutoRejectSafe: boolean;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
-  workflowToolAliasesByCanonical: WorkflowToolAliasesByCanonical | undefined;
-};
-
-type SessionEventContextParams = Omit<ObserveAgentSessionParams, "sessionRef"> & {
-  sessionRef: SessionRef;
-};
 
 export type SessionEventSessionContext = {
   identity: AgentSessionIdentity;
@@ -84,37 +51,38 @@ export type SessionEventSessionContext = {
   repoPath: string;
 };
 
-export type SessionStoreContext = Pick<
-  ObserveAgentSessionParams,
-  "updateSession" | "isSessionObserved"
-> & {
+export type SessionStoreContext = {
+  updateSession: UpdateSession;
+  isSessionObserved: (sessionIdentity: AgentSessionIdentity) => boolean;
   readSession: ReadSession;
   ensureSession: EnsureSession;
 };
 
-export type SessionTodosContext = Pick<ObserveAgentSessionParams, "updateSessionTodos">;
+export type SessionTodosContext = { updateSessionTodos: UpdateSessionTodos };
 
-export type SessionTurnContext = Pick<
-  ObserveAgentSessionParams,
-  | "turnMetadata"
-  | "recordTurnActivityTimestamp"
-  | "recordTurnUserMessageTimestamp"
-  | "resolveTurnDurationMs"
-  | "clearTurnDuration"
->;
+export type SessionTurnContext = {
+  turnMetadata: SessionTurnMetadata;
+  recordTurnActivityTimestamp: RecordTurnTimestamp;
+  recordTurnUserMessageTimestamp: RecordTurnTimestamp;
+  resolveTurnDurationMs: ResolveTurnDuration;
+  clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
+};
 
-export type SessionApprovalContext = Pick<
-  ObserveAgentSessionParams,
-  | "adapter"
-  | "readOnlyApprovalAutoRejectSafe"
-  | "buildReadOnlyApprovalRejectionMessage"
-  | "loadSettingsSnapshot"
->;
+export type SessionApprovalContext = {
+  replyApproval: (input: ReplyApprovalInput) => Promise<void>;
+  readOnlyApprovalAutoRejectSafe: boolean;
+  buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
+  loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
+};
 
-export type SessionRefreshContext = Pick<
-  ObserveAgentSessionParams,
-  "refreshTaskData" | "workflowToolAliasesByCanonical"
->;
+export type SessionRefreshContext = {
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
+  workflowToolAliasesByCanonical: WorkflowToolAliasesByCanonical | undefined;
+};
 
 export type SessionEventContext = {
   session: SessionEventSessionContext;
@@ -127,7 +95,12 @@ export type SessionEventContext = {
 
 export type SessionLifecycleEventContext = Pick<
   SessionEventContext,
-  "session" | "store" | "turn" | "approvals" | "todos"
+  "session" | "store" | "turn" | "todos"
+>;
+
+export type SessionTranscriptEventContext = Pick<
+  SessionEventContext,
+  "session" | "store" | "turn" | "refresh" | "todos"
 >;
 
 export type SessionPartEventContext = Pick<
@@ -139,53 +112,3 @@ export type SessionToolPartEventContext = Pick<
   SessionPartEventContext,
   "session" | "store" | "refresh" | "todos"
 >;
-
-const createSessionContext = (context: SessionEventContextParams): SessionEventSessionContext => ({
-  identity: toAgentSessionIdentity(context.sessionRef),
-  key: agentSessionIdentityKey(context.sessionRef),
-  repoPath: context.sessionRef.repoPath,
-});
-
-const createStoreContext = (context: SessionEventContextParams): SessionStoreContext => ({
-  ensureSession: context.ensureSession,
-  updateSession: context.updateSession,
-  readSession: context.readSession,
-  isSessionObserved: context.isSessionObserved,
-});
-
-const createTurnContext = (context: SessionEventContextParams): SessionTurnContext => ({
-  turnMetadata: context.turnMetadata,
-  recordTurnActivityTimestamp: context.recordTurnActivityTimestamp,
-  recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp,
-  resolveTurnDurationMs: context.resolveTurnDurationMs,
-  clearTurnDuration: context.clearTurnDuration,
-});
-
-export const createSessionEventContext = (
-  context: SessionEventContextParams,
-): SessionEventContext => {
-  const session = createSessionContext(context);
-  const store = createStoreContext(context);
-  const turn = createTurnContext(context);
-
-  return {
-    session,
-    store,
-    turn,
-    approvals: {
-      adapter: context.adapter,
-      buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
-      readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
-      ...(context.loadSettingsSnapshot
-        ? { loadSettingsSnapshot: context.loadSettingsSnapshot }
-        : {}),
-    },
-    refresh: {
-      refreshTaskData: context.refreshTaskData,
-      workflowToolAliasesByCanonical: context.workflowToolAliasesByCanonical,
-    },
-    todos: {
-      updateSessionTodos: context.updateSessionTodos,
-    },
-  };
-};

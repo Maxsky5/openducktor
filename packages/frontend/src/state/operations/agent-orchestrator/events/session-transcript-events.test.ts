@@ -16,7 +16,7 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
-  test("drops deferred stream events when an immediate idle event closes the turn", async () => {
+  test("flushes deferred stream events before an immediate idle event closes the turn", async () => {
     const originalDateNow = Date.now;
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
@@ -84,7 +84,7 @@ describe("agent-orchestrator session transcript events", () => {
 
       expect(getSession(sessionsRef).status).toBe("idle");
       expect(getSessionMessages(sessionsRef).map((message) => message.content)).toEqual([
-        "Visible draft",
+        "Stale deferred draft",
       ]);
 
       Date.now = () => 2_000;
@@ -93,7 +93,7 @@ describe("agent-orchestrator session transcript events", () => {
 
       expect(getSession(sessionsRef).status).toBe("idle");
       expect(getSessionMessages(sessionsRef).map((message) => message.content)).toEqual([
-        "Visible draft",
+        "Stale deferred draft",
       ]);
     } finally {
       unsubscribe?.();

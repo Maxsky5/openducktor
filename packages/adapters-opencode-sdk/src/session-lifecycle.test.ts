@@ -14,7 +14,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
   const localSessions = (adapter: OpencodeSdkAdapter): Map<string, SessionRecord> =>
     (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
 
-  test("subscribeEvents prepares existing session state without emitting a started event", async () => {
+  test("subscribeEvents prepares existing session state without loading history or emitting a started event", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -53,7 +53,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     );
 
     expect(mock.session.getCalls).toHaveLength(1);
-    expect(mock.session.messagesCalls).toHaveLength(1);
+    expect(mock.session.messagesCalls).toHaveLength(0);
     expect(events).toEqual([]);
   });
 
@@ -98,7 +98,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     unsubscribe();
   });
 
-  test("prepared existing session state does not keep session-bound running subagents in pending correlation queues", async () => {
+  test("prepared existing session state does not infer subagent correlation from history", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -165,9 +165,8 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
       throw new Error("Expected adapter session record");
     }
 
-    expect(session.subagentCorrelationKeyByExternalSessionId.get("child-a")).toBe(
-      "part:msg-200:subtask-a",
-    );
+    expect(mock.session.messagesCalls).toHaveLength(0);
+    expect(session.subagentCorrelationKeyByExternalSessionId.has("child-a")).toBe(false);
     expect(session.pendingSubagentCorrelationKeys).toEqual([]);
     expect(session.pendingSubagentCorrelationKeysBySignature.size).toBe(0);
   });

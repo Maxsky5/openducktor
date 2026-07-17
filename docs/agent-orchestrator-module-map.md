@@ -3,9 +3,10 @@
 This is the maintainer-facing map for
 `packages/frontend/src/state/operations/agent-orchestrator`.
 
-The current design is intentionally small: persisted task records identify sessions,
-runtime snapshots tell us which sessions are live, the event stream owns live updates,
-and selected-session UI derives loading state from one selected route.
+The current design is intentionally small: persisted task records identify workflow
+sessions, the host-owned live-session service publishes one ordered initial snapshot
+plus deltas, transcript history is loaded only for the session that needs it, and the
+selected-session UI derives loading state from one selected route.
 
 Workspace records are a UI/app-state concern. Session modules below
 `useAgentOrchestratorOperations` receive the primitive identity they need:
@@ -28,19 +29,15 @@ Owns:
 - derived session summaries and the activity snapshot
 - notifying React subscribers when the collection changes
 
-Invariant: `AgentSessionsStore` is the only in-memory owner for loaded
-sessions. Session observation receives store operations such as `readSession`
-and `updateSession`; it must not receive or inspect the mutable collection
-bridge.
+Invariant: `AgentSessionsStore` is the renderer projection of the latest committed
+host snapshot and deltas. It is the only renderer collection used by UI consumers,
+but it is not the authority for runtime activity, pending input, or context usage.
 Hooks should expose the store, not duplicate collection getters.
 Transient event state is held in explicit named refs; do not reintroduce a
 generic mutable-state bridge that hides which concept owns which value.
 `useAgentOrchestratorOperations` owns the session commit callback that writes to
 `AgentSessionsStore` and optionally persists durable workflow records. Do not
 split this into a single-use mutation hook.
-Observer cleanup and runtime event handlers must read from `AgentSessionsStore`.
-Session removal updates the store collection once; the session observer owner
-clears matching observers and turn state for the removed identities.
 Repo session read-model refreshes merge through one session store commit; the
 store passes the current collection into that commit and remains the only owner
 of the collection.
@@ -53,7 +50,7 @@ they must not create mutable session mirrors to make callbacks look stable.
 Must not own:
 
 - persisted task session records
-- runtime snapshots
+- host live-snapshot authority
 - selected-session history-load policy
 - live runtime routes
 
@@ -85,52 +82,46 @@ pending approval/question payloads stay on the live `AgentSessionState`.
 
 Must not own:
 
-- runtime snapshot classification
+- runtime-specific live-state classification
 - event-stream pending-input mutation
 - durable task-session record reconstruction
 
-### Repo Session Projection
+### Host Live Session Projection
 
 Files:
 
-- `session-read-model/repo-session-read-model-loader.ts`
+- `session-read-model/agent-session-live-projection.ts`
 - `session-read-model/source-session-loader.ts`
-- `session-read-model/repo-session-read-model.ts`
-- `session-read-model/session-runtime-snapshot.ts`
 - `session-read-model/use-task-session-records.ts`
 - `hooks/use-repo-session-read-model.ts`
 
 Owns:
 
-- consuming the query-backed task session records for the active task set
-- scanning runtime snapshots by repo path, runtime kind, and working directory
-- merging persisted records plus runtime snapshots into `AgentSessionState`
-- returning live runtime session refs
+- consuming query-backed durable task session records for the active task set
+- observing the generic host live-event transport before requesting a repository refresh
+- accepting the repository snapshot as the first item for each initial load or reconnect
+- merging durable records with normalized live snapshots in one collection commit
+- applying ordered live upserts, removals, transcript events, and catalog invalidations
+- projecting parent/child pending input from normalized host relationships
 
-Invariant: a missing runtime snapshot means the runtime did not report the session
-as live. For a cold persisted record, that means the local shell starts idle with
-no runtime-owned pending input or in-flight turn state. For a mounted session,
-missing runtime evidence also settles runtime-owned active state to idle and
-clears pending input/in-flight turn fields. Starting, stopped, and errored raw
-statuses remain local session states, but running or waiting-input state requires
-runtime evidence. Transcript messages and history load state are not
-runtime-owned snapshot fields and stay mounted.
-Runtime events own subsequent live state only after the runtime snapshot proves
-the session is live and an observer is running.
-The repo read model overlays persisted session records and runtime snapshots onto
-the current live session collection for the task IDs it loaded. For those loaded
-task IDs, the durable task-session records are authoritative: a local session
-whose identity no longer appears in the records is removed from the collection,
-and the read model reports that identity so the observer owner can remove local
-observer and turn state.
+Invariant: the shared host-event listener must exist before `agentSessionLiveRefresh`.
+The browser uses one channel-tagged SSE connection for all host event families;
+Electron uses its existing generic host-event IPC envelope. Live-session observers
+filter by repository, ignore replayed deltas while awaiting a refresh snapshot,
+and accept later refresh snapshots as authoritative collection resets. No renderer
+or transport attachment identity is required.
+Each host snapshot is committed once so session rows, activity, pending
+input, context usage, and sidebar counters all derive from the same collection.
+The renderer must not keep observer registries, snapshot/event overlap counters,
+pending-input tombstones, or runtime-specific recovery caches.
 The per-task session-list query is the only frontend cache for persisted session
 records. Do not add a separate bulk session-record cache; startup read-model
 loads, Kanban history summaries, and session upserts must observe the same
 per-task query keys.
 Start/reuse preparation that needs a missing source session must use
-`source-session-loader.ts` to load that exact persisted record and read that
-exact runtime snapshot. It must not reload the repo or task read model to recover
-one source session.
+`source-session-loader.ts` to load that exact durable record and read its generic
+host live snapshot. It must not load transcript history or reload the entire repo
+read model to recover one source session.
 
 Must not own:
 
@@ -138,7 +129,7 @@ Must not own:
 - runtime startup policy
 - page navigation state
 - history source selection or history loading
-- permission/question polling
+- runtime-specific protocol selection or permission/question polling
 
 ### Runtime Readiness
 
@@ -193,8 +184,7 @@ Owns:
   history state, and runtime readiness
 - building transient runtime prompt context through the shared prompt helper and
   passing it to history loads without storing it in session state
-- projecting runtime history into transcript messages and context usage without
-  erasing live messages
+- projecting runtime history into transcript messages without erasing live messages
 - resolving subagent row identity when runtime history and live events expose
   separate part-scoped and session-scoped correlation keys
 
@@ -213,6 +203,8 @@ They must request runtime history for any selected session whose history is stil
 `not_requested`, even when live stream messages are already visible. A live tail
 does not prove the historical transcript has hydrated after app reload; loaded
 history merges with any current messages through the history merge module.
+History must not discover pending input, change runtime activity, derive context
+usage, drain runtime events, or trigger an implicit runtime resume.
 
 `support/session-history-chat-messages.ts` owns history-message projection only.
 It must not read or write durable session records.
@@ -223,6 +215,24 @@ that helper instead of growing their own subagent matching rules.
 Invariant: transcript storage is owned by the session message helpers. UI chat
 models receive a `SessionMessagesState` handle; raw message arrays may be
 normalized at boundaries but must not leak into transcript rendering.
+
+### Selected Session Context Loading
+
+Files:
+
+- `history/use-selected-session-context-load.ts`
+- `packages/frontend/src/features/agent-chat-composer/context-usage/use-selected-session-context-usage.ts`
+
+Owns:
+
+- requesting generic host context loading when the selected live session has no
+  retained usage and the runtime is ready
+- leaving retained context usage on the live snapshot fast path
+
+Invariant: context recovery is explicit and session-scoped. The frontend does not
+know whether an adapter performs a native read or a Codex resume with turns. A
+context failure is reported through the operation error path and must not trigger
+history probes, polling, or recovery for every live session.
 
 ### Durable Session Records
 
@@ -253,52 +263,39 @@ Invariant: durable session writes require an active `workspaceRepoPath`.
 Missing repository identity is a broken caller invariant, not an empty workspace
 case; do not silently drop the host write or query update.
 
-### Event Stream
+### Transcript Event Stream
 
 Files:
 
-- `events/session-events.ts`
-- `events/session-event-router.ts`
+- `events/session-transcript-events.ts`
 - `events/session-event-types.ts`
 - `events/session-lifecycle.ts`
 - `events/session-parts.ts`
-- `events/session-pending-input-routing.ts`
-- `events/session-subagent-links.ts`
 - `events/session-tool-parts.ts`
 - `support/session-turn-metadata.ts`
 - `support/session-turn-timing.ts`
 
 Owns:
 
-- applying runtime events to loaded sessions
-- routing every stream event by its own session identity
+- applying normalized transcript events to loaded sessions
+- routing every transcript event by its normalized session ref
 - batching and flushing transcript stream events per session
 - routing runtime todo events into the selected-session todos query owner
-- pending permission and question updates after startup
-- terminal status transitions such as idle, finished, and error
-- active-turn model/context anchors and duration timing
+- active-turn transcript anchors and duration timing
 
-Invariant: permissions and questions are fetched at startup through runtime snapshot/history reads;
-after that they come from runtime events. Do not add polling.
-Invariant: event handlers consume narrow runtime policies only. Runtime descriptor
-lookup is owned by the observer boundary; do not pass runtime descriptors or
-definition resolvers into event handlers.
-Invariant: the observed event target has exactly one owner: `SessionEventContext.session`.
+Invariant: runtime activity, pending approvals/questions, context usage, and
+session removal are live-state envelopes, not transcript events. Their only
+renderer mutation path is `agent-session-live-projection.ts`.
+Invariant: the transcript event target has exactly one owner:
+`SessionTranscriptEventContext.session`.
 `store`, `turn`, and `todos` are capability groups only; they must not duplicate
 session identity, key, external session id, or selected-session runtime-data fields.
-Invariant: a pending permission or question belongs to exactly one `AgentSessionState`.
-Parent subagent rows may link to child session ids in message metadata, but they must
-not copy child pending input.
-Pending-input ownership and approval reply routing live in
-`events/session-pending-input-routing.ts`; subagent row link patching lives in
-`events/session-subagent-links.ts`. The pending-input event handler applies the
-route and mutates pending state, but must not reimplement parent/child routing.
 Invariant: transcript content belongs to `session.messages` only. Do not add
 parallel assistant/reasoning draft state to `AgentSessionState` or event context.
-Invariant: active-turn model and context-usage message anchors live behind
+Invariant: active-turn transcript anchors live behind
 `SessionTurnMetadata`. Import turn-metadata APIs from
-`support/session-turn-metadata.ts`. Event handlers may record/read/clear that
-owner, but must not pass raw per-session maps or refs through observer/event
+`support/session-turn-metadata.ts`. Transcript handlers may record/read/clear that
+owner, but must not pass raw per-session maps or refs through transcript-event
 boundaries.
 Invariant: turn timing lives behind `SessionTurnTiming`. The orchestrator hook
 owns cross-store cleanup by calling the concrete owners directly; do not
@@ -334,13 +331,13 @@ File:
 
 Owns two shapes:
 
-- route refs for listening and release: `externalSessionId`, `repoPath`,
+- route refs for generic host control and history: `externalSessionId`, `repoPath`,
   `runtimeKind`, `workingDirectory`
 - context refs for send/reply: route fields plus durable workflow context such as
   `taskId`, `role`, optional model, and optional purpose
 
-Do not pass prompts, task roles, or models into event subscription. A listener opens
-an event stream for an existing runtime session; it is not a session start request.
+Do not pass prompts, task roles, models, runtime IDs, or native request IDs into
+the generic live observation contract.
 
 ### Existing Session Send Preparation
 
@@ -352,38 +349,32 @@ Owns:
 
 - ensuring the configured runtime process exists for an existing idle/stopped
   session before sending
-- starting the event observer for the exact durable session ref when it is not
-  already observed
 - computing transient system prompt context for the next runtime send
 
-It does not read runtime session snapshots, resume runtime sessions, or classify
-pending input. Runtime adapters own local state preparation and event streams.
-Visible pending input comes from startup snapshots or runtime events.
+It does not attach live observation, read live snapshots, resume runtime sessions,
+or classify pending input. The host live-state service owns observation for the
+runtime lifetime; visible pending input comes from its ordered snapshot/deltas.
 
-### Pending Input Projection
+### Pending Input Projection and Replies
 
-File:
+Files:
 
-- `pending-input-projection.ts`
+- `session-read-model/agent-session-live-projection.ts`
+- `session-read-model/pending-approval-policy.ts`
+- `handlers/pending-input-actions.ts`
 
 Owns:
 
-- routing live pending-input events to the session that should display the
-  prompt
-- projecting startup runtime snapshot pending input from unmaterialized child
-  sessions onto the materialized parent session
+- projecting normalized pending input from host snapshots and deltas
+- projecting pending input from unmaterialized child sessions onto the
+  materialized parent session when the host supplies a parent relationship
+- applying the generic read-only approval policy
+- sending opaque approval/question identities back through generic host commands
 - keeping runtime-owned pending permissions/questions transient
 
-OpenCode runtime evidence includes `parentID` on child sessions; its own UI
-walks the session tree when surfacing child permissions/questions. Codex
-request-user-input app-server payloads are thread-scoped (`threadId`, `turnId`,
-`itemId`, `questions`) and do not expose parent-session identity. Runtime
-adapters may expose optional `parentExternalSessionId` on live runtime snapshots
-when the runtime provides that evidence.
-
-Do not add overlay maps or persisted pending-input records. The projection
-returns only session patches/read-model effects from runtime evidence that is
-available now.
+Do not add overlay maps, persisted pending-input records, or interpret opaque
+request IDs in frontend code. Runtime-specific identifiers and reply routing
+remain private to the host adapter.
 
 ### Selected Session View
 
@@ -511,9 +502,10 @@ set. Task metadata changes and task order changes must not restart the repo
 session read model, because that would temporarily demote selected sessions back
 to loading and cause transcript/status flicker.
 For the task id set it loaded, the repo read model treats durable task-session
-records as the session existence source. Missing records remove non-starting
-local sessions for those tasks and report the removed refs to the observer owner.
-Only local `starting` sessions may remain without a visible record while session
+records as the durable existence source and the current host snapshot as the live
+existence source. Missing records remove durable-only non-starting sessions, while
+host-owned live sessions remain until an ordered `session_removed` envelope arrives.
+Only local `starting` sessions may remain without either source while session
 registration catches up.
 The transcript-state module owns the generic runtime-bound transcript helpers:
 runtime-bound empty, runtime-bound loading, loaded session, failed, and visible.
@@ -847,7 +839,7 @@ Owns:
 
 Must not own:
 
-- creating global sessions or session observers
+- creating global sessions or live-state observers
 - runtime route resolution
 - workflow session status
 - parent-observed copies of pending permissions/questions
@@ -859,13 +851,14 @@ Files:
 - `state/queries/agent-sessions.ts`
 - `state/operations/agent-orchestrator/session-read-model/task-session-records.ts`
 - `state/operations/agent-orchestrator/session-read-model/use-task-session-records.ts`
-- `state/operations/agent-orchestrator/session-read-model/repo-session-read-model.ts`
+- `state/operations/agent-orchestrator/hooks/use-repo-session-read-model.ts`
+- `state/operations/agent-orchestrator/session-read-model/agent-session-live-projection.ts`
 
 Owns:
 
 - reading durable task session records through per-task session-list queries
 - keeping per-task session-list query keys as the only frontend cache for persisted session records
-- projecting current local sessions against loaded durable records during repo reads
+- projecting the ordered host snapshot against loaded durable records during repo reads
 - presenting task session history to Agent Studio, Kanban, task details, and autopilot
 
 Must not own:
@@ -884,37 +877,34 @@ changes for UI history surfaces. Orchestrator internals must not reload the repo
 session read model for explicit start/reuse preparation; they may load exactly
 one source session through `source-session-loader.ts`.
 `useTaskSessionRecords` is the only hook that fans out per-task session-record
-queries for repo startup. `useRepoSessionReadModel` consumes that result, asks
-repo runtime readiness which persisted runtime kinds are snapshot-readable, and
-owns repo session projection/commit. It must not interpret runtime health
-directly. Task reset pages must not call a session refresh command after reset. Reset
+queries for repo startup. `useRepoSessionReadModel` consumes that result, attaches
+to the generic host live-state stream, and owns the one collection projection/commit.
+It must not select a runtime adapter or load transcript history. Task reset pages
+must not call a session refresh command after reset. Reset
 operations invalidate the exact task-session-record query, and the repo read
 model reacts to that owned query data.
-Local session projection during repo reads is owned by
-`repo-session-read-model.ts`. It carries sessions outside the loaded task set and
-local starting sessions whose persisted record is not visible yet; every other
-local session for the loaded task set must have a durable record or become an
-unlisted session ref whose observer state can be cleared.
+Live projection during repo reads is owned by
+`agent-session-live-projection.ts`. It merges durable shells with normalized host
+snapshots, resets missing live-only fields on every new initial snapshot, and
+applies ordered deltas without a second frontend cache.
 
 ## Startup Flow
 
 1. The app loads task IDs from the task store.
 2. `use-task-session-records.ts` reads per-task session records through the
    shared task-session query keys.
-3. Persisted session records remain route candidates while runtime snapshots are checked.
-4. `readRepoRuntimeSessionSnapshots` scans each snapshot-readable runtime kind and working directory once.
-5. `buildRepoSessionReadModel` commits every persisted session record once runtime snapshots are known; missing runtime evidence starts cold persisted records idle and settles mounted runtime-owned active state without clearing mounted transcript history.
-6. Live sessions are observed by route ref. The session observer asks the runtime
-   adapter to subscribe; the adapter requires an already-live repo runtime route
-   and may prepare only session-local adapter state before events can flow.
-7. Before the repo read model becomes ready, every detected live session is
-   preloaded through the same selected-session baseline history loader used when
-   the user selects a session. The stream subscription is attached first so live
-   events are not missed, then baseline history merges with any current live
-   messages. Each history load receives transient runtime prompt context through
-   the shared history context builder; prompt text is never copied into session
-   state.
-8. Subsequent status, transcript, permissions, and questions come from runtime events.
+3. The renderer observes the existing generic host-event channel, then requests
+   one live-state refresh for the active repository.
+4. The refresh publishes the complete normalized host snapshot before later deltas.
+   `buildAgentSessionLiveCollection` merges it with durable shells and commits the
+   session collection once.
+5. Session rows, activity, pending input, retained context usage, and sidebar
+   counters all derive from that same committed collection.
+6. Subsequent ordered upserts, removals, transcript events, faults, and catalog
+   invalidations arrive on the same generic host-event connection. On browser
+   reconnect, replayed live deltas are ignored until a fresh snapshot arrives.
+7. Transcript history and missing context are independent selected-session reads.
+   Neither blocks session discovery or pending-input hydration.
 
 ## Regression Anchors
 
@@ -922,26 +912,24 @@ Use these compact tests as the first-line safety net:
 
 | Regression class | Owning test |
 | --- | --- |
-| Active and waiting-input sessions after reload | `session-read-model/repo-session-read-model.test.ts` |
-| Runtime snapshot classification and idle demotion | `session-read-model/repo-session-read-model.test.ts` |
-| Missing runtime evidence settles runtime-owned active state and starts cold persisted sessions idle | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/repo-session-read-model-loader.test.ts` |
+| Active and waiting-input sessions after reload | `session-read-model/agent-session-live-projection.test.ts` and host adapter tests |
+| Initial snapshot and delta ordering | `hooks/use-repo-session-read-model.test.tsx` and `application/agent-sessions/agent-session-live-state-service.test.ts` |
+| Missing live evidence clears live-only state without erasing history | `session-read-model/agent-session-live-projection.test.ts` |
 | Task metadata changes cannot churn the repo session read model | `hooks/use-repo-session-read-model.test.tsx` |
-| Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
-| Child pending input survives reload on a materialized parent | `pending-input-projection.test.ts` and `session-read-model/repo-session-read-model.test.ts` |
-| Running-session history baseline after reload | `history/use-selected-session-history-load.test.tsx`, `hooks/use-repo-session-read-model.test.tsx`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `session-read-model/repo-session-read-model-loader.test.ts` |
-| Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
-| User messages preserved while repo/session reads are in flight | `session-read-model/repo-session-read-model-loader.test.ts` |
-| Transient repo read-model startup failure can recover without polling | `hooks/use-repo-session-read-model.test.tsx` |
-| Per-session history failure isolation | `session-read-model/repo-session-read-model-loader.test.ts` |
+| Pending input startup snapshots without overlap or resurrection | `session-read-model/agent-session-live-projection.test.ts` and runtime-adapter live-state tests |
+| Child pending input survives reload on a materialized parent | `session-read-model/agent-session-live-projection.test.ts` and host Codex live-adapter tests |
+| Selected-session history remains on demand | `history/use-selected-session-history-load.test.tsx` and `history/session-history-loader.test.ts` |
+| Missing context is selected-session-only and independent of history | `history/use-selected-session-context-load.test.tsx` and runtime-adapter context tests |
+| Browser reconnect refreshes live state without another SSE connection | `local-host-transport.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `components/features/agents/agent-chat/agent-chat-thread-state.test.ts`, `components/features/agents/agent-chat/agent-chat-thread.test.ts`, `pages/agents/selected-session/selected-session-view-projection.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, and `pages/agents/use-agent-studio-page-models.test.tsx` |
 | Selected-session runtime-data ref eligibility | `support/session-runtime-data-refs.test.ts` and `hooks/use-session-runtime-data.test.tsx` |
 | Composer summary runtime cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
 | Existing idle session send preparation | `handlers/prepare-session-send.test.ts` and `handlers/session-actions-send.test.ts` |
-| Runtime snapshot projection onto session state | `session-read-model/session-runtime-snapshot.test.ts` |
-| Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
-| Event-driven permission/question lifecycle after startup | `events/session-permissions-questions.test.ts` |
-| Readonly transcript loading and direct pending-input replies | `components/features/agents/agent-chat/readonly-transcript/use-session-transcript-surface-model.test.tsx` |
+| Host live snapshot projection onto session state | `session-read-model/agent-session-live-projection.test.ts` |
+| Permission/question replies through normalized runtime refs | `handlers/session-actions-pending-input.test.ts` |
+| Event-driven permission/question lifecycle after startup | `hooks/use-repo-session-read-model.test.tsx` and `session-read-model/agent-session-live-projection.test.ts` |
+| Readonly transcript loading and direct pending-input replies | `components/features/agents/agent-chat/readonly-transcript/use-runtime-transcript-session-history.test.tsx` and `components/features/agents/agent-chat/readonly-transcript/use-runtime-transcript-interactions.test.tsx` |
 | Single selected-session route across live and persisted candidates | `pages/agents/use-agent-studio-selection-controller.test.tsx` |
 
 ## Anti-Regressions
@@ -949,8 +937,7 @@ Use these compact tests as the first-line safety net:
 - Do not reintroduce repo hydration coordinators, presence stores, reattach stages,
   or reconciliation stages.
 - Do not make the repo session read model prepare runtime sessions. It may
-  project persisted records plus runtime snapshots and hand live refs to the
-  session observer only.
+  project persisted records plus the generic ordered host snapshot only.
 - Do not make the repo session read model select transcript/history load
   targets. Session history loading owns that policy.
 - Do not add runtime transcript open/attach operations to the app-state operations
@@ -962,7 +949,7 @@ Use these compact tests as the first-line safety net:
   sessions. They must share the same transient prompt-context boundary.
 - Do not add fallback runtime routing. Persisted sessions carry `runtimeKind` and
   `workingDirectory`; missing data is an actionable error.
-- Do not treat a missing runtime snapshot as an idle runtime event. A cold
+- Do not treat a missing host live snapshot as an idle runtime event. A cold
   persisted session starts idle from its durable record. A mounted session loses
   runtime-owned active state while transcript/history stays mounted; running and
   waiting-input state require runtime evidence from snapshots or events.
@@ -974,9 +961,9 @@ Use these compact tests as the first-line safety net:
   or missing-runtime repair there.
 - Do not store live runtime routes, pending permissions, pending questions, or
   transcript stream state in task records.
-- Do not pass generic mutable ref bundles between session hooks. Session
-  observers receive the observer registry plus the concrete turn-state owners
-  they use; other refs stay with the owner that actually needs them.
+- Do not pass generic mutable ref bundles between session hooks. Transcript
+  consumers receive only their concrete turn-state owners; other refs stay with
+  the owner that actually needs them.
 - Do not add pass-through reader hooks that only wrap `agentEngine` runtime reads.
   The public operations boundary adapts `agentEngine` directly.
 - Do not add parent-session pending-input overlays for subagents. Child sessions

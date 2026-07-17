@@ -8,13 +8,7 @@ export { clearAppQueryClient } from "@/lib/query-client";
 export { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 export { host } from "../shared/host";
 export { createSessionMessagesState } from "./support/messages";
-export { createAgentSessionRuntimeSnapshotFixture } from "./test-utils";
-export {
-  type OpencodeSdkAdapterPrototype,
-  opencodeSdkAdapterPrototype,
-  type ReadSessionRuntimeSnapshotInput,
-  setupOrchestratorOperationsTestEnvironment,
-} from "./use-agent-orchestrator-operations.test-environment";
+export { setupOrchestratorOperationsTestEnvironment } from "./use-agent-orchestrator-operations.test-environment";
 export {
   BUILD_SELECTION,
   buildBootstrapFixture,
@@ -26,7 +20,9 @@ export {
   taskFixtureWithPersistedBuildSession,
 } from "./use-agent-orchestrator-operations.test-fixtures";
 export {
+  createAgentSessionLiveSnapshotFixture,
   createHookHarness,
+  createLiveSessionStreamFixture,
   createTestDependencies,
   listHarnessSessions,
   type OrchestratorDependencies,

@@ -14,7 +14,7 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session context usage and idle settlement", () => {
-  test("updates live session context usage from step-finish part tokens", async () => {
+  test("does not derive host-owned context usage from transcript step tokens", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -81,65 +81,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       },
     });
 
-    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
-      totalTokens: 35_022,
-      contextWindow: 200_000,
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "Hephaestus",
-    });
-  });
-
-  test("updates restored session context usage without changing idle status", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
-
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        status: "idle",
-      }),
-    ]);
-    const updateSession = createSessionUpdater(sessionsRef);
-
-    await listenToAgentSessionEvents({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-1",
-      sessionsRef,
-      turnMetadata: createSessionTurnMetadata(),
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-    });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-
-    handleEvent({
-      type: "session_context_updated",
-      externalSessionId: "session-1",
-      timestamp: "2026-02-22T08:00:02.000Z",
-      totalTokens: 35_022,
-      contextWindow: 200_000,
-    });
-
-    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
-    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
-      totalTokens: 35_022,
-      contextWindow: 200_000,
-    });
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
   });
 
   test("does not mark a step message as tokenized when the step update is ignored", async () => {
@@ -199,7 +141,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     ).toBe(false);
   });
 
-  test("keeps live context usage bound to the in-flight turn model after selection changes", async () => {
+  test("keeps host-owned context independent from in-flight turn model changes", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -265,17 +207,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       },
     });
 
-    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
-      totalTokens: 35_022,
-      contextWindow: 200_000,
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "Hephaestus",
-    });
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
   });
 
-  test("preserves step-derived context usage when the final assistant message omits token metadata", async () => {
+  test("does not derive context usage from step or final transcript messages", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -353,22 +288,18 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       message: "Final answer",
     });
 
-    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
-      totalTokens: 35_022,
-      contextWindow: 200_000,
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "Hephaestus",
-    });
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
     expect(sessionMessageAt(getSession(sessionsRef), 0)?.meta).toMatchObject({
       kind: "assistant",
+      isFinal: true,
+    });
+    expect(sessionMessageAt(getSession(sessionsRef), 0)?.meta).not.toMatchObject({
       totalTokens: 35_022,
       contextWindow: 200_000,
     });
   });
 
-  test("preserves step-derived context usage even when no assistant transcript row exists yet", async () => {
+  test("does not derive context usage before an assistant transcript row exists", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -433,22 +364,18 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       message: "Final answer",
     });
 
-    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
-      totalTokens: 35_022,
-      contextWindow: 200_000,
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "Hephaestus",
-    });
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
     expect(sessionMessageAt(getSession(sessionsRef), 0)?.meta).toMatchObject({
       kind: "assistant",
+      isFinal: true,
+    });
+    expect(sessionMessageAt(getSession(sessionsRef), 0)?.meta).not.toMatchObject({
       totalTokens: 35_022,
       contextWindow: 200_000,
     });
   });
 
-  test("does not carry previous-turn context usage into a new final snapshot without token updates", async () => {
+  test("preserves host-owned context across transcript events without a live usage update", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -520,7 +447,15 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       message: "Fresh answer",
     });
 
-    expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
+    expect(findSession(sessionsRef, "session-1")?.contextUsage).toEqual({
+      totalTokens: 35_022,
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    });
     expect(sessionMessageAt(getSession(sessionsRef), 0)?.meta).toMatchObject({
       kind: "assistant",
       agentRole: "spec",

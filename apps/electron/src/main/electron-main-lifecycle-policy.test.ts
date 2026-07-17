@@ -70,6 +70,14 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("appUpdateService.startBackgroundChecks()");
   });
 
+  test("packaged startup ignores a renderer development URL from the environment", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain(
+      "const rendererDevUrl = app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL;",
+    );
+  });
+
   test("startup does not initialize the native updater on the main-process path", () => {
     const mainSource = readRepoFile("apps/electron/src/main/main.ts");
     const nativeAdapterSource = readRepoFile(

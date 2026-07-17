@@ -1,5 +1,7 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
+  type AgentSessionLiveEnvelope,
+  type AgentSessionLiveSnapshot,
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -18,59 +20,128 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
+import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 export type OrchestratorDependencies = NonNullable<
   Parameters<typeof useAgentOrchestratorOperations>[0]["dependencies"]
 >;
 
+export const createAgentSessionLiveSnapshotFixture = (
+  overrides: Omit<Partial<AgentSessionLiveSnapshot>, "ref"> & {
+    ref?: Partial<AgentSessionLiveSnapshot["ref"]>;
+  } = {},
+): AgentSessionLiveSnapshot => {
+  const { ref: refOverrides, ...snapshotOverrides } = overrides;
+  return {
+    ref: {
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
+      externalSessionId: "external-1",
+      ...refOverrides,
+    },
+    activity: "idle",
+    title: "BUILD task-1",
+    startedAt: "2026-02-22T08:00:00.000Z",
+    pendingApprovals: [],
+    pendingQuestions: [],
+    contextUsage: null,
+    ...snapshotOverrides,
+  };
+};
+
+export const createLiveSessionStreamFixture = (
+  initialSessions: AgentSessionLiveSnapshot[] = [],
+) => {
+  let listener: ((payload: AgentSessionLiveEnvelope) => void) | null = null;
+  let observeCount = 0;
+
+  const portOverrides: Partial<OrchestratorDependencies["liveSessionHostPort"]> = {
+    observeAgentSessionLive: async (input, nextListener) => {
+      observeCount += 1;
+      listener = nextListener;
+      nextListener({
+        type: "snapshot",
+        repoPath: input.repoPath,
+        sessions: initialSessions,
+      } satisfies AgentSessionLiveEnvelope);
+      return () => {
+        if (listener === nextListener) {
+          listener = null;
+        }
+      };
+    },
+    agentSessionLiveRead: async (ref) => {
+      const session = initialSessions.find(
+        (candidate) =>
+          candidate.ref.repoPath === ref.repoPath &&
+          candidate.ref.runtimeKind === ref.runtimeKind &&
+          candidate.ref.workingDirectory === ref.workingDirectory &&
+          candidate.ref.externalSessionId === ref.externalSessionId,
+      );
+      return session ? { type: "live", session } : { type: "missing", ref };
+    },
+  };
+
+  return {
+    portOverrides,
+    emit: (payload: AgentSessionLiveEnvelope) => {
+      if (!listener) {
+        throw new Error("Live-session test stream is not observed.");
+      }
+      listener(payload);
+    },
+    getObserveCount: () => observeCount,
+  };
+};
+
 export const createTestDependencies = (
   hostOverrides: Partial<OrchestratorDependencies["hostPort"]> = {},
   runtimeHostOverrides: Partial<OrchestratorDependencies["runtimeHostPort"]> = {},
-): OrchestratorDependencies => ({
-  queryClient: new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
+  liveSessionHostOverrides: Partial<OrchestratorDependencies["liveSessionHostPort"]> = {},
+): OrchestratorDependencies => {
+  return {
+    queryClient: new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    }),
+    hostPort: {
+      agentSessionDelete: async () => undefined,
+      agentSessionUpsert: (...args) => host.agentSessionUpsert(...args),
+      taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
+      ...hostOverrides,
     },
-  }),
-  hostPort: {
-    agentSessionDelete: async () => undefined,
-    agentSessionUpsert: async () => undefined,
-    agentSessionStop: async () => undefined,
-    taskWorktreeGet: async () => ({
-      workingDirectory: "/tmp/repo/worktree",
-      source: "active_build_run",
-    }),
-    ...hostOverrides,
-  },
-  runtimeHostPort: {
-    gitCanonicalizePath: async (path) => path,
-    runtimeEnsure: async (repoPath, runtimeKind) => ({
-      kind: runtimeKind,
-      runtimeId: `${runtimeKind}:${repoPath}`,
-      repoPath,
-      taskId: null,
-      role: "workspace",
-      workingDirectory: repoPath,
-      runtimeRoute: { type: "stdio", identity: `${runtimeKind}:${repoPath}` },
-      startedAt: "2026-01-01T00:00:00.000Z",
-      descriptor: runtimeKind === "codex" ? CODEX_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR,
-    }),
-    taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind) => ({
-      bootstrapId: "bootstrap-1",
-      role,
-      runtimeKind,
-      workingDirectory: "/tmp/repo/worktree",
-    }),
-    taskSessionBootstrapComplete: async () => undefined,
-    taskSessionBootstrapAbort: async () => undefined,
-    taskSessionStartupLeasePrepare: async () => "lease-1",
-    taskSessionStartupLeaseComplete: async () => undefined,
-    taskSessionStartupLeaseAbort: async () => undefined,
-    ...runtimeHostOverrides,
-  },
-});
+    runtimeHostPort: {
+      gitCanonicalizePath: async (path) => path,
+      runtimeEnsure: (...args) => host.runtimeEnsure(...args),
+      taskSessionBootstrapPrepare: (...args) => host.taskSessionBootstrapPrepare(...args),
+      taskSessionBootstrapComplete: (...args) => host.taskSessionBootstrapComplete(...args),
+      taskSessionBootstrapAbort: (...args) => host.taskSessionBootstrapAbort(...args),
+      taskSessionStartupLeasePrepare: async () => "lease-1",
+      taskSessionStartupLeaseComplete: async () => undefined,
+      taskSessionStartupLeaseAbort: async () => undefined,
+      ...runtimeHostOverrides,
+    },
+    liveSessionHostPort: {
+      observeAgentSessionLive: async ({ repoPath }, listener) => {
+        listener({
+          type: "snapshot",
+          repoPath,
+          sessions: [],
+        });
+        return () => {};
+      },
+      agentSessionLiveLoadContext: async () => null,
+      agentSessionLiveRead: async (ref) => ({ type: "missing", ref }),
+      agentSessionLiveReplyApproval: async () => undefined,
+      agentSessionLiveReplyQuestion: async () => undefined,
+      ...liveSessionHostOverrides,
+    },
+  };
+};
 
 const createDefaultActiveWorkspace = (activeRepo: string | null) =>
   activeRepo === null
@@ -163,7 +234,8 @@ export const createHookHarness = (args: {
     runtimeHealthByRuntime: args.runtimeHealthByRuntime ?? {
       opencode: createRepoRuntimeHealthFixture(),
     },
-    agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
+    agentEngine: args.agentEngine ?? (new OpencodeSdkAdapter() as AgentEnginePort),
+    dependencies: args.dependencies ?? createTestDependencies(),
   };
 
   const Harness = () => {

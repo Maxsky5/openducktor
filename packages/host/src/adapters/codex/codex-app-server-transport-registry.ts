@@ -9,7 +9,6 @@ import type {
   CodexAppServerRequestInput,
   CodexAppServerRequestResult,
   CodexAppServerRespondInput,
-  CodexAppServerStreamEvent,
 } from "../../ports/codex-app-server-port";
 import type { CodexAppServerClientRequest } from "../../ports/codex-app-server-protocol";
 import {
@@ -24,7 +23,6 @@ export type CodexAppServerTransport = {
   request(
     input: CodexAppServerClientRequest,
   ): Effect.Effect<CodexAppServerRequestResult, CodexAppServerTransportError>;
-  takeBufferedEvents(): Effect.Effect<CodexAppServerStreamEvent[], never>;
   respond(
     input: Omit<CodexAppServerRespondInput, "runtimeId">,
   ): Effect.Effect<void, CodexAppServerTransportError>;
@@ -118,12 +116,6 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
               details: { method: "thread/list", runtimeId },
             }),
         });
-      });
-    },
-    takeBufferedEvents(runtimeId) {
-      return Effect.gen(function* () {
-        const transport = yield* requireTransport(runtimeId);
-        return yield* transport.takeBufferedEvents();
       });
     },
     respond({ runtimeId, requestId, result, error }) {

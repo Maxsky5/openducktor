@@ -1,4 +1,8 @@
+import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
+import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
+import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
 import {
   createMcpHostBridgeServer,
@@ -10,6 +14,7 @@ import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-reques
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
+import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -33,9 +38,11 @@ import {
 } from "../../application/tasks/sync/task-sync-service";
 import { createTaskService } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
+import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
+import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createCodexAppServerCommandHandlers } from "../../interface/commands/codex-app-server-command-handlers";
 import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
@@ -113,6 +120,20 @@ export const createNodeEffectHostCommandRouter = (
   } = createNodeHostDefaultPorts(input);
   const codexAppServerService: CodexAppServerService =
     createCodexAppServerService(effectiveCodexAppServer);
+  const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
+  const agentSessionLiveStateService = createAgentSessionLiveStateService({
+    adapterRegistry: liveSessionAdapterRegistry,
+    publish: (envelope) => {
+      if (!eventBus) {
+        throw new HostResourceError({
+          resource: "host-event-bus",
+          operation: "agent-session-live.publish",
+          message: "Live agent-session events require a configured host event bus.",
+        });
+      }
+      eventBus.publish("openducktor://agent-session-live-event", envelope);
+    },
+  });
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
@@ -145,15 +166,20 @@ export const createNodeEffectHostCommandRouter = (
         return createCodexWorkspaceRuntimeStarter({
           toolDiscovery,
           codexAppServer: effectiveCodexTransportRegistry,
+          liveSessionLifecycle: agentSessionLiveStateService,
+          prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
+            liveSessionLifecycle: agentSessionLiveStateService,
+            codexAppServer: effectiveCodexAppServer,
+            resolveRuntimePolicy: (scope) =>
+              loadGlobalConfig(settingsConfig).pipe(
+                Effect.map((config) =>
+                  resolveCodexEffectivePolicy(config.agentRuntimes.codex, scope.role),
+                ),
+              ),
+          }),
           processEnv,
           runtimeDistribution,
           ...(clientVersion ? { clientVersion } : {}),
-          ...(eventBus
-            ? {
-                eventEmitter: (event) =>
-                  eventBus.publish("openducktor://codex-app-server-event", event),
-              }
-            : {}),
           resolveMcpBridgeConnection: () =>
             resolvedMcpHostBridge
               ? resolvedMcpHostBridge.ensureConnection({ repoPath: input.repoPath }).pipe(
@@ -180,6 +206,10 @@ export const createNodeEffectHostCommandRouter = (
         toolDiscovery,
         processEnv,
         runtimeDistribution,
+        liveSessionLifecycle: agentSessionLiveStateService,
+        prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: agentSessionLiveStateService,
+        }),
         resolveMcpBridgeConnection: (runtimeInput) =>
           resolvedMcpHostBridge
             ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
@@ -322,6 +352,7 @@ export const createNodeEffectHostCommandRouter = (
         lifecycleLogger.info("OpenDucktor host services stopped");
       }),
     handlers: {
+      ...createAgentSessionLiveCommandHandlers(agentSessionLiveStateService),
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService, {
         logger: lifecycleLogger,

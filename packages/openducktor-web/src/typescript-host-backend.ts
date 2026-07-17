@@ -23,7 +23,6 @@ import {
   type BufferedHostEvent,
   BufferedHostEventBus,
   type BufferedHostEventStream,
-  STREAM_PATH_TO_CHANNEL,
   stopTypescriptHostBackendServices,
   validateWebFrontendOriginEffect,
 } from "./typescript-host-backend-support";
@@ -55,7 +54,7 @@ const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const LAST_EVENT_ID_HEADER = "last-event-id";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
-const INITIAL_REPLAY_STREAM_PATHS = new Set(["codex-app-server-events"]);
+const HOST_EVENT_STREAM_PATH = "events";
 
 const jsonResponseBody = (payload: unknown): string => {
   const serialized = JSON.stringify(payload);
@@ -270,43 +269,28 @@ const writeSseNamedEvent = (eventName: string, data: string): string =>
   [`event: ${eventName}`, ...data.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join("\n");
 const SSE_READY_COMMENT = ": openducktor-ready\n\n";
 
-const streamWarningSubject = (streamPath: string): string => {
-  if (streamPath === "dev-server-events") {
-    return "Dev server stream";
-  }
-  if (streamPath === "task-events") {
-    return "Task stream";
-  }
-  if (streamPath === "codex-app-server-events") {
-    return "Codex app-server stream";
-  }
-  return "Event stream";
-};
-
-const skippedReplayWarningMessage = (streamPath: string, skippedEventCount: number): string => {
+const skippedReplayWarningMessage = (skippedEventCount: number): string => {
   const eventLabel = skippedEventCount === 1 ? "event" : "events";
-  return `${streamWarningSubject(streamPath)} skipped ${skippedEventCount} ${eventLabel}; reconnect will replay buffered events.`;
+  return `Host event stream skipped ${skippedEventCount} ${eventLabel}; reconnect will replay buffered events.`;
 };
 
 const createSseResponse = (
   stream: BufferedHostEventStream,
-  streamPath: string,
   lastEventId: number | null,
   corsHeaders: HeadersInit,
-  options: { includeRecentWhenNoLastEventId?: boolean } = {},
 ): Response => {
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(SSE_READY_COMMENT));
-      const replay = stream.replayAfterWithDiagnostics(lastEventId, options);
+      const replay = stream.replayAfterWithDiagnostics(lastEventId);
       if (replay.skippedEventCount > 0) {
         controller.enqueue(
           encoder.encode(
             writeSseNamedEvent(
               "stream-warning",
-              skippedReplayWarningMessage(streamPath, replay.skippedEventCount),
+              skippedReplayWarningMessage(replay.skippedEventCount),
             ),
           ),
         );
@@ -353,23 +337,6 @@ const webHostRequestErrorResponse = (
 ): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
-const isJsonRpcRequestId = (value: unknown): value is string | number =>
-  typeof value === "string" || typeof value === "number";
-
-const forgetRespondedCodexAppServerRequest = (
-  eventBus: BufferedHostEventBus,
-  command: string,
-  args: Record<string, unknown>,
-): void => {
-  if (command !== "codex_app_server_respond") {
-    return;
-  }
-  const { runtimeId, requestId } = args;
-  if (typeof runtimeId !== "string" || !isJsonRpcRequestId(requestId)) {
-    return;
-  }
-  eventBus.forgetCodexAppServerRequest(runtimeId, requestId);
-};
 
 const parseJsonObjectBody = (
   request: Request,
@@ -528,9 +495,7 @@ const routeCorsRequest = ({
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
     }
 
-    const streamChannel = STREAM_PATH_TO_CHANNEL.get(requestUrl.pathname.replace(/^\//, ""));
-    if (streamChannel && request.method === "GET") {
-      const streamPath = requestUrl.pathname.replace(/^\//, "");
+    if (requestUrl.pathname === `/${HOST_EVENT_STREAM_PATH}` && request.method === "GET") {
       yield* validateAppCookieOrHeader(request, appToken);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
@@ -539,13 +504,7 @@ const routeCorsRequest = ({
         );
       }
       requestTimeouts?.timeout(request, 0);
-      return createSseResponse(
-        eventBus.streamFor(streamChannel),
-        streamPath,
-        yield* parseLastEventId(request),
-        corsHeaders,
-        { includeRecentWhenNoLastEventId: INITIAL_REPLAY_STREAM_PATHS.has(streamPath) },
-      );
+      return createSseResponse(eventBus.stream(), yield* parseLastEventId(request), corsHeaders);
     }
 
     if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
@@ -578,8 +537,13 @@ const routeCorsRequest = ({
       });
       const result = yield* hostCommandRouter
         .invoke(decodedCommand, args)
-        .pipe(Effect.mapError((error) => hostCommandFailureToWebError(decodedCommand, error)));
-      forgetRespondedCodexAppServerRequest(eventBus, decodedCommand, args);
+        .pipe(
+          Effect.mapError((error) =>
+            error instanceof WebHostRequestError
+              ? error
+              : hostCommandFailureToWebError(decodedCommand, error),
+          ),
+        );
       return jsonResponse(result, undefined, corsHeaders);
     }
 

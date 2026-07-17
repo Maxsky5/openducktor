@@ -13,7 +13,6 @@ export type SessionModelActionDependencies = {
   adapter: Pick<AgentEnginePort, "updateSessionModel">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  isSessionObserved: (identity: AgentSessionIdentity) => boolean;
 };
 
 export const createSessionModelActions = ({
@@ -21,16 +20,20 @@ export const createSessionModelActions = ({
   adapter,
   readSessionSnapshot,
   updateSession,
-  isSessionObserved,
 }: SessionModelActionDependencies) => {
-  const updateAgentSessionModel = (
+  const updateAgentSessionModel = async (
     identity: AgentSessionIdentity,
     selection: AgentModelSelection | null,
-  ): void => {
+  ): Promise<void> => {
     const session = requireLoadedSession(readSessionSnapshot, identity);
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
 
-    const updatedSession = updateSession(
+    await adapter.updateSessionModel({
+      ...toRuntimeSessionRef(repoPath, session),
+      model: selection,
+    });
+
+    updateSession(
       session,
       (current) => ({
         ...current,
@@ -38,15 +41,6 @@ export const createSessionModelActions = ({
       }),
       { persist: true },
     );
-
-    if (!updatedSession || !isSessionObserved(updatedSession)) {
-      return;
-    }
-
-    adapter.updateSessionModel({
-      ...toRuntimeSessionRef(repoPath, updatedSession),
-      model: selection,
-    });
   };
 
   return { updateAgentSessionModel };

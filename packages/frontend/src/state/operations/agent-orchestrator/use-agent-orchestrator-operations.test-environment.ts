@@ -1,23 +1,9 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { host } from "../shared/host";
-import { createAgentSessionRuntimeSnapshotFixture } from "./test-utils";
 import { createWorktreeRuntimeFixture } from "./use-agent-orchestrator-operations.test-fixtures";
-
-export type ReadSessionRuntimeSnapshotInput = Parameters<
-  NonNullable<AgentEnginePort["readSessionRuntimeSnapshot"]>
->[0];
-
-export type OpencodeSdkAdapterPrototype = Pick<
-  OpencodeSdkAdapter,
-  "listSessionRuntimeSnapshots" | "readSessionRuntimeSnapshot"
->;
-
-export const opencodeSdkAdapterPrototype =
-  OpencodeSdkAdapter.prototype as OpencodeSdkAdapterPrototype;
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -31,11 +17,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalTaskSessionBootstrapPrepare = host.taskSessionBootstrapPrepare;
   const originalTaskSessionBootstrapComplete = host.taskSessionBootstrapComplete;
   const originalTaskSessionBootstrapAbort = host.taskSessionBootstrapAbort;
-  const originalListSessionRuntimeSnapshots =
-    OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots;
-  const originalReadAgentSessionRuntimeSnapshot =
-    OpencodeSdkAdapter.prototype.readSessionRuntimeSnapshot;
-  const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
   const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
   const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -86,34 +67,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   });
   host.taskSessionBootstrapComplete = async () => undefined;
   host.taskSessionBootstrapAbort = async () => undefined;
-  opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = async () => [
-    createAgentSessionRuntimeSnapshotFixture(),
-  ];
-  opencodeSdkAdapterPrototype.readSessionRuntimeSnapshot = async (
-    input: ReadSessionRuntimeSnapshotInput,
-  ): ReturnType<NonNullable<OpencodeSdkAdapterPrototype["readSessionRuntimeSnapshot"]>> => {
-    const snapshots = await opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots({
-      repoPath: input.repoPath ?? "/tmp/repo",
-      runtimeKind: input.runtimeKind ?? "opencode",
-      directories: [input.workingDirectory ?? "/tmp/repo/worktree"],
-    });
-    const match = snapshots.find(
-      (snapshot: ReturnType<typeof createAgentSessionRuntimeSnapshotFixture>) =>
-        snapshot.ref.externalSessionId === input.externalSessionId,
-    );
-    if (match) {
-      return match;
-    }
-    return createAgentSessionRuntimeSnapshotFixture({
-      ref: {
-        repoPath: input.repoPath ?? "/tmp/repo",
-        runtimeKind: input.runtimeKind ?? "opencode",
-        workingDirectory: input.workingDirectory ?? "/tmp/repo/worktree",
-        externalSessionId: input.externalSessionId,
-      },
-    });
-  };
-  OpencodeSdkAdapter.prototype.subscribeEvents = async () => () => {};
   OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
   OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -127,10 +80,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     host.taskSessionBootstrapPrepare = originalTaskSessionBootstrapPrepare;
     host.taskSessionBootstrapComplete = originalTaskSessionBootstrapComplete;
     host.taskSessionBootstrapAbort = originalTaskSessionBootstrapAbort;
-    opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
-    opencodeSdkAdapterPrototype.readSessionRuntimeSnapshot =
-      originalReadAgentSessionRuntimeSnapshot;
-    OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
     OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
   };

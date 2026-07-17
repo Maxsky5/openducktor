@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openducktor/core";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -19,6 +19,7 @@ import {
   createLoadAgentSessionHistory,
   loadSelectedSessionBaselineHistoryIntoStore,
   loadSessionHistoryIntoStore,
+  reloadSessionHistoryIntoStore,
 } from "./session-history-loader";
 
 const taskFixture: TaskCard = {
@@ -338,6 +339,81 @@ describe("session history loader", () => {
     expect(harness.session.historyLoadState).toBe("loaded");
   });
 
+  test("reloads a loaded transcript after a live-stream gap without dropping later messages", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "Recovered from history",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "live-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:02.000Z",
+          content: "Arrived after the gap",
+        },
+      ]),
+    });
+
+    await reloadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Recovered from history",
+      "Arrived after the gap",
+    ]);
+  });
+
+  test("keeps the last loaded transcript when stream-gap recovery fails", async () => {
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "existing-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          content: "Last known transcript",
+        },
+      ]),
+    });
+
+    await expect(
+      reloadSessionHistoryIntoStore({
+        repoPath: "/repo",
+        adapter: {
+          loadSessionHistory: async () => {
+            throw new Error("history unavailable");
+          },
+        },
+        readSessionSnapshot: harness.readSessionSnapshot,
+        updateSession: harness.updateSession,
+        identity: sessionTarget,
+        isStaleRepoOperation: () => false,
+      }),
+    ).rejects.toThrow("history unavailable");
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Last known transcript",
+    ]);
+  });
+
   test("loads transcript history without owning live input state", async () => {
     const pendingQuestions: AgentQuestionRequest[] = [
       {
@@ -535,8 +611,7 @@ describe("session history loader", () => {
     );
   });
 
-  test("does not wait for selected session observation before loading baseline history", async () => {
-    const observedSessions: PolicyBoundSessionRef[] = [];
+  test("loads baseline history independently from live-session observation", async () => {
     const harness = createHistoryLoadHarness();
     const loadSessionHistory = mock(async () => [
       {
@@ -554,25 +629,11 @@ describe("session history loader", () => {
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
       identity: sessionTarget,
-      observeAgentSession: (session) => {
-        observedSessions.push(session);
-        return new Promise(() => {});
-      },
       isStaleRepoOperation: () => false,
     });
 
     expect(loadSessionHistory).toHaveBeenCalledTimes(1);
     expect(harness.session.historyLoadState).toBe("loaded");
-    expect(observedSessions).toEqual([
-      {
-        externalSessionId: sessionTarget.externalSessionId,
-        repoPath: "/repo",
-        runtimeKind: sessionTarget.runtimeKind,
-        workingDirectory: sessionTarget.workingDirectory,
-        runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      },
-    ]);
   }, 500);
 
   test("loads selected baseline history when live messages arrive during the hydration claim", async () => {
@@ -674,7 +735,7 @@ describe("session history loader", () => {
     expect(harness.session.contextUsage).toEqual(liveContextUsage);
   });
 
-  test("applies context stats from loaded idle history", async () => {
+  test("does not derive missing live context from transcript history", async () => {
     const harness = createHistoryLoadHarness();
 
     await loadSessionHistoryIntoStore({
@@ -709,10 +770,7 @@ describe("session history loader", () => {
     });
 
     expect(harness.session.historyLoadState).toBe("loaded");
-    expect(harness.session.contextUsage).toEqual({
-      totalTokens: 123,
-      contextWindow: 1_000,
-    });
+    expect(harness.session.contextUsage).toBeNull();
   });
 
   test("passes transient prompt context to the history adapter without rendering it locally", async () => {

@@ -4,19 +4,13 @@ import type {
   TaskCard,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentRole,
-  AgentSessionRuntimePolicy,
-  AgentUserMessagePart,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "@/types/agent-session-start";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
-import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
 export type { StartAgentSessionInput, StartAgentSessionResult };
 
@@ -29,7 +23,6 @@ export type SessionDependencies = {
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
-  observeAgentSession: ObserveAgentSession;
   clearSessionObservationState: (identity: AgentSessionIdentity) => void;
 };
 
@@ -127,7 +120,6 @@ export type StartOrReuseResult =
   | {
       kind: "started";
       runtimeInfo: RuntimeInfo;
-      runtimePolicy: AgentSessionRuntimePolicy;
       taskCard: TaskCard;
       ctx: StartedSessionContext;
     };

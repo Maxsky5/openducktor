@@ -9,7 +9,6 @@ import {
   type RuntimeApprovalRequestType,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@openducktor/core";
-import { codexServerRequestIdMetadata, codexServerRequestKey } from "./codex-app-server-approvals";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
@@ -28,6 +27,10 @@ const MCP_APPROVAL_TOOL_PARAMS_KEY = "tool_params";
 const MCP_APPROVAL_TOOL_TITLE_KEY = "tool_title";
 
 type SupportedApprovalOutcomes = NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]>;
+type PendingApprovalProjection = Omit<
+  AgentPendingApprovalRequest,
+  "requestId" | "requestInstanceId"
+>;
 
 const APPROVE_ONCE_AND_REJECT = ["approve_once", "reject"] as const satisfies readonly [
   RuntimeApprovalReplyOutcome,
@@ -274,25 +277,17 @@ const approvalContentFields = (
   };
 };
 
-export const toApprovalRequest = (
-  request: CodexServerRequestRecord,
-): AgentPendingApprovalRequest => {
+export const toApprovalRequest = (request: CodexServerRequestRecord): PendingApprovalProjection => {
   if (request.id === undefined) {
     throw new Error("Codex app-server approval request is missing an id.");
   }
 
   return {
-    requestId: codexServerRequestKey(request.id),
     requestType: classifyApprovalRequestType(request),
     ...approvalContentFields(request),
     mutation: classifyCodexRequestMutation(request),
     supportedReplyOutcomes: supportedReplyOutcomesForRequest(request),
     ...commandApprovalFields(request),
-    metadata: {
-      ...codexServerRequestIdMetadata(request.id),
-      codexMethod: request.method,
-      params: request.params,
-    },
   };
 };
 
@@ -340,7 +335,7 @@ const mcpToolApprovalSupportedReplyOutcomes = (
 
 export const toMcpElicitationApprovalRequest = (
   request: CodexServerRequestRecord,
-): AgentPendingApprovalRequest | null => {
+): PendingApprovalProjection | null => {
   if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
     return null;
   }
@@ -362,7 +357,6 @@ export const toMcpElicitationApprovalRequest = (
   const toolParams = meta[MCP_APPROVAL_TOOL_PARAMS_KEY];
 
   return {
-    requestId: codexServerRequestKey(request.id),
     requestType: "runtime_tool",
     title: "MCP Tool Approval",
     summary: request.params.message,
@@ -375,9 +369,6 @@ export const toMcpElicitationApprovalRequest = (
     mutation: "unknown",
     supportedReplyOutcomes: mcpToolApprovalSupportedReplyOutcomes(meta),
     metadata: {
-      ...codexServerRequestIdMetadata(request.id),
-      codexMethod: request.method,
-      params: request.params,
       serverName: request.params.serverName,
     },
   };
@@ -420,7 +411,10 @@ export const isTerminalTurnStatus = (value: unknown): boolean => {
 export const parseQuestionRequest = (
   request: CodexServerRequestRecord,
 ): {
-  request: import("@openducktor/core").AgentPendingQuestionRequest;
+  request: Omit<
+    import("@openducktor/core").AgentPendingQuestionRequest,
+    "requestId" | "requestInstanceId"
+  >;
   threadId: string;
   turnId: string;
   questionIds: string[];
@@ -494,7 +488,6 @@ export const parseQuestionRequest = (
 
   return {
     request: {
-      requestId: codexServerRequestKey(request.id),
       questions,
     },
     threadId,

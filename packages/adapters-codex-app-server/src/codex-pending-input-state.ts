@@ -1,11 +1,30 @@
+import type { CodexAppServerRequestId } from "@openducktor/contracts";
 import type { AgentPendingApprovalRequest, AgentPendingQuestionRequest } from "@openducktor/core";
+import { codexServerRequestKey } from "./codex-app-server-approvals";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import type { CodexSubagentRoute } from "./codex-subagent-link-state";
+
+export type CodexNativeServerRequest = {
+  id: CodexAppServerRequestId;
+  method: string;
+  params?: unknown;
+};
+
+type PendingApprovalRequestProjection = Omit<
+  AgentPendingApprovalRequest,
+  "requestId" | "requestInstanceId"
+>;
+
+type PendingQuestionRequestProjection = Omit<
+  AgentPendingQuestionRequest,
+  "requestId" | "requestInstanceId"
+>;
 
 export type PendingApprovalEntry = {
   runtimeId: string;
   threadId: string;
   request: AgentPendingApprovalRequest;
+  nativeRequest: CodexNativeServerRequest;
   route?: CodexSubagentRoute;
 };
 
@@ -13,10 +32,28 @@ export type PendingQuestionEntry = {
   runtimeId: string;
   threadId: string;
   request: AgentPendingQuestionRequest;
+  nativeRequest: CodexNativeServerRequest;
   questionIds: string[];
   input: Record<string, unknown>;
   route?: CodexSubagentRoute;
 };
+
+export type RegisterPendingApprovalInput = Omit<PendingApprovalEntry, "request"> & {
+  request: PendingApprovalRequestProjection;
+};
+
+export type RegisterPendingQuestionInput = Omit<PendingQuestionEntry, "request"> & {
+  request: PendingQuestionRequestProjection;
+};
+
+export type PendingInputRegistration<Entry> = {
+  entry: Entry;
+  isNew: boolean;
+};
+
+export type PendingNativeRequest =
+  | { kind: "approval"; entry: PendingApprovalEntry }
+  | { kind: "question"; entry: PendingQuestionEntry };
 
 export type PendingApprovalEventEntry = {
   request: AgentPendingApprovalRequest;
@@ -39,56 +76,137 @@ const sameRoute = (a: CodexSubagentRoute, b: CodexSubagentRoute): boolean =>
   a.childExternalSessionId === b.childExternalSessionId &&
   a.subagentCorrelationKey === b.subagentCorrelationKey;
 
-export const codexPendingInputRequestInstanceId = (runtimeId: string, requestId: string): string =>
-  `${runtimeId}\u0000${requestId}`;
+const newPendingRequestOccurrenceId = (): string => `pending-${crypto.randomUUID()}`;
 
-const pendingRequestKey = (runtimeId: string, requestId: string): string =>
-  codexPendingInputRequestInstanceId(runtimeId, requestId);
+const nativeRequestKey = (
+  runtimeId: string,
+  threadId: string,
+  kind: "approval" | "question",
+  nativeRequestId: CodexAppServerRequestId,
+): string => JSON.stringify([runtimeId, threadId, kind, codexServerRequestKey(nativeRequestId)]);
 
 export class CodexPendingInputState {
   private readonly pendingApprovalsByRequestKey = new Map<string, PendingApprovalEntry>();
+  private readonly approvalRequestIdByNativeKey = new Map<string, string>();
   private readonly pendingApprovalIdsBySessionId = new Map<string, Set<string>>();
   private readonly mirroredApprovalIdsBySessionId = new Map<string, Set<string>>();
   private readonly pendingQuestionsByRequestKey = new Map<string, PendingQuestionEntry>();
+  private readonly questionRequestIdByNativeKey = new Map<string, string>();
   private readonly pendingQuestionIdsBySessionId = new Map<string, Set<string>>();
   private readonly mirroredQuestionIdsBySessionId = new Map<string, Set<string>>();
   private readonly activeTurnsByApprovalRequestKey = new Map<string, ActiveCodexTurn>();
   private readonly activeTurnsByQuestionRequestKey = new Map<string, ActiveCodexTurn>();
+  private readonly approvalReplyClaims = new Set<string>();
+  private readonly questionReplyClaims = new Set<string>();
 
-  addApproval(entry: PendingApprovalEntry): void {
-    const requestId = entry.request.requestId;
-    const requestKey = pendingRequestKey(entry.runtimeId, requestId);
-    this.pendingApprovalsByRequestKey.set(requestKey, entry);
-    this.addSessionRequestId(this.pendingApprovalIdsBySessionId, entry.threadId, requestKey);
+  addApproval(input: RegisterPendingApprovalInput): PendingInputRegistration<PendingApprovalEntry> {
+    const nativeKey = nativeRequestKey(
+      input.runtimeId,
+      input.threadId,
+      "approval",
+      input.nativeRequest.id,
+    );
+    const existingRequestId = this.approvalRequestIdByNativeKey.get(nativeKey);
+    const existing = existingRequestId
+      ? this.pendingApprovalsByRequestKey.get(existingRequestId)
+      : undefined;
+    if (existing) {
+      return { entry: existing, isNew: false };
+    }
+
+    const requestId = newPendingRequestOccurrenceId();
+    const entry: PendingApprovalEntry = {
+      ...input,
+      request: {
+        ...input.request,
+        requestId,
+        requestInstanceId: requestId,
+      },
+    };
+    this.pendingApprovalsByRequestKey.set(requestId, entry);
+    this.approvalRequestIdByNativeKey.set(nativeKey, requestId);
+    this.addSessionRequestId(this.pendingApprovalIdsBySessionId, entry.threadId, requestId);
     if (entry.route) {
       this.addSessionRequestId(
         this.mirroredApprovalIdsBySessionId,
         entry.route.parentExternalSessionId,
-        requestKey,
+        requestId,
       );
     }
+    return { entry, isNew: true };
   }
 
-  addQuestion(entry: PendingQuestionEntry): void {
-    const requestId = entry.request.requestId;
-    const requestKey = pendingRequestKey(entry.runtimeId, requestId);
-    this.pendingQuestionsByRequestKey.set(requestKey, entry);
-    this.addSessionRequestId(this.pendingQuestionIdsBySessionId, entry.threadId, requestKey);
+  addQuestion(input: RegisterPendingQuestionInput): PendingInputRegistration<PendingQuestionEntry> {
+    const nativeKey = nativeRequestKey(
+      input.runtimeId,
+      input.threadId,
+      "question",
+      input.nativeRequest.id,
+    );
+    const existingRequestId = this.questionRequestIdByNativeKey.get(nativeKey);
+    const existing = existingRequestId
+      ? this.pendingQuestionsByRequestKey.get(existingRequestId)
+      : undefined;
+    if (existing) {
+      return { entry: existing, isNew: false };
+    }
+
+    const requestId = newPendingRequestOccurrenceId();
+    const entry: PendingQuestionEntry = {
+      ...input,
+      request: {
+        ...input.request,
+        requestId,
+        requestInstanceId: requestId,
+      },
+    };
+    this.pendingQuestionsByRequestKey.set(requestId, entry);
+    this.questionRequestIdByNativeKey.set(nativeKey, requestId);
+    this.addSessionRequestId(this.pendingQuestionIdsBySessionId, entry.threadId, requestId);
     if (entry.route) {
       this.addSessionRequestId(
         this.mirroredQuestionIdsBySessionId,
         entry.route.parentExternalSessionId,
-        requestKey,
+        requestId,
       );
     }
+    return { entry, isNew: true };
   }
 
   approval(requestId: string, runtimeId?: string): PendingApprovalEntry | undefined {
-    return this.pendingEntry(this.pendingApprovalsByRequestKey, "approval", requestId, runtimeId);
+    return this.pendingEntry(this.pendingApprovalsByRequestKey, requestId, runtimeId);
   }
 
   question(requestId: string, runtimeId?: string): PendingQuestionEntry | undefined {
-    return this.pendingEntry(this.pendingQuestionsByRequestKey, "question", requestId, runtimeId);
+    return this.pendingEntry(this.pendingQuestionsByRequestKey, requestId, runtimeId);
+  }
+
+  nativeRequest(
+    runtimeId: string,
+    threadId: string,
+    requestId: CodexAppServerRequestId,
+  ): PendingNativeRequest | undefined {
+    const approvalOccurrenceId = this.approvalRequestIdByNativeKey.get(
+      nativeRequestKey(runtimeId, threadId, "approval", requestId),
+    );
+    const questionOccurrenceId = this.questionRequestIdByNativeKey.get(
+      nativeRequestKey(runtimeId, threadId, "question", requestId),
+    );
+    const approval = approvalOccurrenceId
+      ? this.pendingApprovalsByRequestKey.get(approvalOccurrenceId)
+      : undefined;
+    const question = questionOccurrenceId
+      ? this.pendingQuestionsByRequestKey.get(questionOccurrenceId)
+      : undefined;
+    if (approval && question) {
+      throw new Error(
+        `Codex native request '${String(requestId)}' is ambiguous for runtime '${runtimeId}' and session '${threadId}'.`,
+      );
+    }
+    if (approval) {
+      return { kind: "approval", entry: approval };
+    }
+    return question ? { kind: "question", entry: question } : undefined;
   }
 
   requireApprovalForSession(
@@ -105,7 +223,7 @@ export class CodexPendingInputState {
         requestId,
         externalSessionId,
         runtimeId,
-      ) ?? this.pendingEntry(this.pendingApprovalsByRequestKey, "approval", requestId, runtimeId);
+      ) ?? this.pendingEntry(this.pendingApprovalsByRequestKey, requestId, runtimeId);
     if (!approval) {
       throw new Error(`Unknown Codex approval request '${requestId}'.`);
     }
@@ -133,7 +251,7 @@ export class CodexPendingInputState {
         requestId,
         externalSessionId,
         runtimeId,
-      ) ?? this.pendingEntry(this.pendingQuestionsByRequestKey, "question", requestId, runtimeId);
+      ) ?? this.pendingEntry(this.pendingQuestionsByRequestKey, requestId, runtimeId);
     if (!question) {
       throw new Error(`Unknown Codex question request '${requestId}'.`);
     }
@@ -145,6 +263,38 @@ export class CodexPendingInputState {
       question.route,
     );
     return question;
+  }
+
+  claimApprovalForSession(
+    requestId: string,
+    externalSessionId: string,
+    runtimeId?: string,
+  ): PendingApprovalEntry {
+    const approval = this.requireApprovalForSession(requestId, externalSessionId, runtimeId);
+    this.claimReply("approval", requestId, this.approvalReplyClaims);
+    return approval;
+  }
+
+  claimQuestionForSession(
+    requestId: string,
+    externalSessionId: string,
+    runtimeId?: string,
+  ): PendingQuestionEntry {
+    const question = this.requireQuestionForSession(requestId, externalSessionId, runtimeId);
+    this.claimReply("question", requestId, this.questionReplyClaims);
+    return question;
+  }
+
+  releaseApprovalReplyClaim(requestId: string, runtimeId?: string): void {
+    if (this.approval(requestId, runtimeId)) {
+      this.approvalReplyClaims.delete(requestId);
+    }
+  }
+
+  releaseQuestionReplyClaim(requestId: string, runtimeId?: string): void {
+    if (this.question(requestId, runtimeId)) {
+      this.questionReplyClaims.delete(requestId);
+    }
   }
 
   pendingApprovalsForSession(
@@ -247,10 +397,7 @@ export class CodexPendingInputState {
     for (const approval of approvalEntries.filter(
       (entry) => entry.runtimeId === activeTurn.session.runtimeId,
     )) {
-      this.activeTurnsByApprovalRequestKey.set(
-        pendingRequestKey(approval.runtimeId, approval.request.requestId),
-        activeTurn,
-      );
+      this.activeTurnsByApprovalRequestKey.set(approval.request.requestId, activeTurn);
     }
 
     const questionEntries = this.pendingQuestionEntriesForIndex(
@@ -262,10 +409,7 @@ export class CodexPendingInputState {
     for (const question of questionEntries.filter(
       (entry) => entry.runtimeId === activeTurn.session.runtimeId,
     )) {
-      this.activeTurnsByQuestionRequestKey.set(
-        pendingRequestKey(question.runtimeId, question.request.requestId),
-        activeTurn,
-      );
+      this.activeTurnsByQuestionRequestKey.set(question.request.requestId, activeTurn);
     }
   }
 
@@ -274,12 +418,15 @@ export class CodexPendingInputState {
     if (!entry) {
       return undefined;
     }
-    const requestKey = pendingRequestKey(entry.runtimeId, requestId);
-    const activeTurn = this.activeTurnsByApprovalRequestKey.get(requestKey);
-    this.pendingApprovalsByRequestKey.delete(requestKey);
-    this.activeTurnsByApprovalRequestKey.delete(requestKey);
-    this.deleteSessionRequestId(this.pendingApprovalIdsBySessionId, requestKey);
-    this.deleteSessionRequestId(this.mirroredApprovalIdsBySessionId, requestKey);
+    const activeTurn = this.activeTurnsByApprovalRequestKey.get(requestId);
+    this.pendingApprovalsByRequestKey.delete(requestId);
+    this.approvalRequestIdByNativeKey.delete(
+      nativeRequestKey(entry.runtimeId, entry.threadId, "approval", entry.nativeRequest.id),
+    );
+    this.activeTurnsByApprovalRequestKey.delete(requestId);
+    this.approvalReplyClaims.delete(requestId);
+    this.deleteSessionRequestId(this.pendingApprovalIdsBySessionId, requestId);
+    this.deleteSessionRequestId(this.mirroredApprovalIdsBySessionId, requestId);
     return activeTurn;
   }
 
@@ -288,12 +435,15 @@ export class CodexPendingInputState {
     if (!entry) {
       return undefined;
     }
-    const requestKey = pendingRequestKey(entry.runtimeId, requestId);
-    const activeTurn = this.activeTurnsByQuestionRequestKey.get(requestKey);
-    this.pendingQuestionsByRequestKey.delete(requestKey);
-    this.activeTurnsByQuestionRequestKey.delete(requestKey);
-    this.deleteSessionRequestId(this.pendingQuestionIdsBySessionId, requestKey);
-    this.deleteSessionRequestId(this.mirroredQuestionIdsBySessionId, requestKey);
+    const activeTurn = this.activeTurnsByQuestionRequestKey.get(requestId);
+    this.pendingQuestionsByRequestKey.delete(requestId);
+    this.questionRequestIdByNativeKey.delete(
+      nativeRequestKey(entry.runtimeId, entry.threadId, "question", entry.nativeRequest.id),
+    );
+    this.activeTurnsByQuestionRequestKey.delete(requestId);
+    this.questionReplyClaims.delete(requestId);
+    this.deleteSessionRequestId(this.pendingQuestionIdsBySessionId, requestId);
+    this.deleteSessionRequestId(this.mirroredQuestionIdsBySessionId, requestId);
     return activeTurn;
   }
 
@@ -305,6 +455,9 @@ export class CodexPendingInputState {
       this.pendingApprovalIdsBySessionId,
       this.mirroredApprovalIdsBySessionId,
       this.activeTurnsByApprovalRequestKey,
+      this.approvalReplyClaims,
+      this.approvalRequestIdByNativeKey,
+      "approval",
     );
     this.clearPendingEntriesForSession(
       externalSessionId,
@@ -313,16 +466,37 @@ export class CodexPendingInputState {
       this.pendingQuestionIdsBySessionId,
       this.mirroredQuestionIdsBySessionId,
       this.activeTurnsByQuestionRequestKey,
+      this.questionReplyClaims,
+      this.questionRequestIdByNativeKey,
+      "question",
     );
   }
 
-  private clearPendingEntriesForSession<Entry extends { runtimeId: string }>(
+  clearRuntime(runtimeId: string): void {
+    for (const [requestId, entry] of [...this.pendingApprovalsByRequestKey]) {
+      if (entry.runtimeId === runtimeId) {
+        this.resolveApproval(requestId, runtimeId);
+      }
+    }
+    for (const [requestId, entry] of [...this.pendingQuestionsByRequestKey]) {
+      if (entry.runtimeId === runtimeId) {
+        this.resolveQuestion(requestId, runtimeId);
+      }
+    }
+  }
+
+  private clearPendingEntriesForSession<
+    Entry extends { runtimeId: string; threadId: string; nativeRequest: CodexNativeServerRequest },
+  >(
     externalSessionId: string,
     runtimeId: string | undefined,
     entriesByRequestKey: Map<string, Entry>,
     ownerIndex: Map<string, Set<string>>,
     mirrorIndex: Map<string, Set<string>>,
     activeTurnsByRequestKey: Map<string, ActiveCodexTurn>,
+    replyClaims: Set<string>,
+    requestIdByNativeKey: Map<string, string>,
+    kind: "approval" | "question",
   ): void {
     const belongsToRuntime = (requestKey: string): boolean =>
       !runtimeId || entriesByRequestKey.get(requestKey)?.runtimeId === runtimeId;
@@ -334,8 +508,15 @@ export class CodexPendingInputState {
     );
 
     for (const requestKey of ownerRequestKeys) {
+      const entry = entriesByRequestKey.get(requestKey);
       entriesByRequestKey.delete(requestKey);
+      if (entry) {
+        requestIdByNativeKey.delete(
+          nativeRequestKey(entry.runtimeId, entry.threadId, kind, entry.nativeRequest.id),
+        );
+      }
       activeTurnsByRequestKey.delete(requestKey);
+      replyClaims.delete(requestKey);
       this.deleteSessionRequestId(ownerIndex, requestKey);
       this.deleteSessionRequestId(mirrorIndex, requestKey);
     }
@@ -452,29 +633,19 @@ export class CodexPendingInputState {
       );
     }
 
-    const requestKey = pendingRequestKey(runtimeId, requestId);
-    const wasMirrored = mirrorIndex.get(route.parentExternalSessionId)?.has(requestKey) ?? false;
+    const wasMirrored = mirrorIndex.get(route.parentExternalSessionId)?.has(requestId) ?? false;
     setRoute(route);
-    this.addSessionRequestId(mirrorIndex, route.parentExternalSessionId, requestKey);
+    this.addSessionRequestId(mirrorIndex, route.parentExternalSessionId, requestId);
     return !wasMirrored;
   }
 
   private pendingEntry<Entry extends PendingApprovalEntry | PendingQuestionEntry>(
     entries: ReadonlyMap<string, Entry>,
-    kind: "approval" | "question",
     requestId: string,
     runtimeId?: string,
   ): Entry | undefined {
-    if (runtimeId) {
-      return entries.get(pendingRequestKey(runtimeId, requestId));
-    }
-    const matches = [...entries.values()].filter((entry) => entry.request.requestId === requestId);
-    if (matches.length > 1) {
-      throw new Error(
-        `Codex ${kind} request '${requestId}' exists in multiple runtimes; runtimeId is required.`,
-      );
-    }
-    return matches[0];
+    const entry = entries.get(requestId);
+    return entry && (!runtimeId || entry.runtimeId === runtimeId) ? entry : undefined;
   }
 
   private pendingEntryForSession<Entry extends PendingApprovalEntry | PendingQuestionEntry>(
@@ -526,5 +697,12 @@ export class CodexPendingInputState {
     throw new Error(
       `Codex ${kind} request '${requestId}' belongs to session '${ownerSessionId}', not '${externalSessionId}'.`,
     );
+  }
+
+  private claimReply(kind: "approval" | "question", requestId: string, claims: Set<string>): void {
+    if (claims.has(requestId)) {
+      throw new Error(`Codex ${kind} request '${requestId}' already has a reply in flight.`);
+    }
+    claims.add(requestId);
   }
 }

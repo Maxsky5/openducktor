@@ -116,17 +116,25 @@ export const createRuntimeStreamSubscription = () => {
     streamListeners.push(listener);
     return () => {};
   });
-  const emitNotification = (message: unknown, receivedAt = new Date().toISOString()) => {
+  const emitEvent = (
+    kind: "notification" | "server_request",
+    message: unknown,
+    receivedAt = new Date().toISOString(),
+  ) => {
     const listener = streamListeners[0];
     expect(listener).toBeDefined();
     listener?.({
       runtimeId: "runtime-live",
-      kind: "notification",
+      kind,
       receivedAt,
       message,
     });
   };
-  return { subscribeEvents, emitNotification };
+  const emitNotification = (message: unknown, receivedAt?: string) =>
+    emitEvent("notification", message, receivedAt);
+  const emitServerRequest = (message: unknown, receivedAt?: string) =>
+    emitEvent("server_request", message, receivedAt);
+  return { subscribeEvents, emitNotification, emitServerRequest };
 };
 
 export const createDeferred = <T>() => {
@@ -504,7 +512,7 @@ export const createAdapterWithTransport = (
       requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
     },
     transportFactory: () => withDefaultThreadResume(transport),
-    takeBufferedEvents: async () => [],
+    subscribeEvents: () => () => {},
     respondServerRequest: async () => {},
     ...overrides,
   });
@@ -529,7 +537,6 @@ export const createHarness = (
     kind: runtimeKind,
     runtimeId: "runtime-live",
   }));
-  const takeBufferedEvents = mock(async (_runtimeId: string) => []);
   const respondServerRequest = mock(async () => {});
 
   const adapter = new CodexAppServerAdapter({
@@ -537,7 +544,7 @@ export const createHarness = (
       requireRepoRuntime,
     },
     transportFactory,
-    takeBufferedEvents,
+    subscribeEvents: () => () => {},
     respondServerRequest,
     ...overrides,
   });
@@ -547,7 +554,6 @@ export const createHarness = (
     transports,
     transportFactory,
     requireRepoRuntime,
-    takeBufferedEvents,
     respondServerRequest,
   };
 };

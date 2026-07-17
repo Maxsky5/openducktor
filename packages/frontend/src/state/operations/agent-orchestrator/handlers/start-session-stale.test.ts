@@ -194,7 +194,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     }
   });
 
-  test("rolls back started remote session when workspace becomes stale after observer start", async () => {
+  test("rolls back a started remote session when persistence makes the workspace stale", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     let stopCalls = 0;
 
@@ -222,7 +222,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       adapter,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
-      observeAgentSession: async () => {
+      persistSessionRecord: async () => {
         currentWorkspaceRepoPathRef.current = "/tmp/other";
       },
     });
