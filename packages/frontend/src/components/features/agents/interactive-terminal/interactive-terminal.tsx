@@ -5,13 +5,14 @@ import { type ITheme, Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
+import { TERMINAL_FONT_FAMILY } from "../terminal-font";
 import {
-  activateTerminalViewport,
   createHydratedTerminalTitlePublisher,
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   createTerminalKeyEventHandler,
   createTerminalOutputSequencer,
+  createTerminalViewportActivator,
   handleTerminalMetadataFrame,
   normalizeTerminalTitle,
 } from "./interactive-terminal-policy";
@@ -52,7 +53,7 @@ export function InteractiveTerminal({
 }): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const activateViewportRef = useRef<((focus: (() => void) | null) => void) | null>(null);
   const callbacksRef = useRef({
     onAttention,
     onLifecycle,
@@ -80,7 +81,7 @@ export function InteractiveTerminal({
       allowTransparency: true,
       convertEol: false,
       cursorBlink: true,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: 12,
       lineHeight: 1.35,
       screenReaderMode: true,
@@ -91,7 +92,12 @@ export function InteractiveTerminal({
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
+    activateViewportRef.current = createTerminalViewportActivator({
+      fit: () => fitAddon.fit(),
+      scrollToBottom: () => terminal.scrollToBottom(),
+      refresh: (start, end) => terminal.refresh(start, end),
+      readRows: () => terminal.rows,
+    });
     const reportInteractionFailure = (cause: unknown): void => {
       setInteractionError(cause instanceof Error ? cause.message : String(cause));
     };
@@ -178,7 +184,7 @@ export function InteractiveTerminal({
       fitAddon.dispose();
       terminal.dispose();
       terminalRef.current = null;
-      fitAddonRef.current = null;
+      activateViewportRef.current = null;
     };
   }, [controller, terminalId]);
 
@@ -186,14 +192,9 @@ export function InteractiveTerminal({
     if (!active || !isHydrated) return;
     const frameId = requestAnimationFrame(() => {
       const terminal = terminalRef.current;
-      const fitAddon = fitAddonRef.current;
-      if (!terminal || !fitAddon) return;
-      activateTerminalViewport({
-        fit: () => fitAddon.fit(),
-        refresh: (start, end) => terminal.refresh(start, end),
-        readRows: () => terminal.rows,
-        focus: focusRequest > 0 ? () => terminal.focus() : null,
-      });
+      const activateViewport = activateViewportRef.current;
+      if (!terminal || !activateViewport) return;
+      activateViewport(focusRequest > 0 ? () => terminal.focus() : null);
     });
     return () => cancelAnimationFrame(frameId);
   }, [active, focusRequest, isHydrated]);

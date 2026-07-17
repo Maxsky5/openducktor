@@ -4,20 +4,27 @@ export type TerminalKeyAction = "copy" | "interrupt" | "paste" | "passthrough";
 
 const TERMINAL_TITLE_MAX_LENGTH = 160;
 
-export const activateTerminalViewport = ({
+export const createTerminalViewportActivator = ({
   fit,
+  scrollToBottom,
   refresh,
   readRows,
-  focus,
 }: {
   fit: () => void;
+  scrollToBottom: () => void;
   refresh: (start: number, end: number) => void;
   readRows: () => number;
-  focus: (() => void) | null;
-}): void => {
-  fit();
-  refresh(0, Math.max(0, readRows() - 1));
-  focus?.();
+}): ((focus: (() => void) | null) => void) => {
+  let hasBeenRevealed = false;
+  return (focus): void => {
+    fit();
+    if (!hasBeenRevealed) {
+      scrollToBottom();
+      hasBeenRevealed = true;
+    }
+    refresh(0, Math.max(0, readRows() - 1));
+    focus?.();
+  };
 };
 
 export const createHydratedTerminalTitlePublisher = (publish: (title: string) => void) => {

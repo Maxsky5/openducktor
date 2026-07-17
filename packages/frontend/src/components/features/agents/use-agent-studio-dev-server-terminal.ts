@@ -2,6 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { type ITerminalOptions, type ITheme, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { TERMINAL_FONT_FAMILY } from "./terminal-font";
 
 export type TerminalBinding = {
   terminal: Pick<Terminal, "clear" | "dispose" | "loadAddon" | "open" | "options" | "reset"> & {
@@ -74,7 +75,7 @@ const terminalOptions = (container: HTMLElement): ITerminalOptions => ({
   convertEol: false,
   cursorBlink: false,
   disableStdin: true,
-  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+  fontFamily: TERMINAL_FONT_FAMILY,
   fontSize: 12,
   lineHeight: 1.35,
   scrollback: 2000,
