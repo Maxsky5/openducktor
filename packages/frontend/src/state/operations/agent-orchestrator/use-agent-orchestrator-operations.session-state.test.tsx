@@ -902,4 +902,74 @@ describe("use-agent-orchestrator-operations session state", () => {
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
+
+  test("applies context returned for a persisted session outside the live projection", async () => {
+    const originalAgentSessionsList = host.agentSessionsList;
+    const contextUsage = {
+      totalTokens: 12_345,
+      contextWindow: 200_000,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+    let receivedContextInput: unknown = null;
+
+    host.agentSessionsList = async () => [persistedSessionFixture];
+    const liveStream = createLiveSessionStreamFixture();
+    const dependencies = createTestDependencies(
+      {},
+      {},
+      {
+        ...liveStream.portOverrides,
+        agentSessionLiveLoadContext: async (input) => {
+          receivedContextInput = input;
+          return contextUsage;
+        },
+      },
+    );
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixtureWithPersistedBuildSession],
+      refreshTaskData: async () => {},
+      dependencies,
+    });
+
+    try {
+      await harness.mount();
+      const loaded = await harness.waitFor((state) =>
+        listHarnessSessions(state).some(
+          (session) => session.externalSessionId === persistedSessionFixture.externalSessionId,
+        ),
+      );
+      const persistedSession = listHarnessSessions(loaded).find(
+        (session) => session.externalSessionId === persistedSessionFixture.externalSessionId,
+      );
+      if (!persistedSession) {
+        throw new Error("Expected persisted session");
+      }
+      expect(persistedSession.contextUsage).toBeNull();
+
+      await harness.run(async () => {
+        await harness.getLatest().operations.loadAgentSessionContext({
+          externalSessionId: persistedSession.externalSessionId,
+          runtimeKind: persistedSession.runtimeKind,
+          workingDirectory: persistedSession.workingDirectory,
+        });
+      });
+
+      expect(receivedContextInput).toEqual({
+        repoPath: "/tmp/repo",
+        externalSessionId: persistedSession.externalSessionId,
+        runtimeKind: persistedSession.runtimeKind,
+        workingDirectory: persistedSession.workingDirectory,
+      });
+      expect(
+        listHarnessSessions(harness.getLatest()).find(
+          (session) => session.externalSessionId === persistedSession.externalSessionId,
+        )?.contextUsage,
+      ).toEqual(contextUsage);
+    } finally {
+      await harness.unmount();
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
 });

@@ -48,6 +48,12 @@ export const createAgentSessionLiveAttachment = (
         pending = [];
         listener(envelope);
         for (const bufferedEnvelope of buffered) {
+          if (
+            bufferedEnvelope.type === "session_upsert" ||
+            bufferedEnvelope.type === "session_removed"
+          ) {
+            continue;
+          }
           listener(bufferedEnvelope);
         }
         return;

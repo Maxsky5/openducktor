@@ -106,7 +106,7 @@ const toQuestionRequest = (
   ...(routing ?? {}),
 });
 
-const toContextUsage = (
+export const toContextUsage = (
   contextUsage: AgentSessionLiveSnapshot["contextUsage"],
 ): Exclude<AgentSessionState["contextUsage"], undefined> =>
   contextUsage === null
@@ -373,6 +373,41 @@ export const buildAgentSessionLiveCollection = ({
     collection = applyChildSnapshot(collection, snapshot);
   }
 
+  return collection;
+};
+
+export const applyTaskSessionRecords = ({
+  current,
+  taskSessionRecords,
+}: {
+  current: AgentSessionCollection;
+  taskSessionRecords: TaskSessionRecords;
+}): AgentSessionCollection => {
+  const loadedTaskIds = new Set(taskSessionRecords.taskIds);
+  const persistedKeys = persistedRecordKeys(taskSessionRecords);
+  let collection = current;
+  for (const session of listAgentSessions(current)) {
+    const recordDisappeared =
+      session.role !== null &&
+      loadedTaskIds.has(session.taskId) &&
+      session.status !== "starting" &&
+      !persistedKeys.has(agentSessionIdentityKey(session));
+    if (recordDisappeared) {
+      collection = removeAgentSession(collection, session);
+    }
+  }
+  for (const { taskId, record } of taskSessionRecords.records) {
+    const identity = toPersistedSessionIdentity(record);
+    const currentSession = getAgentSession(collection, identity);
+    collection = replaceAgentSession(
+      collection,
+      toPersistedSessionView({
+        taskId,
+        record,
+        ...(currentSession ? { current: currentSession } : {}),
+      }),
+    );
+  }
   return collection;
 };
 

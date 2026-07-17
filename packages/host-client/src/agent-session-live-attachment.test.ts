@@ -76,6 +76,44 @@ describe("agent session live attachment", () => {
     expect(received).toEqual([snapshot, replayedSnapshot, duringReconnect, refreshedSnapshot]);
   });
 
+  test("lets a repair snapshot supersede buffered session state without dropping transcripts", () => {
+    const received: AgentSessionLiveEnvelope[] = [];
+    const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
+      received.push(envelope);
+    });
+    const staleSession = {
+      ref: {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "stale-thread",
+      },
+      activity: "waiting_for_permission",
+      title: "Stale session",
+      startedAt: "2026-07-17T08:00:00.000Z",
+      pendingApprovals: [
+        {
+          requestId: "stale-approval",
+          requestType: "command_execution",
+          title: "Stale approval",
+        },
+      ],
+      pendingQuestions: [],
+      contextUsage: null,
+    } as const;
+    const duringReconnect = transcriptEvent("during-repair");
+    const repairSnapshot = { ...snapshot };
+
+    attachment.accept(snapshot);
+    attachment.restart();
+    attachment.accept({ type: "session_upsert", session: staleSession });
+    attachment.accept({ type: "session_removed", ref: staleSession.ref });
+    attachment.accept(duringReconnect);
+    attachment.accept(repairSnapshot);
+
+    expect(received).toEqual([snapshot, repairSnapshot, duringReconnect]);
+  });
+
   test("preserves buffered transcript events across repeated reconnect signals", () => {
     const received: AgentSessionLiveEnvelope[] = [];
     const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {

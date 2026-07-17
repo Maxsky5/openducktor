@@ -28,6 +28,7 @@ import {
   loadRepoPromptOverrides,
   loadTaskDocuments,
 } from "./runtime/runtime";
+import { toContextUsage } from "./session-read-model/agent-session-live-projection";
 import { createLoadSourceSession } from "./session-read-model/source-session-loader";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
@@ -321,13 +322,26 @@ export function useAgentOrchestratorOperations({
           if (!workspaceRepoPath) {
             throw new Error("Cannot load agent session context without an active workspace.");
           }
-          await liveSessionHostPort.agentSessionLiveLoadContext({
+          const contextUsage = await liveSessionHostPort.agentSessionLiveLoadContext({
             repoPath: workspaceRepoPath,
             ...session,
           });
+          if (contextUsage) {
+            sessionStore.updateSession(session, (current) => ({
+              ...current,
+              contextUsage: toContextUsage(contextUsage),
+            }));
+          }
         },
       }),
-    [agentEngine, liveSessionHostPort, sessionHistoryLoaders, sessionActions, workspaceRepoPath],
+    [
+      agentEngine,
+      liveSessionHostPort,
+      sessionHistoryLoaders,
+      sessionActions,
+      sessionStore,
+      workspaceRepoPath,
+    ],
   );
   const historyLoadActions = useMemo<AgentSessionHistoryLoadContextValue>(
     () => ({

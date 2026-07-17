@@ -102,9 +102,11 @@ const createState = (
     getActivitySummary: () =>
       summarizeAgentActivity({ sessions: sessionStore.getActivitySnapshot().sessions }),
     harness: createHookHarness(useRepoSessionReadModel, props),
+    props,
     observeAgentSessionLive,
     agentSessionLiveReplyApproval,
     recoverTranscriptGap,
+    transcriptEvents,
     emit: (payload: AgentSessionLiveEnvelope) => {
       if (!listener) {
         throw new Error("Live-session listener is not ready.");
@@ -150,6 +152,44 @@ describe("useRepoSessionReadModel", () => {
         { repoPath: "/repo" },
         expect.any(Function),
       );
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps observing transcript events while tasks synchronize", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const transcriptEnvelope = {
+      type: "transcript_event",
+      event: {
+        type: "assistant_message",
+        externalSessionId: record.externalSessionId,
+        messageId: "message-after-record-update",
+        message: "Still streaming",
+        timestamp: "2026-07-17T14:00:00.000Z",
+        sessionRef: snapshot().ref,
+      },
+    } as const satisfies AgentSessionLiveEnvelope;
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update({ ...state.props, isLoadingTasks: true });
+
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(state.transcriptEvents.close).not.toHaveBeenCalled();
+
+      await state.harness.run(async () => {
+        state.emit(transcriptEnvelope);
+      });
+
+      expect(state.transcriptEvents.handle).toHaveBeenCalledWith(transcriptEnvelope.event);
+
+      await state.harness.update({ ...state.props, isLoadingTasks: false });
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
     } finally {
       await state.harness.unmount();
     }

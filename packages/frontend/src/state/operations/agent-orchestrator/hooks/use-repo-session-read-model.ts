@@ -19,12 +19,14 @@ import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import {
   applyAgentSessionLiveDelta,
+  applyTaskSessionRecords,
   buildAgentSessionLiveCollection,
 } from "../session-read-model/agent-session-live-projection";
 import {
   collectPendingApprovalPolicyActions,
   type PendingApprovalPolicyAction,
 } from "../session-read-model/pending-approval-policy";
+import type { TaskSessionRecords } from "../session-read-model/task-session-records";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
@@ -88,13 +90,22 @@ export const useRepoSessionReadModel = ({
     enabled: !isLoadingTasks,
     queryClient,
   });
+  const taskSessionRecordsRef = useRef<{
+    repoPath: string;
+    records: TaskSessionRecords;
+  } | null>(null);
+  const observedRepoPathRef = useRef<string | null>(null);
+  const canObserveRepo =
+    taskSessionRecordsState.kind === "ready" || observedRepoPathRef.current === workspaceRepoPath;
 
   useEffect(() => {
-    if (!workspaceRepoPath || isLoadingTasks) {
+    if (!workspaceRepoPath) {
       return;
     }
     if (taskSessionRecordsState.kind === "loading") {
-      setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
+      if (observedRepoPathRef.current !== workspaceRepoPath) {
+        setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
+      }
       return;
     }
     if (taskSessionRecordsState.kind === "failed") {
@@ -109,8 +120,25 @@ export const useRepoSessionReadModel = ({
       return;
     }
 
+    taskSessionRecordsRef.current = {
+      repoPath: workspaceRepoPath,
+      records: taskSessionRecordsState.records,
+    };
+    commitSessionCollection((current) => ({
+      collection: applyTaskSessionRecords({
+        current,
+        taskSessionRecords: taskSessionRecordsState.records,
+      }),
+      result: undefined,
+    }));
+  }, [commitSessionCollection, taskSessionRecordsState, workspaceRepoPath]);
+
+  useEffect(() => {
+    if (!workspaceRepoPath || !canObserveRepo) {
+      return;
+    }
+
     const repoPath = workspaceRepoPath;
-    const taskSessionRecords = taskSessionRecordsState.records;
     const isRepoStale = createRepoStaleGuard({
       repoPath,
       repoEpochRef,
@@ -120,6 +148,13 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     let awaitingInitialSnapshot = true;
+    const readTaskSessionRecords = (): TaskSessionRecords => {
+      const current = taskSessionRecordsRef.current;
+      if (!current || current.repoPath !== repoPath) {
+        throw new Error(`Task session records are not ready for repo '${repoPath}'.`);
+      }
+      return current.records;
+    };
     const isStaleRepoOperation = (): boolean =>
       cancelled || isRepoStale() || latestReloadGenerationRef.current !== effectReloadGeneration;
     const failObservation = (message: string): void => {
@@ -161,7 +196,7 @@ export const useRepoSessionReadModel = ({
       const policyActions = commitSessionCollection((current) => {
         const collection = buildAgentSessionLiveCollection({
           current,
-          taskSessionRecords,
+          taskSessionRecords: readTaskSessionRecords(),
           snapshots: envelope.sessions,
         });
         return {
@@ -197,7 +232,7 @@ export const useRepoSessionReadModel = ({
         const policyActions = commitSessionCollection((current) => {
           const collection = applyAgentSessionLiveDelta({
             current,
-            taskSessionRecords,
+            taskSessionRecords: readTaskSessionRecords(),
             envelope,
           });
           return {
@@ -257,6 +292,7 @@ export const useRepoSessionReadModel = ({
       }
     };
 
+    observedRepoPathRef.current = repoPath;
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     void liveSessionPort
       .observeAgentSessionLive({ repoPath }, (envelope) => {
@@ -280,19 +316,21 @@ export const useRepoSessionReadModel = ({
 
     return () => {
       cancelled = true;
+      if (observedRepoPathRef.current === repoPath) {
+        observedRepoPathRef.current = null;
+      }
       unsubscribe?.();
       transcriptEvents.close();
     };
   }, [
+    canObserveRepo,
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
-    isLoadingTasks,
     liveSessionPort,
     queryClient,
     recoverTranscriptGap,
     reloadGeneration,
     repoEpochRef,
-    taskSessionRecordsState,
     transcriptEvents,
     workspaceRepoPath,
   ]);
