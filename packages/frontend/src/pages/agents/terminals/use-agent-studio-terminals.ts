@@ -80,10 +80,7 @@ export const useAgentStudioTerminals = (
     scopeKey,
     createTerminalPresentationState,
   );
-  const { controller, transportError } = useTerminalTransport(
-    scopeKey,
-    dependencies.terminalBridge,
-  );
+  const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
   const enabled = repoPath !== null && taskId !== null;
   const terminalOptions = enabled
     ? terminalListQueryOptions({ repoPath, taskId, hostClient: dependencies.hostClient })

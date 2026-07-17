@@ -897,6 +897,65 @@ describe("useAgentStudioTerminals", () => {
     }
   }, 5_000);
 
+  test("keeps one terminal transport while switching task scopes", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    let connectCalls = 0;
+    let closeCalls = 0;
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      terminalBridge: {
+        connect: async (_onFrame, _onStateChange) => {
+          connectCalls += 1;
+          return {
+            send: async () => undefined,
+            close: () => {
+              closeCalls += 1;
+            },
+          };
+        },
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = ({ taskId }: { taskId: string }) => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness taskId="task-a" />
+      </QueryProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getLatest().controller).not.toBeNull();
+      expect(connectCalls).toBe(1);
+      expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a");
+    });
+
+    act(() =>
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness taskId="task-b" />
+        </QueryProvider>,
+      ),
+    );
+    await waitFor(() => {
+      expect(getLatest().scopeKey).toBe("/repo:task-b");
+      expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-b");
+    });
+
+    expect(connectCalls).toBe(1);
+    expect(closeCalls).toBe(0);
+
+    view.unmount();
+    expect(closeCalls).toBe(1);
+  });
+
   test("restores task-local tab order and active selection when returning to a task", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const summaries = (taskId: string): TerminalSummary[] => [

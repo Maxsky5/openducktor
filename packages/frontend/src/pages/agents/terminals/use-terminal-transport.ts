@@ -6,16 +6,15 @@ import {
   type TerminalTransportController,
 } from "./terminal-transport-controller";
 
-type ScopedController = {
-  scopeKey: string;
+type ActiveController = {
+  bridge: TerminalBridge;
   controller: TerminalTransportController;
 };
 
 export const useTerminalTransport = (
-  scopeKey: string | null,
   bridge: TerminalBridge,
 ): { controller: TerminalTransportController | null; transportError: string | null } => {
-  const [scopedController, setScopedController] = useState<ScopedController | null>(null);
+  const [activeController, setActiveController] = useState<ActiveController | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
   const handleStateChange = useCallback((state: "connected" | "disconnected"): void => {
     if (state === "connected") setTransportError(null);
@@ -26,23 +25,22 @@ export const useTerminalTransport = (
 
   useEffect(() => {
     setTransportError(null);
-    if (!scopeKey) return;
     const controller = createTerminalTransportController(
       bridge,
       handleStateChange,
       handleProtocolFailure,
     );
-    setScopedController({ scopeKey, controller });
+    setActiveController({ bridge, controller });
     void controller.connect().catch(() => undefined);
     return () => {
       void controller.dispose().catch((cause: unknown) => {
         console.error("Failed to disconnect terminal transport.", cause);
       });
     };
-  }, [bridge, handleProtocolFailure, handleStateChange, scopeKey]);
+  }, [bridge, handleProtocolFailure, handleStateChange]);
 
   return {
-    controller: scopedController?.scopeKey === scopeKey ? scopedController.controller : null,
+    controller: activeController?.bridge === bridge ? activeController.controller : null,
     transportError,
   };
 };
