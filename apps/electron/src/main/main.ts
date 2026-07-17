@@ -76,7 +76,7 @@ const { app, BrowserWindow, ipcMain, nativeImage, net, protocol, session, shell 
 const APPLICATION_NAME = "OpenDucktor";
 const ELECTRON_RENDERER_SESSION_PARTITION = "persist:openducktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
-const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
+const rendererDevUrl = app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL;
 const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
