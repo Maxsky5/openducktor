@@ -221,12 +221,18 @@ export const stopTypescriptHostBackendServicesEffect = ({
 > =>
   Effect.gen(function* () {
     let exitCode = 0;
+    let loggingFailure: WebResourceError | undefined;
     const disposeExit = yield* Effect.exit(disposeHost());
     if (disposeExit._tag === "Failure") {
       exitCode = 1;
-      yield* writeWebLogEffect(logger, "error", Cause.pretty(disposeExit.cause));
+      const logResult = yield* Effect.either(
+        writeWebLogEffect(logger, "error", Cause.pretty(disposeExit.cause)),
+      );
+      if (logResult._tag === "Left") {
+        loggingFailure = logResult.left;
+      }
     }
-    const stopServerExit = yield* Effect.exit(
+    const stopServerResult = yield* Effect.either(
       Effect.try({
         try: stopServer,
         catch: (cause) =>
@@ -237,22 +243,15 @@ export const stopTypescriptHostBackendServicesEffect = ({
           }),
       }),
     );
-    let stopServerError: WebOperationError | null = null;
-    if (stopServerExit._tag === "Failure") {
-      stopServerError =
-        Array.from(Cause.failures(stopServerExit.cause))[0] ??
-        new WebOperationError({
-          operation: "web.host.stop-server",
-          message: Cause.pretty(stopServerExit.cause),
-          cause: stopServerExit.cause,
-        });
-    }
-    if (stopServerError) {
+    if (stopServerResult._tag === "Left") {
       exitCode = 1;
     }
     resolveExited(exitCode);
-    if (stopServerError) {
-      return yield* stopServerError;
+    if (loggingFailure) {
+      return yield* Effect.fail(loggingFailure);
+    }
+    if (stopServerResult._tag === "Left") {
+      return yield* Effect.fail(stopServerResult.left);
     }
   });
 

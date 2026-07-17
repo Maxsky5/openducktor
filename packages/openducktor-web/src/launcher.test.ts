@@ -253,6 +253,8 @@ describe("launcher internals", () => {
     expect(source).toContain('process.on("SIGINT"');
     expect(source).toContain('process.on("SIGTERM"');
     expect(source).toContain("OpenDucktor web shutdown is already in progress");
+    expect(source).toContain("duplicateTerminationLogFailed = true");
+    expect(source).toContain("duplicateTerminationLogFailed ? 1 : resolvedExitCode");
   });
 
   test("signal logging failures still run cleanup and exit through the explicit boundary", async () => {

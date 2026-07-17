@@ -38,23 +38,54 @@ export const writeHostLifecycleLog = (
       }),
   });
 
+const captureHostLifecycleLogFailure = (
+  logger: HostLifecycleLogger,
+  level: "error" | "info",
+  message: string,
+  currentFailure: HostOperationError | undefined,
+): Effect.Effect<HostOperationError | undefined> =>
+  Effect.either(writeHostLifecycleLog(logger, level, message)).pipe(
+    Effect.map((result) =>
+      result._tag === "Left" ? (currentFailure ?? result.left) : currentFailure,
+    ),
+  );
+
 export const runShutdownSteps = (
   steps: HostShutdownStep[],
   logger: HostLifecycleLogger,
 ): Effect.Effect<void, HostOperationError> =>
   Effect.gen(function* () {
     const errors: string[] = [];
+    let loggingFailure: HostOperationError | undefined;
     for (const step of steps) {
-      yield* writeHostLifecycleLog(logger, "info", `Stopping ${step.label}...`);
+      loggingFailure = yield* captureHostLifecycleLogFailure(
+        logger,
+        "info",
+        `Stopping ${step.label}...`,
+        loggingFailure,
+      );
       const result = yield* Effect.exit(step.run());
       if (result._tag === "Failure") {
         const cause = causeToHostBoundaryError(result.cause);
         const message = cause instanceof Error ? cause.message : String(cause);
-        yield* writeHostLifecycleLog(logger, "error", `Failed to stop ${step.label}: ${message}`);
+        loggingFailure = yield* captureHostLifecycleLogFailure(
+          logger,
+          "error",
+          `Failed to stop ${step.label}: ${message}`,
+          loggingFailure,
+        );
         errors.push(`${step.label}: ${message}`);
       } else {
-        yield* writeHostLifecycleLog(logger, "info", `Stopped ${step.label}`);
+        loggingFailure = yield* captureHostLifecycleLogFailure(
+          logger,
+          "info",
+          `Stopped ${step.label}`,
+          loggingFailure,
+        );
       }
+    }
+    if (loggingFailure) {
+      return yield* Effect.fail(loggingFailure);
     }
     if (errors.length > 0) {
       return yield* Effect.fail(
@@ -98,20 +129,43 @@ export const createStopRuntimesStep = (
   label: "active agent runtimes",
   run() {
     return Effect.gen(function* () {
-      yield* writeHostLifecycleLog(logger, "info", "Stopping registered agent runtimes");
-      const stoppedRuntimes = yield* runtimeRegistry.stopAllRuntimes();
+      let loggingFailure: HostOperationError | undefined;
+      loggingFailure = yield* captureHostLifecycleLogFailure(
+        logger,
+        "info",
+        "Stopping registered agent runtimes",
+        loggingFailure,
+      );
+
+      const stopResult = yield* Effect.either(runtimeRegistry.stopAllRuntimes());
+      if (stopResult._tag === "Left") {
+        return yield* Effect.fail(loggingFailure ?? stopResult.left);
+      }
+      const stoppedRuntimes = stopResult.right;
       if (stoppedRuntimes.length === 0) {
-        yield* writeHostLifecycleLog(logger, "info", "No active agent runtimes are registered");
+        loggingFailure = yield* captureHostLifecycleLogFailure(
+          logger,
+          "info",
+          "No active agent runtimes are registered",
+          loggingFailure,
+        );
+        if (loggingFailure) {
+          return yield* Effect.fail(loggingFailure);
+        }
         return;
       }
       for (const runtime of stoppedRuntimes) {
-        yield* writeHostLifecycleLog(
+        loggingFailure = yield* captureHostLifecycleLogFailure(
           logger,
           "info",
           `Stopped ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
             runtime.taskId,
           )} (${runtime.role})`,
+          loggingFailure,
         );
+      }
+      if (loggingFailure) {
+        return yield* Effect.fail(loggingFailure);
       }
     });
   },

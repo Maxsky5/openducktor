@@ -402,6 +402,40 @@ describe("TypeScript web host backend", () => {
     expect(resolvedExitCodes).toEqual([1]);
   });
 
+  test("stops the backend and resolves exit when failure logging rejects", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-web.log",
+    );
+    const resolvedExitCodes: number[] = [];
+    let stopCalls = 0;
+
+    await expect(
+      stopTypescriptHostBackendServices({
+        disposeHost: () => Effect.fail(new Error("host disposal failed")),
+        logger: {
+          error: async () => {
+            throw persistenceError;
+          },
+          info() {},
+          success() {},
+        },
+        resolveExited: (exitCode) => {
+          resolvedExitCodes.push(exitCode);
+        },
+        stopServer: () => {
+          stopCalls += 1;
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "WebResourceError",
+      cause: persistenceError,
+      resource: "persistent-log",
+    });
+
+    expect(stopCalls).toBe(1);
+    expect(resolvedExitCodes).toEqual([1]);
+  });
+
   test("rejects missing or invalid backend auth through typed route errors", async () => {
     const sessionMissing = await handleTestRequest(
       new Request("http://127.0.0.1/session", { method: "POST" }),

@@ -344,21 +344,32 @@ export const createNodeEffectHostCommandRouter = (
       }),
     dispose: () =>
       Effect.gen(function* () {
-        yield* writeHostLifecycleLog(
-          lifecycleLogger,
-          "info",
-          "Shutting down OpenDucktor host services",
+        const startLogResult = yield* Effect.either(
+          writeHostLifecycleLog(lifecycleLogger, "info", "Shutting down OpenDucktor host services"),
         );
-        yield* runShutdownSteps(
-          [
-            { label: "pull request sync loop", run: stopPullRequestSyncLoop },
-            createStopDevServersStep(devServerService, lifecycleLogger),
-            createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
-            createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
-          ],
-          lifecycleLogger,
+        const shutdownResult = yield* Effect.either(
+          runShutdownSteps(
+            [
+              { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+              createStopDevServersStep(devServerService, lifecycleLogger),
+              createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
+              createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
+            ],
+            lifecycleLogger,
+          ),
         );
-        yield* writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped");
+        const completeLogResult = yield* Effect.either(
+          writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped"),
+        );
+        if (startLogResult._tag === "Left") {
+          return yield* Effect.fail(startLogResult.left);
+        }
+        if (shutdownResult._tag === "Left") {
+          return yield* Effect.fail(shutdownResult.left);
+        }
+        if (completeLogResult._tag === "Left") {
+          return yield* Effect.fail(completeLogResult.left);
+        }
       }),
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionLiveStateService),

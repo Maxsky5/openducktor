@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import type { HostEventBusPort } from "../../events/host-event-bus";
@@ -13,9 +13,11 @@ const runtimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../../../.."),
 );
 
-const createRuntimeRegistry = (): RuntimeRegistryPort =>
+const createRuntimeRegistry = (
+  stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"] = () => Effect.succeed([]),
+): RuntimeRegistryPort =>
   ({
-    stopAllRuntimes: () => Effect.succeed([]),
+    stopAllRuntimes,
   }) as unknown as RuntimeRegistryPort;
 
 const createMcpHostBridge = (): McpHostBridgeServer =>
@@ -46,13 +48,17 @@ const createLogger = () => {
   return { errors, infos, logger };
 };
 
-const createRouter = (input: { eventBus?: HostEventBusPort; logger: HostLifecycleLogger }) =>
+const createRouter = (input: {
+  eventBus?: HostEventBusPort;
+  logger: HostLifecycleLogger;
+  runtimeRegistry?: RuntimeRegistryPort;
+}) =>
   createNodeEffectHostCommandRouter({
     ...(input.eventBus ? { eventBus: input.eventBus } : {}),
     lifecycleLogger: input.logger,
     mcpHostBridge: createMcpHostBridge(),
     runtimeDistribution,
-    runtimeRegistry: createRuntimeRegistry(),
+    runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
     taskStore: {} as TaskStorePort,
   });
 
@@ -75,5 +81,38 @@ describe("createNodeEffectHostCommandRouter", () => {
     expect(infos).toContain("Stopping pull request sync loop...");
     expect(infos).toContain("Pull request sync loop stopped");
     expect(infos).toContain("Stopped pull request sync loop");
+  });
+
+  test("disposes host resources when the lifecycle logger rejects", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-host.log",
+    );
+    let stopRuntimeCalls = 0;
+    const logger: HostLifecycleLogger = {
+      error: async () => {
+        throw persistenceError;
+      },
+      info: async () => {
+        throw persistenceError;
+      },
+    };
+    const runtimeRegistry = createRuntimeRegistry(() =>
+      Effect.sync(() => {
+        stopRuntimeCalls += 1;
+        return [];
+      }),
+    );
+
+    const exit = await Effect.runPromiseExit(createRouter({ logger, runtimeRegistry }).dispose());
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        cause: persistenceError,
+      });
+    }
+
+    expect(stopRuntimeCalls).toBe(1);
   });
 });

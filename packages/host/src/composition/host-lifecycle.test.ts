@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { HostOperationError } from "../effect/host-errors";
 import {
   createStopMcpHostBridgeStep,
@@ -78,6 +78,45 @@ describe("host lifecycle shutdown", () => {
       "Failed to stop first: first failed",
       "Failed to stop third: third failed",
     ]);
+  });
+
+  test("runs every shutdown step when lifecycle logging rejects", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-host.log",
+    );
+    const calls: string[] = [];
+    const rejectingLogger: HostLifecycleLogger = {
+      error: async () => {
+        throw persistenceError;
+      },
+      info: async () => {
+        throw persistenceError;
+      },
+    };
+
+    const exit = await Effect.runPromiseExit(
+      runShutdownSteps(
+        ["first", "second", "third"].map((label) => ({
+          label,
+          run: () =>
+            Effect.sync(() => {
+              calls.push(label);
+            }),
+        })),
+        rejectingLogger,
+      ),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "host.lifecycle.log-info",
+        cause: persistenceError,
+      });
+    }
+
+    expect(calls).toEqual(["first", "second", "third"]);
   });
 
   test("propagates MCP host bridge close failures", async () => {
