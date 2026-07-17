@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -7,7 +7,7 @@ import {
   createSourceRuntimeDistribution,
   type EffectHostCommandRouter,
 } from "@openducktor/host";
-import { Effect } from "effect";
+import { Deferred, Effect, TestClock, TestContext } from "effect";
 import { createWebLogger, type WebLogger } from "./logger";
 import {
   BufferedHostEventBus,
@@ -19,9 +19,11 @@ const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
   nativeResponse.constructor as typeof Response;
 
-const { handleTypescriptHostBackendRequest, startTypescriptHostBackend } = await import(
-  "./typescript-host-backend"
-);
+const {
+  handleTypescriptHostBackendRequest,
+  startTypescriptHostBackend,
+  startTypescriptHostBackendEffect,
+} = await import("./typescript-host-backend");
 
 const APP_TOKEN = "app-token";
 const CONTROL_TOKEN = "control-token";
@@ -197,6 +199,82 @@ describe("TypeScript web host backend", () => {
       if (backend) {
         await backend.stop();
       }
+      if (previousConfigDir === undefined) {
+        delete process.env.OPENDUCKTOR_CONFIG_DIR;
+      } else {
+        process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
+      }
+      await rm(tempConfigDir, { force: true, recursive: true });
+    }
+  }, 5_000);
+
+  test("owns a scheduled task-sync disk-write failure through the browser host lifecycle", async () => {
+    const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
+    const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-task-sync-"));
+    const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
+    const configPath = path.join(tempConfigDir, "config.json");
+    const logFilePath = path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log");
+    let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
+    process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
+
+    try {
+      const logger = await Effect.runPromise(
+        createWebLogger({
+          console: { error: () => {}, log: () => {} },
+          environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
+          now: () => recordedAt,
+        }),
+      );
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const failureReported = yield* Deferred.make<unknown>();
+          const startedBackend = yield* startTypescriptHostBackendEffect({
+            port: 0,
+            frontendOrigin: FRONTEND_ORIGIN,
+            controlToken: CONTROL_TOKEN,
+            appToken: APP_TOKEN,
+            logger,
+            onBackgroundFailure: (failure) => {
+              Effect.runSync(Deferred.succeed(failureReported, failure));
+            },
+            runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
+          });
+          backend = startedBackend;
+          const exitedFailure = startedBackend.exited.then(
+            () => new Error("expected browser host background failure"),
+            (failure: unknown) => failure,
+          );
+
+          yield* Effect.promise(() => mkdir(configPath));
+          yield* Effect.promise(() => mkdir(logFilePath));
+          yield* TestClock.adjust("5 minutes");
+          const failure = yield* Deferred.await(failureReported);
+          const rejectedExit = yield* Effect.promise(() => exitedFailure);
+          yield* Effect.promise(() => rm(configPath, { recursive: true }));
+          yield* Effect.promise(() => rm(logFilePath, { recursive: true }));
+          const stopFailure = yield* Effect.promise(() =>
+            startedBackend.stop().then(
+              () => null,
+              (cause: unknown) => cause,
+            ),
+          );
+          return { failure, rejectedExit, stopFailure };
+        }).pipe(Effect.provide(TestContext.TestContext)),
+      );
+
+      expect(result.failure).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "task-sync.log-iteration-failure",
+        cause: {
+          _tag: "OpenDucktorLogPersistenceError",
+          operation: "openducktor.logs.append",
+          path: logFilePath,
+        },
+      });
+      expect(result.rejectedExit).toBe(result.failure);
+      expect(result.stopFailure).toBeNull();
+    } finally {
+      await backend?.stop().catch(() => {});
       if (previousConfigDir === undefined) {
         delete process.env.OPENDUCKTOR_CONFIG_DIR;
       } else {

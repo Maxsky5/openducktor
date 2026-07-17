@@ -14,7 +14,10 @@ export type TaskSyncLifecycleLogger = {
   error(message: string): Effect.Effect<void, unknown>;
 };
 export type TaskSyncLoopHandle = {
-  /** Request loop shutdown without waiting for an active sync iteration to finish. */
+  /**
+   * Stop scheduling work without waiting for an active pull-request sync, while draining any
+   * lifecycle log append admitted before shutdown.
+   */
   stop(): Effect.Effect<void, HostOperationError>;
 };
 export type TaskSyncService = {
