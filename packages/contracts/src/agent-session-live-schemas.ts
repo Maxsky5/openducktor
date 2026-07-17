@@ -10,6 +10,7 @@ import {
   agentSessionLiveRefSchema,
   agentSessionWorkflowScopeSchema,
 } from "./agent-session-schemas";
+import { slashCommandCatalogSchema } from "./slash-command-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const isoTimestampSchema = z.string().datetime({ offset: true });
@@ -156,6 +157,15 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("catalog_invalidated"),
       scope: agentSessionLiveScopeSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("slash_command_catalog_updated"),
+      scope: agentSessionLiveScopeSchema.extend({
+        workingDirectory: nonEmptyStringSchema,
+      }),
+      catalog: slashCommandCatalogSchema,
     })
     .strict(),
   z

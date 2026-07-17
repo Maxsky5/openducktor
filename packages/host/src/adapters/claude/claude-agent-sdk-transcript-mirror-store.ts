@@ -25,6 +25,7 @@ export type ClaudeTranscriptMirrorStore = SessionStore & {
     sessionId: string;
     toolUseId: string;
   }): ClaudeTranscriptToolUseResult | null;
+  deleteSession(sessionId: string): void;
   hasSession(sessionId: string): boolean;
   registerSessionDirectory(input: { dir: string; sessionId: string }): void;
 };
@@ -55,11 +56,18 @@ export const createClaudeTranscriptMirrorStore = ({
 } = {}): ClaudeTranscriptMirrorStore => {
   const entriesByKey = new Map<string, { entries: SessionStoreEntry[]; key: SessionKey }>();
   const sessionIdsWithEntries = new Set<string>();
+  const activeSessionIds = new Set<string>();
   const sessionDirectories = new Map<string, string>();
-  const loadingKeys = new Set<string>();
-  const toolUseResultsByKey = new Map<string, ClaudeTranscriptToolUseResult>();
+  const loadingKeys = new Map<string, SessionKey>();
+  const toolUseResultsByKey = new Map<
+    string,
+    { result: ClaudeTranscriptToolUseResult; sessionId: string }
+  >();
 
   const append: SessionStore["append"] = async (key, nextEntries) => {
+    if (!activeSessionIds.has(key.sessionId)) {
+      return;
+    }
     const mapKey = keyString(key);
     const bucket = entriesByKey.get(mapKey) ?? { entries: [], key };
     const seenUuids = new Set(
@@ -84,7 +92,7 @@ export const createClaudeTranscriptMirrorStore = ({
       if (toolUseId && toolUseResult) {
         toolUseResultsByKey.set(
           toolUseResultKey({ sessionId: key.sessionId, subpath: key.subpath, toolUseId }),
-          { entry, toolUseResult },
+          { sessionId: key.sessionId, result: { entry, toolUseResult } },
         );
       }
     }
@@ -95,6 +103,9 @@ export const createClaudeTranscriptMirrorStore = ({
   };
 
   const load: SessionStore["load"] = async (key) => {
+    if (!activeSessionIds.has(key.sessionId)) {
+      return null;
+    }
     const mapKey = keyString(key);
     const existing = entriesByKey.get(mapKey)?.entries;
     if (existing && existing.length > 0) {
@@ -104,7 +115,7 @@ export const createClaudeTranscriptMirrorStore = ({
       return null;
     }
 
-    loadingKeys.add(mapKey);
+    loadingKeys.set(mapKey, key);
     try {
       const dir = sessionDirectories.get(key.sessionId);
       if (!dir) {
@@ -135,7 +146,27 @@ export const createClaudeTranscriptMirrorStore = ({
         .filter((bucket) => keyMatchesSession(bucket.key, input))
         .flatMap((bucket) => bucket.entries),
     findToolUseResult: ({ sessionId, toolUseId }) =>
-      toolUseResultsByKey.get(toolUseResultKey({ sessionId, toolUseId })) ?? null,
+      toolUseResultsByKey.get(toolUseResultKey({ sessionId, toolUseId }))?.result ?? null,
+    deleteSession: (sessionId) => {
+      activeSessionIds.delete(sessionId);
+      sessionDirectories.delete(sessionId);
+      sessionIdsWithEntries.delete(sessionId);
+      for (const [mapKey, bucket] of entriesByKey) {
+        if (bucket.key.sessionId === sessionId) {
+          entriesByKey.delete(mapKey);
+        }
+      }
+      for (const [mapKey, key] of loadingKeys) {
+        if (key.sessionId === sessionId) {
+          loadingKeys.delete(mapKey);
+        }
+      }
+      for (const [mapKey, indexedResult] of toolUseResultsByKey) {
+        if (indexedResult.sessionId === sessionId) {
+          toolUseResultsByKey.delete(mapKey);
+        }
+      }
+    },
     hasSession: (sessionId) => sessionIdsWithEntries.has(sessionId),
     listSubkeys: async ({ sessionId }) =>
       [...entriesByKey.values()]
@@ -143,6 +174,7 @@ export const createClaudeTranscriptMirrorStore = ({
         .filter((key) => key.sessionId === sessionId && key.subpath !== undefined)
         .map((key) => key.subpath as string),
     registerSessionDirectory: ({ dir, sessionId }) => {
+      activeSessionIds.add(sessionId);
       sessionDirectories.set(sessionId, dir);
     },
   };

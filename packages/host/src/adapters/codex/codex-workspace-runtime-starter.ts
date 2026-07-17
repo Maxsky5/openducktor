@@ -16,7 +16,10 @@ import {
   terminateProcessTree,
 } from "../../infrastructure/process/process-tree";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
-import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
+import type {
+  RuntimeEnsureWorkspaceInput,
+  RuntimeWorkspaceStarterPort,
+} from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { CodexLiveSessionAdapterPreparer } from "../agent-sessions/codex-live-session-adapter";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
@@ -33,10 +36,9 @@ export type CodexMcpBridgeConnection = {
   hostToken: string;
 };
 
-export type CodexMcpBridgeConnectionResolver = () => Effect.Effect<
-  CodexMcpBridgeConnection,
-  HostOperationError | HostResourceError
->;
+export type CodexMcpBridgeConnectionResolver = (
+  input: RuntimeEnsureWorkspaceInput,
+) => Effect.Effect<CodexMcpBridgeConnection, HostOperationError | HostResourceError>;
 
 export type CreateCodexWorkspaceRuntimeStarterInput = {
   toolDiscovery: ToolDiscoveryPort;
@@ -96,7 +98,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         );
       }
 
-      const bridge = yield* resolveMcpBridgeConnection().pipe(
+      const bridge = yield* resolveMcpBridgeConnection(input).pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "codexWorkspaceRuntime.resolveMcpBridgeConnection"),
         ),

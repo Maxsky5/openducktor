@@ -1,10 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeInstanceSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../effect/host-errors";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
@@ -60,21 +58,6 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   ...overrides,
 });
 
-const createClaudeRuntime = (
-  overrides: Partial<RuntimeInstanceSummary> = {},
-): RuntimeInstanceSummary => ({
-  kind: "claude",
-  runtimeId: "runtime-claude",
-  repoPath: "/repo/",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo/worktree/",
-  runtimeRoute: { type: "host_service", identity: "runtime-claude" },
-  startedAt: "2026-06-25T20:00:00.000Z",
-  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
-  ...overrides,
-});
-
 const listClaudeMcpTokenDirectories = async (): Promise<Set<string>> =>
   new Set((await readdir(tmpdir())).filter((name) => name.startsWith("openducktor-claude-mcp-")));
 
@@ -110,7 +93,6 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
         executablePath: process.execPath,
       },
     }),
-    runtimeRegistry: {} as RuntimeRegistryPort,
     sessionStore,
     toolDiscovery: {} as CreateClaudeAgentSdkServiceInput["toolDiscovery"],
   });
@@ -172,9 +154,6 @@ describe("createClaudeAgentSdkService", () => {
           executablePath: process.execPath,
         },
       }),
-      runtimeRegistry: {
-        ensureWorkspaceRuntime: () => Effect.succeed(createClaudeRuntime()),
-      } as unknown as RuntimeRegistryPort,
       sessionStore,
       toolDiscovery: {
         resolveTool: () => Effect.die("unused"),
@@ -192,14 +171,17 @@ describe("createClaudeAgentSdkService", () => {
 
     await expect(
       Effect.runPromise(
-        service.startSession({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          systemPrompt: "Build",
-        }),
+        service.startSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: "Build",
+          },
+          "runtime-claude",
+        ),
       ),
     ).rejects.toThrow("claude unavailable");
 
@@ -212,15 +194,18 @@ describe("createClaudeAgentSdkService", () => {
 
     await expect(
       Effect.runPromise(
-        service.resumeSession({
-          repoPath: "/other-repo",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "session-1",
-          runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          systemPrompt: "Build",
-        }),
+        service.resumeSession(
+          {
+            repoPath: "/other-repo",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: "Build",
+          },
+          "runtime-claude",
+        ),
       ),
     ).rejects.toThrow(
       "Cannot resume Claude session 'session-1' from repo '/other-repo' and working directory '/repo/worktree'",

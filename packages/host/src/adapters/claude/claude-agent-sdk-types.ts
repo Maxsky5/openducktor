@@ -22,7 +22,6 @@ export type {
 } from "../../application/runtimes/claude-agent-sdk-service";
 
 import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
@@ -37,7 +36,6 @@ export type CreateClaudeAgentSdkServiceInput = {
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
-  runtimeRegistry: RuntimeRegistryPort;
   sessionStore?: ClaudeSessionStore;
   toolDiscovery: ToolDiscoveryPort;
   now?: () => string;
@@ -118,6 +116,7 @@ export type ClaudeSessionStore = {
     input: SessionRef,
   ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, never>;
   set(session: ClaudeSession): void;
+  subscribeClose(listener: (session: ClaudeSession) => void): () => void;
   stopSession(input: SessionRef): Effect.Effect<void, HostOperationError | HostValidationError>;
   stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationError>;
   values(): IterableIterator<ClaudeSession>;

@@ -83,25 +83,33 @@ const startInput = {
 const createHarness = async () => {
   const changes: AgentSessionLiveAdapterChange[] = [];
   const eventHub = createClaudeAgentSdkEventHub();
+  let startSessionImpl: ClaudeAgentSdkService["startSession"] = () =>
+    Effect.die("startSession was not configured");
   let sendUserMessageImpl: ClaudeAgentSdkService["sendUserMessage"] = () =>
     Effect.die("sendUserMessage was not configured");
+  startSessionImpl = () => {
+    eventHub.emit(session, {
+      type: "session_started",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:00.000Z",
+      message: "Started build session",
+    });
+    eventHub.emit(session, {
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:01.000Z",
+    });
+    return Effect.succeed(summary);
+  };
   const service = {
-    startSession: () => {
-      eventHub.emit(session, {
-        type: "session_started",
-        externalSessionId: "session-1",
-        timestamp: "2026-07-17T10:01:00.000Z",
-        message: "Started build session",
-      });
-      eventHub.emit(session, {
-        type: "session_idle",
-        externalSessionId: "session-1",
-        timestamp: "2026-07-17T10:01:01.000Z",
-      });
-      return Effect.succeed(summary);
-    },
-    sendUserMessage: (input: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0]) =>
-      sendUserMessageImpl(input),
+    startSession: (
+      input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
+      runtimeId: string,
+    ) => startSessionImpl(input, runtimeId),
+    sendUserMessage: (
+      input: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0],
+      runtimeId: string,
+    ) => sendUserMessageImpl(input, runtimeId),
   } as unknown as ClaudeAgentSdkService;
   const liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation"> = {
     runAdapterMutation: (mutation) =>
@@ -127,6 +135,9 @@ const createHarness = async () => {
     adapter: prepared.adapter as AgentSessionRuntimeAdapterPort,
     changes,
     eventHub,
+    setStartSession: (implementation: ClaudeAgentSdkService["startSession"]) => {
+      startSessionImpl = implementation;
+    },
     setSendUserMessage: (implementation: ClaudeAgentSdkService["sendUserMessage"]) => {
       sendUserMessageImpl = implementation;
     },
@@ -139,6 +150,23 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
 describe("Claude host live-session adapter", () => {
   test("publishes the running start snapshot before suppressing SDK initialization idle", async () => {
     const harness = await createHarness();
+    harness.setStartSession(() =>
+      Effect.promise(async () => {
+        harness.eventHub.emit(session, {
+          type: "session_started",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:01:00.000Z",
+          message: "Started build session",
+        });
+        harness.eventHub.emit(session, {
+          type: "session_idle",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:01:01.000Z",
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        return summary;
+      }),
+    );
 
     await expect(
       Effect.runPromise(harness.adapter.startSession(startInput)),
@@ -158,35 +186,38 @@ describe("Claude host live-session adapter", () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
     harness.changes.splice(0);
-    harness.setSendUserMessage((input) => {
-      harness.eventHub.emit(session, {
-        type: "session_status",
-        externalSessionId: "session-1",
-        timestamp: "2026-07-17T10:02:00.000Z",
-        status: { type: "busy", message: null },
-      });
-      harness.eventHub.emit(session, {
-        type: "assistant_message",
-        externalSessionId: "session-1",
-        timestamp: "2026-07-17T10:02:01.000Z",
-        messageId: "assistant-1",
-        message: "Done",
-      });
-      harness.eventHub.emit(session, {
-        type: "session_idle",
-        externalSessionId: "session-1",
-        timestamp: "2026-07-17T10:02:02.000Z",
-      });
-      return Effect.succeed({
-        type: "user_message" as const,
-        externalSessionId: input.externalSessionId,
-        timestamp: "2026-07-17T10:01:59.000Z",
-        messageId: "user-1",
-        message: "Start",
-        parts: [{ kind: "text" as const, text: "Start" }],
-        state: "read" as const,
-      });
-    });
+    harness.setSendUserMessage((input) =>
+      Effect.promise(async () => {
+        harness.eventHub.emit(session, {
+          type: "session_status",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:00.000Z",
+          status: { type: "busy", message: null },
+        });
+        harness.eventHub.emit(session, {
+          type: "assistant_message",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:01.000Z",
+          messageId: "assistant-1",
+          message: "Done",
+        });
+        harness.eventHub.emit(session, {
+          type: "session_idle",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:02.000Z",
+        });
+        await Promise.resolve();
+        return {
+          type: "user_message" as const,
+          externalSessionId: input.externalSessionId,
+          timestamp: "2026-07-17T10:01:59.000Z",
+          messageId: "user-1",
+          message: "Start",
+          parts: [{ kind: "text" as const, text: "Start" }],
+          state: "read" as const,
+        };
+      }),
+    );
 
     await Effect.runPromise(
       harness.adapter.sendUserMessage({

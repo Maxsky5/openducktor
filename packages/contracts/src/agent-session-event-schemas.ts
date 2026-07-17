@@ -39,7 +39,7 @@ type ExactOptional<T> = T extends SkillDescriptor | SubagentDescriptor
         }
       : T;
 
-const agentFileReferenceSchema = z
+export const agentFileReferenceSchema = z
   .object({
     id: z.string(),
     path: z.string(),
@@ -48,7 +48,7 @@ const agentFileReferenceSchema = z
   })
   .strict();
 
-const agentAttachmentReferenceSchema = z
+export const agentAttachmentReferenceSchema = z
   .object({
     id: z.string(),
     path: z.string(),
@@ -144,10 +144,10 @@ const inferredAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-const agentUserMessageDisplayPartSchema =
+export const agentUserMessageDisplayPartSchema =
   inferredAgentUserMessageDisplayPartSchema as unknown as z.ZodType<AgentTranscriptUserMessageDisplayPart>;
 
-const agentSessionTodoItemSchema = z
+export const agentSessionTodoItemSchema = z
   .object({
     id: z.string(),
     content: z.string(),
@@ -310,7 +310,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-const agentStreamPartSchema: z.ZodType<AgentTranscriptStreamPart> =
+export const agentStreamPartSchema: z.ZodType<AgentTranscriptStreamPart> =
   inferredAgentStreamPartSchema as unknown as z.ZodType<AgentTranscriptStreamPart>;
 
 const agentSessionStatusSchema = z.discriminatedUnion("type", [

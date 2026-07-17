@@ -32,11 +32,7 @@ import {
 } from "./claude-agent-sdk-catalog";
 import { readClaudeContextUsageFromQuery } from "./claude-agent-sdk-context-usage";
 import { replyClaudeApproval, replyClaudeQuestion } from "./claude-agent-sdk-pending-input";
-import {
-  ensureClaudeWorkspaceRuntime,
-  requireLiveClaudeWorkspaceRuntime,
-  resolveClaudeExecutable,
-} from "./claude-agent-sdk-runtime";
+import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { createClaudeAgentSdkSession } from "./claude-agent-sdk-session-factory";
 import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
@@ -92,37 +88,28 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         }
       },
     });
-  }
-
-  startSession(input: StartAgentSessionInput) {
-    const service = this;
-    return Effect.gen(function* () {
-      const runtime = yield* ensureClaudeWorkspaceRuntime(service.input, input.repoPath);
-      return yield* service.start(input, runtime.runtimeId);
+    this.sessionStore.subscribeClose((session) => {
+      this.transcriptStore.deleteSession(session.externalSessionId);
     });
   }
 
-  resumeSession(input: ResumeAgentSessionInput) {
-    const service = this;
-    const existing = service.sessionStore.get(input.externalSessionId);
+  startSession(input: StartAgentSessionInput, runtimeId: string) {
+    return this.start(input, runtimeId);
+  }
+
+  resumeSession(input: ResumeAgentSessionInput, runtimeId: string) {
+    const existing = this.sessionStore.get(input.externalSessionId);
     if (existing) {
       return fromPromise("claudeRuntime.resumeSession", async () => {
         assertClaudeSessionRef(existing, input, "resume");
         return existing.summary;
       });
     }
-    return Effect.gen(function* () {
-      const runtime = yield* ensureClaudeWorkspaceRuntime(service.input, input.repoPath);
-      return yield* service.resume(input, runtime.runtimeId);
-    });
+    return this.resume(input, runtimeId);
   }
 
-  forkSession(input: ForkAgentSessionInput) {
-    const service = this;
-    return Effect.gen(function* () {
-      const runtime = yield* ensureClaudeWorkspaceRuntime(service.input, input.repoPath);
-      return yield* service.fork(input, runtime.runtimeId);
-    });
+  forkSession(input: ForkAgentSessionInput, runtimeId: string) {
+    return this.fork(input, runtimeId);
   }
 
   releaseSession(input: SessionRef) {
@@ -192,7 +179,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const service = this;
     return Effect.gen(function* () {
-      yield* requireLiveClaudeWorkspaceRuntime(service.input, input);
       const session = service.sessionStore.get(input.externalSessionId);
       const claudeExecutablePath = yield* resolveClaudeExecutable(
         service.input,
@@ -241,10 +227,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  sendUserMessage(input: SendAgentUserMessageInput) {
+  sendUserMessage(input: SendAgentUserMessageInput, runtimeId: string) {
     const service = this;
     return Effect.gen(function* () {
-      const session = yield* service.requireSessionForSend(input);
+      const session = yield* service.requireSessionForSend(input, runtimeId);
       assertClaudeSessionRef(session, input, "send message");
       return yield* fromPromise("claudeRuntime.sendUserMessage", () =>
         sendClaudeUserMessage({
@@ -418,17 +404,16 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return session;
   }
 
-  private requireSessionForSend(input: SendAgentUserMessageInput) {
+  private requireSessionForSend(input: SendAgentUserMessageInput, runtimeId: string) {
     const existing = this.sessionStore.get(input.externalSessionId);
     if (existing) {
       return Effect.succeed(existing);
     }
     const service = this;
     return Effect.gen(function* () {
-      const runtime = yield* ensureClaudeWorkspaceRuntime(service.input, input.repoPath);
       const title = service.workflowSessionTitle(input);
       const scope = claudeWorkflowScope(input);
-      yield* service.createSession(input, runtime.runtimeId, {
+      yield* service.createSession(input, runtimeId, {
         externalSessionId: input.externalSessionId,
         startedMessage: `Resumed ${scope?.role ?? "Claude"} session`,
         ...(title ? { title } : {}),

@@ -27,10 +27,8 @@ import type {
   ClaudeSessionContext,
   ClaudeSessionStore,
 } from "../claude/claude-agent-sdk-types";
-import type {
-  ClaudeAgentSdkEventHub,
-  ClaudeRuntimeEventListener,
-} from "./claude-live-session-event-hub";
+import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
+import type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 
 export type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
@@ -102,13 +100,6 @@ export const createClaudeLiveSessionAdapterPreparer =
     Effect.gen(function* () {
       const runtime = yield* requireRuntime(runtimeInput);
       const state = createClaudeLiveSessionState({ runtime });
-      const queuedEvents: Array<{
-        session: ClaudeSessionContext;
-        event: ClaudeAgentSdkEvent;
-      }> = [];
-      let forwarding = false;
-      let released = false;
-      let forwardingChain = Promise.resolve();
       let forwardingFailure: HostError | null = null;
 
       const commit = <Value>(
@@ -156,49 +147,12 @@ export const createClaudeLiveSessionAdapterPreparer =
         }
       };
 
-      const drainEvents = (): Promise<void> => {
-        forwardingChain = forwardingChain.then(async () => {
-          while (forwarding && !released && queuedEvents.length > 0) {
-            const queued = queuedEvents.shift();
-            if (queued) {
-              await processEvent(queued.session, queued.event);
-            }
-          }
-        });
-        return forwardingChain;
-      };
-
-      const enqueueEvent: ClaudeRuntimeEventListener = (session, event) => {
-        if (released) {
-          throw new Error(`Claude runtime '${runtime.runtimeId}' is already released.`);
-        }
-        if (session.runtimeId !== runtime.runtimeId) {
-          throw new Error(
-            `Claude event for runtime '${session.runtimeId}' cannot enter runtime '${runtime.runtimeId}'.`,
-          );
-        }
-        queuedEvents.push({ session, event });
-        if (forwarding) {
-          void drainEvents();
-        }
-      };
-      const unsubscribe = eventHub.subscribe(runtime.runtimeId, enqueueEvent);
-
-      const flushEvents = (): Effect.Effect<void, HostError> =>
-        Effect.tryPromise({
-          try: async () => {
-            await drainEvents();
-            if (forwardingFailure) {
-              throw forwardingFailure;
-            }
-          },
-          catch: (cause) =>
-            cause && typeof cause === "object" && "_tag" in cause
-              ? (cause as HostError)
-              : toHostOperationError(cause, "claude-live-session.flush-events", {
-                  runtimeId: runtime.runtimeId,
-                }),
-        });
+      const eventCoordinator = createClaudeLiveSessionEventCoordinator({
+        processEvent,
+        readForwardingFailure: () => forwardingFailure,
+        runtimeId: runtime.runtimeId,
+      });
+      const unsubscribe = eventHub.subscribe(runtime.runtimeId, eventCoordinator.enqueueEvent);
 
       const sessionError = (operation: string, externalSessionId: string) => (cause: unknown) =>
         toHostOperationError(cause, operation, {
@@ -262,17 +216,18 @@ export const createClaudeLiveSessionAdapterPreparer =
           readonly parentExternalSessionId?: string;
         } = {},
       ): Effect.Effect<AgentSessionControlSummary, HostError> =>
-        run().pipe(
-          Effect.flatMap((value) =>
-            parseOutput(agentSessionControlSummarySchema, value, operation),
+        eventCoordinator.runControlMutation(
+          run().pipe(
+            Effect.flatMap((value) =>
+              parseOutput(agentSessionControlSummarySchema, value, operation),
+            ),
+            Effect.flatMap((summary) =>
+              commit(`${operation}.retain-summary`, () => ({
+                value: options.forceRunning ? { ...summary, status: "running" as const } : summary,
+                changes: state.retainControlSummary(summary, options),
+              })),
+            ),
           ),
-          Effect.flatMap((summary) =>
-            commit(`${operation}.retain-summary`, () => ({
-              value: options.forceRunning ? { ...summary, status: "running" as const } : summary,
-              changes: state.retainControlSummary(summary, options),
-            })),
-          ),
-          Effect.tap(() => flushEvents()),
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
@@ -299,45 +254,55 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
             ),
             Effect.flatMap((contextUsage) =>
-              flushEvents().pipe(
-                Effect.flatMap(() =>
-                  commit("claude-live-session.retain-context", () =>
-                    state.applyLoadedContext(input, contextUsage),
+              eventCoordinator
+                .flush()
+                .pipe(
+                  Effect.flatMap(() =>
+                    commit("claude-live-session.retain-context", () =>
+                      state.applyLoadedContext(input, contextUsage),
+                    ),
                   ),
                 ),
-              ),
             ),
           ),
         replyApproval: (input) =>
           bindPolicy(input, "reply-approval").pipe(
             Effect.flatMap((boundInput) =>
-              service.replyApproval(
-                boundInput as Parameters<ClaudeAgentSdkService["replyApproval"]>[0],
+              eventCoordinator.runControlMutation(
+                service
+                  .replyApproval(
+                    boundInput as Parameters<ClaudeAgentSdkService["replyApproval"]>[0],
+                  )
+                  .pipe(
+                    Effect.mapError(
+                      sessionError("claude-live-session.reply-approval", input.externalSessionId),
+                    ),
+                  ),
               ),
             ),
-            Effect.mapError(
-              sessionError("claude-live-session.reply-approval", input.externalSessionId),
-            ),
-            Effect.tap(() => flushEvents()),
           ),
         replyQuestion: (input) =>
           bindPolicy(input, "reply-question").pipe(
             Effect.flatMap((boundInput) =>
-              service.replyQuestion(
-                boundInput as Parameters<ClaudeAgentSdkService["replyQuestion"]>[0],
+              eventCoordinator.runControlMutation(
+                service
+                  .replyQuestion(
+                    boundInput as Parameters<ClaudeAgentSdkService["replyQuestion"]>[0],
+                  )
+                  .pipe(
+                    Effect.mapError(
+                      sessionError("claude-live-session.reply-question", input.externalSessionId),
+                    ),
+                  ),
               ),
             ),
-            Effect.mapError(
-              sessionError("claude-live-session.reply-question", input.externalSessionId),
-            ),
-            Effect.tap(() => flushEvents()),
           ),
         releaseRuntime: () =>
           Effect.suspend(() => {
-            if (released) {
+            if (eventCoordinator.isReleased()) {
               return Effect.succeed([]);
             }
-            forwarding = false;
+            eventCoordinator.stopForwarding();
             const refs = state.release();
             return service.stopSessionsForRuntime(runtime.runtimeId).pipe(
               Effect.as(refs),
@@ -348,9 +313,8 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
               Effect.ensuring(
                 Effect.sync(() => {
-                  released = true;
+                  eventCoordinator.release();
                   unsubscribe();
-                  queuedEvents.splice(0);
                 }),
               ),
             );
@@ -363,6 +327,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 () =>
                   service.startSession(
                     boundInput as Parameters<ClaudeAgentSdkService["startSession"]>[0],
+                    runtime.runtimeId,
                   ),
                 { forceRunning: true },
               ),
@@ -374,6 +339,7 @@ export const createClaudeLiveSessionAdapterPreparer =
               runSummary("claude-live-session.resume-session", () =>
                 service.resumeSession(
                   boundInput as Parameters<ClaudeAgentSdkService["resumeSession"]>[0],
+                  runtime.runtimeId,
                 ),
               ),
             ),
@@ -386,6 +352,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 () =>
                   service.forkSession(
                     boundInput as Parameters<ClaudeAgentSdkService["forkSession"]>[0],
+                    runtime.runtimeId,
                   ),
                 {
                   forceRunning: true,
@@ -397,34 +364,42 @@ export const createClaudeLiveSessionAdapterPreparer =
         sendUserMessage: (input) =>
           bindPolicy(input, "send-user-message").pipe(
             Effect.flatMap((boundInput) =>
-              service.sendUserMessage(
-                boundInput as Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0],
+              eventCoordinator.runControlMutation(
+                service
+                  .sendUserMessage(
+                    boundInput as Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0],
+                    runtime.runtimeId,
+                  )
+                  .pipe(
+                    Effect.mapError(
+                      sessionError(
+                        "claude-live-session.send-user-message",
+                        input.externalSessionId,
+                      ),
+                    ),
+                    Effect.flatMap((event) =>
+                      parseOutput(
+                        acceptedAgentUserMessageSchema,
+                        event,
+                        "claude-live-session.normalize-user-message",
+                      ),
+                    ),
+                    Effect.flatMap((event) =>
+                      requireSessionContext(input.externalSessionId).pipe(
+                        Effect.flatMap((session) =>
+                          commit("claude-live-session.publish-user-message", () => {
+                            const { sessionRef: _sessionRef, ...runtimeEvent } = event;
+                            return {
+                              value: event as AcceptedAgentUserMessage,
+                              changes: state.applyEvent(session, runtimeEvent as AgentEvent),
+                            };
+                          }),
+                        ),
+                      ),
+                    ),
+                  ),
               ),
             ),
-            Effect.mapError(
-              sessionError("claude-live-session.send-user-message", input.externalSessionId),
-            ),
-            Effect.flatMap((event) =>
-              parseOutput(
-                acceptedAgentUserMessageSchema,
-                event,
-                "claude-live-session.normalize-user-message",
-              ),
-            ),
-            Effect.flatMap((event) =>
-              requireSessionContext(input.externalSessionId).pipe(
-                Effect.flatMap((session) =>
-                  commit("claude-live-session.publish-user-message", () => {
-                    const { sessionRef: _sessionRef, ...runtimeEvent } = event;
-                    return {
-                      value: event as AcceptedAgentUserMessage,
-                      changes: state.applyEvent(session, runtimeEvent as AgentEvent),
-                    };
-                  }),
-                ),
-              ),
-            ),
-            Effect.tap(() => flushEvents()),
           ),
         updateSessionModel: (input) =>
           service
@@ -435,48 +410,38 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
             ),
         stopSession: (input) =>
-          service.stopSession(input).pipe(
-            Effect.mapError(
-              sessionError("claude-live-session.stop-session", input.externalSessionId),
-            ),
-            Effect.tap(() => flushEvents()),
-            Effect.flatMap(() =>
-              commit("claude-live-session.remove-stopped-session", () => ({
-                value: undefined,
-                changes: state.removeSession(input),
-              })),
+          eventCoordinator.runControlMutation(
+            service.stopSession(input).pipe(
+              Effect.mapError(
+                sessionError("claude-live-session.stop-session", input.externalSessionId),
+              ),
+              Effect.flatMap(() =>
+                commit("claude-live-session.remove-stopped-session", () => ({
+                  value: undefined,
+                  changes: state.removeSession(input),
+                })),
+              ),
             ),
           ),
         releaseSession: (input) =>
-          service.releaseSession(input).pipe(
-            Effect.mapError(
-              sessionError("claude-live-session.release-session", input.externalSessionId),
-            ),
-            Effect.flatMap(() =>
-              commit("claude-live-session.remove-released-session", () => ({
-                value: undefined,
-                changes: state.removeSession(input),
-              })),
+          eventCoordinator.runControlMutation(
+            service.releaseSession(input).pipe(
+              Effect.mapError(
+                sessionError("claude-live-session.release-session", input.externalSessionId),
+              ),
+              Effect.flatMap(() =>
+                commit("claude-live-session.remove-released-session", () => ({
+                  value: undefined,
+                  changes: state.removeSession(input),
+                })),
+              ),
             ),
           ),
       };
 
       return {
         adapter,
-        startForwarding: () =>
-          Effect.tryPromise({
-            try: async () => {
-              if (released) {
-                throw new Error(`Claude runtime '${runtime.runtimeId}' is already released.`);
-              }
-              forwarding = true;
-              await drainEvents();
-            },
-            catch: (cause) =>
-              toHostOperationError(cause, "claude-live-session.start-forwarding", {
-                runtimeId: runtime.runtimeId,
-              }),
-          }),
+        startForwarding: eventCoordinator.startForwarding,
         discard: () => adapter.releaseRuntime().pipe(Effect.asVoid),
       } satisfies PreparedRuntimeLiveSessionAdapter;
     });

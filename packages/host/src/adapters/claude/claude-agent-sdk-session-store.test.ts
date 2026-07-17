@@ -95,6 +95,21 @@ describe("createClaudeAgentSdkSessionStore", () => {
     ]);
   });
 
+  test("notifies lifecycle listeners whenever a session is closed", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const closedSessionIds: string[] = [];
+    const unsubscribe = store.subscribeClose((session) =>
+      closedSessionIds.push(session.externalSessionId),
+    );
+    const session = createSession();
+    store.set(session);
+
+    store.close(session);
+    unsubscribe();
+
+    expect(closedSessionIds).toEqual(["session-1"]);
+  });
+
   test("does not report idle Claude sessions as live work for reset guards", async () => {
     const store = createClaudeAgentSdkSessionStore();
     store.set(

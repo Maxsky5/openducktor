@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { agentModelCatalogSchema, agentSessionHistoryMessageSchema } from "./agent-engine-schemas";
+import {
+  agentSessionTodoItemSchema,
+  agentStreamPartSchema,
+  agentUserMessageDisplayPartSchema,
+} from "./agent-session-event-schemas";
 import {
   CLAUDE_RUNTIME_COMMAND_CONTRACTS,
   CLAUDE_RUNTIME_HOST_COMMAND_NAMES,
+  claudeAgentModelCatalogSchema,
+  claudeAgentSessionHistoryMessageSchema,
+  claudeAgentSessionTodoItemSchema,
+  claudeAgentStreamPartSchema,
+  claudeAgentUserMessageDisplayPartSchema,
   claudeSearchAgentFilesInputSchema,
 } from "./claude-runtime-command-contracts";
 
@@ -35,5 +46,13 @@ describe("Claude runtime command contracts", () => {
       workingDirectory: "/repo",
       query: "",
     });
+  });
+
+  test("composes runtime-neutral response schemas instead of redefining them", () => {
+    expect(claudeAgentModelCatalogSchema).toBe(agentModelCatalogSchema);
+    expect(claudeAgentSessionHistoryMessageSchema).toBe(agentSessionHistoryMessageSchema);
+    expect(claudeAgentSessionTodoItemSchema).toBe(agentSessionTodoItemSchema);
+    expect(claudeAgentStreamPartSchema).toBe(agentStreamPartSchema);
+    expect(claudeAgentUserMessageDisplayPartSchema).toBe(agentUserMessageDisplayPartSchema);
   });
 });

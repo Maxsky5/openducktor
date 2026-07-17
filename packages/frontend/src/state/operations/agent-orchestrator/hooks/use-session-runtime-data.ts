@@ -27,7 +27,10 @@ import {
   type SelectedSessionRuntimeData,
 } from "@/types/selected-session-runtime-data";
 import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-refs";
-import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../support/session-runtime-policy";
+import {
+  resolveAgentSessionRuntimePolicyFromSnapshot,
+  resolveSettingsIndependentAgentSessionRuntimePolicy,
+} from "../support/session-runtime-policy";
 
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
@@ -123,11 +126,11 @@ export const useSessionRuntimeData = ({
     if (!runtimePolicyTarget) {
       return { runtimePolicy: null, error: null };
     }
-    if (runtimePolicyTarget.runtimeKind === "opencode") {
-      return { runtimePolicy: { kind: "opencode" } as const, error: null };
-    }
-    if (runtimePolicyTarget.runtimeKind === "claude") {
-      return { runtimePolicy: { kind: "claude" } as const, error: null };
+    const settingsIndependentPolicy = resolveSettingsIndependentAgentSessionRuntimePolicy(
+      runtimePolicyTarget.runtimeKind,
+    );
+    if (settingsIndependentPolicy) {
+      return { runtimePolicy: settingsIndependentPolicy, error: null };
     }
     const settingsSnapshot = settingsSnapshotQuery.data;
     if (!settingsSnapshot) {

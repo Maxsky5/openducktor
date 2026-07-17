@@ -130,6 +130,16 @@ const toEnvelope = (change: AgentSessionLiveAdapterChange): AgentSessionLiveEnve
           ...(change.workingDirectory ? { workingDirectory: change.workingDirectory } : {}),
         },
       };
+    case "slash_command_catalog_updated":
+      return {
+        type: "slash_command_catalog_updated",
+        scope: {
+          repoPath: change.repoPath,
+          runtimeKind: change.runtimeKind,
+          workingDirectory: change.workingDirectory,
+        },
+        catalog: change.catalog,
+      };
     case "fault":
       return {
         type: "fault",

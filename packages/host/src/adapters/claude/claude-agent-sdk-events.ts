@@ -33,17 +33,16 @@ import {
   timestampMs,
 } from "./claude-agent-sdk-tool-shapes";
 import {
+  claudeAssistantTextPartEvent,
+  createClaudeAssistantReasoningPart,
+} from "./claude-agent-sdk-transcript-parts";
+import {
   emitRetractedTranscriptMessages,
   emitSupersededTranscriptMessage,
   settleClaudeStreamedAssistantText,
 } from "./claude-agent-sdk-transcript-retractions";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
-import {
-  claudeAssistantTextPartEvent,
-  isRecord,
-  readStringProp,
-  textFromContentBlocks,
-} from "./claude-agent-sdk-utils";
+import { isRecord, readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 type SdkMessageHandlerInput = {
   emit: (event: ClaudeAgentSdkEvent) => void;
@@ -395,13 +394,11 @@ const handleAssistantMessage = ({
             type: "assistant_part",
             externalSessionId: session.externalSessionId,
             timestamp,
-            part: {
-              kind: "reasoning",
+            part: createClaudeAssistantReasoningPart({
               messageId: message.uuid,
               partId: `${message.uuid}:thinking:${index}`,
               text: thinkingText,
-              completed: true,
-            },
+            }),
           });
         }
       }

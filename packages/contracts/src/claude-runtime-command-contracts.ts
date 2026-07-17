@@ -1,13 +1,27 @@
 import { z } from "zod";
 import {
-  runtimeDescriptorSchema,
-  runtimeSubagentExecutionModeSchema,
-} from "./agent-runtime-schemas";
-import { agentRoleSchema } from "./agent-workflow-schemas";
-import { fileContentSchema, fileDiffSchema, fileStatusSchema } from "./git-schemas";
-import { skillCatalogSchema, skillDescriptorSchema } from "./skill-schemas";
+  agentFileDiffsSchema,
+  agentFileStatusesSchema,
+  agentModelCatalogSchema,
+  agentSessionHistoryMessageSchema,
+  agentSessionHistorySchema,
+  agentSessionTodosSchema,
+} from "./agent-engine-schemas";
+import { repoRuntimeRefSchema } from "./agent-runtime-schemas";
+import {
+  agentFileReferenceSchema,
+  agentSessionTodoItemSchema,
+  agentStreamPartSchema,
+  agentUserMessageDisplayPartSchema,
+} from "./agent-session-event-schemas";
+import {
+  agentSessionLiveRefSchema,
+  agentSessionWorkflowScopeSchema,
+  runtimeWorkingDirectoryRefSchema,
+} from "./agent-session-schemas";
+import { skillCatalogSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
-import { subagentCatalogSchema, subagentDescriptorSchema } from "./subagent-schemas";
+import { subagentCatalogSchema } from "./subagent-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const claudeRuntimeKindSchema = z.literal("claude");
@@ -23,21 +37,20 @@ export const claudeAgentModelSelectionSchema = z.object({
 });
 export type ClaudeAgentModelSelection = z.infer<typeof claudeAgentModelSelectionSchema>;
 
-export const claudeRepoRuntimeRefSchema = z.object({
-  repoPath: nonEmptyStringSchema,
+export const claudeRepoRuntimeRefSchema = repoRuntimeRefSchema.extend({
   runtimeKind: claudeRuntimeKindSchema,
 });
 export type ClaudeRepoRuntimeRef = z.infer<typeof claudeRepoRuntimeRefSchema>;
 
-export const claudeRuntimeWorkingDirectoryRefSchema = claudeRepoRuntimeRefSchema.extend({
-  workingDirectory: nonEmptyStringSchema,
+export const claudeRuntimeWorkingDirectoryRefSchema = runtimeWorkingDirectoryRefSchema.extend({
+  runtimeKind: claudeRuntimeKindSchema,
 });
 export type ClaudeRuntimeWorkingDirectoryRef = z.infer<
   typeof claudeRuntimeWorkingDirectoryRefSchema
 >;
 
-export const claudeAgentSessionRefSchema = claudeRuntimeWorkingDirectoryRefSchema.extend({
-  externalSessionId: nonEmptyStringSchema,
+export const claudeAgentSessionRefSchema = agentSessionLiveRefSchema.extend({
+  runtimeKind: claudeRuntimeKindSchema,
 });
 export type ClaudeAgentSessionRef = z.infer<typeof claudeAgentSessionRefSchema>;
 
@@ -48,13 +61,7 @@ export const claudeAgentRuntimePolicySchema = z
   .strict();
 export type ClaudeAgentRuntimePolicy = z.infer<typeof claudeAgentRuntimePolicySchema>;
 
-export const claudeWorkflowSessionScopeSchema = z
-  .object({
-    kind: z.literal("workflow"),
-    taskId: nonEmptyStringSchema,
-    role: agentRoleSchema,
-  })
-  .strict();
+export const claudeWorkflowSessionScopeSchema = agentSessionWorkflowScopeSchema;
 export type ClaudeWorkflowSessionScope = z.infer<typeof claudeWorkflowSessionScopeSchema>;
 
 const claudePolicyBoundSessionRefSchema = claudeAgentSessionRefSchema.extend({
@@ -76,24 +83,8 @@ export type ClaudeListAgentSkillsInput = z.infer<typeof claudeListAgentSkillsInp
 export const claudeListAgentSubagentsInputSchema = claudeRuntimeWorkingDirectoryRefSchema;
 export type ClaudeListAgentSubagentsInput = z.infer<typeof claudeListAgentSubagentsInputSchema>;
 
-export const claudeFileReferenceSchema = z.object({
-  id: nonEmptyStringSchema,
-  path: nonEmptyStringSchema,
-  name: nonEmptyStringSchema,
-  kind: z.enum(["directory", "css", "code", "image", "video", "default"]),
-});
+export const claudeFileReferenceSchema = agentFileReferenceSchema;
 export type ClaudeFileReference = z.infer<typeof claudeFileReferenceSchema>;
-
-const claudeAttachmentReferenceSchema = z
-  .object({
-    id: nonEmptyStringSchema,
-    path: nonEmptyStringSchema,
-    name: nonEmptyStringSchema,
-    kind: z.enum(["image", "audio", "video", "pdf"]),
-    mime: nonEmptyStringSchema.optional(),
-    localPreviewAvailable: z.boolean().optional(),
-  })
-  .passthrough();
 
 export const claudeSearchAgentFilesInputSchema = claudeRuntimeWorkingDirectoryRefSchema.extend({
   query: z.string(),
@@ -127,231 +118,29 @@ export type ClaudeLoadAgentSessionDiffInput = z.infer<typeof claudeLoadAgentSess
 export const claudeLoadAgentFileStatusInputSchema = claudeRuntimeWorkingDirectoryRefSchema;
 export type ClaudeLoadAgentFileStatusInput = z.infer<typeof claudeLoadAgentFileStatusInputSchema>;
 
-const claudeModelAttachmentSupportSchema = z.object({
-  image: z.boolean(),
-  audio: z.boolean(),
-  video: z.boolean(),
-  pdf: z.boolean(),
-  mimeTypes: z
-    .object({
-      image: z.array(nonEmptyStringSchema).optional(),
-      audio: z.array(nonEmptyStringSchema).optional(),
-      video: z.array(nonEmptyStringSchema).optional(),
-      pdf: z.array(nonEmptyStringSchema).optional(),
-    })
-    .optional(),
-});
-
-const claudeAgentModelDescriptorSchema = z.object({
-  id: nonEmptyStringSchema,
-  providerId: nonEmptyStringSchema,
-  providerName: nonEmptyStringSchema,
-  modelId: nonEmptyStringSchema,
-  modelName: nonEmptyStringSchema,
-  variants: z.array(z.string()),
-  contextWindow: z.number().int().positive().optional(),
-  outputLimit: z.number().int().positive().optional(),
-  attachmentSupport: claudeModelAttachmentSupportSchema.optional(),
-  liveSessionUpdates: z
-    .object({
-      profile: z.boolean().optional(),
-      variants: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
-
-const claudeAgentDescriptorSchema = z.object({
-  id: nonEmptyStringSchema.optional(),
-  label: nonEmptyStringSchema.optional(),
-  name: nonEmptyStringSchema.optional(),
-  description: z.string().optional(),
-  mode: z.enum(["subagent", "primary", "all"]),
-  hidden: z.boolean().optional(),
-  native: z.boolean().optional(),
-  color: nonEmptyStringSchema.optional(),
-});
-
-export const claudeAgentModelCatalogSchema = z.object({
-  runtime: runtimeDescriptorSchema.optional(),
-  models: z.array(claudeAgentModelDescriptorSchema),
-  defaultModelsByProvider: z.record(z.string(), z.string()),
-  profiles: z.array(claudeAgentDescriptorSchema).optional(),
-});
+export const claudeAgentModelCatalogSchema = agentModelCatalogSchema;
 export type ClaudeAgentModelCatalog = z.infer<typeof claudeAgentModelCatalogSchema>;
 
-export const claudeFileSearchResultSchema = claudeFileReferenceSchema;
+export const claudeFileSearchResultSchema = agentFileReferenceSchema;
 export const claudeFileSearchResultsSchema = z.array(claudeFileSearchResultSchema);
 export type ClaudeFileSearchResult = z.infer<typeof claudeFileSearchResultSchema>;
 
-const claudeAgentUserMessageSourceTextSchema = z.object({
-  value: z.string(),
-  start: z.number().int().nonnegative(),
-  end: z.number().int().nonnegative(),
-});
-
-export const claudeAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("text"),
-    text: z.string(),
-    synthetic: z.boolean().optional(),
-  }),
-  z.object({
-    kind: z.literal("file_reference"),
-    file: claudeFileReferenceSchema,
-    sourceText: claudeAgentUserMessageSourceTextSchema.optional(),
-  }),
-  z.object({
-    kind: z.literal("skill_mention"),
-    skill: skillDescriptorSchema,
-    sourceText: claudeAgentUserMessageSourceTextSchema.optional(),
-  }),
-  z.object({
-    kind: z.literal("subagent_reference"),
-    subagent: subagentDescriptorSchema,
-    sourceText: claudeAgentUserMessageSourceTextSchema.optional(),
-  }),
-  z.object({
-    kind: z.literal("attachment"),
-    attachment: claudeAttachmentReferenceSchema,
-  }),
-]);
-
-const claudeAgentToolTypeSchema = z.enum([
-  "bash",
-  "read",
-  "list",
-  "search",
-  "web",
-  "todo",
-  "file_edit",
-  "workflow",
-  "question",
-  "generic",
-]);
-
-export const claudeAgentStreamPartSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("text"),
-    messageId: nonEmptyStringSchema,
-    partId: nonEmptyStringSchema,
-    text: z.string(),
-    synthetic: z.boolean().optional(),
-    completed: z.boolean(),
-  }),
-  z.object({
-    kind: z.literal("reasoning"),
-    messageId: nonEmptyStringSchema,
-    partId: nonEmptyStringSchema,
-    text: z.string(),
-    completed: z.boolean(),
-  }),
-  z.object({
-    kind: z.literal("tool"),
-    messageId: nonEmptyStringSchema,
-    partId: nonEmptyStringSchema,
-    callId: nonEmptyStringSchema,
-    tool: nonEmptyStringSchema,
-    toolType: claudeAgentToolTypeSchema,
-    status: z.enum(["pending", "running", "completed", "error"]),
-    preview: z.string().optional(),
-    title: z.string().optional(),
-    displayLabel: z.string().optional(),
-    input: z.record(z.string(), z.unknown()).optional(),
-    output: z.string().optional(),
-    error: z.string().optional(),
-    fileDiffs: z.array(fileDiffSchema).optional(),
-    fileContent: z.array(fileContentSchema).optional(),
-    fileChanges: z.array(fileDiffSchema).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-    startedAtMs: z.number().optional(),
-    endedAtMs: z.number().optional(),
-  }),
-  z.object({
-    kind: z.literal("step"),
-    messageId: nonEmptyStringSchema,
-    partId: nonEmptyStringSchema,
-    phase: z.enum(["start", "finish"]),
-    reason: z.string().optional(),
-    cost: z.number().optional(),
-    totalTokens: z.number().optional(),
-    contextWindow: z.number().optional(),
-  }),
-  z.object({
-    kind: z.literal("subagent"),
-    messageId: nonEmptyStringSchema,
-    partId: nonEmptyStringSchema,
-    correlationKey: nonEmptyStringSchema,
-    status: z.enum(["pending", "running", "completed", "cancelled", "error"]),
-    agent: z.string().optional(),
-    prompt: z.string().optional(),
-    description: z.string().optional(),
-    error: z.string().optional(),
-    externalSessionId: nonEmptyStringSchema.optional(),
-    executionMode: runtimeSubagentExecutionModeSchema.optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-    startedAtMs: z.number().optional(),
-    endedAtMs: z.number().optional(),
-  }),
-]);
-
-export const claudeAgentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
-  z.object({
-    messageId: nonEmptyStringSchema,
-    role: z.literal("user"),
-    timestamp: nonEmptyStringSchema,
-    text: z.string(),
-    displayParts: z.array(claudeAgentUserMessageDisplayPartSchema),
-    state: z.enum(["queued", "read"]),
-    model: claudeAgentModelSelectionSchema.optional(),
-    parts: z.array(claudeAgentStreamPartSchema),
-  }),
-  z.object({
-    messageId: nonEmptyStringSchema,
-    role: z.literal("assistant"),
-    timestamp: nonEmptyStringSchema,
-    text: z.string(),
-    durationMs: z.number().optional(),
-    totalTokens: z.number().optional(),
-    contextWindow: z.number().optional(),
-    model: claudeAgentModelSelectionSchema.optional(),
-    parts: z.array(claudeAgentStreamPartSchema),
-  }),
-  z.object({
-    messageId: nonEmptyStringSchema,
-    role: z.literal("system"),
-    timestamp: nonEmptyStringSchema,
-    text: z.string(),
-    notice: z
-      .object({
-        tone: z.literal("info"),
-        reason: z.literal("session_compacted"),
-        title: nonEmptyStringSchema,
-      })
-      .optional(),
-    parts: z.tuple([]),
-  }),
-]);
+export const claudeAgentUserMessageDisplayPartSchema = agentUserMessageDisplayPartSchema;
+export const claudeAgentStreamPartSchema = agentStreamPartSchema;
+export const claudeAgentSessionHistoryMessageSchema = agentSessionHistoryMessageSchema;
 export type ClaudeAgentSessionHistoryMessage = z.infer<
   typeof claudeAgentSessionHistoryMessageSchema
 >;
+export const claudeAgentSessionHistorySchema = agentSessionHistorySchema;
+export const claudeAgentSessionTodoItemSchema = agentSessionTodoItemSchema;
+export const claudeAgentSessionTodosSchema = agentSessionTodosSchema;
+export const claudeFileDiffsSchema = agentFileDiffsSchema;
+export const claudeFileStatusesSchema = agentFileStatusesSchema;
 
-export const claudeAgentSessionHistorySchema = z.array(claudeAgentSessionHistoryMessageSchema);
-
-export const claudeAgentSessionTodoItemSchema = z.object({
-  id: nonEmptyStringSchema,
-  content: z.string(),
-  status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
-  priority: z.enum(["high", "medium", "low"]),
-});
-export const claudeAgentSessionTodosSchema = z.array(claudeAgentSessionTodoItemSchema);
-
-export const claudeFileDiffsSchema = z.array(fileDiffSchema);
-export const claudeFileStatusesSchema = z.array(fileStatusSchema);
-
-type ClaudeRuntimeCommandContract = {
+export type ClaudeRuntimeCommandContract<Input = unknown, Response = unknown> = {
   command: string;
-  inputSchema: z.ZodTypeAny;
-  responseSchema: z.ZodTypeAny;
+  inputSchema: { parse(value: unknown): Input };
+  responseSchema: { parse(value: unknown): Response };
 };
 
 export const CLAUDE_RUNTIME_COMMAND_CONTRACTS = {
@@ -420,8 +209,25 @@ export type ClaudeRuntimeCommandOutput<Command extends ClaudeRuntimeCommandName>
 
 export const CLAUDE_RUNTIME_HOST_COMMAND_NAMES = Object.values(CLAUDE_RUNTIME_COMMAND_CONTRACTS)
   .map((contract) => contract.command)
-  .sort() as ClaudeRuntimeCommandName[];
+  .sort();
 
-export const CLAUDE_RUNTIME_COMMAND_CONTRACTS_BY_COMMAND = Object.fromEntries(
-  Object.values(CLAUDE_RUNTIME_COMMAND_CONTRACTS).map((contract) => [contract.command, contract]),
-) as Record<ClaudeRuntimeCommandName, ClaudeRuntimeCommandContractValue>;
+export const CLAUDE_RUNTIME_COMMAND_CONTRACTS_BY_COMMAND = {
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff,
+  [CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus.command]:
+    CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus,
+} satisfies Record<ClaudeRuntimeCommandName, ClaudeRuntimeCommandContractValue>;

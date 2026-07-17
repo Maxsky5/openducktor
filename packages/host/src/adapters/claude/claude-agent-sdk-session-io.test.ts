@@ -291,10 +291,13 @@ describe("sendClaudeUserMessage", () => {
     expect(getContextUsage).not.toHaveBeenCalled();
     expect(events.some((event) => event.type === "session_context_updated")).toBe(false);
   });
+});
 
+describe("Claude session I/O mirrored file edits", () => {
   test("enriches live file edit results from the Claude SDK transcript mirror", async () => {
     const events: AgentEvent[] = [];
     const transcriptStore = createClaudeTranscriptMirrorStore();
+    transcriptStore.registerSessionDirectory({ dir: "/repo", sessionId: "session-1" });
     const session = createClaudeSession({
       query: claudeQueryWithMessages([
         {
@@ -529,7 +532,9 @@ describe("sendClaudeUserMessage", () => {
 
     expect(events).toEqual([]);
   });
+});
 
+describe("Claude session I/O model changes", () => {
   test("applies per-message model changes through the Claude SDK query", async () => {
     const setModel = mock(async (_model?: string) => {});
     const pushed: SDKUserMessage[] = [];
@@ -633,7 +638,9 @@ describe("sendClaudeUserMessage", () => {
     expect(session.model?.variant).toBe("xhigh");
     expect(pushed).toHaveLength(1);
   });
+});
 
+describe("Claude session I/O queued messages", () => {
   test("accepts queued user messages while the Claude SDK session is running", async () => {
     const pushed: SDKUserMessage[] = [];
     const events: AgentEvent[] = [];
@@ -1069,7 +1076,9 @@ describe("sendClaudeUserMessage", () => {
     });
     expect(events).toEqual([]);
   });
+});
 
+describe("Claude session I/O attachments and invalid updates", () => {
   test("queues structured Claude SDK messages with staged image attachments", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openducktor-claude-send-"));
     try {

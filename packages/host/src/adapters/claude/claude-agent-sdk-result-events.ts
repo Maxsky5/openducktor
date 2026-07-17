@@ -7,8 +7,9 @@ import {
   readClaudeResultDurationMs,
 } from "./claude-agent-sdk-result-lifecycle";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
+import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeSessionActivity } from "./claude-agent-sdk-types";
-import { isRecord, previewInput, readStringProp, toolPartType } from "./claude-agent-sdk-utils";
+import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeResultEventSession = {
   acceptedUserMessages?: readonly unknown[];
@@ -126,27 +127,21 @@ export const emitClaudePermissionDeniedToolPart = ({
     session.toolInputsByCallId.set(permission.toolUseId, input);
   }
   const startedAtMs = session.toolStartedAtMsByCallId.get(permission.toolUseId);
-  const endedAtMs = timestampMs(timestamp);
-  const preview = input ? previewInput(input) : undefined;
   emit({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,
     timestamp,
-    part: {
-      kind: "tool",
-      messageId,
-      partId: permission.toolUseId,
+    part: createClaudeCompletedToolPart({
       callId: permission.toolUseId,
+      endedAtMs: timestampMs(timestamp),
+      isError: true,
+      messageId,
+      text: permission.message,
       tool: permission.toolName,
-      toolType: toolPartType(permission.toolName),
-      status: "error",
-      error: permission.message,
       ...(input ? { input } : {}),
-      ...(preview ? { preview } : {}),
       ...(permission.metadata ? { metadata: permission.metadata } : {}),
       ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-      endedAtMs,
-    },
+    }),
   });
 };
 

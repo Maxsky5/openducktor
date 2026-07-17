@@ -213,7 +213,9 @@ describe("handleClaudeSdkMessage subagent events", () => {
       }),
     ]);
   });
+});
 
+describe("handleClaudeSdkMessage subagent visibility", () => {
   test("hides Claude subagent tasks flagged with skip_transcript", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
@@ -319,7 +321,9 @@ describe("handleClaudeSdkMessage subagent events", () => {
 
     expect(events).toEqual([]);
   });
+});
 
+describe("handleClaudeSdkMessage subagent task lifecycle", () => {
   test("maps Claude task events for Agent tool calls without subagent_type", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
@@ -685,7 +689,9 @@ describe("handleClaudeSdkMessage subagent events", () => {
       }),
     ]);
   });
+});
 
+describe("handleClaudeSdkMessage Agent tool results", () => {
   test("links Claude Agent tool results to the stored subagent transcript id", () => {
     const events: AgentEvent[] = [];
     const session = createSession();

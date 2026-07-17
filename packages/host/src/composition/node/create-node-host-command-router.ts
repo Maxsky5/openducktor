@@ -1,16 +1,8 @@
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
-import {
-  type ClaudeLiveSessionAdapterPreparer,
-  createClaudeAgentSdkEventHub,
-  createClaudeLiveSessionAdapterPreparer,
-} from "../../adapters/agent-sessions/claude-live-session-adapter";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
-import { createClaudeAgentSdkService } from "../../adapters/claude/claude-agent-sdk-service";
-import { createClaudeAgentSdkSessionStore } from "../../adapters/claude/claude-agent-sdk-session-store";
-import { createClaudeWorkspaceRuntimeStarter } from "../../adapters/claude/claude-workspace-runtime-starter";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
 import type { McpBridgeDiscoveryMode } from "../../adapters/mcp/mcp-bridge-discovery-file";
 import {
@@ -23,6 +15,7 @@ import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-reques
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
+import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
@@ -82,10 +75,7 @@ import {
   type HostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
-import type {
-  RuntimeRegistryPort,
-  RuntimeWorkspaceStarterPort,
-} from "../../ports/runtime-registry-port";
+import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
   createStopDevServersStep,
@@ -96,6 +86,7 @@ import {
   runShutdownSteps,
   writeHostLifecycleLog,
 } from "../host-lifecycle";
+import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 import {
   type CreateNodeHostDefaultPortsInput,
   createNodeHostDefaultPorts,
@@ -166,8 +157,6 @@ export const createNodeEffectHostCommandRouter = (
       eventBus.publish("openducktor://agent-session-live-event", envelope);
     },
   });
-  const claudeEventHub = createClaudeAgentSdkEventHub();
-  const claudeSessionStore = createClaudeAgentSdkSessionStore({ emit: claudeEventHub.emit });
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
@@ -194,114 +183,11 @@ export const createNodeEffectHostCommandRouter = (
     repoStoreDiagnostics: taskStore,
   });
   let resolvedMcpHostBridge = mcpHostBridge;
-  let prepareClaudeLiveSessionAdapter: ClaudeLiveSessionAdapterPreparer | null = null;
-  const workspaceStarter: RuntimeWorkspaceStarterPort = {
-    startWorkspaceRuntime(input) {
-      if (input.runtimeKind === "codex") {
-        return createCodexWorkspaceRuntimeStarter({
-          toolDiscovery,
-          codexAppServer: effectiveCodexTransportRegistry,
-          liveSessionLifecycle: agentSessionLiveStateService,
-          prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
-            liveSessionLifecycle: agentSessionLiveStateService,
-            codexAppServer: effectiveCodexAppServer,
-            resolveRuntimePolicy: (scope) =>
-              loadGlobalConfig(settingsConfig).pipe(
-                Effect.map((config) =>
-                  resolveCodexEffectivePolicy(config.agentRuntimes.codex, scope.role),
-                ),
-              ),
-          }),
-          processEnv,
-          runtimeDistribution,
-          ...(clientVersion ? { clientVersion } : {}),
-          resolveMcpBridgeConnection: () =>
-            resolvedMcpHostBridge
-              ? resolvedMcpHostBridge.ensureConnection({ repoPath: input.repoPath }).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new HostOperationError({
-                        operation: "codex-workspace-runtime.resolve-mcp-bridge",
-                        message: cause.message,
-                        cause,
-                      }),
-                  ),
-                )
-              : Effect.fail(
-                  new HostResourceError({
-                    message: "Codex workspace startup requires an initialized MCP host bridge.",
-                    resource: "mcp-host-bridge",
-                    operation: "codex-workspace-runtime.start",
-                  }),
-                ),
-        }).startWorkspaceRuntime(input);
-      }
-      if (input.runtimeKind === "claude") {
-        if (!prepareClaudeLiveSessionAdapter) {
-          return Effect.fail(
-            new HostResourceError({
-              resource: "claude-live-session-adapter",
-              operation: "claude-workspace-runtime.start",
-              message: "Claude live-session adapter preparation is not initialized.",
-            }),
-          );
-        }
-        return createClaudeWorkspaceRuntimeStarter({
-          liveSessionLifecycle: agentSessionLiveStateService,
-          prepareLiveSessionAdapter: prepareClaudeLiveSessionAdapter,
-          systemCommands,
-          toolDiscovery,
-        }).startWorkspaceRuntime(input);
-      }
-
-      return createOpenCodeWorkspaceRuntimeStarter({
-        toolDiscovery,
-        processEnv,
-        runtimeDistribution,
-        liveSessionLifecycle: agentSessionLiveStateService,
-        prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
-          liveSessionLifecycle: agentSessionLiveStateService,
-        }),
-        resolveMcpBridgeConnection: (runtimeInput) =>
-          resolvedMcpHostBridge
-            ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new HostOperationError({
-                      operation: "opencode-workspace-runtime.resolve-mcp-bridge",
-                      message: cause.message,
-                      cause,
-                    }),
-                ),
-              )
-            : Effect.fail(
-                new HostResourceError({
-                  message: "OpenCode workspace startup requires an initialized MCP host bridge.",
-                  resource: "mcp-host-bridge",
-                  operation: "opencode-workspace-runtime.start",
-                }),
-              ),
-      }).startWorkspaceRuntime(input);
-    },
-  };
-  const effectiveRuntimeRegistry =
-    runtimeRegistry ??
-    createRuntimeRegistry({
-      workspaceStarter,
-      sessionOperations: createRuntimeSessionOperations({
-        codexAppServer: effectiveCodexAppServer,
-        claudeAgentSdk: {
-          stopSession: claudeSessionStore.stopSession,
-          probeSessionStatus: claudeSessionStore.probeSessionStatus,
-        },
-      }),
-    });
-  const claudeAgentSdkService = createClaudeAgentSdkService({
-    emit: claudeEventHub.emit,
+  const claudeRuntime = createClaudeRuntimeComposition({
+    liveSessionLifecycle: agentSessionLiveStateService,
     processEnv,
-    runtimeRegistry: effectiveRuntimeRegistry,
     runtimeDistribution,
-    sessionStore: claudeSessionStore,
+    systemCommands,
     toolDiscovery,
     resolveMcpBridgeConnection: (repoPath) =>
       resolvedMcpHostBridge
@@ -322,12 +208,83 @@ export const createNodeEffectHostCommandRouter = (
             }),
           ),
   });
-  prepareClaudeLiveSessionAdapter = createClaudeLiveSessionAdapterPreparer({
-    eventHub: claudeEventHub,
-    liveSessionLifecycle: agentSessionLiveStateService,
-    service: claudeAgentSdkService,
-    sessionStore: claudeSessionStore,
+  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
+    claude: claudeRuntime.workspaceStarter,
+    codex: createCodexWorkspaceRuntimeStarter({
+      toolDiscovery,
+      codexAppServer: effectiveCodexTransportRegistry,
+      liveSessionLifecycle: agentSessionLiveStateService,
+      prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: agentSessionLiveStateService,
+        codexAppServer: effectiveCodexAppServer,
+        resolveRuntimePolicy: (scope) =>
+          loadGlobalConfig(settingsConfig).pipe(
+            Effect.map((config) =>
+              resolveCodexEffectivePolicy(config.agentRuntimes.codex, scope.role),
+            ),
+          ),
+      }),
+      processEnv,
+      runtimeDistribution,
+      ...(clientVersion ? { clientVersion } : {}),
+      resolveMcpBridgeConnection: (runtimeInput) =>
+        resolvedMcpHostBridge
+          ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation: "codex-workspace-runtime.resolve-mcp-bridge",
+                    message: cause.message,
+                    cause,
+                  }),
+              ),
+            )
+          : Effect.fail(
+              new HostResourceError({
+                message: "Codex workspace startup requires an initialized MCP host bridge.",
+                resource: "mcp-host-bridge",
+                operation: "codex-workspace-runtime.start",
+              }),
+            ),
+    }),
+    opencode: createOpenCodeWorkspaceRuntimeStarter({
+      toolDiscovery,
+      processEnv,
+      runtimeDistribution,
+      liveSessionLifecycle: agentSessionLiveStateService,
+      prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: agentSessionLiveStateService,
+      }),
+      resolveMcpBridgeConnection: (runtimeInput) =>
+        resolvedMcpHostBridge
+          ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation: "opencode-workspace-runtime.resolve-mcp-bridge",
+                    message: cause.message,
+                    cause,
+                  }),
+              ),
+            )
+          : Effect.fail(
+              new HostResourceError({
+                message: "OpenCode workspace startup requires an initialized MCP host bridge.",
+                resource: "mcp-host-bridge",
+                operation: "opencode-workspace-runtime.start",
+              }),
+            ),
+    }),
   });
+  const effectiveRuntimeRegistry =
+    runtimeRegistry ??
+    createRuntimeRegistry({
+      workspaceStarter,
+      sessionOperations: createRuntimeSessionOperations({
+        codexAppServer: effectiveCodexAppServer,
+        claudeAgentSdk: claudeRuntime.sessionOperations,
+      }),
+    });
   const taskWorktreeService = createTaskWorktreeService({
     settingsConfig,
     workspaceSettingsService,
@@ -506,7 +463,10 @@ export const createNodeEffectHostCommandRouter = (
       }),
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionLiveStateService),
-      ...createClaudeRuntimeCommandHandlers(claudeAgentSdkService),
+      ...createClaudeRuntimeCommandHandlers(
+        claudeRuntime.agentSdkService,
+        effectiveRuntimeRegistry,
+      ),
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService, {
         logger: lifecycleLogger,

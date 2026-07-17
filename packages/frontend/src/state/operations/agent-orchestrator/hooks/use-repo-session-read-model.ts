@@ -383,6 +383,13 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
+      if (envelope.type === "slash_command_catalog_updated") {
+        queryClient.setQueryData(
+          runtimeCatalogQueryKeys.repoSlashCommands(envelope.scope),
+          envelope.catalog,
+        );
+        return;
+      }
       if (envelope.type === "fault") {
         failObservation(
           `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`,

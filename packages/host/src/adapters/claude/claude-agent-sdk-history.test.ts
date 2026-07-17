@@ -317,7 +317,9 @@ describe("claude-agent-sdk-history", () => {
       displayParts: [{ kind: "text", text: "Run /help and contact dev@example.com" }],
     });
   });
+});
 
+describe("claude-agent-sdk-history tool projection", () => {
   test("hydrates MCP tool blocks with input and timing", () => {
     const history = toClaudeHistoryMessages(
       [
@@ -755,7 +757,9 @@ describe("claude-agent-sdk-history", () => {
       ],
     });
   });
+});
 
+describe("claude-agent-sdk-history assistant turns", () => {
   test("hydrates Claude thinking and skips superseded text-only tool-use drafts", () => {
     const history = toClaudeHistoryMessages(
       [
@@ -1211,7 +1215,9 @@ describe("claude-agent-sdk-history", () => {
       messageId: "result-2",
     });
   });
+});
 
+describe("claude-agent-sdk-history subagents", () => {
   test("does not hydrate subagent sidechain messages into the parent transcript", () => {
     const history = toClaudeHistoryMessages(
       [
