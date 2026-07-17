@@ -52,6 +52,7 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
       earliestRetainedSequence: sequenceSchema,
       snapshotSequenceEnd: sequenceSchema,
       lifecycle: terminalLifecycleSchema,
+      title: z.string().min(1),
       complete: z.boolean(),
     })
     .strict(),
@@ -102,6 +103,9 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
     .strict(),
   protocolBaseSchema
     .extend({ type: z.literal("output_overflow"), terminalId: terminalIdSchema })
+    .strict(),
+  protocolBaseSchema
+    .extend({ type: z.literal("title"), terminalId: terminalIdSchema, title: z.string().min(1) })
     .strict(),
   protocolBaseSchema
     .extend({ type: z.literal("terminal_forgotten"), terminalId: terminalIdSchema })

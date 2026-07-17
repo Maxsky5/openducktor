@@ -2,8 +2,6 @@ import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/cont
 
 export type TerminalKeyAction = "copy" | "interrupt" | "paste" | "passthrough";
 
-const TERMINAL_TITLE_MAX_LENGTH = 160;
-
 export const createTerminalViewportActivator = ({
   fit,
   scrollToBottom,
@@ -25,41 +23,6 @@ export const createTerminalViewportActivator = ({
     refresh(0, Math.max(0, readRows() - 1));
     focus?.();
   };
-};
-
-export const createHydratedTerminalTitlePublisher = (publish: (title: string) => void) => {
-  let hydrated = false;
-  let pendingTitle: string | null = null;
-  return {
-    receive(title: string): void {
-      if (hydrated) {
-        publish(title);
-        return;
-      }
-      pendingTitle = title;
-    },
-    markHydrated(): void {
-      if (hydrated) return;
-      hydrated = true;
-      if (pendingTitle) publish(pendingTitle);
-      pendingTitle = null;
-    },
-  };
-};
-
-export const normalizeTerminalTitle = (title: string, fallback: string): string => {
-  const sanitize = (value: string): string =>
-    Array.from(value.trim())
-      .filter((character) => {
-        const codePoint = character.codePointAt(0) ?? 0;
-        return codePoint > 31 && (codePoint < 127 || codePoint > 159);
-      })
-      .slice(0, TERMINAL_TITLE_MAX_LENGTH)
-      .join("");
-  const sanitizedTitle = sanitize(title);
-  const shellDirectory = sanitizedTitle.match(/^[^@\s]+@[^:\s]+:(?<directory>[~/].*)$/u)?.groups
-    ?.directory;
-  return shellDirectory || sanitizedTitle || sanitize(fallback);
 };
 
 type TerminalKeyEventHandlerInput = {
@@ -164,12 +127,18 @@ export const handleTerminalMetadataFrame = (
     reset: () => void;
     onAttention: (message: string | null) => void;
     onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
+    onTitle: (title: string) => void;
     onForgotten: (message: string) => void;
     onFailure: (message: string) => void;
   },
 ): message is Exclude<TerminalServerMessage, { type: "output" }> => {
   if (message.type === "snapshot") {
     handlers.onLifecycle(message.lifecycle, null);
+    handlers.onTitle(message.title);
+    return true;
+  }
+  if (message.type === "title") {
+    handlers.onTitle(message.title);
     return true;
   }
   if (message.type === "replay_gap") {

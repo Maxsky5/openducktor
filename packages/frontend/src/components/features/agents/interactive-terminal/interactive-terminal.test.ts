@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import {
-  createHydratedTerminalTitlePublisher,
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   createTerminalKeyEventHandler,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
-  normalizeTerminalTitle,
   resolveTerminalKeyAction,
 } from "./interactive-terminal-policy";
 
@@ -54,30 +52,6 @@ describe("InteractiveTerminal policies", () => {
     activate(() => events.push("focus"));
 
     expect(events).toEqual(["fit", "scroll-to-bottom", "refresh", "focus"]);
-  });
-
-  test("publishes only the final replay title before forwarding live title changes", () => {
-    const titles: string[] = [];
-    const publisher = createHydratedTerminalTitlePublisher((title) => titles.push(title));
-
-    publisher.receive("~/repo");
-    publisher.receive("pnpm run dev");
-    expect(titles).toEqual([]);
-
-    publisher.markHydrated();
-    expect(titles).toEqual(["pnpm run dev"]);
-
-    publisher.receive("~/repo/packages/frontend");
-    expect(titles).toEqual(["pnpm run dev", "~/repo/packages/frontend"]);
-  });
-
-  test("normalizes live shell titles without exposing control characters", () => {
-    expect(normalizeTerminalTitle("  pnpm run dev\u0007  ", "/repo/worktree")).toBe("pnpm run dev");
-    expect(normalizeTerminalTitle("\u0000\u001f", "/repo/worktree")).toBe("/repo/worktree");
-    expect(normalizeTerminalTitle("maxsky5@studio:~/repo/worktree", "/repo/worktree")).toBe(
-      "~/repo/worktree",
-    );
-    expect(normalizeTerminalTitle("x".repeat(300), "/repo/worktree")).toHaveLength(160);
   });
 
   test("keeps copy, paste, and Ctrl+C interrupt semantics distinct", () => {
@@ -213,6 +187,7 @@ describe("InteractiveTerminal policies", () => {
       reset: () => events.push("reset"),
       onAttention: (message: string | null) => events.push(`attention:${message}`),
       onLifecycle: (lifecycle: string) => events.push(`lifecycle:${lifecycle}`),
+      onTitle: (title: string) => events.push(`title:${title}`),
       onForgotten: () => undefined,
       onFailure: () => undefined,
     };
@@ -225,7 +200,19 @@ describe("InteractiveTerminal policies", () => {
           earliestRetainedSequence: 10,
           snapshotSequenceEnd: 20,
           lifecycle: "running",
+          title: "~/repo",
           complete: false,
+        },
+        handlers,
+      ),
+    ).toBe(true);
+    expect(
+      handleTerminalMetadataFrame(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "title",
+          terminalId: "terminal-1",
+          title: "pnpm run dev",
         },
         handlers,
       ),
@@ -257,6 +244,8 @@ describe("InteractiveTerminal policies", () => {
 
     expect(events).toEqual([
       "lifecycle:running",
+      "title:~/repo",
+      "title:pnpm run dev",
       "reset",
       "attention:Incomplete replay: output 0–10 is unavailable.",
       "output",
@@ -269,6 +258,7 @@ describe("InteractiveTerminal policies", () => {
       reset: () => undefined,
       onAttention: (message: string | null) => events.push(`attention:${message}`),
       onLifecycle: () => undefined,
+      onTitle: () => undefined,
       onForgotten: (message: string) => events.push(`forgotten:${message}`),
       onFailure: (message: string) => events.push(`failure:${message}`),
     };

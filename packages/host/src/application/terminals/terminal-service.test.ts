@@ -112,6 +112,48 @@ describe("TerminalService", () => {
     expect(pty.operations).toContain("write:cd /tmp\n");
   });
 
+  test("lists the latest terminal title without changing the initial directory", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+
+    pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/projects/openducktor\u0007"));
+
+    const listed = await Effect.runPromise(service.list({ kind: "unassociated" }));
+    expect(listed.terminals[0]).toMatchObject({
+      label: "~/projects/openducktor",
+      initialWorkingDir: "/canonical/repo",
+    });
+
+    pty.emit(new TextEncoder().encode("\u001b]2;pnpm "));
+    pty.emit(new TextEncoder().encode("run dev\u001b\\"));
+
+    const updated = await Effect.runPromise(service.list({ kind: "unassociated" }));
+    expect(updated.terminals[0]?.label).toBe("pnpm run dev");
+  });
+
+  test("publishes the current title on attach and later title changes as metadata", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/repo\u0007"));
+    const events: unknown[] = [];
+
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "attachment-1",
+        lastConsumedSequence: 0,
+        sink: (event) => events.push(event),
+      }),
+    );
+
+    expect(events[0]).toMatchObject({ type: "snapshot", title: "~/repo" });
+
+    pty.emit(new TextEncoder().encode("\u001b]2;pnpm run dev\u0007"));
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "title", title: "pnpm run dev" }),
+    );
+  });
+
   test("publishes output before exit with monotonic byte ranges", async () => {
     const { service, pty } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: { taskId: "task-1" } }));

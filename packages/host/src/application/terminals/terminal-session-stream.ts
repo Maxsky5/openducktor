@@ -6,6 +6,7 @@ import {
 import { Effect } from "effect";
 import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import type { TerminalTitleTracker } from "./terminal-title-tracker";
 
 const OUTPUT_CHUNK_BYTES = 64 * 1024;
 const EMPTY_PAYLOAD = new Uint8Array(0);
@@ -26,6 +27,7 @@ export type TerminalAttachment = {
 
 export type TerminalSession = {
   summary: TerminalSummary;
+  titleTracker: TerminalTitleTracker;
   handle: TerminalPtyHandle | null;
   replay: ReplayChunk[];
   replayBytes: number;

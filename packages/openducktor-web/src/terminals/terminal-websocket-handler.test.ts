@@ -60,6 +60,7 @@ describe("terminalWebSocketHandler", () => {
               earliestRetainedSequence: 0,
               snapshotSequenceEnd: 0,
               lifecycle: "running",
+              title: "~/repo",
               complete: true,
             },
             new Uint8Array(),

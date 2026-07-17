@@ -6,6 +6,7 @@ import {
   TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   TERMINAL_PROTOCOL_MAX_ROWS,
+  TERMINAL_PROTOCOL_VERSION,
   terminalClientMessageSchema,
 } from "./terminal-protocol";
 
@@ -60,6 +61,36 @@ describe("terminal protocol", () => {
         lastConsumedSequence: null,
       }),
     ).toThrow();
+  });
+
+  test("round trips host-owned snapshot and live terminal titles", () => {
+    const snapshot = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "snapshot" as const,
+      terminalId: "terminal-1",
+      earliestRetainedSequence: 0,
+      snapshotSequenceEnd: 0,
+      lifecycle: "running" as const,
+      title: "~/projects/openducktor",
+      complete: true,
+    };
+    const title = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "title" as const,
+      terminalId: "terminal-1",
+      title: "pnpm run dev",
+    };
+
+    expect(
+      decodeTerminalProtocolFrame(
+        encodeTerminalProtocolFrame({ message: snapshot, payload: new Uint8Array() }),
+      ).message,
+    ).toEqual(snapshot);
+    expect(
+      decodeTerminalProtocolFrame(
+        encodeTerminalProtocolFrame({ message: title, payload: new Uint8Array() }),
+      ).message,
+    ).toEqual(title);
   });
 
   test("rejects truncated, oversized, and mismatched frames before payload use", () => {

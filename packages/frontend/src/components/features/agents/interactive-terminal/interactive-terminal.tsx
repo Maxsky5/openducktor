@@ -7,14 +7,12 @@ import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
 import { TERMINAL_FONT_FAMILY } from "../terminal-font";
 import {
-  createHydratedTerminalTitlePublisher,
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   createTerminalKeyEventHandler,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
-  normalizeTerminalTitle,
 } from "./interactive-terminal-policy";
 
 const readCssVariable = (element: HTMLElement, name: string): string =>
@@ -101,9 +99,6 @@ export function InteractiveTerminal({
     const reportInteractionFailure = (cause: unknown): void => {
       setInteractionError(cause instanceof Error ? cause.message : String(cause));
     };
-    const titlePublisher = createHydratedTerminalTitlePublisher((title) =>
-      callbacksRef.current.onTitleChange(title),
-    );
     const outputSequencer = createTerminalOutputSequencer({
       write: (payload, parsed) => terminal.write(payload, parsed),
       onConsumed: (sequenceEnd) => {
@@ -112,7 +107,6 @@ export function InteractiveTerminal({
       },
       onHydrated: () => {
         if (generation !== 0) return;
-        titlePublisher.markHydrated();
         setIsHydrated(true);
       },
     });
@@ -129,10 +123,6 @@ export function InteractiveTerminal({
     const dataSubscription = terminal.onData((data) => {
       resizeScheduler.flush();
       void enqueueInput(() => new TextEncoder().encode(data));
-    });
-    const titleSubscription = terminal.onTitleChange((title) => {
-      const normalizedTitle = normalizeTerminalTitle(title, "");
-      if (normalizedTitle) titlePublisher.receive(normalizedTitle);
     });
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
     terminal.attachCustomKeyEventHandler(
@@ -161,6 +151,7 @@ export function InteractiveTerminal({
           reset: isReplayGap ? () => undefined : () => terminal.reset(),
           onAttention: callbacksRef.current.onAttention,
           onLifecycle: callbacksRef.current.onLifecycle,
+          onTitle: callbacksRef.current.onTitleChange,
           onForgotten: callbacksRef.current.onForgotten,
           onFailure: callbacksRef.current.onAttention,
         })
@@ -179,7 +170,6 @@ export function InteractiveTerminal({
       observer.disconnect();
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
-      titleSubscription.dispose();
       resizeSubscription.dispose();
       fitAddon.dispose();
       terminal.dispose();

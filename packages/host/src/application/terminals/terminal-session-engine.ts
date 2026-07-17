@@ -23,6 +23,7 @@ import {
   type TerminalSession,
   type TerminalSessionAttachInput,
 } from "./terminal-session-stream";
+import { createTerminalTitleTracker } from "./terminal-title-tracker";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-stream";
 
@@ -63,6 +64,7 @@ export const createTerminalSessionEngine = ({
       Effect.gen(function* () {
         const session: TerminalSession = {
           summary,
+          titleTracker: createTerminalTitleTracker(),
           handle: null,
           replay: [],
           replayBytes: 0,
@@ -75,7 +77,23 @@ export const createTerminalSessionEngine = ({
         sessions.set(summary.terminalId, session);
         const handleResult = yield* Effect.either(
           ptyPort.start(plan, {
-            onOutput: (data) => applyStreamEvents(session, stream.handleOutput(session, data)),
+            onOutput: (data) => {
+              const title = session.titleTracker.consume(data);
+              applyStreamEvents(session, stream.handleOutput(session, data));
+              if (!title || title === session.summary.label) return;
+              session.summary.label = title;
+              for (const attachment of session.attachments.values()) {
+                applyStreamEvents(
+                  session,
+                  stream.publishSafely(session, attachment, {
+                    version: TERMINAL_PROTOCOL_VERSION,
+                    type: "title",
+                    terminalId: session.summary.terminalId,
+                    title,
+                  }),
+                );
+              }
+            },
             onFailure: () => handleFailure(session),
             onExit: ({ exitCode, signal }) => handleExit(session, exitCode, signal),
           }),
@@ -140,6 +158,7 @@ export const createTerminalSessionEngine = ({
               earliestRetainedSequence: earliest,
               snapshotSequenceEnd: session.nextSequence,
               lifecycle: session.summary.lifecycle,
+              title: session.summary.label,
               complete,
             });
             applyStreamEvents(session, stream.flushAttachment(session, attachment, true));

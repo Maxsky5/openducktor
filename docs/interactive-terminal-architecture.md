@@ -8,7 +8,7 @@ panel preferences; it never owns PTY processes or stores transcripts in the task
 - `packages/contracts` defines launch metadata, summaries, typed failures, and the versioned binary
   protocol. A frame is a four-byte big-endian JSON-header length, the JSON header, then raw bytes.
 - `packages/host` owns terminal identity, launch policy, the in-memory registry, replay, sequencing,
-  flow control, cleanup, and the runtime-neutral `TerminalPtyPort`.
+  flow control, cleanup, transient OSC title metadata, and the runtime-neutral `TerminalPtyPort`.
 - Electron composes the Node adapter backed by `node-pty`. The browser runner composes the Bun
   adapter backed by `Bun.spawn({ terminal })`. Composition is explicit; there is no adapter fallback.
 - Electron exposes a narrow IPC channel through preload. The browser runner exposes one
@@ -21,6 +21,12 @@ panel preferences; it never owns PTY processes or stores transcripts in the task
 and records it as immutable `initialWorkingDir`. It is deliberately not presented as the shell's
 current directory. Shell selection and the scrubbed process environment are host policy; the
 renderer cannot supply an executable, arguments, or environment variables.
+
+The host observes bounded OSC 0/2 title sequences without altering PTY bytes, keeps the latest
+sanitized title in the transient terminal summary, and includes it in attachment snapshots and
+live title events. The renderer displays that metadata and does not derive a competing title from
+replayed xterm output, so renderer reload starts with the current title instead of visibly replaying
+historical title changes.
 
 ## Attachment and flow control
 
