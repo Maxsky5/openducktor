@@ -65,7 +65,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
-    host.agentSessionsList = async () => [persistedSessionFixture];
+    host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -95,7 +95,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       dependencies: createTestDependencies(
         {
           agentSessionsListForTasks: async () => [
-            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+            { taskId: "task-1", agentSessions: [{ ...persistedSessionFixture }] },
           ],
         },
         {},
@@ -145,7 +145,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
 
-    host.agentSessionsList = async () => [persistedSessionFixture];
+    host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
     host.agentSessionUpsert = async () => {};
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -168,7 +168,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       dependencies: createTestDependencies(
         {
           agentSessionsListForTasks: async () => [
-            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+            { taskId: "task-1", agentSessions: [{ ...persistedSessionFixture }] },
           ],
         },
         {},
@@ -208,7 +208,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     toast.error = toastError;
-    host.agentSessionsList = async () => [persistedSessionFixture];
+    host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -239,7 +239,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       dependencies: createTestDependencies(
         {
           agentSessionsListForTasks: async () => [
-            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+            { taskId: "task-1", agentSessions: [{ ...persistedSessionFixture }] },
           ],
         },
         {},
@@ -416,7 +416,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
   test("dedupes concurrent starts for the same repo and task", async () => {
     let startCalls = 0;
-    let persistedListCalls = 0;
+    let persistedBatchListCalls = 0;
+    let persistedSingleListCalls = 0;
     let persistedSessions = [] as (typeof persistedSessionFixture)[];
     const startDeferred = createDeferred<{
       runtimeKind: "opencode";
@@ -483,11 +484,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       refreshTaskData: async () => {},
       dependencies: createTestDependencies({
         agentSessionsList: async () => {
-          persistedListCalls += 1;
+          persistedSingleListCalls += 1;
           return persistedSessions;
         },
         agentSessionsListForTasks: async () => {
-          persistedListCalls += 1;
+          persistedBatchListCalls += 1;
           return [{ taskId: "task-1", agentSessions: persistedSessions }];
         },
         agentSessionUpsert: async (_repoPath, _taskId, record) => {
@@ -533,7 +534,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(firstSessionId).toBe("external-concurrent");
       expect(secondSessionId).toBe("external-concurrent");
       expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBeGreaterThanOrEqual(1);
+      expect(persistedBatchListCalls).toBe(1);
+      expect(persistedSingleListCalls).toBe(1);
     } finally {
       await harness.unmount();
 

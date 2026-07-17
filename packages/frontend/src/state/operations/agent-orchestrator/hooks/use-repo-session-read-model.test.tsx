@@ -482,6 +482,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("an older successful retry cannot overwrite a newer failed retry", async () => {
+    const staleRecord = { ...record, externalSessionId: "external-stale" };
     const firstRetry =
       createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
     const secondRetry =
@@ -521,7 +522,7 @@ describe("useRepoSessionReadModel", () => {
 
       secondRetry.reject(new Error("newer retry failed"));
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
-      firstRetry.resolve([{ taskId: "task-1", agentSessions: [record] }]);
+      firstRetry.resolve([{ taskId: "task-1", agentSessions: [staleRecord] }]);
       await state.harness.run(async () => {
         await Promise.resolve();
       });
@@ -531,6 +532,9 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message: "Failed to retry task session records for repo '/repo': newer retry failed",
       });
+      const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+      expect(state.queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([record]);
+      expect(state.queryClient.getQueryState(queryKey)?.status).toBe("error");
     } finally {
       await state.harness.unmount();
     }

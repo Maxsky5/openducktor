@@ -49,17 +49,9 @@ describe("createTaskCommandHandlers", () => {
         });
       },
       agentSessionsListForTasks(input: unknown) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "agent_sessions_list_for_tasks", input });
-            return [];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push({ command: "agent_sessions_list_for_tasks", input });
+          return [];
         });
       },
       getApprovalContext(input: unknown) {

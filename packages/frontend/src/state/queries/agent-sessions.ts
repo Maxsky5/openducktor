@@ -281,6 +281,9 @@ export const retryAgentSessionListQueries = async (
       queryClient.getQueryData(queryKey) === undefined
     );
   });
+  for (const taskId of taskIdsToRetry) {
+    incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
+  }
   await hydrateAgentSessionListQueries(queryClient, repoPath, taskIdsToRetry, readPort);
 };
 
