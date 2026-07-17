@@ -230,6 +230,7 @@ export function useAgentOrchestratorOperations({
     transcriptEvents,
     recoverTranscriptGap,
     queryClient,
+    sessionReadPort: hostPort,
   });
   const ensureRuntime = useMemo(
     () =>

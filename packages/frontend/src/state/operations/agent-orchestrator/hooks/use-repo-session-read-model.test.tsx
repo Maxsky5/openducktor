@@ -8,7 +8,7 @@ import type {
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { summarizeAgentActivity } from "@/state/read-models/agent-activity-read-model";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -24,6 +24,16 @@ const record: AgentSessionRecord = {
   workingDirectory: "/repo/worktree",
   startedAt: "2026-07-16T08:00:00.000Z",
   selectedModel: null,
+};
+
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 };
 
 const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessionLiveSnapshot => ({
@@ -48,6 +58,14 @@ const createState = (
     observeIndex: number,
   ) => void,
   taskRecords: AgentSessionRecord | AgentSessionRecord[] = record,
+  sessionReadPort: AgentSessionReadPort = {
+    agentSessionsList: async () => {
+      throw new Error("Per-task session cache should already be hydrated.");
+    },
+    agentSessionsListForTasks: async () => {
+      throw new Error("Per-task session cache should already be hydrated.");
+    },
+  },
 ) => {
   const queryClient = new QueryClient();
   const records = Array.isArray(taskRecords) ? taskRecords : [taskRecords];
@@ -89,6 +107,7 @@ const createState = (
     transcriptEvents,
     recoverTranscriptGap,
     queryClient,
+    sessionReadPort,
   };
 
   return {
@@ -358,6 +377,164 @@ describe("useRepoSessionReadModel", () => {
         message:
           "Failed to recover transcript history after a live-stream gap: history reload failed",
       });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("explicit retry recovers a failed task session query without reloading healthy caches", async () => {
+    const recoveredRecord = { ...record, externalSessionId: "thread-recovered" };
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [recoveredRecord] }]);
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      record,
+      {
+        agentSessionsList: async () => {
+          throw new Error("Exact reads are not used by explicit batch retry.");
+        },
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("temporary exact refresh failure");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("temporary exact refresh failure");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => {
+        state.harness.getLatest().reloadSessionReadModel();
+      });
+
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(
+        state.queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([recoveredRecord]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("an older failed retry cannot overwrite a newer successful retry", async () => {
+    const firstRetry =
+      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const secondRetry =
+      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const batchList = mock(() =>
+      batchList.mock.calls.length === 1 ? firstRetry.promise : secondRetry.promise,
+    );
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      record,
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("initial refresh failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("initial refresh failed");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      expect(batchList).toHaveBeenCalledTimes(2);
+
+      secondRetry.resolve([{ taskId: "task-1", agentSessions: [record] }]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      firstRetry.reject(new Error("older retry failed"));
+      await state.harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("an older successful retry cannot overwrite a newer failed retry", async () => {
+    const staleRecord = { ...record, externalSessionId: "external-stale" };
+    const firstRetry =
+      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const secondRetry =
+      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const batchList = mock(() =>
+      batchList.mock.calls.length === 1 ? firstRetry.promise : secondRetry.promise,
+    );
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      record,
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("initial refresh failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("initial refresh failed");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      expect(batchList).toHaveBeenCalledTimes(2);
+
+      secondRetry.reject(new Error("newer retry failed"));
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      firstRetry.resolve([{ taskId: "task-1", agentSessions: [staleRecord] }]);
+      await state.harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message: "Failed to retry task session records for repo '/repo': newer retry failed",
+      });
+      const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+      expect(state.queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([record]);
+      expect(state.queryClient.getQueryState(queryKey)?.status).toBe("error");
     } finally {
       await state.harness.unmount();
     }

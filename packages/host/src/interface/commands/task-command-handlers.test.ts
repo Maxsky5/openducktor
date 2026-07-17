@@ -48,6 +48,12 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
+      agentSessionsListForTasks(input: unknown) {
+        return Effect.sync(() => {
+          calls.push({ command: "agent_sessions_list_for_tasks", input });
+          return [];
+        });
+      },
       getApprovalContext(input: unknown) {
         return Effect.tryPromise({
           try: async () => {
@@ -668,6 +674,17 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toEqual([]);
     await expect(
       runHandler(
+        handlers.agent_sessions_list_for_tasks?.(
+          { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
+          {
+            command: "agent_sessions_list_for_tasks",
+            args: { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
+          },
+        ),
+      ),
+    ).resolves.toEqual([]);
+    await expect(
+      runHandler(
         handlers.task_approval_context_get?.(
           { repoPath: "/repo", taskId: "task-1" },
           {
@@ -1022,6 +1039,10 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "agent_sessions_list",
         input: { repoPath: "/repo", taskId: "task-1" },
+      },
+      {
+        command: "agent_sessions_list_for_tasks",
+        input: { repoPath: "/repo", taskIds: ["task-2", "task-1"] },
       },
       {
         command: "task_approval_context_get",

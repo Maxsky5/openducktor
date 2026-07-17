@@ -12,6 +12,26 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService list and session reads", () => {
+  test("loads agent sessions for task IDs with one task-store call", async () => {
+    const session = createAgentSessionRecord();
+    const calls: unknown[] = [];
+    const service = createTaskService({
+      taskStore: {
+        listAgentSessionsForTasks(input) {
+          calls.push(input);
+          return Effect.succeed([{ taskId: "task-1", agentSessions: [session] }]);
+        },
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.agentSessionsListForTasks({ repoPath: "/repo", taskIds: ["task-1", "task-2"] }),
+      ),
+    ).resolves.toEqual([{ taskId: "task-1", agentSessions: [session] }]);
+    expect(calls).toEqual([{ repoPath: "/repo", taskIds: ["task-1", "task-2"] }]);
+  });
+
   test("loads tasks and enriches available actions and workflow state", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

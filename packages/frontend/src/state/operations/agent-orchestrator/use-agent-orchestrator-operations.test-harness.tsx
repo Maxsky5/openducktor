@@ -110,6 +110,9 @@ export const createTestDependencies = (
     }),
     hostPort: {
       agentSessionDelete: async () => undefined,
+      agentSessionsList: async () => [],
+      agentSessionsListForTasks: async (_repoPath, taskIds) =>
+        taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
       agentSessionUpsert: (...args) => host.agentSessionUpsert(...args),
       taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
       ...hostOverrides,
@@ -227,6 +230,21 @@ export const createHookHarness = (args: {
   dependencies?: OrchestratorDependencies;
 }) => {
   let latest: OrchestratorHookState | null = null;
+  const dependencies =
+    args.dependencies ??
+    createTestDependencies(
+      {
+        agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
+        agentSessionsListForTasks: (repoPath, taskIds) =>
+          host.agentSessionsListForTasks(repoPath, taskIds),
+        agentSessionUpsert: (repoPath, taskId, record) =>
+          host.agentSessionUpsert(repoPath, taskId, record),
+        taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
+      },
+      {
+        runtimeEnsure: (...runtimeEnsureArgs) => host.runtimeEnsure(...runtimeEnsureArgs),
+      },
+    );
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
@@ -235,7 +253,7 @@ export const createHookHarness = (args: {
       opencode: createRepoRuntimeHealthFixture(),
     },
     agentEngine: args.agentEngine ?? (new OpencodeSdkAdapter() as AgentEnginePort),
-    dependencies: args.dependencies ?? createTestDependencies(),
+    dependencies,
   };
 
   const Harness = () => {

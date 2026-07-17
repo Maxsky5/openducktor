@@ -6,7 +6,10 @@ import {
   clearAgentChatDraftsForTargets,
 } from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 import { errorMessage } from "@/lib/errors";
-import { loadAgentSessionListsFromQuery } from "../../queries/agent-sessions";
+import {
+  type AgentSessionReadPort,
+  loadAgentSessionListsFromQuery,
+} from "../../queries/agent-sessions";
 
 export type TaskChatDraftCleanupPlan = {
   targets: AgentChatDraftCleanupTarget[];
@@ -17,6 +20,7 @@ type TaskChatDraftCleanupInput = {
   repoPath: string;
   workspaceId: string | null;
   taskIds: string[];
+  agentSessionReadPort: AgentSessionReadPort;
 };
 
 type RunTaskMutationWithChatDraftCleanupInput<TResult> = TaskChatDraftCleanupInput & {
@@ -35,6 +39,7 @@ export const prepareTaskChatDraftCleanupTargets = async ({
   repoPath,
   workspaceId,
   taskIds,
+  agentSessionReadPort,
 }: TaskChatDraftCleanupInput): Promise<TaskChatDraftCleanupPlan> => {
   if (!workspaceId) {
     throw new Error("Cannot clean chat drafts without an active workspace id.");
@@ -46,6 +51,7 @@ export const prepareTaskChatDraftCleanupTargets = async ({
     taskIds,
     {
       forceFresh: true,
+      readPort: agentSessionReadPort,
     },
   );
   const targets = new Map<string, AgentChatDraftCleanupTarget>();
@@ -86,6 +92,7 @@ export const runTaskMutationWithChatDraftCleanup = async <TResult>({
   repoPath,
   workspaceId,
   taskIds,
+  agentSessionReadPort,
   mutation,
   shouldCleanup = () => true,
 }: RunTaskMutationWithChatDraftCleanupInput<TResult>): Promise<TResult> => {
@@ -97,6 +104,7 @@ export const runTaskMutationWithChatDraftCleanup = async <TResult>({
       repoPath,
       workspaceId,
       taskIds,
+      agentSessionReadPort,
     });
   } catch (error) {
     cleanupTargetLookupError = error;

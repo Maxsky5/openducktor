@@ -31,7 +31,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { agentSessionQueryKeys } from "../../queries/agent-sessions";
+import { type AgentSessionReadPort, agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
 import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import { workspaceQueryKeys } from "../../queries/workspace";
@@ -214,6 +214,12 @@ const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   repoPath,
 });
 
+const testAgentSessionReadPort: AgentSessionReadPort = {
+  agentSessionsList: async () => [],
+  agentSessionsListForTasks: async (_repoPath, taskIds) =>
+    taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
+};
+
 const normalizeHookArgs = ({
   activeWorkspace,
   activeRepo,
@@ -222,6 +228,7 @@ const normalizeHookArgs = ({
 }: LegacyHookArgs): HookArgs => ({
   ...rest,
   activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+  agentSessionReadPort: rest.agentSessionReadPort ?? testAgentSessionReadPort,
 });
 
 const createHookHarness = (initialArgs: LegacyHookArgs) => {
@@ -229,7 +236,7 @@ const createHookHarness = (initialArgs: LegacyHookArgs) => {
   let currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
-    latest = useTaskOperations(args);
+    latest = useTaskOperations(normalizeHookArgs(args));
     return null;
   };
 
@@ -290,7 +297,7 @@ const createTaskAndKanbanHarness = (initialArgs: LegacyHookArgs, doneVisibleDays
   const currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
-    const operations = useTaskOperations(args);
+    const operations = useTaskOperations(normalizeHookArgs(args));
     const activeRepoPath = args.activeWorkspace?.repoPath ?? null;
     const kanbanTaskListQuery = useQuery({
       ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays),
@@ -626,7 +633,7 @@ describe("use-task-operations", () => {
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
     const Harness = () => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
     const getLatest = (): ReturnType<typeof useTaskOperations> => {
@@ -746,6 +753,7 @@ describe("use-task-operations", () => {
     });
     const tasksList = mock(async () => [makeTask("A", currentStatus)]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const agentSessionsList = mock(async () => []);
 
     const original = {
       taskReset: host.taskReset,
@@ -783,7 +791,7 @@ describe("use-task-operations", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -796,6 +804,11 @@ describe("use-task-operations", () => {
       {
         args: {
           activeWorkspace: createActiveWorkspace("/repo"),
+          agentSessionReadPort: {
+            agentSessionsList,
+            agentSessionsListForTasks: async (_repoPath, taskIds) =>
+              taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
+          },
           refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
         },
       },
@@ -830,8 +843,12 @@ describe("use-task-operations", () => {
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: agentSessionQueryKeys.list("/repo", "A"),
         exact: true,
-        refetchType: "active",
+        refetchType: "none",
       });
+      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "A")),
+      ).toEqual([]);
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: documentQueryKeys.qaReport("/repo", "A"),
         exact: true,
@@ -1568,7 +1585,7 @@ describe("use-task-operations", () => {
     let latest: ReturnType<typeof useTaskOperations> | null = null;
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -1673,7 +1690,7 @@ describe("use-task-operations", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      const operations = useTaskOperations(args);
+      const operations = useTaskOperations(normalizeHookArgs(args));
       const { planDoc } = useTaskDocuments("A", true, args.activeWorkspace?.repoPath ?? "");
       latest = {
         operations,
@@ -1772,7 +1789,7 @@ describe("use-task-operations", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -1816,42 +1833,48 @@ describe("use-task-operations", () => {
 
   test("deleteTask removes cached task documents for deleted tasks and subtasks", async () => {
     let isDeleted = false;
+    let deletePromise: Promise<void> | null = null;
+    const taskDeleted = createDeferred<void>();
+    const deletedTasksList = createDeferred<TaskCard[]>();
     const taskDelete = mock(async () => {
       isDeleted = true;
+      taskDeleted.resolve();
       return { ok: true };
     });
-    const agentSessionsList = mock(async (_repoPath: string, taskId: string) => {
-      if (taskId === "A") {
-        return [
+    const agentSessionsListForTasks = mock(async () => [
+      {
+        taskId: "A",
+        agentSessions: [
           buildAgentSessionRecord({
             externalSessionId: "session-shared",
             workingDirectory: "/repo/parent",
           }),
-        ];
-      }
-      if (taskId === "B") {
-        return [
+        ],
+      },
+      {
+        taskId: "B",
+        agentSessions: [
           buildAgentSessionRecord({
             externalSessionId: "session-b",
             workingDirectory: "/repo/child",
           }),
-        ];
+        ],
+      },
+    ]);
+    const tasksList = mock(async () => {
+      if (isDeleted) {
+        return deletedTasksList.promise;
       }
-      return [];
+      return [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")];
     });
-    const tasksList = mock(async () =>
-      isDeleted ? [] : [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
-    );
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
       taskDelete: host.taskDelete,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskDelete = taskDelete;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
@@ -1859,7 +1882,7 @@ describe("use-task-operations", () => {
     let latest: ReturnType<typeof useTaskOperations> | null = null;
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -1872,6 +1895,12 @@ describe("use-task-operations", () => {
       {
         args: {
           activeWorkspace: createActiveWorkspace("/repo"),
+          agentSessionReadPort: {
+            agentSessionsList: async () => {
+              throw new Error("Exact session reads are not expected during deletion cleanup.");
+            },
+            agentSessionsListForTasks,
+          },
           refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
         },
       },
@@ -1903,13 +1932,32 @@ describe("use-task-operations", () => {
 
       await harness.mount();
       await harness.waitFor(() => latest?.tasks.length === 2);
-      await harness.run(async () => {
-        if (!latest) {
-          throw new Error("Hook not mounted");
-        }
+      const operations = latest as ReturnType<typeof useTaskOperations> | null;
+      if (!operations) {
+        throw new Error("Hook not mounted");
+      }
+      deletePromise = operations.deleteTask("A", true);
+      await taskDeleted.promise;
 
-        await latest.deleteTask("A", true);
-      });
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "A")),
+      ).toEqual([
+        buildAgentSessionRecord({
+          externalSessionId: "session-shared",
+          workingDirectory: "/repo/parent",
+        }),
+      ]);
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "B")),
+      ).toEqual([
+        buildAgentSessionRecord({
+          externalSessionId: "session-b",
+          workingDirectory: "/repo/child",
+        }),
+      ]);
+
+      deletedTasksList.resolve([]);
+      await deletePromise;
 
       await harness.waitFor(
         () =>
@@ -1920,17 +1968,19 @@ describe("use-task-operations", () => {
       );
 
       expect(taskDelete).toHaveBeenCalledWith("/repo", "A", true);
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "B");
+      expect(agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["A", "B"]);
       expect(storage.getItem(toAgentChatDraftStorageKey(parentDraftIdentity))).toBeNull();
       expect(storage.getItem(toAgentChatDraftStorageKey(childDraftIdentity))).toBeNull();
       expect(storage.getItem(toAgentChatDraftStorageKey(unrelatedDraftIdentity))).not.toBeNull();
       expect(queryClient.getQueryData(documentQueryKeys.spec("/repo", "A"))).toBeUndefined();
       expect(queryClient.getQueryData(documentQueryKeys.plan("/repo", "B"))).toBeUndefined();
+      expect(queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "A"))).toBeUndefined();
+      expect(queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "B"))).toBeUndefined();
     } finally {
+      deletedTasksList.resolve([]);
+      await deletePromise?.catch(() => undefined);
       await harness.unmount();
       host.taskDelete = original.taskDelete;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
     }
@@ -1940,8 +1990,11 @@ describe("use-task-operations", () => {
     const taskDelete = mock(async () => {
       throw new Error("delete failed");
     });
-    const agentSessionsList = mock(async () => [
-      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    const agentSessionsListForTasks = mock(async () => [
+      {
+        taskId: "A",
+        agentSessions: [buildAgentSessionRecord({ externalSessionId: "session-a" })],
+      },
     ]);
     const tasksList = mock(async () => [makeTask("A", "open")]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
@@ -1949,13 +2002,11 @@ describe("use-task-operations", () => {
 
     const original = {
       taskDelete: host.taskDelete,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
       toastError: toast.error,
     };
     host.taskDelete = taskDelete;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
@@ -1967,6 +2018,10 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks,
+      },
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
@@ -1980,12 +2035,11 @@ describe("use-task-operations", () => {
         }),
       ).rejects.toThrow("delete failed");
 
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["A"]);
       expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).not.toBeNull();
     } finally {
       await harness.unmount();
       host.taskDelete = original.taskDelete;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
@@ -1998,8 +2052,11 @@ describe("use-task-operations", () => {
       isDeleted = true;
       return { ok: true };
     });
-    const agentSessionsList = mock(async () => [
-      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    const agentSessionsListForTasks = mock(async () => [
+      {
+        taskId: "A",
+        agentSessions: [buildAgentSessionRecord({ externalSessionId: "session-a" })],
+      },
     ]);
     const tasksList = mock(async () => (isDeleted ? [] : [makeTask("A", "open")]));
     const runsList = mock(async (): Promise<RunSummary[]> => []);
@@ -2007,13 +2064,11 @@ describe("use-task-operations", () => {
 
     const original = {
       taskDelete: host.taskDelete,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
       toastError: toast.error,
     };
     host.taskDelete = taskDelete;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
@@ -2029,6 +2084,10 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks,
+      },
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
@@ -2040,7 +2099,7 @@ describe("use-task-operations", () => {
         await value.deleteTask("A");
       });
 
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["A"]);
       expect(taskDelete).toHaveBeenCalledWith("/repo", "A", false);
       expect(toastError).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
         description: "Failed to clean 1 chat draft storage key(s).",
@@ -2048,7 +2107,6 @@ describe("use-task-operations", () => {
     } finally {
       await harness.unmount();
       host.taskDelete = original.taskDelete;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
@@ -2059,7 +2117,7 @@ describe("use-task-operations", () => {
     const taskDelete = mock(async () => {
       return { ok: true };
     });
-    const agentSessionsList = mock(async () => {
+    const agentSessionsListForTasks = mock(async () => {
       throw new Error("session lookup failed");
     });
     const tasksList = mock(async () => [makeTask("A", "open")]);
@@ -2068,19 +2126,21 @@ describe("use-task-operations", () => {
 
     const original = {
       taskDelete: host.taskDelete,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
       toastError: toast.error,
     };
     host.taskDelete = taskDelete;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks,
+      },
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
@@ -2092,7 +2152,7 @@ describe("use-task-operations", () => {
         await value.deleteTask("A");
       });
 
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["A"]);
       expect(taskDelete).toHaveBeenCalledWith("/repo", "A", false);
       expect(toastError).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
         description: "session lookup failed",
@@ -2100,7 +2160,6 @@ describe("use-task-operations", () => {
     } finally {
       await harness.unmount();
       host.taskDelete = original.taskDelete;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
@@ -2111,7 +2170,7 @@ describe("use-task-operations", () => {
     const taskClose = mock(async () => makeTask("A", "closed"));
     const humanApprove = mock(async () => makeTask("A", "closed"));
     const taskTransition = mock(async () => makeTask("A", "closed"));
-    const agentSessionsList = mock(async () => {
+    const agentSessionsListForTasks = mock(async () => {
       throw new Error("session lookup failed");
     });
     const tasksList = mock(async () => [makeTask("A", "human_review")]);
@@ -2122,7 +2181,6 @@ describe("use-task-operations", () => {
       taskClose: host.taskClose,
       humanApprove: host.humanApprove,
       taskTransition: host.taskTransition,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
       toastError: toast.error,
@@ -2130,13 +2188,16 @@ describe("use-task-operations", () => {
     host.taskClose = taskClose;
     host.humanApprove = humanApprove;
     host.taskTransition = taskTransition;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks,
+      },
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
@@ -2154,7 +2215,7 @@ describe("use-task-operations", () => {
         await value.transitionTask("A", "closed");
       });
 
-      expect(agentSessionsList).toHaveBeenCalledTimes(3);
+      expect(agentSessionsListForTasks).toHaveBeenCalledTimes(3);
       expect(taskClose).toHaveBeenCalledWith("/repo", "A");
       expect(humanApprove).toHaveBeenCalledWith("/repo", "A");
       expect(taskTransition).toHaveBeenCalledWith("/repo", "A", "closed", undefined);
@@ -2167,7 +2228,6 @@ describe("use-task-operations", () => {
       host.taskClose = original.taskClose;
       host.humanApprove = original.humanApprove;
       host.taskTransition = original.taskTransition;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
@@ -2180,20 +2240,21 @@ describe("use-task-operations", () => {
       isClosed = true;
       return makeTask("A", "closed");
     });
-    const agentSessionsList = mock(async () => [
-      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    const agentSessionsListForTasks = mock(async () => [
+      {
+        taskId: "A",
+        agentSessions: [buildAgentSessionRecord({ externalSessionId: "session-a" })],
+      },
     ]);
     const tasksList = mock(async () => [makeTask("A", isClosed ? "closed" : "in_progress")]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
       taskClose: host.taskClose,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskClose = taskClose;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
@@ -2201,7 +2262,7 @@ describe("use-task-operations", () => {
     let latest: ReturnType<typeof useTaskOperations> | null = null;
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useTaskOperations(args);
+      latest = useTaskOperations(normalizeHookArgs(args));
       return null;
     };
 
@@ -2214,6 +2275,10 @@ describe("use-task-operations", () => {
       {
         args: {
           activeWorkspace: createActiveWorkspace("/repo"),
+          agentSessionReadPort: {
+            agentSessionsList: async () => [],
+            agentSessionsListForTasks,
+          },
           refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
         },
       },
@@ -2245,12 +2310,11 @@ describe("use-task-operations", () => {
       );
 
       expect(taskClose).toHaveBeenCalledWith("/repo", "A");
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["A"]);
       expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
     } finally {
       await harness.unmount();
       host.taskClose = original.taskClose;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
     }
@@ -2704,8 +2768,11 @@ describe("use-task-operations", () => {
       },
     }));
     const taskPullRequestLinkMerged = mock(async () => makeTask("A", "closed"));
-    const agentSessionsList = mock(async () => [
-      buildAgentSessionRecord({ externalSessionId: "session-a" }),
+    const agentSessionsListForTasks = mock(async () => [
+      {
+        taskId: "A",
+        agentSessions: [buildAgentSessionRecord({ externalSessionId: "session-a" })],
+      },
     ]);
     const tasksList = mock(async () => [makeTask("A", "closed")]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
@@ -2713,13 +2780,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
@@ -2730,6 +2795,10 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks,
+      },
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
@@ -2762,7 +2831,7 @@ describe("use-task-operations", () => {
         closedAt: "2026-02-20T10:00:00Z",
       });
       expect(tasksList).toHaveBeenCalledWith("/repo", 1);
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["A"]);
       expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
       expect(harness.getLatest().pendingMergedPullRequest).toBeNull();
       expect(harness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
@@ -2773,7 +2842,6 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.success = originalToastSuccess;
@@ -2797,7 +2865,7 @@ describe("use-task-operations", () => {
       pullRequest: mergedPullRequest,
     }));
     const taskPullRequestLinkMerged = mock(async () => makeTask("A", "closed"));
-    const agentSessionsList = mock(async () => {
+    const agentSessionsListForTasks = mock(async () => {
       throw new Error("session lookup failed");
     });
     const tasksList = mock(async () => [makeTask("A", "human_review")]);
@@ -2807,20 +2875,22 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
       toastError: toast.error,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks,
+      },
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
@@ -2834,7 +2904,7 @@ describe("use-task-operations", () => {
         await value.linkMergedPullRequest();
       });
 
-      expect(agentSessionsList).toHaveBeenCalledWith("/repo", "A");
+      expect(agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["A"]);
       expect(taskPullRequestLinkMerged).toHaveBeenCalledWith("/repo", "A", mergedPullRequest);
       expect(toastError).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
         description: "session lookup failed",
@@ -2844,7 +2914,6 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
@@ -2872,25 +2941,27 @@ describe("use-task-operations", () => {
       currentStatus = "closed";
       return makeTask("A", currentStatus);
     });
-    const agentSessionsList = mock(async () => []);
+    const agentSessionsListForTasks = mock(async () => [{ taskId: "A", agentSessions: [] }]);
     const tasksList = mock(async () => [makeTask("A", currentStatus)]);
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
-      agentSessionsList: host.agentSessionsList,
       tasksList: host.tasksList,
       runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
-    host.agentSessionsList = agentSessionsList;
     host.tasksList = tasksList;
     legacyHost.runsList = runsList;
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks,
+      },
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
@@ -2944,7 +3015,6 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
-      host.agentSessionsList = original.agentSessionsList;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
     }

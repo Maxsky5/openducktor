@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { invalidatePullRequestReviewContextQueries } from "@/state/queries/pull-request-review";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
@@ -15,6 +16,7 @@ type UseTaskPullRequestOperationsArgs = {
   activeWorkspaceId: string | null;
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
+  agentSessionReadPort: AgentSessionReadPort;
 };
 
 type PendingMergedPullRequestState = {
@@ -45,6 +47,7 @@ export function useTaskPullRequestOperations({
   activeWorkspaceId,
   refreshTaskData,
   runTaskMutation,
+  agentSessionReadPort,
 }: UseTaskPullRequestOperationsArgs): TaskPullRequestOperations {
   const queryClient = useQueryClient();
   const [detectingPullRequestState, setDetectingPullRequestState] = useState<TaskRepoState | null>(
@@ -150,6 +153,7 @@ export function useTaskPullRequestOperations({
         repoPath,
         workspaceId: activeWorkspaceId,
         taskIds: [taskId],
+        agentSessionReadPort,
         mutation: async () => {
           await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
         },
@@ -172,7 +176,13 @@ export function useTaskPullRequestOperations({
         currentTaskId === taskId ? null : currentTaskId,
       );
     }
-  }, [activeWorkspaceId, pendingMergedPullRequestState, queryClient, refreshTaskData]);
+  }, [
+    activeWorkspaceId,
+    agentSessionReadPort,
+    pendingMergedPullRequestState,
+    queryClient,
+    refreshTaskData,
+  ]);
 
   const unlinkPullRequest = useCallback(
     async (taskId: string): Promise<void> => {

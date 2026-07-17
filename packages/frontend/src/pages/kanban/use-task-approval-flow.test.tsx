@@ -61,7 +61,7 @@ const defaultGitPushBranch = async () => ({
 const defaultGitAbortConflict = async () => {};
 const defaultHumanApproveTask = async () => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
-const defaultAgentSessionsList = async () => [
+const createDefaultAgentSessions = () => [
   {
     ...createAgentSessionFixture({
       externalSessionId: "builder-session-old",
@@ -81,6 +81,10 @@ const defaultAgentSessionsList = async () => [
     }),
   },
 ];
+const defaultAgentSessionsList = async () => createDefaultAgentSessions();
+const defaultAgentSessionsListForTasks = async () => [
+  { taskId: "TASK-1", agentSessions: createDefaultAgentSessions() },
+];
 
 const taskApprovalContextGetMock = mock(defaultTaskApprovalContextGet);
 const taskDirectMergeMock = mock(defaultTaskDirectMerge);
@@ -91,6 +95,7 @@ const gitAbortConflictMock = mock(defaultGitAbortConflict);
 const humanApproveTaskMock = mock(defaultHumanApproveTask);
 const openResetImplementationMock = mock(defaultOpenResetImplementation);
 const agentSessionsListMock = mock(defaultAgentSessionsList);
+const agentSessionsListForTasksMock = mock(defaultAgentSessionsListForTasks);
 const toastLoadingMock = mock(() => "toast-id");
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
@@ -152,6 +157,7 @@ const buildMockedHost = () => ({
   gitPushBranch: gitPushBranchMock,
   gitAbortConflict: gitAbortConflictMock,
   agentSessionsList: agentSessionsListMock,
+  agentSessionsListForTasks: agentSessionsListForTasksMock,
   specGet: async () => ({ markdown: "", updatedAt: null }),
   planGet: async () => ({ markdown: "", updatedAt: null }),
   qaGetReport: async () => ({ markdown: "", updatedAt: null }),
@@ -167,6 +173,7 @@ const HOST_METHOD_NAMES = [
   "gitPushBranch",
   "gitAbortConflict",
   "agentSessionsList",
+  "agentSessionsListForTasks",
   "specGet",
   "planGet",
   "qaGetReport",
@@ -373,6 +380,8 @@ describe("useTaskApprovalFlow", () => {
     openResetImplementationMock.mockImplementation(defaultOpenResetImplementation);
     agentSessionsListMock.mockClear();
     agentSessionsListMock.mockImplementation(defaultAgentSessionsList);
+    agentSessionsListForTasksMock.mockClear();
+    agentSessionsListForTasksMock.mockImplementation(defaultAgentSessionsListForTasks);
   });
 
   afterAll(async () => {
@@ -1161,7 +1170,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("reports cleanup target lookup failure after direct merge succeeds", async () => {
-    agentSessionsListMock.mockImplementationOnce(async () => {
+    agentSessionsListForTasksMock.mockImplementationOnce(async () => {
       throw new Error("session lookup failed");
     });
     taskApprovalContextGetMock.mockResolvedValueOnce(
@@ -1197,7 +1206,7 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
     expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
       mergeMethod: "merge_commit",
       squashCommitMessage: undefined,
@@ -1213,7 +1222,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("reports cleanup target lookup failure after direct merge completion succeeds", async () => {
-    agentSessionsListMock.mockImplementationOnce(async () => {
+    agentSessionsListForTasksMock.mockImplementationOnce(async () => {
       throw new Error("session lookup failed");
     });
     taskApprovalContextGetMock.mockResolvedValueOnce(
@@ -1258,7 +1267,7 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(agentSessionsListMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
     expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "main", {
       remote: "origin",
     });

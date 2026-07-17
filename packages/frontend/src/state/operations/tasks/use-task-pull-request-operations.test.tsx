@@ -52,6 +52,11 @@ const createOperationsHarness = () => {
     const operations = useTaskPullRequestOperations({
       activeRepoPath,
       activeWorkspaceId: null,
+      agentSessionReadPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: async (_repoPath, taskIds) =>
+          taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
+      },
       refreshTaskData,
       runTaskMutation,
     });

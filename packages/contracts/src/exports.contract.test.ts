@@ -191,6 +191,7 @@ import type {
   SystemOpenInToolId,
   SystemOpenInToolInfo,
   TaskAction,
+  TaskAgentSessions,
   TaskCard,
   TaskCreateInput,
   TaskDirectMergeInput,
@@ -278,6 +279,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionTranscriptEventSchema",
   "agentSessionUserMessagePartSchema",
   "agentSessionWorkflowScopeSchema",
+  "taskAgentSessionsSchema",
   "APP_PLATFORM_VALUES",
   "appUpdateCheckInputSchema",
   "appUpdateCheckInitiatorSchema",
@@ -680,6 +682,7 @@ type ExportedTypeContract = {
   AgentSessionRole: AgentSessionRole;
   AgentSessionStatus: AgentSessionStatus;
   AgentSessionStopTarget: AgentSessionStopTarget;
+  TaskAgentSessions: TaskAgentSessions;
   AgentToolName: AgentToolName;
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;

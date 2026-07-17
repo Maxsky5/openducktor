@@ -6,6 +6,7 @@ import { encodeJson, normalizeLabels } from "./sqlite-json-codecs";
 import {
   clearAgentSessionsByRoles,
   deleteAgentSession,
+  listAgentSessionsForTasks,
   upsertAgentSession,
 } from "./sqlite-task-agent-sessions";
 import { getTaskCard, listTasksInDatabase } from "./sqlite-task-card-read-model";
@@ -206,6 +207,16 @@ export const createSqliteTaskRepository = ({
         input.repoPath,
         "sqliteTaskRepository.listPullRequestSyncCandidates",
         ({ session }) => listPullRequestSyncCandidatesInDatabase(session),
+      );
+    },
+    listAgentSessionsForTasks(input) {
+      if (input.taskIds.length === 0) {
+        return Effect.succeed([]);
+      }
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.listAgentSessionsForTasks",
+        ({ session }) => listAgentSessionsForTasks(session, input),
       );
     },
     listTasks(input) {

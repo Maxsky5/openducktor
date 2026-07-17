@@ -1,11 +1,14 @@
 import {
   type AgentSessionIdentity,
   type AgentSessionRecord,
+  agentSessionRecordSchema,
   type PlanSubtaskInput,
+  type TaskAgentSessions,
   type TaskCard,
   type TaskCreateInput,
   type TaskStatus,
   type TaskUpdatePatch,
+  taskAgentSessionsSchema,
   taskCardSchema,
   taskCreateInputSchema,
   taskStatusSchema,
@@ -299,8 +302,16 @@ export class HostTaskClient {
   }
 
   async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
-    return payload.agentSessions;
+    const payload = await this.invokeFn("agent_sessions_list", { repoPath, taskId });
+    return parseArray(agentSessionRecordSchema, payload, "agent_sessions_list");
+  }
+
+  async agentSessionsListForTasks(
+    repoPath: string,
+    taskIds: string[],
+  ): Promise<TaskAgentSessions[]> {
+    const payload = await this.invokeFn("agent_sessions_list_for_tasks", { repoPath, taskIds });
+    return parseArray(taskAgentSessionsSchema, payload, "agent_sessions_list_for_tasks");
   }
 
   async agentSessionUpsert(

@@ -1858,22 +1858,8 @@ describe("HostClient", () => {
 
   test("agent session history commands use expected IPC routes", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        return {
-          spec: { markdown: "", updatedAt: null },
-          plan: { markdown: "", updatedAt: null },
-          qaReport: null,
-          agentSessions: [
-            {
-              externalSessionId: "session-opencode-1",
-              role: "spec",
-              startedAt: "2026-02-18T17:20:00Z",
-              runtimeKind: "opencode",
-              workingDirectory: "/repo",
-              selectedModel: null,
-            },
-          ],
-        };
+      if (command === "agent_sessions_list") {
+        return makeTaskMetadataPayload().agentSessions;
       }
       if (command === "agent_session_upsert" || command === "agent_session_delete") {
         return { ok: true };
@@ -1891,7 +1877,7 @@ describe("HostClient", () => {
 
     expect(history).toHaveLength(1);
     expect(calls.map((entry) => entry.command)).toEqual([
-      "task_metadata_get",
+      "agent_sessions_list",
       "agent_session_upsert",
       "agent_session_delete",
     ]);
@@ -1901,24 +1887,111 @@ describe("HostClient", () => {
     });
   });
 
+  test("agentSessionsListForTasks uses one command and parses the batch response", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "agent_sessions_list_for_tasks") {
+        return [
+          {
+            taskId: "task-1",
+            agentSessions: [
+              {
+                externalSessionId: "session-opencode-1",
+                role: "spec",
+                startedAt: "2026-02-18T17:20:00Z",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo",
+                selectedModel: null,
+              },
+            ],
+          },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const sessions = await client.agentSessionsListForTasks("/repo", ["task-2", "task-1"]);
+
+    expect(sessions).toHaveLength(1);
+    expect(calls).toEqual([
+      {
+        command: "agent_sessions_list_for_tasks",
+        args: { repoPath: "/repo", taskIds: ["task-2", "task-1"] },
+      },
+    ]);
+  });
+
+  test("agentSessionsList stays authoritative after a newer batch read", async () => {
+    const newerSession = {
+      externalSessionId: "session-opencode-2",
+      role: "build",
+      startedAt: "2026-02-19T17:20:00Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        return makeTaskMetadataPayload();
+      }
+      if (command === "agent_sessions_list_for_tasks") {
+        return [{ taskId: "task-1", agentSessions: [newerSession] }];
+      }
+      if (command === "agent_sessions_list") {
+        return [newerSession];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.specGet("/repo", "task-1");
+    await client.agentSessionsListForTasks("/repo", ["task-1"]);
+    const sessions = await client.agentSessionsList("/repo", "task-1");
+
+    expect(sessions.map((session) => session.externalSessionId)).toEqual(["session-opencode-2"]);
+    expect(calls.map((call) => call.command)).toEqual([
+      "task_metadata_get",
+      "agent_sessions_list_for_tasks",
+      "agent_sessions_list",
+    ]);
+  });
+
+  test("agentSessionsListForTasks rejects invalid nested session entries", async () => {
+    const { client } = createClient((command) => {
+      if (command === "agent_sessions_list_for_tasks") {
+        return [
+          {
+            taskId: "task-1",
+            agentSessions: [
+              {
+                externalSessionId: "session-opencode-1",
+                role: "invalid-role",
+                startedAt: "2026-02-18T17:20:00Z",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo",
+                selectedModel: null,
+              },
+            ],
+          },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.agentSessionsListForTasks("/repo", ["task-1"])).rejects.toThrow("role");
+  });
+
   test("agentSessionsList rejects invalid persisted agent session entries", async () => {
     const { client } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        return {
-          spec: { markdown: "", updatedAt: null },
-          plan: { markdown: "", updatedAt: null },
-          qaReport: null,
-          agentSessions: [
-            {
-              externalSessionId: "ext-1",
-              role: "invalid-role",
-              startedAt: "2026-02-18T17:20:00Z",
-              runtimeKind: "opencode",
-              workingDirectory: "/repo",
-              selectedModel: null,
-            },
-          ],
-        };
+      if (command === "agent_sessions_list") {
+        return [
+          {
+            externalSessionId: "ext-1",
+            role: "invalid-role",
+            startedAt: "2026-02-18T17:20:00Z",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+            selectedModel: null,
+          },
+        ];
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -1926,10 +1999,13 @@ describe("HostClient", () => {
     await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow("role");
   });
 
-  test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {
+  test("document reads share metadata while session reads stay independently authoritative", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
         return makeTaskMetadataPayload();
+      }
+      if (command === "agent_sessions_list") {
+        return makeTaskMetadataPayload().agentSessions;
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -1953,13 +2029,23 @@ describe("HostClient", () => {
           taskId: "task-1",
         },
       },
+      {
+        command: "agent_sessions_list",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
     ]);
   });
 
-  test("sequential metadata reads reuse cache for the same task", async () => {
+  test("sequential document reads reuse metadata while session reads remain independent", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
         return makeTaskMetadataPayload();
+      }
+      if (command === "agent_sessions_list") {
+        return makeTaskMetadataPayload().agentSessions;
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -1976,6 +2062,13 @@ describe("HostClient", () => {
     expect(calls).toEqual([
       {
         command: "task_metadata_get",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+      {
+        command: "agent_sessions_list",
         args: {
           repoPath: "/repo",
           taskId: "task-1",

@@ -6,6 +6,8 @@ import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
+import { retryAgentSessionListQueries } from "@/state/queries/agent-sessions";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import {
   type AgentSessionReadModelLoadState,
@@ -49,6 +51,7 @@ type UseRepoSessionReadModelArgs = {
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   recoverTranscriptGap: (message: string) => Promise<void>;
   queryClient: QueryClient;
+  sessionReadPort: AgentSessionReadPort;
 };
 
 export type RepoSessionReadModelState = {
@@ -67,15 +70,57 @@ export const useRepoSessionReadModel = ({
   transcriptEvents,
   recoverTranscriptGap,
   queryClient,
+  sessionReadPort,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const [reloadGeneration, setReloadGeneration] = useState(0);
   const latestReloadGenerationRef = useRef(reloadGeneration);
+  const retryAttemptRef = useRef(0);
   latestReloadGenerationRef.current = reloadGeneration;
   const reloadSessionReadModel = useCallback(() => {
-    setReloadGeneration((current) => current + 1);
-  }, []);
+    const retryAttempt = retryAttemptRef.current + 1;
+    retryAttemptRef.current = retryAttempt;
+    if (!workspaceRepoPath) {
+      setReloadGeneration((current) => current + 1);
+      return;
+    }
+    const repoPath = workspaceRepoPath;
+    const repoEpoch = repoEpochRef.current;
+    setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    void retryAgentSessionListQueries(queryClient, repoPath, taskIds, sessionReadPort).then(
+      () => {
+        if (
+          retryAttemptRef.current === retryAttempt &&
+          currentWorkspaceRepoPathRef.current === repoPath &&
+          repoEpochRef.current === repoEpoch
+        ) {
+          setReloadGeneration((current) => current + 1);
+        }
+      },
+      (error: unknown) => {
+        if (
+          retryAttemptRef.current === retryAttempt &&
+          currentWorkspaceRepoPathRef.current === repoPath &&
+          repoEpochRef.current === repoEpoch
+        ) {
+          setSessionReadModelLoadState(
+            failedAgentSessionReadModelLoadState(
+              repoPath,
+              `Failed to retry task session records for repo '${repoPath}': ${errorMessage(error)}`,
+            ),
+          );
+        }
+      },
+    );
+  }, [
+    currentWorkspaceRepoPathRef,
+    queryClient,
+    repoEpochRef,
+    sessionReadPort,
+    taskIds,
+    workspaceRepoPath,
+  ]);
   const currentSessionReadModelLoadState = useMemo(
     () =>
       currentAgentSessionReadModelLoadState({
@@ -89,6 +134,7 @@ export const useRepoSessionReadModel = ({
     taskIds,
     enabled: !isLoadingTasks,
     queryClient,
+    readPort: sessionReadPort,
   });
   const taskSessionRecordsRef = useRef<{
     repoPath: string;

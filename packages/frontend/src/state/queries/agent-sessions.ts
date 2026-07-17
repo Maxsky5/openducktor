@@ -1,22 +1,181 @@
-import type { AgentSessionIdentity, AgentSessionRecord } from "@openducktor/contracts";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import { isCancelledError, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "../operations/host";
 
-const AGENT_SESSION_LIST_STALE_TIME_MS = 30_000;
+const AGENT_SESSION_LIST_STALE_TIME = Number.POSITIVE_INFINITY;
+const invalidationVersionsByQueryClient = new WeakMap<QueryClient, Map<string, number>>();
+
+export type AgentSessionReadPort = Pick<
+  typeof host,
+  "agentSessionsList" | "agentSessionsListForTasks"
+>;
+
+const agentSessionInvalidationVersionKey = (repoPath: string, taskId: string): string =>
+  JSON.stringify([repoPath, taskId]);
+
+const getAgentSessionInvalidationVersion = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): number =>
+  invalidationVersionsByQueryClient
+    .get(queryClient)
+    ?.get(agentSessionInvalidationVersionKey(repoPath, taskId)) ?? 0;
+
+const incrementAgentSessionInvalidationVersion = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): number => {
+  const versions = invalidationVersionsByQueryClient.get(queryClient) ?? new Map<string, number>();
+  const versionKey = agentSessionInvalidationVersionKey(repoPath, taskId);
+  const version = (versions.get(versionKey) ?? 0) + 1;
+  versions.set(versionKey, version);
+  invalidationVersionsByQueryClient.set(queryClient, versions);
+  return version;
+};
+
+export const normalizeAgentSessionTaskIds = (taskIds: string[]): string[] =>
+  Array.from(
+    new Set(
+      taskIds.flatMap((taskId) => {
+        const normalizedTaskId = taskId.trim();
+        return normalizedTaskId ? [normalizedTaskId] : [];
+      }),
+    ),
+  ).sort();
 
 export const agentSessionQueryKeys = {
   all: ["agent-sessions"] as const,
   list: (repoPath: string, taskId: string) =>
     [...agentSessionQueryKeys.all, "list", repoPath, taskId] as const,
+  hydration: (repoPath: string, taskIds: string[]) =>
+    [
+      ...agentSessionQueryKeys.all,
+      "hydrate-missing-lists",
+      repoPath,
+      normalizeAgentSessionTaskIds(taskIds),
+    ] as const,
 };
 
-export const agentSessionListQueryOptions = (repoPath: string, taskId: string) =>
+export const agentSessionListQueryOptions = (
+  repoPath: string,
+  taskId: string,
+  readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
+) =>
   queryOptions({
     queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-    queryFn: (): Promise<AgentSessionRecord[]> => host.agentSessionsList(repoPath, taskId),
-    staleTime: AGENT_SESSION_LIST_STALE_TIME_MS,
+    queryFn: (): Promise<AgentSessionRecord[]> => readPort.agentSessionsList(repoPath, taskId),
+    retryOnMount: false,
+    staleTime: AGENT_SESSION_LIST_STALE_TIME,
   });
+
+const joinInFlightAgentSessionListQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  readPort: Pick<AgentSessionReadPort, "agentSessionsList">,
+): Promise<AgentSessionRecord[]> =>
+  queryClient.fetchQuery({
+    ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+    staleTime: 0,
+  });
+
+export const hydrateAgentSessionListQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+  readPort: AgentSessionReadPort = host,
+): Promise<void> => {
+  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
+  if (normalizedTaskIds.length === 0) {
+    return;
+  }
+
+  const initialQueryStates = new Map(
+    normalizedTaskIds.map((taskId) => [
+      taskId,
+      queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId)),
+    ]),
+  );
+  const taskIdsWithInFlightQueries = normalizedTaskIds.filter(
+    (taskId) => initialQueryStates.get(taskId)?.fetchStatus === "fetching",
+  );
+  const taskIdsToHydrate = normalizedTaskIds.filter(
+    (taskId) => initialQueryStates.get(taskId)?.fetchStatus !== "fetching",
+  );
+  const inFlightQueries = taskIdsWithInFlightQueries.map((taskId) =>
+    joinInFlightAgentSessionListQuery(queryClient, repoPath, taskId, readPort),
+  );
+  if (taskIdsToHydrate.length === 0) {
+    await Promise.all(inFlightQueries);
+    return;
+  }
+  const initialInvalidationVersions = new Map(
+    taskIdsToHydrate.map((taskId) => [
+      taskId,
+      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId),
+    ]),
+  );
+  const [taskSessions] = await Promise.all([
+    readPort.agentSessionsListForTasks(repoPath, taskIdsToHydrate),
+    Promise.all(inFlightQueries),
+  ]);
+  const requestedTaskIds = new Set(taskIdsToHydrate);
+  const sessionsByTaskId = new Map<string, AgentSessionRecord[]>();
+  for (const taskSession of taskSessions) {
+    if (!requestedTaskIds.has(taskSession.taskId)) {
+      throw new Error(`Batch session response included unexpected task "${taskSession.taskId}".`);
+    }
+    if (sessionsByTaskId.has(taskSession.taskId)) {
+      throw new Error(
+        `Batch session response included task "${taskSession.taskId}" more than once.`,
+      );
+    }
+    sessionsByTaskId.set(taskSession.taskId, taskSession.agentSessions);
+  }
+
+  const missingTaskId = taskIdsToHydrate.find((taskId) => !sessionsByTaskId.has(taskId));
+  if (missingTaskId) {
+    throw new Error(`Batch session response omitted task "${missingTaskId}".`);
+  }
+  for (const taskId of taskIdsToHydrate) {
+    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const initialState = initialQueryStates.get(taskId);
+    const currentState = queryClient.getQueryState(queryKey);
+    const generationChanged =
+      (currentState?.dataUpdateCount ?? 0) !== (initialState?.dataUpdateCount ?? 0) ||
+      (currentState?.errorUpdateCount ?? 0) !== (initialState?.errorUpdateCount ?? 0);
+    const invalidatedAfterBatchStarted =
+      initialState?.isInvalidated !== true && currentState?.isInvalidated === true;
+    const invalidationVersionChanged =
+      getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !==
+      initialInvalidationVersions.get(taskId);
+    if (generationChanged || invalidatedAfterBatchStarted || invalidationVersionChanged) {
+      continue;
+    }
+    queryClient.setQueryData(queryKey, sessionsByTaskId.get(taskId));
+  }
+};
+
+export const agentSessionListHydrationQueryOptions = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+  readPort: AgentSessionReadPort = host,
+) => {
+  const queryKey = agentSessionQueryKeys.hydration(repoPath, taskIds);
+  const normalizedTaskIds = queryKey[3];
+  return queryOptions({
+    queryKey,
+    queryFn: async (): Promise<true> => {
+      await hydrateAgentSessionListQueries(queryClient, repoPath, normalizedTaskIds, readPort);
+      return true;
+    },
+    staleTime: AGENT_SESSION_LIST_STALE_TIME,
+    gcTime: 0,
+  });
+};
 
 export const loadAgentSessionListFromQuery = (
   queryClient: QueryClient,
@@ -24,10 +183,11 @@ export const loadAgentSessionListFromQuery = (
   taskId: string,
   options?: {
     forceFresh?: boolean;
+    readPort?: AgentSessionReadPort;
   },
 ): Promise<AgentSessionRecord[]> =>
   queryClient.fetchQuery({
-    ...agentSessionListQueryOptions(repoPath, taskId),
+    ...agentSessionListQueryOptions(repoPath, taskId, options?.readPort),
     ...(options?.forceFresh ? { staleTime: 0 } : {}),
   });
 
@@ -37,107 +197,194 @@ export const loadAgentSessionListsFromQuery = async (
   taskIds: string[],
   options?: {
     forceFresh?: boolean;
+    readPort?: AgentSessionReadPort;
   },
 ): Promise<Record<string, AgentSessionRecord[]>> => {
-  const uniqueTaskIds = Array.from(new Set(taskIds));
-  const entries = await Promise.all(
-    uniqueTaskIds.map(async (taskId) => {
-      const records = await loadAgentSessionListFromQuery(queryClient, repoPath, taskId, options);
-      return [taskId, records] as const;
-    }),
-  );
+  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
+  if (normalizedTaskIds.length === 0) {
+    return {};
+  }
+
+  const taskIdsToHydrate: string[] = [];
+  let refreshesInvalidatedData = false;
+  for (const taskId of normalizedTaskIds) {
+    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const queryState = queryClient.getQueryState(queryKey);
+    const shouldHydrate =
+      options?.forceFresh === true ||
+      queryClient.getQueryData(queryKey) === undefined ||
+      queryState?.isInvalidated === true;
+    if (!shouldHydrate) {
+      continue;
+    }
+    taskIdsToHydrate.push(taskId);
+    refreshesInvalidatedData ||= queryState?.isInvalidated === true;
+  }
+  if (taskIdsToHydrate.length > 0) {
+    await queryClient.fetchQuery({
+      ...agentSessionListHydrationQueryOptions(
+        queryClient,
+        repoPath,
+        taskIdsToHydrate,
+        options?.readPort,
+      ),
+      ...(options?.forceFresh || refreshesInvalidatedData ? { staleTime: 0 } : {}),
+    });
+    await Promise.all(
+      taskIdsToHydrate.flatMap((taskId) => {
+        const queryState = queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId));
+        return queryState?.fetchStatus === "fetching"
+          ? [
+              joinInFlightAgentSessionListQuery(
+                queryClient,
+                repoPath,
+                taskId,
+                options?.readPort ?? host,
+              ),
+            ]
+          : [];
+      }),
+    );
+  }
+
+  const entries = normalizedTaskIds.map((taskId) => {
+    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const queryState = queryClient.getQueryState(queryKey);
+    if (queryState?.status === "error") {
+      throw queryState.error;
+    }
+    const records = queryClient.getQueryData<AgentSessionRecord[]>(queryKey);
+    if (!records) {
+      throw new Error(`Batch session hydration did not populate task "${taskId}".`);
+    }
+    if (queryState?.isInvalidated === true) {
+      throw new Error(`Batch session hydration for task "${taskId}" was superseded.`);
+    }
+    return [taskId, records] as const;
+  });
 
   return Object.fromEntries(entries);
 };
 
-export const invalidateAgentSessionListQuery = (
+export const retryAgentSessionListQueries = async (
   queryClient: QueryClient,
   repoPath: string,
-  taskId: string,
-  options?: {
-    refetchActive?: boolean;
-  },
-): Promise<void> =>
-  queryClient.invalidateQueries({
-    queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-    exact: true,
-    refetchType: options?.refetchActive === true ? "active" : "none",
+  taskIds: string[],
+  readPort: AgentSessionReadPort = host,
+): Promise<void> => {
+  const taskIdsToRetry = normalizeAgentSessionTaskIds(taskIds).filter((taskId) => {
+    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const queryState = queryClient.getQueryState(queryKey);
+    return (
+      queryState?.status === "error" ||
+      queryState?.isInvalidated === true ||
+      queryClient.getQueryData(queryKey) === undefined
+    );
   });
-
-const areSelectedModelsEquivalent = (
-  left: AgentSessionRecord["selectedModel"],
-  right: AgentSessionRecord["selectedModel"],
-): boolean => {
-  if (left === right) {
-    return true;
+  for (const taskId of taskIdsToRetry) {
+    incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
   }
-  if (left === null || right === null) {
-    return false;
-  }
-  return (
-    left.runtimeKind === right.runtimeKind &&
-    left.providerId === right.providerId &&
-    left.modelId === right.modelId &&
-    left.variant === right.variant &&
-    left.profileId === right.profileId
-  );
+  await hydrateAgentSessionListQueries(queryClient, repoPath, taskIdsToRetry, readPort);
 };
 
-const areAgentSessionRecordsEquivalent = (
-  left: AgentSessionRecord,
-  right: AgentSessionRecord,
-): boolean =>
-  left.externalSessionId === right.externalSessionId &&
-  left.role === right.role &&
-  left.startedAt === right.startedAt &&
-  left.runtimeKind === right.runtimeKind &&
-  left.workingDirectory === right.workingDirectory &&
-  areSelectedModelsEquivalent(left.selectedModel, right.selectedModel);
+export const removeAgentSessionListQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+): Promise<void> => {
+  const queryKeys = normalizeAgentSessionTaskIds(taskIds).map((taskId) => {
+    incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
+    return agentSessionQueryKeys.list(repoPath, taskId);
+  });
+  await Promise.all(
+    queryKeys.map((queryKey) => queryClient.cancelQueries({ queryKey, exact: true })),
+  );
+  for (const queryKey of queryKeys) {
+    queryClient.removeQueries({ queryKey, exact: true });
+  }
+};
 
-export const upsertAgentSessionRecordInQuery = (
+const beginAgentSessionListInvalidation = async (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  session: AgentSessionRecord,
-): void => {
-  queryClient.setQueryData<AgentSessionRecord[] | undefined>(
-    agentSessionQueryKeys.list(repoPath, taskId),
-    (current): AgentSessionRecord[] | undefined => {
-      if (!current) {
-        return current;
-      }
+): Promise<number> => {
+  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+  const invalidationVersion = incrementAgentSessionInvalidationVersion(
+    queryClient,
+    repoPath,
+    taskId,
+  );
+  await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+  return invalidationVersion;
+};
 
-      const sessionKey = agentSessionIdentityKey(session);
-      const existingIndex = current.findIndex(
-        (entry) => agentSessionIdentityKey(entry) === sessionKey,
-      );
-      if (existingIndex === -1) {
-        return [...current, session];
-      }
+type AuthoritativeAgentSessionListInvalidation = {
+  queryKey: ReturnType<typeof agentSessionQueryKeys.list>;
+  invalidationVersion: number;
+};
 
-      const existingSession = current[existingIndex];
-      if (!existingSession || existingSession === session) {
-        return current;
-      }
+const runAuthoritativeAgentSessionListInvalidation = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+  complete: (invalidation: AuthoritativeAgentSessionListInvalidation) => Promise<void>,
+): Promise<void> => {
+  const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+  const invalidationVersion = await beginAgentSessionListInvalidation(
+    queryClient,
+    repoPath,
+    taskId,
+  );
+  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
+    return;
+  }
+  await queryClient.cancelQueries({ queryKey, exact: true });
+  if (getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion) {
+    return;
+  }
+  await complete({ queryKey, invalidationVersion });
+};
 
-      if (areAgentSessionRecordsEquivalent(existingSession, session)) {
-        return current;
-      }
-
-      return current.map((entry, index) => (index === existingIndex ? session : entry));
+export const invalidateAgentSessionListQuery = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): Promise<void> => {
+  await runAuthoritativeAgentSessionListInvalidation(
+    queryClient,
+    repoPath,
+    taskId,
+    async ({ queryKey }) => {
+      await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
     },
   );
 };
 
-export const removeAgentSessionRecordFromQuery = (
+export const refreshAgentSessionListQuery = async (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  identity: AgentSessionIdentity,
-): void => {
-  const identityKey = agentSessionIdentityKey(identity);
-  queryClient.setQueryData<AgentSessionRecord[] | undefined>(
-    agentSessionQueryKeys.list(repoPath, taskId),
-    (current) => current?.filter((entry) => agentSessionIdentityKey(entry) !== identityKey),
+  readPort: Pick<AgentSessionReadPort, "agentSessionsList"> = host,
+): Promise<void> => {
+  await runAuthoritativeAgentSessionListInvalidation(
+    queryClient,
+    repoPath,
+    taskId,
+    async ({ invalidationVersion }) => {
+      try {
+        await queryClient.fetchQuery({
+          ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+          staleTime: 0,
+        });
+      } catch (error) {
+        const superseded =
+          getAgentSessionInvalidationVersion(queryClient, repoPath, taskId) !== invalidationVersion;
+        if (superseded && isCancelledError(error)) {
+          return;
+        }
+        throw error;
+      }
+    },
   );
 };
