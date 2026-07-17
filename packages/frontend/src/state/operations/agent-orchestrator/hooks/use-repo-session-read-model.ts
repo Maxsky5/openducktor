@@ -98,12 +98,15 @@ export const useRepoSessionReadModel = ({
   const canObserveRepo =
     taskSessionRecordsState.kind === "ready" || observedRepoPathRef.current === workspaceRepoPath;
 
+  // Synchronizes an async query lifecycle with the parent-owned session read model.
+  // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
     if (!workspaceRepoPath) {
       return;
     }
     if (taskSessionRecordsState.kind === "loading") {
       if (observedRepoPathRef.current !== workspaceRepoPath) {
+        // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       }
       return;
@@ -133,6 +136,8 @@ export const useRepoSessionReadModel = ({
     }));
   }, [commitSessionCollection, taskSessionRecordsState, workspaceRepoPath]);
 
+  // Owns the async stream lifecycle; its loading state is not render-derived.
+  // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
     if (!workspaceRepoPath || !canObserveRepo) {
       return;
@@ -293,6 +298,7 @@ export const useRepoSessionReadModel = ({
     };
 
     observedRepoPathRef.current = repoPath;
+    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     void liveSessionPort
       .observeAgentSessionLive({ repoPath }, (envelope) => {
