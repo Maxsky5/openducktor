@@ -446,6 +446,13 @@ export const useRepoSessionReadModel = ({
         );
         return;
       }
+      if (envelope.type === "slash_command_catalog_updated") {
+        queryClient.setQueryData(
+          runtimeCatalogQueryKeys.repoSlashCommands(envelope.scope),
+          envelope.catalog,
+        );
+        return;
+      }
     };
 
     observedRepoPathRef.current = repoPath;

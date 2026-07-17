@@ -512,7 +512,9 @@ describe("handleClaudeSdkMessage tool events", () => {
 
     expect(events).toEqual([]);
   });
+});
 
+describe("handleClaudeSdkMessage denied tool events", () => {
   test("emits permission_denied events as errored tool parts with input and duration", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
@@ -609,7 +611,9 @@ describe("handleClaudeSdkMessage tool events", () => {
     ]);
     expect(session.activity).toBe("running");
   });
+});
 
+describe("handleClaudeSdkMessage file edit tool events", () => {
   test("maps completed Claude Edit results to canonical file diffs", () => {
     const events: AgentEvent[] = [];
     const session = createSession();

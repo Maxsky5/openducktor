@@ -74,7 +74,6 @@ const createServiceInput = (events?: {
       executablePath: process.execPath,
     },
   }),
-  runtimeRegistry: {} as CreateClaudeAgentSdkServiceInput["runtimeRegistry"],
   toolDiscovery: {
     resolveTool: () => Effect.die("unused"),
     resolveToolPath: () => Effect.succeed(process.execPath),

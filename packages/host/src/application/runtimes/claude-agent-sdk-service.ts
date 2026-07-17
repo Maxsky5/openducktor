@@ -35,12 +35,15 @@ export type ClaudeAgentSdkServiceError = HostOperationError | HostValidationErro
 export type ClaudeAgentSdkService = {
   startSession(
     input: StartAgentSessionInput,
+    runtimeId: string,
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   resumeSession(
     input: ResumeAgentSessionInput,
+    runtimeId: string,
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   forkSession(
     input: ForkAgentSessionInput,
+    runtimeId: string,
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   releaseSession(input: SessionRef): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   listAvailableModels(
@@ -72,6 +75,7 @@ export type ClaudeAgentSdkService = {
   ): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   sendUserMessage(
     input: SendAgentUserMessageInput,
+    runtimeId: string,
   ): Effect.Effect<AcceptedAgentUserMessage, ClaudeAgentSdkServiceError>;
   replyApproval(input: ReplyApprovalInput): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   replyQuestion(input: ReplyQuestionInput): Effect.Effect<void, ClaudeAgentSdkServiceError>;

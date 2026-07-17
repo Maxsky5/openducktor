@@ -266,7 +266,9 @@ describe("createClaudeCanUseTool", () => {
     session.pendingQuestions.get("request-1")?.resolve([["Direct"]]);
     await expect(resultPromise).resolves.toMatchObject({ behavior: "allow" });
   });
+});
 
+describe("Claude permission request lifecycle", () => {
   test("cleans up pending approvals when the Claude permission request is aborted", async () => {
     const events: AgentEvent[] = [];
     const session = createSession("build");
@@ -488,7 +490,9 @@ describe("createClaudeCanUseTool", () => {
     expect(events).toEqual([]);
     expect(session.pendingApprovals.size).toBe(0);
   });
+});
 
+describe("Claude permission path routing", () => {
   test("routes Claude file paths through the session worktree", async () => {
     const events: AgentEvent[] = [];
     const session = createSession("build");
@@ -656,7 +660,9 @@ describe("createClaudeCanUseTool", () => {
     expect(events).toEqual([]);
     expect(session.pendingApprovals.size).toBe(0);
   });
+});
 
+describe("Claude permission questions", () => {
   test("maps Claude AskUserQuestion tool calls to pending questions and forwards answers", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();

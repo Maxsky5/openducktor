@@ -1,6 +1,5 @@
 import { CLAUDE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
 import type {
-  AgentEvent,
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
@@ -240,31 +239,6 @@ export const textFromContentBlocks = (content: unknown): string => {
     .filter((text) => text.length > 0)
     .join("\n");
 };
-
-export const claudeAssistantTextPartEvent = ({
-  externalSessionId,
-  messageId,
-  partId,
-  text,
-  timestamp,
-}: {
-  externalSessionId: string;
-  messageId: string;
-  partId?: string;
-  text: string;
-  timestamp: string;
-}): AgentEvent => ({
-  type: "assistant_part",
-  externalSessionId,
-  timestamp,
-  part: {
-    kind: "text",
-    messageId,
-    partId: partId ?? `${messageId}:text`,
-    text,
-    completed: true,
-  },
-});
 
 export const historyMessageText = (message: unknown): string => {
   if (!isRecord(message)) {

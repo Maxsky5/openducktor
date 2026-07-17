@@ -1,9 +1,9 @@
 # Claude Agent SDK runtime — last-commit audit
 
-Date: 2026-07-11  
-Audited commit: `1992a6b1219ce7bb279a7c567bb61b7f9f959213` (`feat(runtime): add Claude Agent SDK runtime`)  
-Fixed point: `69425cd1a7015fa59c4b4f77117375c808867c13` (`HEAD^`)  
-Diff: `git diff HEAD^...HEAD`  
+Date: 2026-07-11
+Audited commit: `1992a6b1219ce7bb279a7c567bb61b7f9f959213` (`feat(runtime): add Claude Agent SDK runtime`)
+Fixed point: `69425cd1a7015fa59c4b4f77117375c808867c13` (`HEAD^`)
+Diff: `git diff HEAD^...HEAD`
 Scope: 290 files, 32,959 insertions, 1,462 deletions
 
 ## Verdict

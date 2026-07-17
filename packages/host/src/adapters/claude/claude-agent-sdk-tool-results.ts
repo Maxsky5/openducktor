@@ -1,9 +1,9 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
-import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
+import type { AgentEvent } from "@openducktor/core";
 import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
-import { isRecord, previewInput, toolPartType } from "./claude-agent-sdk-utils";
+import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
+import { isRecord } from "./claude-agent-sdk-utils";
 
 type ClaudeToolResultSession = {
   externalSessionId: string;
@@ -83,29 +83,17 @@ export const handleClaudeUserToolResultMessage = ({
   const messageId =
     session.toolMessageIdsByCallId.get(result.toolUseId) ?? message.uuid ?? result.toolUseId;
   const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
-  const endedAtMs = timestampMs(timestamp);
-  const part: Extract<AgentStreamPart, { kind: "tool" }> = {
-    kind: "tool",
-    messageId,
-    partId: result.toolUseId,
+  const part = createClaudeCompletedToolPart({
     callId: result.toolUseId,
+    endedAtMs: timestampMs(timestamp),
+    isError: result.isError,
+    messageId,
+    raw: result.raw,
+    text: result.text,
     tool,
-    toolType: toolPartType(tool),
-    status: result.isError ? "error" : "completed",
     ...(input ? { input } : {}),
     ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-    endedAtMs,
-  };
-  const preview = input ? previewInput(input) : undefined;
-  if (preview) {
-    part.preview = preview;
-  }
-  if (result.isError) {
-    part.error = result.text;
-  } else {
-    part.output = result.text;
-    Object.assign(part, readClaudeFileEditPayload({ tool, input, raw: result.raw }));
-  }
+  });
   emit({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,

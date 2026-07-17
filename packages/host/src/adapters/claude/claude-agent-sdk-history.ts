@@ -4,7 +4,6 @@ import type {
   AgentSkillReference,
   AgentStreamPart,
 } from "@openducktor/core";
-import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import {
   isNestedHistoryEntry,
   readHistoryAssistantModel,
@@ -37,11 +36,12 @@ import {
 } from "./claude-agent-sdk-subagents";
 import { isClaudeToolUseBlockType, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import {
-  historyMessageText,
-  isRecord,
-  readStringProp,
-  toolPartType,
-} from "./claude-agent-sdk-utils";
+  createClaudeAssistantReasoningPart,
+  createClaudeAssistantTextPart,
+  createClaudeCompletedToolPart,
+  createClaudeFinishStepPart,
+} from "./claude-agent-sdk-transcript-parts";
+import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "assistant" }>;
 
@@ -103,17 +103,13 @@ const addFinishStep = (message: MutableAssistantHistoryMessage, reason: string |
   if (!reason) {
     return;
   }
-  const partId = `${message.messageId}:finish`;
-  if (message.parts.some((part) => part.kind === "step" && part.partId === partId)) {
+  const part = createClaudeFinishStepPart({ messageId: message.messageId, reason });
+  if (
+    message.parts.some((candidate) => candidate.kind === "step" && candidate.partId === part.partId)
+  ) {
     return;
   }
-  message.parts.push({
-    kind: "step",
-    messageId: message.messageId,
-    partId,
-    phase: "finish",
-    reason,
-  });
+  message.parts.push(part);
 };
 
 export const toClaudeHistoryMessages = (
@@ -241,33 +237,21 @@ export const toClaudeHistoryMessages = (
           if (!tool) {
             continue;
           }
-          const completedPart: Extract<AgentStreamPart, { kind: "tool" }> = {
-            kind: "tool",
-            messageId: existingMessage?.messageId ?? entry.uuid ?? toolResult.toolUseId,
-            partId: toolResult.toolUseId,
+          const completedPart = createClaudeCompletedToolPart({
             callId: toolResult.toolUseId,
+            endedAtMs: timestampMs(timestamp),
+            isError: toolResult.isError,
+            messageId: existingMessage?.messageId ?? entry.uuid ?? toolResult.toolUseId,
+            raw: toolResult.raw,
+            text: toolResult.text,
             tool,
-            toolType: toolPartType(tool),
-            status: toolResult.isError ? "error" : "completed",
             ...(existingPart?.input ? { input: existingPart.input } : {}),
             ...(existingPart?.preview ? { preview: existingPart.preview } : {}),
             ...(existingPart?.metadata ? { metadata: existingPart.metadata } : {}),
             ...(typeof existingPart?.startedAtMs === "number"
               ? { startedAtMs: existingPart.startedAtMs }
               : {}),
-            endedAtMs: timestampMs(timestamp),
-            ...(toolResult.isError ? { error: toolResult.text } : { output: toolResult.text }),
-          };
-          if (!toolResult.isError) {
-            Object.assign(
-              completedPart,
-              readClaudeFileEditPayload({
-                tool,
-                input: existingPart?.input,
-                raw: toolResult.raw,
-              }),
-            );
-          }
+          });
           const subagentParts: AgentStreamPart[] = [];
           if (tool === "Agent") {
             const subagentEvents: AgentEvent[] = [];
@@ -375,13 +359,13 @@ export const toClaudeHistoryMessages = (
           if (type === "text" && preservesBlockOrder) {
             const blockText = readStringProp(block, "text");
             if (blockText && blockText.trim().length > 0) {
-              parts.push({
-                kind: "text",
-                messageId: entry.uuid,
-                partId: `${entry.uuid}:text:${index}`,
-                text: blockText,
-                completed: true,
-              });
+              parts.push(
+                createClaudeAssistantTextPart({
+                  messageId: entry.uuid,
+                  partId: `${entry.uuid}:text:${index}`,
+                  text: blockText,
+                }),
+              );
             }
             continue;
           }
@@ -397,13 +381,13 @@ export const toClaudeHistoryMessages = (
           if (type === "thinking") {
             const thinkingText = readStringProp(block, "thinking") ?? readStringProp(block, "text");
             if (thinkingText) {
-              parts.push({
-                kind: "reasoning",
-                messageId: entry.uuid,
-                partId: `${entry.uuid}:thinking:${index}`,
-                text: thinkingText,
-                completed: true,
-              });
+              parts.push(
+                createClaudeAssistantReasoningPart({
+                  messageId: entry.uuid,
+                  partId: `${entry.uuid}:thinking:${index}`,
+                  text: thinkingText,
+                }),
+              );
             }
           }
         }

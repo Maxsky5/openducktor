@@ -179,4 +179,36 @@ describe("Claude host live-session state", () => {
       }),
     });
   });
+
+  test("publishes the authoritative slash-command replacement catalog", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    const catalog = {
+      commands: [
+        {
+          id: "review",
+          trigger: "review",
+          title: "review",
+          source: "command" as const,
+          hints: [],
+        },
+      ],
+    };
+
+    expect(
+      state.applyEvent(session, {
+        type: "runtime_slash_commands_changed",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:05:00.000Z",
+        catalog,
+      }),
+    ).toEqual([
+      {
+        type: "slash_command_catalog_updated",
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        catalog,
+      },
+    ]);
+  });
 });

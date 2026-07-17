@@ -252,10 +252,11 @@ export const createClaudeLiveSessionState = ({
     if (event.type === "runtime_slash_commands_changed") {
       return [
         {
-          type: "catalog_invalidated",
+          type: "slash_command_catalog_updated",
           repoPath: runtime.repoPath,
           runtimeKind: "claude",
           workingDirectory: session.input.workingDirectory,
+          catalog: event.catalog,
         },
       ];
     }

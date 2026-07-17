@@ -17,6 +17,7 @@ import type {
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   RuntimeKind,
+  SlashCommandCatalog,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
@@ -41,6 +42,13 @@ export type AgentSessionLiveAdapterChange =
       readonly event: AgentSessionTranscriptEvent;
     }
   | ({ readonly type: "catalog_invalidated" } & AgentSessionCatalogInvalidation)
+  | {
+      readonly type: "slash_command_catalog_updated";
+      readonly repoPath: string;
+      readonly runtimeKind: RuntimeKind;
+      readonly workingDirectory: string;
+      readonly catalog: SlashCommandCatalog;
+    }
   | {
       readonly type: "fault";
       readonly repoPath: string;

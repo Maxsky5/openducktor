@@ -30,6 +30,7 @@ export const createClaudeAgentSdkSessionStore = ({
   now = () => new Date().toISOString(),
 }: CreateClaudeAgentSdkSessionStoreInput = {}): ClaudeSessionStore => {
   const sessions = new Map<string, ClaudeSession>();
+  const closeListeners = new Set<(session: ClaudeSession) => void>();
   const rejectPendingApprovals = (session: ClaudeSession, message: string): void => {
     for (const pending of session.pendingApprovals.values()) {
       pending.resolve({
@@ -51,6 +52,9 @@ export const createClaudeAgentSdkSessionStore = ({
     sessions.delete(session.externalSessionId);
     session.pendingApprovals.clear();
     session.pendingQuestions.clear();
+    for (const listener of closeListeners) {
+      listener(session);
+    }
   };
   const publishSessionFinished = (session: ClaudeSession, message: string): void => {
     emit?.(session, {
@@ -67,6 +71,12 @@ export const createClaudeAgentSdkSessionStore = ({
     get: (externalSessionId) => sessions.get(externalSessionId),
     set: (session) => {
       sessions.set(session.externalSessionId, session);
+    },
+    subscribeClose: (listener) => {
+      closeListeners.add(listener);
+      return () => {
+        closeListeners.delete(listener);
+      };
     },
     values: () => sessions.values(),
     probeSessionStatus: (input) => {

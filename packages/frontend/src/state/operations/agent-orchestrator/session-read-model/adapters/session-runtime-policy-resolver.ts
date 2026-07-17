@@ -1,6 +1,9 @@
 import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
 import type { AgentSessionRuntimePolicy, AgentSessionScope } from "@openducktor/core";
-import { resolveAgentSessionRuntimePolicyFromSnapshot } from "../../support/session-runtime-policy";
+import {
+  resolveAgentSessionRuntimePolicyFromSnapshot,
+  resolveSettingsIndependentAgentSessionRuntimePolicy,
+} from "../../support/session-runtime-policy";
 
 type LoadSettingsSnapshot = () => Promise<SettingsSnapshot>;
 
@@ -8,10 +11,6 @@ export type ResolveSessionRuntimePolicySync = (input: {
   runtimeKind: RuntimeKind;
   sessionScope?: AgentSessionScope | null;
 }) => AgentSessionRuntimePolicy;
-
-const settingsIndependentRuntimePolicy = (
-  runtimeKind: "opencode" | "claude",
-): AgentSessionRuntimePolicy => ({ kind: runtimeKind });
 
 export const loadSessionRuntimePolicyResolver = async ({
   runtimeKinds,
@@ -22,10 +21,11 @@ export const loadSessionRuntimePolicyResolver = async ({
 }): Promise<ResolveSessionRuntimePolicySync> => {
   if (runtimeKinds.every((runtimeKind) => runtimeKind !== "codex")) {
     return ({ runtimeKind }) => {
-      if (runtimeKind === "codex") {
+      const runtimePolicy = resolveSettingsIndependentAgentSessionRuntimePolicy(runtimeKind);
+      if (!runtimePolicy) {
         throw new Error(`Runtime policy for '${runtimeKind}' was not loaded.`);
       }
-      return settingsIndependentRuntimePolicy(runtimeKind);
+      return runtimePolicy;
     };
   }
 

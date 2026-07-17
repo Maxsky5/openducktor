@@ -511,7 +511,9 @@ describe("handleClaudeSdkMessage result events", () => {
       },
     ]);
   });
+});
 
+describe("handleClaudeSdkMessage result deduplication", () => {
   test("does not duplicate successful result text already emitted by assistant messages", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
@@ -672,7 +674,9 @@ describe("handleClaudeSdkMessage result events", () => {
     expect(session.pendingUserTurnCount).toBe(1);
     expect(session.activity).toBe("running");
   });
+});
 
+describe("handleClaudeSdkMessage result settlement", () => {
   test("settles completed successful results immediately", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
@@ -1029,7 +1033,9 @@ describe("handleClaudeSdkMessage result events", () => {
     expect(session.pendingUserTurnCount).toBe(0);
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
   });
+});
 
+describe("handleClaudeSdkMessage failed results", () => {
   test("reports failed Claude results and settles the session idle", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");

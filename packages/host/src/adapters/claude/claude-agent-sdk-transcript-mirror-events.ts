@@ -1,10 +1,11 @@
 import type { SessionMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
-import { isClaudeFileEditTool, readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
+import type { AgentEvent } from "@openducktor/core";
+import { isClaudeFileEditTool } from "./claude-agent-sdk-file-edits";
 import { readHistoryToolResult } from "./claude-agent-sdk-history-support";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
+import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
-import { isRecord, previewInput, readStringProp, toolPartType } from "./claude-agent-sdk-utils";
+import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeTranscriptMirrorSession = Pick<
   ClaudeSession,
@@ -59,37 +60,26 @@ export const emitClaudeMirroredFileEditToolResult = ({
     return;
   }
   const input = session.toolInputsByCallId.get(result.toolUseId);
-  const payload = readClaudeFileEditPayload({
-    tool,
-    input,
-    raw: result.raw,
-  });
-  if (!payload.fileDiffs) {
-    return;
-  }
-
   const timestamp = readStringProp(entry, "timestamp") ?? now();
   const messageId =
     session.toolMessageIdsByCallId.get(result.toolUseId) ??
     readStringProp(entry, "uuid") ??
     result.toolUseId;
-  const preview = input ? previewInput(input) : undefined;
   const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
-  const part: Extract<AgentStreamPart, { kind: "tool" }> = {
-    kind: "tool",
-    messageId,
-    partId: result.toolUseId,
+  const part = createClaudeCompletedToolPart({
     callId: result.toolUseId,
-    tool,
-    toolType: toolPartType(tool),
-    status: "completed",
-    ...(input ? { input } : {}),
-    ...(preview ? { preview } : {}),
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
     endedAtMs: timestampMs(timestamp),
-    output: result.text,
-    ...payload,
-  };
+    isError: false,
+    messageId,
+    raw: result.raw,
+    text: result.text,
+    tool,
+    ...(input ? { input } : {}),
+    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+  });
+  if (!part.fileDiffs) {
+    return;
+  }
 
   emit({
     type: "assistant_part",
