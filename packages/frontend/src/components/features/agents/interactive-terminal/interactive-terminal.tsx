@@ -1,20 +1,21 @@
 import "@xterm/xterm/css/xterm.css";
-import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
+import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
+import { useQuery } from "@tanstack/react-query";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
+import { platformQueryOptions } from "@/state/queries/system";
 import { createTerminalOptions } from "../terminal-xterm-options";
 import {
   createLatestResizeScheduler,
   createTerminalInputSequencer,
-  createTerminalKeyEventHandler,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
-  detectTerminalPlatform,
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
+import { createTerminalKeyEventHandler } from "./terminal-keyboard-policy";
 
 export function InteractiveTerminal({
   terminalId,
@@ -35,8 +36,10 @@ export function InteractiveTerminal({
   onForgotten: (message: string) => void;
   onTitleChange: (title: string) => void;
 }): ReactElement {
+  const platformQuery = useQuery(platformQueryOptions());
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const platformRef = useRef<AppPlatform | undefined>(platformQuery.data);
   const activateViewportRef = useRef<((focus: (() => void) | null) => void) | null>(null);
   const callbacksRef = useRef({
     onAttention,
@@ -46,6 +49,10 @@ export function InteractiveTerminal({
   });
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    platformRef.current = platformQuery.data;
+  }, [platformQuery.data]);
 
   useEffect(() => {
     callbacksRef.current = {
@@ -108,7 +115,7 @@ export function InteractiveTerminal({
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
     terminal.attachCustomKeyEventHandler(
       createTerminalKeyEventHandler({
-        platform: detectTerminalPlatform(navigator.platform),
+        getPlatform: () => platformRef.current,
         hasSelection: () => terminal.hasSelection(),
         getSelection: () => terminal.getSelection(),
         writeClipboard: (text) => navigator.clipboard.writeText(text),
@@ -170,6 +177,10 @@ export function InteractiveTerminal({
     return () => cancelAnimationFrame(frameId);
   }, [active, focusRequest, isHydrated]);
 
+  const visibleInteractionError = platformQuery.isError
+    ? platformQuery.error.message
+    : interactionError;
+
   return (
     <div className="relative h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
       <div
@@ -178,12 +189,12 @@ export function InteractiveTerminal({
         role="application"
         aria-label={`Interactive terminal ${terminalId}`}
       />
-      {interactionError ? (
+      {visibleInteractionError ? (
         <p
           role="alert"
           className="absolute inset-x-2 bottom-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
         >
-          Terminal interaction failed: {interactionError}
+          Terminal interaction failed: {visibleInteractionError}
         </p>
       ) : null}
     </div>

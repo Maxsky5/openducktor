@@ -3,13 +3,14 @@ import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import {
   createLatestResizeScheduler,
   createTerminalInputSequencer,
-  createTerminalKeyEventHandler,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
-  detectTerminalPlatform,
   handleTerminalMetadataFrame,
-  resolveTerminalKeyAction,
 } from "./interactive-terminal-policy";
+import {
+  createTerminalKeyEventHandler,
+  resolveTerminalKeyAction,
+} from "./terminal-keyboard-policy";
 
 const keyEvent = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
   ({
@@ -57,11 +58,11 @@ describe("InteractiveTerminal policies", () => {
   });
 
   test("keeps copy, paste, and Ctrl+C interrupt semantics distinct", () => {
-    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), "linux", true)).toBe(
-      "copy",
-    );
-    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), "linux", false)).toBe(
-      "interrupt",
+    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), "linux", true)).toEqual({
+      type: "copy",
+    });
+    expect(resolveTerminalKeyAction(keyEvent({ ctrlKey: true, key: "c" }), "linux", false)).toEqual(
+      { bytes: [3], type: "input" },
     );
     expect(
       resolveTerminalKeyAction(
@@ -69,17 +70,10 @@ describe("InteractiveTerminal policies", () => {
         "linux",
         false,
       ),
-    ).toBe("paste");
-    expect(resolveTerminalKeyAction(keyEvent({ key: "c", metaKey: true }), "macos", true)).toBe(
-      "copy",
+    ).toEqual({ type: "paste" });
+    expect(resolveTerminalKeyAction(keyEvent({ key: "c", metaKey: true }), "darwin", true)).toEqual(
+      { type: "copy" },
     );
-  });
-
-  test("detects the desktop terminal platform without treating unknown platforms as Linux", () => {
-    expect(detectTerminalPlatform("MacIntel")).toBe("macos");
-    expect(detectTerminalPlatform("Win32")).toBe("windows");
-    expect(detectTerminalPlatform("Linux x86_64")).toBe("linux");
-    expect(detectTerminalPlatform("iPhone")).toBe("other");
   });
 
   test("wires copy, paste, and interrupt to clipboard and terminal input", async () => {
@@ -99,7 +93,7 @@ describe("InteractiveTerminal policies", () => {
       return inputIdle;
     };
     const handleKey = createTerminalKeyEventHandler({
-      platform: "linux",
+      getPlatform: () => "linux",
       hasSelection: () => selected,
       getSelection: () => "selected output",
       writeClipboard: async (text) => {
@@ -131,7 +125,7 @@ describe("InteractiveTerminal policies", () => {
       reportFailure: () => undefined,
     });
     const handleKey = createTerminalKeyEventHandler({
-      platform: "macos",
+      getPlatform: () => "darwin",
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,
@@ -163,7 +157,7 @@ describe("InteractiveTerminal policies", () => {
       reportFailure: () => undefined,
     });
     const handleKey = createTerminalKeyEventHandler({
-      platform: "linux",
+      getPlatform: () => "linux",
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,
@@ -193,7 +187,9 @@ describe("InteractiveTerminal policies", () => {
     ];
 
     for (const shortcut of shortcuts) {
-      expect(resolveTerminalKeyAction(shortcut, "windows", false)).toBe("passthrough");
+      expect(resolveTerminalKeyAction(shortcut, "win32", false)).toEqual({
+        type: "passthrough",
+      });
     }
   });
 
@@ -204,7 +200,21 @@ describe("InteractiveTerminal policies", () => {
         "linux",
         false,
       ),
-    ).toBe("passthrough");
+    ).toEqual({ type: "passthrough" });
+  });
+
+  test("delegates every shortcut to xterm while the host platform is unresolved", () => {
+    const handleKey = createTerminalKeyEventHandler({
+      getPlatform: () => undefined,
+      hasSelection: () => false,
+      getSelection: () => "",
+      writeClipboard: async () => undefined,
+      readClipboard: async () => "",
+      enqueueInput: async () => undefined,
+      reportFailure: () => undefined,
+    });
+
+    expect(handleKey(keyEvent({ ctrlKey: true, key: "ArrowLeft" }))).toBe(true);
   });
 
   test("surfaces clipboard failures without injecting terminal input", async () => {
@@ -223,7 +233,7 @@ describe("InteractiveTerminal policies", () => {
       return inputIdle;
     };
     const handleKey = createTerminalKeyEventHandler({
-      platform: "macos",
+      getPlatform: () => "darwin",
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,
