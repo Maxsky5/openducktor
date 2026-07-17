@@ -131,9 +131,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionsListForTasks = async () => [
-      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
-    ];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -200,7 +197,15 @@ describe("use-agent-orchestrator-operations session state", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
-      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
+      dependencies: createTestDependencies(
+        {
+          agentSessionsListForTasks: async () => [
+            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+          ],
+        },
+        {},
+        liveStream.portOverrides,
+      ),
     });
 
     try {
@@ -454,9 +459,6 @@ describe("use-agent-orchestrator-operations session state", () => {
 
     const upsertedRecords: unknown[] = [];
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionsListForTasks = async () => [
-      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
-    ];
     host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
       upsertedRecords.push(record);
     };
@@ -478,7 +480,15 @@ describe("use-agent-orchestrator-operations session state", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
       refreshTaskData: async () => {},
-      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
+      dependencies: createTestDependencies(
+        {
+          agentSessionsListForTasks: async () => [
+            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+          ],
+        },
+        {},
+        liveStream.portOverrides,
+      ),
     });
 
     try {
@@ -729,9 +739,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionsListForTasks = async () => [
-      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
-    ];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -758,7 +765,15 @@ describe("use-agent-orchestrator-operations session state", () => {
       },
       refreshTaskData: async () => {},
       agentEngine: createAgentRuntimeServices().agentEngine,
-      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
+      dependencies: createTestDependencies(
+        {
+          agentSessionsListForTasks: async () => [
+            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+          ],
+        },
+        {},
+        liveStream.portOverrides,
+      ),
     });
 
     try {
@@ -800,9 +815,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     } = { current: null };
 
     host.agentSessionsList = async () => [codexRecord];
-    host.agentSessionsListForTasks = async () => [
-      { taskId: "task-1", agentSessions: [codexRecord] },
-    ];
     CodexAppServerAdapter.prototype.loadSessionHistory = async (input) => {
       receivedHistoryInputRef.current = input;
       return [
@@ -835,7 +847,15 @@ describe("use-agent-orchestrator-operations session state", () => {
       },
       refreshTaskData: async () => {},
       agentEngine: createAgentRuntimeServices().agentEngine,
-      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
+      dependencies: createTestDependencies(
+        {
+          agentSessionsListForTasks: async () => [
+            { taskId: "task-1", agentSessions: [codexRecord] },
+          ],
+        },
+        {},
+        liveStream.portOverrides,
+      ),
     });
 
     try {
@@ -894,9 +914,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     let resumeCalls = 0;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionsListForTasks = async () => [
-      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
-    ];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -926,7 +943,15 @@ describe("use-agent-orchestrator-operations session state", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
       refreshTaskData: async () => {},
-      dependencies: createTestDependencies({}, {}, liveStream.portOverrides),
+      dependencies: createTestDependencies(
+        {
+          agentSessionsListForTasks: async () => [
+            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+          ],
+        },
+        {},
+        liveStream.portOverrides,
+      ),
     });
 
     try {
@@ -963,7 +988,11 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.agentSessionsList = async () => [persistedSessionFixture];
     const liveStream = createLiveSessionStreamFixture();
     const dependencies = createTestDependencies(
-      {},
+      {
+        agentSessionsListForTasks: async () => [
+          { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+        ],
+      },
       {},
       {
         ...liveStream.portOverrides,
