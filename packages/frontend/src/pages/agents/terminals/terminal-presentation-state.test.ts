@@ -7,15 +7,11 @@ import {
 
 const summary = (terminalId: string): TerminalSummary => ({
   terminalId,
-  hostInstanceId: "host-1",
   label: terminalId,
   context: { taskId: "task-1" },
   initialWorkingDir: "/repo/task-1",
-  initialWorkingDirAvailable: true,
   createdAt: "2026-07-17T00:00:00.000Z",
   lifecycle: "running",
-  connectionState: "connected",
-  attentionState: "none",
   exit: null,
 });
 

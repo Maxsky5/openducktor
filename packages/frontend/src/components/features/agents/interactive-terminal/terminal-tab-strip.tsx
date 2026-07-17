@@ -6,6 +6,10 @@ import { type ReactElement, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import {
+  terminalTabLabel,
+  terminalTabLifecycle,
+} from "@/pages/agents/terminals/terminal-presentation-state";
 import type { AgentStudioTerminalTab } from "@/pages/agents/terminals/use-agent-studio-terminals";
 import { terminalTabsListClassName, terminalTabTriggerClassName } from "../terminal-tab-styles";
 import {
@@ -19,10 +23,11 @@ const lifecycleText = (tab: AgentStudioTerminalTab): string => {
   if (tab.requestState === "unsupported_runtime") return "Unsupported runtime";
   if (tab.requestState === "creation_failed") return "Creation failed";
   if (tab.requestState === "lost") return "Lost after host restart";
-  if (tab.lifecycle === "starting") return "Starting";
-  if (tab.lifecycle === "closing") return "Closing";
-  if (tab.lifecycle === "close_failed") return "Close failed";
-  if (tab.lifecycle === "exited") return "Exited";
+  const lifecycle = terminalTabLifecycle(tab);
+  if (lifecycle === "starting") return "Starting";
+  if (lifecycle === "closing") return "Closing";
+  if (lifecycle === "close_failed") return "Close failed";
+  if (lifecycle === "exited") return "Exited";
   return "Running";
 };
 
@@ -37,7 +42,7 @@ const terminalTabShellClassName =
 function TerminalTabLabel({ tab }: { tab: AgentStudioTerminalTab }): ReactElement {
   return (
     <span className="min-w-0 flex-1 truncate px-3 text-left" title={detailText(tab)}>
-      {tab.label}
+      {terminalTabLabel(tab)}
     </span>
   );
 }
@@ -84,7 +89,7 @@ function SortableTerminalTab({
     >
       <TabsTrigger
         value={tab.tabId}
-        aria-label={`${tab.label}, ${lifecycleText(tab)}`}
+        aria-label={`${terminalTabLabel(tab)}, ${lifecycleText(tab)}`}
         className={cn(
           terminalTabTriggerClassName,
           "h-8 w-full max-w-none flex-1 cursor-pointer px-0 pr-8",
@@ -105,10 +110,10 @@ function SortableTerminalTab({
         type="button"
         size="icon"
         variant="ghost"
-        aria-label={`Close ${tab.label}`}
-        aria-busy={tab.lifecycle === "closing"}
+        aria-label={`Close ${terminalTabLabel(tab)}`}
+        aria-busy={terminalTabLifecycle(tab) === "closing"}
         className="absolute right-1 z-20 size-6 rounded-sm text-[var(--dev-server-terminal-foreground)] hover:bg-[var(--dev-server-terminal-surface)] hover:text-[var(--dev-server-terminal-foreground)]"
-        disabled={tab.lifecycle === "closing"}
+        disabled={terminalTabLifecycle(tab) === "closing"}
         onMouseDown={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
@@ -117,7 +122,7 @@ function SortableTerminalTab({
           onCloseTab(tab);
         }}
       >
-        {tab.lifecycle === "closing" ? <Loader2 className="animate-spin" /> : <X />}
+        {terminalTabLifecycle(tab) === "closing" ? <Loader2 className="animate-spin" /> : <X />}
       </Button>
     </div>
   );

@@ -14,11 +14,13 @@ import {
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
+  ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_EVENT_CHANNEL,
   ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
   type ElectronHostInvokeResult,
+  type ElectronTerminalEventEnvelope,
   type OpenDucktorElectronApi,
   type OpenDucktorElectronAppUpdateApi,
   type OpenDucktorElectronTerminalApi,
@@ -70,12 +72,18 @@ const appUpdates: OpenDucktorElectronAppUpdateApi = {
 };
 
 const terminals: OpenDucktorElectronTerminalApi = {
-  async send(frame) {
-    await ipcRenderer.invoke(ELECTRON_TERMINAL_SEND_CHANNEL, frame);
+  async send(clientId, frame) {
+    await ipcRenderer.invoke(ELECTRON_TERMINAL_SEND_CHANNEL, { clientId, frame });
   },
-  subscribe(listener) {
-    const handleEvent = (_event: Electron.IpcRendererEvent, frame: unknown) => {
-      if (frame instanceof Uint8Array) listener(frame);
+  async disconnect(clientId) {
+    await ipcRenderer.invoke(ELECTRON_TERMINAL_DISCONNECT_CHANNEL, clientId);
+  },
+  subscribe(clientId, listener) {
+    const handleEvent = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const envelope = value as Partial<ElectronTerminalEventEnvelope>;
+      if (envelope.clientId === clientId && envelope.frame instanceof Uint8Array) {
+        listener(envelope.frame);
+      }
     };
     ipcRenderer.on(ELECTRON_TERMINAL_EVENT_CHANNEL, handleEvent);
     return () => ipcRenderer.off(ELECTRON_TERMINAL_EVENT_CHANNEL, handleEvent);

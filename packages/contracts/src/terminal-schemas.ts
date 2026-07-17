@@ -31,24 +31,6 @@ export const terminalLifecycleSchema = z.enum([
 ]);
 export type TerminalLifecycle = z.infer<typeof terminalLifecycleSchema>;
 
-export const terminalConnectionStateSchema = z.enum([
-  "attaching",
-  "connected",
-  "disconnected",
-  "incomplete_replay",
-]);
-export type TerminalConnectionState = z.infer<typeof terminalConnectionStateSchema>;
-
-export const terminalAttentionStateSchema = z.enum([
-  "none",
-  "exited",
-  "disconnected",
-  "incomplete_replay",
-  "overflow",
-  "close_failed",
-]);
-export type TerminalAttentionState = z.infer<typeof terminalAttentionStateSchema>;
-
 export const terminalExitSchema = z
   .object({
     exitCode: z.number().int().nullable(),
@@ -62,15 +44,11 @@ export type TerminalExit = z.infer<typeof terminalExitSchema>;
 export const terminalSummarySchema = z
   .object({
     terminalId: terminalIdSchema,
-    hostInstanceId: z.string().min(1),
     label: z.string().min(1),
     context: terminalContextSchema,
     initialWorkingDir: z.string().min(1),
-    initialWorkingDirAvailable: z.boolean(),
     createdAt: z.string().min(1),
     lifecycle: terminalLifecycleSchema,
-    connectionState: terminalConnectionStateSchema,
-    attentionState: terminalAttentionStateSchema,
     exit: terminalExitSchema.nullable(),
   })
   .strict();

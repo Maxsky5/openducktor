@@ -39,6 +39,7 @@ import {
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
+  ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
@@ -641,9 +642,22 @@ const registerIpcHandlers = (
     },
   });
 
-  ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, frame: unknown) => {
+  ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, request: unknown) => {
     bindTerminalSenderCleanup(event.sender);
-    await runElectronEffect(terminalIpc.handleFrame(event.sender, frame));
+    const clientId =
+      typeof request === "object" && request !== null && "clientId" in request
+        ? request.clientId
+        : undefined;
+    const frame =
+      typeof request === "object" && request !== null && "frame" in request
+        ? request.frame
+        : undefined;
+    await runElectronEffect(terminalIpc.handleFrame(event.sender, clientId, frame));
+  });
+
+  ipcMain.handle(ELECTRON_TERMINAL_DISCONNECT_CHANNEL, async (event, clientId: unknown) => {
+    bindTerminalSenderCleanup(event.sender);
+    await runElectronEffect(terminalIpc.detachClient(event.sender.id, clientId));
   });
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {

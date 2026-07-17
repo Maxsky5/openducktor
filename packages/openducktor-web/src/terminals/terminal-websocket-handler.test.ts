@@ -24,7 +24,7 @@ const makeSocket = (
     data: {
       connectionId: "connection-1",
       terminalService,
-      attachments: new Set<string>(),
+      clientSession: null,
       backpressured: false,
       inFlightBytes: 0,
       pendingBytes: 0,
@@ -124,6 +124,48 @@ describe("terminalWebSocketHandler", () => {
     ).toEqual(["terminal-1", "terminal-2"]);
   });
 
+  test("preserves client frame order while attach is asynchronous", async () => {
+    const operations: string[] = [];
+    let attached = false;
+    const terminalService = {
+      attach: () =>
+        Effect.promise(
+          () =>
+            new Promise<void>((resolve) => {
+              setTimeout(() => {
+                attached = true;
+                operations.push("attach");
+                resolve();
+              }, 10);
+            }),
+        ),
+      acknowledge: () => Effect.sync(() => operations.push(attached ? "ack" : "ack-before-attach")),
+    } as unknown as TerminalService;
+    const harness = makeSocket(terminalService);
+    const send = (message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"]): void => {
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(encodeTerminalProtocolFrame({ message, payload: new Uint8Array() })),
+      );
+    };
+
+    send({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "attach",
+      terminalId: "terminal-1",
+      lastConsumedSequence: null,
+    });
+    send({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "ack",
+      terminalId: "terminal-1",
+      sequenceEnd: 0,
+    });
+    await Bun.sleep(20);
+
+    expect(operations).toEqual(["attach", "ack"]);
+  });
+
   test("reports unknown terminal ids and rejects oversized frames", async () => {
     const service = {
       write: (terminalId: string) =>
@@ -194,7 +236,7 @@ describe("terminalWebSocketHandler", () => {
     }
     await Bun.sleep(10);
 
-    expect(harness.data.attachments.size).toBe(0);
+    expect(harness.data.clientSession).not.toBeNull();
     expect(harness.sent.map((frame) => decodeTerminalProtocolFrame(frame).message)).toHaveLength(
       100,
     );
@@ -234,7 +276,7 @@ describe("terminalWebSocketHandler", () => {
     );
     await Bun.sleep(0);
 
-    expect(harness.data.attachments.size).toBe(0);
+    expect(harness.data.clientSession).not.toBeNull();
     expect(harness.sent).toHaveLength(1);
     expect(decodeTerminalProtocolFrame(harness.sent[0] ?? new Uint8Array()).message).toMatchObject({
       type: "protocol_error",
@@ -307,14 +349,30 @@ describe("terminalWebSocketHandler", () => {
   test("detaches every multiplexed terminal when the socket closes", async () => {
     const detached: string[] = [];
     const service = {
+      attach: () => Effect.void,
       detach: (terminalId: string) => Effect.sync(() => detached.push(terminalId)),
     } as unknown as TerminalService;
     const harness = makeSocket(service);
-    harness.data.attachments.add("terminal-1");
-    harness.data.attachments.add("terminal-2");
+    for (const terminalId of ["terminal-1", "terminal-2"]) {
+      terminalWebSocketHandler.message(
+        harness.socket,
+        Buffer.from(
+          encodeTerminalProtocolFrame({
+            message: {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "attach",
+              terminalId,
+              lastConsumedSequence: null,
+            },
+            payload: new Uint8Array(),
+          }),
+        ),
+      );
+    }
+    await Bun.sleep(0);
     terminalWebSocketHandler.close?.(harness.socket, 1000, "done");
-    await Promise.resolve();
+    await Bun.sleep(0);
     expect(detached.sort()).toEqual(["terminal-1", "terminal-2"]);
-    expect(harness.data.attachments.size).toBe(0);
+    expect(harness.data.clientSession).toBeNull();
   });
 });

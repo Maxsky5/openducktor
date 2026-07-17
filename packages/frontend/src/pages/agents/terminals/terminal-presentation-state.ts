@@ -1,16 +1,31 @@
 import { arrayMove } from "@dnd-kit/sortable";
 import type { TerminalLifecycle, TerminalSummary } from "@openducktor/contracts";
 
-export type AgentStudioTerminalTab = {
+type ReadyTerminalTab = {
   tabId: string;
-  terminalId: string | null;
-  summary: TerminalSummary | null;
-  lifecycle: TerminalLifecycle | null;
-  lifecycleFromEvent: boolean;
+  terminalId: string;
+  summary: TerminalSummary;
+  awaitingLifecycleSync: boolean;
+  error: null;
+  requestState: "ready";
+};
+
+type PendingTerminalTab = {
+  tabId: string;
+  terminalId: null;
+  summary: null;
   label: string;
   error: string | null;
-  requestState: "ready" | "creating" | "creation_failed" | "unsupported_runtime" | "lost";
+  requestState: "creating" | "creation_failed" | "unsupported_runtime" | "lost";
 };
+
+export type AgentStudioTerminalTab = ReadyTerminalTab | PendingTerminalTab;
+
+export const terminalTabLabel = (tab: AgentStudioTerminalTab): string =>
+  tab.requestState === "ready" ? tab.summary.label : tab.label;
+
+export const terminalTabLifecycle = (tab: AgentStudioTerminalTab): TerminalLifecycle | null =>
+  tab.requestState === "ready" ? tab.summary.lifecycle : null;
 
 export type TerminalScopePresentation = {
   tabs: AgentStudioTerminalTab[];
@@ -73,15 +88,23 @@ export const toHostTab = (
   summary: TerminalSummary,
   previous?: AgentStudioTerminalTab,
 ): AgentStudioTerminalTab => {
-  const lifecycleFromEvent =
-    previous?.lifecycleFromEvent === true && previous.lifecycle !== summary.lifecycle;
+  const previousSummary = previous?.requestState === "ready" ? previous.summary : null;
+  const previousLabel = previous ? terminalTabLabel(previous) : null;
+  const preserveLiveLifecycle =
+    previous?.requestState === "ready" &&
+    previous.awaitingLifecycleSync &&
+    previous.summary.lifecycle !== summary.lifecycle;
   return {
     tabId: previous?.tabId ?? `tab:${summary.terminalId}`,
     terminalId: summary.terminalId,
-    summary,
-    lifecycle: lifecycleFromEvent ? previous.lifecycle : summary.lifecycle,
-    lifecycleFromEvent,
-    label: previous?.label ?? summary.label,
+    summary: previousSummary
+      ? {
+          ...summary,
+          label: previousLabel ?? summary.label,
+          lifecycle: preserveLiveLifecycle ? previousSummary.lifecycle : summary.lifecycle,
+        }
+      : { ...summary, label: previousLabel ?? summary.label },
+    awaitingLifecycleSync: preserveLiveLifecycle,
     error: null,
     requestState: "ready",
   };
@@ -162,19 +185,16 @@ export const terminalPresentationReducer = (
     if (event.type === "hostSynced") return reconcileHostTabs(scope, event.summaries);
     if (event.type === "creationStarted") {
       const tabs = event.retry
-        ? scope.tabs.map((tab) =>
-            tab.tabId === event.tabId
-              ? { ...tab, requestState: "creating" as const, error: null }
-              : tab,
-          )
+        ? scope.tabs.map((tab) => {
+            if (tab.tabId !== event.tabId || tab.requestState === "ready") return tab;
+            return { ...tab, requestState: "creating" as const, error: null };
+          })
         : [
             ...scope.tabs,
             {
               tabId: event.tabId,
               terminalId: null,
               summary: null,
-              lifecycle: null,
-              lifecycleFromEvent: false,
               label: event.label,
               error: null,
               requestState: "creating" as const,
@@ -190,11 +210,10 @@ export const terminalPresentationReducer = (
     if (event.type === "creationFailed") {
       return {
         ...scope,
-        tabs: scope.tabs.map((tab) =>
-          tab.tabId === event.tabId
-            ? { ...tab, requestState: event.requestState, error: event.error }
-            : tab,
-        ),
+        tabs: scope.tabs.map((tab) => {
+          if (tab.tabId !== event.tabId || tab.requestState === "ready") return tab;
+          return { ...tab, requestState: event.requestState, error: event.error };
+        }),
       };
     }
     if (event.type === "creationCompleted") {
@@ -265,7 +284,9 @@ export const terminalPresentationReducer = (
       return {
         ...scope,
         tabs: scope.tabs.map((tab) =>
-          tab.terminalId === event.terminalId ? { ...tab, label: event.title } : tab,
+          tab.terminalId === event.terminalId && tab.requestState === "ready"
+            ? { ...tab, summary: { ...tab.summary, label: event.title } }
+            : tab,
         ),
       };
     }
@@ -273,8 +294,12 @@ export const terminalPresentationReducer = (
       return {
         ...scope,
         tabs: scope.tabs.map((tab) =>
-          tab.terminalId === event.terminalId
-            ? { ...tab, lifecycle: event.lifecycle, lifecycleFromEvent: true }
+          tab.terminalId === event.terminalId && tab.requestState === "ready"
+            ? {
+                ...tab,
+                summary: { ...tab.summary, lifecycle: event.lifecycle },
+                awaitingLifecycleSync: true,
+              }
             : tab,
         ),
       };
@@ -291,8 +316,7 @@ export const terminalPresentationReducer = (
               tabId: lostTabId,
               terminalId: null,
               summary: null,
-              lifecycle: null,
-              lifecycleFromEvent: false,
+              label: terminalTabLabel(tab),
               error: `${event.message} It cannot be recovered or recreated automatically.`,
               requestState: "lost",
             }

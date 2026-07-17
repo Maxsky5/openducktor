@@ -11,14 +11,24 @@ const lostTab: AgentStudioTerminalTab = {
   tabId: "lost:terminal-1",
   terminalId: null,
   summary: null,
-  lifecycle: null,
-  lifecycleFromEvent: false,
   label: "Shell 1",
   error: "This terminal belonged to a previous host session.",
   requestState: "lost",
 };
 
 const tabsModel = (tabs: AgentStudioTerminalTab[]) => ({ tabs, mountedTabs: tabs });
+
+const readyTab = (
+  summary: TerminalSummary,
+  lifecycle: TerminalSummary["lifecycle"] = summary.lifecycle,
+): AgentStudioTerminalTab => ({
+  tabId: `tab:${summary.terminalId}`,
+  terminalId: summary.terminalId,
+  summary: { ...summary, lifecycle },
+  awaitingLifecycleSync: false,
+  error: null,
+  requestState: "ready",
+});
 
 const model: AgentStudioTerminalPanelModel = {
   scopeKey: "/repo:task-1",
@@ -111,8 +121,6 @@ describe("AgentStudioTerminalPanel", () => {
               tabId: `lost:${index}`,
               terminalId: null,
               summary: null,
-              lifecycle: null,
-              lifecycleFromEvent: false,
               label: `Shell ${index + 1}`,
               error: "This terminal belonged to a previous host session.",
               requestState: "lost" as const,
@@ -130,33 +138,18 @@ describe("AgentStudioTerminalPanel", () => {
     const onClose = mock(async () => ({ closed: true as const }));
     const summary: TerminalSummary = {
       terminalId: "terminal-running",
-      hostInstanceId: "host-1",
       label: "Shell 1",
       context: { taskId: "task-1" },
       initialWorkingDir: "/repo",
-      initialWorkingDirAvailable: true,
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
-      connectionState: "connected",
-      attentionState: "none",
       exit: null,
     };
     render(
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          ...tabsModel([
-            {
-              tabId: "tab:terminal-running",
-              terminalId: summary.terminalId,
-              summary,
-              lifecycle: "running",
-              lifecycleFromEvent: false,
-              label: summary.label,
-              error: null,
-              requestState: "ready",
-            },
-          ]),
+          ...tabsModel([readyTab(summary)]),
           activeTabId: "tab:terminal-running",
           onClose,
         }}
@@ -182,33 +175,18 @@ describe("AgentStudioTerminalPanel", () => {
     );
     const summary: TerminalSummary = {
       terminalId: "terminal-busy",
-      hostInstanceId: "host-1",
       label: "Shell 1",
       context: { taskId: "task-1" },
       initialWorkingDir: "/repo",
-      initialWorkingDirAvailable: true,
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
-      connectionState: "connected",
-      attentionState: "none",
       exit: null,
     };
     render(
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          ...tabsModel([
-            {
-              tabId: "tab:terminal-busy",
-              terminalId: summary.terminalId,
-              summary,
-              lifecycle: "running",
-              lifecycleFromEvent: false,
-              label: summary.label,
-              error: null,
-              requestState: "ready",
-            },
-          ]),
+          ...tabsModel([readyTab(summary)]),
           activeTabId: "tab:terminal-busy",
           onClose,
         }}
@@ -234,33 +212,18 @@ describe("AgentStudioTerminalPanel", () => {
   test("shows immediate feedback while a terminal close is pending", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-closing",
-      hostInstanceId: "host-1",
       label: "Shell 1",
       context: { taskId: "task-1" },
       initialWorkingDir: "/repo",
-      initialWorkingDirAvailable: true,
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
-      connectionState: "connected",
-      attentionState: "none",
       exit: null,
     };
     render(
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          ...tabsModel([
-            {
-              tabId: "tab:terminal-closing",
-              terminalId: summary.terminalId,
-              summary,
-              lifecycle: "closing",
-              lifecycleFromEvent: false,
-              label: summary.label,
-              error: null,
-              requestState: "ready",
-            },
-          ]),
+          ...tabsModel([readyTab(summary, "closing")]),
           activeTabId: "tab:terminal-closing",
         }}
       />,
@@ -275,15 +238,11 @@ describe("AgentStudioTerminalPanel", () => {
   test("reuses compact Dev Server terminal chrome without muted icon actions", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-running",
-      hostInstanceId: "host-1",
       label: "Shell 1",
       context: { taskId: "task-1" },
       initialWorkingDir: "/repo/worktrees/task-1",
-      initialWorkingDirAvailable: true,
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
-      connectionState: "connected",
-      attentionState: "none",
       exit: null,
     };
     const view = render(
@@ -291,18 +250,7 @@ describe("AgentStudioTerminalPanel", () => {
         <AgentStudioTerminalPanel
           model={{
             ...model,
-            ...tabsModel([
-              {
-                tabId: "tab:terminal-running",
-                terminalId: summary.terminalId,
-                summary,
-                lifecycle: "running",
-                lifecycleFromEvent: false,
-                label: summary.label,
-                error: null,
-                requestState: "ready",
-              },
-            ]),
+            ...tabsModel([readyTab(summary)]),
             activeTabId: "tab:terminal-running",
           }}
         />
@@ -349,8 +297,6 @@ describe("AgentStudioTerminalPanel", () => {
               tabId: "creating:terminal",
               terminalId: null,
               summary: null,
-              lifecycle: null,
-              lifecycleFromEvent: false,
               label: "Shell 1",
               error: null,
               requestState: "creating",
@@ -371,33 +317,18 @@ describe("AgentStudioTerminalPanel", () => {
     const onClose = mock(async () => ({ closed: true as const }));
     const summary: TerminalSummary = {
       terminalId: "terminal-exited",
-      hostInstanceId: "host-1",
       label: "Shell 1",
       context: { taskId: "task-1" },
       initialWorkingDir: "/repo",
-      initialWorkingDirAvailable: true,
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
-      connectionState: "connected",
-      attentionState: "none",
       exit: null,
     };
     render(
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          ...tabsModel([
-            {
-              tabId: "tab:terminal-exited",
-              terminalId: summary.terminalId,
-              summary,
-              lifecycle: "exited",
-              lifecycleFromEvent: true,
-              label: summary.label,
-              error: null,
-              requestState: "ready",
-            },
-          ]),
+          ...tabsModel([readyTab(summary, "exited")]),
           activeTabId: "tab:terminal-exited",
           onClose,
         }}

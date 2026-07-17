@@ -41,7 +41,7 @@ export type TerminalTransportState = "connected" | "disconnected";
 
 export type TerminalTransportConnection = {
   send(frame: Uint8Array): Promise<void>;
-  close(): void;
+  close(): void | Promise<void>;
 };
 
 export type TerminalBridge = {

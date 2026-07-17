@@ -117,6 +117,10 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
 export type TerminalServerMessage = z.infer<typeof terminalServerMessageSchema>;
 export type TerminalProtocolMessage = TerminalClientMessage | TerminalServerMessage;
 
+export const isTerminalClientMessage = (
+  message: TerminalProtocolMessage,
+): message is TerminalClientMessage => terminalClientMessageSchema.safeParse(message).success;
+
 const terminalProtocolHeaderSchema = z
   .object({
     message: z.union([terminalClientMessageSchema, terminalServerMessageSchema]),

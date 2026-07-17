@@ -208,11 +208,9 @@ import type {
   TaskStoreCheck,
   TaskUpdatePatch,
   TaskWorktreeSummary,
-  TerminalAttentionState,
   TerminalClientMessage,
   TerminalCloseRequest,
   TerminalCloseResponse,
-  TerminalConnectionState,
   TerminalContext,
   TerminalCreateRequest,
   TerminalCreateResponse,
@@ -447,6 +445,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "getWorkspacesResultSchema",
   "issueTypeSchema",
   "isOpencodeExposedOdtToolAlias",
+  "isTerminalClientMessage",
   "knownGitProviderIdSchema",
   "knownGitProviderIdValues",
   "codexReasoningEffortSchema",
@@ -632,11 +631,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "decodeTerminalProtocolFrame",
   "encodeTerminalProtocolFrame",
   "hostInvokeFailureSchema",
-  "terminalAttentionStateSchema",
   "terminalClientMessageSchema",
   "terminalCloseRequestSchema",
   "terminalCloseResponseSchema",
-  "terminalConnectionStateSchema",
   "terminalContextSchema",
   "terminalCreateRequestSchema",
   "terminalCreateResponseSchema",
@@ -879,11 +876,9 @@ type ExportedTypeContract = {
   TaskQaDocumentPresence: TaskQaDocumentPresence;
   TaskStatus: TaskStatus;
   TaskWorktreeSummary: TaskWorktreeSummary;
-  TerminalAttentionState: TerminalAttentionState;
   TerminalClientMessage: TerminalClientMessage;
   TerminalCloseRequest: TerminalCloseRequest;
   TerminalCloseResponse: TerminalCloseResponse;
-  TerminalConnectionState: TerminalConnectionState;
   TerminalContext: TerminalContext;
   TerminalCreateRequest: TerminalCreateRequest;
   TerminalCreateResponse: TerminalCreateResponse;

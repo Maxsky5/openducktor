@@ -88,13 +88,18 @@ export const createElectronShellBridge = (): ShellBridge => {
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
     terminals: {
       connect: async (onFrame, onStateChange) => {
-        const unsubscribe = electronApi.terminals.subscribe(onFrame);
+        const clientId = globalThis.crypto.randomUUID();
+        const unsubscribe = electronApi.terminals.subscribe(clientId, onFrame);
         onStateChange("connected");
         return {
-          send: (frame) => electronApi.terminals.send(frame),
-          close: () => {
-            unsubscribe();
-            onStateChange("disconnected");
+          send: (frame) => electronApi.terminals.send(clientId, frame),
+          close: async () => {
+            try {
+              await electronApi.terminals.disconnect(clientId);
+            } finally {
+              unsubscribe();
+              onStateChange("disconnected");
+            }
           },
         };
       },

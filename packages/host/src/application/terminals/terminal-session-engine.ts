@@ -108,9 +108,6 @@ export const createTerminalSessionEngine = ({
         return matches ? [{ ...session.summary, context: { ...session.summary.context } }] : [];
       });
     },
-    setInitialWorkingDirAvailable: (terminalId: string, available: boolean): void => {
-      getSession(terminalId, "list").summary.initialWorkingDirAvailable = available;
-    },
     attach: (input: TerminalSessionAttachInput): Effect.Effect<void, TerminalServiceError> =>
       Effect.try({
         try: () => {
@@ -134,10 +131,7 @@ export const createTerminalSessionEngine = ({
             pendingBytes: 0,
           };
           const previousAttachment = session.attachments.get(input.attachmentId);
-          const previousConnectionState = session.summary.connectionState;
-          const previousAttentionState = session.summary.attentionState;
           session.attachments.set(input.attachmentId, attachment);
-          session.summary.connectionState = complete ? "connected" : "incomplete_replay";
           try {
             stream.publish(attachment, {
               version: TERMINAL_PROTOCOL_VERSION,
@@ -152,8 +146,6 @@ export const createTerminalSessionEngine = ({
           } catch (cause) {
             if (previousAttachment) session.attachments.set(input.attachmentId, previousAttachment);
             else session.attachments.delete(input.attachmentId);
-            session.summary.connectionState = previousConnectionState;
-            session.summary.attentionState = previousAttentionState;
             throw cause;
           }
         },
@@ -295,7 +287,6 @@ export const createTerminalSessionEngine = ({
           catch: (cause) => terminalOperationFailure(cause, "detach"),
         });
         session.attachments.delete(attachmentId);
-        if (session.attachments.size === 0) session.summary.connectionState = "disconnected";
         const events = yield* stream
           .resumeOutputIfUnblocked(session)
           .pipe(

@@ -245,14 +245,20 @@ describe("TerminalService", () => {
     expect(healthyEvents).toEqual(["snapshot", "output", "output"]);
   });
 
-  test("updates started-directory availability without replacing the terminal", async () => {
-    directoryAvailable = true;
-    const { service } = await makeService();
+  test("lists terminals without repeating filesystem validation", async () => {
+    let statCalls = 0;
+    const countingFilesystem: FilesystemPort = {
+      ...filesystem,
+      stat: (path) => {
+        statCalls += 1;
+        return filesystem.stat(path);
+      },
+    };
+    const { service } = await makeService(makePty(), () => "terminal-1", countingFilesystem);
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
-    directoryAvailable = false;
-    const listed = await Effect.runPromise(service.list({ kind: "all" }));
-    expect(listed.terminals[0]?.initialWorkingDirAvailable).toBe(false);
-    directoryAvailable = true;
+    const callsAfterCreate = statCalls;
+    await Effect.runPromise(service.list({ kind: "all" }));
+    expect(statCalls).toBe(callsAfterCreate);
   });
 
   test("does not advance pending output until ACK and pauses at the hard bound", async () => {
@@ -323,7 +329,6 @@ describe("TerminalService", () => {
     expect(pty.operations).toContain("terminate");
     const listed = await Effect.runPromise(service.list({ kind: "all" }));
     expect(listed.terminals[0]?.lifecycle).toBe("exited");
-    expect(listed.terminals[0]?.attentionState).toBe("overflow");
     for (let index = 0; index < TERMINAL_LIMITS.livePerHost; index += 1) {
       await Effect.runPromise(
         service.create({ workingDir: "/repo", context: { taskId: `replacement-${index}` } }),

@@ -49,7 +49,7 @@ describe("terminal schemas", () => {
     ).toEqual({ closed: false, confirmationRequired: true });
   });
 
-  test("rejects malformed summary state", () => {
+  test("rejects malformed and legacy summary state", () => {
     expect(() =>
       terminalSummarySchema.parse({
         terminalId: "terminal-1",
@@ -57,11 +57,8 @@ describe("terminal schemas", () => {
         label: "Shell 1",
         context: {},
         initialWorkingDir: "/repo",
-        initialWorkingDirAvailable: true,
         createdAt: "2026-07-12T00:00:00.000Z",
-        lifecycle: "missing",
-        connectionState: "connected",
-        attentionState: "none",
+        lifecycle: "running",
         exit: null,
       }),
     ).toThrow();

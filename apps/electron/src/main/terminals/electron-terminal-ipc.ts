@@ -1,26 +1,39 @@
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
-  TERMINAL_PROTOCOL_VERSION,
-  type TerminalClientMessage,
+  isTerminalClientMessage,
 } from "@openducktor/contracts";
-import type { TerminalService, TerminalServiceError } from "@openducktor/host";
+import {
+  createTerminalClientSession,
+  type TerminalClientSession,
+  type TerminalService,
+  type TerminalServiceError,
+} from "@openducktor/host";
 import { Effect } from "effect";
 import { ElectronValidationError } from "../../effect/electron-errors";
-import { ELECTRON_TERMINAL_EVENT_CHANNEL } from "../../shared/electron-bridge-contract";
+import {
+  ELECTRON_TERMINAL_EVENT_CHANNEL,
+  type ElectronTerminalEventEnvelope,
+} from "../../shared/electron-bridge-contract";
+
+const MAX_CLIENT_ID_LENGTH = 128;
 
 export type ElectronTerminalSender = {
   readonly id: number;
   isDestroyed(): boolean;
-  send(channel: string, frame: Uint8Array): void;
+  send(channel: string, envelope: ElectronTerminalEventEnvelope): void;
 };
 
-const isClientMessage = (message: { type: string }): message is TerminalClientMessage =>
-  message.type === "attach" ||
-  message.type === "input" ||
-  message.type === "resize" ||
-  message.type === "ack" ||
-  message.type === "detach";
+const readClientId = (clientId: unknown): Effect.Effect<string, ElectronValidationError> =>
+  typeof clientId === "string" && clientId.length > 0 && clientId.length <= MAX_CLIENT_ID_LENGTH
+    ? Effect.succeed(clientId)
+    : Effect.fail(
+        new ElectronValidationError({
+          operation: "electron.terminal.client",
+          field: "clientId",
+          message: "Electron terminal client IDs must contain between 1 and 128 characters.",
+        }),
+      );
 
 export const shouldDetachTerminalSenderForNavigation = (details: {
   isMainFrame: boolean;
@@ -28,37 +41,34 @@ export const shouldDetachTerminalSenderForNavigation = (details: {
 }): boolean => details.isMainFrame && !details.isSameDocument;
 
 export const createElectronTerminalIpcController = (terminalService: TerminalService) => {
-  const attachedBySender = new Map<number, Set<string>>();
-  const senderOperations = new Map<number, Effect.Semaphore>();
-  const attachmentId = (senderId: number, terminalId: string): string =>
-    `electron:${senderId}:${terminalId}`;
-  const serializeSenderOperations = <Success, Failure>(
-    senderId: number,
-    operation: Effect.Effect<Success, Failure>,
-  ): Effect.Effect<Success, Failure> => {
-    const semaphore = senderOperations.get(senderId) ?? Effect.unsafeMakeSemaphore(1);
-    senderOperations.set(senderId, semaphore);
-    return semaphore.withPermits(1)(operation);
-  };
-  const detachSenderAttachments = (senderId: number): Effect.Effect<void, TerminalServiceError> =>
-    Effect.gen(function* () {
-      const terminalIds = attachedBySender.get(senderId) ?? new Set();
-      attachedBySender.delete(senderId);
-      for (const terminalId of terminalIds) {
-        yield* terminalService
-          .detach(terminalId, attachmentId(senderId, terminalId))
-          .pipe(
-            Effect.catchTag("TerminalServiceError", (error) =>
-              error.code === "terminal_not_found" ? Effect.void : Effect.fail(error),
-            ),
-          );
-      }
+  const clientsBySender = new Map<number, Map<string, TerminalClientSession>>();
+  const getClient = (sender: ElectronTerminalSender, clientId: string): TerminalClientSession => {
+    const senderClients =
+      clientsBySender.get(sender.id) ?? new Map<string, TerminalClientSession>();
+    const existing = senderClients.get(clientId);
+    if (existing) return existing;
+    const client = createTerminalClientSession({
+      clientId: `electron:${sender.id}:${clientId}`,
+      terminalService,
+      send: (message, payload) => {
+        if (sender.isDestroyed()) return;
+        sender.send(ELECTRON_TERMINAL_EVENT_CHANNEL, {
+          clientId,
+          frame: encodeTerminalProtocolFrame({ message, payload }),
+        });
+      },
     });
-  const processFrame = (
+    senderClients.set(clientId, client);
+    clientsBySender.set(sender.id, senderClients);
+    return client;
+  };
+  const handleFrame = (
     sender: ElectronTerminalSender,
+    rawClientId: unknown,
     rawFrame: unknown,
-  ): Effect.Effect<void, TerminalServiceError | ElectronValidationError> =>
+  ): Effect.Effect<void, ElectronValidationError> =>
     Effect.gen(function* () {
+      const clientId = yield* readClientId(rawClientId);
       if (!(rawFrame instanceof Uint8Array)) {
         return yield* Effect.fail(
           new ElectronValidationError({
@@ -78,7 +88,7 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
             cause,
           }),
       });
-      if (!isClientMessage(frame.message)) {
+      if (!isTerminalClientMessage(frame.message)) {
         return yield* Effect.fail(
           new ElectronValidationError({
             operation: "electron.terminal.direction",
@@ -87,74 +97,28 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
           }),
         );
       }
-      const message = frame.message;
-      const id = attachmentId(sender.id, message.terminalId);
-      if (message.type === "attach") {
-        const result = yield* Effect.either(
-          terminalService.attach({
-            terminalId: message.terminalId,
-            attachmentId: id,
-            lastConsumedSequence: message.lastConsumedSequence,
-            sink: (event, payload) => {
-              if (!sender.isDestroyed()) {
-                sender.send(
-                  ELECTRON_TERMINAL_EVENT_CHANNEL,
-                  encodeTerminalProtocolFrame({ message: event, payload }),
-                );
-              }
-            },
-          }),
-        );
-        if (result._tag === "Left") {
-          if (!sender.isDestroyed()) {
-            const code =
-              result.left.code === "terminal_not_found" ? "terminal_forgotten" : result.left.code;
-            sender.send(
-              ELECTRON_TERMINAL_EVENT_CHANNEL,
-              encodeTerminalProtocolFrame({
-                message: {
-                  version: TERMINAL_PROTOCOL_VERSION,
-                  type: "protocol_error",
-                  terminalId: message.terminalId,
-                  failure: {
-                    code,
-                    message: result.left.message,
-                    terminalId: message.terminalId,
-                  },
-                },
-                payload: new Uint8Array(),
-              }),
-            );
-          }
-          return;
-        }
-        const attached = attachedBySender.get(sender.id) ?? new Set<string>();
-        attached.add(message.terminalId);
-        attachedBySender.set(sender.id, attached);
-        return;
-      }
-      if (message.type === "input") {
-        return yield* terminalService.write(message.terminalId, frame.payload);
-      }
-      if (message.type === "resize") {
-        return yield* terminalService.resize(message.terminalId, {
-          columns: message.columns,
-          rows: message.rows,
-        });
-      }
-      if (message.type === "ack") {
-        return yield* terminalService.acknowledge(message.terminalId, id, message.sequenceEnd);
-      }
-      const attached = attachedBySender.get(sender.id);
-      attached?.delete(message.terminalId);
-      return yield* terminalService.detach(message.terminalId, id);
+      yield* getClient(sender, clientId).handle(frame.message, frame.payload);
+    });
+  const detachClient = (
+    senderId: number,
+    rawClientId: unknown,
+  ): Effect.Effect<void, TerminalServiceError | ElectronValidationError> =>
+    Effect.gen(function* () {
+      const clientId = yield* readClientId(rawClientId);
+      const senderClients = clientsBySender.get(senderId);
+      if (!senderClients) return;
+      const client = senderClients.get(clientId);
+      if (!client) return;
+      yield* client.close();
+      senderClients.delete(clientId);
+      if (senderClients.size === 0) clientsBySender.delete(senderId);
     });
   const detachSender = (senderId: number): Effect.Effect<void, TerminalServiceError> =>
-    serializeSenderOperations(senderId, detachSenderAttachments(senderId));
-  const handleFrame = (
-    sender: ElectronTerminalSender,
-    rawFrame: unknown,
-  ): Effect.Effect<void, TerminalServiceError | ElectronValidationError> =>
-    serializeSenderOperations(sender.id, processFrame(sender, rawFrame));
-  return { detachSender, handleFrame };
+    Effect.gen(function* () {
+      const clients = [...(clientsBySender.get(senderId)?.values() ?? [])];
+      clientsBySender.delete(senderId);
+      yield* Effect.forEach(clients, (client) => client.close(), { concurrency: 1 });
+    });
+
+  return { detachClient, detachSender, handleFrame };
 };

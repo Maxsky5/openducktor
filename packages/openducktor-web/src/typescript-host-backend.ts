@@ -120,7 +120,7 @@ const tryUpgradeTerminalWebSocket = ({
     data: {
       connectionId: globalThis.crypto.randomUUID(),
       terminalService: hostCommandRouter.terminalService,
-      attachments: new Set(),
+      clientSession: null,
       backpressured: false,
       inFlightBytes: 0,
       pendingBytes: 0,

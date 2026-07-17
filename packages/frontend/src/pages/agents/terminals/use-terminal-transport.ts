@@ -34,7 +34,11 @@ export const useTerminalTransport = (
     );
     setScopedController({ scopeKey, controller });
     void controller.connect().catch(() => undefined);
-    return () => controller.dispose();
+    return () => {
+      void controller.dispose().catch((cause: unknown) => {
+        console.error("Failed to disconnect terminal transport.", cause);
+      });
+    };
   }, [bridge, handleProtocolFailure, handleStateChange, scopeKey]);
 
   return {

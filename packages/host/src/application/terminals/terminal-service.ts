@@ -94,15 +94,11 @@ export const createTerminalService = ({
                 const terminalId = idFactory();
                 const summary: TerminalSummary = {
                   terminalId,
-                  hostInstanceId,
                   label: plan.cwd,
                   context: input.context,
                   initialWorkingDir: plan.cwd,
-                  initialWorkingDirAvailable: true,
                   createdAt: now().toISOString(),
                   lifecycle: "starting",
-                  connectionState: "disconnected",
-                  attentionState: "none",
                   exit: null,
                 };
                 const started = yield* engine.start(summary, plan);
@@ -112,18 +108,10 @@ export const createTerminalService = ({
           );
         }),
       list: (rawFilter) =>
-        Effect.gen(function* () {
-          const filter = terminalListFilterSchema.parse(rawFilter);
-          const matching = engine.list(filter);
-          const terminals: TerminalSummary[] = [];
-          for (const summary of matching) {
-            const directory = yield* Effect.either(filesystem.stat(summary.initialWorkingDir));
-            const available = directory._tag === "Right" && directory.right.isDirectory;
-            engine.setInitialWorkingDirAvailable(summary.terminalId, available);
-            terminals.push({ ...summary, initialWorkingDirAvailable: available });
-          }
-          return { hostInstanceId, terminals };
-        }),
+        Effect.sync(() => ({
+          hostInstanceId,
+          terminals: engine.list(terminalListFilterSchema.parse(rawFilter)),
+        })),
       attach: engine.attach,
       write: engine.write,
       resize: engine.resize,

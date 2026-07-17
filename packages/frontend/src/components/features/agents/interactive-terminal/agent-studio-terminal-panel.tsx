@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { terminalTabLabel } from "@/pages/agents/terminals/terminal-presentation-state";
 import type {
   AgentStudioTerminalPanelModel,
   AgentStudioTerminalTab,
@@ -277,7 +278,9 @@ export function AgentStudioTerminalPanel({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Terminate and close {closeCandidate?.label}?</DialogTitle>
+            <DialogTitle>
+              Terminate and close {closeCandidate ? terminalTabLabel(closeCandidate) : "terminal"}?
+            </DialogTitle>
             <DialogDescription>
               This stops the running process tree. This action cannot be undone.
             </DialogDescription>

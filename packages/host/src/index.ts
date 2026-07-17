@@ -33,6 +33,10 @@ export {
 } from "./application/agent-sessions/live-state-coordinator";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
 export {
+  createTerminalClientSession,
+  type TerminalClientSession,
+} from "./application/terminals/terminal-client-session";
+export {
   createTerminalService,
   type TerminalService,
   TerminalServiceError,

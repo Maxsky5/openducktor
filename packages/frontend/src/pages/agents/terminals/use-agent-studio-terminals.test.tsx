@@ -7,7 +7,8 @@ import { act, render, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
+import { terminalTabLabel, terminalTabLifecycle } from "./terminal-presentation-state";
+import { type AgentStudioTerminalTab, useAgentStudioTerminals } from "./use-agent-studio-terminals";
 
 if (typeof document === "undefined") {
   GlobalRegistrator.register();
@@ -15,17 +16,18 @@ if (typeof document === "undefined") {
 
 const summaryForTask = (taskId: string): TerminalSummary => ({
   terminalId: `terminal-${taskId}`,
-  hostInstanceId: "host-1",
   label: "Shell 1",
   context: { taskId },
   initialWorkingDir: `/repo/worktrees/${taskId}`,
-  initialWorkingDirAvailable: true,
   createdAt: "2026-07-13T00:00:00.000Z",
   lifecycle: "running",
-  connectionState: "connected",
-  attentionState: "none",
   exit: null,
 });
+
+const requireTab = (tab: AgentStudioTerminalTab | undefined): AgentStudioTerminalTab => {
+  if (!tab) throw new Error("Expected a terminal tab.");
+  return tab;
+};
 
 type TerminalTestDependencies = NonNullable<Parameters<typeof useAgentStudioTerminals>[1]>;
 
@@ -199,7 +201,7 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() => expect(getLatest().isLoading).toBe(false));
       act(() => getLatest().onCreate());
       await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("creating"));
-      expect(getLatest().tabs[0]?.label).toBe("/repo/worktrees/task-a");
+      expect(terminalTabLabel(requireTab(getLatest().tabs[0]))).toBe("/repo/worktrees/task-a");
     } finally {
       resolveCreate({
         ref: { terminalId: "terminal-created" },
@@ -302,7 +304,7 @@ describe("useAgentStudioTerminals", () => {
         "terminal-task-a-2",
         "terminal-task-a",
       ]);
-      expect(getLatest().tabs[1]?.label).toBe("pnpm run dev");
+      expect(terminalTabLabel(requireTab(getLatest().tabs[1]))).toBe("pnpm run dev");
 
       await act(refresh);
 
@@ -310,7 +312,7 @@ describe("useAgentStudioTerminals", () => {
         "terminal-task-a-2",
         "terminal-task-a",
       ]);
-      expect(getLatest().tabs[1]?.label).toBe("pnpm run dev");
+      expect(terminalTabLabel(requireTab(getLatest().tabs[1]))).toBe("pnpm run dev");
     } finally {
       view.unmount();
     }
@@ -350,7 +352,9 @@ describe("useAgentStudioTerminals", () => {
       };
 
       act(() => getLatest().onTitleChange("terminal-task-a", "pnpm run dev"));
-      await waitFor(() => expect(getLatest().tabs[0]?.label).toBe("pnpm run dev"));
+      await waitFor(() =>
+        expect(terminalTabLabel(requireTab(getLatest().tabs[0]))).toBe("pnpm run dev"),
+      );
 
       expect({
         onToggle: getLatest().onToggle,
@@ -584,7 +588,7 @@ describe("useAgentStudioTerminals", () => {
       expect(getLatest().tabs).toHaveLength(1);
       expect(getLatest().tabs[0]).toMatchObject({
         terminalId: "terminal-created",
-        label: "/repo/worktrees/task-a",
+        summary: { label: "/repo/worktrees/task-a" },
         requestState: "ready",
       });
       expect(typeof getLatest().tabs[0]?.tabId).toBe("string");
@@ -689,13 +693,13 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a"), {
         timeout: 2_000,
       });
-      expect(getLatest().tabs[0]).toHaveProperty("lifecycle", "running");
+      expect(terminalTabLifecycle(requireTab(getLatest().tabs[0]))).toBe("running");
 
       act(() => getLatest().onLifecycle("terminal-task-a", "exited"));
       await act(refetchTerminalList);
 
       expect(terminalListCalls).toBeGreaterThanOrEqual(2);
-      expect(getLatest().tabs[0]).toHaveProperty("lifecycle", "exited");
+      expect(terminalTabLifecycle(requireTab(getLatest().tabs[0]))).toBe("exited");
     } finally {
       view.unmount();
     }
@@ -732,7 +736,6 @@ describe("useAgentStudioTerminals", () => {
       expect(getLatest().tabs[0]).toMatchObject({
         tabId: "lost:terminal-task-a",
         terminalId: null,
-        lifecycle: null,
         requestState: "lost",
       });
       expect(getLatest().tabs[0]?.error).toContain(

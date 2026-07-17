@@ -1,14 +1,17 @@
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
+  isTerminalClientMessage,
   TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   TERMINAL_PROTOCOL_VERSION,
-  type TerminalClientMessage,
   type TerminalFailure,
   type TerminalServerMessage,
-  terminalFailureCodeSchema,
 } from "@openducktor/contracts";
-import type { TerminalService } from "@openducktor/host";
+import {
+  createTerminalClientSession,
+  type TerminalClientSession,
+  type TerminalService,
+} from "@openducktor/host";
 import { Effect } from "effect";
 import { type WebLogger, writeWebLogEffect } from "../logger";
 
@@ -18,7 +21,7 @@ const EMPTY_PAYLOAD: Uint8Array = new Uint8Array(0);
 export type TerminalWebSocketData = {
   connectionId: string;
   terminalService: TerminalService;
-  attachments: Set<string>;
+  clientSession: TerminalClientSession | null;
   backpressured: boolean;
   inFlightBytes: number;
   pendingBytes: number;
@@ -26,16 +29,6 @@ export type TerminalWebSocketData = {
   logger: WebLogger;
   onBackgroundFailure(failure: unknown): void;
 };
-
-const isClientMessage = (message: { type: string }): message is TerminalClientMessage =>
-  message.type === "attach" ||
-  message.type === "input" ||
-  message.type === "resize" ||
-  message.type === "ack" ||
-  message.type === "detach";
-
-const attachmentId = (data: TerminalWebSocketData, terminalId: string): string =>
-  `browser:${data.connectionId}:${terminalId}`;
 
 const closeForQueueOverflow = (socket: Bun.ServerWebSocket<TerminalWebSocketData>): void => {
   socket.close(1013, "Terminal outbound queue limit exceeded.");
@@ -82,35 +75,18 @@ const sendProtocolError = (
     failure,
   });
 
-const handleClientMessage = (
+const getClientSession = (
   socket: Bun.ServerWebSocket<TerminalWebSocketData>,
-  message: TerminalClientMessage,
-  payload: Uint8Array,
-) => {
-  const service = socket.data.terminalService;
-  const id = attachmentId(socket.data, message.terminalId);
-  if (message.type === "attach") {
-    return service
-      .attach({
-        terminalId: message.terminalId,
-        attachmentId: id,
-        lastConsumedSequence: message.lastConsumedSequence,
-        sink: (event, eventPayload) => sendMessage(socket, event, eventPayload),
-      })
-      .pipe(Effect.tap(() => Effect.sync(() => socket.data.attachments.add(message.terminalId))));
-  }
-  if (message.type === "input") return service.write(message.terminalId, payload);
-  if (message.type === "resize") {
-    return service.resize(message.terminalId, {
-      columns: message.columns,
-      rows: message.rows,
-    });
-  }
-  if (message.type === "ack") {
-    return service.acknowledge(message.terminalId, id, message.sequenceEnd);
-  }
-  socket.data.attachments.delete(message.terminalId);
-  return service.detach(message.terminalId, id);
+): TerminalClientSession => {
+  const existing = socket.data.clientSession;
+  if (existing) return existing;
+  const clientSession = createTerminalClientSession({
+    clientId: `browser:${socket.data.connectionId}`,
+    terminalService: socket.data.terminalService,
+    send: (message, payload) => sendMessage(socket, message, payload),
+  });
+  socket.data.clientSession = clientSession;
+  return clientSession;
 };
 
 const runClientMessage = (
@@ -144,7 +120,7 @@ const runClientMessage = (
     );
     return;
   }
-  if (!isClientMessage(decoded.message)) {
+  if (!isTerminalClientMessage(decoded.message)) {
     sendProtocolError(socket, {
       code: "protocol_error",
       message: "Browser terminal traffic must use a client message type.",
@@ -152,33 +128,7 @@ const runClientMessage = (
     socket.close(1002, "Invalid terminal message direction.");
     return;
   }
-  Effect.runFork(
-    handleClientMessage(socket, decoded.message, decoded.payload).pipe(
-      Effect.catchAll((cause: unknown) =>
-        Effect.sync(() => {
-          const terminalId = decoded.message.terminalId;
-          const parsedCode =
-            typeof cause === "object" && cause !== null && "code" in cause
-              ? terminalFailureCodeSchema.safeParse(cause.code)
-              : null;
-          const code = parsedCode?.success ? parsedCode.data : "protocol_error";
-          const clientCode =
-            decoded.message.type === "attach" && code === "terminal_not_found"
-              ? "terminal_forgotten"
-              : code;
-          sendProtocolError(
-            socket,
-            {
-              code: clientCode,
-              message: cause instanceof Error ? cause.message : String(cause),
-              terminalId,
-            },
-            terminalId,
-          );
-        }),
-      ),
-    ),
-  );
+  Effect.runFork(getClientSession(socket).handle(decoded.message, decoded.payload));
 };
 
 export const terminalWebSocketHandler: Bun.WebSocketHandler<TerminalWebSocketData> = {
@@ -197,20 +147,17 @@ export const terminalWebSocketHandler: Bun.WebSocketHandler<TerminalWebSocketDat
     }
   },
   close(socket) {
-    const { attachments, connectionId, logger, onBackgroundFailure, terminalService } = socket.data;
-    for (const terminalId of attachments) {
+    const { clientSession, connectionId, logger, onBackgroundFailure } = socket.data;
+    socket.data.clientSession = null;
+    if (!clientSession) return;
+    void Effect.runPromise(clientSession.close()).catch((cause: unknown) => {
       void Effect.runPromise(
-        terminalService.detach(terminalId, `browser:${connectionId}:${terminalId}`),
-      ).catch((cause: unknown) => {
-        void Effect.runPromise(
-          writeWebLogEffect(
-            logger,
-            "error",
-            `Failed to detach terminal ${terminalId} from browser connection ${connectionId}: ${cause instanceof Error ? cause.message : String(cause)}`,
-          ),
-        ).catch(onBackgroundFailure);
-      });
-    }
-    attachments.clear();
+        writeWebLogEffect(
+          logger,
+          "error",
+          `Failed to detach terminals from browser connection ${connectionId}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        ),
+      ).catch(onBackgroundFailure);
+    });
   },
 };

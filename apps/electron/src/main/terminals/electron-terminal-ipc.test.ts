@@ -31,12 +31,44 @@ describe("Electron terminal IPC", () => {
       },
       payload: new Uint8Array(),
     });
-    await Effect.runPromise(controller.handleFrame(sender, frame));
+    await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
     await Effect.runPromise(controller.detachSender(sender.id));
-    expect(calls).toEqual(["attach:electron:7:terminal-1", "detach:electron:7:terminal-1"]);
-    await expect(Effect.runPromise(controller.handleFrame(sender, "bad"))).rejects.toThrow(
-      "Uint8Array",
-    );
+    expect(calls).toEqual([
+      "attach:electron:7:client-a:terminal-1",
+      "detach:electron:7:client-a:terminal-1",
+    ]);
+    await expect(
+      Effect.runPromise(controller.handleFrame(sender, "client-a", "bad")),
+    ).rejects.toThrow("Uint8Array");
+  });
+
+  test("disconnects one logical renderer client without waiting for WebContents teardown", async () => {
+    const calls: string[] = [];
+    const terminalService = {
+      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+        Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
+      detach: (_terminalId: string, attachmentId: string) =>
+        Effect.sync(() => calls.push(`detach:${attachmentId}`)),
+    } as TerminalService;
+    const controller = createElectronTerminalIpcController(terminalService);
+    const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
+    const frame = encodeTerminalProtocolFrame({
+      message: {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "attach",
+        terminalId: "terminal-1",
+        lastConsumedSequence: null,
+      },
+      payload: new Uint8Array(),
+    });
+
+    await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
+    await Effect.runPromise(controller.detachClient(sender.id, "client-a"));
+
+    expect(calls).toEqual([
+      "attach:electron:7:client-a:terminal-1",
+      "detach:electron:7:client-a:terminal-1",
+    ]);
   });
 
   test("keeps live attachments during same-document main-frame navigation", async () => {
@@ -63,6 +95,7 @@ describe("Electron terminal IPC", () => {
     await Effect.runPromise(
       controller.handleFrame(
         sender,
+        "client-a",
         encodeTerminalProtocolFrame({
           message: {
             version: TERMINAL_PROTOCOL_VERSION,
@@ -83,6 +116,7 @@ describe("Electron terminal IPC", () => {
       Effect.runPromise(
         controller.handleFrame(
           sender,
+          "client-a",
           encodeTerminalProtocolFrame({
             message: {
               version: TERMINAL_PROTOCOL_VERSION,
@@ -125,13 +159,14 @@ describe("Electron terminal IPC", () => {
     const sender = {
       id: 7,
       isDestroyed: () => false,
-      send: (_channel: string, frame: Uint8Array) => sent.push(frame),
+      send: (_channel: string, envelope: { frame: Uint8Array }) => sent.push(envelope.frame),
     };
 
     for (let index = 0; index < 100; index += 1) {
       await Effect.runPromise(
         controller.handleFrame(
           sender,
+          "client-a",
           encodeTerminalProtocolFrame({
             message: {
               version: TERMINAL_PROTOCOL_VERSION,
@@ -213,19 +248,31 @@ describe("Electron terminal IPC", () => {
       });
 
     await Effect.runPromise(
-      controller.handleFrame(sender, frame({ type: "attach", lastConsumedSequence: null })),
+      controller.handleFrame(
+        sender,
+        "client-a",
+        frame({ type: "attach", lastConsumedSequence: null }),
+      ),
     );
-    const detaching = Effect.runPromise(controller.handleFrame(sender, frame({ type: "detach" })));
+    const detaching = Effect.runPromise(
+      controller.handleFrame(sender, "client-a", frame({ type: "detach" })),
+    );
     await detachStarted;
     const replacing = Effect.runPromise(
-      controller.handleFrame(sender, frame({ type: "attach", lastConsumedSequence: null })),
+      controller.handleFrame(
+        sender,
+        "client-a",
+        frame({ type: "attach", lastConsumedSequence: null }),
+      ),
     );
 
     releaseDetach();
     await Promise.all([detaching, replacing]);
 
     await expect(
-      Effect.runPromise(controller.handleFrame(sender, frame({ type: "ack", sequenceEnd: 1 }))),
+      Effect.runPromise(
+        controller.handleFrame(sender, "client-a", frame({ type: "ack", sequenceEnd: 1 })),
+      ),
     ).resolves.toBeUndefined();
     expect(operations).toEqual(["attach", "detach:start", "detach:complete", "attach"]);
   });

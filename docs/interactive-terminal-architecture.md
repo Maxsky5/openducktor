@@ -55,4 +55,5 @@ addressed by an opaque terminal ID. Browser traffic requires the established Htt
 an allowed loopback frontend origin, and the exact terminal protocol version.
 
 Electron packaging keeps `node-pty` as a production dependency, unpacks its native files from ASAR,
-and runs an `afterPack` check for the platform binding and helper executable.
+and relies on Electron Builder's declarative dependency and ASAR configuration. The terminal
+feature adds no dependency-specific packaging script.

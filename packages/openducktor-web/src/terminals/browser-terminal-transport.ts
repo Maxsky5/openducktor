@@ -54,7 +54,7 @@ export const createBrowserTerminalBridge = (): TerminalBridge => ({
             }
             socket.send(frame);
           },
-          close: () => {
+          close: async () => {
             socket.close(1000, "Terminal renderer disconnected.");
             onStateChange("disconnected");
           },

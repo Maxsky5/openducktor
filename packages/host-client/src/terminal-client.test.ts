@@ -4,15 +4,11 @@ import { HostTerminalClient, HostTerminalClientError } from "./terminal-client";
 
 const summary = {
   terminalId: "terminal-1",
-  hostInstanceId: "host-1",
   label: "Shell 1",
   context: { taskId: "task-1" },
   initialWorkingDir: "/repo/worktree",
-  initialWorkingDirAvailable: true,
   createdAt: "2026-07-12T00:00:00.000Z",
   lifecycle: "running",
-  connectionState: "disconnected",
-  attentionState: "none",
   exit: null,
 };
 

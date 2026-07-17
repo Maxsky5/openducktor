@@ -88,7 +88,6 @@ export const createTerminalSessionLifecycle = ({
 
   const handleFailure = (session: TerminalSession): void => {
     session.summary.lifecycle = "close_failed";
-    session.summary.attentionState = "close_failed";
     emitLifecycle(session);
   };
 
@@ -128,7 +127,6 @@ export const createTerminalSessionLifecycle = ({
     if (session.summary.lifecycle === "exited") return;
     session.handle = null;
     session.summary.lifecycle = "exited";
-    if (!session.overflowed) session.summary.attentionState = "exited";
     session.summary.exit = {
       exitCode,
       signal,
@@ -142,7 +140,6 @@ export const createTerminalSessionLifecycle = ({
   function terminateForOverflow(session: TerminalSession): void {
     if (session.overflowed) return;
     session.overflowed = true;
-    session.summary.attentionState = "overflow";
     for (const attachment of session.attachments.values()) {
       applyStreamEvents(
         session,
@@ -166,12 +163,7 @@ export const createTerminalSessionLifecycle = ({
 
   function applyStreamEvents(session: TerminalSession, events: TerminalStreamEvents): void {
     for (const event of events) {
-      if (event.type === "incomplete_replay") {
-        session.summary.connectionState = "incomplete_replay";
-        session.summary.attentionState = "incomplete_replay";
-      } else if (event.type === "attachments_empty") {
-        session.summary.connectionState = "disconnected";
-      } else if (event.type === "overflow") {
+      if (event.type === "overflow") {
         terminateForOverflow(session);
       } else if (event.type === "pause_requested" && session.handle) {
         Effect.runFork(
