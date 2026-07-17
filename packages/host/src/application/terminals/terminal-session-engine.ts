@@ -23,6 +23,7 @@ import {
   type TerminalSession,
   type TerminalSessionAttachInput,
 } from "./terminal-session-stream";
+import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-stream";
@@ -30,9 +31,11 @@ export type { TerminalSessionAttachInput } from "./terminal-session-stream";
 export const createTerminalSessionEngine = ({
   now,
   ptyPort,
+  scheduleTitleSettlement,
 }: {
   now: () => Date;
   ptyPort: TerminalPtyPort;
+  scheduleTitleSettlement?: TerminalTitleSettlementScheduler;
 }) => {
   const sessions = new Map<string, TerminalSession>();
   const stream = createTerminalSessionStream();
@@ -79,7 +82,10 @@ export const createTerminalSessionEngine = ({
     ): Effect.Effect<TerminalSummary, TerminalServiceError> =>
       Effect.gen(function* () {
         let session: TerminalSession;
-        const titleTracker = createTerminalTitleTracker((title) => publishTitle(session, title));
+        const titleTracker = createTerminalTitleTracker(
+          (title) => publishTitle(session, title),
+          scheduleTitleSettlement,
+        );
         session = {
           summary,
           titleTracker,

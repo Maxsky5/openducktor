@@ -22,6 +22,7 @@ import {
   createTerminalSessionEngine,
   type TerminalSessionAttachInput,
 } from "./terminal-session-engine";
+import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
 const DEFAULT_GRID: TerminalGrid = { columns: 80, rows: 24 };
 
@@ -59,6 +60,7 @@ type CreateTerminalServiceInput = {
   now?: () => Date;
   idFactory?: () => string;
   hostInstanceIdFactory?: () => string;
+  scheduleTitleSettlement?: TerminalTitleSettlementScheduler;
 };
 
 export const createTerminalService = ({
@@ -68,10 +70,15 @@ export const createTerminalService = ({
   now = () => new Date(),
   idFactory = () => globalThis.crypto.randomUUID(),
   hostInstanceIdFactory = () => globalThis.crypto.randomUUID(),
+  scheduleTitleSettlement,
 }: CreateTerminalServiceInput): Effect.Effect<TerminalService> =>
   Effect.gen(function* () {
     const hostInstanceId = hostInstanceIdFactory();
-    const engine = createTerminalSessionEngine({ now, ptyPort });
+    const engine = createTerminalSessionEngine({
+      now,
+      ptyPort,
+      ...(scheduleTitleSettlement ? { scheduleTitleSettlement } : {}),
+    });
     const launch = createTerminalLaunchPolicy({
       filesystem,
       resolveEnvironment: resolveLaunchEnvironment,

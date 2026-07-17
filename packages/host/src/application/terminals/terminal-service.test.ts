@@ -10,6 +10,7 @@ import {
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { createTerminalService } from "./terminal-service";
+import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
 let directoryAvailable = true;
 const filesystem: FilesystemPort = {
@@ -75,26 +76,47 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
   };
 };
 
+const makeTitleSettlementScheduler = () => {
+  const scheduled = new Set<() => void>();
+  const schedule: TerminalTitleSettlementScheduler = (_delay, settle) => {
+    scheduled.add(settle);
+    return () => scheduled.delete(settle);
+  };
+  return {
+    schedule,
+    flush: () => {
+      const pending = [...scheduled];
+      scheduled.clear();
+      for (const settle of pending) settle();
+    },
+  };
+};
+
 const makeService = async (
   pty = makePty(),
   idFactory: () => string = () => "terminal-1",
   filesystemPort: FilesystemPort = filesystem,
-) => ({
-  pty,
-  service: await Effect.runPromise(
-    createTerminalService({
-      filesystem: filesystemPort,
-      ptyPort: pty.port,
-      resolveLaunchEnvironment: createTerminalLaunchEnvironment({
-        processEnv: { SHELL: "/bin/zsh", PATH: "/usr/bin" },
-        platform: "darwin",
+) => {
+  const titleSettlement = makeTitleSettlementScheduler();
+  return {
+    pty,
+    settleTitles: titleSettlement.flush,
+    service: await Effect.runPromise(
+      createTerminalService({
+        filesystem: filesystemPort,
+        ptyPort: pty.port,
+        resolveLaunchEnvironment: createTerminalLaunchEnvironment({
+          processEnv: { SHELL: "/bin/zsh", PATH: "/usr/bin" },
+          platform: "darwin",
+        }),
+        idFactory,
+        hostInstanceIdFactory: () => "host-1",
+        now: () => new Date("2026-07-12T00:00:00.000Z"),
+        scheduleTitleSettlement: titleSettlement.schedule,
       }),
-      idFactory,
-      hostInstanceIdFactory: () => "host-1",
-      now: () => new Date("2026-07-12T00:00:00.000Z"),
-    }),
-  ),
-});
+    ),
+  };
+};
 
 describe("TerminalService", () => {
   beforeEach(() => {
@@ -113,11 +135,11 @@ describe("TerminalService", () => {
   });
 
   test("lists the latest terminal title without changing the initial directory", async () => {
-    const { service, pty } = await makeService();
+    const { service, pty, settleTitles } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
 
     pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/projects/openducktor\u0007"));
-    await Bun.sleep(75);
+    settleTitles();
 
     const listed = await Effect.runPromise(service.list({ kind: "unassociated" }));
     expect(listed.terminals[0]).toMatchObject({
@@ -127,17 +149,17 @@ describe("TerminalService", () => {
 
     pty.emit(new TextEncoder().encode("\u001b]2;pnpm "));
     pty.emit(new TextEncoder().encode("run dev\u001b\\"));
-    await Bun.sleep(75);
+    settleTitles();
 
     const updated = await Effect.runPromise(service.list({ kind: "unassociated" }));
     expect(updated.terminals[0]?.label).toBe("pnpm run dev");
   });
 
   test("publishes the current title on attach and later title changes as metadata", async () => {
-    const { service, pty } = await makeService();
+    const { service, pty, settleTitles } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/repo\u0007"));
-    await Bun.sleep(75);
+    settleTitles();
     const events: unknown[] = [];
 
     await Effect.runPromise(
@@ -152,14 +174,14 @@ describe("TerminalService", () => {
     expect(events[0]).toMatchObject({ type: "snapshot", title: "~/repo" });
 
     pty.emit(new TextEncoder().encode("\u001b]2;pnpm run dev\u0007"));
-    await Bun.sleep(75);
+    settleTitles();
     expect(events).toContainEqual(
       expect.objectContaining({ type: "title", title: "pnpm run dev" }),
     );
   });
 
   test("publishes only the settled title for a fast shell command", async () => {
-    const { service, pty } = await makeService();
+    const { service, pty, settleTitles } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const events: Array<{ type: string; title?: string }> = [];
 
@@ -175,7 +197,7 @@ describe("TerminalService", () => {
     pty.emit(new TextEncoder().encode("\u001b]2;cd /tmp\u0007"));
     pty.emit(new TextEncoder().encode("\u001b]0;user@host:/tmp\u0007"));
 
-    await Bun.sleep(75);
+    settleTitles();
 
     expect(events.filter((event) => event.type === "title")).toEqual([
       expect.objectContaining({ type: "title", title: "/tmp" }),
@@ -183,7 +205,7 @@ describe("TerminalService", () => {
   });
 
   test("cancels an unsettled title when the terminal closes", async () => {
-    const { service, pty } = await makeService();
+    const { service, pty, settleTitles } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const events: Array<{ type: string }> = [];
     await Effect.runPromise(
@@ -197,7 +219,7 @@ describe("TerminalService", () => {
 
     pty.emit(new TextEncoder().encode("\u001b]2;pnpm run dev\u0007"));
     await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true }));
-    await Bun.sleep(75);
+    settleTitles();
 
     expect(events.some((event) => event.type === "title")).toBe(false);
   });
@@ -469,7 +491,7 @@ describe("TerminalService", () => {
   });
 
   test("keeps tracking titles while a failed close remains retryable", async () => {
-    const { service, pty } = await makeService();
+    const { service, pty, settleTitles } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.failNextTerminate();
 
@@ -478,7 +500,7 @@ describe("TerminalService", () => {
     ).rejects.toThrow();
 
     pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/still-running\u0007"));
-    await Bun.sleep(75);
+    settleTitles();
 
     const listed = await Effect.runPromise(service.list({ kind: "all" }));
     expect(listed.terminals[0]).toMatchObject({
