@@ -1,4 +1,5 @@
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
@@ -14,6 +15,7 @@ import {
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
+import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import {
   applyAgentSessionLiveDelta,
@@ -126,10 +128,22 @@ export const useRepoSessionReadModel = ({
       }
     };
     const applyPendingApprovalPolicy = (actions: PendingApprovalPolicyAction[]): void => {
+      if (actions.length === 0) {
+        return;
+      }
+      const promptOverrides = loadEffectivePromptOverrides(repoPath, queryClient);
       for (const action of actions) {
         runOrchestratorSideEffect(
           "agent-session-live-auto-reject-mutating-approval",
-          liveSessionPort.agentSessionLiveReplyApproval(action.input),
+          promptOverrides.then((overrides) =>
+            liveSessionPort.agentSessionLiveReplyApproval({
+              ...action.input,
+              message: buildReadOnlyPermissionRejectionMessage({
+                role: action.role,
+                overrides,
+              }),
+            }),
+          ),
           {
             tags: {
               repoPath,

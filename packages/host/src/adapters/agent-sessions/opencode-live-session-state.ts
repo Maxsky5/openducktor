@@ -190,15 +190,19 @@ export const createOpenCodeLiveSessionState = ({
     ref: AgentSessionLiveRef,
     usage: OpencodeSessionContextUsage | null,
   ): { value: AgentSessionContextUsage | null; changes: AgentSessionLiveAdapterChange[] } => {
-    const retained = requireSession(ref);
-    if (retained.snapshot.contextUsage) {
+    const retained = sessionsByRef.get(refKey(ref));
+    if (retained?.snapshot.contextUsage) {
       return { value: retained.snapshot.contextUsage, changes: [] };
     }
     if (!usage) {
       return { value: null, changes: [] };
     }
+    const contextUsage = toContextUsage(usage);
+    if (!retained) {
+      return { value: contextUsage, changes: [] };
+    }
     const changes = retainContext(ref.externalSessionId, usage);
-    return { value: requireSession(ref).snapshot.contextUsage, changes };
+    return { value: contextUsage, changes };
   };
 
   const retainControlSummary = (
@@ -349,7 +353,7 @@ export const createOpenCodeLiveSessionState = ({
         : { type: "missing", ref: toSessionRef(ref) };
     },
     contextUsage: (ref: AgentSessionLiveRef): AgentSessionContextUsage | null =>
-      requireSession(ref).snapshot.contextUsage,
+      sessionsByRef.get(refKey(ref))?.snapshot.contextUsage ?? null,
     retainContext,
     applyLoadedContext,
     retainControlSummary,

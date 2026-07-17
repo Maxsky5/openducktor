@@ -645,4 +645,44 @@ describe("createAgentSessionLiveStateService", () => {
     await expect(Effect.runPromise(service.resumeSession(input))).resolves.toEqual(summary);
     expect(resumeInput).toEqual(input);
   });
+
+  test("routes an unloaded Codex session send through the repository runtime scope", async () => {
+    const { service } = createHarness();
+    let sendInput: unknown;
+    const accepted = {
+      type: "user_message" as const,
+      externalSessionId: "persisted-session",
+      timestamp: "2026-07-16T10:02:00.000Z",
+      messageId: "message-1",
+      message: "Continue",
+      parts: [{ kind: "text" as const, text: "Continue" }],
+      state: "queued" as const,
+    };
+    const adapter = {
+      ...fakeAdapter({
+        runtimeId: "runtime-1",
+        snapshots: () => [],
+      }),
+      startSession: () => Effect.dieMessage("unexpected start"),
+      resumeSession: () => Effect.dieMessage("unexpected resume"),
+      forkSession: () => Effect.dieMessage("unexpected fork"),
+      sendUserMessage: (input) =>
+        Effect.sync(() => {
+          sendInput = input;
+          return accepted;
+        }),
+      updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      stopSession: () => Effect.dieMessage("unexpected stop"),
+      releaseSession: () => Effect.dieMessage("unexpected release"),
+    } satisfies AgentSessionRuntimeAdapterPort;
+    await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+    const input = {
+      ...sessionRef("persisted-session"),
+      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      parts: [{ kind: "text" as const, text: "Continue" }],
+    };
+
+    await expect(Effect.runPromise(service.sendUserMessage(input))).resolves.toEqual(accepted);
+    expect(sendInput).toEqual(input);
+  });
 });

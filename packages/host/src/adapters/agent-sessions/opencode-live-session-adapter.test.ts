@@ -378,6 +378,35 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     expect(harness.contextLoadCalls).toEqual(["session-1"]);
   });
 
+  test("loads context for a persisted session without retaining a live snapshot", async () => {
+    const harness = createRuntimeHarness();
+    harness.setSources([]);
+    const originalPrepare = harness.prepareRuntime;
+    const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
+      const prepared = await originalPrepare(input);
+      return {
+        ...prepared,
+        initialContextUsageBySessionId: new Map(),
+      };
+    };
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime,
+      })(runtime),
+    );
+
+    await expect(Effect.runPromise(prepared.adapter.loadContext(ref))).resolves.toEqual({
+      totalTokens: 999,
+      providerId: "openai",
+      modelId: "gpt-5.1",
+    });
+    expect(harness.contextLoadCalls).toEqual(["session-1"]);
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([]);
+  });
+
   test("keeps pending replies usable after context or native reply failures", async () => {
     const harness = createRuntimeHarness();
     const originalPrepare = harness.prepareRuntime;

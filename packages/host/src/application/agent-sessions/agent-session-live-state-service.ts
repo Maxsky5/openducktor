@@ -256,7 +256,7 @@ export const createAgentSessionLiveStateService = ({
         .pipe(Effect.flatMap((adapter) => adapter.forkSession(input))),
     sendUserMessage: (input) =>
       adapterRegistry
-        .resolveControl(input)
+        .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.sendUserMessage(input))),
     updateSessionModel: (input) =>
       adapterRegistry

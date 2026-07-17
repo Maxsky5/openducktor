@@ -4,12 +4,15 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveSnapshot,
   AgentSessionRecord,
+  RepoConfig,
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { summarizeAgentActivity } from "@/state/read-models/agent-activity-read-model";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import type { AgentSessionLiveFrontendPort } from "./use-repo-session-read-model";
 import { useRepoSessionReadModel } from "./use-repo-session-read-model";
@@ -341,6 +344,31 @@ describe("useRepoSessionReadModel", () => {
       },
       { ...record, role: "spec" },
     );
+    const repoConfig: RepoConfig = {
+      workspaceId: "/repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "codex",
+      branchPrefix: "odt/",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: { providers: {} },
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [],
+      promptOverrides: {
+        "permission.read_only.reject": {
+          template: "Custom read-only rejection for {{role}}.",
+          baseVersion: 1,
+          enabled: true,
+        },
+      },
+      worktreeCopyPaths: [],
+      agentDefaults: {},
+    };
+    state.queryClient.setQueryData(workspaceQueryKeys.repoConfig("/repo"), repoConfig);
+    state.queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture(),
+    );
 
     try {
       await state.harness.mount();
@@ -354,8 +382,7 @@ describe("useRepoSessionReadModel", () => {
           externalSessionId: "thread-1",
           requestId: "initial-mutating",
           outcome: "reject",
-          message:
-            "Rejected by OpenDucktor spec read-only policy: this role cannot use mutating tools in this session.",
+          message: "Custom read-only rejection for spec.",
         }),
       );
       expect(state.getSession()?.pendingApprovals.map(({ requestId }) => requestId)).toEqual([

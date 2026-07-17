@@ -1,9 +1,5 @@
 import type { AgentSessionLiveReplyApprovalInput } from "@openducktor/contracts";
-import {
-  type AgentRole,
-  buildReadOnlyPermissionRejectionMessage,
-  isReadOnlyAgentRole,
-} from "@openducktor/core";
+import { type AgentRole, isReadOnlyAgentRole } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -73,7 +69,6 @@ export const collectPendingApprovalPolicyActions = ({
           externalSessionId: responseSession.externalSessionId,
           requestId: approval.requestId,
           outcome: "reject",
-          message: buildReadOnlyPermissionRejectionMessage({ role, overrides: {} }),
         },
       });
     }

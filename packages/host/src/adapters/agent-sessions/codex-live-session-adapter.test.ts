@@ -17,7 +17,10 @@ import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
-import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
+import type {
+  CodexAppServerPort,
+  CodexAppServerRequestResult,
+} from "../../ports/codex-app-server-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createCodexLiveSessionAdapterPreparer } from "./codex-live-session-adapter";
 import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
@@ -232,6 +235,81 @@ const createControllerHarness = (
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
+  test("interrupts an active Codex turn before releasing its live projection", async () => {
+    const calls: unknown[] = [];
+    const interruptingCodexAppServer = {
+      ...codexAppServer,
+      request: (input: Parameters<CodexAppServerPort["request"]>[0]) => {
+        calls.push(input);
+        if (input.method === "thread/read") {
+          return Effect.succeed({
+            thread: {
+              id: "thread-1",
+              cwd: "/repo/worktree",
+              status: { type: "active", activeFlags: [] },
+            },
+          } as unknown as CodexAppServerRequestResult);
+        }
+        if (input.method === "thread/turns/list") {
+          return Effect.succeed({
+            data: [
+              {
+                id: "turn-1",
+                startedAt: 1_778_112_001,
+                completedAt: null,
+                durationMs: null,
+                error: null,
+                items: [],
+                itemsView: "summary",
+                status: "running",
+              },
+            ],
+            nextCursor: null,
+            backwardsCursor: null,
+          } as CodexAppServerRequestResult);
+        }
+        return Effect.succeed({} as CodexAppServerRequestResult);
+      },
+    } satisfies CodexAppServerPort;
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer: interruptingCodexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+
+    await Effect.runPromise(prepared.adapter.stopSession(ref));
+
+    expect(calls).toEqual([
+      {
+        runtimeId: "runtime-1",
+        method: "thread/read",
+        params: { threadId: "thread-1", includeTurns: false },
+      },
+      {
+        runtimeId: "runtime-1",
+        method: "thread/turns/list",
+        params: {
+          threadId: "thread-1",
+          limit: 20,
+          sortDirection: "desc",
+          itemsView: "summary",
+        },
+      },
+      {
+        runtimeId: "runtime-1",
+        method: "turn/interrupt",
+        params: { threadId: "thread-1", turnId: "turn-1" },
+      },
+    ]);
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([]);
+  });
+
   test("resolves and injects Codex policy behind the normalized control boundary", async () => {
     const policyScopes: AgentSessionWorkflowScope[] = [];
     const harness = createControllerHarness();

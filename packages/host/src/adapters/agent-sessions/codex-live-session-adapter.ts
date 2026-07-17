@@ -32,6 +32,7 @@ import type {
   PreparedRuntimeLiveSessionAdapter,
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
+import { stopCodexSession } from "../codex/codex-session-stop";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 
 type CodexSessionController = Pick<
@@ -292,6 +293,12 @@ export const createCodexLiveSessionAdapterPreparer =
         );
       };
 
+      const sessionError = (operation: string, externalSessionId: string) => (cause: unknown) =>
+        toHostOperationError(cause, operation, {
+          runtimeId: runtime.runtimeId,
+          externalSessionId,
+        });
+
       const adapter: AgentSessionRuntimeAdapterPort = {
         binding: {
           runtimeId: runtime.runtimeId,
@@ -311,11 +318,7 @@ export const createCodexLiveSessionAdapterPreparer =
                       runtimeId: runtime.runtimeId,
                       externalSessionId: input.externalSessionId,
                     }),
-                  catch: (cause) =>
-                    toHostOperationError(cause, "codex-live-session.load-context", {
-                      runtimeId: runtime.runtimeId,
-                      externalSessionId: input.externalSessionId,
-                    }),
+                  catch: sessionError("codex-live-session.load-context", input.externalSessionId),
                 })
               : yield* Effect.gen(function* () {
                   const sessionScope = input.sessionScope;
@@ -343,11 +346,10 @@ export const createCodexLiveSessionAdapterPreparer =
                         sessionScope,
                         runtimePolicy: { kind: "codex", policy },
                       }),
-                    catch: (cause) =>
-                      toHostOperationError(cause, "codex-live-session.load-persisted-context", {
-                        runtimeId: runtime.runtimeId,
-                        externalSessionId: input.externalSessionId,
-                      }),
+                    catch: sessionError(
+                      "codex-live-session.load-persisted-context",
+                      input.externalSessionId,
+                    ),
                   });
                 });
             const normalized = yield* parseOutput<AgentSessionContextUsage>(
@@ -368,11 +370,7 @@ export const createCodexLiveSessionAdapterPreparer =
                 outcome: input.outcome,
                 ...(input.message !== undefined ? { message: input.message } : {}),
               }),
-            catch: (cause) =>
-              toHostOperationError(cause, "codex-live-session.reply-approval", {
-                runtimeId: runtime.runtimeId,
-                externalSessionId: input.externalSessionId,
-              }),
+            catch: sessionError("codex-live-session.reply-approval", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         replyQuestion: (input) =>
           Effect.tryPromise({
@@ -383,11 +381,7 @@ export const createCodexLiveSessionAdapterPreparer =
                 requestId: input.requestId,
                 answers: input.answers,
               }),
-            catch: (cause) =>
-              toHostOperationError(cause, "codex-live-session.reply-question", {
-                runtimeId: runtime.runtimeId,
-                externalSessionId: input.externalSessionId,
-              }),
+            catch: sessionError("codex-live-session.reply-question", input.externalSessionId),
           }).pipe(
             Effect.flatMap((event) =>
               refreshProjection([{ ...event, sessionRef: toSessionRef(input) }]),
@@ -432,11 +426,10 @@ export const createCodexLiveSessionAdapterPreparer =
                   controller.sendUserMessage(
                     boundInput as Parameters<CodexSessionController["sendUserMessage"]>[0],
                   ),
-                catch: (cause) =>
-                  toHostOperationError(cause, "codex-live-session.send-user-message", {
-                    runtimeId: runtime.runtimeId,
-                    externalSessionId: input.externalSessionId,
-                  }),
+                catch: sessionError(
+                  "codex-live-session.send-user-message",
+                  input.externalSessionId,
+                ),
               }),
             ),
             Effect.flatMap((value) =>
@@ -459,29 +452,27 @@ export const createCodexLiveSessionAdapterPreparer =
                 ...input,
                 ...(input.model ? { model: input.model } : {}),
               } as Parameters<CodexSessionController["updateSessionModel"]>[0]),
-            catch: (cause) =>
-              toHostOperationError(cause, "codex-live-session.update-session-model", {
-                runtimeId: runtime.runtimeId,
-                externalSessionId: input.externalSessionId,
-              }),
+            catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         stopSession: (input) =>
-          Effect.tryPromise({
-            try: () => controller.stopSession(input),
-            catch: (cause) =>
-              toHostOperationError(cause, "codex-live-session.stop-session", {
-                runtimeId: runtime.runtimeId,
-                externalSessionId: input.externalSessionId,
+          stopCodexSession({
+            codexAppServer,
+            runtimeId: runtime.runtimeId,
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          }).pipe(
+            Effect.flatMap(() =>
+              Effect.tryPromise({
+                try: () => controller.stopSession(input),
+                catch: sessionError("codex-live-session.stop-session", input.externalSessionId),
               }),
-          }).pipe(Effect.tap(() => refreshProjection())),
+            ),
+            Effect.tap(() => refreshProjection()),
+          ),
         releaseSession: (input) =>
           Effect.tryPromise({
             try: () => controller.releaseSession(input),
-            catch: (cause) =>
-              toHostOperationError(cause, "codex-live-session.release-session", {
-                runtimeId: runtime.runtimeId,
-                externalSessionId: input.externalSessionId,
-              }),
+            catch: sessionError("codex-live-session.release-session", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
       };
 
