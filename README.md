@@ -112,6 +112,15 @@ That keeps the workflow task-centric and auditable: agents act through a control
   - More runtimes may be added through the runtime descriptor and adapter model.
 - The project is still early and should be treated as an active prototype
 
+## Troubleshooting Logs
+
+OpenDucktor keeps application lifecycle logs in `~/.openducktor/logs` by default, or in `$OPENDUCKTOR_CONFIG_DIR/logs` when the config directory is overridden.
+
+- Electron desktop logs: `openducktor-electron-YYYY-MM-DD.log`
+- Local web runner logs: `openducktor-web-YYYY-MM-DD.log`
+
+Files rotate on the host's local calendar day. OpenDucktor retains the current date and the preceding 29 dates.
+
 ## Documentation
 
 - [docs/README.md](docs/README.md)

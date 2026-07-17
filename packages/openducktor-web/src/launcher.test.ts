@@ -13,6 +13,13 @@ import {
   stopLauncherServices,
   waitForBackend,
 } from "./launcher-support";
+import type { WebLogger } from "./logger";
+
+const testLogger: WebLogger = {
+  error() {},
+  info() {},
+  success() {},
+};
 
 const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
   return { exited } as Bun.Subprocess;
@@ -119,6 +126,7 @@ describe("launcher internals", () => {
       {
         frontendServer,
         hostBackend,
+        logger: testLogger,
       },
       {
         closeServer: async (server) => {
@@ -265,6 +273,7 @@ describe("launcher internals", () => {
         {
           frontendServer: null,
           hostBackend,
+          logger: testLogger,
         },
         {
           closeServer: async () => {},
@@ -279,6 +288,7 @@ describe("launcher internals", () => {
         {
           frontendServer: null,
           hostBackend,
+          logger: testLogger,
         },
         {
           closeServer: async () => {},

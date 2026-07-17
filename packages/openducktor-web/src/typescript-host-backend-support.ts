@@ -14,7 +14,7 @@ import {
   WebResourceError,
   WebValidationError,
 } from "./effect/web-errors";
-import { logError } from "./logger";
+import type { WebLogger } from "./logger";
 
 export type BufferedHostEvent = {
   id: number;
@@ -26,6 +26,7 @@ export type BufferedHostEventReplay = {
 };
 type StopTypescriptHostBackendServicesInput = {
   disposeHost: () => Effect.Effect<void, unknown>;
+  logger: WebLogger;
   resolveExited: (exitCode: number) => void;
   stopServer: () => void;
 };
@@ -211,6 +212,7 @@ export const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<str
 
 export const stopTypescriptHostBackendServicesEffect = ({
   disposeHost,
+  logger,
   resolveExited,
   stopServer,
 }: StopTypescriptHostBackendServicesInput): Effect.Effect<void, WebOperationError> =>
@@ -219,7 +221,7 @@ export const stopTypescriptHostBackendServicesEffect = ({
     const disposeExit = yield* Effect.exit(disposeHost());
     if (disposeExit._tag === "Failure") {
       exitCode = 1;
-      logError(Cause.pretty(disposeExit.cause));
+      logger.error(Cause.pretty(disposeExit.cause));
     }
     const stopServerExit = yield* Effect.exit(
       Effect.try({

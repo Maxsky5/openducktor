@@ -16,6 +16,21 @@ const readRepoFile = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
 
 describe("Electron main lifecycle policy", () => {
+  test("one persistent main logger is created before host resources and shared by lifecycle consumers", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+    const loggerCreationIndex = source.indexOf(
+      "const electronMainLogger = createElectronMainLogger();",
+    );
+
+    expect(loggerCreationIndex).toBeGreaterThanOrEqual(0);
+    expect(source.indexOf("const hostEventBus = createHostEventBus();")).toBeGreaterThan(
+      loggerCreationIndex,
+    );
+    expect(source).toContain("lifecycleLogger: electronMainLogger");
+    expect(source).toContain("logger: electronMainLogger");
+    expect(source).not.toContain("import { electronMainLogger }");
+  });
+
   test("main window uses the tracked application icon", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 

@@ -24,7 +24,7 @@ import {
   stopLauncherServicesEffect,
   waitForBackendEffect,
 } from "./launcher-support";
-import { logError, logInfo, logSuccess } from "./logger";
+import type { WebLogger } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import { startTypescriptHostBackendEffect } from "./typescript-host-backend";
 import { resolveWebRuntimeDistributionEffect } from "./web-runtime-distribution";
@@ -39,10 +39,10 @@ export type LauncherOptions = {
   readinessTimeoutMs?: number;
 };
 
-const logFrontendAvailability = (port: number): void => {
-  logSuccess("OpenDucktor web is ready:");
+const logFrontendAvailability = (port: number, logger: WebLogger): void => {
+  logger.success("OpenDucktor web is ready:");
   for (const url of buildFrontendDisplayUrls(port)) {
-    logSuccess(`  ➜  Local:   ${url}`);
+    logger.success(`  ➜  Local:   ${url}`);
   }
 };
 
@@ -74,11 +74,14 @@ const contentTypeForPath = (filePath: string): string => {
   }
 };
 
-const cleanupStartedFrontendServerEffect = (server: FrontendServer): Effect.Effect<void> =>
+const cleanupStartedFrontendServerEffect = (
+  server: FrontendServer,
+  logger: WebLogger,
+): Effect.Effect<void> =>
   Effect.gen(function* () {
     const closeExit = yield* Effect.exit(closeFrontendServerEffect(server));
     if (closeExit._tag === "Failure") {
-      logError(errorMessage(causeToWebBoundaryError(closeExit.cause)));
+      logger.error(errorMessage(causeToWebBoundaryError(closeExit.cause)));
     }
   });
 
@@ -86,6 +89,7 @@ const startViteServerEffect = (
   options: LauncherOptions,
   backendUrl: string,
   appToken: string,
+  logger: WebLogger,
 ): Effect.Effect<ViteDevServer, WebError> =>
   Effect.gen(function* () {
     const { createServer } = yield* Effect.tryPromise({
@@ -151,11 +155,11 @@ const startViteServerEffect = (
         ).pipe(
           Effect.catchAll((error) =>
             Effect.gen(function* () {
-              yield* cleanupStartedFrontendServerEffect(server);
+              yield* cleanupStartedFrontendServerEffect(server, logger);
               return yield* error;
             }),
           ),
-          Effect.onInterrupt(() => cleanupStartedFrontendServerEffect(server)),
+          Effect.onInterrupt(() => cleanupStartedFrontendServerEffect(server, logger)),
         );
         return server;
       }),
@@ -247,12 +251,16 @@ const startFrontendServerEffect = (
   options: LauncherOptions,
   backendUrl: string,
   appToken: string,
+  logger: WebLogger,
 ): Effect.Effect<FrontendServer, WebError> =>
   options.workspaceMode
-    ? startViteServerEffect(options, backendUrl, appToken)
+    ? startViteServerEffect(options, backendUrl, appToken, logger)
     : startStaticFrontendServerEffect(options, backendUrl, appToken);
 
-export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<number, WebError> =>
+export const runLauncherEffect = (
+  options: LauncherOptions,
+  logger: WebLogger,
+): Effect.Effect<number, WebError> =>
   Effect.gen(function* () {
     const readinessTimeoutMs = options.readinessTimeoutMs ?? 60_000;
     const frontendUrl = buildFrontendUrl(options.frontendPort);
@@ -289,6 +297,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
         appToken,
         providedToolPaths,
         runtimeDistribution,
+        logger,
       }),
       (hostBackend) =>
         Effect.gen(function* () {
@@ -299,17 +308,17 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
 
           const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
             Effect.gen(function* () {
-              logInfo("Stopping OpenDucktor frontend server...");
-              logInfo("Stopping OpenDucktor TypeScript host services...");
+              logger.info("Stopping OpenDucktor frontend server...");
+              logger.info("Stopping OpenDucktor TypeScript host services...");
 
               yield* stopLauncherServicesEffect(
-                { frontendServer, hostBackend },
+                { frontendServer, hostBackend, logger },
                 {
                   closeServer: (server) => runWebBoundary(closeFrontendOnceEffect(server)),
                   stopHost: (backend) => backend.stop(),
                 },
               );
-              logSuccess("OpenDucktor web stopped.");
+              logger.success("OpenDucktor web stopped.");
             });
 
           const stopEffect = (): Effect.Effect<void, WebError> =>
@@ -334,21 +343,21 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
             if (terminationStarted) {
               if (!duplicateTerminationNoticeLogged) {
                 duplicateTerminationNoticeLogged = true;
-                logInfo(
+                logger.info(
                   "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
                 );
               }
               return;
             }
             terminationStarted = true;
-            logInfo(`Stopping OpenDucktor web after ${signal}...`);
+            logger.info(`Stopping OpenDucktor web after ${signal}...`);
 
             void stopForSignal().then(
               () => {
                 process.exit(exitCode);
               },
               (error: unknown) => {
-                logError(errorMessage(error));
+                logger.error(errorMessage(error));
                 process.exit(1);
               },
             );
@@ -366,21 +375,21 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
               Effect.gen(function* () {
                 const launcherExit = yield* Effect.exit(
                   Effect.gen(function* () {
-                    logInfo("Starting OpenDucktor TypeScript host...");
-                    logInfo("Waiting for OpenDucktor TypeScript host readiness...");
+                    logger.info("Starting OpenDucktor TypeScript host...");
+                    logger.info("Waiting for OpenDucktor TypeScript host readiness...");
                     yield* waitForBackendEffect(
                       backendUrl,
                       appToken,
                       readinessTimeoutMs,
                       hostBackend,
                     );
-                    logInfo("Starting OpenDucktor frontend server...");
+                    logger.info("Starting OpenDucktor frontend server...");
                     return yield* Effect.acquireUseRelease(
-                      startFrontendServerEffect(options, backendUrl, appToken),
+                      startFrontendServerEffect(options, backendUrl, appToken, logger),
                       (server) =>
                         Effect.gen(function* () {
                           frontendServer = server;
-                          logFrontendAvailability(options.frontendPort);
+                          logFrontendAvailability(options.frontendPort, logger);
 
                           const exitCode = yield* Effect.tryPromise({
                             try: () => hostBackend.exited,
@@ -395,11 +404,11 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
                           if (stopStarted) {
                             yield* stopEffect();
                           } else {
-                            logInfo(
+                            logger.info(
                               "OpenDucktor TypeScript host exited; stopping frontend server...",
                             );
                             yield* closeFrontendOnceEffect(server);
-                            logSuccess("OpenDucktor web stopped.");
+                            logger.success("OpenDucktor web stopped.");
                             servicesReleased = true;
                           }
                           return exitCode;
@@ -408,7 +417,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
                         Effect.gen(function* () {
                           const closeExit = yield* Effect.exit(closeFrontendOnceEffect(server));
                           if (closeExit._tag === "Failure") {
-                            logError(errorMessage(causeToWebBoundaryError(closeExit.cause)));
+                            logger.error(errorMessage(causeToWebBoundaryError(closeExit.cause)));
                           }
                         }),
                     );
@@ -421,7 +430,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
 
                 const stopExit = yield* Effect.exit(stopEffect());
                 if (stopExit._tag === "Failure") {
-                  logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+                  logger.error(errorMessage(causeToWebBoundaryError(stopExit.cause)));
                 }
                 return yield* causeToWebBoundaryError(launcherExit.cause);
               }),
@@ -432,7 +441,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
                 if (!servicesReleased) {
                   const stopExit = yield* Effect.exit(stopEffect());
                   if (stopExit._tag === "Failure") {
-                    logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+                    logger.error(errorMessage(causeToWebBoundaryError(stopExit.cause)));
                   }
                 }
               }),
@@ -446,15 +455,15 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
           const stopExit = yield* Effect.exit(
             stopEffectRef
               ? stopEffectRef()
-              : stopLauncherServicesEffect({ frontendServer, hostBackend }),
+              : stopLauncherServicesEffect({ frontendServer, hostBackend, logger }),
           );
           servicesReleased = true;
           if (stopExit._tag === "Failure") {
-            logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+            logger.error(errorMessage(causeToWebBoundaryError(stopExit.cause)));
           }
         }),
     );
   });
 
-export const runLauncher = (options: LauncherOptions): Promise<number> =>
-  runWebBoundary(runLauncherEffect(options));
+export const runLauncher = (options: LauncherOptions, logger: WebLogger): Promise<number> =>
+  runWebBoundary(runLauncherEffect(options, logger));

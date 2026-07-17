@@ -49,6 +49,11 @@ export {
   parseHostEventChannel,
 } from "./events/host-event-bus";
 export {
+  createOpenDucktorDailyLogWriter,
+  type OpenDucktorDailyLogWriter,
+  type OpenDucktorLogSurface,
+} from "./infrastructure/logging/openducktor-daily-log-writer";
+export {
   HOST_COMMAND_NAMES,
   type HostCommandName,
   isHostCommandName,

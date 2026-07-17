@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -8,6 +8,7 @@ import {
   type EffectHostCommandRouter,
 } from "@openducktor/host";
 import { Effect } from "effect";
+import { createWebLogger, type WebLogger } from "./logger";
 import {
   BufferedHostEventBus,
   stopTypescriptHostBackendServices,
@@ -28,6 +29,11 @@ const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
 const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../.."),
 );
+const testLogger: WebLogger = {
+  error() {},
+  info() {},
+  success() {},
+};
 
 class StructuredHostCommandFailure extends Error {
   readonly details: { readonly command: string; readonly failureKind: "timeout" };
@@ -100,6 +106,7 @@ const handleTestRequest = (
       eventBus: options.eventBus ?? new BufferedHostEventBus(),
       hostCommandRouter,
       localAttachments: createLocalAttachmentAdapter(),
+      logger: testLogger,
       request,
       shutdownStarted: options.shutdownStarted ?? false,
       beginShutdown: options.beginShutdown ?? (() => {}),
@@ -114,6 +121,15 @@ describe("TypeScript web host backend", () => {
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
     process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
+    const consoleLines: string[] = [];
+    const logger = createWebLogger({
+      console: {
+        error: (message) => consoleLines.push(message),
+        log: (message) => consoleLines.push(message),
+      },
+      environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
+      now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
+    });
 
     try {
       backend = await startTypescriptHostBackend({
@@ -121,6 +137,7 @@ describe("TypeScript web host backend", () => {
         frontendOrigin: FRONTEND_ORIGIN,
         controlToken: CONTROL_TOKEN,
         appToken: APP_TOKEN,
+        logger,
         runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
       });
       const backendUrl = `http://127.0.0.1:${backend.port}`;
@@ -164,6 +181,15 @@ describe("TypeScript web host backend", () => {
       });
       expect(shutdown.status).toBe(202);
       await expect(backend.exited).resolves.toBe(0);
+      const persisted = await readFile(
+        path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log"),
+        "utf8",
+      );
+      expect(persisted).toContain("INFO Shutting down OpenDucktor host services\n");
+      expect(persisted).toContain("INFO OpenDucktor host services stopped\n");
+      expect(
+        consoleLines.some((line) => line.includes("Shutting down OpenDucktor host services")),
+      ).toBe(true);
     } finally {
       if (backend) {
         await backend.stop();
@@ -362,6 +388,7 @@ describe("TypeScript web host backend", () => {
     await expect(
       stopTypescriptHostBackendServices({
         disposeHost: () => Effect.void,
+        logger: testLogger,
         resolveExited: (exitCode) => {
           resolvedExitCodes.push(exitCode);
         },
@@ -660,6 +687,7 @@ describe("TypeScript web host backend", () => {
       resolveExited: (exitCode) => {
         calls.push(`exited-${exitCode}`);
       },
+      logger: testLogger,
       stopServer: () => {
         calls.push("server-stopped");
       },

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { fileURLToPath } from "node:url";
 import { parseCliArgs } from "./cli";
 
 describe("web CLI argument parsing", () => {
@@ -48,4 +49,24 @@ describe("web CLI argument parsing", () => {
     expect(parseUnknownOption).toThrow("Unknown option: --unexpected");
     expect(parseUnknownOption).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
+
+  test("exits non-zero when persistent logging cannot resolve its config directory", async () => {
+    const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
+    const subprocess = Bun.spawn([process.execPath, cliPath, "--workspace"], {
+      env: {
+        ...process.env,
+        OPENDUCKTOR_CONFIG_DIR: "   ",
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+
+    const [exitCode, stderr] = await Promise.all([
+      subprocess.exited,
+      new Response(subprocess.stderr).text(),
+    ]);
+
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toContain("OPENDUCKTOR_CONFIG_DIR");
+  }, 5_000);
 });

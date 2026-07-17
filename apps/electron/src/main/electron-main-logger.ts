@@ -16,6 +16,7 @@ type ElectronMainLoggerInput = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
   stream?: LogStream;
+  writer?: OpenDucktorDailyLogWriter;
 };
 
 export type ElectronMainLogger = {
@@ -106,13 +107,17 @@ export const createElectronMainLogger = ({
   env = process.env,
   now = () => new Date(),
   stream = process.stderr,
+  writer = createOpenDucktorDailyLogWriter({ surface: "electron", environment: env, clock: now }),
 }: ElectronMainLoggerInput = {}): ElectronMainLogger => {
   const log = (level: LogLevel, message: string): void => {
+    const recordedAt = now();
     const useAnsi = shouldUseAnsi(env, stream);
-    const renderedTimestamp = colorize(useAnsi, ANSI_DIM, timestamp(now()));
+    const plainTimestamp = timestamp(recordedAt);
+    const renderedTimestamp = colorize(useAnsi, ANSI_DIM, plainTimestamp);
     const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
     const renderedMessage = colorMessage(useAnsi, level, message);
     stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
+    writer.append(recordedAt, `${plainTimestamp}  ${level} ${message}`);
   };
 
   return {
@@ -128,4 +133,4 @@ export const createElectronMainLogger = ({
   };
 };
 
-export const electronMainLogger = createElectronMainLogger();
+import { createOpenDucktorDailyLogWriter, type OpenDucktorDailyLogWriter } from "@openducktor/host";

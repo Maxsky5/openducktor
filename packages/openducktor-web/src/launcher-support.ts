@@ -9,7 +9,7 @@ import {
   type WebError,
   WebOperationError,
 } from "./effect/web-errors";
-import { logError } from "./logger";
+import type { WebLogger } from "./logger";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
@@ -32,6 +32,7 @@ type FrontendServerWithHttpConnections = FrontendServer & {
 type StopLauncherServicesInput = {
   frontendServer: FrontendServer | null;
   hostBackend: TypescriptHostBackend;
+  logger: WebLogger;
 };
 type LauncherShutdownDependencies = {
   closeServer: (server: FrontendServer | null) => Promise<void>;
@@ -343,7 +344,7 @@ const defaultLauncherShutdownDependencies: LauncherShutdownDependencies = {
 };
 
 export const stopLauncherServicesEffect = (
-  { frontendServer, hostBackend }: StopLauncherServicesInput,
+  { frontendServer, hostBackend, logger }: StopLauncherServicesInput,
   { closeServer, stopHost }: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
 ): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
@@ -380,7 +381,7 @@ export const stopLauncherServicesEffect = (
       .filter((result) => result._tag === "Failure")
       .map((result) => causeToWebBoundaryError(result.cause));
     for (const failure of shutdownFailures) {
-      logError(errorMessage(failure));
+      logger.error(errorMessage(failure));
     }
     if (hostStopExit._tag === "Failure") {
       const failure = launcherShutdownFailure(shutdownFailures);

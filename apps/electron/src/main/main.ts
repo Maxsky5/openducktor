@@ -66,7 +66,7 @@ import {
   createElectronMainShutdownController,
   runElectronMainStartupBoundary,
 } from "./electron-main-lifecycle";
-import { electronMainLogger } from "./electron-main-logger";
+import { createElectronMainLogger } from "./electron-main-logger";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
@@ -80,6 +80,7 @@ const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
 
+const electronMainLogger = createElectronMainLogger();
 const hostEventBus = createHostEventBus();
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
