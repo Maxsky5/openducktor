@@ -136,6 +136,7 @@ describe("createTerminalTransportController", () => {
   test("automatically reconnects and reattaches after transport loss", async () => {
     const sentByConnection: Uint8Array[][] = [];
     const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
+    const observedStates: Array<"connected" | "disconnected"> = [];
     const bridge: TerminalBridge = {
       connect: async (_onFrame, onStateChange) => {
         const sent: Uint8Array[] = [];
@@ -150,7 +151,9 @@ describe("createTerminalTransportController", () => {
         };
       },
     };
-    const controller = createTerminalTransportController(bridge, () => undefined);
+    const controller = createTerminalTransportController(bridge, (state) => {
+      observedStates.push(state);
+    });
     await controller.connect();
     controller.subscribe(terminalId, () => undefined);
     await Promise.resolve();
@@ -168,7 +171,177 @@ describe("createTerminalTransportController", () => {
       terminalId,
       lastConsumedSequence: 41,
     });
+    expect(observedStates).toEqual(["connected", "disconnected", "connected"]);
     controller.dispose();
+  });
+
+  test("reconnects when the initial attachment send fails", async () => {
+    const sentByConnection: string[][] = [];
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => {
+        connectionCount += 1;
+        const sent: string[] = [];
+        sentByConnection.push(sent);
+        return {
+          send: async (frame) => {
+            const type = decodeTerminalProtocolFrame(frame).message.type;
+            if (connectionCount === 1 && type === "attach") throw new Error("socket closed");
+            sent.push(type);
+          },
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    controller.subscribe(terminalId, () => undefined);
+
+    await expect(controller.connect()).rejects.toThrow("socket closed");
+    await Bun.sleep(10);
+
+    expect(connectionCount).toBe(2);
+    expect(sentByConnection[1]).toEqual(["attach"]);
+    await controller.dispose();
+  });
+
+  test("backs off when attachment sends fail repeatedly", async () => {
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => {
+        connectionCount += 1;
+        const attempt = connectionCount;
+        return {
+          send: async (frame) => {
+            const type = decodeTerminalProtocolFrame(frame).message.type;
+            if (attempt < 3 && type === "attach") throw new Error("socket closed");
+          },
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    controller.subscribe(terminalId, () => undefined);
+
+    await expect(controller.connect()).rejects.toThrow("socket closed");
+    await Bun.sleep(20);
+    expect(connectionCount).toBe(2);
+
+    await Bun.sleep(260);
+    expect(connectionCount).toBe(3);
+    await controller.dispose();
+  });
+
+  test("reconnects when closing the failed connection also fails", async () => {
+    const failures: string[] = [];
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => {
+        connectionCount += 1;
+        const attempt = connectionCount;
+        return {
+          send: async (frame) => {
+            const type = decodeTerminalProtocolFrame(frame).message.type;
+            if (attempt === 1 && type === "attach") throw new Error("socket closed");
+          },
+          close: async () => {
+            if (attempt === 1) throw new Error("close failed");
+          },
+        };
+      },
+    };
+    const controller = createTerminalTransportController(
+      bridge,
+      () => undefined,
+      (failure) => failures.push(failure.message),
+    );
+    controller.subscribe(terminalId, () => undefined);
+
+    await expect(controller.connect()).rejects.toThrow("socket closed");
+    await Bun.sleep(10);
+
+    expect(connectionCount).toBe(2);
+    expect(failures).toEqual(["socket closed", "close failed"]);
+    await controller.dispose();
+  });
+
+  test("does not restore a pending connection after it reports disconnection", async () => {
+    let resolveFirst = (_connection: TerminalTransportConnection): void => undefined;
+    let disconnectFirst = (): void => undefined;
+    const staleClosed: number[] = [];
+    const activeSent: string[] = [];
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: (_onFrame, onStateChange) => {
+        connectionCount += 1;
+        if (connectionCount === 1) {
+          disconnectFirst = () => onStateChange("disconnected");
+          return new Promise((resolve) => {
+            resolveFirst = resolve;
+          });
+        }
+        return Promise.resolve({
+          send: async (frame) => {
+            activeSent.push(decodeTerminalProtocolFrame(frame).message.type);
+          },
+          close: () => undefined,
+        });
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    const connecting = controller.connect();
+
+    await Promise.resolve();
+    disconnectFirst();
+    resolveFirst({
+      send: async () => undefined,
+      close: () => {
+        staleClosed.push(1);
+      },
+    });
+    await connecting;
+    await Bun.sleep(10);
+    await controller.write(terminalId, new Uint8Array([1]));
+
+    expect(staleClosed).toHaveLength(1);
+    expect(connectionCount).toBe(2);
+    expect(activeSent).toEqual(["input"]);
+    await controller.dispose();
+  });
+
+  test("does not lose a synchronous disconnection reported while connecting", async () => {
+    const staleClosed: number[] = [];
+    const activeSent: string[] = [];
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async (_onFrame, onStateChange) => {
+        connectionCount += 1;
+        if (connectionCount === 1) {
+          onStateChange("disconnected");
+          return {
+            send: async () => undefined,
+            close: () => {
+              staleClosed.push(1);
+            },
+          };
+        }
+        return {
+          send: async (frame) => {
+            activeSent.push(decodeTerminalProtocolFrame(frame).message.type);
+          },
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+
+    await controller.connect();
+    await Bun.sleep(10);
+    await controller.write(terminalId, new Uint8Array([1]));
+
+    expect(staleClosed).toHaveLength(1);
+    expect(connectionCount).toBe(2);
+    expect(activeSent).toEqual(["input"]);
+    await controller.dispose();
   });
 
   test("serializes ACK sends so an earlier consumed sequence cannot arrive after a later one", async () => {

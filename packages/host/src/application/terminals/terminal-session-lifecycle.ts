@@ -71,7 +71,7 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const emitLifecycle = (session: TerminalSession): void => {
-    for (const attachment of session.attachments.values()) {
+    for (const attachment of session.output.attachmentValues()) {
       applyStreamEvents(
         session,
         stream.publishSafely(session, attachment, {
@@ -111,7 +111,7 @@ export const createTerminalSessionLifecycle = ({
     );
     for (const session of new Set([...expired, ...overCapacity])) {
       disposeTerminalSession(session);
-      for (const attachment of session.attachments.values()) {
+      for (const attachment of session.output.attachmentValues()) {
         applyStreamEvents(
           session,
           stream.publishSafely(session, attachment, {
@@ -144,7 +144,7 @@ export const createTerminalSessionLifecycle = ({
 
   function terminateForOverflow(session: TerminalSession): void {
     if (!markTerminalOverflowed(session)) return;
-    for (const attachment of session.attachments.values()) {
+    for (const attachment of session.output.attachmentValues()) {
       applyStreamEvents(
         session,
         stream.publishSafely(session, attachment, {
@@ -154,11 +154,12 @@ export const createTerminalSessionLifecycle = ({
         }),
       );
     }
-    if (!session.handle) return;
+    const handle = session.resources.handle;
+    if (!handle) return;
     beginTerminalClose(session);
     emitLifecycle(session);
     Effect.runFork(
-      session.handle.terminate().pipe(
+      handle.terminate().pipe(
         Effect.tap(() => Effect.sync(() => handleExit(session, null, "output_overflow"))),
         Effect.tapError(() => Effect.sync(() => handleFailure(session))),
       ),
@@ -169,9 +170,9 @@ export const createTerminalSessionLifecycle = ({
     for (const event of events) {
       if (event.type === "overflow") {
         terminateForOverflow(session);
-      } else if (event.type === "pause_requested" && session.handle) {
+      } else if (event.type === "pause_requested" && session.resources.handle) {
         Effect.runFork(
-          session.handle
+          session.resources.handle
             .pauseOutput()
             .pipe(Effect.tapError(() => Effect.sync(() => terminateForOverflow(session)))),
         );
@@ -182,8 +183,9 @@ export const createTerminalSessionLifecycle = ({
   const closeSession = (session: TerminalSession, confirmTerminate: boolean) =>
     Effect.gen(function* () {
       const terminalId = session.summary.terminalId;
-      if (isLiveTerminal(session) && !confirmTerminate && session.handle) {
-        const inspection = yield* Effect.either(session.handle.hasChildProcesses());
+      const handle = session.resources.handle;
+      if (isLiveTerminal(session) && !confirmTerminate && handle) {
+        const inspection = yield* Effect.either(handle.hasChildProcesses());
         if (inspection._tag === "Left") {
           return yield* Effect.fail(
             terminalFailure(
@@ -206,10 +208,10 @@ export const createTerminalSessionLifecycle = ({
           );
         }
       }
-      if (session.handle) {
+      if (handle) {
         beginTerminalClose(session);
         emitLifecycle(session);
-        const result = yield* Effect.either(session.handle.terminate());
+        const result = yield* Effect.either(handle.terminate());
         if (result._tag === "Left") {
           handleFailure(session);
           return yield* Effect.fail(

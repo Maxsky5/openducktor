@@ -48,10 +48,10 @@ export const createTerminalSessionStream = () => {
       publish(attachment, event, payload);
       return { delivered: true, events: [] };
     } catch {
-      session.attachments.delete(attachment.attachmentId);
+      session.output.deleteAttachment(attachment.attachmentId);
       return {
         delivered: false,
-        events: session.attachments.size === 0 ? streamEvent("attachments_empty") : [],
+        events: session.output.attachmentCount === 0 ? streamEvent("attachments_empty") : [],
       };
     }
   };
@@ -63,24 +63,13 @@ export const createTerminalSessionStream = () => {
     payload: Uint8Array = EMPTY_PAYLOAD,
   ): TerminalStreamEvents => tryPublish(session, attachment, event, payload).events;
 
-  const appendReplay = (session: TerminalSession, chunk: ReplayChunk): void => {
-    session.replay.push(chunk);
-    session.replayBytes += chunk.data.byteLength;
-    while (session.replayBytes > TERMINAL_LIMITS.replayBytes) {
-      const removed = session.replay.shift();
-      if (!removed) {
-        break;
-      }
-      session.replayBytes -= removed.data.byteLength;
-    }
-  };
-
   const requestPause = (session: TerminalSession): TerminalStreamEvents => {
-    if (session.paused || !session.handle) return [];
-    if (!session.handle.supportsOutputPause) {
+    const handle = session.resources.handle;
+    if (session.output.paused || !handle) return [];
+    if (!handle.supportsOutputPause) {
       return streamEvent("overflow");
     }
-    session.paused = true;
+    session.output.pause();
     return streamEvent("pause_requested");
   };
 
@@ -128,7 +117,7 @@ export const createTerminalSessionStream = () => {
     replay: boolean,
   ): TerminalStreamEvents => {
     let events: TerminalStreamEvents = [];
-    const earliest = session.replay[0]?.sequenceStart ?? session.nextSequence;
+    const earliest = session.output.earliestRetainedSequence;
     if (attachment.deliveredSequence < earliest) {
       const published = tryPublish(session, attachment, {
         version: TERMINAL_PROTOCOL_VERSION,
@@ -144,7 +133,7 @@ export const createTerminalSessionStream = () => {
       attachment.pendingBytes = 0;
       events = mergeStreamEvents(events, streamEvent("incomplete_replay"));
     }
-    for (const chunk of session.replay) {
+    for (const chunk of session.output.replayChunks()) {
       const delivered = deliverChunk(session, attachment, chunk, replay);
       events = mergeStreamEvents(events, delivered.events);
       if (!delivered.delivered) break;
@@ -154,19 +143,13 @@ export const createTerminalSessionStream = () => {
 
   const handleOutput = (session: TerminalSession, data: Uint8Array): TerminalStreamEvents => {
     let events: TerminalStreamEvents = [];
-    if (data.byteLength === 0 || session.overflowed) {
+    if (data.byteLength === 0 || session.output.overflowed) {
       return events;
     }
     for (let offset = 0; offset < data.byteLength; offset += OUTPUT_CHUNK_BYTES) {
       const bytes = data.slice(offset, Math.min(data.byteLength, offset + OUTPUT_CHUNK_BYTES));
-      const chunk = {
-        sequenceStart: session.nextSequence,
-        sequenceEnd: session.nextSequence + bytes.byteLength,
-        data: bytes,
-      };
-      session.nextSequence = chunk.sequenceEnd;
-      appendReplay(session, chunk);
-      for (const attachment of session.attachments.values()) {
+      const chunk = session.output.append(bytes);
+      for (const attachment of session.output.attachmentValues()) {
         const delivered = deliverChunk(session, attachment, chunk, false);
         events = mergeStreamEvents(events, delivered.events);
       }
@@ -183,19 +166,19 @@ export const createTerminalSessionStream = () => {
   > =>
     Effect.gen(function* () {
       if (
-        !session.paused ||
-        ![...session.attachments.values()].every(
+        !session.output.paused ||
+        ![...session.output.attachmentValues()].every(
           (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
         )
       ) {
         return [];
       }
-      if (session.handle) {
-        yield* session.handle.resumeOutput();
+      if (session.resources.handle) {
+        yield* session.resources.handle.resumeOutput();
       }
-      session.paused = false;
+      session.output.resume();
       let events: TerminalStreamEvents = [];
-      for (const candidate of session.attachments.values()) {
+      for (const candidate of session.output.attachmentValues()) {
         events = mergeStreamEvents(events, flushAttachment(session, candidate, false));
       }
       return events;
