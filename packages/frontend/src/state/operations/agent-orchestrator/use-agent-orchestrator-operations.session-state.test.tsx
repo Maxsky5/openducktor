@@ -501,9 +501,14 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.run(() => {
         harness.getLatest().operations.updateAgentSessionModel(session, BUILD_SELECTION);
       });
-      await Promise.resolve();
-
-      const updatedSession = listHarnessSessions(harness.getLatest()).find(
+      const updated = await harness.waitFor((state) =>
+        listHarnessSessions(state).some(
+          (entry) =>
+            entry.externalSessionId === "external-1" &&
+            entry.selectedModel?.modelId === BUILD_SELECTION.modelId,
+        ),
+      );
+      const updatedSession = listHarnessSessions(updated).find(
         (entry) => entry.externalSessionId === "external-1",
       );
       expect(updatedSession?.selectedModel).toEqual(BUILD_SELECTION);
