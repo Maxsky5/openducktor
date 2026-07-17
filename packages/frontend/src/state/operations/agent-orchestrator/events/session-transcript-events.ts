@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { SessionTurnState } from "../support/session-turn-state";
 import {
-  closesQueuedSessionEvents,
   createSessionEventBatcher,
   isImmediateSessionEvent,
   type QueuedSessionEvent,
@@ -211,14 +210,7 @@ export const createAgentSessionTranscriptEventConsumer = (
     handle: (event) => {
       const sessionKey = agentSessionIdentityKey(toAgentSessionIdentity(event.sessionRef));
       if (isImmediateSessionEvent(event)) {
-        if (closesQueuedSessionEvents(event)) {
-          queuedEventsBySession.delete(sessionKey);
-          if (queuedEventsBySession.size === 0) {
-            cancelScheduledFlush();
-          }
-        } else {
-          forceFlushSession(sessionKey);
-        }
+        forceFlushSession(sessionKey);
         dispatchTranscriptEvent(dependencies, event);
         return;
       }

@@ -132,11 +132,6 @@ export const isImmediateSessionEvent = (event: SessionEvent): event is Immediate
   return IMMEDIATE_SESSION_EVENT_TYPES.has(event.type);
 };
 
-export const closesQueuedSessionEvents = (event: ImmediateSessionEvent): boolean =>
-  event.type === "session_error" ||
-  event.type === "session_finished" ||
-  event.type === "session_idle";
-
 const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
   events: Item[],
 ): QueuedSessionEventEntry<Item>[] => {

@@ -97,30 +97,35 @@ describe("agent session transcript event consumer", () => {
     consumer.close();
   });
 
-  test("drops deferred transcript chunks when an immediate terminal event closes the turn", () => {
-    const { consumer, sessionsRef } = createConsumerHarness(60_000);
+  for (const runtimeKind of ["codex", "opencode"] as const) {
+    test(`flushes the final ${runtimeKind} child message before the terminal event`, () => {
+      const childRef = { ...sessionRef, runtimeKind, externalSessionId: "child-thread" };
+      const child = buildSession({
+        externalSessionId: "child-thread",
+        role: null,
+        runtimeKind,
+      });
+      const { consumer, sessionsRef } = createConsumerHarness(60_000, child);
 
-    consumer.handle({
-      type: "assistant_part",
-      externalSessionId: "session-1",
-      timestamp: "2026-07-17T08:00:00.000Z",
-      part: {
-        kind: "text",
-        messageId: "assistant-1",
-        partId: "text-1",
-        text: "Stale deferred output",
-        completed: false,
-      },
-      sessionRef,
+      consumer.handle({
+        type: "assistant_message",
+        externalSessionId: "child-thread",
+        messageId: "assistant-child-2",
+        message: "New output while the transcript stays open",
+        timestamp: "2026-07-17T08:00:00.000Z",
+        sessionRef: childRef,
+      });
+      consumer.handle({
+        type: "session_idle",
+        externalSessionId: "child-thread",
+        timestamp: "2026-07-17T08:00:01.000Z",
+        sessionRef: childRef,
+      } satisfies AgentSessionTranscriptEvent);
+
+      expect(getSessionMessages(sessionsRef, "child-thread")).toEqual([
+        expect.objectContaining({ content: "New output while the transcript stays open" }),
+      ]);
+      consumer.close();
     });
-    consumer.handle({
-      type: "session_idle",
-      externalSessionId: "session-1",
-      timestamp: "2026-07-17T08:00:01.000Z",
-      sessionRef,
-    } satisfies AgentSessionTranscriptEvent);
-
-    expect(getSessionMessages(sessionsRef)).toEqual([]);
-    consumer.close();
-  });
+  }
 });

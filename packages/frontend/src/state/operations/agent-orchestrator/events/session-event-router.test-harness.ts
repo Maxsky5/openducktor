@@ -30,10 +30,6 @@ type FlushOptions = {
   force?: boolean;
 };
 
-type ImmediateOptions = {
-  clearQueuedSession?: boolean;
-};
-
 const routeSessionEvent = <Event extends SessionEvent>(
   context: ObserveAgentSessionParams,
   event: Event,
@@ -210,17 +206,14 @@ export const createSessionEventRouter = ({
     queuedEventsBySessionKey.set(sessionKey, deferredEvents);
   };
 
-  const handleImmediate = (event: SessionEvent, options: ImmediateOptions = {}): void => {
+  const handleImmediate = (event: SessionEvent): void => {
     if (clearIfSubscriptionSessionUnmounted()) {
       return;
     }
 
     const routedEvent = routeSessionEvent(context, event);
-    flushSession(routedEvent.routeKey);
+    flushSession(routedEvent.routeKey, { force: true });
     handleEvent(createRoutedSessionEventContext(context, routedEvent), event);
-    if (options.clearQueuedSession === true) {
-      clearSession(routedEvent.routeKey);
-    }
   };
 
   const flushSession = (sessionKey: string, options: FlushOptions = {}): number | null => {

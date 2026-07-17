@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  closesQueuedSessionEvents,
   createSessionEventBatcher,
   isImmediateSessionEvent,
   type QueuedSessionEvent,
@@ -253,43 +252,6 @@ describe("session-event-batching", () => {
         messageId: "assistant-1",
         delta: "Hello",
         timestamp: "2026-02-22T08:00:01.000Z",
-      }),
-    ).toBe(false);
-  });
-
-  test("classifies turn-closing immediate events as queued-event boundaries", async () => {
-    expect(
-      closesQueuedSessionEvents({
-        type: "session_idle",
-        externalSessionId: "session-1",
-        timestamp: "2026-02-22T08:00:01.000Z",
-      }),
-    ).toBe(true);
-    expect(
-      closesQueuedSessionEvents({
-        type: "session_finished",
-        externalSessionId: "session-1",
-        timestamp: "2026-02-22T08:00:01.000Z",
-        message: "done",
-      }),
-    ).toBe(true);
-    expect(
-      closesQueuedSessionEvents({
-        type: "session_error",
-        externalSessionId: "session-1",
-        timestamp: "2026-02-22T08:00:01.000Z",
-        message: "failed",
-      }),
-    ).toBe(true);
-    expect(
-      closesQueuedSessionEvents({
-        type: "user_message",
-        externalSessionId: "session-1",
-        messageId: "user-1",
-        timestamp: "2026-02-22T08:00:01.000Z",
-        message: "Continue",
-        parts: [{ kind: "text", text: "Continue" }],
-        state: "read",
       }),
     ).toBe(false);
   });

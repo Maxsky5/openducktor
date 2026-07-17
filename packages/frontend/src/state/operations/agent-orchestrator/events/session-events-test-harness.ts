@@ -36,11 +36,7 @@ import {
   getAgentSessionFixture,
   replaceAgentSessionFixture,
 } from "../test-utils";
-import {
-  closesQueuedSessionEvents,
-  createSessionEventBatcher,
-  isImmediateSessionEvent,
-} from "./session-event-batching";
+import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import { createSessionEventRouter } from "./session-event-router.test-harness";
 import type { ObserveAgentSessionParams, SessionEventAdapter } from "./session-event-test-types";
 import type {
@@ -160,9 +156,7 @@ const listenToAgentSessionEventsImpl = async (
 
   const unsubscribe = await context.adapter.subscribeEvents(context.sessionRef, (event) => {
     if (isImmediateSessionEvent(event)) {
-      router.handleImmediate(event, {
-        clearQueuedSession: closesQueuedSessionEvents(event),
-      });
+      router.handleImmediate(event);
       return;
     }
     if (router.enqueue(event)) {
