@@ -468,6 +468,28 @@ describe("TerminalService", () => {
     expect(pty.operations).toContain("terminate");
   });
 
+  test("keeps tracking titles while a failed close remains retryable", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    pty.failNextTerminate();
+
+    await expect(
+      Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true })),
+    ).rejects.toThrow();
+
+    pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/still-running\u0007"));
+    await Bun.sleep(75);
+
+    const listed = await Effect.runPromise(service.list({ kind: "all" }));
+    expect(listed.terminals[0]).toMatchObject({
+      label: "~/still-running",
+      lifecycle: "close_failed",
+    });
+
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true }));
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
+  });
+
   test("terminates independent sessions concurrently during host shutdown", async () => {
     let terminalId = 0;
     let startedTerminations = 0;

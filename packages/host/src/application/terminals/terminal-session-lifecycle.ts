@@ -87,7 +87,6 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const handleFailure = (session: TerminalSession): void => {
-    session.titleTracker.dispose();
     session.summary.lifecycle = "close_failed";
     emitLifecycle(session);
   };
@@ -205,7 +204,6 @@ export const createTerminalSessionLifecycle = ({
           );
         }
       }
-      session.titleTracker.dispose();
       if (session.handle) {
         session.summary.lifecycle = "closing";
         emitLifecycle(session);
@@ -223,6 +221,7 @@ export const createTerminalSessionLifecycle = ({
           );
         }
       }
+      session.titleTracker.dispose();
       sessions.delete(terminalId);
     });
 
