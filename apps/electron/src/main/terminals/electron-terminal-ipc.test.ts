@@ -85,4 +85,78 @@ describe("Electron terminal IPC", () => {
       }),
     ).toBe(true);
   });
+
+  test("serializes a replacement attach behind an in-flight detach", async () => {
+    let releaseDetach = (): void => {
+      throw new Error("The detach operation was not started.");
+    };
+    const detachBlocked = new Promise<void>((resolve) => {
+      releaseDetach = resolve;
+    });
+    let markDetachStarted = (): void => undefined;
+    const detachStarted = new Promise<void>((resolve) => {
+      markDetachStarted = resolve;
+    });
+    const attachments = new Set<string>();
+    const operations: string[] = [];
+    const terminalService = {
+      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+        Effect.sync(() => {
+          operations.push("attach");
+          attachments.add(input.attachmentId);
+        }),
+      detach: (_terminalId: string, attachmentId: string) =>
+        Effect.gen(function* () {
+          operations.push("detach:start");
+          markDetachStarted();
+          yield* Effect.promise(() => detachBlocked);
+          attachments.delete(attachmentId);
+          operations.push("detach:complete");
+        }),
+      acknowledge: (terminalId: string, attachmentId: string) =>
+        attachments.has(attachmentId)
+          ? Effect.void
+          : Effect.fail(
+              new TerminalServiceError({
+                code: "terminal_not_found",
+                operation: "ack",
+                message: `Terminal attachment not found: ${attachmentId}`,
+                terminalId,
+              }),
+            ),
+    } as TerminalService;
+    const controller = createElectronTerminalIpcController(terminalService);
+    const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
+    const frame = (
+      message:
+        | { type: "attach"; lastConsumedSequence: null }
+        | { type: "detach" }
+        | { type: "ack"; sequenceEnd: number },
+    ): Uint8Array =>
+      encodeTerminalProtocolFrame({
+        message: {
+          version: TERMINAL_PROTOCOL_VERSION,
+          terminalId: "terminal-1",
+          ...message,
+        },
+        payload: new Uint8Array(),
+      });
+
+    await Effect.runPromise(
+      controller.handleFrame(sender, frame({ type: "attach", lastConsumedSequence: null })),
+    );
+    const detaching = Effect.runPromise(controller.handleFrame(sender, frame({ type: "detach" })));
+    await detachStarted;
+    const replacing = Effect.runPromise(
+      controller.handleFrame(sender, frame({ type: "attach", lastConsumedSequence: null })),
+    );
+
+    releaseDetach();
+    await Promise.all([detaching, replacing]);
+
+    await expect(
+      Effect.runPromise(controller.handleFrame(sender, frame({ type: "ack", sequenceEnd: 1 }))),
+    ).resolves.toBeUndefined();
+    expect(operations).toEqual(["attach", "detach:start", "detach:complete", "attach"]);
+  });
 });

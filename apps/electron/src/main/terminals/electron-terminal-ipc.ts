@@ -24,9 +24,18 @@ const isClientMessage = (message: { type: string }): message is TerminalClientMe
 
 export const createElectronTerminalIpcController = (terminalService: TerminalService) => {
   const attachedBySender = new Map<number, Set<string>>();
+  const senderOperations = new Map<number, Effect.Semaphore>();
   const attachmentId = (senderId: number, terminalId: string): string =>
     `electron:${senderId}:${terminalId}`;
-  const detachSender = (senderId: number): Effect.Effect<void, TerminalServiceError> =>
+  const serializeSenderOperations = <Success, Failure>(
+    senderId: number,
+    operation: Effect.Effect<Success, Failure>,
+  ): Effect.Effect<Success, Failure> => {
+    const semaphore = senderOperations.get(senderId) ?? Effect.unsafeMakeSemaphore(1);
+    senderOperations.set(senderId, semaphore);
+    return semaphore.withPermits(1)(operation);
+  };
+  const detachSenderAttachments = (senderId: number): Effect.Effect<void, TerminalServiceError> =>
     Effect.gen(function* () {
       const terminalIds = attachedBySender.get(senderId) ?? new Set();
       attachedBySender.delete(senderId);
@@ -40,7 +49,7 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
           );
       }
     });
-  const handleFrame = (
+  const processFrame = (
     sender: ElectronTerminalSender,
     rawFrame: unknown,
   ): Effect.Effect<void, TerminalServiceError | ElectronValidationError> =>
@@ -135,5 +144,12 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
       attached?.delete(message.terminalId);
       return yield* terminalService.detach(message.terminalId, id);
     });
+  const detachSender = (senderId: number): Effect.Effect<void, TerminalServiceError> =>
+    serializeSenderOperations(senderId, detachSenderAttachments(senderId));
+  const handleFrame = (
+    sender: ElectronTerminalSender,
+    rawFrame: unknown,
+  ): Effect.Effect<void, TerminalServiceError | ElectronValidationError> =>
+    serializeSenderOperations(sender.id, processFrame(sender, rawFrame));
   return { detachSender, handleFrame };
 };
