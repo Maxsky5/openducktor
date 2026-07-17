@@ -148,6 +148,13 @@ describe("AgentStudioTerminalPanel", () => {
     expect(screen.queryByText("Terminate and close Shell 1?")).toBeNull();
   });
 
+  test("uses a pointer cursor for clickable terminal tabs", () => {
+    render(<AgentStudioTerminalPanel model={model} />);
+
+    const tab = screen.getByRole("tab", { name: "Shell 1, Lost after host restart" });
+    expect(tab.parentElement?.className).toContain("cursor-pointer");
+  });
+
   test("confirms only after the host reports a blocking command", async () => {
     const onClose = mock(async (_tab, confirmTerminate: boolean) =>
       confirmTerminate

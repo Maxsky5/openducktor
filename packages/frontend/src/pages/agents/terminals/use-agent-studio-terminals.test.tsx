@@ -887,6 +887,11 @@ describe("useAgentStudioTerminals", () => {
         "terminal-task-a",
       ]);
       expect(getLatest().activeTabId).toBe("tab:terminal-task-a-2");
+      expect(getLatest().focusRequest).toBe(1);
+      expect(getLatest().mountedTabs.map((tab) => tab.terminalId)).toEqual([
+        "terminal-task-a",
+        "terminal-task-a-2",
+      ]);
 
       view.rerender(
         <QueryProvider useIsolatedClient>

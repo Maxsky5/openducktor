@@ -167,14 +167,27 @@ export const handleTerminalMetadataFrame = (
 export const createTerminalOutputSequencer = ({
   write,
   onConsumed,
+  onHydrated = () => undefined,
 }: {
   write: (payload: Uint8Array, parsed: () => void) => void;
   onConsumed: (sequenceEnd: number) => void;
+  onHydrated?: () => void;
 }) => {
   let consumedSequence = 0;
+  let snapshotBoundary: number | null = null;
+  let hydrated = false;
   let epoch = 0;
   let queue = Promise.resolve();
+  const revealHydratedTerminal = (): void => {
+    if (hydrated || snapshotBoundary === null || consumedSequence < snapshotBoundary) return;
+    hydrated = true;
+    onHydrated();
+  };
   return {
+    setSnapshotBoundary(sequenceEnd: number): void {
+      snapshotBoundary = sequenceEnd;
+      revealHydratedTerminal();
+    },
     enqueue(
       frame: { sequenceStart: number; sequenceEnd: number },
       payload: Uint8Array,
@@ -193,6 +206,7 @@ export const createTerminalOutputSequencer = ({
             }
             consumedSequence = Math.max(consumedSequence, frame.sequenceEnd);
             onConsumed(frame.sequenceEnd);
+            revealHydratedTerminal();
             resolve();
           });
         });
@@ -204,7 +218,10 @@ export const createTerminalOutputSequencer = ({
       const resetEpoch = epoch;
       consumedSequence = Math.max(consumedSequence, sequence);
       queue = queue.then(() => {
-        if (resetEpoch === epoch) reset();
+        if (resetEpoch === epoch) {
+          reset();
+          revealHydratedTerminal();
+        }
       });
       return queue;
     },

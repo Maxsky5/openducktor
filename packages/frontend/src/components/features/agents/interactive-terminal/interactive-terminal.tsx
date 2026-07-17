@@ -3,6 +3,7 @@ import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/cont
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
 import {
   createLatestResizeScheduler,
@@ -56,6 +57,7 @@ export function InteractiveTerminal({
     onTitleChange,
   });
   const [interactionError, setInteractionError] = useState<string | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     callbacksRef.current = {
@@ -69,6 +71,7 @@ export function InteractiveTerminal({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    setIsHydrated(false);
     let generation = 0;
     const terminal = new Terminal({
       allowTransparency: true,
@@ -93,6 +96,9 @@ export function InteractiveTerminal({
       onConsumed: (sequenceEnd) => {
         if (generation !== 0) return;
         void controller.acknowledge(terminalId, sequenceEnd).catch(reportInteractionFailure);
+      },
+      onHydrated: () => {
+        if (generation === 0) setIsHydrated(true);
       },
     });
     const enqueueInput = createTerminalInputSequencer({
@@ -126,6 +132,9 @@ export function InteractiveTerminal({
       }),
     );
     const handleFrame = (message: TerminalServerMessage, payload: Uint8Array): void => {
+      if (message.type === "snapshot") {
+        outputSequencer.setSnapshotBoundary(message.snapshotSequenceEnd);
+      }
       const isReplayGap = message.type === "replay_gap";
       if (isReplayGap) {
         void outputSequencer
@@ -171,7 +180,7 @@ export function InteractiveTerminal({
     <div className="relative h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
       <div
         ref={containerRef}
-        className="h-full min-h-0 px-2 py-1"
+        className={cn("h-full min-h-0 px-2 py-1", !isHydrated && "invisible")}
         role="application"
         aria-label={`Interactive terminal ${terminalId}`}
       />

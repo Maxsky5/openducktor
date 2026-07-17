@@ -133,6 +133,15 @@ export const useAgentStudioTerminals = (
     const closingTabIdSet = new Set(visibleState.closingTabIds);
     return visibleState.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
   }, [visibleState.closingTabIds, visibleState.tabs]);
+  const mountedTabs = useMemo(
+    () =>
+      visibleState.tabs.toSorted((left, right) => {
+        const leftCreatedAt = left.summary?.createdAt ?? `~${left.tabId}`;
+        const rightCreatedAt = right.summary?.createdAt ?? `~${right.tabId}`;
+        return leftCreatedAt.localeCompare(rightCreatedAt);
+      }),
+    [visibleState.tabs],
+  );
   const isVisible = visibleState.visibility.isExplicit
     ? visibleState.visibility.value
     : visibleTabs.length > 0;
@@ -223,7 +232,7 @@ export const useAgentStudioTerminals = (
       scopeKey,
       taskId,
       tabs: visibleTabs,
-      mountedTabs: visibleState.tabs,
+      mountedTabs,
       activeTabId: visibleState.activeTabId,
       isVisible,
       isLoading: terminalQuery.isLoading || worktreeQuery.isLoading,
@@ -237,7 +246,9 @@ export const useAgentStudioTerminals = (
         if (scopeKey) dispatch({ type: "visibilitySet", scopeKey, value: false, isExplicit: true });
       },
       onSelectTab: (tabId: string) => {
-        if (scopeKey) dispatch({ type: "tabSelected", scopeKey, tabId });
+        if (!scopeKey) return;
+        dispatch({ type: "tabSelected", scopeKey, tabId });
+        dispatch({ type: "focusRequested", scopeKey });
       },
       onCreate: () => void createTerminal(),
       onRetryCreate: (tabId: string) => void createTerminal(tabId),
@@ -295,6 +306,7 @@ export const useAgentStudioTerminals = (
       dependencies.hostClient,
       focusRequest,
       isVisible,
+      mountedTabs,
       queryClient,
       repoPath,
       scopeKey,
@@ -303,7 +315,6 @@ export const useAgentStudioTerminals = (
       transportError,
       togglePanel,
       visibleState.activeTabId,
-      visibleState.tabs,
       visibleTabs,
       worktreeQuery.isLoading,
     ],

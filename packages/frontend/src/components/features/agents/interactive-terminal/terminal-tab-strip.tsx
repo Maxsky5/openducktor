@@ -71,7 +71,7 @@ function TerminalTabShell({
       style={style}
       data-dragging={isDragSource ? "true" : "false"}
       className={cn(
-        "group relative inline-flex h-8 min-w-52 max-w-80 shrink-0 touch-none select-none items-center",
+        "group relative inline-flex h-8 min-w-52 max-w-80 shrink-0 cursor-pointer touch-none select-none items-center font-mono text-[11px]",
         isDragSource && "opacity-0",
         isDragOverlay &&
           "z-50 border-r border-(--dev-server-terminal-border) border-t-4 border-t-selected-accent bg-(--dev-server-terminal-tab-active) text-(--dev-server-terminal-foreground)",
@@ -84,7 +84,10 @@ function TerminalTabShell({
         <TabsTrigger
           value={tab.tabId}
           aria-label={`${tab.label}, ${lifecycleText(tab)}`}
-          className={cn(terminalTabTriggerClassName, "h-8 w-full max-w-none flex-1 px-0 pr-8")}
+          className={cn(
+            terminalTabTriggerClassName,
+            "h-8 w-full max-w-none flex-1 cursor-pointer px-0 pr-8",
+          )}
           onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => event.preventDefault()}
           onMouseUp={(event: ReactMouseEvent<HTMLButtonElement>) => {
             if (shouldSuppressSelection) {

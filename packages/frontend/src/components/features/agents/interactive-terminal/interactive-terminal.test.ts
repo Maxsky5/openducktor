@@ -301,6 +301,43 @@ describe("InteractiveTerminal policies", () => {
     expect(acknowledgements).toEqual([2]);
   });
 
+  test("reveals a restored terminal only after its snapshot has been fully parsed", async () => {
+    const parserCallbacks: Array<() => void> = [];
+    const hydrationEvents: string[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (_payload, parsed) => parserCallbacks.push(parsed),
+      onConsumed: () => undefined,
+      onHydrated: () => hydrationEvents.push("hydrated"),
+    });
+
+    sequencer.setSnapshotBoundary(4);
+    expect(hydrationEvents).toEqual([]);
+
+    const replay = sequencer.enqueue(
+      { sequenceStart: 0, sequenceEnd: 4 },
+      new Uint8Array([1, 2, 3, 4]),
+    );
+    await Promise.resolve();
+    expect(hydrationEvents).toEqual([]);
+
+    parserCallbacks[0]?.();
+    await replay;
+    expect(hydrationEvents).toEqual(["hydrated"]);
+  });
+
+  test("reveals an empty restored terminal as soon as its snapshot arrives", () => {
+    const hydrationEvents: string[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: () => undefined,
+      onConsumed: () => undefined,
+      onHydrated: () => hydrationEvents.push("hydrated"),
+    });
+
+    sequencer.setSnapshotBoundary(0);
+
+    expect(hydrationEvents).toEqual(["hydrated"]);
+  });
+
   test("renders a replayed range only once when reconnect happens before ACK", async () => {
     const parserCallbacks: Array<() => void> = [];
     const writes: number[][] = [];
