@@ -40,6 +40,7 @@ export const createAgentSessionLiveAttachment = (
       }
       if (envelope.type === "snapshot") {
         if (!awaitingSnapshot) {
+          listener(envelope);
           return;
         }
         awaitingSnapshot = false;

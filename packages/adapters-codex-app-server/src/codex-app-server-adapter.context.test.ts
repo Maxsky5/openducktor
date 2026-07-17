@@ -8,6 +8,7 @@ import {
   flushCodexAdapterWork,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
+import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 
@@ -29,6 +30,23 @@ const tokenUsageNotification = (
 });
 
 describe("CodexAppServerAdapter context loading", () => {
+  test("shares the initialized recovery with a synchronous reentrant load", async () => {
+    const tracker = new CodexContextUsageTracker(async () => undefined);
+    let reentrant: Promise<unknown> | null = null;
+    const loading = tracker.load("runtime-live", "thread-live", async () => {
+      reentrant = tracker.load("runtime-live", "thread-live", async () => {
+        throw new Error("unexpected duplicate recovery");
+      });
+    });
+    const outcome = loading.catch((error: unknown) => error);
+
+    await Promise.resolve();
+
+    expect(reentrant).toBe(loading);
+    tracker.releaseRuntime("runtime-live", new Error("runtime released"));
+    await expect(outcome).resolves.toBeInstanceOf(Error);
+  });
+
   test("returns retained context without a Codex read or resume", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({

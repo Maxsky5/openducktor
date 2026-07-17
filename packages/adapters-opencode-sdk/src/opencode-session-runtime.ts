@@ -243,18 +243,26 @@ export const createPrepareOpencodeSessionRuntime = (
       }
     };
 
-    const readSessionSources = async (): Promise<OpencodeRuntimeSnapshotSource[]> => {
-      requireActive();
-      const sources = await listOpencodeRuntimeSnapshotSources({
-        createClient,
-        runtimeEndpoint: input.runtimeEndpoint,
-        now,
-        ...(input.directories ? { directories: input.directories } : {}),
+    let readSessionSourcesTail = Promise.resolve();
+    const readSessionSources = (): Promise<OpencodeRuntimeSnapshotSource[]> => {
+      const read = readSessionSourcesTail.then(async () => {
+        requireActive();
+        const sources = await listOpencodeRuntimeSnapshotSources({
+          createClient,
+          runtimeEndpoint: input.runtimeEndpoint,
+          now,
+          ...(input.directories ? { directories: input.directories } : {}),
+        });
+        requireActive();
+        await syncEventSessions(sources);
+        requireActive();
+        return sources;
       });
-      requireActive();
-      await syncEventSessions(sources);
-      requireActive();
-      return sources;
+      readSessionSourcesTail = read.then(
+        () => undefined,
+        () => undefined,
+      );
+      return read;
     };
 
     const observation = await observeRuntimeEvents({

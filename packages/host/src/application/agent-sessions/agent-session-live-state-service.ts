@@ -338,6 +338,20 @@ export const createAgentSessionLiveStateService = ({
             refs = releasedRefsExit.value;
           }
           yield* publishChanges(refs.map((ref) => ({ type: "session_removed" as const, ref })));
+          const needsAuthoritativeSnapshot =
+            Exit.isFailure(retainedExit) && (!releasedRefsExit || Exit.isFailure(releasedRefsExit));
+          const authoritativeSnapshotExit = needsAuthoritativeSnapshot
+            ? yield* Effect.exit(
+                Effect.gen(function* () {
+                  const snapshots = yield* listSnapshots(adapter.binding.repoPath);
+                  yield* publishEnvelope({
+                    type: "snapshot",
+                    repoPath: adapter.binding.repoPath,
+                    sessions: [...snapshots],
+                  });
+                }),
+              )
+            : null;
 
           const failures: string[] = [];
           if (Exit.isFailure(retainedExit)) {
@@ -348,6 +362,11 @@ export const createAgentSessionLiveStateService = ({
           }
           if (releasedRefsExit && Exit.isFailure(releasedRefsExit)) {
             failures.push(`released refs: ${Cause.pretty(releasedRefsExit.cause)}`);
+          }
+          if (authoritativeSnapshotExit && Exit.isFailure(authoritativeSnapshotExit)) {
+            failures.push(
+              `authoritative snapshot: ${Cause.pretty(authoritativeSnapshotExit.cause)}`,
+            );
           }
           if (failures.length > 0) {
             return yield* Effect.fail(

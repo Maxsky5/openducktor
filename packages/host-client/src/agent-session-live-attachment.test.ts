@@ -42,19 +42,20 @@ describe("agent session live attachment", () => {
     expect(received).toEqual([snapshot, first, second]);
   });
 
-  test("ignores unrelated and duplicate snapshots without dropping later deltas", () => {
+  test("delivers later ordered snapshots without dropping deltas", () => {
     const received: AgentSessionLiveEnvelope[] = [];
     const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
       received.push(envelope);
     });
     const delta = transcriptEvent("after-snapshot");
+    const refreshedSnapshot = { ...snapshot };
 
     attachment.accept({ ...snapshot, repoPath: "/other" });
     attachment.accept(snapshot);
-    attachment.accept(snapshot);
+    attachment.accept(refreshedSnapshot);
     attachment.accept(delta);
 
-    expect(received).toEqual([snapshot, delta]);
+    expect(received).toEqual([snapshot, refreshedSnapshot, delta]);
   });
 
   test("starts a new snapshot-first epoch after reconnect", () => {
@@ -67,9 +68,12 @@ describe("agent session live attachment", () => {
     attachment.accept(snapshot);
     attachment.restart();
     attachment.accept(duringReconnect);
-    attachment.accept(snapshot);
+    const replayedSnapshot = { ...snapshot };
+    const refreshedSnapshot = { ...snapshot };
+    attachment.accept(replayedSnapshot);
+    attachment.accept(refreshedSnapshot);
 
-    expect(received).toEqual([snapshot, snapshot, duringReconnect]);
+    expect(received).toEqual([snapshot, replayedSnapshot, duringReconnect, refreshedSnapshot]);
   });
 
   test("preserves buffered transcript events across repeated reconnect signals", () => {

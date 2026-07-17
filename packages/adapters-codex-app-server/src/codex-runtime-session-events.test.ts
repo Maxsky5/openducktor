@@ -682,7 +682,7 @@ describe("CodexRuntimeSessionEvents", () => {
       "thread-target",
       resumeWithTurns,
     );
-    expect(resumeAttempts).toBe(2);
+    expect(resumeAttempts).toBe(1);
     await replayScheduler.waitForScheduledCount(2);
     expect(resumeAttempts).toBe(2);
     listener?.({

@@ -30,7 +30,7 @@ const createLiveClientHarness = (
     nativeRequestId?: string;
     totalTokens?: number;
     pendingQuestion?: boolean;
-    listBarrier?: Promise<void>;
+    listBarrier?: Promise<void> | (() => Promise<void>);
     listError?: Error;
     onList?: () => void;
     messagesBarrier?: Promise<void>;
@@ -72,7 +72,11 @@ const createLiveClientHarness = (
       list: async () => {
         callOrder.push("list");
         input.onList?.();
-        await input.listBarrier;
+        if (typeof input.listBarrier === "function") {
+          await input.listBarrier();
+        } else {
+          await input.listBarrier;
+        }
         if (input.listError) {
           throw input.listError;
         }
@@ -293,6 +297,44 @@ describe("OpenCode session runtime connection", () => {
     expect(prepared.initialSources).toHaveLength(1);
     expect(prepared.initialSources[0]?.pendingApprovals[0]?.requestId).toBe("native-request-1");
     expect(harness.messageCalls).toEqual([]);
+    await prepared.release();
+  });
+
+  test("serializes concurrent session source reads", async () => {
+    let listCallCount = 0;
+    let blockNextRead = false;
+    let resolveReadStarted: () => void = () => undefined;
+    let releaseRead: () => void = () => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      resolveReadStarted = resolve;
+    });
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const harness = createLiveClientHarness({
+      onList: () => {
+        listCallCount += 1;
+      },
+      listBarrier: async () => {
+        if (blockNextRead) {
+          blockNextRead = false;
+          resolveReadStarted();
+          await readGate;
+        }
+      },
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    blockNextRead = true;
+
+    const first = prepared.connection.readSessionSources();
+    await readStarted;
+    const second = prepared.connection.readSessionSources();
+    await Promise.resolve();
+
+    expect(listCallCount).toBe(2);
+    releaseRead();
+    await Promise.all([first, second]);
+    expect(listCallCount).toBe(3);
     await prepared.release();
   });
 

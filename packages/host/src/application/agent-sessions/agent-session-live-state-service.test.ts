@@ -565,6 +565,44 @@ describe("createAgentSessionLiveStateService", () => {
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
+  test("publishes an authoritative snapshot when retained reads and cleanup both fail", async () => {
+    const { events, service } = createHarness();
+    const snapshot = liveSnapshot("session-1");
+    let failRetainedRead = false;
+    const adapter = {
+      ...fakeAdapter({
+        runtimeId: "runtime-1",
+        snapshots: () => [snapshot],
+        listEffect: () =>
+          failRetainedRead
+            ? Effect.fail(
+                new HostOperationError({
+                  operation: "test.list-retained",
+                  message: "retained snapshot read failed",
+                }),
+              )
+            : Effect.succeed([snapshot]),
+      }),
+      releaseRuntime: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "test.release-runtime",
+            message: "adapter cleanup failed",
+          }),
+        ),
+    } satisfies AgentSessionLiveAdapterPort;
+    await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+    failRetainedRead = true;
+    events.length = 0;
+
+    await expect(Effect.runPromise(service.releaseRuntime("runtime-1"))).rejects.toThrow(
+      "retained snapshot read failed",
+    );
+
+    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
+  });
+
   test("routes an unloaded session resume through the repository runtime scope", async () => {
     const { service } = createHarness();
     const summary = {

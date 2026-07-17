@@ -482,19 +482,29 @@ describe("local host SSE subscriptions", () => {
       }),
     );
     expect(listener).toHaveBeenCalledTimes(3);
+    const replayedSnapshot = { ...snapshot };
     eventSource.emit(
       "message",
       JSON.stringify({
         channel: "openducktor://agent-session-live-event",
-        payload: snapshot,
+        payload: replayedSnapshot,
+      }),
+    );
+    const refreshedSnapshot = { ...snapshot };
+    eventSource.emit(
+      "message",
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: refreshedSnapshot,
       }),
     );
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
       snapshot,
       transcriptEvent,
       transcriptGap,
-      snapshot,
+      replayedSnapshot,
       reconnectTranscriptEvent,
+      refreshedSnapshot,
     ]);
 
     stopObserving();

@@ -207,6 +207,7 @@ export class CodexContextUsageTracker {
   ): Promise<CodexSessionContextUsage> {
     const key = contextUsageKey(recovery.runtimeId, recovery.threadId);
     try {
+      await Promise.resolve();
       await Promise.race([resumeWithTurns(), recovery.released]);
       recovery.resumeCompletedObservationGeneration =
         this.observationGenerationByKey.get(key) ?? recovery.observationGenerationAtStart;
