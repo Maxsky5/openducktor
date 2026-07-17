@@ -1,5 +1,6 @@
 const TERMINAL_TITLE_MAX_LENGTH = 160;
 const TERMINAL_TITLE_MAX_BYTES = TERMINAL_TITLE_MAX_LENGTH * 4;
+const TERMINAL_TITLE_SETTLE_MS = 40;
 const ESCAPE = 0x1b;
 const OSC = 0x5d;
 const BELL = 0x07;
@@ -30,12 +31,17 @@ const normalizeTerminalTitle = (title: string): string => {
 };
 
 export type TerminalTitleTracker = {
-  consume(data: Uint8Array): string | null;
+  consume(data: Uint8Array): void;
+  dispose(): void;
 };
 
-export const createTerminalTitleTracker = (): TerminalTitleTracker => {
+export const createTerminalTitleTracker = (
+  onSettledTitle: (title: string) => void,
+): TerminalTitleTracker => {
   let state: ParserState = "ground";
   let titleBytes: number[] = [];
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
 
   const finishTitle = (): string | null => {
     const title = normalizeTerminalTitle(new TextDecoder().decode(new Uint8Array(titleBytes)));
@@ -48,8 +54,17 @@ export const createTerminalTitleTracker = (): TerminalTitleTracker => {
     if (titleBytes.length < TERMINAL_TITLE_MAX_BYTES) titleBytes.push(byte);
   };
 
+  const settleTitle = (title: string): void => {
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      settleTimer = null;
+      if (!disposed) onSettledTitle(title);
+    }, TERMINAL_TITLE_SETTLE_MS);
+  };
+
   return {
     consume(data) {
+      if (disposed) return;
       let latestTitle: string | null = null;
       for (const byte of data) {
         if (state === "ground") {
@@ -98,7 +113,12 @@ export const createTerminalTitleTracker = (): TerminalTitleTracker => {
         if (byte === STRING_TERMINATOR) state = "ground";
         else if (byte !== ESCAPE) state = "osc_discard";
       }
-      return latestTitle;
+      if (latestTitle) settleTitle(latestTitle);
+    },
+    dispose() {
+      disposed = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = null;
     },
   };
 };

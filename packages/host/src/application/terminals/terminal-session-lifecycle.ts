@@ -87,6 +87,7 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const handleFailure = (session: TerminalSession): void => {
+    session.titleTracker.dispose();
     session.summary.lifecycle = "close_failed";
     emitLifecycle(session);
   };
@@ -105,6 +106,7 @@ export const createTerminalSessionLifecycle = ({
       Math.max(0, exited.length - TERMINAL_LIMITS.retainedExited),
     );
     for (const session of new Set([...expired, ...overCapacity])) {
+      session.titleTracker.dispose();
       for (const attachment of session.attachments.values()) {
         applyStreamEvents(
           session,
@@ -125,6 +127,7 @@ export const createTerminalSessionLifecycle = ({
     signal: string | null,
   ): void => {
     if (session.summary.lifecycle === "exited") return;
+    session.titleTracker.dispose();
     session.handle = null;
     session.summary.lifecycle = "exited";
     session.summary.exit = {
@@ -202,6 +205,7 @@ export const createTerminalSessionLifecycle = ({
           );
         }
       }
+      session.titleTracker.dispose();
       if (session.handle) {
         session.summary.lifecycle = "closing";
         emitLifecycle(session);

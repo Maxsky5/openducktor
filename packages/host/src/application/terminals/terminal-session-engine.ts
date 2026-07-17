@@ -46,6 +46,22 @@ export const createTerminalSessionEngine = ({
     pruneExited,
   } = createTerminalSessionLifecycle({ now, sessions, stream });
 
+  const publishTitle = (session: TerminalSession, title: string): void => {
+    if (title === session.summary.label) return;
+    session.summary.label = title;
+    for (const attachment of session.attachments.values()) {
+      applyStreamEvents(
+        session,
+        stream.publishSafely(session, attachment, {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "title",
+          terminalId: session.summary.terminalId,
+          title,
+        }),
+      );
+    }
+  };
+
   return {
     countLive: (): number => {
       pruneExited();
@@ -62,9 +78,11 @@ export const createTerminalSessionEngine = ({
       plan: TerminalPtyLaunchPlan,
     ): Effect.Effect<TerminalSummary, TerminalServiceError> =>
       Effect.gen(function* () {
-        const session: TerminalSession = {
+        let session: TerminalSession;
+        const titleTracker = createTerminalTitleTracker((title) => publishTitle(session, title));
+        session = {
           summary,
-          titleTracker: createTerminalTitleTracker(),
+          titleTracker,
           handle: null,
           replay: [],
           replayBytes: 0,
@@ -78,27 +96,15 @@ export const createTerminalSessionEngine = ({
         const handleResult = yield* Effect.either(
           ptyPort.start(plan, {
             onOutput: (data) => {
-              const title = session.titleTracker.consume(data);
+              session.titleTracker.consume(data);
               applyStreamEvents(session, stream.handleOutput(session, data));
-              if (!title || title === session.summary.label) return;
-              session.summary.label = title;
-              for (const attachment of session.attachments.values()) {
-                applyStreamEvents(
-                  session,
-                  stream.publishSafely(session, attachment, {
-                    version: TERMINAL_PROTOCOL_VERSION,
-                    type: "title",
-                    terminalId: session.summary.terminalId,
-                    title,
-                  }),
-                );
-              }
             },
             onFailure: () => handleFailure(session),
             onExit: ({ exitCode, signal }) => handleExit(session, exitCode, signal),
           }),
         );
         if (handleResult._tag === "Left") {
+          session.titleTracker.dispose();
           sessions.delete(summary.terminalId);
           return yield* Effect.fail(
             terminalFailure(

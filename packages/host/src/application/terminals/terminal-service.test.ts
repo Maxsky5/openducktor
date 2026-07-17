@@ -117,6 +117,7 @@ describe("TerminalService", () => {
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
 
     pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/projects/openducktor\u0007"));
+    await Bun.sleep(75);
 
     const listed = await Effect.runPromise(service.list({ kind: "unassociated" }));
     expect(listed.terminals[0]).toMatchObject({
@@ -126,6 +127,7 @@ describe("TerminalService", () => {
 
     pty.emit(new TextEncoder().encode("\u001b]2;pnpm "));
     pty.emit(new TextEncoder().encode("run dev\u001b\\"));
+    await Bun.sleep(75);
 
     const updated = await Effect.runPromise(service.list({ kind: "unassociated" }));
     expect(updated.terminals[0]?.label).toBe("pnpm run dev");
@@ -135,6 +137,7 @@ describe("TerminalService", () => {
     const { service, pty } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/repo\u0007"));
+    await Bun.sleep(75);
     const events: unknown[] = [];
 
     await Effect.runPromise(
@@ -149,9 +152,54 @@ describe("TerminalService", () => {
     expect(events[0]).toMatchObject({ type: "snapshot", title: "~/repo" });
 
     pty.emit(new TextEncoder().encode("\u001b]2;pnpm run dev\u0007"));
+    await Bun.sleep(75);
     expect(events).toContainEqual(
       expect.objectContaining({ type: "title", title: "pnpm run dev" }),
     );
+  });
+
+  test("publishes only the settled title for a fast shell command", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    const events: Array<{ type: string; title?: string }> = [];
+
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "attachment-1",
+        lastConsumedSequence: 0,
+        sink: (event) => events.push(event),
+      }),
+    );
+
+    pty.emit(new TextEncoder().encode("\u001b]2;cd /tmp\u0007"));
+    pty.emit(new TextEncoder().encode("\u001b]0;user@host:/tmp\u0007"));
+
+    await Bun.sleep(75);
+
+    expect(events.filter((event) => event.type === "title")).toEqual([
+      expect.objectContaining({ type: "title", title: "/tmp" }),
+    ]);
+  });
+
+  test("cancels an unsettled title when the terminal closes", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    const events: Array<{ type: string }> = [];
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "attachment-1",
+        lastConsumedSequence: 0,
+        sink: (event) => events.push(event),
+      }),
+    );
+
+    pty.emit(new TextEncoder().encode("\u001b]2;pnpm run dev\u0007"));
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true }));
+    await Bun.sleep(75);
+
+    expect(events.some((event) => event.type === "title")).toBe(false);
   });
 
   test("publishes output before exit with monotonic byte ranges", async () => {
