@@ -10,6 +10,8 @@ import {
   invalidateAgentSessionListQuery,
   loadAgentSessionListsFromQuery,
   refreshAgentSessionListQuery,
+  removeAgentSessionListQueries,
+  retryAgentSessionListQueries,
 } from "./agent-sessions";
 
 const sessionFixture: AgentSessionRecord = {
@@ -165,6 +167,41 @@ describe("agent session query cache helpers", () => {
 
     expect(queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([sessionFixture]);
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
+  });
+
+  test("removing a task cache prevents an older batch from restoring it", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    queryClient.setQueryData(queryKey, [sessionFixture]);
+    let releaseBatch: () => void = () => {
+      throw new Error("Batch read was not started.");
+    };
+    let markBatchStarted: () => void = () => {
+      throw new Error("Batch-start signal was not initialized.");
+    };
+    const batchStarted = new Promise<void>((resolve) => {
+      markBatchStarted = resolve;
+    });
+    const batchRelease = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    const hydration = hydrateAgentSessionListQueries(
+      queryClient,
+      "/repo",
+      ["task-1"],
+      createReadPort(async () => {
+        markBatchStarted();
+        await batchRelease;
+        return [{ taskId: "task-1", agentSessions: [sessionFixture] }];
+      }),
+    );
+    await batchStarted;
+
+    await removeAgentSessionListQueries(queryClient, "/repo", ["task-1"]);
+    releaseBatch();
+    await hydration;
+
+    expect(queryClient.getQueryData(queryKey)).toBeUndefined();
   });
 
   test("invalidation targets only the canonical per-task cache", async () => {
@@ -437,6 +474,51 @@ describe("agent session query cache helpers", () => {
       }),
     ).rejects.toThrow("ordinary refresh failed");
     expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
+  });
+
+  test("explicit retry batch-loads only failed and missing task session queries", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const healthySession = { ...sessionFixture, externalSessionId: "healthy" };
+    const recoveredSession = { ...sessionFixture, externalSessionId: "recovered" };
+    const missingSession = { ...sessionFixture, externalSessionId: "missing" };
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-healthy"), [healthySession]);
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: agentSessionQueryKeys.list("/repo", "task-failed"),
+        queryFn: async () => {
+          throw new Error("temporary failure");
+        },
+      }),
+    ).rejects.toThrow("temporary failure");
+    const batchList = mock(async () => [
+      { taskId: "task-failed", agentSessions: [recoveredSession] },
+      { taskId: "task-missing", agentSessions: [missingSession] },
+    ]);
+
+    await retryAgentSessionListQueries(
+      queryClient,
+      "/repo",
+      ["task-healthy", "task-failed", "task-missing"],
+      createReadPort(batchList),
+    );
+
+    expect(batchList).toHaveBeenCalledTimes(1);
+    expect(batchList).toHaveBeenCalledWith("/repo", ["task-failed", "task-missing"]);
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(
+        agentSessionQueryKeys.list("/repo", "task-healthy"),
+      ),
+    ).toEqual([healthySession]);
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(
+        agentSessionQueryKeys.list("/repo", "task-failed"),
+      ),
+    ).toEqual([recoveredSession]);
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(
+        agentSessionQueryKeys.list("/repo", "task-missing"),
+      ),
+    ).toEqual([missingSession]);
   });
 
   test("exact invalidation propagates a disabled static-query refresh failure", async () => {

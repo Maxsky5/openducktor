@@ -7,7 +7,10 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
+import {
+  type AgentSessionReadPort,
+  removeAgentSessionListQueries,
+} from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
@@ -124,6 +127,7 @@ export function useTaskMutationCommands({
               );
             },
           });
+          await removeAgentSessionListQueries(queryClient, repoPath, taskIdsToRemove);
         },
         successTitle: "Task deleted",
         successDescription: taskId,

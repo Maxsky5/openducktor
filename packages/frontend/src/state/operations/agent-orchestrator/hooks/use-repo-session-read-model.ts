@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
+import { retryAgentSessionListQueries } from "@/state/queries/agent-sessions";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import {
   type AgentSessionReadModelLoadState,
@@ -77,8 +78,44 @@ export const useRepoSessionReadModel = ({
   const latestReloadGenerationRef = useRef(reloadGeneration);
   latestReloadGenerationRef.current = reloadGeneration;
   const reloadSessionReadModel = useCallback(() => {
-    setReloadGeneration((current) => current + 1);
-  }, []);
+    if (!workspaceRepoPath) {
+      setReloadGeneration((current) => current + 1);
+      return;
+    }
+    const repoPath = workspaceRepoPath;
+    const repoEpoch = repoEpochRef.current;
+    setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    void retryAgentSessionListQueries(queryClient, repoPath, taskIds, sessionReadPort).then(
+      () => {
+        if (
+          currentWorkspaceRepoPathRef.current === repoPath &&
+          repoEpochRef.current === repoEpoch
+        ) {
+          setReloadGeneration((current) => current + 1);
+        }
+      },
+      (error: unknown) => {
+        if (
+          currentWorkspaceRepoPathRef.current === repoPath &&
+          repoEpochRef.current === repoEpoch
+        ) {
+          setSessionReadModelLoadState(
+            failedAgentSessionReadModelLoadState(
+              repoPath,
+              `Failed to retry task session records for repo '${repoPath}': ${errorMessage(error)}`,
+            ),
+          );
+        }
+      },
+    );
+  }, [
+    currentWorkspaceRepoPathRef,
+    queryClient,
+    repoEpochRef,
+    sessionReadPort,
+    taskIds,
+    workspaceRepoPath,
+  ]);
   const currentSessionReadModelLoadState = useMemo(
     () =>
       currentAgentSessionReadModelLoadState({

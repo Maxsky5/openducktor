@@ -266,6 +266,41 @@ export const loadAgentSessionListsFromQuery = async (
   return Object.fromEntries(entries);
 };
 
+export const retryAgentSessionListQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+  readPort: AgentSessionReadPort = host,
+): Promise<void> => {
+  const taskIdsToRetry = normalizeAgentSessionTaskIds(taskIds).filter((taskId) => {
+    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const queryState = queryClient.getQueryState(queryKey);
+    return (
+      queryState?.status === "error" ||
+      queryState?.isInvalidated === true ||
+      queryClient.getQueryData(queryKey) === undefined
+    );
+  });
+  await hydrateAgentSessionListQueries(queryClient, repoPath, taskIdsToRetry, readPort);
+};
+
+export const removeAgentSessionListQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+): Promise<void> => {
+  const queryKeys = normalizeAgentSessionTaskIds(taskIds).map((taskId) => {
+    incrementAgentSessionInvalidationVersion(queryClient, repoPath, taskId);
+    return agentSessionQueryKeys.list(repoPath, taskId);
+  });
+  await Promise.all(
+    queryKeys.map((queryKey) => queryClient.cancelQueries({ queryKey, exact: true })),
+  );
+  for (const queryKey of queryKeys) {
+    queryClient.removeQueries({ queryKey, exact: true });
+  }
+};
+
 const beginAgentSessionListInvalidation = async (
   queryClient: QueryClient,
   repoPath: string,

@@ -8,7 +8,7 @@ import type {
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { summarizeAgentActivity } from "@/state/read-models/agent-activity-read-model";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -48,6 +48,14 @@ const createState = (
     observeIndex: number,
   ) => void,
   taskRecords: AgentSessionRecord | AgentSessionRecord[] = record,
+  sessionReadPort: AgentSessionReadPort = {
+    agentSessionsList: async () => {
+      throw new Error("Per-task session cache should already be hydrated.");
+    },
+    agentSessionsListForTasks: async () => {
+      throw new Error("Per-task session cache should already be hydrated.");
+    },
+  },
 ) => {
   const queryClient = new QueryClient();
   const records = Array.isArray(taskRecords) ? taskRecords : [taskRecords];
@@ -89,14 +97,7 @@ const createState = (
     transcriptEvents,
     recoverTranscriptGap,
     queryClient,
-    sessionReadPort: {
-      agentSessionsList: async () => {
-        throw new Error("Per-task session cache should already be hydrated.");
-      },
-      agentSessionsListForTasks: async () => {
-        throw new Error("Per-task session cache should already be hydrated.");
-      },
-    },
+    sessionReadPort,
   };
 
   return {
@@ -366,6 +367,54 @@ describe("useRepoSessionReadModel", () => {
         message:
           "Failed to recover transcript history after a live-stream gap: history reload failed",
       });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("explicit retry recovers a failed task session query without reloading healthy caches", async () => {
+    const recoveredRecord = { ...record, externalSessionId: "thread-recovered" };
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [recoveredRecord] }]);
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      record,
+      {
+        agentSessionsList: async () => {
+          throw new Error("Exact reads are not used by explicit batch retry.");
+        },
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("temporary exact refresh failure");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("temporary exact refresh failure");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => {
+        state.harness.getLatest().reloadSessionReadModel();
+      });
+
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(
+        state.queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([recoveredRecord]);
     } finally {
       await state.harness.unmount();
     }
