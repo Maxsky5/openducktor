@@ -22,9 +22,9 @@ type WebLoggerInput = {
 };
 
 export type WebLogger = {
-  error(message: string): void | Promise<void>;
-  info(message: string): void | Promise<void>;
-  success(message: string): void | Promise<void>;
+  error(message: string): void;
+  info(message: string): void;
+  success(message: string): void;
 };
 
 export const writeWebLogEffect = (
@@ -113,8 +113,8 @@ const colorSuccessMessage = (useColor: boolean, message: string): string => {
   return `${GREEN}${message}${RESET}`;
 };
 
-const runLogEffect = async <Failure>(effect: Effect.Effect<void, Failure>): Promise<void> => {
-  const result = await Effect.runPromise(Effect.either(effect));
+const runLogEffect = <Failure>(effect: Effect.Effect<void, Failure>): void => {
+  const result = Effect.runSync(Effect.either(effect));
   if (result._tag === "Left") {
     throw result.left;
   }
@@ -136,7 +136,7 @@ export const createWebLogger = ({
         level: LogLevel,
         message: string,
         renderMessage: (useColor: boolean, message: string) => string,
-      ): Promise<void> => {
+      ): void => {
         const recordedAt = now();
         const useColor = supportsColor(environment, stdout);
         const plainTimestamp = timestamp(recordedAt);
@@ -150,9 +150,7 @@ export const createWebLogger = ({
         } else {
           consoleOutput.log(line);
         }
-        return runLogEffect(
-          resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`),
-        );
+        runLogEffect(resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`));
       };
 
       return {

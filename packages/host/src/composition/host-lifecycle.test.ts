@@ -86,10 +86,10 @@ describe("host lifecycle shutdown", () => {
     );
     const calls: string[] = [];
     const rejectingLogger: HostLifecycleLogger = {
-      error: async () => {
+      error: () => {
         throw persistenceError;
       },
-      info: async () => {
+      info: () => {
         throw persistenceError;
       },
     };

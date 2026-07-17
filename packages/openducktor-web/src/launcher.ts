@@ -72,6 +72,27 @@ const defaultWebSignalProcessBoundary: WebSignalProcessBoundary = {
   },
 };
 
+const DUPLICATE_TERMINATION_NOTICE =
+  "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.";
+
+export const logDuplicateWebTerminationNotice = (
+  logger: WebLogger,
+  reportFailure: (cause: unknown) => void,
+): boolean => {
+  try {
+    logger.info(DUPLICATE_TERMINATION_NOTICE);
+    return false;
+  } catch (cause) {
+    reportFailure(cause);
+    return true;
+  }
+};
+
+export const resolveWebSignalExitCode = (
+  requestedExitCode: number,
+  duplicateTerminationLogFailed: boolean,
+): number => (duplicateTerminationLogFailed ? 1 : requestedExitCode);
+
 const stopLauncherForSignalEffect = (
   signal: NodeJS.Signals,
   logger: WebLogger,
@@ -450,16 +471,10 @@ export const runLauncherEffect = (
             if (terminationStarted) {
               if (!duplicateTerminationNoticeLogged) {
                 duplicateTerminationNoticeLogged = true;
-                void runWebBoundary(
-                  writeWebLogEffect(
-                    logger,
-                    "info",
-                    "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
-                  ),
-                ).catch((error: unknown) => {
-                  duplicateTerminationLogFailed = true;
-                  console.error(`OpenDucktor web fatal boundary: ${errorMessage(error)}`);
-                });
+                duplicateTerminationLogFailed = logDuplicateWebTerminationNotice(
+                  logger,
+                  defaultWebSignalProcessBoundary.reportFailure,
+                );
               }
               return;
             }
@@ -467,7 +482,9 @@ export const runLauncherEffect = (
             void runWebSignalShutdown({
               boundary: {
                 exit: (resolvedExitCode) => {
-                  process.exit(duplicateTerminationLogFailed ? 1 : resolvedExitCode);
+                  process.exit(
+                    resolveWebSignalExitCode(resolvedExitCode, duplicateTerminationLogFailed),
+                  );
                 },
                 flush: flushProcessOutput,
                 reportFailure: defaultWebSignalProcessBoundary.reportFailure,

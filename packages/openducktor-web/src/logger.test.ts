@@ -76,10 +76,11 @@ describe("createWebLogger", () => {
       }),
     );
 
-    await logger.info("Starting host");
+    const result = logger.info("Starting host");
     await logger.success("Host ready");
     await logger.error("Host failed");
 
+    expect(result).toBeUndefined();
     expect(output.stdout).toEqual([
       expect.stringMatching(/^2026-05-13T23:45:12\.345[+-]\d\d:\d\d {2}INFO Starting host$/),
       expect.stringMatching(/^2026-05-13T23:45:12\.345[+-]\d\d:\d\d {2}INFO Host ready$/),
@@ -135,6 +136,6 @@ describe("createWebLogger", () => {
       }),
     );
 
-    await expect(logger.info("Starting host")).rejects.toBe(failure);
+    expect(() => logger.info("Starting host")).toThrow(failure);
   });
 });

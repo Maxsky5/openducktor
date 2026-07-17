@@ -12,8 +12,8 @@ import {
 import type { RuntimeRegistryPort } from "../ports/runtime-registry-port";
 
 export type HostLifecycleLogger = {
-  info(message: string): void | Promise<void>;
-  error(message: string): void | Promise<void>;
+  info(message: string): void;
+  error(message: string): void;
 };
 
 export type HostShutdownStep = {
@@ -28,8 +28,8 @@ export const writeHostLifecycleLog = (
   level: "error" | "info",
   message: string,
 ): Effect.Effect<void, HostOperationError> =>
-  Effect.tryPromise({
-    try: async () => logger[level](message),
+  Effect.try({
+    try: () => logger[level](message),
     catch: (cause) =>
       new HostOperationError({
         operation: `host.lifecycle.log-${level}`,

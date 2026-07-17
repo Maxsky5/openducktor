@@ -89,10 +89,10 @@ describe("createNodeEffectHostCommandRouter", () => {
     );
     let stopRuntimeCalls = 0;
     const logger: HostLifecycleLogger = {
-      error: async () => {
+      error: () => {
         throw persistenceError;
       },
-      info: async () => {
+      info: () => {
         throw persistenceError;
       },
     };

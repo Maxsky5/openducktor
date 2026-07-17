@@ -1,5 +1,4 @@
-import type { Dirent } from "node:fs";
-import { appendFile, mkdir, readdir, rm } from "node:fs/promises";
+import { appendFileSync, type Dirent, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { Data, Effect } from "effect";
@@ -21,10 +20,10 @@ export type OpenDucktorDailyLogWriterOptions = {
 type OpenDucktorLogDirectoryEntry = Pick<Dirent, "name" | "isFile">;
 
 export type OpenDucktorDailyLogWriterDependencies = {
-  appendFile(filePath: string, contents: string): Promise<void>;
-  createDirectory(directoryPath: string): Promise<void>;
-  readDirectory(directoryPath: string): Promise<OpenDucktorLogDirectoryEntry[]>;
-  removeFile(filePath: string): Promise<void>;
+  appendFile(filePath: string, contents: string): void;
+  createDirectory(directoryPath: string): void;
+  readDirectory(directoryPath: string): OpenDucktorLogDirectoryEntry[];
+  removeFile(filePath: string): void;
   resolveBaseDirectory(environment: NodeJS.ProcessEnv): string;
 };
 
@@ -41,10 +40,12 @@ const MANAGED_LOG_FILE_PATTERN = /^openducktor-(?:electron|web)-(\d{4})-(\d{2})-
 const RETAINED_LOCAL_DATE_COUNT = 30;
 
 const defaultDependencies: OpenDucktorDailyLogWriterDependencies = {
-  appendFile: (filePath, contents) => appendFile(filePath, contents, "utf8"),
-  createDirectory: (directoryPath) => mkdir(directoryPath, { recursive: true }).then(() => {}),
-  readDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
-  removeFile: (filePath) => rm(filePath, { force: true }),
+  appendFile: (filePath, contents) => appendFileSync(filePath, contents, "utf8"),
+  createDirectory: (directoryPath) => {
+    mkdirSync(directoryPath, { recursive: true });
+  },
+  readDirectory: (directoryPath) => readdirSync(directoryPath, { withFileTypes: true }),
+  removeFile: (filePath) => rmSync(filePath, { force: true }),
   resolveBaseDirectory: resolveOpenDucktorBaseDir,
 };
 
@@ -91,9 +92,9 @@ const errorMessage = (cause: unknown): string =>
 const runFileOperation = <Result>(
   operation: string,
   targetPath: string,
-  run: () => Promise<Result>,
+  run: () => Result,
 ): Effect.Effect<Result, OpenDucktorLogPersistenceError> =>
-  Effect.tryPromise({
+  Effect.try({
     try: run,
     catch: (cause) =>
       new OpenDucktorLogPersistenceError({
@@ -165,23 +166,20 @@ export const createOpenDucktorDailyLogWriterWithDependencies = (
     const initializedAt = clock();
     yield* cleanupExpiredLogs(initializedAt);
     let lastCleanedDateKey = localDateKey(initializedAt);
-    const semaphore = Effect.unsafeMakeSemaphore(1);
 
     return {
       append(recordedAt, record) {
-        return semaphore.withPermits(1)(
-          Effect.gen(function* () {
-            const recordedDateKey = localDateKey(recordedAt);
-            if (recordedDateKey !== lastCleanedDateKey) {
-              yield* cleanupExpiredLogs(recordedAt);
-              lastCleanedDateKey = recordedDateKey;
-            }
-            const filePath = path.join(logDirectory, logFileName(surface, recordedDateKey));
-            yield* runFileOperation("openducktor.logs.append", filePath, () =>
-              dependencies.appendFile(filePath, normalizeRecord(record)),
-            );
-          }),
-        );
+        return Effect.gen(function* () {
+          const recordedDateKey = localDateKey(recordedAt);
+          if (recordedDateKey !== lastCleanedDateKey) {
+            yield* cleanupExpiredLogs(recordedAt);
+            lastCleanedDateKey = recordedDateKey;
+          }
+          const filePath = path.join(logDirectory, logFileName(surface, recordedDateKey));
+          yield* runFileOperation("openducktor.logs.append", filePath, () =>
+            dependencies.appendFile(filePath, normalizeRecord(record)),
+          );
+        });
       },
     };
   });

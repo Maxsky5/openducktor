@@ -7,8 +7,8 @@ import {
 } from "../effect/electron-errors";
 
 type ElectronMainLifecycleLogger = {
-  error(message: string, error?: unknown): void | Promise<void>;
-  info(message: string): void | Promise<void>;
+  error(message: string, error?: unknown): void;
+  info(message: string): void;
 };
 
 const captureLoggingFailure = async (

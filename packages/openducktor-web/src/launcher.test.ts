@@ -3,7 +3,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import { runWebSignalShutdown } from "./launcher";
+import {
+  logDuplicateWebTerminationNotice,
+  resolveWebSignalExitCode,
+  runWebSignalShutdown,
+} from "./launcher";
 import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
@@ -253,8 +257,30 @@ describe("launcher internals", () => {
     expect(source).toContain('process.on("SIGINT"');
     expect(source).toContain('process.on("SIGTERM"');
     expect(source).toContain("OpenDucktor web shutdown is already in progress");
-    expect(source).toContain("duplicateTerminationLogFailed = true");
-    expect(source).toContain("duplicateTerminationLogFailed ? 1 : resolvedExitCode");
+  });
+
+  test("owns duplicate-signal persistence failures before resolving the process exit", () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-web.log",
+    );
+    const reportedFailures: unknown[] = [];
+
+    const duplicateLogFailed = logDuplicateWebTerminationNotice(
+      {
+        error() {},
+        info() {
+          throw persistenceError;
+        },
+        success() {},
+      },
+      (cause) => {
+        reportedFailures.push(cause);
+      },
+    );
+
+    expect(duplicateLogFailed).toBeTrue();
+    expect(reportedFailures).toEqual([persistenceError]);
+    expect(resolveWebSignalExitCode(143, duplicateLogFailed)).toBe(1);
   });
 
   test("signal logging failures still run cleanup and exit through the explicit boundary", async () => {

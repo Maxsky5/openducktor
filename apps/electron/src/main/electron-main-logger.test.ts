@@ -31,8 +31,9 @@ describe("createElectronMainLogger", () => {
       }),
     );
 
-    await logger.info("OpenDucktor host services stopped");
+    const result = logger.info("OpenDucktor host services stopped");
 
+    expect(result).toBeUndefined();
     expect(output()).toMatch(
       /^2026-05-13T23:45:12\.345[+-]\d\d:\d\d {2}INFO OpenDucktor host services stopped\n$/,
     );
@@ -134,6 +135,6 @@ describe("createElectronMainLogger", () => {
       }),
     );
 
-    await expect(logger.info("Host is ready")).rejects.toBe(failure);
+    expect(() => logger.info("Host is ready")).toThrow(failure);
   });
 });

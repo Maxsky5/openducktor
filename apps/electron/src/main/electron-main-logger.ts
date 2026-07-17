@@ -23,9 +23,9 @@ type ElectronMainLoggerInput = {
 };
 
 export type ElectronMainLogger = {
-  error(message: string, error?: unknown): Promise<void>;
-  info(message: string): Promise<void>;
-  warn(message: string): Promise<void>;
+  error(message: string, error?: unknown): void;
+  info(message: string): void;
+  warn(message: string): void;
 };
 
 const pad = (value: number, length = 2): string => value.toString().padStart(length, "0");
@@ -106,8 +106,8 @@ const formatError = (error: unknown): string => {
   return String(error);
 };
 
-const runLogEffect = async <Failure>(effect: Effect.Effect<void, Failure>): Promise<void> => {
-  const result = await Effect.runPromise(Effect.either(effect));
+const runLogEffect = <Failure>(effect: Effect.Effect<void, Failure>): void => {
+  const result = Effect.runSync(Effect.either(effect));
   if (result._tag === "Left") {
     throw result.left;
   }
@@ -124,7 +124,7 @@ export const createElectronMainLogger = ({
     : createOpenDucktorDailyLogWriter({ surface: "electron", environment: env, clock: now })
   ).pipe(
     Effect.map((resolvedWriter): ElectronMainLogger => {
-      const log = async (level: LogLevel, message: string): Promise<void> => {
+      const log = (level: LogLevel, message: string): void => {
         const recordedAt = now();
         const useAnsi = shouldUseAnsi(env, stream);
         const plainTimestamp = timestamp(recordedAt);
@@ -132,9 +132,7 @@ export const createElectronMainLogger = ({
         const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
         const renderedMessage = colorMessage(useAnsi, level, message);
         stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
-        await runLogEffect(
-          resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`),
-        );
+        runLogEffect(resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`));
       };
 
       return {

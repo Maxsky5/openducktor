@@ -298,18 +298,27 @@ describe("createOpenDucktorDailyLogWriter", () => {
     const failure = new Error(`${failingDependency} failed`);
     const dependencies: Partial<OpenDucktorDailyLogWriterDependencies> = {};
     if (failingDependency === "createDirectory") {
-      dependencies.createDirectory = () => Promise.reject(failure);
+      dependencies.createDirectory = () => {
+        throw failure;
+      };
     }
     if (failingDependency === "readDirectory") {
-      dependencies.readDirectory = () => Promise.reject(failure);
+      dependencies.readDirectory = () => {
+        throw failure;
+      };
     }
     if (failingDependency === "removeFile") {
-      dependencies.readDirectory = () =>
-        Promise.resolve([{ name: "openducktor-web-2025-01-01.log", isFile: () => true }]);
-      dependencies.removeFile = () => Promise.reject(failure);
+      dependencies.readDirectory = () => [
+        { name: "openducktor-web-2025-01-01.log", isFile: () => true },
+      ];
+      dependencies.removeFile = () => {
+        throw failure;
+      };
     }
     if (failingDependency === "appendFile") {
-      dependencies.appendFile = () => Promise.reject(failure);
+      dependencies.appendFile = () => {
+        throw failure;
+      };
     }
 
     const createWriter = () =>
