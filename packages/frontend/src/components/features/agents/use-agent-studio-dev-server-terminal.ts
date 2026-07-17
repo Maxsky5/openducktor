@@ -1,8 +1,8 @@
 import { FitAddon } from "@xterm/addon-fit";
-import { type ITerminalOptions, type ITheme, Terminal } from "@xterm/xterm";
+import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-import { TERMINAL_FONT_FAMILY } from "./terminal-font";
+import { createTerminalOptions, createTerminalTheme } from "./terminal-xterm-options";
 
 export type TerminalBinding = {
   terminal: Pick<Terminal, "clear" | "dispose" | "loadAddon" | "open" | "options" | "reset"> & {
@@ -45,22 +45,6 @@ type UseDevServerTerminalRenderingArgs = TerminalRenderController & {
   onRendererError: (message: string | null) => void;
 };
 
-const readCssVariable = (element: HTMLElement, name: string): string => {
-  return getComputedStyle(element).getPropertyValue(name).trim();
-};
-
-const buildTerminalTheme = (container: HTMLElement): ITheme => ({
-  background: readCssVariable(container, "--dev-server-terminal-panel"),
-  foreground: readCssVariable(container, "--dev-server-terminal-foreground"),
-  cursor: readCssVariable(container, "--dev-server-terminal-foreground"),
-  cursorAccent: readCssVariable(container, "--dev-server-terminal-panel"),
-  selectionBackground: readCssVariable(container, "--dev-server-terminal-selection"),
-  selectionInactiveBackground: readCssVariable(
-    container,
-    "--dev-server-terminal-selection-inactive",
-  ),
-});
-
 export const defaultCreateTerminalBinding: CreateTerminalBinding = (container, options) => {
   const terminal = new Terminal(options);
   const fitAddon = new FitAddon();
@@ -70,17 +54,11 @@ export const defaultCreateTerminalBinding: CreateTerminalBinding = (container, o
   return { terminal, fitAddon };
 };
 
-const terminalOptions = (container: HTMLElement): ITerminalOptions => ({
-  allowTransparency: true,
-  convertEol: false,
-  cursorBlink: false,
-  disableStdin: true,
-  fontFamily: TERMINAL_FONT_FAMILY,
-  fontSize: 12,
-  lineHeight: 1.35,
-  scrollback: 2000,
-  theme: buildTerminalTheme(container),
-});
+const terminalOptions = (container: HTMLElement): ITerminalOptions =>
+  createTerminalOptions(container, {
+    cursorBlink: false,
+    disableStdin: true,
+  });
 
 const writeTerminalOutput = (terminal: TerminalBinding["terminal"], data: string): void => {
   if (data.length === 0) {
@@ -165,7 +143,7 @@ const createThemeObserverCleanup = (
   }
 
   const themeObserver = new MutationObserver(() => {
-    binding.terminal.options.theme = buildTerminalTheme(container);
+    binding.terminal.options.theme = createTerminalTheme(container);
     binding.fitAddon.fit();
   });
   themeObserver.observe(document.documentElement, {

@@ -1,11 +1,11 @@
 import "@xterm/xterm/css/xterm.css";
 import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
 import { FitAddon } from "@xterm/addon-fit";
-import { type ITheme, Terminal } from "@xterm/xterm";
+import { Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
-import { TERMINAL_FONT_FAMILY } from "../terminal-font";
+import { createTerminalOptions } from "../terminal-xterm-options";
 import {
   createLatestResizeScheduler,
   createTerminalInputSequencer,
@@ -14,21 +14,6 @@ import {
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
-
-const readCssVariable = (element: HTMLElement, name: string): string =>
-  getComputedStyle(element).getPropertyValue(name).trim();
-
-const terminalTheme = (container: HTMLElement): ITheme => ({
-  background: readCssVariable(container, "--dev-server-terminal-panel"),
-  foreground: readCssVariable(container, "--dev-server-terminal-foreground"),
-  cursor: readCssVariable(container, "--dev-server-terminal-foreground"),
-  cursorAccent: readCssVariable(container, "--dev-server-terminal-panel"),
-  selectionBackground: readCssVariable(container, "--dev-server-terminal-selection"),
-  selectionInactiveBackground: readCssVariable(
-    container,
-    "--dev-server-terminal-selection-inactive",
-  ),
-});
 
 export function InteractiveTerminal({
   terminalId,
@@ -75,17 +60,12 @@ export function InteractiveTerminal({
     if (!container) return;
     setIsHydrated(false);
     let generation = 0;
-    const terminal = new Terminal({
-      allowTransparency: true,
-      convertEol: false,
-      cursorBlink: true,
-      fontFamily: TERMINAL_FONT_FAMILY,
-      fontSize: 12,
-      lineHeight: 1.35,
-      screenReaderMode: true,
-      scrollback: 2000,
-      theme: terminalTheme(container),
-    });
+    const terminal = new Terminal(
+      createTerminalOptions(container, {
+        cursorBlink: true,
+        screenReaderMode: true,
+      }),
+    );
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(container);
