@@ -40,7 +40,6 @@ export type AgentStudioTerminalPanelModel = {
   isVisible: boolean;
   isLoading: boolean;
   isCreating: boolean;
-  runningCount: number;
   transportError: string | null;
   focusRequest: number;
   controller: TerminalTransportController | null;
@@ -227,6 +226,90 @@ export const useAgentStudioTerminals = (
     return () => window.removeEventListener("keydown", handleShortcut);
   }, [togglePanel]);
 
+  const backToChat = useCallback((): void => {
+    if (scopeKey) dispatch({ type: "visibilitySet", scopeKey, value: false, isExplicit: true });
+  }, [scopeKey]);
+  const selectTab = useCallback(
+    (tabId: string): void => {
+      if (!scopeKey) return;
+      dispatch({ type: "tabSelected", scopeKey, tabId });
+      dispatch({ type: "focusRequested", scopeKey });
+    },
+    [scopeKey],
+  );
+  const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
+  const retryCreate = useCallback(
+    (tabId: string): void => void createTerminal(tabId),
+    [createTerminal],
+  );
+  const reorderTab = useCallback(
+    (draggedTabId: string, targetTabId: string, position: "before" | "after"): void => {
+      if (scopeKey)
+        dispatch({ type: "tabReordered", scopeKey, draggedTabId, targetTabId, position });
+    },
+    [scopeKey],
+  );
+  const changeTitle = useCallback(
+    (terminalId: string, title: string): void => {
+      if (scopeKey) dispatch({ type: "titleChanged", scopeKey, terminalId, title });
+    },
+    [scopeKey],
+  );
+  const closeTerminal = useCallback(
+    async (
+      tab: AgentStudioTerminalTab,
+      confirmTerminate: boolean,
+    ): Promise<TerminalCloseResponse> => {
+      if (!scopeKey) throw new Error("Terminal scope is unavailable.");
+      if (!tab.terminalId) {
+        dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
+        return { closed: true };
+      }
+      const terminalId = tab.terminalId;
+      if (!controller) {
+        throw new Error("Terminal transport is unavailable for this task.");
+      }
+      dispatch({ type: "closeStarted", scopeKey, tabId: tab.tabId });
+      let closeResult: TerminalCloseResponse;
+      try {
+        closeResult = await controller.closeTerminal(terminalId, () =>
+          dependencies.hostClient.terminalClose({
+            terminalId,
+            confirmTerminate,
+          }),
+        );
+      } catch (cause) {
+        dispatch({ type: "closeRejected", scopeKey, tabId: tab.tabId });
+        throw cause;
+      }
+      if (!closeResult.closed) {
+        dispatch({ type: "closeRejected", scopeKey, tabId: tab.tabId });
+        return closeResult;
+      }
+      dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
+      if (repoPath && taskId)
+        await queryClient.invalidateQueries({
+          queryKey: terminalQueryKeys.task({ repoPath, taskId }),
+        });
+      return closeResult;
+    },
+    [controller, dependencies.hostClient, queryClient, repoPath, scopeKey, taskId],
+  );
+  const changeLifecycle = useCallback(
+    (terminalId: string, lifecycle: TerminalLifecycle): void => {
+      if (scopeKey) dispatch({ type: "lifecycleChanged", scopeKey, terminalId, lifecycle });
+    },
+    [scopeKey],
+  );
+  const forgetTerminal = useCallback(
+    (terminalId: string, message: string): void => {
+      if (scopeKey) dispatch({ type: "terminalForgotten", scopeKey, terminalId, message });
+    },
+    [scopeKey],
+  );
+  const isLoading = terminalQuery.isLoading || worktreeQuery.isLoading;
+  const isCreating = visibleTabs.some((tab) => tab.requestState === "creating");
+
   return useMemo(
     () => ({
       scopeKey,
@@ -235,88 +318,44 @@ export const useAgentStudioTerminals = (
       mountedTabs,
       activeTabId: visibleState.activeTabId,
       isVisible,
-      isLoading: terminalQuery.isLoading || worktreeQuery.isLoading,
-      isCreating: visibleTabs.some((tab) => tab.requestState === "creating"),
-      runningCount: visibleTabs.filter((tab) => tab.lifecycle === "running").length,
+      isLoading,
+      isCreating,
       transportError,
       focusRequest,
       controller,
       onToggle: togglePanel,
-      onBackToChat: () => {
-        if (scopeKey) dispatch({ type: "visibilitySet", scopeKey, value: false, isExplicit: true });
-      },
-      onSelectTab: (tabId: string) => {
-        if (!scopeKey) return;
-        dispatch({ type: "tabSelected", scopeKey, tabId });
-        dispatch({ type: "focusRequested", scopeKey });
-      },
-      onCreate: () => void createTerminal(),
-      onRetryCreate: (tabId: string) => void createTerminal(tabId),
-      onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => {
-        if (scopeKey)
-          dispatch({ type: "tabReordered", scopeKey, draggedTabId, targetTabId, position });
-      },
-      onTitleChange: (terminalId: string, title: string) => {
-        if (scopeKey) dispatch({ type: "titleChanged", scopeKey, terminalId, title });
-      },
-      onClose: async (tab: AgentStudioTerminalTab, confirmTerminate: boolean) => {
-        if (!scopeKey) throw new Error("Terminal scope is unavailable.");
-        if (!tab.terminalId) {
-          dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
-          return { closed: true };
-        }
-        const terminalId = tab.terminalId;
-        if (!controller) {
-          throw new Error("Terminal transport is unavailable for this task.");
-        }
-        dispatch({ type: "closeStarted", scopeKey, tabId: tab.tabId });
-        let closeResult: TerminalCloseResponse;
-        try {
-          closeResult = await controller.closeTerminal(terminalId, () =>
-            dependencies.hostClient.terminalClose({
-              terminalId,
-              confirmTerminate,
-            }),
-          );
-        } catch (cause) {
-          dispatch({ type: "closeRejected", scopeKey, tabId: tab.tabId });
-          throw cause;
-        }
-        if (!closeResult.closed) {
-          dispatch({ type: "closeRejected", scopeKey, tabId: tab.tabId });
-          return closeResult;
-        }
-        dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
-        if (repoPath && taskId)
-          await queryClient.invalidateQueries({
-            queryKey: terminalQueryKeys.task({ repoPath, taskId }),
-          });
-        return closeResult;
-      },
-      onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) => {
-        if (scopeKey) dispatch({ type: "lifecycleChanged", scopeKey, terminalId, lifecycle });
-      },
-      onForgotten: (terminalId: string, message: string) => {
-        if (scopeKey) dispatch({ type: "terminalForgotten", scopeKey, terminalId, message });
-      },
+      onBackToChat: backToChat,
+      onSelectTab: selectTab,
+      onCreate: startCreate,
+      onRetryCreate: retryCreate,
+      onReorderTab: reorderTab,
+      onTitleChange: changeTitle,
+      onClose: closeTerminal,
+      onLifecycle: changeLifecycle,
+      onForgotten: forgetTerminal,
     }),
     [
-      createTerminal,
+      backToChat,
+      changeLifecycle,
+      changeTitle,
+      closeTerminal,
       controller,
-      dependencies.hostClient,
       focusRequest,
+      forgetTerminal,
+      isCreating,
+      isLoading,
       isVisible,
       mountedTabs,
-      queryClient,
-      repoPath,
+      reorderTab,
+      retryCreate,
+      selectTab,
       scopeKey,
+      startCreate,
       taskId,
-      terminalQuery.isLoading,
       transportError,
       togglePanel,
       visibleState.activeTabId,
       visibleTabs,
-      worktreeQuery.isLoading,
     ],
   );
 };

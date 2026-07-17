@@ -272,20 +272,23 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     terminalPanel,
   } = model;
 
+  const terminalPanelToggleModel = useMemo(
+    () => ({
+      isVisible: terminalPanel.isVisible,
+      disabled: terminalPanel.taskId === null,
+      onToggle: terminalPanel.onToggle,
+    }),
+    [terminalPanel.isVisible, terminalPanel.onToggle, terminalPanel.taskId],
+  );
   const taskTabsContent = useMemo(
     () => (
       <AgentStudioTaskTabs
         model={taskTabsModel}
         {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
-        terminalPanelToggleModel={{
-          isVisible: terminalPanel.isVisible,
-          runningCount: terminalPanel.runningCount,
-          disabled: terminalPanel.taskId === null,
-          onToggle: terminalPanel.onToggle,
-        }}
+        terminalPanelToggleModel={terminalPanelToggleModel}
       />
     ),
-    [rightPanelToggleModel, taskTabsModel, terminalPanel],
+    [rightPanelToggleModel, taskTabsModel, terminalPanelToggleModel],
   );
   const chatContent = useMemo(
     () => <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />,

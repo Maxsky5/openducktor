@@ -169,7 +169,6 @@ describe("AgentStudioTaskTabs", () => {
           model: buildModel(),
           terminalPanelToggleModel: {
             isVisible: true,
-            runningCount: 3,
             disabled: false,
             onToggle: () => {},
           },
@@ -191,7 +190,6 @@ describe("AgentStudioTaskTabs", () => {
           model: buildModel(),
           terminalPanelToggleModel: {
             isVisible: false,
-            runningCount: 0,
             disabled: false,
             onToggle: () => {},
           },

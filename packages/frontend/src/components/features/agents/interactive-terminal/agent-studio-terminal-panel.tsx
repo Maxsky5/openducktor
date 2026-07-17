@@ -1,6 +1,6 @@
 import type { TerminalLifecycle } from "@openducktor/contracts";
 import { Loader2, Plus } from "lucide-react";
-import { type ReactElement, useCallback, useState } from "react";
+import { lazy, memo, type ReactElement, Suspense, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,23 +16,36 @@ import type {
   AgentStudioTerminalPanelModel,
   AgentStudioTerminalTab,
 } from "@/pages/agents/terminals/use-agent-studio-terminals";
-import { InteractiveTerminal } from "./interactive-terminal";
 import { TerminalTabStrip } from "./terminal-tab-strip";
 
-function TerminalViewport({
+const InteractiveTerminal = lazy(async () => {
+  const module = await import("./interactive-terminal");
+  return { default: module.InteractiveTerminal };
+});
+
+const TerminalViewport = memo(function TerminalViewport({
   tab,
-  model,
+  controller,
+  focusRequest,
   active,
+  onRetryCreate,
   onAttention,
   onLifecycle,
   onForgotten,
   onTitleChange,
 }: {
   tab: AgentStudioTerminalTab;
-  model: AgentStudioTerminalPanelModel;
+  controller: AgentStudioTerminalPanelModel["controller"];
+  focusRequest: number;
   active: boolean;
+  onRetryCreate: AgentStudioTerminalPanelModel["onRetryCreate"];
   onAttention: (tabId: string, message: string | null) => void;
-  onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle, exitText: string | null) => void;
+  onLifecycle: (
+    tabId: string,
+    terminalId: string,
+    lifecycle: TerminalLifecycle,
+    exitText: string | null,
+  ) => void;
   onForgotten: (terminalId: string, message: string) => void;
   onTitleChange: (terminalId: string, title: string) => void;
 }): ReactElement {
@@ -42,9 +55,9 @@ function TerminalViewport({
   );
   const handleLifecycle = useCallback(
     (lifecycle: TerminalLifecycle, exitText: string | null) => {
-      if (tab.terminalId) onLifecycle(tab.terminalId, lifecycle, exitText);
+      if (tab.terminalId) onLifecycle(tab.tabId, tab.terminalId, lifecycle, exitText);
     },
-    [onLifecycle, tab.terminalId],
+    [onLifecycle, tab.tabId, tab.terminalId],
   );
   const handleForgotten = useCallback(
     (message: string) => {
@@ -63,7 +76,7 @@ function TerminalViewport({
       <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 text-center">
         <p className="max-w-[70ch] text-sm text-destructive">{tab.error}</p>
         {tab.requestState === "lost" ? null : (
-          <Button type="button" variant="outline" onClick={() => model.onRetryCreate(tab.tabId)}>
+          <Button type="button" variant="outline" onClick={() => onRetryCreate(tab.tabId)}>
             Retry terminal creation
           </Button>
         )}
@@ -78,7 +91,7 @@ function TerminalViewport({
       />
     );
   }
-  if (!model.controller) {
+  if (!controller) {
     return (
       <div
         data-testid="agent-studio-terminal-unavailable-surface"
@@ -87,18 +100,27 @@ function TerminalViewport({
     );
   }
   return (
-    <InteractiveTerminal
-      terminalId={tab.terminalId}
-      controller={model.controller}
-      active={active}
-      focusRequest={model.focusRequest}
-      onAttention={handleAttention}
-      onLifecycle={handleLifecycle}
-      onForgotten={handleForgotten}
-      onTitleChange={handleTitleChange}
-    />
+    <Suspense
+      fallback={
+        <div
+          data-testid="agent-studio-terminal-loading-surface"
+          className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
+        />
+      }
+    >
+      <InteractiveTerminal
+        terminalId={tab.terminalId}
+        controller={controller}
+        active={active}
+        focusRequest={focusRequest}
+        onAttention={handleAttention}
+        onLifecycle={handleLifecycle}
+        onForgotten={handleForgotten}
+        onTitleChange={handleTitleChange}
+      />
+    </Suspense>
   );
-}
+});
 
 export function AgentStudioTerminalPanel({
   model,
@@ -115,12 +137,16 @@ export function AgentStudioTerminalPanel({
     setAttentionByTab((current) => ({ ...current, [tabId]: message }));
   }, []);
   const setTerminalLifecycle = useCallback(
-    (terminalId: string, lifecycle: TerminalLifecycle, exitText: string | null): void => {
+    (
+      tabId: string,
+      terminalId: string,
+      lifecycle: TerminalLifecycle,
+      exitText: string | null,
+    ): void => {
       model.onLifecycle(terminalId, lifecycle);
-      const tab = model.tabs.find((candidate) => candidate.terminalId === terminalId);
-      if (tab && exitText) setTabAttention(tab.tabId, exitText);
+      if (exitText) setTabAttention(tabId, exitText);
     },
-    [model, setTabAttention],
+    [model.onLifecycle, setTabAttention],
   );
   const closeTab = async (tab: AgentStudioTerminalTab): Promise<void> => {
     try {
@@ -211,8 +237,10 @@ export function AgentStudioTerminalPanel({
               >
                 <TerminalViewport
                   tab={tab}
-                  model={model}
+                  controller={model.controller}
+                  focusRequest={model.focusRequest}
                   active={tab.tabId === activeTab?.tabId}
+                  onRetryCreate={model.onRetryCreate}
                   onAttention={setTabAttention}
                   onLifecycle={setTerminalLifecycle}
                   onForgotten={model.onForgotten}

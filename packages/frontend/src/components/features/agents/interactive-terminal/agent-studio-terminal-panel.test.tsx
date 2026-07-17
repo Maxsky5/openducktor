@@ -28,7 +28,6 @@ const model: AgentStudioTerminalPanelModel = {
   isVisible: true,
   isLoading: false,
   isCreating: false,
-  runningCount: 0,
   transportError: null,
   focusRequest: 0,
   controller: null,
@@ -146,7 +145,6 @@ describe("AgentStudioTerminalPanel", () => {
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          runningCount: 1,
           ...tabsModel([
             {
               tabId: "tab:terminal-running",
@@ -199,7 +197,6 @@ describe("AgentStudioTerminalPanel", () => {
       <AgentStudioTerminalPanel
         model={{
           ...model,
-          runningCount: 1,
           ...tabsModel([
             {
               tabId: "tab:terminal-busy",
@@ -294,7 +291,6 @@ describe("AgentStudioTerminalPanel", () => {
         <AgentStudioTerminalPanel
           model={{
             ...model,
-            runningCount: 1,
             ...tabsModel([
               {
                 tabId: "tab:terminal-running",

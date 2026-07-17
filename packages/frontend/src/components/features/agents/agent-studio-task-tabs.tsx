@@ -1,17 +1,9 @@
-import { DndContext, type DraggableSyntheticListeners, DragOverlay } from "@dnd-kit/core";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskCard } from "@openducktor/contracts";
 import { Circle, CircleAlert, LoaderCircle, Plus, SquareTerminal, X } from "lucide-react";
-import {
-  type CSSProperties,
-  type ReactElement,
-  type MouseEvent as ReactMouseEvent,
-  type RefCallback,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,43 +50,24 @@ export type AgentStudioTaskTabsModel = {
 
 export type TerminalPanelToggleModel = {
   isVisible: boolean;
-  runningCount: number;
   disabled: boolean;
   onToggle: () => void;
 };
 
-type AgentStudioTaskTabShellProps = {
-  tab: AgentStudioTaskTab;
-  dragListeners?: DraggableSyntheticListeners;
-  shellRef?: RefCallback<HTMLDivElement>;
-  style?: CSSProperties;
-  isDragSource?: boolean;
-  isDragOverlay?: boolean;
-  shouldSuppressSelection?: boolean;
-  onSelectTab?: (taskId: string) => void;
-  onCloseTab?: (taskId: string) => void;
-};
+const taskTabLabelClassName =
+  "h-9 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none text-inherit";
 
-function AgentStudioTaskTabLabel({
-  tab,
-  isPreview = false,
-  onMouseDown,
-  onMouseUp,
-}: {
-  tab: AgentStudioTaskTab;
-  isPreview?: boolean;
-  onMouseDown?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onMouseUp?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-}): ReactElement {
-  const statusLabel = statusLabelByTab(tab.status);
-  const className = cn(
-    "h-9 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
-    "text-inherit",
-    !isPreview &&
-      "data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+const taskTabShellClassName = (tab: AgentStudioTaskTab): string =>
+  cn(
+    "group relative z-1 inline-flex h-10 shrink-0 cursor-pointer touch-none select-none items-center gap-1 rounded-t-[10px] pl-2 pr-1",
+    tab.isActive
+      ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
+      : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
   );
 
-  const content = (
+function AgentStudioTaskTabContent({ tab }: { tab: AgentStudioTaskTab }): ReactElement {
+  const statusLabel = statusLabelByTab(tab.status);
+  return (
     <>
       <span
         aria-hidden="true"
@@ -106,22 +79,6 @@ function AgentStudioTaskTabLabel({
       <span className="sr-only">{statusLabel}</span>
       <span className="max-w-52 truncate">{tab.taskTitle}</span>
     </>
-  );
-
-  if (isPreview) {
-    return <div className={cn(className, "inline-flex")}>{content}</div>;
-  }
-
-  return (
-    <TabsTrigger
-      id={`agent-studio-tab-${tab.taskId}`}
-      value={tab.taskId}
-      className={className}
-      onMouseDown={onMouseDown}
-      onMouseUp={onMouseUp}
-    >
-      {content}
-    </TabsTrigger>
   );
 }
 
@@ -149,79 +106,24 @@ const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
   return <Circle className="size-3.5 fill-input text-input" />;
 };
 
-function AgentStudioTaskTabShell({
-  tab,
-  dragListeners,
-  shellRef,
-  style,
-  isDragSource = false,
-  isDragOverlay = false,
-  shouldSuppressSelection = false,
-  onSelectTab,
-  onCloseTab,
-}: AgentStudioTaskTabShellProps): ReactElement {
+function AgentStudioTaskTabDragOverlay({ tab }: { tab: AgentStudioTaskTab }): ReactElement {
   return (
     <div
-      ref={shellRef}
+      aria-hidden="true"
       data-active={tab.isActive ? "true" : "false"}
-      data-dragging={isDragSource ? "true" : "false"}
+      data-dragging="true"
       data-task-tab-id={tab.taskId}
-      style={style}
-      className={cn(
-        "group relative z-1 inline-flex h-10 shrink-0 touch-none select-none items-center gap-1 rounded-t-[10px] pl-2 pr-1",
-        "cursor-pointer",
-        tab.isActive
-          ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
-          : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
-        isDragSource && "opacity-0",
-        isDragOverlay && "z-50 after:hidden",
-      )}
-      {...dragListeners}
+      className={cn(taskTabShellClassName(tab), "z-50 after:hidden")}
     >
-      <AgentStudioTaskTabLabel
-        tab={tab}
-        isPreview={isDragOverlay}
-        {...(!isDragOverlay
-          ? {
-              onMouseDown: (event: ReactMouseEvent<HTMLButtonElement>) => {
-                event.preventDefault();
-              },
-              onMouseUp: (event: ReactMouseEvent<HTMLButtonElement>) => {
-                if (shouldSuppressSelection) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  return;
-                }
-                onSelectTab?.(tab.taskId);
-              },
-            }
-          : {})}
-      />
-      <button
-        type="button"
-        className={cn(
-          "mr-1 rounded-md p-1 text-muted-foreground transition-opacity hover:bg-secondary hover:text-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          "opacity-60 group-hover:opacity-100 data-[active=true]:opacity-100 transition-none",
-          onCloseTab ? "cursor-pointer" : "pointer-events-none",
-        )}
+      <div className={cn(taskTabLabelClassName, "inline-flex")}>
+        <AgentStudioTaskTabContent tab={tab} />
+      </div>
+      <span
+        className="pointer-events-none mr-1 rounded-md p-1 text-muted-foreground opacity-60"
         data-active={tab.isActive ? "true" : "false"}
-        tabIndex={onCloseTab && tab.isActive ? 0 : -1}
-        aria-label={`Close tab for ${tab.taskTitle}`}
-        onMouseDown={(event) => {
-          event.stopPropagation();
-        }}
-        onPointerDown={(event) => {
-          event.stopPropagation();
-        }}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onCloseTab?.(tab.taskId);
-        }}
       >
         <X className="size-3.5" />
-      </button>
+      </span>
     </div>
   );
 }
@@ -243,21 +145,57 @@ function SortableAgentStudioTaskTab({
     id: tab.taskId,
     transition: horizontalTabSortTransition,
   });
+  const isDragSource = isDragging || isActiveDrag;
 
   return (
-    <AgentStudioTaskTabShell
-      tab={tab}
-      shellRef={setNodeRef}
-      dragListeners={listeners}
-      isDragSource={isDragging || isActiveDrag}
-      shouldSuppressSelection={shouldSuppressSelection}
-      onSelectTab={onSelectTab}
-      onCloseTab={onCloseTab}
+    <div
+      ref={setNodeRef}
+      data-active={tab.isActive ? "true" : "false"}
+      data-dragging={isDragSource ? "true" : "false"}
+      data-task-tab-id={tab.taskId}
+      className={cn(taskTabShellClassName(tab), isDragSource && "opacity-0")}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-    />
+      {...listeners}
+    >
+      <TabsTrigger
+        id={`agent-studio-tab-${tab.taskId}`}
+        value={tab.taskId}
+        className={cn(
+          taskTabLabelClassName,
+          "data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        )}
+        onMouseDown={(event) => event.preventDefault()}
+        onMouseUp={(event) => {
+          if (shouldSuppressSelection) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          onSelectTab(tab.taskId);
+        }}
+      >
+        <AgentStudioTaskTabContent tab={tab} />
+      </TabsTrigger>
+      <button
+        type="button"
+        className="mr-1 cursor-pointer rounded-md p-1 text-muted-foreground opacity-60 transition-none hover:bg-secondary hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        data-active={tab.isActive ? "true" : "false"}
+        tabIndex={tab.isActive ? 0 : -1}
+        aria-label={`Close tab for ${tab.taskTitle}`}
+        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onCloseTab(tab.taskId);
+        }}
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
   );
 }
 
@@ -344,9 +282,7 @@ export function AgentStudioTaskTabs({
                   </SortableContext>
 
                   <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
-                    {activeDragTab ? (
-                      <AgentStudioTaskTabShell tab={activeDragTab} isDragOverlay />
-                    ) : null}
+                    {activeDragTab ? <AgentStudioTaskTabDragOverlay tab={activeDragTab} /> : null}
                   </DragOverlay>
                 </DndContext>
               ) : (

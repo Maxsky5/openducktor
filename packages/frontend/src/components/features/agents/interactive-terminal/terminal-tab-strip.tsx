@@ -1,14 +1,8 @@
-import { DndContext, type DraggableSyntheticListeners, DragOverlay } from "@dnd-kit/core";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Loader2, X } from "lucide-react";
-import {
-  type CSSProperties,
-  type ReactElement,
-  type MouseEvent as ReactMouseEvent,
-  type RefCallback,
-  useMemo,
-} from "react";
+import { type ReactElement, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -37,90 +31,27 @@ const detailText = (tab: AgentStudioTerminalTab): string =>
     ? `${lifecycleText(tab)}. Started in ${tab.summary.initialWorkingDir}`
     : lifecycleText(tab);
 
-type TerminalTabShellProps = {
-  tab: AgentStudioTerminalTab;
-  dragListeners?: DraggableSyntheticListeners;
-  shellRef?: RefCallback<HTMLDivElement>;
-  style?: CSSProperties;
-  isDragSource?: boolean;
-  isDragOverlay?: boolean;
-  shouldSuppressSelection?: boolean;
-  onSelectTab?: (tabId: string) => void;
-  onCloseTab?: (tab: AgentStudioTerminalTab) => void;
-};
+const terminalTabShellClassName =
+  "group relative inline-flex h-8 min-w-52 max-w-80 shrink-0 cursor-pointer touch-none select-none items-center font-mono text-[11px]";
 
-function TerminalTabShell({
-  tab,
-  dragListeners,
-  shellRef,
-  style,
-  isDragSource = false,
-  isDragOverlay = false,
-  shouldSuppressSelection = false,
-  onSelectTab,
-  onCloseTab,
-}: TerminalTabShellProps): ReactElement {
-  const label = (
+function TerminalTabLabel({ tab }: { tab: AgentStudioTerminalTab }): ReactElement {
+  return (
     <span className="min-w-0 flex-1 truncate px-3 text-left" title={detailText(tab)}>
       {tab.label}
     </span>
   );
+}
+
+function TerminalTabDragOverlay({ tab }: { tab: AgentStudioTerminalTab }): ReactElement {
   return (
     <div
-      ref={shellRef}
-      style={style}
-      data-dragging={isDragSource ? "true" : "false"}
+      aria-hidden="true"
       className={cn(
-        "group relative inline-flex h-8 min-w-52 max-w-80 shrink-0 cursor-pointer touch-none select-none items-center font-mono text-[11px]",
-        isDragSource && "opacity-0",
-        isDragOverlay &&
-          "z-50 border-r border-(--dev-server-terminal-border) border-t-4 border-t-selected-accent bg-(--dev-server-terminal-tab-active) text-(--dev-server-terminal-foreground)",
+        terminalTabShellClassName,
+        "z-50 border-r border-(--dev-server-terminal-border) border-t-4 border-t-selected-accent bg-(--dev-server-terminal-tab-active) text-(--dev-server-terminal-foreground)",
       )}
-      {...dragListeners}
     >
-      {isDragOverlay ? (
-        label
-      ) : (
-        <TabsTrigger
-          value={tab.tabId}
-          aria-label={`${tab.label}, ${lifecycleText(tab)}`}
-          className={cn(
-            terminalTabTriggerClassName,
-            "h-8 w-full max-w-none flex-1 cursor-pointer px-0 pr-8",
-          )}
-          onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => event.preventDefault()}
-          onMouseUp={(event: ReactMouseEvent<HTMLButtonElement>) => {
-            if (shouldSuppressSelection) {
-              event.preventDefault();
-              event.stopPropagation();
-              return;
-            }
-            onSelectTab?.(tab.tabId);
-          }}
-        >
-          {label}
-        </TabsTrigger>
-      )}
-      {isDragOverlay ? null : (
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          aria-label={`Close ${tab.label}`}
-          aria-busy={tab.lifecycle === "closing"}
-          className="absolute right-1 z-20 size-6 rounded-sm text-[var(--dev-server-terminal-foreground)] hover:bg-[var(--dev-server-terminal-surface)] hover:text-[var(--dev-server-terminal-foreground)]"
-          disabled={tab.lifecycle === "closing"}
-          onMouseDown={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onCloseTab?.(tab);
-          }}
-        >
-          {tab.lifecycle === "closing" ? <Loader2 className="animate-spin" /> : <X />}
-        </Button>
-      )}
+      <TerminalTabLabel tab={tab} />
     </div>
   );
 }
@@ -142,17 +73,53 @@ function SortableTerminalTab({
     id: tab.tabId,
     transition: horizontalTabSortTransition,
   });
+  const isDragSource = isDragging || isActiveDrag;
   return (
-    <TerminalTabShell
-      tab={tab}
-      shellRef={setNodeRef}
-      dragListeners={listeners}
-      isDragSource={isDragging || isActiveDrag}
-      shouldSuppressSelection={shouldSuppressSelection}
-      onSelectTab={onSelectTab}
-      onCloseTab={onCloseTab}
+    <div
+      ref={setNodeRef}
+      data-dragging={isDragSource ? "true" : "false"}
+      className={cn(terminalTabShellClassName, isDragSource && "opacity-0")}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-    />
+      {...listeners}
+    >
+      <TabsTrigger
+        value={tab.tabId}
+        aria-label={`${tab.label}, ${lifecycleText(tab)}`}
+        className={cn(
+          terminalTabTriggerClassName,
+          "h-8 w-full max-w-none flex-1 cursor-pointer px-0 pr-8",
+        )}
+        onMouseDown={(event) => event.preventDefault()}
+        onMouseUp={(event) => {
+          if (shouldSuppressSelection) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          onSelectTab(tab.tabId);
+        }}
+      >
+        <TerminalTabLabel tab={tab} />
+      </TabsTrigger>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        aria-label={`Close ${tab.label}`}
+        aria-busy={tab.lifecycle === "closing"}
+        className="absolute right-1 z-20 size-6 rounded-sm text-[var(--dev-server-terminal-foreground)] hover:bg-[var(--dev-server-terminal-surface)] hover:text-[var(--dev-server-terminal-foreground)]"
+        disabled={tab.lifecycle === "closing"}
+        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onCloseTab(tab);
+        }}
+      >
+        {tab.lifecycle === "closing" ? <Loader2 className="animate-spin" /> : <X />}
+      </Button>
+    </div>
   );
 }
 
@@ -210,7 +177,7 @@ export function TerminalTabStrip({
         </TabsList>
       </SortableContext>
       <DragOverlay dropAnimation={horizontalTabDropAnimation} zIndex={40}>
-        {activeDragTab ? <TerminalTabShell tab={activeDragTab} isDragOverlay /> : null}
+        {activeDragTab ? <TerminalTabDragOverlay tab={activeDragTab} /> : null}
       </DragOverlay>
     </DndContext>
   );

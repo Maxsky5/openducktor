@@ -316,6 +316,59 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
+  test("keeps terminal actions stable across presentation-only updates", async () => {
+    const dependencies = createTerminalTestDependencies();
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
+      const actions = {
+        onToggle: getLatest().onToggle,
+        onBackToChat: getLatest().onBackToChat,
+        onSelectTab: getLatest().onSelectTab,
+        onCreate: getLatest().onCreate,
+        onRetryCreate: getLatest().onRetryCreate,
+        onReorderTab: getLatest().onReorderTab,
+        onTitleChange: getLatest().onTitleChange,
+        onClose: getLatest().onClose,
+        onLifecycle: getLatest().onLifecycle,
+        onForgotten: getLatest().onForgotten,
+      };
+
+      act(() => getLatest().onTitleChange("terminal-task-a", "pnpm run dev"));
+      await waitFor(() => expect(getLatest().tabs[0]?.label).toBe("pnpm run dev"));
+
+      expect({
+        onToggle: getLatest().onToggle,
+        onBackToChat: getLatest().onBackToChat,
+        onSelectTab: getLatest().onSelectTab,
+        onCreate: getLatest().onCreate,
+        onRetryCreate: getLatest().onRetryCreate,
+        onReorderTab: getLatest().onReorderTab,
+        onTitleChange: getLatest().onTitleChange,
+        onClose: getLatest().onClose,
+        onLifecycle: getLatest().onLifecycle,
+        onForgotten: getLatest().onForgotten,
+      }).toEqual(actions);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("hides the final tab immediately while its terminal shuts down", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals = [summaryForTask("task-a")];
@@ -643,7 +696,6 @@ describe("useAgentStudioTerminals", () => {
 
       expect(terminalListCalls).toBeGreaterThanOrEqual(2);
       expect(getLatest().tabs[0]).toHaveProperty("lifecycle", "exited");
-      expect(getLatest().runningCount).toBe(0);
     } finally {
       view.unmount();
     }
