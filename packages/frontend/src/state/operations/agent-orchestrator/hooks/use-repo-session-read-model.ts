@@ -76,8 +76,11 @@ export const useRepoSessionReadModel = ({
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const [reloadGeneration, setReloadGeneration] = useState(0);
   const latestReloadGenerationRef = useRef(reloadGeneration);
+  const retryAttemptRef = useRef(0);
   latestReloadGenerationRef.current = reloadGeneration;
   const reloadSessionReadModel = useCallback(() => {
+    const retryAttempt = retryAttemptRef.current + 1;
+    retryAttemptRef.current = retryAttempt;
     if (!workspaceRepoPath) {
       setReloadGeneration((current) => current + 1);
       return;
@@ -88,6 +91,7 @@ export const useRepoSessionReadModel = ({
     void retryAgentSessionListQueries(queryClient, repoPath, taskIds, sessionReadPort).then(
       () => {
         if (
+          retryAttemptRef.current === retryAttempt &&
           currentWorkspaceRepoPathRef.current === repoPath &&
           repoEpochRef.current === repoEpoch
         ) {
@@ -96,6 +100,7 @@ export const useRepoSessionReadModel = ({
       },
       (error: unknown) => {
         if (
+          retryAttemptRef.current === retryAttempt &&
           currentWorkspaceRepoPathRef.current === repoPath &&
           repoEpochRef.current === repoEpoch
         ) {

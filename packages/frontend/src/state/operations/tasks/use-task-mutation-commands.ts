@@ -115,26 +115,27 @@ export function useTaskMutationCommands({
             agentSessionReadPort,
             mutation: async () => {
               await host.taskDelete(repoPath, taskId, deleteSubtasks);
-              await Promise.all(
-                taskIdsToRemove.map((deletedTaskId) =>
-                  queryClient.invalidateQueries({
-                    queryKey: taskWorktreeQueryKeys.taskWorktree({
-                      repoPath,
-                      taskId: deletedTaskId,
-                    }),
-                  }),
-                ),
-              );
             },
           });
-          await removeAgentSessionListQueries(queryClient, repoPath, taskIdsToRemove);
         },
         successTitle: "Task deleted",
         successDescription: taskId,
         failureTitle: "Failed to delete task",
       });
+      const repoPath = requireActiveRepo(activeRepoPath);
+      await Promise.all([
+        removeAgentSessionListQueries(queryClient, repoPath, taskIdsToRemove),
+        ...taskIdsToRemove.map((deletedTaskId) =>
+          queryClient.invalidateQueries({
+            queryKey: taskWorktreeQueryKeys.taskWorktree({
+              repoPath,
+              taskId: deletedTaskId,
+            }),
+          }),
+        ),
+      ]);
     },
-    [activeWorkspaceId, agentSessionReadPort, queryClient, runTaskMutation, tasks],
+    [activeRepoPath, activeWorkspaceId, agentSessionReadPort, queryClient, runTaskMutation, tasks],
   );
 
   const closeTask = useCallback(

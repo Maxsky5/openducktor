@@ -1833,8 +1833,12 @@ describe("use-task-operations", () => {
 
   test("deleteTask removes cached task documents for deleted tasks and subtasks", async () => {
     let isDeleted = false;
+    let deletePromise: Promise<void> | null = null;
+    const taskDeleted = createDeferred<void>();
+    const deletedTasksList = createDeferred<TaskCard[]>();
     const taskDelete = mock(async () => {
       isDeleted = true;
+      taskDeleted.resolve();
       return { ok: true };
     });
     const agentSessionsListForTasks = mock(async () => [
@@ -1857,9 +1861,12 @@ describe("use-task-operations", () => {
         ],
       },
     ]);
-    const tasksList = mock(async () =>
-      isDeleted ? [] : [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
-    );
+    const tasksList = mock(async () => {
+      if (isDeleted) {
+        return deletedTasksList.promise;
+      }
+      return [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")];
+    });
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
     const original = {
@@ -1925,13 +1932,32 @@ describe("use-task-operations", () => {
 
       await harness.mount();
       await harness.waitFor(() => latest?.tasks.length === 2);
-      await harness.run(async () => {
-        if (!latest) {
-          throw new Error("Hook not mounted");
-        }
+      const operations = latest as ReturnType<typeof useTaskOperations> | null;
+      if (!operations) {
+        throw new Error("Hook not mounted");
+      }
+      deletePromise = operations.deleteTask("A", true);
+      await taskDeleted.promise;
 
-        await latest.deleteTask("A", true);
-      });
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "A")),
+      ).toEqual([
+        buildAgentSessionRecord({
+          externalSessionId: "session-shared",
+          workingDirectory: "/repo/parent",
+        }),
+      ]);
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "B")),
+      ).toEqual([
+        buildAgentSessionRecord({
+          externalSessionId: "session-b",
+          workingDirectory: "/repo/child",
+        }),
+      ]);
+
+      deletedTasksList.resolve([]);
+      await deletePromise;
 
       await harness.waitFor(
         () =>
@@ -1951,6 +1977,8 @@ describe("use-task-operations", () => {
       expect(queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "A"))).toBeUndefined();
       expect(queryClient.getQueryData(agentSessionQueryKeys.list("/repo", "B"))).toBeUndefined();
     } finally {
+      deletedTasksList.resolve([]);
+      await deletePromise?.catch(() => undefined);
       await harness.unmount();
       host.taskDelete = original.taskDelete;
       host.tasksList = original.tasksList;
