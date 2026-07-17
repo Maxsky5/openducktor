@@ -268,7 +268,7 @@ export function TaskExecutionPanelToggleButton({
       type="button"
       size="icon"
       variant="ghost"
-      className="size-10 rounded-md border border-transparent bg-transparent text-studio-chrome-foreground hover:border-studio-chrome-foreground/30 hover:bg-studio-chrome-foreground/10"
+      className={agentStudioPanelToggleButtonClassName}
       onClick={model.onToggle}
       aria-label={model.isOpen ? `Hide ${panelLabel} panel` : `Show ${panelLabel} panel`}
       title={model.isOpen ? `Hide ${panelLabel} panel` : `Show ${panelLabel} panel`}
@@ -281,6 +281,9 @@ export function TaskExecutionPanelToggleButton({
     </Button>
   );
 }
+
+export const agentStudioPanelToggleButtonClassName =
+  "size-10 rounded-md border border-transparent bg-transparent text-studio-chrome-foreground hover:border-studio-chrome-foreground/30 hover:bg-studio-chrome-foreground/10";
 
 export function TaskExecutionPanel({ model }: { model: TaskExecutionPanelModel }): ReactElement {
   return <TaskExecutionPanelColumn model={model} />;

@@ -26,6 +26,7 @@ import {
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
+  agentStudioPanelToggleButtonClassName,
   TaskExecutionPanelToggleButton,
   type TaskExecutionPanelToggleModel,
 } from "./task-execution-panel";
@@ -377,7 +378,7 @@ export function AgentStudioTaskTabs({
             size="icon"
             variant="ghost"
             aria-label={terminalPanelToggleModel.isVisible ? "Hide terminals" : "Show terminals"}
-            className="shrink-0 text-studio-chrome-foreground"
+            className={cn(agentStudioPanelToggleButtonClassName, "shrink-0")}
             disabled={terminalPanelToggleModel.disabled}
             onClick={terminalPanelToggleModel.onToggle}
           >

@@ -180,7 +180,12 @@ export const terminalPresentationReducer = (
               requestState: "creating" as const,
             },
           ];
-      return { ...scope, tabs, activeTabId: event.tabId };
+      return {
+        ...scope,
+        tabs,
+        activeTabId: event.tabId,
+        focusRequest: scope.focusRequest + 1,
+      };
     }
     if (event.type === "creationFailed") {
       return {

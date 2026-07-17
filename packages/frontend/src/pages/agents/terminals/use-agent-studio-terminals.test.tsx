@@ -579,6 +579,7 @@ describe("useAgentStudioTerminals", () => {
 
     try {
       await waitFor(() => expect(getLatest().activeTabId).toBe("tab:terminal-task-a"));
+      const previousFocusRequest = getLatest().focusRequest;
 
       act(() => getLatest().onCreate());
 
@@ -586,6 +587,7 @@ describe("useAgentStudioTerminals", () => {
         () => {
           const activeTab = getLatest().tabs.find((tab) => tab.tabId === getLatest().activeTabId);
           expect(activeTab?.terminalId).toBe("terminal-created-second");
+          expect(getLatest().focusRequest).toBe(previousFocusRequest + 1);
         },
         { timeout: 2_000 },
       );

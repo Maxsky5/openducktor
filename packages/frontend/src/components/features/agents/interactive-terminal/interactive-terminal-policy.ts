@@ -4,6 +4,42 @@ export type TerminalKeyAction = "copy" | "interrupt" | "paste" | "passthrough";
 
 const TERMINAL_TITLE_MAX_LENGTH = 160;
 
+export const activateTerminalViewport = ({
+  fit,
+  refresh,
+  readRows,
+  focus,
+}: {
+  fit: () => void;
+  refresh: (start: number, end: number) => void;
+  readRows: () => number;
+  focus: (() => void) | null;
+}): void => {
+  fit();
+  refresh(0, Math.max(0, readRows() - 1));
+  focus?.();
+};
+
+export const createHydratedTerminalTitlePublisher = (publish: (title: string) => void) => {
+  let hydrated = false;
+  let pendingTitle: string | null = null;
+  return {
+    receive(title: string): void {
+      if (hydrated) {
+        publish(title);
+        return;
+      }
+      pendingTitle = title;
+    },
+    markHydrated(): void {
+      if (hydrated) return;
+      hydrated = true;
+      if (pendingTitle) publish(pendingTitle);
+      pendingTitle = null;
+    },
+  };
+};
+
 export const normalizeTerminalTitle = (title: string, fallback: string): string => {
   const sanitize = (value: string): string =>
     Array.from(value.trim())

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import {
+  activateTerminalViewport,
+  createHydratedTerminalTitlePublisher,
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   createTerminalKeyEventHandler,
@@ -21,6 +23,51 @@ const keyEvent = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
   }) as KeyboardEvent;
 
 describe("InteractiveTerminal policies", () => {
+  test("fits and redraws a terminal when its hidden viewport becomes active", () => {
+    const events: string[] = [];
+    let rows = 1;
+
+    activateTerminalViewport({
+      fit: () => {
+        rows = 24;
+        events.push("fit");
+      },
+      refresh: (start, end) => events.push(`refresh:${start}-${end}`),
+      readRows: () => rows,
+      focus: null,
+    });
+
+    expect(events).toEqual(["fit", "refresh:0-23"]);
+  });
+
+  test("focuses an activated terminal only when focus was explicitly requested", () => {
+    const events: string[] = [];
+
+    activateTerminalViewport({
+      fit: () => events.push("fit"),
+      refresh: () => events.push("refresh"),
+      readRows: () => 24,
+      focus: () => events.push("focus"),
+    });
+
+    expect(events).toEqual(["fit", "refresh", "focus"]);
+  });
+
+  test("publishes only the final replay title before forwarding live title changes", () => {
+    const titles: string[] = [];
+    const publisher = createHydratedTerminalTitlePublisher((title) => titles.push(title));
+
+    publisher.receive("~/repo");
+    publisher.receive("pnpm run dev");
+    expect(titles).toEqual([]);
+
+    publisher.markHydrated();
+    expect(titles).toEqual(["pnpm run dev"]);
+
+    publisher.receive("~/repo/packages/frontend");
+    expect(titles).toEqual(["pnpm run dev", "~/repo/packages/frontend"]);
+  });
+
   test("normalizes live shell titles without exposing control characters", () => {
     expect(normalizeTerminalTitle("  pnpm run dev\u0007  ", "/repo/worktree")).toBe("pnpm run dev");
     expect(normalizeTerminalTitle("\u0000\u001f", "/repo/worktree")).toBe("/repo/worktree");

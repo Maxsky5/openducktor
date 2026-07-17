@@ -6,6 +6,8 @@ import { type ReactElement, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
 import {
+  activateTerminalViewport,
+  createHydratedTerminalTitlePublisher,
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   createTerminalKeyEventHandler,
@@ -50,6 +52,7 @@ export function InteractiveTerminal({
 }): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
   const callbacksRef = useRef({
     onAttention,
     onLifecycle,
@@ -88,9 +91,13 @@ export function InteractiveTerminal({
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
     const reportInteractionFailure = (cause: unknown): void => {
       setInteractionError(cause instanceof Error ? cause.message : String(cause));
     };
+    const titlePublisher = createHydratedTerminalTitlePublisher((title) =>
+      callbacksRef.current.onTitleChange(title),
+    );
     const outputSequencer = createTerminalOutputSequencer({
       write: (payload, parsed) => terminal.write(payload, parsed),
       onConsumed: (sequenceEnd) => {
@@ -98,7 +105,9 @@ export function InteractiveTerminal({
         void controller.acknowledge(terminalId, sequenceEnd).catch(reportInteractionFailure);
       },
       onHydrated: () => {
-        if (generation === 0) setIsHydrated(true);
+        if (generation !== 0) return;
+        titlePublisher.markHydrated();
+        setIsHydrated(true);
       },
     });
     const enqueueInput = createTerminalInputSequencer({
@@ -117,7 +126,7 @@ export function InteractiveTerminal({
     });
     const titleSubscription = terminal.onTitleChange((title) => {
       const normalizedTitle = normalizeTerminalTitle(title, "");
-      if (normalizedTitle) callbacksRef.current.onTitleChange(normalizedTitle);
+      if (normalizedTitle) titlePublisher.receive(normalizedTitle);
     });
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
     terminal.attachCustomKeyEventHandler(
@@ -169,12 +178,25 @@ export function InteractiveTerminal({
       fitAddon.dispose();
       terminal.dispose();
       terminalRef.current = null;
+      fitAddonRef.current = null;
     };
   }, [controller, terminalId]);
 
   useEffect(() => {
-    if (active && focusRequest > 0) terminalRef.current?.focus();
-  }, [active, focusRequest]);
+    if (!active || !isHydrated) return;
+    const frameId = requestAnimationFrame(() => {
+      const terminal = terminalRef.current;
+      const fitAddon = fitAddonRef.current;
+      if (!terminal || !fitAddon) return;
+      activateTerminalViewport({
+        fit: () => fitAddon.fit(),
+        refresh: (start, end) => terminal.refresh(start, end),
+        readRows: () => terminal.rows,
+        focus: focusRequest > 0 ? () => terminal.focus() : null,
+      });
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [active, focusRequest, isHydrated]);
 
   return (
     <div className="relative h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
