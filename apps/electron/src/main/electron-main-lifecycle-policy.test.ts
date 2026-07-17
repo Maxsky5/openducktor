@@ -30,6 +30,14 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("icon: resolveElectronWindowIcon()");
   });
 
+  test("main window stays hidden until Electron has rendered its first frame", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("show: false");
+    expect(source).toContain('window.once("ready-to-show", () => {');
+    expect(source).toContain("window.show();");
+  });
+
   test("macOS dock uses the tracked application icon", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 

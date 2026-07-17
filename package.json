@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "bun run electron:dev",
-    "electron:dev": "cd apps/electron && bun run dev",
+    "electron:dev": "bun apps/electron/scripts/dev.ts",
     "electron:build": "bun run --filter @openducktor/electron build",
     "electron:package": "bun run --filter @openducktor/electron package",
     "browser:dev": "cd packages/openducktor-web && bun run dev",

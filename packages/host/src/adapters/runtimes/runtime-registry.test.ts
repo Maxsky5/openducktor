@@ -361,8 +361,12 @@ describe("createRuntimeRegistry", () => {
     ).resolves.toEqual([createRuntime()]);
     expect(starts).toBe(1);
   });
-  test("waits for starting runtime handles before stopping all runtimes", async () => {
+  test("cancels starting runtime handles before stopping all runtimes", async () => {
     const stops: string[] = [];
+    let markStarted: () => void = () => {};
+    const startEntered = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     let resolveStart: (runtime: RuntimeInstanceSummary) => void = () => {};
     const started = new Promise<RuntimeInstanceSummary>((resolve) => {
       resolveStart = resolve;
@@ -372,6 +376,7 @@ describe("createRuntimeRegistry", () => {
         startWorkspaceRuntime() {
           return Effect.tryPromise({
             try: async () => {
+              markStarted();
               const runtime = await started;
               return createRuntimeHandle(runtime, () =>
                 Effect.sync(() => {
@@ -391,13 +396,25 @@ describe("createRuntimeRegistry", () => {
       workingDirectory: "/repo",
       descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
     };
-    const ensure = Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    const ensure = Effect.runPromise(registry.ensureWorkspaceRuntime(input)).then(
+      (runtime) => ({ type: "started" as const, runtime }),
+      (error: unknown) => ({ type: "cancelled" as const, error }),
+    );
+    await startEntered;
     const stopAllRuntimes = requireMethod(registry.stopAllRuntimes, "stopAllRuntimes");
     const stopAll = Effect.runPromise(stopAllRuntimes());
+    const stopResult = await Promise.race([
+      stopAll.then((stopped) => ({ type: "stopped" as const, stopped })),
+      new Promise<{ type: "pending" }>((resolve) =>
+        setTimeout(() => resolve({ type: "pending" }), 100),
+      ),
+    ]);
     const runtime = createRuntime();
     resolveStart(runtime);
-    await expect(stopAll).resolves.toEqual([runtime]);
-    await expect(ensure).resolves.toEqual(runtime);
+    await Promise.allSettled([ensure, stopAll]);
+
+    expect(stopResult).toEqual({ type: "stopped", stopped: [] });
+    expect((await ensure).type).toBe("cancelled");
     await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([]);
     await expect(
       Effect.runPromise(registry.findRuntimeById(runtime.runtimeId)),
@@ -407,7 +424,7 @@ describe("createRuntimeRegistry", () => {
         registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
       ),
     ).resolves.toEqual([]);
-    expect(stops).toEqual(["runtime-1"]);
+    expect(stops).toEqual([]);
   });
   test("stops host-started runtime handles before removing them", async () => {
     const stops: string[] = [];

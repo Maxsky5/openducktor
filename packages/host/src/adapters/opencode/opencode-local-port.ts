@@ -1,3 +1,4 @@
+import { type IncomingMessage, request } from "node:http";
 import { createServer, Socket } from "node:net";
 import { Effect } from "effect";
 import {
@@ -107,4 +108,65 @@ export const canConnect = (port: number, timeoutMs: number): Effect.Effect<boole
     } catch {
       finish(false);
     }
+  });
+
+export const isOpenCodeHealthy = (port: number, timeoutMs: number): Effect.Effect<boolean> =>
+  Effect.async<boolean>((resume, signal) => {
+    let settled = false;
+    let response: IncomingMessage | null = null;
+    const finish = (healthy: boolean): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      response?.destroy();
+      probe.destroy();
+      resume(Effect.succeed(healthy));
+    };
+    const abort = () => finish(false);
+    const probe = request(
+      {
+        host: "127.0.0.1",
+        port,
+        path: "/global/health",
+        method: "GET",
+      },
+      (nextResponse) => {
+        response = nextResponse;
+        if (nextResponse.statusCode !== 200) {
+          finish(false);
+          return;
+        }
+        let body = "";
+        nextResponse.setEncoding("utf8");
+        nextResponse.on("data", (chunk: string) => {
+          body += chunk;
+          if (body.length > 4_096) {
+            finish(false);
+          }
+        });
+        nextResponse.once("end", () => {
+          try {
+            const parsed: unknown = JSON.parse(body);
+            finish(
+              typeof parsed === "object" &&
+                parsed !== null &&
+                "healthy" in parsed &&
+                parsed.healthy === true,
+            );
+          } catch {
+            finish(false);
+          }
+        });
+      },
+    );
+    probe.setTimeout(timeoutMs, () => finish(false));
+    probe.once("error", () => finish(false));
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    probe.end();
   });

@@ -8,6 +8,7 @@ import {
   type ElectronDevProcessHandlers,
   electronGracefulShutdownSignal,
   electronRuntimeEnv,
+  keepElectronDevProcessAliveDuring,
   mainEffect,
   resolveMacosAppBundlePath,
   resolveMacosDevExecutablePath,
@@ -19,15 +20,20 @@ import {
 } from "./dev";
 
 const createFakeProcessHandlers = () => {
-  const registered: Array<{ event: string; listener: () => void }> = [];
+  const registered: Array<{ event: string; listener: () => void; mode: "on" | "once" }> = [];
   const removed: Array<{ event: string; listener: () => void }> = [];
-  const processHandlers: ElectronDevProcessHandlers = {
+  const processHandlers = {
     off(event, listener) {
       removed.push({ event, listener });
     },
-    once(event, listener) {
-      registered.push({ event, listener });
+    on(event, listener) {
+      registered.push({ event, listener, mode: "on" });
     },
+    once(event, listener) {
+      registered.push({ event, listener, mode: "once" });
+    },
+  } satisfies ElectronDevProcessHandlers & {
+    on(event: "SIGINT" | "SIGTERM" | "exit", listener: () => void): void;
   };
 
   return {
@@ -38,6 +44,27 @@ const createFakeProcessHandlers = () => {
 };
 
 describe("electron dev script", () => {
+  test("keeps the launcher alive while graceful shutdown is pending", async () => {
+    const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;
+    const clearedTimers: Array<ReturnType<typeof setInterval>> = [];
+    let finishShutdown: () => void = () => {};
+    const shutdown = new Promise<void>((resolve) => {
+      finishShutdown = resolve;
+    });
+
+    const shutdownPromise = keepElectronDevProcessAliveDuring(() => shutdown, {
+      clearInterval: (nextTimer) => {
+        clearedTimers.push(nextTimer);
+      },
+      setInterval: () => timer,
+    });
+
+    expect(clearedTimers).toEqual([]);
+    finishShutdown();
+    await shutdownPromise;
+    expect(clearedTimers).toEqual([timer]);
+  });
+
   test("uses the default renderer dev server port", () => {
     expect(resolveRendererDevPort(undefined)).toBe(1430);
     expect(resolveRendererDevPort("   ")).toBe(1430);
@@ -361,6 +388,11 @@ describe("electron dev script", () => {
       "SIGINT",
       "SIGTERM",
       "exit",
+    ]);
+    expect(fakeProcessHandlers.registered.map(({ event, mode }) => ({ event, mode }))).toEqual([
+      { event: "SIGINT", mode: "on" },
+      { event: "SIGTERM", mode: "on" },
+      { event: "exit", mode: "once" },
     ]);
     expect(fakeProcessHandlers.removed.map(({ event }) => event)).toEqual([
       "exit",

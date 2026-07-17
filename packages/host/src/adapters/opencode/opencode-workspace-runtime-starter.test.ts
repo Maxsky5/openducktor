@@ -313,7 +313,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
                 cause: cause,
               }),
           }),
-        portProbe: (port) =>
+        readinessProbe: (port) =>
           Effect.tryPromise({
             try: async () => {
               portProbeCalls.push(port);
@@ -419,7 +419,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 1,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-live-order",
       });
 
@@ -441,6 +441,61 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
 
       await Effect.runPromise(handle.stop());
       expect(releasedRuntimeIds).toEqual(["runtime-live-order"]);
+    } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("applies the startup deadline to live-session initialization after readiness", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-timeout-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const opencodeBinary = await createFakeOpenCode(root);
+      const starter = createOpenCodeWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
+        prepareLiveSessionAdapter: (runtime) =>
+          Effect.sleep("100 millis").pipe(
+            Effect.as({
+              adapter: createLiveAdapter(runtime),
+              startForwarding: () => Effect.void,
+              discard: () => Effect.void,
+            }),
+          ),
+        startupTimeoutMs: 20,
+        retryDelayMs: 1,
+        portAllocator: () => Effect.succeed(43123),
+        readinessProbe: () => Effect.succeed(true),
+        runtimeId: () => "runtime-live-timeout",
+      });
+
+      const result = await Effect.runPromise(
+        Effect.either(
+          starter.startWorkspaceRuntime({
+            runtimeKind: "opencode",
+            repoPath: repo,
+            workingDirectory: repo,
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          }),
+        ),
+      );
+      if (result._tag === "Right") {
+        await Effect.runPromise(result.right.stop());
+      }
+
+      expect(result._tag).toBe("Left");
+      if (result._tag === "Left") {
+        expect(result.left.message).toBe(
+          "Timed out starting OpenCode runtime on 127.0.0.1:43123 after 20ms.",
+        );
+      }
     } finally {
       await removeTestDirectory(root);
     }
@@ -481,7 +536,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 1,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-unexpected-close",
       });
 
@@ -541,7 +596,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 1,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-register-failure",
       });
 
@@ -607,7 +662,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 1,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-forward-failure",
       });
 
@@ -648,7 +703,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-tree",
       });
 
@@ -694,7 +749,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 100,
         retryDelayMs: 5,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () =>
+        readinessProbe: () =>
           Effect.promise(() => waitFor(() => existsSync(childPidPath))).pipe(Effect.as(false)),
       });
 
@@ -737,7 +792,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-failure",
         processTreeTerminator: ({ pid }) => {
           runtimePid = pid;
@@ -787,7 +842,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 20,
         retryDelayMs: 5,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(false),
+        readinessProbe: () => Effect.succeed(false),
         processTreeTerminator: ({ pid }) => {
           runtimePid = pid;
           return Effect.fail(
@@ -845,7 +900,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
         portAllocator: () => Effect.succeed(43123),
-        portProbe: () => Effect.succeed(true),
+        readinessProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-path",
       });
 

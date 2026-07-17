@@ -43,6 +43,7 @@ export type PrepareOpencodeSessionRuntimeInput = {
   readonly runtimeId: string;
   readonly runtimeEndpoint: string;
   readonly directories?: string[];
+  readonly signal?: AbortSignal;
 };
 
 export type {
@@ -289,6 +290,7 @@ export const createPrepareOpencodeSessionRuntime = (
       },
       terminalObserver: (error) =>
         emitSignal({ type: "fault", message: toOpencodeObservationFailureMessage(error) }),
+      ...(input.signal ? { signal: input.signal } : {}),
       ...(options.logEvent ? { logEvent: options.logEvent } : {}),
     });
 

@@ -41,6 +41,10 @@ export type ElectronDevRendererServer = {
   watcher: ElectronDevRendererWatcher;
 };
 type ElectronDevRendererServerHandle = Pick<ElectronDevRendererServer, "close" | "httpServer">;
+type ProcessKeepAliveDependencies = {
+  clearInterval(timer: ReturnType<typeof setInterval>): void;
+  setInterval(callback: () => void, durationMs: number): ReturnType<typeof setInterval>;
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,6 +59,7 @@ const RENDERER_DEV_HOST = "127.0.0.1";
 const ELECTRON_RESTART_DEBOUNCE_MS = 100;
 const RENDERER_CLOSE_TIMEOUT_MS = 3_000;
 const ELECTRON_STOP_TIMEOUT_MS = 30_000;
+const ELECTRON_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
 export const ELECTRON_RESTART_WATCH_ROOTS = [
   path.join(packageRoot, "src/main"),
@@ -78,6 +83,22 @@ const ELECTRON_RESTART_EXTENSIONS = new Set([
 
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, durationMs));
+
+export const keepElectronDevProcessAliveDuring = <Value>(
+  operation: () => Promise<Value>,
+  dependencies: ProcessKeepAliveDependencies = {
+    clearInterval,
+    setInterval,
+  },
+): Promise<Value> => {
+  const timer = dependencies.setInterval(() => {}, ELECTRON_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS);
+  try {
+    return operation().finally(() => dependencies.clearInterval(timer));
+  } catch (cause) {
+    dependencies.clearInterval(timer);
+    throw cause;
+  }
+};
 
 const runStepEffect = (
   label: string,
@@ -608,12 +629,16 @@ type ElectronDevProcessEvent = "SIGINT" | "SIGTERM" | "exit";
 
 export type ElectronDevProcessHandlers = {
   off(event: ElectronDevProcessEvent, listener: () => void): void;
+  on(event: ElectronDevProcessEvent, listener: () => void): void;
   once(event: ElectronDevProcessEvent, listener: () => void): void;
 };
 
 const defaultElectronDevProcessHandlers: ElectronDevProcessHandlers = {
   off(event, listener) {
     process.off(event, listener);
+  },
+  on(event, listener) {
+    process.on(event, listener);
   },
   once(event, listener) {
     process.once(event, listener);
@@ -684,8 +709,16 @@ export const runElectronDevLifecycleEffect = ({
       resume(effect);
     };
 
-    const registerProcessHandler = (event: ElectronDevProcessEvent, listener: () => void): void => {
-      processHandlers.once(event, listener);
+    const registerProcessHandler = (
+      event: ElectronDevProcessEvent,
+      listener: () => void,
+      persistent = false,
+    ): void => {
+      if (persistent) {
+        processHandlers.on(event, listener);
+      } else {
+        processHandlers.once(event, listener);
+      }
       registeredProcessHandlers.push({ event, listener });
     };
 
@@ -713,7 +746,9 @@ export const runElectronDevLifecycleEffect = ({
       });
 
     const runShutdown = (exitCode: number): void => {
-      void Effect.runPromiseExit(shutdownEffect(exitCode)).then((exit) => {
+      void keepElectronDevProcessAliveDuring(() =>
+        Effect.runPromiseExit(shutdownEffect(exitCode)),
+      ).then((exit) => {
         if (Exit.isFailure(exit)) {
           completeFailure(causeToElectronBoundaryError(exit.cause));
         }
@@ -838,14 +873,22 @@ export const runElectronDevLifecycleEffect = ({
 
     const registerProcessHandlersEffect = (): Effect.Effect<void, never> =>
       Effect.sync(() => {
-        registerProcessHandler("SIGINT", () => {
-          console.log("[electron:dev] Received SIGINT, shutting down...");
-          runShutdown(130);
-        });
-        registerProcessHandler("SIGTERM", () => {
-          console.log("[electron:dev] Received SIGTERM, shutting down...");
-          runShutdown(143);
-        });
+        registerProcessHandler(
+          "SIGINT",
+          () => {
+            console.log("[electron:dev] Received SIGINT, shutting down...");
+            runShutdown(130);
+          },
+          true,
+        );
+        registerProcessHandler(
+          "SIGTERM",
+          () => {
+            console.log("[electron:dev] Received SIGTERM, shutting down...");
+            runShutdown(143);
+          },
+          true,
+        );
         registerProcessHandler("exit", () => {
           if (electron) {
             electron.kill();

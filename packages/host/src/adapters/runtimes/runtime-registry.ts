@@ -26,6 +26,7 @@ export type CreateRuntimeRegistryInput = {
 };
 
 type RuntimeEnsureFlight = {
+  cancel: Deferred.Deferred<void>;
   deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
 };
 
@@ -76,16 +77,24 @@ export const createRuntimeRegistry = ({
       store.remove(runtimeId);
       return runtime;
     });
-  const waitForStartingRuntimes = () => {
+  const cancelStartingRuntimes = () => {
     const flights = [...ensureFlights.values()];
     if (flights.length === 0) {
       return Effect.succeed(undefined);
     }
-    return Effect.forEach(flights, (flight) => Effect.either(Deferred.await(flight.deferred)), {
-      concurrency: "unbounded",
-    }).pipe(Effect.asVoid);
+    return Effect.gen(function* () {
+      yield* Effect.forEach(flights, (flight) => Deferred.succeed(flight.cancel, undefined), {
+        concurrency: "unbounded",
+        discard: true,
+      });
+      yield* Effect.forEach(flights, (flight) => Effect.exit(Deferred.await(flight.deferred)), {
+        concurrency: "unbounded",
+        discard: true,
+      });
+    });
   };
   const makeRuntimeEnsureFlight = (): RuntimeEnsureFlight => ({
+    cancel: Deferred.unsafeMake(FiberId.none),
     deferred: Deferred.unsafeMake(FiberId.none),
   });
   const completeRuntimeEnsureFlight = (
@@ -94,7 +103,12 @@ export const createRuntimeRegistry = ({
     startEffect: Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>,
   ) =>
     Effect.gen(function* () {
-      const exit = yield* Effect.exit(startEffect);
+      const exit = yield* Effect.exit(
+        Effect.raceFirst(
+          startEffect,
+          Deferred.await(flight.cancel).pipe(Effect.zipRight(Effect.interrupt)),
+        ),
+      );
       yield* Deferred.done(flight.deferred, exit);
     }).pipe(
       Effect.ensuring(
@@ -177,7 +191,7 @@ export const createRuntimeRegistry = ({
               return parsed;
             });
             yield* Effect.forkDaemon(
-              completeRuntimeEnsureFlight(flightKey, reservation.flight, startEffect),
+              restore(completeRuntimeEnsureFlight(flightKey, reservation.flight, startEffect)),
             );
             return yield* restore(Deferred.await(reservation.flight.deferred));
           }),
@@ -201,7 +215,7 @@ export const createRuntimeRegistry = ({
     },
     stopAllRuntimes() {
       return Effect.gen(function* () {
-        yield* waitForStartingRuntimes();
+        yield* cancelStartingRuntimes();
         const stopped: RuntimeInstanceSummary[] = [];
         const errors: string[] = [];
         for (const runtime of store.list()) {

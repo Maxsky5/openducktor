@@ -334,13 +334,33 @@ export const observeRuntimeEvents = async (input: {
   emit: (sessionId: string, event: AgentEvent) => void;
   observer: (event: Event) => void | Promise<void>;
   terminalObserver: (error: Error) => void | Promise<void>;
+  signal?: AbortSignal;
   logEvent?: OpencodeEventLogger;
 }): Promise<{ dispatch: (event: Event) => Promise<void>; release: () => Promise<void> }> => {
   const eventTransport = ensureRuntimeEventTransport(input);
   eventTransport.observers.add(input.observer);
   eventTransport.terminalObservers.add(input.terminalObserver);
+  const waitForReady = input.signal
+    ? new Promise<void>((resolve, reject) => {
+        const abort = (): void => {
+          reject(
+            input.signal?.reason instanceof Error
+              ? input.signal.reason
+              : new Error(`OpenCode runtime '${input.runtimeId}' initialization was aborted.`),
+          );
+        };
+        if (input.signal?.aborted) {
+          abort();
+          return;
+        }
+        input.signal?.addEventListener("abort", abort, { once: true });
+        void eventTransport.ready.then(resolve, reject).finally(() => {
+          input.signal?.removeEventListener("abort", abort);
+        });
+      })
+    : eventTransport.ready;
   try {
-    await eventTransport.ready;
+    await waitForReady;
   } catch (error) {
     eventTransport.observers.delete(input.observer);
     eventTransport.terminalObservers.delete(input.terminalObserver);
