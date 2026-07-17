@@ -37,10 +37,10 @@ describe("createWebLogger", () => {
         }),
       );
 
-      await logger.info("Starting host");
-      await logger.success("OpenDucktor web is ready:");
-      await logger.success("  ➜  Local:   http://localhost:1420/");
-      await logger.error("Host failed\nstack detail");
+      await Effect.runPromise(logger.info("Starting host"));
+      await Effect.runPromise(logger.success("OpenDucktor web is ready:"));
+      await Effect.runPromise(logger.success("  ➜  Local:   http://localhost:1420/"));
+      await Effect.runPromise(logger.error("Host failed\nstack detail"));
 
       expect(output.stdout).toHaveLength(3);
       expect(output.stderr).toHaveLength(1);
@@ -76,11 +76,10 @@ describe("createWebLogger", () => {
       }),
     );
 
-    const result = logger.info("Starting host");
-    await logger.success("Host ready");
-    await logger.error("Host failed");
+    await Effect.runPromise(logger.info("Starting host"));
+    await Effect.runPromise(logger.success("Host ready"));
+    await Effect.runPromise(logger.error("Host failed"));
 
-    expect(result).toBeUndefined();
     expect(output.stdout).toEqual([
       expect.stringMatching(/^2026-05-13T23:45:12\.345[+-]\d\d:\d\d {2}INFO Starting host$/),
       expect.stringMatching(/^2026-05-13T23:45:12\.345[+-]\d\d:\d\d {2}INFO Host ready$/),
@@ -105,7 +104,7 @@ describe("createWebLogger", () => {
       }),
     );
 
-    await logger.info("boundary record");
+    await Effect.runPromise(logger.info("boundary record"));
 
     const rendered = output.stdout[0];
     if (!rendered) {
@@ -136,6 +135,8 @@ describe("createWebLogger", () => {
       }),
     );
 
-    expect(() => logger.info("Starting host")).toThrow(failure);
+    await expect(Effect.runPromise(Effect.flip(logger.info("Starting host")))).resolves.toBe(
+      failure,
+    );
   });
 });

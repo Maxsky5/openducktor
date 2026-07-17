@@ -3,11 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import {
-  logDuplicateWebTerminationNotice,
-  resolveWebSignalExitCode,
-  runWebSignalShutdown,
-} from "./launcher";
+import { logDuplicateWebTerminationNotice, runWebSignalShutdown } from "./launcher";
 import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
@@ -22,9 +18,9 @@ import {
 import type { WebLogger } from "./logger";
 
 const testLogger: WebLogger = {
-  error() {},
-  info() {},
-  success() {},
+  error: () => Effect.void,
+  info: () => Effect.void,
+  success: () => Effect.void,
 };
 
 const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
@@ -259,28 +255,70 @@ describe("launcher internals", () => {
     expect(source).toContain("OpenDucktor web shutdown is already in progress");
   });
 
-  test("owns duplicate-signal persistence failures before resolving the process exit", () => {
+  test("awaits a delayed duplicate-signal persistence failure before exiting", async () => {
     const persistenceError = new Error(
       "openducktor.logs.append failed for /tmp/openducktor-web.log",
     );
+    const exitCodes: number[] = [];
     const reportedFailures: unknown[] = [];
+    let markLogStarted: () => void = () => {};
+    const logStarted = new Promise<void>((resolve) => {
+      markLogStarted = resolve;
+    });
+    let rejectLog: () => void = () => {};
 
-    const duplicateLogFailed = logDuplicateWebTerminationNotice(
-      {
-        error() {},
-        info() {
-          throw persistenceError;
+    const duplicateLogFailed = Effect.runPromise(
+      logDuplicateWebTerminationNotice(
+        {
+          error: () => Effect.void,
+          info: () =>
+            Effect.tryPromise({
+              try: () =>
+                new Promise<void>((_resolve, reject) => {
+                  markLogStarted();
+                  rejectLog = () => reject(persistenceError);
+                }),
+              catch: (cause) => cause,
+            }),
+          success: () => Effect.void,
         },
-        success() {},
-      },
-      (cause) => {
-        reportedFailures.push(cause);
-      },
+        (cause) => {
+          reportedFailures.push(cause);
+        },
+      ),
     );
+    await logStarted;
 
-    expect(duplicateLogFailed).toBeTrue();
-    expect(reportedFailures).toEqual([persistenceError]);
-    expect(resolveWebSignalExitCode(143, duplicateLogFailed)).toBe(1);
+    const shutdown = runWebSignalShutdown({
+      awaitDuplicateTerminationLog: () => duplicateLogFailed,
+      boundary: {
+        exit: (exitCode) => exitCodes.push(exitCode),
+        flush: async () => {},
+        reportFailure: (cause) => reportedFailures.push(cause),
+      },
+      exitCode: 143,
+      logger: {
+        error: () => Effect.void,
+        info: () => Effect.void,
+        success: () => Effect.void,
+      },
+      signal: "SIGTERM",
+      stop: Effect.void,
+    });
+
+    await Promise.resolve();
+    expect(exitCodes).toEqual([]);
+    rejectLog();
+    await shutdown;
+
+    expect(exitCodes).toEqual([1]);
+    expect(reportedFailures).toEqual([
+      expect.objectContaining({
+        _tag: "WebResourceError",
+        cause: persistenceError,
+        resource: "persistent-log",
+      }),
+    ]);
   });
 
   test("signal logging failures still run cleanup and exit through the explicit boundary", async () => {
@@ -304,13 +342,9 @@ describe("launcher internals", () => {
       },
       exitCode: 143,
       logger: {
-        error: async () => {
-          throw new Error("The failed persistent logger must not be retried.");
-        },
-        info: async () => {
-          throw persistenceError;
-        },
-        success() {},
+        error: () => Effect.die("The failed persistent logger must not be retried."),
+        info: () => Effect.fail(persistenceError),
+        success: () => Effect.void,
       },
       signal: "SIGTERM",
       stop: Effect.sync(() => {

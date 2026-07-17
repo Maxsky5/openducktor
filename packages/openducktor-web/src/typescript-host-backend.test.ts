@@ -30,9 +30,9 @@ const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../.."),
 );
 const testLogger: WebLogger = {
-  error() {},
-  info() {},
-  success() {},
+  error: () => Effect.void,
+  info: () => Effect.void,
+  success: () => Effect.void,
 };
 
 class StructuredHostCommandFailure extends Error {
@@ -413,11 +413,9 @@ describe("TypeScript web host backend", () => {
       stopTypescriptHostBackendServices({
         disposeHost: () => Effect.fail(new Error("host disposal failed")),
         logger: {
-          error: async () => {
-            throw persistenceError;
-          },
-          info() {},
-          success() {},
+          error: () => Effect.fail(persistenceError),
+          info: () => Effect.void,
+          success: () => Effect.void,
         },
         resolveExited: (exitCode) => {
           resolvedExitCodes.push(exitCode);

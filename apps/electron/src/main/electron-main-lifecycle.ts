@@ -7,16 +7,16 @@ import {
 } from "../effect/electron-errors";
 
 type ElectronMainLifecycleLogger = {
-  error(message: string, error?: unknown): void;
-  info(message: string): void;
+  error(message: string, error?: unknown): Effect.Effect<void, unknown>;
+  info(message: string): Effect.Effect<void, unknown>;
 };
 
 const captureLoggingFailure = async (
-  operation: () => void | Promise<void>,
+  operation: () => Effect.Effect<void, unknown>,
 ): Promise<unknown | undefined> => {
   try {
-    await operation();
-    return undefined;
+    const result = await Effect.runPromise(Effect.either(operation()));
+    return result._tag === "Left" ? result.left : undefined;
   } catch (cause) {
     return cause;
   }

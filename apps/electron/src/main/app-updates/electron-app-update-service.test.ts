@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AppUpdateState } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { runElectronEffect } from "../../effect/electron-boundary";
 import { createElectronMainLogger } from "../electron-main-logger";
 import { DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS } from "./electron-app-update-service";
 import {
@@ -408,7 +409,13 @@ describe("electron app update service", () => {
           },
         }),
       );
-      const { service } = createService({ logger });
+      const { service } = createService({
+        logger: {
+          error: (message, error) => runElectronEffect(logger.error(message, error)),
+          info: (message) => runElectronEffect(logger.info(message)),
+          warn: (message) => runElectronEffect(logger.warn(message)),
+        },
+      });
 
       await service.check({ initiator: "settings" });
       await service.dispose();

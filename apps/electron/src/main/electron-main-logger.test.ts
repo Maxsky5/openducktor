@@ -31,9 +31,8 @@ describe("createElectronMainLogger", () => {
       }),
     );
 
-    const result = logger.info("OpenDucktor host services stopped");
+    await Effect.runPromise(logger.info("OpenDucktor host services stopped"));
 
-    expect(result).toBeUndefined();
     expect(output()).toMatch(
       /^2026-05-13T23:45:12\.345[+-]\d\d:\d\d {2}INFO OpenDucktor host services stopped\n$/,
     );
@@ -50,7 +49,9 @@ describe("createElectronMainLogger", () => {
       }),
     );
 
-    await logger.error("OpenDucktor host shutdown failed", new Error("cleanup failed"));
+    await Effect.runPromise(
+      logger.error("OpenDucktor host shutdown failed", new Error("cleanup failed")),
+    );
 
     const rendered = output();
     expect(rendered).toContain("\u001b[2m2026-05-13T23:45:12.345");
@@ -70,11 +71,11 @@ describe("createElectronMainLogger", () => {
         }),
       );
 
-      await logger.info("Host is ready");
-      await logger.warn("Host warning");
+      await Effect.runPromise(logger.info("Host is ready"));
+      await Effect.runPromise(logger.warn("Host warning"));
       const failure = new Error("cleanup failed");
       failure.stack = "Error: cleanup failed\n    at shutdown (host.ts:1:1)";
-      await logger.error("Host shutdown failed", failure);
+      await Effect.runPromise(logger.error("Host shutdown failed", failure));
 
       expect(output()).toContain("\u001b[");
       const persisted = readFileSync(
@@ -108,7 +109,7 @@ describe("createElectronMainLogger", () => {
       }),
     );
 
-    await logger.info("boundary record");
+    await Effect.runPromise(logger.info("boundary record"));
 
     expect(appended).toEqual([
       {
@@ -135,6 +136,8 @@ describe("createElectronMainLogger", () => {
       }),
     );
 
-    expect(() => logger.info("Host is ready")).toThrow(failure);
+    await expect(Effect.runPromise(Effect.flip(logger.info("Host is ready")))).resolves.toBe(
+      failure,
+    );
   });
 });

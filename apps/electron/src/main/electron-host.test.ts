@@ -520,10 +520,10 @@ describe("createElectronHostCommandRouter", () => {
     const router = createElectronHostCommandRouter({
       lifecycleLogger: {
         info(message) {
-          lifecycleLogs.push(message);
+          return Effect.sync(() => lifecycleLogs.push(message));
         },
         error(message) {
-          lifecycleLogs.push(message);
+          return Effect.sync(() => lifecycleLogs.push(message));
         },
       },
       runtimeRegistry: {

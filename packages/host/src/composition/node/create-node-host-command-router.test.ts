@@ -38,12 +38,8 @@ const createLogger = () => {
   const infos: string[] = [];
   const errors: string[] = [];
   const logger: HostLifecycleLogger = {
-    error: (message) => {
-      errors.push(String(message));
-    },
-    info: (message) => {
-      infos.push(String(message));
-    },
+    error: (message) => Effect.sync(() => errors.push(String(message))),
+    info: (message) => Effect.sync(() => infos.push(String(message))),
   };
   return { errors, infos, logger };
 };
@@ -89,12 +85,8 @@ describe("createNodeEffectHostCommandRouter", () => {
     );
     let stopRuntimeCalls = 0;
     const logger: HostLifecycleLogger = {
-      error: () => {
-        throw persistenceError;
-      },
-      info: () => {
-        throw persistenceError;
-      },
+      error: () => Effect.fail(persistenceError),
+      info: () => Effect.fail(persistenceError),
     };
     const runtimeRegistry = createRuntimeRegistry(() =>
       Effect.sync(() => {

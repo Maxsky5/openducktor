@@ -22,9 +22,9 @@ type WebLoggerInput = {
 };
 
 export type WebLogger = {
-  error(message: string): void;
-  info(message: string): void;
-  success(message: string): void;
+  error(message: string): Effect.Effect<void, unknown>;
+  info(message: string): Effect.Effect<void, unknown>;
+  success(message: string): Effect.Effect<void, unknown>;
 };
 
 export const writeWebLogEffect = (
@@ -32,16 +32,17 @@ export const writeWebLogEffect = (
   level: keyof WebLogger,
   message: string,
 ): Effect.Effect<void, WebResourceError> =>
-  Effect.tryPromise({
-    try: async () => logger[level](message),
-    catch: (cause) =>
-      new WebResourceError({
-        resource: "persistent-log",
-        operation: `web.log-${level}`,
-        message: errorMessage(cause),
-        cause,
-      }),
-  });
+  logger[level](message).pipe(
+    Effect.mapError(
+      (cause) =>
+        new WebResourceError({
+          resource: "persistent-log",
+          operation: `web.log-${level}`,
+          message: errorMessage(cause),
+          cause,
+        }),
+    ),
+  );
 
 const RESET = "\u001b[0m";
 const BOLD = "\u001b[1m";
@@ -113,13 +114,6 @@ const colorSuccessMessage = (useColor: boolean, message: string): string => {
   return `${GREEN}${message}${RESET}`;
 };
 
-const runLogEffect = <Failure>(effect: Effect.Effect<void, Failure>): void => {
-  const result = Effect.runSync(Effect.either(effect));
-  if (result._tag === "Left") {
-    throw result.left;
-  }
-};
-
 export const createWebLogger = ({
   console: consoleOutput = console,
   environment = process.env,
@@ -136,22 +130,23 @@ export const createWebLogger = ({
         level: LogLevel,
         message: string,
         renderMessage: (useColor: boolean, message: string) => string,
-      ): void => {
-        const recordedAt = now();
-        const useColor = supportsColor(environment, stdout);
-        const plainTimestamp = timestamp(recordedAt);
-        const renderedTimestamp = useColor ? `${DIM}${plainTimestamp}${RESET}` : plainTimestamp;
-        const line = `${renderedTimestamp}  ${colorLevel(useColor, level)} ${renderMessage(
-          useColor,
-          message,
-        )}`;
-        if (level === "ERROR") {
-          consoleOutput.error(line);
-        } else {
-          consoleOutput.log(line);
-        }
-        runLogEffect(resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`));
-      };
+      ): Effect.Effect<void, unknown> =>
+        Effect.gen(function* () {
+          const recordedAt = now();
+          const useColor = supportsColor(environment, stdout);
+          const plainTimestamp = timestamp(recordedAt);
+          const renderedTimestamp = useColor ? `${DIM}${plainTimestamp}${RESET}` : plainTimestamp;
+          const line = `${renderedTimestamp}  ${colorLevel(useColor, level)} ${renderMessage(
+            useColor,
+            message,
+          )}`;
+          if (level === "ERROR") {
+            consoleOutput.error(line);
+          } else {
+            consoleOutput.log(line);
+          }
+          yield* resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`);
+        });
 
       return {
         error(message) {

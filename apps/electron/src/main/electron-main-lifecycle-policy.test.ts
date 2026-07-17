@@ -162,11 +162,9 @@ describe("Electron main lifecycle policy", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
     expect(source).toContain("const reportElectronMainFatalFailure");
+    expect(source).toContain('appUpdateService.check({ initiator: "menu" }).then(() => {})');
     expect(source).toContain(
-      'runElectronMainTask(appUpdateService.check({ initiator: "menu" }).then(() => {}))',
-    );
-    expect(source).toContain(
-      'runElectronMainTask(shutdownController.shutdownHostAndQuit({ reason: "before-quit" }))',
+      'runElectronMainTask(() => shutdownController.shutdownHostAndQuit({ reason: "before-quit" }))',
     );
     expect(source).not.toContain("void appUpdateService.check(");
     expect(source).not.toContain("void shutdownController.shutdownHostAndQuit(");
@@ -290,9 +288,9 @@ describe("Electron main lifecycle policy", () => {
       },
       logger: {
         error(message, error) {
-          errors.push({ message, error });
+          return Effect.sync(() => errors.push({ message, error }));
         },
-        info() {},
+        info: () => Effect.void,
       },
       markShutdownComplete: () => {
         shutdownComplete = true;
@@ -333,10 +331,8 @@ describe("Electron main lifecycle policy", () => {
         exitCodes.push(exitCode);
       },
       logger: {
-        error: async () => {
-          throw persistenceError;
-        },
-        info() {},
+        error: () => Effect.fail(persistenceError),
+        info: () => Effect.void,
       },
       markShutdownComplete: () => {
         shutdownComplete = true;
@@ -420,6 +416,10 @@ describe("Electron main lifecycle policy", () => {
   test("shutdown controller disposes the host once for concurrent shutdown triggers", async () => {
     const disposeReasons: string[] = [];
     const quitCalls: string[] = [];
+    let markDisposeStarted: () => void = () => {};
+    const disposeStarted = new Promise<void>((resolve) => {
+      markDisposeStarted = resolve;
+    });
     let releaseDispose: () => void = () => {};
     const disposeGate = new Promise<void>((resolve) => {
       releaseDispose = resolve;
@@ -429,6 +429,7 @@ describe("Electron main lifecycle policy", () => {
         Effect.tryPromise({
           try: async () => {
             disposeReasons.push(reason);
+            markDisposeStarted();
             await disposeGate;
           },
           catch: (cause) =>
@@ -440,8 +441,8 @@ describe("Electron main lifecycle policy", () => {
         }),
       exitProcess: () => {},
       logger: {
-        error() {},
-        info() {},
+        error: () => Effect.void,
+        info: () => Effect.void,
       },
       quitApp: () => {
         quitCalls.push("quit");
@@ -452,8 +453,7 @@ describe("Electron main lifecycle policy", () => {
     const firstShutdown = controller.shutdownHostAndQuit({ reason: "window-all-closed" });
     const secondShutdown = controller.shutdownHostAndQuit({ reason: "before-quit" });
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await disposeStarted;
     expect(disposeReasons).toEqual(["window-all-closed"]);
     expect(controller.isHostShutdownStarted()).toBe(true);
 
@@ -481,9 +481,9 @@ describe("Electron main lifecycle policy", () => {
       },
       logger: {
         error(message, error) {
-          errors.push({ message, error });
+          return Effect.sync(() => errors.push({ message, error }));
         },
-        info() {},
+        info: () => Effect.void,
       },
       quitApp: () => {
         throw new Error("Expected signal shutdown to exit instead of quitting the app.");
@@ -518,12 +518,8 @@ describe("Electron main lifecycle policy", () => {
         exitCodes.push(exitCode);
       },
       logger: {
-        error: async () => {
-          throw persistenceError;
-        },
-        info: async () => {
-          throw persistenceError;
-        },
+        error: () => Effect.fail(persistenceError),
+        info: () => Effect.fail(persistenceError),
       },
       quitApp: () => {
         quitCalls += 1;
@@ -558,8 +554,8 @@ describe("Electron main lifecycle policy", () => {
       },
       exitProcess: () => {},
       logger: {
-        error() {},
-        info() {},
+        error: () => Effect.void,
+        info: () => Effect.void,
       },
       quitApp: () => {},
       reportFailure: () => {},
@@ -599,8 +595,8 @@ describe("Electron main lifecycle policy", () => {
       disposeHost: () => Effect.void,
       exitProcess: () => {},
       logger: {
-        error() {},
-        info() {},
+        error: () => Effect.void,
+        info: () => Effect.void,
       },
       quitApp: () => {},
       reportFailure: () => {},

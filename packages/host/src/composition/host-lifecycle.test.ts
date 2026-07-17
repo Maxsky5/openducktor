@@ -12,12 +12,8 @@ const createLogger = (): HostLifecycleLogger & { infos: string[]; errors: string
   return {
     infos,
     errors,
-    info: (message) => {
-      infos.push(message);
-    },
-    error: (message) => {
-      errors.push(message);
-    },
+    info: (message) => Effect.sync(() => infos.push(message)),
+    error: (message) => Effect.sync(() => errors.push(message)),
   };
 };
 
@@ -86,12 +82,8 @@ describe("host lifecycle shutdown", () => {
     );
     const calls: string[] = [];
     const rejectingLogger: HostLifecycleLogger = {
-      error: () => {
-        throw persistenceError;
-      },
-      info: () => {
-        throw persistenceError;
-      },
+      error: () => Effect.fail(persistenceError),
+      info: () => Effect.fail(persistenceError),
     };
 
     const exit = await Effect.runPromiseExit(

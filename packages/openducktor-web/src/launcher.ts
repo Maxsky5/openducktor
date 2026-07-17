@@ -78,15 +78,17 @@ const DUPLICATE_TERMINATION_NOTICE =
 export const logDuplicateWebTerminationNotice = (
   logger: WebLogger,
   reportFailure: (cause: unknown) => void,
-): boolean => {
-  try {
-    logger.info(DUPLICATE_TERMINATION_NOTICE);
-    return false;
-  } catch (cause) {
-    reportFailure(cause);
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.either(
+      writeWebLogEffect(logger, "info", DUPLICATE_TERMINATION_NOTICE),
+    );
+    if (result._tag === "Right") {
+      return false;
+    }
+    yield* Effect.sync(() => reportFailure(result.left));
     return true;
-  }
-};
+  });
 
 export const resolveWebSignalExitCode = (
   requestedExitCode: number,
@@ -112,37 +114,53 @@ const stopLauncherForSignalEffect = (
   });
 
 export const runWebSignalShutdown = async ({
+  awaitDuplicateTerminationLog = async () => false,
   boundary = defaultWebSignalProcessBoundary,
   exitCode,
   logger,
   signal,
   stop,
 }: {
+  awaitDuplicateTerminationLog?: () => Promise<boolean>;
   boundary?: WebSignalProcessBoundary;
   exitCode: number;
   logger: WebLogger;
   signal: NodeJS.Signals;
   stop: Effect.Effect<void, WebError>;
 }): Promise<void> => {
+  let resolvedExitCode = exitCode;
   try {
     await runWebBoundary(
       keepProcessAliveDuringEffect(stopLauncherForSignalEffect(signal, logger, stop)),
     );
-    await boundary.flush();
-    boundary.exit(exitCode);
   } catch (cause) {
+    resolvedExitCode = 1;
     if (cause instanceof WebResourceError && cause.resource === "persistent-log") {
       boundary.reportFailure(cause);
     } else {
       try {
-        await logger.error(errorMessage(cause));
+        await runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(cause)));
       } catch (loggingCause) {
         boundary.reportFailure(loggingCause);
       }
     }
-    await boundary.flush();
-    boundary.exit(1);
   }
+
+  try {
+    const duplicateTerminationLogFailed = await awaitDuplicateTerminationLog();
+    resolvedExitCode = resolveWebSignalExitCode(resolvedExitCode, duplicateTerminationLogFailed);
+  } catch (duplicateLogCause) {
+    boundary.reportFailure(duplicateLogCause);
+    resolvedExitCode = 1;
+  }
+
+  try {
+    await boundary.flush();
+  } catch (flushCause) {
+    boundary.reportFailure(flushCause);
+    resolvedExitCode = 1;
+  }
+  boundary.exit(resolvedExitCode);
 };
 
 const contentTypeForPath = (filePath: string): string => {
@@ -410,7 +428,7 @@ export const runLauncherEffect = (
           let stopStarted = false;
           let terminationStarted = false;
           let duplicateTerminationNoticeLogged = false;
-          let duplicateTerminationLogFailed = false;
+          let duplicateTerminationLog: Promise<boolean> | null = null;
 
           const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
             Effect.gen(function* () {
@@ -471,24 +489,19 @@ export const runLauncherEffect = (
             if (terminationStarted) {
               if (!duplicateTerminationNoticeLogged) {
                 duplicateTerminationNoticeLogged = true;
-                duplicateTerminationLogFailed = logDuplicateWebTerminationNotice(
-                  logger,
-                  defaultWebSignalProcessBoundary.reportFailure,
+                duplicateTerminationLog = runWebBoundary(
+                  logDuplicateWebTerminationNotice(
+                    logger,
+                    defaultWebSignalProcessBoundary.reportFailure,
+                  ),
                 );
               }
               return;
             }
             terminationStarted = true;
             void runWebSignalShutdown({
-              boundary: {
-                exit: (resolvedExitCode) => {
-                  process.exit(
-                    resolveWebSignalExitCode(resolvedExitCode, duplicateTerminationLogFailed),
-                  );
-                },
-                flush: flushProcessOutput,
-                reportFailure: defaultWebSignalProcessBoundary.reportFailure,
-              },
+              awaitDuplicateTerminationLog: async () =>
+                duplicateTerminationLog ? await duplicateTerminationLog : false,
               exitCode,
               logger,
               signal,

@@ -491,10 +491,12 @@ const routeCorsRequest = ({
         beginShutdown();
         setTimeout(() => {
           void stop().catch((error: unknown) => {
-            void Promise.resolve(logger.error(errorMessage(error))).catch((logError: unknown) => {
-              console.error(errorMessage(logError));
-              process.exitCode = 1;
-            });
+            void runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(error))).catch(
+              (logError: unknown) => {
+                console.error(errorMessage(logError));
+                process.exitCode = 1;
+              },
+            );
           });
         }, 10);
       });

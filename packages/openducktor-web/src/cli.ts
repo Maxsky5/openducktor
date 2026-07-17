@@ -11,7 +11,7 @@ import {
   WebValidationError,
 } from "./effect/web-errors";
 import { runLauncherEffect } from "./launcher";
-import { createWebLogger, type WebLogger } from "./logger";
+import { createWebLogger, type WebLogger, writeWebLogEffect } from "./logger";
 
 type CliOptions = {
   workspaceMode: boolean;
@@ -161,7 +161,7 @@ const runCli = async (): Promise<void> => {
       return;
     }
     try {
-      await logger.error(errorMessage(cause));
+      await runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(cause)));
     } catch (loggingCause) {
       console.error(`OpenDucktor web fatal boundary: ${errorMessage(loggingCause)}`);
     }

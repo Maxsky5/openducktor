@@ -117,6 +117,88 @@ describe("createOpenDucktorDailyLogWriter", () => {
     ).toBe("first\nsecond\nthird\n");
   });
 
+  test("awaits an asynchronous append without blocking the caller", async () => {
+    const configDirectory = createTemporaryConfigDirectory();
+    const recordedAt = localDate(2026, 5, 13);
+    let markAppendStarted = () => {};
+    const appendStarted = new Promise<void>((resolve) => {
+      markAppendStarted = resolve;
+    });
+    let releaseAppend = () => {};
+    const writer = await Effect.runPromise(
+      createOpenDucktorDailyLogWriterWithDependencies(
+        {
+          surface: "electron",
+          environment: environmentFor(configDirectory),
+          clock: () => recordedAt,
+        },
+        {
+          appendFile: () => {
+            markAppendStarted();
+            return new Promise<void>((resolve) => {
+              releaseAppend = resolve;
+            });
+          },
+        },
+      ),
+    );
+
+    let appendSettled = false;
+    const append = Effect.runPromise(writer.append(recordedAt, "record")).then(() => {
+      appendSettled = true;
+    });
+    await appendStarted;
+    await Promise.resolve();
+
+    expect(appendSettled).toBeFalse();
+
+    releaseAppend();
+    await append;
+    expect(appendSettled).toBeTrue();
+  });
+
+  test("serializes concurrent appends in call order", async () => {
+    const configDirectory = createTemporaryConfigDirectory();
+    const recordedAt = localDate(2026, 5, 13);
+    const startedRecords: string[] = [];
+    const releases: Array<() => void> = [];
+    let markAppendStarted: () => void = () => {};
+    let appendStarted = new Promise<void>((resolve) => {
+      markAppendStarted = resolve;
+    });
+    const writer = await Effect.runPromise(
+      createOpenDucktorDailyLogWriterWithDependencies(
+        {
+          surface: "electron",
+          environment: environmentFor(configDirectory),
+          clock: () => recordedAt,
+        },
+        {
+          appendFile: (_filePath, contents) => {
+            startedRecords.push(contents);
+            markAppendStarted();
+            return new Promise<void>((resolve) => releases.push(resolve));
+          },
+        },
+      ),
+    );
+
+    const first = Effect.runPromise(writer.append(recordedAt, "first"));
+    await appendStarted;
+    appendStarted = new Promise<void>((resolve) => {
+      markAppendStarted = resolve;
+    });
+    const second = Effect.runPromise(writer.append(recordedAt, "second"));
+    await Promise.resolve();
+
+    expect(startedRecords).toEqual(["first\n"]);
+    releases.shift()?.();
+    await appendStarted;
+    expect(startedRecords).toEqual(["first\n", "second\n"]);
+    releases.shift()?.();
+    await Promise.all([first, second]);
+  });
+
   test("routes each record by its observed local date", async () => {
     const configDirectory = createTemporaryConfigDirectory();
     const beforeMidnight = localDate(2026, 5, 13, 23, 59, 59);
@@ -298,27 +380,18 @@ describe("createOpenDucktorDailyLogWriter", () => {
     const failure = new Error(`${failingDependency} failed`);
     const dependencies: Partial<OpenDucktorDailyLogWriterDependencies> = {};
     if (failingDependency === "createDirectory") {
-      dependencies.createDirectory = () => {
-        throw failure;
-      };
+      dependencies.createDirectory = () => Promise.reject(failure);
     }
     if (failingDependency === "readDirectory") {
-      dependencies.readDirectory = () => {
-        throw failure;
-      };
+      dependencies.readDirectory = () => Promise.reject(failure);
     }
     if (failingDependency === "removeFile") {
-      dependencies.readDirectory = () => [
-        { name: "openducktor-web-2025-01-01.log", isFile: () => true },
-      ];
-      dependencies.removeFile = () => {
-        throw failure;
-      };
+      dependencies.readDirectory = () =>
+        Promise.resolve([{ name: "openducktor-web-2025-01-01.log", isFile: () => true }]);
+      dependencies.removeFile = () => Promise.reject(failure);
     }
     if (failingDependency === "appendFile") {
-      dependencies.appendFile = () => {
-        throw failure;
-      };
+      dependencies.appendFile = () => Promise.reject(failure);
     }
 
     const createWriter = () =>

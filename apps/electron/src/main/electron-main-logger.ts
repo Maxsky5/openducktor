@@ -1,4 +1,8 @@
-import { createOpenDucktorDailyLogWriter, type OpenDucktorDailyLogWriter } from "@openducktor/host";
+import {
+  createOpenDucktorDailyLogWriter,
+  type OpenDucktorDailyLogWriter,
+  type OpenDucktorLogPersistenceError,
+} from "@openducktor/host";
 import { Effect } from "effect";
 
 const ANSI_RESET = "\u001b[0m";
@@ -23,9 +27,9 @@ type ElectronMainLoggerInput = {
 };
 
 export type ElectronMainLogger = {
-  error(message: string, error?: unknown): void;
-  info(message: string): void;
-  warn(message: string): void;
+  error(message: string, error?: unknown): Effect.Effect<void, OpenDucktorLogPersistenceError>;
+  info(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
+  warn(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
 };
 
 const pad = (value: number, length = 2): string => value.toString().padStart(length, "0");
@@ -106,13 +110,6 @@ const formatError = (error: unknown): string => {
   return String(error);
 };
 
-const runLogEffect = <Failure>(effect: Effect.Effect<void, Failure>): void => {
-  const result = Effect.runSync(Effect.either(effect));
-  if (result._tag === "Left") {
-    throw result.left;
-  }
-};
-
 export const createElectronMainLogger = ({
   env = process.env,
   now = () => new Date(),
@@ -124,16 +121,20 @@ export const createElectronMainLogger = ({
     : createOpenDucktorDailyLogWriter({ surface: "electron", environment: env, clock: now })
   ).pipe(
     Effect.map((resolvedWriter): ElectronMainLogger => {
-      const log = (level: LogLevel, message: string): void => {
-        const recordedAt = now();
-        const useAnsi = shouldUseAnsi(env, stream);
-        const plainTimestamp = timestamp(recordedAt);
-        const renderedTimestamp = colorize(useAnsi, ANSI_DIM, plainTimestamp);
-        const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
-        const renderedMessage = colorMessage(useAnsi, level, message);
-        stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
-        runLogEffect(resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`));
-      };
+      const log = (
+        level: LogLevel,
+        message: string,
+      ): Effect.Effect<void, OpenDucktorLogPersistenceError> =>
+        Effect.gen(function* () {
+          const recordedAt = now();
+          const useAnsi = shouldUseAnsi(env, stream);
+          const plainTimestamp = timestamp(recordedAt);
+          const renderedTimestamp = colorize(useAnsi, ANSI_DIM, plainTimestamp);
+          const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
+          const renderedMessage = colorMessage(useAnsi, level, message);
+          stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
+          yield* resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`);
+        });
 
       return {
         error(message, error) {

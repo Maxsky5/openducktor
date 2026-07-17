@@ -92,13 +92,18 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   taskStore?: TaskStorePort;
 };
 
+const defaultLifecycleLogger: HostLifecycleLogger = {
+  error: (message) => Effect.sync(() => console.error(message)),
+  info: (message) => Effect.sync(() => console.info(message)),
+};
+
 export const createNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
 ): EffectHostCommandRouter => {
   const {
     clientVersion,
     eventBus,
-    lifecycleLogger = console,
+    lifecycleLogger = defaultLifecycleLogger,
     mcpHostBridge,
     runtimeRegistry,
     taskStore: configuredTaskStore,
