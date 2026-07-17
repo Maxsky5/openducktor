@@ -1,6 +1,24 @@
 import type { TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
 
-export type TerminalKeyAction = "copy" | "interrupt" | "paste" | "passthrough";
+export type TerminalKeyAction =
+  | "copy"
+  | "interrupt"
+  | "kill-to-line-start"
+  | "line-end"
+  | "line-start"
+  | "next-word"
+  | "paste"
+  | "passthrough"
+  | "previous-word";
+
+const TERMINAL_INPUT_BY_KEY_ACTION: Partial<Record<TerminalKeyAction, readonly number[]>> = {
+  interrupt: [3],
+  "kill-to-line-start": [21],
+  "line-end": [5],
+  "line-start": [1],
+  "next-word": [27, 102],
+  "previous-word": [27, 98],
+};
 
 export const createTerminalViewportActivator = ({
   fit,
@@ -36,7 +54,7 @@ type TerminalKeyEventHandlerInput = {
 };
 
 export const resolveTerminalKeyAction = (
-  event: Pick<KeyboardEvent, "ctrlKey" | "key" | "metaKey" | "shiftKey" | "type">,
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey" | "type">,
   isMac: boolean,
   hasSelection: boolean,
 ): TerminalKeyAction => {
@@ -52,6 +70,13 @@ export const resolveTerminalKeyAction = (
     (!isMac && event.ctrlKey && event.shiftKey && key === "v");
   if (paste) return "paste";
   if (event.ctrlKey && key === "c" && !hasSelection) return "interrupt";
+  const commandOnly = isMac && event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey;
+  if (commandOnly && key === "arrowleft") return "line-start";
+  if (commandOnly && key === "arrowright") return "line-end";
+  if (commandOnly && key === "backspace") return "kill-to-line-start";
+  const optionOnly = isMac && event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey;
+  if (optionOnly && key === "arrowleft") return "previous-word";
+  if (optionOnly && key === "arrowright") return "next-word";
   return "passthrough";
 };
 
@@ -74,8 +99,9 @@ export const createTerminalKeyEventHandler = ({
       void enqueueInput(() => readClipboard().then((text) => new TextEncoder().encode(text)));
       return false;
     }
-    if (action === "interrupt") {
-      void enqueueInput(() => new Uint8Array([3]));
+    const input = TERMINAL_INPUT_BY_KEY_ACTION[action];
+    if (input) {
+      void enqueueInput(() => new Uint8Array(input));
       return false;
     }
     return true;

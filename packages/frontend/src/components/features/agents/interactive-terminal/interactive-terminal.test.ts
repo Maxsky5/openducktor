@@ -12,6 +12,7 @@ import {
 
 const keyEvent = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
   ({
+    altKey: false,
     ctrlKey: false,
     key: "",
     metaKey: false,
@@ -106,6 +107,38 @@ describe("InteractiveTerminal policies", () => {
     expect(clipboardWrites).toEqual(["selected output"]);
     expect(inputWrites).toEqual([[...new TextEncoder().encode("pasted input")], [3]]);
     expect(failures).toEqual([]);
+  });
+
+  test("maps macOS navigation shortcuts to standard shell editing sequences", async () => {
+    const inputWrites: number[][] = [];
+    let inputIdle = Promise.resolve();
+    const sequenceInput = createTerminalInputSequencer({
+      writeInput: async (data) => {
+        inputWrites.push([...data]);
+      },
+      reportFailure: () => undefined,
+    });
+    const handleKey = createTerminalKeyEventHandler({
+      isMac: true,
+      hasSelection: () => false,
+      getSelection: () => "",
+      writeClipboard: async () => undefined,
+      readClipboard: async () => "",
+      enqueueInput: (operation) => {
+        inputIdle = sequenceInput(operation);
+        return inputIdle;
+      },
+      reportFailure: () => undefined,
+    });
+
+    expect(handleKey(keyEvent({ key: "ArrowLeft", metaKey: true }))).toBe(false);
+    expect(handleKey(keyEvent({ key: "ArrowRight", metaKey: true }))).toBe(false);
+    expect(handleKey(keyEvent({ key: "Backspace", metaKey: true }))).toBe(false);
+    expect(handleKey(keyEvent({ altKey: true, key: "ArrowLeft" }))).toBe(false);
+    expect(handleKey(keyEvent({ altKey: true, key: "ArrowRight" }))).toBe(false);
+    await inputIdle;
+
+    expect(inputWrites).toEqual([[1], [5], [21], [27, 98], [27, 102]]);
   });
 
   test("surfaces clipboard failures without injecting terminal input", async () => {
