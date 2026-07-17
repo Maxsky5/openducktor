@@ -200,14 +200,14 @@ export function AgentStudioTerminalPanel({
           <Tabs
             value={activeTab?.tabId ?? "pending-terminal-close"}
             onValueChange={model.onSelectTab}
-            className="min-h-0 flex-1 gap-0"
+            className="relative min-h-0 flex-1 gap-0 overflow-hidden"
           >
             {model.mountedTabs.map((tab) => (
               <TabsContent
                 key={tab.tabId}
                 value={tab.tabId}
                 forceMount
-                className="h-full min-h-0 data-[state=inactive]:hidden"
+                className="h-full min-h-0 data-[state=inactive]:pointer-events-none data-[state=inactive]:absolute data-[state=inactive]:inset-0 data-[state=inactive]:invisible"
               >
                 <TerminalViewport
                   tab={tab}

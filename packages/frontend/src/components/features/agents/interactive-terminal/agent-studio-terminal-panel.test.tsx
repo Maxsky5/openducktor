@@ -81,6 +81,27 @@ describe("AgentStudioTerminalPanel", () => {
     );
   });
 
+  test("keeps inactive terminal viewports measurable while hiding them", () => {
+    const secondTab: AgentStudioTerminalTab = {
+      ...lostTab,
+      tabId: "lost:terminal-2",
+      label: "Shell 2",
+    };
+    const view = render(
+      <AgentStudioTerminalPanel model={{ ...model, ...tabsModel([lostTab, secondTab]) }} />,
+    );
+
+    const panels = view.container.querySelectorAll<HTMLElement>('[data-slot="tabs-content"]');
+    const inactivePanel = Array.from(panels).find((panel) => panel.dataset.state === "inactive");
+
+    expect(panels).toHaveLength(2);
+    expect(inactivePanel).toBeTruthy();
+    expect(inactivePanel?.className).toContain("data-[state=inactive]:absolute");
+    expect(inactivePanel?.className).toContain("data-[state=inactive]:invisible");
+    expect(inactivePanel?.className).toContain("data-[state=inactive]:pointer-events-none");
+    expect(inactivePanel?.className).not.toContain("data-[state=inactive]:hidden");
+  });
+
   test("enforces the eight-terminal tab limit", () => {
     render(
       <AgentStudioTerminalPanel
