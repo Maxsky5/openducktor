@@ -36,19 +36,18 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("exposes startup read-model failures as one load state", async () => {
-    const originalAgentSessionsList = host.agentSessionsList;
-
-    host.agentSessionsList = async () => {
-      throw new Error("session store unavailable");
-    };
-    host.agentSessionsListForTasks = async () => {
-      throw new Error("session store unavailable");
-    };
-
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionsList: async () => {
+          throw new Error("session store unavailable");
+        },
+        agentSessionsListForTasks: async () => {
+          throw new Error("session store unavailable");
+        },
+      }),
     });
 
     try {
@@ -65,24 +64,23 @@ describe("use-agent-orchestrator-operations session state", () => {
       expect(readModelLoadState.message).toContain("session store unavailable");
     } finally {
       await harness.unmount();
-      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
   test("keeps the repo session read model loading until task data is ready", async () => {
-    const originalAgentSessionsList = host.agentSessionsList;
     let sessionListCalls = 0;
-
-    host.agentSessionsListForTasks = async (_repoPath, taskIds) => {
-      sessionListCalls += 1;
-      return taskIds.map((taskId) => ({ taskId, agentSessions: [] }));
-    };
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [],
       isLoadingTasks: true,
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionsListForTasks: async (_repoPath, taskIds) => {
+          sessionListCalls += 1;
+          return taskIds.map((taskId) => ({ taskId, agentSessions: [] }));
+        },
+      }),
     });
 
     try {
@@ -109,7 +107,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       expect(sessionListCalls).toBe(1);
     } finally {
       await harness.unmount();
-      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
@@ -374,8 +371,6 @@ describe("use-agent-orchestrator-operations session state", () => {
   test("uses latest tasks after args update when validating send permissions", async () => {
     let sendCalls = 0;
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -384,11 +379,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
-    host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionsListForTasks = async () => [
-      { taskId: "task-1", agentSessions: [persistedSessionFixture] },
-    ];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -408,6 +398,13 @@ describe("use-agent-orchestrator-operations session state", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionsList: async () => [persistedSessionFixture],
+        agentSessionsListForTasks: async () => [
+          { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+        ],
+        agentSessionUpsert: async () => {},
+      }),
     });
 
     const unavailableTask = createUnavailableBuildTaskFixture();
@@ -434,8 +431,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
 
-      host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -537,8 +532,6 @@ describe("use-agent-orchestrator-operations session state", () => {
   test("reuses freshly loaded sessions without starting a new session", async () => {
     let startCalls = 0;
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -549,26 +542,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
 
-    host.agentSessionsList = async () => [
-      {
-        ...persistedSessionFixture,
-        role: "build",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-    ];
-    host.agentSessionsListForTasks = async () => [
-      {
-        taskId: "task-1",
-        agentSessions: [
-          {
-            ...persistedSessionFixture,
-            role: "build",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        ],
-      },
-    ];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -600,6 +573,28 @@ describe("use-agent-orchestrator-operations session state", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionsList: async () => [
+          {
+            ...persistedSessionFixture,
+            role: "build",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        ],
+        agentSessionsListForTasks: async () => [
+          {
+            taskId: "task-1",
+            agentSessions: [
+              {
+                ...persistedSessionFixture,
+                role: "build",
+                workingDirectory: "/tmp/repo/worktree",
+              },
+            ],
+          },
+        ],
+        agentSessionUpsert: async () => {},
+      }),
     });
 
     try {
@@ -629,8 +624,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
 
-      host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -696,17 +689,18 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("revisit to the same repo refreshes task sessions again", async () => {
-    const originalAgentSessionsList = host.agentSessionsList;
     let persistedListCalls = 0;
-    host.agentSessionsListForTasks = async () => {
-      persistedListCalls += 1;
-      return [{ taskId: "task-1", agentSessions: [persistedSessionFixture] }];
-    };
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo-a",
       tasks: [taskFixtureWithPersistedBuildSession],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionsListForTasks: async () => {
+          persistedListCalls += 1;
+          return [{ taskId: "task-1", agentSessions: [persistedSessionFixture] }];
+        },
+      }),
     });
 
     try {
@@ -724,7 +718,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       expect(persistedListCalls).toBe(1);
     } finally {
       await harness.unmount();
-      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 

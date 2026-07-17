@@ -290,8 +290,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let persistedListCalls = 0;
     let persistedSessions = [] as (typeof persistedSessionFixture)[];
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -303,17 +301,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return persistedSessions;
-    };
-    host.agentSessionsListForTasks = async () => {
-      persistedListCalls += 1;
-      return [{ taskId: "task-1", agentSessions: persistedSessions }];
-    };
-    host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
-      persistedSessions = [record];
-    };
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -363,6 +350,19 @@ describe("use-agent-orchestrator-operations start and send", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionsList: async () => {
+          persistedListCalls += 1;
+          return persistedSessions;
+        },
+        agentSessionsListForTasks: async () => {
+          persistedListCalls += 1;
+          return [{ taskId: "task-1", agentSessions: persistedSessions }];
+        },
+        agentSessionUpsert: async (_repoPath, _taskId, record) => {
+          persistedSessions = [record];
+        },
+      }),
     });
 
     try {
@@ -401,8 +401,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     } finally {
       await harness.unmount();
 
-      host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -429,8 +427,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       status: "idle";
     }>();
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -442,17 +438,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return persistedSessions;
-    };
-    host.agentSessionsListForTasks = async () => {
-      persistedListCalls += 1;
-      return [{ taskId: "task-1", agentSessions: persistedSessions }];
-    };
-    host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
-      persistedSessions = [record];
-    };
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -496,6 +481,19 @@ describe("use-agent-orchestrator-operations start and send", () => {
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionsList: async () => {
+          persistedListCalls += 1;
+          return persistedSessions;
+        },
+        agentSessionsListForTasks: async () => {
+          persistedListCalls += 1;
+          return [{ taskId: "task-1", agentSessions: persistedSessions }];
+        },
+        agentSessionUpsert: async (_repoPath, _taskId, record) => {
+          persistedSessions = [record];
+        },
+      }),
     });
 
     try {
@@ -539,8 +537,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     } finally {
       await harness.unmount();
 
-      host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
