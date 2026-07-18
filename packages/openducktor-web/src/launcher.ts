@@ -382,6 +382,35 @@ const startFrontendServerEffect = (
     ? startViteServerEffect(options, backendUrl, appToken, logger)
     : startStaticFrontendServerEffect(options, backendUrl, appToken);
 
+export const preserveLauncherFailureAfterStop = (
+  launcherFailure: WebError,
+  stop: Effect.Effect<void, WebError>,
+  logger: WebLogger,
+): Effect.Effect<never, WebError> =>
+  Effect.gen(function* () {
+    const failures: WebError[] = [launcherFailure];
+    const stopExit = yield* Effect.exit(stop);
+    if (stopExit._tag === "Failure") {
+      const stopFailure = causeToWebBoundaryError(stopExit.cause);
+      failures.push(stopFailure);
+      const loggingExit = yield* Effect.exit(
+        writeWebLogEffect(logger, "error", errorMessage(stopFailure)),
+      );
+      if (loggingExit._tag === "Failure") {
+        failures.push(causeToWebBoundaryError(loggingExit.cause));
+      }
+    }
+    const failure = combineWebErrors(
+      "web.launcher.failure-cleanup",
+      errorMessage(launcherFailure),
+      failures,
+    );
+    if (failure) {
+      return yield* failure;
+    }
+    return yield* launcherFailure;
+  });
+
 export const runLauncherEffect = (
   options: LauncherOptions,
   logger: WebLogger,
@@ -493,16 +522,11 @@ export const runLauncherEffect = (
                 if (launcherExit._tag === "Success") {
                   return launcherExit.value;
                 }
-
-                const stopExit = yield* Effect.exit(owner.stop());
-                if (stopExit._tag === "Failure") {
-                  yield* writeWebLogEffect(
-                    logger,
-                    "error",
-                    errorMessage(causeToWebBoundaryError(stopExit.cause)),
-                  );
-                }
-                return yield* causeToWebBoundaryError(launcherExit.cause);
+                return yield* preserveLauncherFailureAfterStop(
+                  causeToWebBoundaryError(launcherExit.cause),
+                  owner.stop(),
+                  logger,
+                );
               }),
             () =>
               Effect.gen(function* () {

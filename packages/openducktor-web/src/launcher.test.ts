@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { WebOperationError } from "./effect/web-errors";
-import { logDuplicateWebTerminationNotice, runWebSignalShutdown } from "./launcher";
+import {
+  logDuplicateWebTerminationNotice,
+  preserveLauncherFailureAfterStop,
+  runWebSignalShutdown,
+} from "./launcher";
 import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
@@ -574,6 +578,43 @@ describe("launcher internals", () => {
         failures: [
           expect.objectContaining({ cause: frontendFailure }),
           expect.objectContaining({ cause: persistenceFailure }),
+        ],
+      },
+    });
+  });
+
+  test("preserves launcher, cleanup, and cleanup-log failures together", async () => {
+    const launcherFailure = new WebOperationError({
+      operation: "web.launcher.start",
+      message: "launcher failed",
+    });
+    const cleanupFailure = new WebOperationError({
+      operation: "web.launcher.cleanup",
+      message: "cleanup failed",
+    });
+    const loggingFailure = new Error("log append failed");
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          preserveLauncherFailureAfterStop(launcherFailure, Effect.fail(cleanupFailure), {
+            error: () => Effect.fail(loggingFailure),
+            info: () => Effect.void,
+            success: () => Effect.void,
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.failure-cleanup",
+      details: {
+        failures: [
+          launcherFailure,
+          cleanupFailure,
+          expect.objectContaining({
+            _tag: "WebResourceError",
+            cause: loggingFailure,
+          }),
         ],
       },
     });

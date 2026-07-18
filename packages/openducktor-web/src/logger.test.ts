@@ -135,8 +135,10 @@ describe("createWebLogger", () => {
       }),
     );
 
-    await expect(Effect.runPromise(Effect.flip(logger.info("Starting host")))).resolves.toBe(
+    await expect(Effect.runPromise(Effect.flip(logger.error("Launcher failed")))).resolves.toBe(
       failure,
     );
+    expect(output.stderr).toHaveLength(1);
+    expect(output.stderr[0]).toContain("ERROR Launcher failed");
   });
 });
