@@ -671,7 +671,6 @@ export const createElectronAppUpdateService = ({
           if (disposed) {
             return rejectDisposed("check");
           }
-          await logger.error("OpenDucktor update check failed", cause);
           setErrorState({
             checkedAt: now(),
             code: "check_failed",
@@ -679,6 +678,7 @@ export const createElectronAppUpdateService = ({
             message: appUpdateErrorMessage("check", cause),
             operation: "check",
           });
+          await logger.error("OpenDucktor update check failed", cause);
           return commandAccepted();
         }
         if (disposed) {
@@ -765,7 +765,6 @@ export const createElectronAppUpdateService = ({
             return rejectDisposed("download");
           }
           clearDownloadProgressThrottle();
-          await logger.error("OpenDucktor update download failed", cause);
           const checkedAt = checkedAtFromState(state);
           setErrorState({
             ...(availableVersion ? { availableVersion } : {}),
@@ -775,6 +774,7 @@ export const createElectronAppUpdateService = ({
             message: appUpdateErrorMessage("download", cause),
             operation: "download",
           });
+          await logger.error("OpenDucktor update download failed", cause);
           return commandAccepted();
         }
         if (disposed) {
@@ -827,9 +827,9 @@ export const createElectronAppUpdateService = ({
         if (disposed) {
           return rejectDisposed("install");
         }
-        await logger.error("OpenDucktor update install failed", cause);
         const previousState = state.status === "downloaded" ? state : downloadedState;
         applyInstallFailure(cause, previousState);
+        await logger.error("OpenDucktor update install failed", cause);
         return commandAccepted();
       } finally {
         activeOperation = null;

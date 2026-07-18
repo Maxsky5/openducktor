@@ -62,6 +62,46 @@ describe("createRuntimeOrchestratorService", () => {
     ]);
   });
 
+  test("preserves runtime startup and logging failures together", async () => {
+    const startupFailure = new HostOperationError({
+      operation: "test.runtime-startup",
+      message: "runtime failed to start",
+    });
+    const loggingFailure = new Error("openducktor.logs.append failed");
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      logger: {
+        error: () => Effect.fail(loggingFailure),
+        info: () => Effect.void,
+      },
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        ensureWorkspaceRuntime: () => Effect.fail(startupFailure),
+      }),
+      taskReader: createTaskStore(),
+    });
+
+    const exit = await Effect.runPromiseExit(
+      service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "runtime-orchestrator.ensure",
+        details: {
+          runtimeFailure: startupFailure,
+          loggingFailure: expect.objectContaining({
+            _tag: "HostOperationError",
+            operation: "runtime-orchestrator.log-error",
+            cause: loggingFailure,
+          }),
+        },
+      });
+    }
+  });
+
   test("ensures a workspace runtime for the canonical repository path", async () => {
     const registry = createRegistry();
     const service = createRuntimeOrchestratorService({

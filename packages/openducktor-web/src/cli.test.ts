@@ -239,6 +239,7 @@ describe("web CLI argument parsing", () => {
       }
     } finally {
       subprocess.kill("SIGKILL");
+      await subprocess.exited;
       await rm(configDirectory, { force: true, recursive: true });
     }
   }, 20_000);

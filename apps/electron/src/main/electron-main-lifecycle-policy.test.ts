@@ -331,6 +331,42 @@ describe("Electron main lifecycle policy", () => {
     expect(exitCodes).toEqual([1]);
   });
 
+  test("startup boundary reports persistence and cleanup failures together", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const cleanupError = new ElectronLifecycleError({
+      operation: "electron.main.cleanup-startup",
+      message: "cleanup failed",
+    });
+    const reportedFailures: unknown[] = [];
+
+    await runElectronMainStartupBoundary({
+      cleanupAfterFailure: () => Effect.fail(cleanupError),
+      exitProcess: () => {},
+      logger: {
+        error: () => Effect.fail(persistenceError),
+        info: () => Effect.void,
+      },
+      markShutdownComplete: () => {},
+      markShutdownStarted: () => {},
+      reportFailure: (cause) => {
+        reportedFailures.push(cause);
+      },
+      startupEffect: Effect.fail(
+        new ElectronLifecycleError({
+          operation: "electron.main.integration-startup",
+          message: "startup failed",
+        }),
+      ),
+    });
+
+    expect(reportedFailures).toHaveLength(1);
+    expect(reportedFailures[0]).toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.startup-failure-report",
+      details: { failures: [persistenceError, cleanupError] },
+    });
+  });
+
   test("persists real startup failure and shutdown lifecycle events with console parity", async () => {
     const configDirectory = mkdtempSync(resolve(tmpdir(), "openducktor-electron-lifecycle-"));
     let consoleOutput = "";
@@ -509,6 +545,36 @@ describe("Electron main lifecycle policy", () => {
     expect(reportedFailures).toEqual([persistenceError]);
     expect(exitCodes).toEqual([1]);
     expect(quitCalls).toBe(0);
+  });
+
+  test("shutdown controller reports persistence and disposal failures together", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const disposalError = new ElectronLifecycleError({
+      operation: "electron.main.dispose-host",
+      message: "dispose failed",
+    });
+    const reportedFailures: unknown[] = [];
+    const controller = createElectronMainShutdownController({
+      disposeHost: () => Effect.fail(disposalError),
+      exitProcess: () => {},
+      logger: {
+        error: () => Effect.fail(persistenceError),
+        info: () => Effect.fail(persistenceError),
+      },
+      quitApp: () => {},
+      reportFailure: (cause) => {
+        reportedFailures.push(cause);
+      },
+    });
+
+    await controller.shutdownHostAndQuit({ reason: "window-all-closed" });
+
+    expect(reportedFailures).toHaveLength(1);
+    expect(reportedFailures[0]).toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.main.shutdown-failure-report",
+      details: { failures: [persistenceError, disposalError] },
+    });
   });
 
   test("shutdown controller preserves a failed host disposal outcome across run retries", async () => {

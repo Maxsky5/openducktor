@@ -22,6 +22,32 @@ const captureLoggingFailure = async (
   }
 };
 
+const lifecycleReportingFailure = ({
+  loggingFailures,
+  message,
+  operation,
+  relatedFailures,
+}: {
+  loggingFailures: unknown[];
+  message: string;
+  operation: string;
+  relatedFailures: unknown[];
+}): unknown | undefined => {
+  if (loggingFailures.length === 0) {
+    return undefined;
+  }
+  const failures = [...new Set([...loggingFailures, ...relatedFailures])];
+  if (failures.length === 1) {
+    return failures[0];
+  }
+  return new ElectronLifecycleError({
+    operation,
+    message,
+    cause: failures[0],
+    details: { failures },
+  });
+};
+
 export type ElectronMainStartupSteps<PreReady, Ready> = {
   configureReady(preReady: PreReady): Effect.Effect<Ready, ElectronError>;
   createMainWindow(ready: Ready): Effect.Effect<void, ElectronError>;
@@ -109,24 +135,37 @@ export const runElectronMainStartupBoundary = async ({
   }
 
   markShutdownStarted();
-  let loggingFailure = await captureLoggingFailure(() =>
+  const loggingFailures: unknown[] = [];
+  const startupLoggingFailure = await captureLoggingFailure(() =>
     logger.error(
       "OpenDucktor Electron startup failed",
       causeToElectronBoundaryError(startupExit.cause),
     ),
   );
+  if (startupLoggingFailure !== undefined) {
+    loggingFailures.push(startupLoggingFailure);
+  }
+  const cleanupFailures: unknown[] = [];
   const cleanupExit = await Effect.runPromiseExit(cleanupAfterFailure());
-  if (Exit.isFailure(cleanupExit) && loggingFailure === undefined) {
-    loggingFailure = await captureLoggingFailure(() =>
-      logger.error(
-        "OpenDucktor host cleanup after startup failure failed",
-        causeToElectronBoundaryError(cleanupExit.cause),
-      ),
+  if (Exit.isFailure(cleanupExit)) {
+    const cleanupFailure = causeToElectronBoundaryError(cleanupExit.cause);
+    cleanupFailures.push(cleanupFailure);
+    const cleanupLoggingFailure = await captureLoggingFailure(() =>
+      logger.error("OpenDucktor host cleanup after startup failure failed", cleanupFailure),
     );
+    if (cleanupLoggingFailure !== undefined) {
+      loggingFailures.push(cleanupLoggingFailure);
+    }
   }
   markShutdownComplete();
-  if (loggingFailure !== undefined) {
-    reportFailure(loggingFailure);
+  const reportingFailure = lifecycleReportingFailure({
+    loggingFailures,
+    message: "Electron startup logging and cleanup failed.",
+    operation: "electron.main.startup-failure-report",
+    relatedFailures: cleanupFailures,
+  });
+  if (reportingFailure !== undefined) {
+    reportFailure(reportingFailure);
   }
   exitProcess(1);
 };
@@ -190,28 +229,40 @@ export const createElectronMainShutdownController = ({
 
     hostShutdownStarted = true;
     let exitCode = hostShutdownExitCode ?? 0;
-    let loggingFailure = await captureLoggingFailure(() =>
+    const loggingFailures: unknown[] = [];
+    const shutdownFailures: unknown[] = [];
+    const startLoggingFailure = await captureLoggingFailure(() =>
       logger.info(`OpenDucktor host shutdown started (${reason})`),
     );
+    if (startLoggingFailure !== undefined) {
+      loggingFailures.push(startLoggingFailure);
+    }
     const disposeExit = await Effect.runPromiseExit(disposeHost(reason));
+    let completionLoggingFailure: unknown | undefined;
     if (Exit.isFailure(disposeExit)) {
       exitCode = 1;
-      if (loggingFailure === undefined) {
-        loggingFailure = await captureLoggingFailure(() =>
-          logger.error(
-            "OpenDucktor host shutdown failed",
-            causeToElectronBoundaryError(disposeExit.cause),
-          ),
-        );
-      }
-    } else if (loggingFailure === undefined) {
-      loggingFailure = await captureLoggingFailure(() =>
+      const disposalFailure = causeToElectronBoundaryError(disposeExit.cause);
+      shutdownFailures.push(disposalFailure);
+      completionLoggingFailure = await captureLoggingFailure(() =>
+        logger.error("OpenDucktor host shutdown failed", disposalFailure),
+      );
+    } else {
+      completionLoggingFailure = await captureLoggingFailure(() =>
         logger.info("OpenDucktor host shutdown complete"),
       );
     }
-    if (loggingFailure !== undefined) {
+    if (completionLoggingFailure !== undefined) {
+      loggingFailures.push(completionLoggingFailure);
+    }
+    const reportingFailure = lifecycleReportingFailure({
+      loggingFailures,
+      message: "Electron shutdown logging and resource cleanup failed.",
+      operation: "electron.main.shutdown-failure-report",
+      relatedFailures: shutdownFailures,
+    });
+    if (reportingFailure !== undefined) {
       exitCode = 1;
-      reportFailure(loggingFailure);
+      reportFailure(reportingFailure);
     }
 
     hostShutdownComplete = true;

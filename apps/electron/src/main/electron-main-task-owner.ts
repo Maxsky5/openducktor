@@ -1,3 +1,5 @@
+import { ElectronOperationError } from "../effect/electron-errors";
+
 export type ElectronDetachedTaskOwner = {
   drain(): Promise<void>;
   run(
@@ -11,11 +13,21 @@ export const createElectronDetachedTaskOwner = (
 ): ElectronDetachedTaskOwner => {
   const pendingTasks = new Set<Promise<void>>();
   let firstFailure: { readonly cause: unknown } | null = null;
+  let drainPromise: Promise<void> | null = null;
 
   const run = (
     operation: () => void | Promise<void>,
     reportOperationFailure = reportFailure,
   ): void => {
+    if (drainPromise) {
+      const cause = new ElectronOperationError({
+        operation: "electron.detached-task.run-after-drain",
+        message: "Electron detached work was requested after shutdown draining began.",
+      });
+      firstFailure ??= { cause };
+      reportOperationFailure(cause);
+      return;
+    }
     const pending = Promise.resolve()
       .then(operation)
       .catch((cause: unknown) => {
@@ -29,11 +41,14 @@ export const createElectronDetachedTaskOwner = (
   };
 
   return {
-    drain: async () => {
-      await Promise.all(pendingTasks);
-      if (firstFailure) {
-        throw firstFailure.cause;
-      }
+    drain: () => {
+      drainPromise ??= (async () => {
+        await Promise.all(pendingTasks);
+        if (firstFailure) {
+          throw firstFailure.cause;
+        }
+      })();
+      return drainPromise;
     },
     run,
   };

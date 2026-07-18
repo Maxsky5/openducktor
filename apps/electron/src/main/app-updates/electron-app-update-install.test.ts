@@ -64,6 +64,41 @@ describe("electron app update install handoff", () => {
     expect(canInstallAppUpdate(result.state)).toBe(true);
   });
 
+  test("commits a failed install before surfacing its logging failure", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    adapter.onPrepareInstall = () => {
+      throw new Error("updater preparation failed");
+    };
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {},
+        warn: async () => {},
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await service.download();
+
+    await expect(service.install()).rejects.toBe(persistenceError);
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      error: {
+        operation: "install",
+        message: expect.stringContaining("updater preparation failed"),
+      },
+    });
+    expect(canInstallAppUpdate(service.getState())).toBe(true);
+  });
+
   test("does not start the install handoff after disposal begins", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {

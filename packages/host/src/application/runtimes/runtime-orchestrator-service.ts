@@ -201,10 +201,25 @@ export const createRuntimeOrchestratorService = ({
           message,
         ),
       );
-      yield* writeRuntimeLog(
-        "error",
-        `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
+      const loggingResult = yield* Effect.either(
+        writeRuntimeLog(
+          "error",
+          `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
+        ),
       );
+      if (loggingResult._tag === "Left") {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "runtime-orchestrator.ensure",
+            message: `${message}; additionally failed to persist the runtime startup failure: ${loggingResult.left.message}`,
+            cause: ensureResult.left,
+            details: {
+              runtimeFailure: ensureResult.left,
+              loggingFailure: loggingResult.left,
+            },
+          }),
+        );
+      }
       return yield* Effect.fail(ensureResult.left);
     });
   const service: RuntimeOrchestratorService = {

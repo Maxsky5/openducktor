@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { ElectronOperationError } from "../effect/electron-errors";
 import { createElectronDetachedTaskOwner, runElectronMainTask } from "./electron-main-task-owner";
 
 test("detached task owner reports the first failure and drains all admitted work", async () => {
@@ -46,6 +47,40 @@ test("detached task owner reports the first failure and drains all admitted work
 
   resolveSecond();
   await expect(drain).rejects.toBe(firstFailure);
+});
+
+test("detached task owner closes admission when draining begins", async () => {
+  const reported: unknown[] = [];
+  let releaseAdmitted: () => void = () => {};
+  let markAdmittedStarted: () => void = () => {};
+  const admittedStarted = new Promise<void>((resolve) => {
+    markAdmittedStarted = resolve;
+  });
+  const owner = createElectronDetachedTaskOwner((cause) => reported.push(cause));
+  let lateTaskStarted = false;
+
+  owner.run(
+    () =>
+      new Promise<void>((resolve) => {
+        releaseAdmitted = resolve;
+        markAdmittedStarted();
+      }),
+  );
+  await admittedStarted;
+  const drain = owner.drain();
+
+  owner.run(() => {
+    lateTaskStarted = true;
+  });
+  await Promise.resolve();
+
+  expect(lateTaskStarted).toBeFalse();
+  expect(reported).toHaveLength(1);
+  expect(reported[0]).toBeInstanceOf(ElectronOperationError);
+
+  releaseAdmitted();
+  await expect(drain).rejects.toBe(reported[0]);
+  await expect(owner.drain()).rejects.toBe(reported[0]);
 });
 
 test("reports a synchronous task failure exactly once", async () => {

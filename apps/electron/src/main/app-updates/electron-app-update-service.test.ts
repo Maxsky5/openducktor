@@ -504,6 +504,32 @@ describe("electron app update service", () => {
     expect(result.state.error.message).not.toContain("at createHttpError");
   });
 
+  test("commits a failed check before surfacing its logging failure", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    adapter.nextCheckResult = Promise.reject(new Error("GitHub update check failed"));
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {},
+        warn: async () => {},
+      },
+    });
+
+    await expect(service.check({ initiator: "settings" })).rejects.toBe(persistenceError);
+
+    expect(service.getState()).toMatchObject({
+      status: "error",
+      error: {
+        code: "check_failed",
+        operation: "check",
+      },
+    });
+  });
+
   test("sanitizes updater error events before publishing them to renderers", async () => {
     const adapter = new FakeUpdaterAdapter();
     const { service } = createService({ adapter });
@@ -703,5 +729,37 @@ describe("electron app update service", () => {
       },
     });
     expect(adapter.downloadCalls).toBe(2);
+  });
+
+  test("commits a failed download before surfacing its logging failure", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    adapter.nextDownloadResult = Promise.reject(new Error("network unavailable"));
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {},
+        warn: async () => {},
+      },
+    });
+    await service.check({ initiator: "settings" });
+
+    await expect(service.download()).rejects.toBe(persistenceError);
+
+    expect(service.getState()).toMatchObject({
+      status: "error",
+      availableVersion: "0.4.3",
+      error: {
+        code: "download_failed",
+        operation: "download",
+      },
+    });
   });
 });

@@ -80,6 +80,34 @@ describe("createWebLauncherLifecycle", () => {
     expect(reportedFailures).toEqual([stopFailure]);
   });
 
+  test("closes the frontend after host exit when persistence fails", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    let closeCalls = 0;
+    const lifecycle = await Effect.runPromise(
+      createWebLauncherLifecycle({
+        closeFrontend: () =>
+          Effect.sync(() => {
+            closeCalls += 1;
+          }),
+        logger: {
+          error: () => Effect.void,
+          info: () => Effect.fail(persistenceError),
+          success: () => Effect.void,
+        },
+        onSignalShutdownFailure: () => {},
+        reportFailure: () => {},
+        runSignalShutdown: async () => {},
+        stopResources: () => Effect.void,
+      }),
+    );
+    await Effect.runPromise(lifecycle.registerFrontend(frontendServer));
+
+    const result = await Effect.runPromise(Effect.either(lifecycle.completeAfterHostExit()));
+
+    expect(result._tag).toBe("Left");
+    expect(closeCalls).toBe(1);
+  });
+
   test("admits one duplicate-signal log and closes admission before flush", async () => {
     const infos: string[] = [];
     const signalRequests: WebSignalShutdownRequest[] = [];
