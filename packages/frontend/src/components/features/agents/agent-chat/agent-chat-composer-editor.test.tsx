@@ -426,6 +426,14 @@ const createClipboardFileItem = (file: File) => ({
 });
 
 describe("AgentChatComposerEditor", () => {
+  test("names the message composer", () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    expect(screen.getByRole("textbox", { name: "Message composer" })).toBe(
+      getEditorRoot(rendered.container),
+    );
+  });
+
   test("shows the slash-command error state after typing a slash trigger", async () => {
     const rendered = render(
       <EditorHarness slashCommands={COMMANDS} slashCommandsError="Slash commands unavailable." />,
