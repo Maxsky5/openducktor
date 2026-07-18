@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { posix } from "node:path";
 import { Effect } from "effect";
-import { HOST_CONTROL_ENV_NAMES } from "../../infrastructure/process/process-environment";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import { createTerminalLaunchPolicy } from "./terminal-launch-policy";
@@ -20,9 +19,12 @@ const filesystem: FilesystemPort = {
 
 describe("terminal launch policy", () => {
   test("canonicalizes the directory and removes control credentials", async () => {
-    const processEnv = Object.fromEntries(HOST_CONTROL_ENV_NAMES.map((name) => [name, "secret"]));
-    processEnv.PATH = "/usr/bin";
-    processEnv.SHELL = "/bin/zsh";
+    const processEnv = {
+      ODT_HOST_TOKEN: "host-secret",
+      OPENDUCKTOR_APP_TOKEN: "app-secret",
+      PATH: "/usr/bin",
+      SHELL: "/bin/zsh",
+    };
     const plan = await Effect.runPromise(
       createTerminalLaunchPolicy({
         filesystem,
@@ -37,7 +39,8 @@ describe("terminal launch policy", () => {
     expect(plan.shell).toBe("/bin/zsh");
     expect(plan.args).toEqual(["-l"]);
     expect(plan.env.TERM).toBe("xterm-256color");
-    for (const name of HOST_CONTROL_ENV_NAMES) expect(plan.env[name]).toBeUndefined();
+    expect(plan.env.ODT_HOST_TOKEN).toBeUndefined();
+    expect(plan.env.OPENDUCKTOR_APP_TOKEN).toBeUndefined();
   });
 
   test("rejects a non-directory and does not select another path", async () => {

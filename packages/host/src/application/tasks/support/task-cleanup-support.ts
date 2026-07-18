@@ -376,7 +376,7 @@ export const runTaskLocalCleanup = ({
         }),
       );
     }
-    const terminalResult = yield* terminalService.acquireTaskCleanup(taskIds);
+    const terminalResult = yield* terminalService.acquireTaskCleanup({ repoPath, taskIds });
     progress.completedSteps.push(
       terminalResult.closedTerminalIds.length > 0
         ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`

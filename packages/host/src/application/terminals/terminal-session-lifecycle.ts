@@ -213,6 +213,14 @@ export const createTerminalSessionLifecycle = ({
           );
         }
       }
+      applyStreamEvents(
+        session,
+        session.output.publish({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "terminal_forgotten",
+          terminalId,
+        }),
+      );
       disposeTerminalSession(session);
       sessions.delete(terminalId);
     });

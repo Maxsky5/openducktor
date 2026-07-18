@@ -204,7 +204,7 @@ export function AgentStudioTerminalPanel({
           {model.tabs.length > 0 ? (
             <Tabs
               {...(model.activeTabId ? { value: model.activeTabId } : {})}
-              onValueChange={() => undefined}
+              onValueChange={model.onSelectTab}
               className="gap-0"
             >
               <TerminalTabStrip

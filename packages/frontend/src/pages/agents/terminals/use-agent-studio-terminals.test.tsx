@@ -16,7 +16,7 @@ if (typeof document === "undefined") {
 const summaryForTask = (taskId: string): TerminalSummary => ({
   terminalId: `terminal-${taskId}`,
   label: "Shell 1",
-  context: { taskId },
+  context: { repoPath: "/repo", taskId },
   initialWorkingDir: `/repo/worktrees/${taskId}`,
   createdAt: "2026-07-13T00:00:00.000Z",
   lifecycle: "running",
@@ -117,7 +117,7 @@ describe("useAgentStudioTerminals", () => {
         terminalCreate: async ({ context }) => {
           createCalls += 1;
           const terminal: TerminalSummary = {
-            ...summaryForTask(context.taskId ?? "unassociated"),
+            ...summaryForTask("taskId" in context ? context.taskId : "unassociated"),
             terminalId: "terminal-created",
           };
           terminals.push(terminal);

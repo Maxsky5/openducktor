@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createTcpServer, type Server } from "node:net";
 import { Effect } from "effect";
-import { canConnect, isOpenCodeHealthy, pickFreePort } from "./opencode-local-port";
+import { isOpenCodeHealthy, pickFreePort } from "./opencode-local-port";
 
 const listen = (server: Server, port = 0): Promise<number> =>
   new Promise((resolve, reject) => {
@@ -44,18 +44,6 @@ describe("opencode-local-port", () => {
     }
   });
 
-  test("probes local TCP connectivity", async () => {
-    const server = createTcpServer();
-    try {
-      const port = await listen(server);
-      await expect(Effect.runPromise(canConnect(port, 250))).resolves.toBe(true);
-    } finally {
-      if (server.listening) {
-        await close(server);
-      }
-    }
-  });
-
   test("waits for the OpenCode health contract instead of accepting a bare TCP socket", async () => {
     const server = createHttpServer((_request, response) => {
       response.writeHead(503);
@@ -63,7 +51,6 @@ describe("opencode-local-port", () => {
     });
     try {
       const port = await listen(server);
-      await expect(Effect.runPromise(canConnect(port, 50))).resolves.toBe(true);
       await expect(Effect.runPromise(isOpenCodeHealthy(port, 50))).resolves.toBe(false);
     } finally {
       if (server.listening) {

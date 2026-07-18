@@ -2,10 +2,7 @@ const TERMINAL_TITLE_SETTLE_MS = 40;
 
 export type TerminalTitleSettlementScheduler = (delayMs: number, settle: () => void) => () => void;
 
-export const scheduleTerminalTitleSettlement: TerminalTitleSettlementScheduler = (
-  delayMs,
-  settle,
-) => {
+const scheduleTerminalTitleSettlement: TerminalTitleSettlementScheduler = (delayMs, settle) => {
   const timer = setTimeout(settle, delayMs);
   return () => clearTimeout(timer);
 };

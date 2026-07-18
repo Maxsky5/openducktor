@@ -11,7 +11,7 @@ export type TerminalSession = {
   operations: Effect.Semaphore;
 };
 
-export class TerminalSessionResources {
+class TerminalSessionResources {
   private currentHandle: TerminalPtyHandle | null = null;
   private disposed = false;
 

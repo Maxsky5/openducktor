@@ -1,4 +1,6 @@
+import type { TerminalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { type TerminalTaskScope, terminalContextKey } from "./terminal-context";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { TerminalServiceError } from "./terminal-service-error";
 
@@ -13,10 +15,8 @@ type TerminalTaskCleanupLease = {
 
 type TerminalAdmissionInput = {
   countLive(): number;
-  countLiveForContext(taskId: string | undefined): number;
+  countLiveForContext(context: TerminalContext): number;
 };
-
-const contextKey = (taskId: string | undefined): string => taskId ?? "__unassociated__";
 
 export const createTerminalAdmission = ({
   countLive,
@@ -48,7 +48,7 @@ export const createTerminalAdmission = ({
     });
 
   const reserve = (
-    taskId: string | undefined,
+    context: TerminalContext,
   ): Effect.Effect<TerminalAdmissionReservation, TerminalServiceError> =>
     Effect.suspend(() => {
       if (!accepting) {
@@ -69,7 +69,8 @@ export const createTerminalAdmission = ({
           }),
         );
       }
-      const key = contextKey(taskId);
+      const key = terminalContextKey(context);
+      const taskId = "taskId" in context ? context.taskId : undefined;
       if ((blockedContexts.get(key) ?? 0) > 0) {
         return Effect.fail(
           new TerminalServiceError({
@@ -83,7 +84,7 @@ export const createTerminalAdmission = ({
       }
       const pendingForContext = pendingByContext.get(key) ?? 0;
       const contextLimit = taskId ? TERMINAL_LIMITS.livePerTask : TERMINAL_LIMITS.liveUnassociated;
-      if (countLiveForContext(taskId) + pendingForContext >= contextLimit) {
+      if (countLiveForContext(context) + pendingForContext >= contextLimit) {
         return Effect.fail(
           new TerminalServiceError({
             code: "context_terminal_limit",
@@ -109,11 +110,12 @@ export const createTerminalAdmission = ({
       });
     });
 
-  const acquireTaskCleanupLease = (
-    taskIds: readonly string[],
-  ): Effect.Effect<TerminalTaskCleanupLease> =>
+  const acquireTaskCleanupLease = ({
+    repoPath,
+    taskIds,
+  }: TerminalTaskScope): Effect.Effect<TerminalTaskCleanupLease> =>
     Effect.sync(() => {
-      const keys = [...new Set(taskIds.map(contextKey))];
+      const keys = [...new Set(taskIds.map((taskId) => terminalContextKey({ repoPath, taskId })))];
       for (const key of keys) blockedContexts.set(key, (blockedContexts.get(key) ?? 0) + 1);
       let released = false;
       return {

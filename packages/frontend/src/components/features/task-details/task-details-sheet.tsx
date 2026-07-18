@@ -236,6 +236,7 @@ export function TaskDetailsSheet({
           isLoadingImpact={viewModel.isLoadingResetImpact}
           hasManagedSessionCleanup={viewModel.hasManagedResetSessionCleanup}
           managedWorktreeCount={viewModel.resetManagedWorktreeCount}
+          terminalCount={viewModel.resetTerminalCount}
           impactError={viewModel.resetImpactError}
           isResetPending={viewModel.isResetPending}
           resetError={viewModel.resetError}

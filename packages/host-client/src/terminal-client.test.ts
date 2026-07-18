@@ -5,7 +5,7 @@ import { HostTerminalClient, HostTerminalClientError } from "./terminal-client";
 const summary = {
   terminalId: "terminal-1",
   label: "Shell 1",
-  context: { taskId: "task-1" },
+  context: { repoPath: "/repo", taskId: "task-1" },
   initialWorkingDir: "/repo/worktree",
   createdAt: "2026-07-12T00:00:00.000Z",
   lifecycle: "running",
@@ -20,12 +20,18 @@ describe("HostTerminalClient", () => {
       return { ref: { terminalId: "terminal-1" }, summary };
     });
     await expect(
-      client.terminalCreate({ workingDir: "/repo/worktree", context: { taskId: "task-1" } }),
+      client.terminalCreate({
+        workingDir: "/repo/worktree",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
     ).resolves.toEqual({ ref: { terminalId: "terminal-1" }, summary });
     expect(calls).toEqual([
       {
         command: "terminal_create",
-        input: { workingDir: "/repo/worktree", context: { taskId: "task-1" } },
+        input: {
+          workingDir: "/repo/worktree",
+          context: { repoPath: "/repo", taskId: "task-1" },
+        },
       },
     ]);
   });
@@ -38,7 +44,7 @@ describe("HostTerminalClient", () => {
       throw new Error(`Unexpected ${command}`);
     });
     await expect(
-      client.terminalList({ filter: { kind: "task", taskId: "task-1" } }),
+      client.terminalList({ filter: { kind: "task", repoPath: "/repo", taskId: "task-1" } }),
     ).resolves.toEqual({
       hostInstanceId: "host-1",
       terminals: [summary],
@@ -79,7 +85,10 @@ describe("HostTerminalClient", () => {
     });
 
     const result = await client
-      .terminalCreate({ workingDir: "/repo/worktree", context: { taskId: "task-1" } })
+      .terminalCreate({
+        workingDir: "/repo/worktree",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      })
       .then(
         () => ({ ok: true as const }),
         (error: unknown) => ({ ok: false as const, error }),

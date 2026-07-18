@@ -226,7 +226,12 @@ describe("TerminalService", () => {
 
   test("publishes output before exit with monotonic byte ranges", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(service.create({ workingDir: "/repo", context: { taskId: "task-1" } }));
+    await Effect.runPromise(
+      service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
     const events: Array<{ type: string; start?: number; end?: number }> = [];
     await Effect.runPromise(
       service.attach({
@@ -443,7 +448,10 @@ describe("TerminalService", () => {
     expect(listed.terminals[0]?.lifecycle).toBe("exited");
     for (let index = 0; index < TERMINAL_LIMITS.livePerHost; index += 1) {
       await Effect.runPromise(
-        service.create({ workingDir: "/repo", context: { taskId: `replacement-${index}` } }),
+        service.create({
+          workingDir: "/repo",
+          context: { repoPath: "/repo", taskId: `replacement-${index}` },
+        }),
       );
     }
   });
@@ -470,6 +478,52 @@ describe("TerminalService", () => {
 
     expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
     expect(pty.operations).toEqual(["inspect-children", "terminate"]);
+  });
+
+  test("scopes task cleanup by repository and forgets attached terminals", async () => {
+    let terminalId = 0;
+    const { service } = await makeService(makePty(true, false), () => `terminal-${++terminalId}`);
+    await Effect.runPromise(
+      service.create({
+        workingDir: "/repo-a",
+        context: { repoPath: "/repo-a", taskId: "shared-task" },
+      }),
+    );
+    await Effect.runPromise(
+      service.create({
+        workingDir: "/repo-b",
+        context: { repoPath: "/repo-b", taskId: "shared-task" },
+      }),
+    );
+    const events: string[] = [];
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "renderer",
+        lastConsumedSequence: 0,
+        sink: (event) => events.push(event.type),
+      }),
+    );
+
+    await Effect.runPromise(
+      Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo-a", taskIds: ["shared-task"] })),
+    );
+
+    expect(events.at(-1)).toBe("terminal_forgotten");
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({ kind: "task", repoPath: "/repo-a", taskId: "shared-task" }),
+        )
+      ).terminals,
+    ).toEqual([]);
+    expect(
+      (
+        await Effect.runPromise(
+          service.list({ kind: "task", repoPath: "/repo-b", taskId: "shared-task" }),
+        )
+      ).terminals.map((terminal) => terminal.terminalId),
+    ).toEqual(["terminal-2"]);
   });
 
   test("removes a close-failed session after its PTY cleanup retry succeeds", async () => {
@@ -569,7 +623,10 @@ describe("TerminalService", () => {
     const { service, pty } = await makeService(makePty(), () => "terminal-1", delayedFilesystem);
 
     const creating = Effect.runPromise(
-      service.create({ workingDir: "/repo", context: { taskId: "task-1" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
     );
     await canonicalizeStarted;
     let disposed = false;
@@ -616,7 +673,12 @@ describe("TerminalService", () => {
 
     const creations = Array.from({ length: TERMINAL_LIMITS.livePerTask + 1 }, () =>
       Effect.runPromise(
-        Effect.either(service.create({ workingDir: "/repo", context: { taskId: "task-1" } })),
+        Effect.either(
+          service.create({
+            workingDir: "/repo",
+            context: { repoPath: "/repo", taskId: "task-1" },
+          }),
+        ),
       ),
     );
     await allCanonicalizing;
@@ -660,7 +722,10 @@ describe("TerminalService", () => {
       delayedFilesystem,
     );
     const creating = Effect.runPromise(
-      service.create({ workingDir: "/repo", context: { taskId: "task-1" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
     );
     await canonicalizeStarted;
     let releaseCleanup = (): void => undefined;
@@ -674,7 +739,7 @@ describe("TerminalService", () => {
     const cleanup = Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          yield* service.acquireTaskCleanup(["task-1"]);
+          yield* service.acquireTaskCleanup({ repoPath: "/repo", taskIds: ["task-1"] });
           reportCleanupAcquired();
           yield* Effect.promise(() => cleanupReleased);
         }),
@@ -683,7 +748,12 @@ describe("TerminalService", () => {
 
     await Bun.sleep(0);
     const blocked = await Effect.runPromise(
-      Effect.either(service.create({ workingDir: "/repo", context: { taskId: "task-1" } })),
+      Effect.either(
+        service.create({
+          workingDir: "/repo",
+          context: { repoPath: "/repo", taskId: "task-1" },
+        }),
+      ),
     );
     expect(blocked._tag).toBe("Left");
     if (blocked._tag === "Left") expect(blocked.left.code).toBe("close_failed");
@@ -692,15 +762,19 @@ describe("TerminalService", () => {
     await creating;
     await cleanupAcquired;
     expect(
-      (await Effect.runPromise(service.list({ kind: "task", taskId: "task-1" }))).terminals,
+      (await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" })))
+        .terminals,
     ).toEqual([]);
 
     shouldDelayCanonicalize = false;
     releaseCleanup();
     await cleanup;
     const createdAfterCleanup = await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: { taskId: "task-1" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
     );
-    expect(createdAfterCleanup.summary.context.taskId).toBe("task-1");
+    expect(createdAfterCleanup.summary.context).toEqual({ repoPath: "/repo", taskId: "task-1" });
   });
 });

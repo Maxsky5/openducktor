@@ -3,12 +3,17 @@ import { z } from "zod";
 export const TERMINAL_ID_MAX_LENGTH = 128;
 export const terminalIdSchema = z.string().trim().min(1).max(TERMINAL_ID_MAX_LENGTH);
 export const terminalTaskIdSchema = z.string().trim().min(1);
+const terminalRepoPathSchema = z.string().trim().min(1);
 
-export const terminalContextSchema = z
-  .object({
-    taskId: terminalTaskIdSchema.optional(),
-  })
-  .strict();
+export const terminalContextSchema = z.union([
+  z.object({}).strict(),
+  z
+    .object({
+      repoPath: terminalRepoPathSchema,
+      taskId: terminalTaskIdSchema,
+    })
+    .strict(),
+]);
 export type TerminalContext = z.infer<typeof terminalContextSchema>;
 
 export const terminalLaunchSpecSchema = z
@@ -116,7 +121,13 @@ export type TerminalCreateResponse = z.infer<typeof terminalCreateResponseSchema
 
 export const terminalListFilterSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all") }).strict(),
-  z.object({ kind: z.literal("task"), taskId: terminalTaskIdSchema }).strict(),
+  z
+    .object({
+      kind: z.literal("task"),
+      repoPath: terminalRepoPathSchema,
+      taskId: terminalTaskIdSchema,
+    })
+    .strict(),
   z.object({ kind: z.literal("unassociated") }).strict(),
 ]);
 export type TerminalListFilter = z.infer<typeof terminalListFilterSchema>;

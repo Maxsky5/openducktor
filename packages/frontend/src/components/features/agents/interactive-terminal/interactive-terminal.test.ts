@@ -176,7 +176,7 @@ describe("InteractiveTerminal policies", () => {
     expect(encodeTerminalTextInput("text")).toEqual(new TextEncoder().encode("text"));
   });
 
-  test("stages bounded dropped images sequentially and pastes host-formatted input", async () => {
+  test("stages bounded dropped images concurrently and preserves paste order", async () => {
     const first = new File([new Uint8Array([1])], "first image.png", { type: "image/png" });
     const second = new File([new Uint8Array([2])], "second.jpg", { type: "image/jpeg" });
     const text = new File(["notes"], "notes.txt", { type: "text/plain" });
@@ -209,7 +209,7 @@ describe("InteractiveTerminal policies", () => {
     });
 
     expect(stagedFiles).toEqual(["first image.png", "second.jpg"]);
-    expect(maximumActiveStages).toBe(1);
+    expect(maximumActiveStages).toBe(2);
     expect(preparedPaths).toEqual([["/tmp/first image.png", "/tmp/second.jpg"]]);
     expect(pasted).toEqual(["prepared:/tmp/first image.png|/tmp/second.jpg"]);
   });

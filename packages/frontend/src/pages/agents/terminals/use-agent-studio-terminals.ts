@@ -172,7 +172,7 @@ export const useAgentStudioTerminals = (
       try {
         const created = await dependencies.hostClient.terminalCreate({
           workingDir,
-          context: { taskId },
+          context: { repoPath, taskId },
         });
         dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
         await queryClient.invalidateQueries({

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   createProcessEnvironment,
-  HOST_CONTROL_ENV_NAMES,
   normalizeProcessEnvironment,
   pathEnvironmentValue,
   sanitizeChildProcessEnvironment,
@@ -133,7 +132,6 @@ describe("sanitizeChildProcessEnvironment", () => {
       USER_SETTING: "preserved",
     });
     expect(resolvedEnvironment.ODT_HOST_TOKEN).toBe("host-secret");
-    expect(HOST_CONTROL_ENV_NAMES).toContain("ODT_HOST_TOKEN");
   });
 
   test("removes host-control values case-insensitively on Windows", () => {

@@ -1,5 +1,6 @@
 import {
   TERMINAL_PROTOCOL_VERSION,
+  type TerminalContext,
   type TerminalListFilter,
   type TerminalSummary,
 } from "@openducktor/contracts";
@@ -9,6 +10,11 @@ import type {
   TerminalPtyLaunchPlan,
   TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
+import {
+  type TerminalTaskScope,
+  terminalContextKey,
+  terminalContextMatchesTaskScope,
+} from "./terminal-context";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
 import { TerminalServiceError } from "./terminal-service-error";
@@ -72,10 +78,12 @@ export const createTerminalSessionEngine = ({
       pruneExited();
       return [...sessions.values()].filter(isLiveTerminal).length;
     },
-    countLiveForContext: (taskId: string | undefined): number => {
+    countLiveForContext: (context: TerminalContext): number => {
       pruneExited();
       return [...sessions.values()].filter(
-        (session) => isLiveTerminal(session) && session.summary.context.taskId === taskId,
+        (session) =>
+          isLiveTerminal(session) &&
+          terminalContextKey(session.summary.context) === terminalContextKey(context),
       ).length;
     },
     start: (
@@ -129,8 +137,10 @@ export const createTerminalSessionEngine = ({
       return [...sessions.values()].flatMap((session) => {
         const matches =
           filter.kind === "all" ||
-          (filter.kind === "unassociated" && session.summary.context.taskId === undefined) ||
-          (filter.kind === "task" && session.summary.context.taskId === filter.taskId);
+          (filter.kind === "unassociated" && !("taskId" in session.summary.context)) ||
+          (filter.kind === "task" &&
+            terminalContextKey(session.summary.context) ===
+              terminalContextKey({ repoPath: filter.repoPath, taskId: filter.taskId }));
         return matches ? [{ ...session.summary, context: { ...session.summary.context } }] : [];
       });
     },
@@ -331,13 +341,11 @@ export const createTerminalSessionEngine = ({
         });
         yield* closeSession(session, confirmTerminate);
       }),
-    closeByTaskIds: (taskIds: readonly string[]): Effect.Effect<string[], TerminalServiceError> =>
+    closeByTaskScope: (scope: TerminalTaskScope): Effect.Effect<string[], TerminalServiceError> =>
       Effect.suspend(() => {
-        const taskIdSet = new Set(taskIds);
-        const targets = [...sessions.values()].filter((session) => {
-          const taskId = session.summary.context.taskId;
-          return taskId !== undefined && taskIdSet.has(taskId);
-        });
+        const targets = [...sessions.values()].filter((session) =>
+          terminalContextMatchesTaskScope(session.summary.context, scope),
+        );
         return closeSessions(targets, "close_by_task");
       }),
     dispose: (): Effect.Effect<void, TerminalServiceError> =>

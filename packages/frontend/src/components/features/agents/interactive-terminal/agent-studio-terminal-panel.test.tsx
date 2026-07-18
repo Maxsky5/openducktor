@@ -1,6 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TerminalSummary } from "@openducktor/contracts";
-import { fireEvent, screen, render as testingLibraryRender, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  render as testingLibraryRender,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import type {
@@ -152,7 +158,7 @@ describe("AgentStudioTerminalPanel", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-running",
       label: "Shell 1",
-      context: { taskId: "task-1" },
+      context: { repoPath: "/repo", taskId: "task-1" },
       initialWorkingDir: "/repo",
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
@@ -180,6 +186,31 @@ describe("AgentStudioTerminalPanel", () => {
     expect(tab.parentElement?.className).toContain("cursor-pointer");
   });
 
+  test("activates terminal tabs through keyboard navigation", async () => {
+    const onSelectTab = mock(() => undefined);
+    const secondTab: AgentStudioTerminalTab = {
+      ...lostTab,
+      tabId: "lost:terminal-2",
+      label: "Shell 2",
+    };
+    render(
+      <AgentStudioTerminalPanel
+        model={{
+          ...model,
+          ...tabsModel([lostTab, secondTab]),
+          onSelectTab,
+        }}
+      />,
+    );
+    const firstTab = screen.getByRole("tab", { name: "Shell 1, Lost after host restart" });
+    act(() => {
+      firstTab.focus();
+      fireEvent.keyDown(firstTab, { key: "ArrowRight" });
+    });
+
+    await waitFor(() => expect(onSelectTab).toHaveBeenCalledWith("lost:terminal-2"));
+  });
+
   test("confirms only after the host reports a blocking command", async () => {
     const onClose = mock(async (_tab, confirmTerminate: boolean) =>
       confirmTerminate
@@ -189,7 +220,7 @@ describe("AgentStudioTerminalPanel", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-busy",
       label: "Shell 1",
-      context: { taskId: "task-1" },
+      context: { repoPath: "/repo", taskId: "task-1" },
       initialWorkingDir: "/repo",
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
@@ -226,7 +257,7 @@ describe("AgentStudioTerminalPanel", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-closing",
       label: "Shell 1",
-      context: { taskId: "task-1" },
+      context: { repoPath: "/repo", taskId: "task-1" },
       initialWorkingDir: "/repo",
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
@@ -252,7 +283,7 @@ describe("AgentStudioTerminalPanel", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-running",
       label: "Shell 1",
-      context: { taskId: "task-1" },
+      context: { repoPath: "/repo", taskId: "task-1" },
       initialWorkingDir: "/repo/worktrees/task-1",
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",
@@ -331,7 +362,7 @@ describe("AgentStudioTerminalPanel", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-exited",
       label: "Shell 1",
-      context: { taskId: "task-1" },
+      context: { repoPath: "/repo", taskId: "task-1" },
       initialWorkingDir: "/repo",
       createdAt: "2026-07-12T00:00:00.000Z",
       lifecycle: "running",

@@ -16,6 +16,7 @@ import { Effect, type Scope } from "effect";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
 import { createTerminalAdmission } from "./terminal-admission";
+import type { TerminalTaskScope } from "./terminal-context";
 import {
   createTerminalLaunchPolicy,
   type TerminalLaunchEnvironmentPort,
@@ -50,11 +51,11 @@ export type TerminalService = {
   ): Effect.Effect<void, TerminalServiceError>;
   detach(terminalId: string, attachmentId: string): Effect.Effect<void, TerminalServiceError>;
   close(input: TerminalCloseRequest): Effect.Effect<void, TerminalServiceError>;
-  closeByTaskIds(
-    taskIds: readonly string[],
+  closeByTaskScope(
+    scope: TerminalTaskScope,
   ): Effect.Effect<TerminalCloseByTaskResult, TerminalServiceError>;
   acquireTaskCleanup(
-    taskIds: readonly string[],
+    scope: TerminalTaskScope,
   ): Effect.Effect<TerminalCloseByTaskResult, TerminalServiceError, Scope.Scope>;
   dispose(): Effect.Effect<void, TerminalServiceError>;
 };
@@ -100,7 +101,7 @@ export const createTerminalService = ({
         Effect.gen(function* () {
           const input = terminalCreateRequestSchema.parse(rawInput);
           return yield* Effect.acquireUseRelease(
-            admission.reserve(input.context.taskId),
+            admission.reserve(input.context),
             () =>
               Effect.gen(function* () {
                 const plan = yield* launch(input, DEFAULT_GRID);
@@ -141,18 +142,18 @@ export const createTerminalService = ({
           const input = terminalCloseRequestSchema.parse(rawInput);
           yield* engine.close(input.terminalId, input.confirmTerminate);
         }),
-      closeByTaskIds: (taskIds) =>
+      closeByTaskScope: (scope) =>
         engine
-          .closeByTaskIds(taskIds)
+          .closeByTaskScope(scope)
           .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
-      acquireTaskCleanup: (taskIds) =>
-        Effect.acquireRelease(admission.acquireTaskCleanupLease(taskIds), (lease) =>
+      acquireTaskCleanup: (scope) =>
+        Effect.acquireRelease(admission.acquireTaskCleanupLease(scope), (lease) =>
           Effect.sync(() => lease.release()),
         ).pipe(
           Effect.tap((lease) => lease.awaitPending),
           Effect.zipRight(
             engine
-              .closeByTaskIds(taskIds)
+              .closeByTaskScope(scope)
               .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
           ),
         ),

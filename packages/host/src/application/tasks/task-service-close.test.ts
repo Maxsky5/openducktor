@@ -549,8 +549,8 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
       terminalService: {
-        acquireTaskCleanup: (taskIds) => {
-          calls.push(`terminals:${taskIds.join(",")}`);
+        acquireTaskCleanup: ({ repoPath, taskIds }) => {
+          calls.push(`terminals:${repoPath}:${taskIds.join(",")}`);
           return Effect.fail(
             new TerminalServiceError({
               code: "close_failed",
@@ -568,7 +568,7 @@ describe("TaskService.closeTask", () => {
     await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
       "terminal-1",
     );
-    expect(calls).toContain("terminals:task-1");
+    expect(calls).toContain("terminals:/repo:task-1");
     expect(calls).not.toContain("stop-dev:task-1");
     expect(calls).not.toContain("transition:task-1:closed");
   });
@@ -582,9 +582,9 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
       terminalService: {
-        acquireTaskCleanup: (taskIds) =>
+        acquireTaskCleanup: ({ repoPath, taskIds }) =>
           Effect.acquireRelease(
-            Effect.sync(() => calls.push(`terminals:acquire:${taskIds.join(",")}`)),
+            Effect.sync(() => calls.push(`terminals:acquire:${repoPath}:${taskIds.join(",")}`)),
             () => Effect.sync(() => calls.push("terminals:release")),
           ).pipe(Effect.as({ closedTerminalIds: ["terminal-1"] })),
       },
@@ -594,7 +594,7 @@ describe("TaskService.closeTask", () => {
 
     await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
 
-    expect(calls.indexOf("terminals:acquire:task-1")).toBeLessThan(
+    expect(calls.indexOf("terminals:acquire:/repo:task-1")).toBeLessThan(
       calls.indexOf("stop-dev:task-1"),
     );
     expect(calls.indexOf("terminals:release")).toBeGreaterThan(

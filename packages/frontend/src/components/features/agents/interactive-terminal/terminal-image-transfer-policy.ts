@@ -64,7 +64,6 @@ export const pasteDroppedTerminalImages = async ({
     throw new Error("Dropped images must total 40 MiB or less.");
   }
 
-  const paths: string[] = [];
-  for (const file of files) paths.push(await stageFile(file));
+  const paths = await Promise.all(files.map((file) => stageFile(file)));
   paste(await prepareInput(paths));
 };
