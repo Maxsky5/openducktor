@@ -119,7 +119,7 @@ const createState = (
     close: mock(() => undefined),
   };
   const recoverTranscriptGap = mock(async (_message: string) => undefined);
-  const props = {
+  const props: Parameters<typeof useRepoSessionReadModel>[0] = {
     workspaceRepoPath: "/repo",
     taskIds: ["task-1"],
     isLoadingTasks: false,
