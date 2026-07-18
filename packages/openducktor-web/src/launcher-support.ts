@@ -391,12 +391,19 @@ export const stopLauncherServicesEffect = (
       ],
       { concurrency: "unbounded" },
     );
-    const shutdownFailures = [frontendCloseExit, hostStopExit]
+    const shutdownFailures: WebError[] = [frontendCloseExit, hostStopExit]
       .filter((result) => result._tag === "Failure")
       .map((result) => causeToWebBoundaryError(result.cause));
+    const loggingFailures: WebError[] = [];
     for (const failure of shutdownFailures) {
-      yield* writeWebLogEffect(logger, "error", errorMessage(failure));
+      const loggingExit = yield* Effect.exit(
+        writeWebLogEffect(logger, "error", errorMessage(failure)),
+      );
+      if (loggingExit._tag === "Failure") {
+        loggingFailures.push(causeToWebBoundaryError(loggingExit.cause));
+      }
     }
+    shutdownFailures.push(...loggingFailures);
     if (hostStopExit._tag === "Failure") {
       const failure = combineWebErrors(
         "web.launcher.shutdown",

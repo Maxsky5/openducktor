@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { OpenDucktorLogPersistenceError } from "@openducktor/host";
 import { Effect } from "effect";
-import { createElectronMainLogger } from "./electron-main-logger";
+import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 
 const createLogStream = (isTTY = false) => {
   let output = "";
@@ -20,6 +20,32 @@ const createLogStream = (isTTY = false) => {
 };
 
 describe("createElectronMainLogger", () => {
+  test("reports logger initialization failures before exiting", async () => {
+    const failure = new OpenDucktorLogPersistenceError({
+      message: "openducktor.logs.create-directory failed for /logs",
+      operation: "openducktor.logs.create-directory",
+      path: "/logs",
+      cause: new Error("permission denied"),
+    });
+    const processExit = new Error("process exited");
+    const reportedFailures: unknown[] = [];
+    const exitCodes: number[] = [];
+
+    await expect(
+      initializeElectronMainLogger({
+        loggerEffect: Effect.fail(failure),
+        reportFailure: (cause) => reportedFailures.push(cause),
+        exitProcess: (exitCode) => {
+          exitCodes.push(exitCode);
+          throw processExit;
+        },
+      }),
+    ).rejects.toBe(processExit);
+
+    expect(reportedFailures).toEqual([failure]);
+    expect(exitCodes).toEqual([1]);
+  });
+
   test("formats host logs like the legacy human logger without ANSI when color is disabled", async () => {
     const { stream, output } = createLogStream(true);
     const logger = await Effect.runPromise(

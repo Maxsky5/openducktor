@@ -66,7 +66,7 @@ import {
   createElectronMainShutdownController,
   runElectronMainStartupBoundary,
 } from "./electron-main-lifecycle";
-import { createElectronMainLogger } from "./electron-main-logger";
+import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
@@ -81,13 +81,17 @@ const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
 
-const electronMainLogger = await Effect.runPromise(createElectronMainLogger());
-const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);
-const electronAppUpdateLogger = electronMainRuntimeBindings.appUpdateLogger;
-const electronLifecycleLogger = electronMainRuntimeBindings.lifecycleLogger;
 const reportElectronMainFailure = (cause: unknown): void => {
   process.stderr.write(`OpenDucktor Electron fatal boundary: ${errorMessage(cause)}\n`);
 };
+const electronMainLogger = await initializeElectronMainLogger({
+  exitProcess: (exitCode) => process.exit(exitCode),
+  loggerEffect: createElectronMainLogger(),
+  reportFailure: reportElectronMainFailure,
+});
+const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);
+const electronAppUpdateLogger = electronMainRuntimeBindings.appUpdateLogger;
+const electronLifecycleLogger = electronMainRuntimeBindings.lifecycleLogger;
 const hostEventBus = createHostEventBus();
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;

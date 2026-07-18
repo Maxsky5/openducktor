@@ -17,6 +17,11 @@ import { requireRecord, requireString } from "./command-inputs";
 
 type CodexAppServerCommandHandlerOptions = {
   logger?: HostLifecycleLogger;
+  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
+};
+
+const defaultCodexAppServerCommandHandlerOptions: CodexAppServerCommandHandlerOptions = {
+  onBackgroundFailure: () => Effect.void,
 };
 
 const CODEX_POLICY_REQUEST_METHODS = new Set<CodexAppServerRequestMethod>([
@@ -188,12 +193,22 @@ const parseRequestInput = (
 
 export const createCodexAppServerCommandHandlers = (
   codexAppServerService: CodexAppServerService,
-  options: CodexAppServerCommandHandlerOptions = {},
+  options: CodexAppServerCommandHandlerOptions = defaultCodexAppServerCommandHandlerOptions,
 ): HostCommandHandlers => ({
   codex_app_server_request: (args) => {
     const input = parseRequestInput(args);
     return codexAppServerService
       .request(input)
-      .pipe(Effect.tap((result) => logCodexPolicyRequest(options.logger, input, result)));
+      .pipe(
+        Effect.tap((result) =>
+          Effect.either(logCodexPolicyRequest(options.logger, input, result)).pipe(
+            Effect.flatMap((loggingResult) =>
+              loggingResult._tag === "Left"
+                ? options.onBackgroundFailure(loggingResult.left)
+                : Effect.void,
+            ),
+          ),
+        ),
+      );
   },
 });

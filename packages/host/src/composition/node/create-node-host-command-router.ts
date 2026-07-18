@@ -418,6 +418,7 @@ export const createNodeEffectHostCommandRouter = (
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService, {
         logger: lifecycleLogger,
+        onBackgroundFailure,
       }),
       ...createFilesystemCommandHandlers(filesystemService),
       ...createWorkspaceFilesCommandHandlers(workspaceFilesService),

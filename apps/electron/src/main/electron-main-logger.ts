@@ -3,7 +3,8 @@ import {
   type OpenDucktorDailyLogWriter,
   type OpenDucktorLogPersistenceError,
 } from "@openducktor/host";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
+import { causeToElectronBoundaryError } from "../effect/electron-errors";
 
 const ANSI_RESET = "\u001b[0m";
 const ANSI_DIM = "\u001b[2m";
@@ -30,6 +31,12 @@ export type ElectronMainLogger = {
   error(message: string, error?: unknown): Effect.Effect<void, OpenDucktorLogPersistenceError>;
   info(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
   warn(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
+};
+
+type InitializeElectronMainLoggerOptions = {
+  exitProcess(exitCode: number): never;
+  loggerEffect: Effect.Effect<ElectronMainLogger, unknown>;
+  reportFailure(cause: unknown): void;
 };
 
 const pad = (value: number, length = 2): string => value.toString().padStart(length, "0");
@@ -149,3 +156,16 @@ export const createElectronMainLogger = ({
       };
     }),
   );
+
+export const initializeElectronMainLogger = async ({
+  exitProcess,
+  loggerEffect,
+  reportFailure,
+}: InitializeElectronMainLoggerOptions): Promise<ElectronMainLogger> => {
+  const exit = await Effect.runPromiseExit(loggerEffect);
+  if (Exit.isSuccess(exit)) {
+    return exit.value;
+  }
+  reportFailure(causeToElectronBoundaryError(exit.cause));
+  return exitProcess(1);
+};

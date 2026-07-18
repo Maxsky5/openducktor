@@ -540,6 +540,45 @@ describe("launcher internals", () => {
     });
   });
 
+  test("preserves cleanup failures when shutdown error logging fails", async () => {
+    const frontendFailure = new Error("frontend close failed");
+    const persistenceFailure = new Error("log append failed");
+    const hostBackend = {
+      exited: Promise.resolve(0),
+      port: 14327,
+      stop: async () => {},
+    };
+
+    await expect(
+      stopLauncherServices(
+        {
+          frontendServer: null,
+          hostBackend,
+          logger: {
+            error: () => Effect.fail(persistenceFailure),
+            info: () => Effect.void,
+            success: () => Effect.void,
+          },
+        },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {},
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.shutdown",
+      details: {
+        failures: [
+          expect.objectContaining({ cause: frontendFailure }),
+          expect.objectContaining({ cause: persistenceFailure }),
+        ],
+      },
+    });
+  });
+
   test("builds runtime config JSON for the browser shell", () => {
     expect(buildBrowserRuntimeConfigJson("http://127.0.0.1:14327", "app-token")).toBe(
       '{"backendUrl":"http://127.0.0.1:14327","appToken":"app-token"}\n',
