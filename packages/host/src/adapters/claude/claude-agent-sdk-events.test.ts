@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("emits transcript retractions for Claude superseded assistant messages", () => {
@@ -18,7 +18,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-2",
         session_id: "session-1",
@@ -29,7 +29,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "replacement" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events[0]).toEqual({
@@ -60,7 +60,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "model_refusal_fallback",
         trigger: "refusal",
@@ -72,7 +72,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         uuid: "fallback-1",
         session_id: "session-1",
         retracted_message_uuids: ["assistant-1", "assistant-1", "assistant-2"],
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toContainEqual({
@@ -96,7 +96,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -115,7 +115,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -154,7 +154,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-draft",
         session_id: "session-1",
@@ -165,7 +165,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "tool_use",
           content: [{ type: "text", text: "I will inspect the task first." }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -197,7 +197,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -208,7 +208,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "Spec persisted." }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -238,7 +238,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -248,7 +248,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           model: "claude-sonnet-4-6",
           content: [{ type: "text", text: "Draft snapshot" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([]);
@@ -267,7 +267,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -278,7 +278,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "max_tokens",
           content: [{ type: "text", text: "Partial answer" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -308,7 +308,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "partial-event-1",
         session_id: "session-1",
@@ -318,7 +318,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 0,
           delta: { type: "text_delta", text: "Draft" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -351,7 +351,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "partial-event-1",
         session_id: "session-1",
@@ -361,12 +361,12 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 0,
           delta: { type: "text_delta", text: "Final answer" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-final",
         session_id: "session-1",
@@ -377,7 +377,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "Final answer" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -412,7 +412,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     for (const text of ["Hello", " ", "world"]) {
       handleClaudeSdkMessage({
         ...input,
-        message: {
+        message: claudeSdkMessageFixture({
           type: "stream_event",
           uuid: `partial-event-${events.length}`,
           session_id: "session-1",
@@ -422,7 +422,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             index: 0,
             delta: { type: "text_delta", text },
           },
-        } as unknown as SDKMessage,
+        }),
       });
     }
 
@@ -452,17 +452,17 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-start-1",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "message_start" },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-delta-1",
         session_id: "session-1",
@@ -472,11 +472,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 0,
           delta: { type: "text_delta", text: "First draft" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-tool-use-1",
         session_id: "session-1",
@@ -487,22 +487,22 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "tool_use",
           content: [{ type: "text", text: "First draft" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-start-2",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "message_start" },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-delta-2",
         session_id: "session-1",
@@ -512,11 +512,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 0,
           delta: { type: "text_delta", text: "Second draft" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-final-2",
         session_id: "session-1",
@@ -527,7 +527,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "Second draft" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     const assistantTextMessageIds = events.flatMap((event) => {
@@ -566,7 +566,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-delta-1",
         session_id: "session-1",
@@ -576,11 +576,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 0,
           delta: { type: "text_delta", text: "First draft" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-tool-use-1",
         session_id: "session-1",
@@ -594,11 +594,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             { type: "tool_use", id: "tool-1", name: "Bash", input: { command: "pwd" } },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-delta-2",
         session_id: "session-1",
@@ -608,11 +608,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 0,
           delta: { type: "text_delta", text: "Second draft" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-final-2",
         session_id: "session-1",
@@ -623,7 +623,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "Second draft" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     const assistantTextMessageIds = events.flatMap((event) => {
@@ -662,17 +662,17 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-start-1",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "message_start" },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-delta-1",
         session_id: "session-1",
@@ -682,11 +682,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 0,
           delta: { type: "text_delta", text: "First block" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-delta-2",
         session_id: "session-1",
@@ -696,11 +696,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           index: 1,
           delta: { type: "text_delta", text: "Second block" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-final",
         session_id: "session-1",
@@ -714,7 +714,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             { type: "text", text: "Second block" },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -756,7 +756,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     handleClaudeSdkMessage({
       ...baseInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-tool-start",
         session_id: "session-1",
@@ -771,12 +771,12 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             input: {},
           },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...baseInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-tool-input",
         session_id: "session-1",
@@ -789,12 +789,12 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             partial_json: '{"command":"bun test"}',
           },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...baseInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-final",
         session_id: "session-1",
@@ -812,7 +812,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -856,7 +856,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "subagent-stream-tool-start",
         session_id: "session-1",
@@ -871,7 +871,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
             input: { command: "pwd" },
           },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([]);

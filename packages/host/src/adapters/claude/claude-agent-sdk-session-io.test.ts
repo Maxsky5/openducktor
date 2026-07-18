@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import {
@@ -17,6 +17,7 @@ import {
   openClaudeQueryWithMessages,
   waitForTimers,
 } from "./claude-agent-sdk-session-io.test-support";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import { emitClaudeMirroredFileEditToolResult } from "./claude-agent-sdk-transcript-mirror-events";
 import { createClaudeTranscriptMirrorStore } from "./claude-agent-sdk-transcript-mirror-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
@@ -26,7 +27,7 @@ describe("sendClaudeUserMessage", () => {
     const events: AgentEvent[] = [];
     const session = createClaudeSession({
       query: claudeQueryWithMessages([
-        {
+        claudeSdkMessageFixture({
           type: "assistant",
           uuid: "assistant-1",
           session_id: "session-1",
@@ -37,7 +38,7 @@ describe("sendClaudeUserMessage", () => {
             stop_reason: "end_turn",
             content: [{ type: "text", text: "Done." }],
           },
-        } as unknown as SDKMessage,
+        }),
       ]),
     });
     const closed = { value: false };
@@ -80,7 +81,7 @@ describe("sendClaudeUserMessage", () => {
     const session = createClaudeSession({
       query: Object.assign(
         claudeQueryWithMessages([
-          {
+          claudeSdkMessageFixture({
             type: "result",
             subtype: "success",
             uuid: "result-1",
@@ -94,7 +95,7 @@ describe("sendClaudeUserMessage", () => {
               input_tokens: 1_600_000,
               output_tokens: 74_127,
             },
-          } as unknown as SDKMessage,
+          }),
         ]),
         { getContextUsage },
       ),
@@ -142,7 +143,7 @@ describe("sendClaudeUserMessage", () => {
     const session = createClaudeSession({
       query: Object.assign(
         claudeQueryWithMessages([
-          {
+          claudeSdkMessageFixture({
             type: "result",
             subtype: "success",
             uuid: "result-1",
@@ -152,7 +153,7 @@ describe("sendClaudeUserMessage", () => {
             result: "Done.",
             stop_reason: "end_turn",
             terminal_reason: "completed",
-          } as unknown as SDKMessage,
+          }),
         ]),
         { getContextUsage },
       ),
@@ -199,7 +200,7 @@ describe("sendClaudeUserMessage", () => {
       maxTokens: 200_000,
     }));
     const { query, release } = openClaudeQueryWithMessages([
-      {
+      claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -210,7 +211,7 @@ describe("sendClaudeUserMessage", () => {
           stop_reason: null,
           content: [{ type: "text", text: "Working..." }],
         },
-      } as unknown as SDKMessage,
+      }),
     ]);
     const session = createClaudeSession({
       query: Object.assign(query, { getContextUsage }),
@@ -255,7 +256,7 @@ describe("sendClaudeUserMessage", () => {
     const session = createClaudeSession({
       query: Object.assign(
         claudeQueryWithMessages([
-          {
+          claudeSdkMessageFixture({
             type: "result",
             subtype: "success",
             uuid: "result-1",
@@ -268,7 +269,7 @@ describe("sendClaudeUserMessage", () => {
               input_tokens: 20_000,
               output_tokens: 1_000,
             },
-          } as unknown as SDKMessage,
+          }),
         ]),
         { getContextUsage },
       ),
@@ -300,7 +301,7 @@ describe("Claude session I/O mirrored file edits", () => {
     transcriptStore.registerSessionDirectory({ dir: "/repo", sessionId: "session-1" });
     const session = createClaudeSession({
       query: claudeQueryWithMessages([
-        {
+        claudeSdkMessageFixture({
           type: "assistant",
           uuid: "assistant-1",
           session_id: "session-1",
@@ -323,8 +324,8 @@ describe("Claude session I/O mirrored file edits", () => {
             ],
             stop_reason: "tool_use",
           },
-        } as unknown as SDKMessage,
-        {
+        }),
+        claudeSdkMessageFixture({
           type: "user",
           uuid: "user-1",
           session_id: "session-1",
@@ -340,7 +341,7 @@ describe("Claude session I/O mirrored file edits", () => {
               },
             ],
           },
-        } as unknown as SDKMessage,
+        }),
       ]),
     });
     const closed = { value: false };

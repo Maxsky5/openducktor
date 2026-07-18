@@ -87,6 +87,7 @@ const createHarness = async () => {
     Effect.die("startSession was not configured");
   let sendUserMessageImpl: ClaudeAgentSdkService["sendUserMessage"] = () =>
     Effect.die("sendUserMessage was not configured");
+  let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
   startSessionImpl = () => {
     eventHub.emit(session, {
       type: "session_started",
@@ -110,6 +111,8 @@ const createHarness = async () => {
       input: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0],
       runtimeId: string,
     ) => sendUserMessageImpl(input, runtimeId),
+    releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
+      releaseSessionImpl(input),
   } as unknown as ClaudeAgentSdkService;
   const liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation"> = {
     runAdapterMutation: (mutation) =>
@@ -140,6 +143,9 @@ const createHarness = async () => {
     },
     setSendUserMessage: (implementation: ClaudeAgentSdkService["sendUserMessage"]) => {
       sendUserMessageImpl = implementation;
+    },
+    setReleaseSession: (implementation: ClaudeAgentSdkService["releaseSession"]) => {
+      releaseSessionImpl = implementation;
     },
   };
 };
@@ -232,6 +238,43 @@ describe("Claude host live-session adapter", () => {
       "session_status",
       "assistant_message",
       "session_idle",
+    ]);
+  });
+
+  test("does not recreate a released session from runtime events buffered during release", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.changes.splice(0);
+    harness.setReleaseSession(() =>
+      Effect.sync(() => {
+        harness.eventHub.emit(session, {
+          type: "session_status",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:03:00.000Z",
+          status: { type: "busy", message: null },
+        });
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.releaseSession({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+
+    expect(harness.changes).toEqual([
+      {
+        type: "session_removed",
+        ref: {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+      },
     ]);
   });
 });
