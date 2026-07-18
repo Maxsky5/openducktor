@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,18 +135,44 @@ describe("web CLI argument parsing", () => {
 
   test("persists real launcher and host lifecycle logs through readiness and shutdown", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-launcher-"));
-    const reservePort = (): number => {
-      const server = Bun.serve({ port: 0, fetch: () => new Response("reserved") });
-      const port = server.port;
-      server.stop(true);
-      if (port === undefined) {
-        throw new Error("Expected Bun to allocate a test port.");
+    const reserveDistinctPorts = (): readonly [number, number] => {
+      const frontendReservation = Bun.serve({
+        port: 0,
+        fetch: () => new Response("reserved"),
+      });
+      const backendReservation = Bun.serve({
+        port: 0,
+        fetch: () => new Response("reserved"),
+      });
+      try {
+        const frontendPort = frontendReservation.port;
+        const backendPort = backendReservation.port;
+        if (frontendPort === undefined || backendPort === undefined) {
+          throw new Error("Expected Bun to allocate distinct test ports.");
+        }
+        return [frontendPort, backendPort];
+      } finally {
+        frontendReservation.stop(true);
+        backendReservation.stop(true);
       }
-      return port;
     };
-    const frontendPort = reservePort();
-    const backendPort = reservePort();
+    const [frontendPort, backendPort] = reserveDistinctPorts();
     const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
+    const webShellIndexPath = path.resolve(path.dirname(cliPath), "../dist/web-shell/index.html");
+    await mkdir(path.dirname(webShellIndexPath), { recursive: true });
+    const createdWebShellIndex = await writeFile(
+      webShellIndexPath,
+      "<!doctype html><html><body>OpenDucktor test shell</body></html>",
+      { flag: "wx" },
+    ).then(
+      () => true,
+      (cause: NodeJS.ErrnoException) => {
+        if (cause.code === "EEXIST") {
+          return false;
+        }
+        throw cause;
+      },
+    );
     const subprocess = Bun.spawn(
       [
         process.execPath,
@@ -178,19 +204,29 @@ describe("web CLI argument parsing", () => {
         }
         const chunk = value;
         stdout += decoder.decode(chunk, { stream: true });
-        if (stdout.includes("OpenDucktor web is ready:")) {
+        // The availability line is logged only after the readiness record has been persisted.
+        if (stdout.includes("Local:")) {
           ready.resolve();
         }
       }
       stdout += decoder.decode();
     })();
     const stderrPromise = new Response(subprocess.stderr).text();
+    const exited = subprocess.exited.then(async (exitCode) => ({
+      exitCode,
+      stderr: await stderrPromise,
+    }));
 
     try {
       let readyTimeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        await Promise.race([
-          ready.promise,
+        const readiness = await Promise.race([
+          ready.promise.then(() => ({ _tag: "ready" as const })),
+          exited.then(({ exitCode, stderr }) => ({
+            _tag: "exited" as const,
+            exitCode,
+            stderr,
+          })),
           new Promise<never>((_, reject) => {
             readyTimeout = setTimeout(
               () => reject(new Error("Web launcher did not become ready.")),
@@ -198,15 +234,20 @@ describe("web CLI argument parsing", () => {
             );
           }),
         ]);
+        if (readiness._tag === "exited") {
+          throw new Error(
+            `Web launcher exited before readiness with code ${readiness.exitCode}.\n${readiness.stderr}`,
+          );
+        }
       } finally {
         clearTimeout(readyTimeout);
       }
       subprocess.kill("SIGTERM");
-      const exitCode = await subprocess.exited;
+      const { exitCode, stderr } = await exited;
       await stdoutPump;
-      const stderr = await stderrPromise;
 
-      expect(exitCode).toBe(0);
+      const expectedExitCode = process.platform === "win32" ? 143 : 0;
+      expect(exitCode).toBe(expectedExitCode);
       expect(stderr).not.toContain("log persistence failed");
       expect(stderr).not.toContain("OPENDUCKTOR_CONFIG_DIR");
       const logDirectory = path.join(configDirectory, "logs");
@@ -218,28 +259,40 @@ describe("web CLI argument parsing", () => {
         throw new Error("Expected the web launcher to create a daily log file.");
       }
       const persisted = await readFile(path.join(logDirectory, logFileName), "utf8");
-      const launcherMessages = [
+      const startupMessages = [
         "Starting OpenDucktor TypeScript host...",
         "Waiting for OpenDucktor TypeScript host readiness...",
         "Starting OpenDucktor frontend server...",
         "OpenDucktor web is ready:",
-        "Stopping OpenDucktor web after SIGTERM...",
-        "Stopping OpenDucktor frontend server...",
       ];
-      for (const message of launcherMessages) {
+      for (const message of startupMessages) {
         expect(stdout).toContain(message);
-      }
-      for (const message of [
-        ...launcherMessages,
-        "Shutting down OpenDucktor host services",
-        "OpenDucktor host services stopped",
-        "OpenDucktor web stopped.",
-      ]) {
         expect(persisted).toContain(message);
+      }
+      // Bun terminates Windows subprocesses without running this POSIX signal handler.
+      if (process.platform !== "win32") {
+        const shutdownConsoleMessages = [
+          "Stopping OpenDucktor web after SIGTERM...",
+          "Stopping OpenDucktor frontend server...",
+        ];
+        for (const message of shutdownConsoleMessages) {
+          expect(stdout).toContain(message);
+        }
+        for (const message of [
+          ...shutdownConsoleMessages,
+          "Shutting down OpenDucktor host services",
+          "OpenDucktor host services stopped",
+          "OpenDucktor web stopped.",
+        ]) {
+          expect(persisted).toContain(message);
+        }
       }
     } finally {
       subprocess.kill("SIGKILL");
       await subprocess.exited;
+      if (createdWebShellIndex) {
+        await rm(webShellIndexPath, { force: true });
+      }
       await rm(configDirectory, { force: true, recursive: true });
     }
   }, 20_000);
