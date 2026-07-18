@@ -469,6 +469,13 @@ describe("AgentChatComposerEditor", () => {
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
+    await waitFor(
+      () => {
+        expect(resolveSearch).not.toBeNull();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
     if (!resolveSearch) {
       throw new Error("Expected file search to be pending");
     }
