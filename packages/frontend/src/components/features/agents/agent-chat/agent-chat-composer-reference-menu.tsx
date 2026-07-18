@@ -58,24 +58,30 @@ export function AgentChatComposerReferenceMenu({
   return (
     <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
       {showSubagentsLoading ? (
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
+        >
           <LoaderCircle className="size-4 animate-spin" />
           <span>Loading subagents</span>
         </div>
       ) : null}
       {subagentsError ? (
-        <div className="border-b border-border px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
           {subagentsError}
         </div>
       ) : null}
       {showFileSearchLoading ? (
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
+        >
           <LoaderCircle className="size-4 animate-spin" />
           <span>Searching files</span>
         </div>
       ) : null}
       {fileSearchError ? (
-        <div className="border-b border-border px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
           {fileSearchError}
         </div>
       ) : null}
@@ -88,6 +94,7 @@ export function AgentChatComposerReferenceMenu({
         id={listboxId}
         role="listbox"
         aria-label="References"
+        aria-busy={showSubagentsLoading || showFileSearchLoading || undefined}
         className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
       >
         {hasResults

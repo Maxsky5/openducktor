@@ -93,9 +93,11 @@ describe("AgentChatComposerSkillMenu", () => {
     );
 
     const listbox = screen.getByRole("listbox", { name: "Skills" });
-    const loadingFeedback = screen.getByText("Loading skills");
+    const loadingFeedback = screen.getByRole("status");
     expect(listbox.id).toBe(LISTBOX_ID);
+    expect(listbox.getAttribute("aria-busy")).toBe("true");
     expect(listbox.contains(loadingFeedback)).toBe(false);
+    expect(loadingFeedback.textContent).toBe("Loading skills");
   });
 
   test("mounts the controlled listbox for skill errors", () => {
@@ -111,9 +113,11 @@ describe("AgentChatComposerSkillMenu", () => {
     );
 
     const listbox = screen.getByRole("listbox", { name: "Skills" });
-    const errorFeedback = screen.getByText("Skills unavailable");
+    const errorFeedback = screen.getByRole("alert");
     expect(listbox.id).toBe(LISTBOX_ID);
+    expect(listbox.getAttribute("aria-busy")).toBeNull();
     expect(listbox.contains(errorFeedback)).toBe(false);
+    expect(errorFeedback.textContent).toBe("Skills unavailable");
   });
 
   test("mounts the controlled listbox for the empty skill state", () => {

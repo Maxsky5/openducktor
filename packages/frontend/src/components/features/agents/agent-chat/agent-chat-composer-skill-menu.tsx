@@ -42,13 +42,16 @@ export function AgentChatComposerSkillMenu({
   return (
     <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
       {isSkillsLoading ? (
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
+        >
           <LoaderCircle className="size-4 animate-spin" />
           <span>Loading skills</span>
         </div>
       ) : null}
       {skillsError ? (
-        <div className="border-b border-border px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
           {skillsError}
         </div>
       ) : null}
@@ -61,6 +64,7 @@ export function AgentChatComposerSkillMenu({
         id={listboxId}
         role="listbox"
         aria-label="Skills"
+        aria-busy={(isSkillsLoading && skills.length === 0) || undefined}
         className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
       >
         {skills.length > 0

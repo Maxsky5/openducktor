@@ -64,7 +64,7 @@ describe("AgentChatComposerReferenceMenu", () => {
     expect(rendered.container.firstChild).toBeNull();
   });
 
-  test("renders delayed file search loading inside the reference menu", () => {
+  test("announces reference loading while the controlled listbox is busy", () => {
     render(
       <AgentChatComposerReferenceMenu
         listboxId={LISTBOX_ID}
@@ -73,19 +73,23 @@ describe("AgentChatComposerReferenceMenu", () => {
         fileSearchError={null}
         isFileSearchPending={true}
         isFileSearchLoading={true}
-        supportsSubagentReferences={false}
+        supportsSubagentReferences={true}
         subagentsError={null}
-        isSubagentsLoading={false}
+        isSubagentsLoading={true}
         onSelectFile={() => {}}
         onSelectSubagent={() => {}}
       />,
     );
 
     const listbox = screen.getByRole("listbox", { name: "References" });
-
-    const loadingFeedback = screen.getByText("Searching files");
+    const loadingFeedback = screen.getAllByRole("status");
     expect(listbox.id).toBe(LISTBOX_ID);
-    expect(listbox.contains(loadingFeedback)).toBe(false);
+    expect(listbox.getAttribute("aria-busy")).toBe("true");
+    expect(loadingFeedback.map((element) => element.textContent)).toEqual([
+      "Loading subagents",
+      "Searching files",
+    ]);
+    expect(loadingFeedback.every((element) => !listbox.contains(element))).toBe(true);
   });
 
   test("does not render delayed file search loading when results are already visible", () => {
@@ -264,7 +268,7 @@ describe("AgentChatComposerReferenceMenu", () => {
     expect(listbox.getAttribute("tabindex")).toBeNull();
   });
 
-  test("mounts a controlled listbox for visible error feedback", () => {
+  test("announces visible reference errors outside the controlled listbox", () => {
     render(
       <AgentChatComposerReferenceMenu
         listboxId={LISTBOX_ID}
@@ -273,8 +277,8 @@ describe("AgentChatComposerReferenceMenu", () => {
         fileSearchError="File search unavailable."
         isFileSearchPending={false}
         isFileSearchLoading={false}
-        supportsSubagentReferences={false}
-        subagentsError={null}
+        supportsSubagentReferences={true}
+        subagentsError="Subagents unavailable."
         isSubagentsLoading={false}
         onSelectFile={() => {}}
         onSelectSubagent={() => {}}
@@ -282,9 +286,14 @@ describe("AgentChatComposerReferenceMenu", () => {
     );
 
     const listbox = screen.getByRole("listbox", { name: "References" });
-    const errorFeedback = screen.getByText("File search unavailable.");
+    const errorFeedback = screen.getAllByRole("alert");
     expect(listbox.id).toBe(LISTBOX_ID);
-    expect(listbox.contains(errorFeedback)).toBe(false);
+    expect(listbox.getAttribute("aria-busy")).toBeNull();
+    expect(errorFeedback.map((element) => element.textContent)).toEqual([
+      "Subagents unavailable.",
+      "File search unavailable.",
+    ]);
+    expect(errorFeedback.every((element) => !listbox.contains(element))).toBe(true);
   });
 
   test("mounts a controlled listbox for the visible empty state", () => {

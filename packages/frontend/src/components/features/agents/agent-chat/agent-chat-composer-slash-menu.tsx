@@ -38,13 +38,16 @@ export function AgentChatComposerSlashMenu({
   return (
     <div className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg">
       {isSlashCommandsLoading ? (
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
+        >
           <LoaderCircle className="size-4 animate-spin" />
           <span>Loading slash commands…</span>
         </div>
       ) : null}
       {slashCommandsError ? (
-        <div className="border-b border-border px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
           {slashCommandsError}
         </div>
       ) : null}
@@ -57,6 +60,7 @@ export function AgentChatComposerSlashMenu({
         id={listboxId}
         role="listbox"
         aria-label="Slash commands"
+        aria-busy={(isSlashCommandsLoading && commands.length === 0) || undefined}
         className="hide-scrollbar flex rounded-xl max-h-64 flex-col overflow-y-auto"
       >
         {commands.length > 0

@@ -99,10 +99,32 @@ describe("AgentChatComposerSlashMenu", () => {
     );
 
     const listbox = screen.getByRole("listbox", { name: "Slash commands" });
-    const errorFeedback = screen.getByText("Runtime commands failed");
+    const errorFeedback = screen.getByRole("alert");
     expect(listbox.contains(errorFeedback)).toBe(false);
+    expect(listbox.getAttribute("aria-busy")).toBeNull();
+    expect(errorFeedback.textContent).toBe("Runtime commands failed");
     expect(screen.getByRole("option", { name: /first command/i })).toBeTruthy();
     expect(screen.getByText("custom")).toBeTruthy();
+  });
+
+  test("announces loading while the empty controlled listbox is busy", () => {
+    render(
+      <AgentChatComposerSlashMenu
+        listboxId={LISTBOX_ID}
+        commands={[]}
+        activeIndex={0}
+        slashCommandsError={null}
+        isSlashCommandsLoading={true}
+        onSelectCommand={() => {}}
+      />,
+    );
+
+    const listbox = screen.getByRole("listbox", { name: "Slash commands" });
+    const loadingFeedback = screen.getByRole("status");
+
+    expect(listbox.getAttribute("aria-busy")).toBe("true");
+    expect(listbox.contains(loadingFeedback)).toBe(false);
+    expect(loadingFeedback.textContent).toBe("Loading slash commands…");
   });
 
   test("announces empty feedback outside the controlled listbox", () => {
