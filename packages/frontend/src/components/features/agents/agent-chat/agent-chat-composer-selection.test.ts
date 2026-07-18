@@ -88,6 +88,37 @@ describe("agent-chat-composer-selection", () => {
     expect(range?.endOffset).toBe((textNode.textContent ?? "").length);
   });
 
+  test("keeps the caret attached when focusing triggers re-entrant selection repair", () => {
+    const element = createSelectionHost();
+    element.textContent = "hello";
+    const root = element.parentElement;
+    if (!root) {
+      throw new Error("Expected contenteditable root");
+    }
+
+    let isRepairingSelection = false;
+    root.focus = () => {
+      if (isRepairingSelection) {
+        return;
+      }
+      isRepairingSelection = true;
+      selectionModule.setCaretOffsetWithinElement(element, 0);
+    };
+
+    selectionModule.setCaretOffsetWithinElement(element, 5);
+
+    const selection = globalThis.getSelection?.();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const currentTextNode = element.firstChild;
+    expect(currentTextNode).toBeInstanceOf(Text);
+    if (!(currentTextNode instanceof Text)) {
+      throw new Error("Expected composer text node");
+    }
+    expect(range?.endContainer).toBe(currentTextNode);
+    expect(element.contains(range?.endContainer ?? null)).toBe(true);
+    expect(range?.endOffset).toBe(5);
+  });
+
   test("places the caret on empty text segments next to chips without adding sentinel text", () => {
     const root = document.createElement("div");
     root.setAttribute("contenteditable", "true");
