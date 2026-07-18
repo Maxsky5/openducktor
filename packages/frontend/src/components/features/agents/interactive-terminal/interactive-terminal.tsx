@@ -4,14 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { type IDisposable, Terminal } from "@xterm/xterm";
-import { type ReactElement, useEffect, useRef, useState } from "react";
+import { type ReactElement, useEffect, useEffectEvent, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
 import { platformQueryOptions } from "@/state/queries/system";
 import { createTerminalOptions } from "../terminal-xterm-options";
 import {
   createLatestResizeScheduler,
-  createTerminalFitScheduler,
+  createLiveTerminalFitScheduler,
   createTerminalInputSequencer,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
@@ -52,6 +52,7 @@ export function InteractiveTerminal({
   });
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  const isActive = useEffectEvent(() => active);
 
   useEffect(() => {
     platformRef.current = platformQuery.data;
@@ -167,10 +168,13 @@ export function InteractiveTerminal({
       void outputSequencer.enqueue(message, payload).catch(reportInteractionFailure);
     };
     const unsubscribe = controller.subscribe(terminalId, handleFrame);
-    const fitScheduler = createTerminalFitScheduler(() => fitAddon.fit());
+    const fitScheduler = createLiveTerminalFitScheduler({
+      fit: () => fitAddon.fit(),
+      isActive,
+    });
     const observer = new ResizeObserver(() => fitScheduler.schedule());
     observer.observe(container);
-    fitAddon.fit();
+    if (isActive()) fitAddon.fit();
     return () => {
       generation += 1;
       controller.releaseEmulator(terminalId);

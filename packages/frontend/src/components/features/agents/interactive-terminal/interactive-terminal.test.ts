@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import {
   createLatestResizeScheduler,
-  createTerminalFitScheduler,
+  createLiveTerminalFitScheduler,
   createTerminalInputSequencer,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
@@ -268,34 +268,53 @@ describe("InteractiveTerminal policies", () => {
     expect(grids).toEqual(["120x40"]);
   });
 
-  test("waits for a stable animation frame before fitting a resized terminal", () => {
-    const frames: Array<FrameRequestCallback | null> = [];
+  test("fits only the active terminal once per animation frame", () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    const cancelledFrames: number[] = [];
     const fitEvents: string[] = [];
-    const scheduler = createTerminalFitScheduler(
-      () => fitEvents.push("fit"),
-      (callback) => {
-        frames.push(callback);
-        return frames.length - 1;
+    let nextFrameId = 0;
+    let active = false;
+    const scheduler = createLiveTerminalFitScheduler({
+      fit: () => fitEvents.push("fit"),
+      isActive: () => active,
+      requestFrame: (callback) => {
+        const frameId = nextFrameId;
+        nextFrameId += 1;
+        frames.set(frameId, callback);
+        return frameId;
       },
-      (frameId) => {
-        frames[frameId] = null;
+      cancelFrame: (frameId) => {
+        cancelledFrames.push(frameId);
+        frames.delete(frameId);
       },
-    );
-    const runNextFrame = (): void => {
-      const callback = frames.find((candidate) => candidate !== null);
-      if (!callback) throw new Error("Expected a scheduled animation frame.");
-      frames[frames.indexOf(callback)] = null;
-      callback(0);
-    };
+    });
 
     scheduler.schedule();
-    runNextFrame();
-    scheduler.schedule();
-    runNextFrame();
-    expect(fitEvents).toEqual([]);
+    expect(frames.size).toBe(0);
 
-    runNextFrame();
+    active = true;
+    scheduler.schedule();
+    scheduler.schedule();
+    expect(frames.size).toBe(1);
+    const frame = frames.get(0);
+    if (!frame) throw new Error("Expected a scheduled animation frame.");
+    frames.delete(0);
+    frame(0);
     expect(fitEvents).toEqual(["fit"]);
+
+    scheduler.schedule();
+    active = false;
+    const hiddenFrame = frames.get(1);
+    if (!hiddenFrame) throw new Error("Expected a scheduled animation frame.");
+    frames.delete(1);
+    hiddenFrame(0);
+    expect(fitEvents).toEqual(["fit"]);
+
+    active = true;
+    scheduler.schedule();
+    scheduler.dispose();
+    expect(cancelledFrames).toEqual([2]);
+    expect(frames.size).toBe(0);
   });
 
   test("preserves paste ordering before later typed input", async () => {
