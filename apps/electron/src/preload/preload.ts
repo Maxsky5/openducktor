@@ -7,7 +7,6 @@ import {
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_HOST_EVENT_CHANNEL,
-  ELECTRON_HOST_INVOKE_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
@@ -15,6 +14,7 @@ import {
   type OpenDucktorElectronApi,
   type OpenDucktorElectronAppUpdateApi,
 } from "../shared/electron-bridge-contract";
+import { createElectronHostInvoke } from "./electron-host-invoke";
 
 const { contextBridge, ipcRenderer } = electron;
 
@@ -60,12 +60,7 @@ const appUpdates: OpenDucktorElectronAppUpdateApi = {
 };
 
 const electronApi: OpenDucktorElectronApi = {
-  invoke(command, args) {
-    return ipcRenderer.invoke(ELECTRON_HOST_INVOKE_CHANNEL, {
-      command,
-      args,
-    });
-  },
+  invoke: createElectronHostInvoke(ipcRenderer),
   subscribe(channel, listener) {
     const handleEvent = (
       _event: Electron.IpcRendererEvent,

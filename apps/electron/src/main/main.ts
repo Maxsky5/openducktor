@@ -36,12 +36,10 @@ import {
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_HOST_EVENT_CHANNEL,
-  ELECTRON_HOST_INVOKE_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
-  type ElectronHostInvokeRequest,
 } from "../shared/electron-bridge-contract";
 import {
   createElectronAppUpdateService,
@@ -51,6 +49,7 @@ import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-ada
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
+import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
   createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -549,9 +548,10 @@ const registerIpcHandlers = (
   hostCommandRouter: EffectHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
 ): void => {
-  ipcMain.handle(ELECTRON_HOST_INVOKE_CHANNEL, async (_event, request: ElectronHostInvokeRequest) =>
-    runElectronEffect(hostCommandRouter.invoke(request.command, request.args)),
-  );
+  registerElectronHostInvokeHandler(ipcMain, {
+    isHostShutdownStarted: shutdownController.isHostShutdownStarted,
+    invoke: (command, args) => runElectronEffect(hostCommandRouter.invoke(command, args)),
+  });
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {
     await runElectronEffect(openExternalUrlEffect(url));
