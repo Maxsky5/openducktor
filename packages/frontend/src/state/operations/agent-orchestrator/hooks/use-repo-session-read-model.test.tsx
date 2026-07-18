@@ -27,7 +27,7 @@ const record: AgentSessionRecord = {
   selectedModel: null,
 };
 
-const readOnlyRepoConfig: RepoConfig = {
+const createReadOnlyRepoConfig = (): RepoConfig => ({
   workspaceId: "/repo",
   workspaceName: "Repo",
   repoPath: "/repo",
@@ -46,7 +46,7 @@ const readOnlyRepoConfig: RepoConfig = {
   },
   worktreeCopyPaths: [],
   agentDefaults: {},
-};
+});
 
 const createDeferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -260,7 +260,7 @@ describe("useRepoSessionReadModel", () => {
       });
 
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
-      expect(state.transcriptEvents.close).not.toHaveBeenCalled();
+      expect(state.transcriptEvents.close).toHaveBeenCalledTimes(1);
 
       await state.harness.run(async () => {
         state.emit({
@@ -291,7 +291,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.unmount();
     }
 
-    expect(state.transcriptEvents.close).not.toHaveBeenCalled();
+    expect(state.transcriptEvents.close).toHaveBeenCalledTimes(1);
     expect(refreshedTranscriptEvents.close).toHaveBeenCalledTimes(1);
   });
 
@@ -361,7 +361,10 @@ describe("useRepoSessionReadModel", () => {
         agentSessionLiveReplyApproval: refreshedReplyApproval,
       },
     };
-    state.queryClient.setQueryData(workspaceQueryKeys.repoConfig("/repo"), readOnlyRepoConfig);
+    state.queryClient.setQueryData(
+      workspaceQueryKeys.repoConfig("/repo"),
+      createReadOnlyRepoConfig(),
+    );
     state.queryClient.setQueryData(
       workspaceQueryKeys.settingsSnapshot(),
       createSettingsSnapshotFixture(),
@@ -381,7 +384,7 @@ describe("useRepoSessionReadModel", () => {
         });
       });
       await waitFor(() => expect(refreshedReplyApproval).toHaveBeenCalledTimes(1), {
-        timeout: 1_000,
+        timeout: 750,
       });
 
       expect(state.agentSessionLiveReplyApproval).not.toHaveBeenCalled();
@@ -416,7 +419,7 @@ describe("useRepoSessionReadModel", () => {
       expect(unsubscribe).not.toHaveBeenCalled();
       deferredObservation.resolve(unsubscribe);
       observationResolved = true;
-      await waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1), { timeout: 1_000 });
+      await waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1), { timeout: 750 });
     } finally {
       try {
         if (!harnessUnmounted) {
@@ -777,7 +780,10 @@ describe("useRepoSessionReadModel", () => {
       },
       { ...record, role: "spec" },
     );
-    state.queryClient.setQueryData(workspaceQueryKeys.repoConfig("/repo"), readOnlyRepoConfig);
+    state.queryClient.setQueryData(
+      workspaceQueryKeys.repoConfig("/repo"),
+      createReadOnlyRepoConfig(),
+    );
     state.queryClient.setQueryData(
       workspaceQueryKeys.settingsSnapshot(),
       createSettingsSnapshotFixture(),

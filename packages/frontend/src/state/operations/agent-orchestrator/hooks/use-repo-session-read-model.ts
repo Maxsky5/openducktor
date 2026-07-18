@@ -91,7 +91,6 @@ export const useRepoSessionReadModel = ({
     (event: Parameters<AgentSessionTranscriptEventConsumer["handle"]>[0]) =>
       transcriptEvents.handle(event),
   );
-  const closeTranscriptEvents = useEffectEvent(() => transcriptEvents.close());
   const recoverTranscriptHistory = useEffectEvent((message: string) =>
     recoverTranscriptGap(message),
   );
@@ -198,6 +197,23 @@ export const useRepoSessionReadModel = ({
       result: undefined,
     }));
   }, [commitSessionCollection, taskSessionRecordsState, workspaceRepoPath]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Consumer cleanup must match every live-stream restart as well as consumer replacement.
+  useEffect(() => {
+    if (!workspaceRepoPath || !canObserveRepo) {
+      return;
+    }
+    return () => transcriptEvents.close();
+  }, [
+    canObserveRepo,
+    commitSessionCollection,
+    currentWorkspaceRepoPathRef,
+    queryClient,
+    reloadGeneration,
+    repoEpochRef,
+    transcriptEvents,
+    workspaceRepoPath,
+  ]);
 
   // Owns the async stream lifecycle; its loading state is not render-derived.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
@@ -388,7 +404,6 @@ export const useRepoSessionReadModel = ({
         observedRepoPathRef.current = null;
       }
       unsubscribe?.();
-      closeTranscriptEvents();
     };
   }, [
     canObserveRepo,
