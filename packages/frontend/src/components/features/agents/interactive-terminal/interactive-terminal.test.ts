@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import {
   createLatestResizeScheduler,
+  createTerminalFitScheduler,
   createTerminalInputSequencer,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
@@ -265,6 +266,36 @@ describe("InteractiveTerminal policies", () => {
     expect(callbacks).toHaveLength(1);
     scheduler.flush();
     expect(grids).toEqual(["120x40"]);
+  });
+
+  test("waits for a stable animation frame before fitting a resized terminal", () => {
+    const frames: Array<FrameRequestCallback | null> = [];
+    const fitEvents: string[] = [];
+    const scheduler = createTerminalFitScheduler(
+      () => fitEvents.push("fit"),
+      (callback) => {
+        frames.push(callback);
+        return frames.length - 1;
+      },
+      (frameId) => {
+        frames[frameId] = null;
+      },
+    );
+    const runNextFrame = (): void => {
+      const callback = frames.find((candidate) => candidate !== null);
+      if (!callback) throw new Error("Expected a scheduled animation frame.");
+      frames[frames.indexOf(callback)] = null;
+      callback(0);
+    };
+
+    scheduler.schedule();
+    runNextFrame();
+    scheduler.schedule();
+    runNextFrame();
+    expect(fitEvents).toEqual([]);
+
+    runNextFrame();
+    expect(fitEvents).toEqual(["fit"]);
   });
 
   test("preserves paste ordering before later typed input", async () => {

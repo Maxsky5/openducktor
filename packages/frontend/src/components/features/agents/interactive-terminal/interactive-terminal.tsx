@@ -11,6 +11,7 @@ import { platformQueryOptions } from "@/state/queries/system";
 import { createTerminalOptions } from "../terminal-xterm-options";
 import {
   createLatestResizeScheduler,
+  createTerminalFitScheduler,
   createTerminalInputSequencer,
   createTerminalOutputSequencer,
   createTerminalViewportActivator,
@@ -166,7 +167,8 @@ export function InteractiveTerminal({
       void outputSequencer.enqueue(message, payload).catch(reportInteractionFailure);
     };
     const unsubscribe = controller.subscribe(terminalId, handleFrame);
-    const observer = new ResizeObserver(() => fitAddon.fit());
+    const fitScheduler = createTerminalFitScheduler(() => fitAddon.fit());
+    const observer = new ResizeObserver(() => fitScheduler.schedule());
     observer.observe(container);
     fitAddon.fit();
     return () => {
@@ -174,6 +176,7 @@ export function InteractiveTerminal({
       controller.releaseEmulator(terminalId);
       unsubscribe();
       observer.disconnect();
+      fitScheduler.dispose();
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();

@@ -62,6 +62,40 @@ export const createLatestResizeScheduler = (
   };
 };
 
+export const createTerminalFitScheduler = (
+  fit: () => void,
+  requestFrame: (callback: FrameRequestCallback) => number = (callback) =>
+    requestAnimationFrame(callback),
+  cancelFrame: (frameId: number) => void = (frameId) => cancelAnimationFrame(frameId),
+) => {
+  // FitAddon clears the WebGL canvas before xterm redraws it. Wait for one complete frame
+  // without another container resize so a panel drag cannot expose repeated cleared frames.
+  let resizeVersion = 0;
+  let observedVersion = 0;
+  let frameId: number | null = null;
+  const waitForStableFrame = (): void => {
+    frameId = null;
+    if (observedVersion === resizeVersion) {
+      fit();
+      return;
+    }
+    observedVersion = resizeVersion;
+    frameId = requestFrame(waitForStableFrame);
+  };
+  return {
+    schedule(): void {
+      resizeVersion += 1;
+      if (frameId !== null) return;
+      frameId = requestFrame(waitForStableFrame);
+    },
+    dispose(): void {
+      if (frameId === null) return;
+      cancelFrame(frameId);
+      frameId = null;
+    },
+  };
+};
+
 export const handleTerminalMetadataFrame = (
   message: TerminalServerMessage,
   handlers: {
