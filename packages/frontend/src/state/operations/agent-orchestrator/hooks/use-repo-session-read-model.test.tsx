@@ -7,6 +7,7 @@ import type {
   RepoConfig,
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
@@ -25,6 +26,27 @@ const record: AgentSessionRecord = {
   startedAt: "2026-07-16T08:00:00.000Z",
   selectedModel: null,
 };
+
+const createReadOnlyRepoConfig = (): RepoConfig => ({
+  workspaceId: "/repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
+  defaultRuntimeKind: "codex",
+  branchPrefix: "odt/",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: { providers: {} },
+  hooks: { preStart: [], postComplete: [] },
+  devServers: [],
+  promptOverrides: {
+    "permission.read_only.reject": {
+      template: "Custom read-only rejection for {{role}}.",
+      baseVersion: 1,
+      enabled: true,
+    },
+  },
+  worktreeCopyPaths: [],
+  agentDefaults: {},
+});
 
 const createDeferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -73,6 +95,7 @@ const createState = (
   const sessionStore = createAgentSessionsStore("/repo");
   let listener: ((payload: AgentSessionLiveEnvelope) => void) | null = null;
   const callOrder: string[] = [];
+  const unsubscribe = mock(() => undefined);
   const observeAgentSessionLive = mock(
     async (
       _input: { repoPath: string },
@@ -81,7 +104,7 @@ const createState = (
       callOrder.push("observe");
       listener = nextListener;
       duringObservation(nextListener, observeAgentSessionLive.mock.calls.length);
-      return mock(() => undefined);
+      return unsubscribe;
     },
   );
   const agentSessionLiveReplyApproval = mock(
@@ -96,7 +119,7 @@ const createState = (
     close: mock(() => undefined),
   };
   const recoverTranscriptGap = mock(async (_message: string) => undefined);
-  const props = {
+  const props: Parameters<typeof useRepoSessionReadModel>[0] = {
     workspaceRepoPath: "/repo",
     taskIds: ["task-1"],
     isLoadingTasks: false,
@@ -123,6 +146,7 @@ const createState = (
     harness: createHookHarness(useRepoSessionReadModel, props),
     props,
     observeAgentSessionLive,
+    unsubscribe,
     agentSessionLiveReplyApproval,
     recoverTranscriptGap,
     transcriptEvents,
@@ -211,6 +235,201 @@ describe("useRepoSessionReadModel", () => {
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
     } finally {
       await state.harness.unmount();
+    }
+  });
+
+  test("keeps the active observation stable when stream callbacks refresh", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const refreshedTranscriptEvents: AgentSessionTranscriptEventConsumer = {
+      handle: mock(() => undefined),
+      close: mock(() => undefined),
+    };
+    const refreshedRecoverTranscriptGap = mock(async (_message: string) => undefined);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update({
+        ...state.props,
+        liveSessionPort: { ...state.props.liveSessionPort },
+        transcriptEvents: refreshedTranscriptEvents,
+        recoverTranscriptGap: refreshedRecoverTranscriptGap,
+      });
+
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(state.transcriptEvents.close).toHaveBeenCalledTimes(1);
+
+      await state.harness.run(async () => {
+        state.emit({
+          type: "transcript_event",
+          event: {
+            type: "assistant_message",
+            externalSessionId: record.externalSessionId,
+            messageId: "message-after-callback-refresh",
+            message: "Still streaming",
+            timestamp: "2026-07-17T14:00:00.000Z",
+            sessionRef: snapshot().ref,
+          },
+        });
+        state.emit({
+          type: "transcript_gap",
+          repoPath: "/repo",
+          message: "Refresh history with the latest callback.",
+        });
+      });
+
+      expect(state.transcriptEvents.handle).not.toHaveBeenCalled();
+      expect(refreshedTranscriptEvents.handle).toHaveBeenCalledTimes(1);
+      expect(state.recoverTranscriptGap).not.toHaveBeenCalled();
+      expect(refreshedRecoverTranscriptGap).toHaveBeenCalledWith(
+        "Refresh history with the latest callback.",
+      );
+    } finally {
+      await state.harness.unmount();
+    }
+
+    expect(state.transcriptEvents.close).toHaveBeenCalledTimes(1);
+    expect(refreshedTranscriptEvents.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses the latest observe callback when stream identity changes", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const secondUnsubscribe = mock(() => undefined);
+    const secondObserveAgentSessionLive = mock(
+      async (
+        _input: { repoPath: string },
+        listener: (payload: AgentSessionLiveEnvelope) => void,
+      ) => {
+        listener({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        return secondUnsubscribe;
+      },
+    );
+    const refreshedProps = {
+      ...state.props,
+      liveSessionPort: {
+        ...state.props.liveSessionPort,
+        observeAgentSessionLive: secondObserveAgentSessionLive,
+      },
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update(refreshedProps);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(secondObserveAgentSessionLive).not.toHaveBeenCalled();
+      expect(state.unsubscribe).not.toHaveBeenCalled();
+
+      await state.harness.update({ ...refreshedProps, workspaceRepoPath: null });
+      expect(state.unsubscribe).toHaveBeenCalledTimes(1);
+
+      await state.harness.update(refreshedProps);
+      await state.harness.waitFor(() => secondObserveAgentSessionLive.mock.calls.length === 1);
+    } finally {
+      await state.harness.unmount();
+    }
+
+    expect(secondUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses the latest approval reply callback without restarting observation", async () => {
+    const mutatingApproval = {
+      requestId: "latest-mutating",
+      requestType: "file_change" as const,
+      title: "Edit file",
+      mutation: "mutating" as const,
+    };
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      { ...record, role: "spec" },
+    );
+    const refreshedReplyApproval = mock(
+      async (_input: AgentSessionLiveReplyApprovalInput) => undefined,
+    );
+    const refreshedProps = {
+      ...state.props,
+      liveSessionPort: {
+        ...state.props.liveSessionPort,
+        agentSessionLiveReplyApproval: refreshedReplyApproval,
+      },
+    };
+    state.queryClient.setQueryData(
+      workspaceQueryKeys.repoConfig("/repo"),
+      createReadOnlyRepoConfig(),
+    );
+    state.queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture(),
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update(refreshedProps);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+
+      await state.harness.run(async () => {
+        state.emit({
+          type: "session_upsert",
+          session: snapshot({ pendingApprovals: [mutatingApproval] }),
+        });
+      });
+      await waitFor(() => expect(refreshedReplyApproval).toHaveBeenCalledTimes(1), {
+        timeout: 750,
+      });
+
+      expect(state.agentSessionLiveReplyApproval).not.toHaveBeenCalled();
+      expect(refreshedReplyApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: "latest-mutating",
+          outcome: "reject",
+          message: "Custom read-only rejection for spec.",
+        }),
+      );
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("unsubscribes exactly once when repository observation resolves after unmount", async () => {
+    const state = createState(() => undefined);
+    const deferredObservation = createDeferred<() => void>();
+    const unsubscribe = mock(() => undefined);
+    const observeAgentSessionLive = mock(async () => deferredObservation.promise);
+    state.props.liveSessionPort.observeAgentSessionLive = observeAgentSessionLive;
+    let observationResolved = false;
+    let harnessUnmounted = false;
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => observeAgentSessionLive.mock.calls.length === 1);
+      await state.harness.unmount();
+      harnessUnmounted = true;
+
+      expect(unsubscribe).not.toHaveBeenCalled();
+      deferredObservation.resolve(unsubscribe);
+      observationResolved = true;
+      await waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1), { timeout: 750 });
+    } finally {
+      try {
+        if (!harnessUnmounted) {
+          await state.harness.unmount();
+        }
+      } finally {
+        if (!observationResolved) {
+          deferredObservation.resolve(unsubscribe);
+        }
+      }
     }
   });
 
@@ -561,27 +780,10 @@ describe("useRepoSessionReadModel", () => {
       },
       { ...record, role: "spec" },
     );
-    const repoConfig: RepoConfig = {
-      workspaceId: "/repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "codex",
-      branchPrefix: "odt/",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      promptOverrides: {
-        "permission.read_only.reject": {
-          template: "Custom read-only rejection for {{role}}.",
-          baseVersion: 1,
-          enabled: true,
-        },
-      },
-      worktreeCopyPaths: [],
-      agentDefaults: {},
-    };
-    state.queryClient.setQueryData(workspaceQueryKeys.repoConfig("/repo"), repoConfig);
+    state.queryClient.setQueryData(
+      workspaceQueryKeys.repoConfig("/repo"),
+      createReadOnlyRepoConfig(),
+    );
     state.queryClient.setQueryData(
       workspaceQueryKeys.settingsSnapshot(),
       createSettingsSnapshotFixture(),
