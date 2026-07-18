@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Effect } from "effect";
-import type { ElectronMainLogger } from "./electron-main-logger";
+import { createElectronMainLogger, type ElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 
 describe("createElectronMainRuntimeBindings", () => {
@@ -39,5 +42,69 @@ describe("createElectronMainRuntimeBindings", () => {
     await failureReported;
 
     expect(reported).toEqual([failure]);
+  });
+
+  test("persists rejected host commands before returning the original failure", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-host-command-log-"));
+    const failure = new Error("Codex session was released while context usage was loading");
+    let consoleOutput = "";
+
+    try {
+      const logger = await Effect.runPromise(
+        createElectronMainLogger({
+          env: { NO_COLOR: "1", OPENDUCKTOR_CONFIG_DIR: configDirectory },
+          now: () => new Date(2026, 6, 19, 1, 0, 47, 280),
+          stream: {
+            write(chunk) {
+              consoleOutput += chunk;
+            },
+          },
+        }),
+      );
+      const bindings = createElectronMainRuntimeBindings(logger);
+
+      await expect(
+        bindings.runHostCommand("runtime.session.context-usage", Effect.fail(failure)),
+      ).rejects.toBe(failure);
+
+      const persisted = await readFile(
+        path.join(configDirectory, "logs", "openducktor-electron-2026-07-19.log"),
+        "utf8",
+      );
+      expect(consoleOutput).toContain(
+        "ERROR Electron host command 'runtime.session.context-usage' failed",
+      );
+      expect(consoleOutput).toContain(failure.message);
+      expect(persisted).toContain(
+        "ERROR Electron host command 'runtime.session.context-usage' failed",
+      );
+      expect(persisted).toContain(failure.message);
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("preserves host command and persistence failures together", async () => {
+    const commandFailure = new Error("Codex session was released");
+    const persistenceFailure = new Error("openducktor.logs.append failed");
+    const logger: ElectronMainLogger = {
+      error: () => Effect.fail(persistenceFailure),
+      info: () => Effect.void,
+      warn: () => Effect.void,
+    };
+    const bindings = createElectronMainRuntimeBindings(logger);
+
+    await expect(
+      bindings.runHostCommand("runtime.session.context-usage", Effect.fail(commandFailure)),
+    ).rejects.toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.main.host-command",
+      cause: commandFailure,
+      details: {
+        command: "runtime.session.context-usage",
+        commandFailure,
+        persistenceFailure,
+      },
+    });
   });
 });

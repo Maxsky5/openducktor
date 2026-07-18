@@ -610,7 +610,11 @@ const registerIpcHandlers = (
 ): void => {
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
-    invoke: (command, args) => runElectronEffect(hostCommandRouter.invoke(command, args)),
+    invoke: (command, args) =>
+      electronMainRuntimeBindings.runHostCommand(
+        command,
+        hostCommandRouter.invoke(command, args),
+      ),
   });
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {
