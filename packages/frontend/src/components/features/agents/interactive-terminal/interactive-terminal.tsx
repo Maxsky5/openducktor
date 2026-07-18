@@ -17,7 +17,11 @@ import {
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
-import { attachInteractiveTerminalRenderer } from "./interactive-terminal-renderer";
+import {
+  attachInteractiveTerminalRenderer,
+  captureTerminalRendererFrame,
+  createTerminalResizeFrameBuffer,
+} from "./interactive-terminal-renderer";
 import { createTerminalKeyEventHandler } from "./terminal-keyboard-policy";
 
 export function InteractiveTerminal({
@@ -88,7 +92,7 @@ export function InteractiveTerminal({
     try {
       rendererContextLossSubscription = attachInteractiveTerminalRenderer({
         terminal,
-        renderer: new WebglAddon(),
+        renderer: new WebglAddon(/* preserveDrawingBuffer */ true),
         onContextLoss: () => {
           reportInteractionFailure(
             new Error("The terminal renderer was lost. Reopen this terminal tab."),
@@ -168,8 +172,18 @@ export function InteractiveTerminal({
       void outputSequencer.enqueue(message, payload).catch(reportInteractionFailure);
     };
     const unsubscribe = controller.subscribe(terminalId, handleFrame);
+    const resizeFrameBuffer = createTerminalResizeFrameBuffer({
+      captureFrame: () => captureTerminalRendererFrame(container),
+      onRender: (listener) => terminal.onRender(listener),
+    });
     const fitScheduler = createLiveTerminalFitScheduler({
-      fit: () => fitAddon.fit(),
+      fit: () => {
+        const proposed = fitAddon.proposeDimensions();
+        if (proposed && (proposed.cols !== terminal.cols || proposed.rows !== terminal.rows)) {
+          resizeFrameBuffer.preserveCurrentFrame();
+        }
+        fitAddon.fit();
+      },
       isActive,
     });
     const observer = new ResizeObserver(() => fitScheduler.schedule());
@@ -181,6 +195,7 @@ export function InteractiveTerminal({
       unsubscribe();
       observer.disconnect();
       fitScheduler.dispose();
+      resizeFrameBuffer.dispose();
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();

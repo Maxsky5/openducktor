@@ -3,6 +3,7 @@ import type { IDisposable, IEvent, Terminal } from "@xterm/xterm";
 import {
   attachInteractiveTerminalRenderer,
   type ContextAwareTerminalRenderer,
+  createTerminalResizeFrameBuffer,
 } from "./interactive-terminal-renderer";
 
 const createContextLossEvent = (): {
@@ -72,5 +73,60 @@ describe("attachInteractiveTerminalRenderer", () => {
       }),
     ).toThrow(failure);
     expect(contextLoss.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createTerminalResizeFrameBuffer", () => {
+  test("keeps the captured frame until xterm renders the resized grid", () => {
+    const render = createContextLossEvent();
+    const disposeFrame = mock(() => undefined);
+    const scheduledFrames = new Map<number, FrameRequestCallback>();
+    const buffer = createTerminalResizeFrameBuffer({
+      captureFrame: () => ({ dispose: disposeFrame }),
+      onRender: render.event,
+      requestFrame: (callback) => {
+        scheduledFrames.set(1, callback);
+        return 1;
+      },
+      cancelFrame: (frameId) => {
+        scheduledFrames.delete(frameId);
+      },
+    });
+
+    buffer.preserveCurrentFrame();
+    expect(disposeFrame).not.toHaveBeenCalled();
+
+    render.fire();
+    expect(scheduledFrames.size).toBe(1);
+    scheduledFrames.get(1)?.(0);
+    expect(disposeFrame).toHaveBeenCalledTimes(1);
+
+    buffer.dispose();
+    expect(render.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  test("replaces a stale frame and cancels its pending removal", () => {
+    const render = createContextLossEvent();
+    const firstFrame = { dispose: mock(() => undefined) };
+    const secondFrame = { dispose: mock(() => undefined) };
+    const frames = [firstFrame, secondFrame];
+    const cancelledFrames: number[] = [];
+    const buffer = createTerminalResizeFrameBuffer({
+      captureFrame: () => frames.shift() ?? null,
+      onRender: render.event,
+      requestFrame: () => 7,
+      cancelFrame: (frameId) => cancelledFrames.push(frameId),
+    });
+
+    buffer.preserveCurrentFrame();
+    render.fire();
+    buffer.preserveCurrentFrame();
+
+    expect(cancelledFrames).toEqual([7]);
+    expect(firstFrame.dispose).toHaveBeenCalledTimes(1);
+    expect(secondFrame.dispose).not.toHaveBeenCalled();
+
+    buffer.dispose();
+    expect(secondFrame.dispose).toHaveBeenCalledTimes(1);
   });
 });
