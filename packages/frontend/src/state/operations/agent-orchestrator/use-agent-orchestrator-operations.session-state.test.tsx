@@ -442,8 +442,6 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("persists explicit session model updates through the orchestrator commit boundary", async () => {
-    const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -453,10 +451,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     const upsertedRecords: unknown[] = [];
-    host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionUpsert = async (_repoPath, _taskId, record) => {
-      upsertedRecords.push(record);
-    };
+    let storedSession = structuredClone(persistedSessionFixture);
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -477,9 +472,14 @@ describe("use-agent-orchestrator-operations session state", () => {
       refreshTaskData: async () => {},
       dependencies: createTestDependencies(
         {
+          agentSessionsList: async () => [storedSession],
           agentSessionsListForTasks: async () => [
-            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+            { taskId: "task-1", agentSessions: [storedSession] },
           ],
+          agentSessionUpsert: async (_repoPath, _taskId, record) => {
+            upsertedRecords.push(record);
+            storedSession = record;
+          },
         },
         {},
         liveStream.portOverrides,
@@ -522,8 +522,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       ]);
     } finally {
       await harness.unmount();
-      host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;

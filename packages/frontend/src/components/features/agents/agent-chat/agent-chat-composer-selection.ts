@@ -98,6 +98,7 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
     return;
   }
 
+  focusEditableTarget(element);
   const textNode = normalizeEditableTextNode(element);
 
   const textContent = textNode.textContent ?? "";
@@ -113,7 +114,6 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
   } else if (shouldPlaceCaretAfterTrailingSentinel) {
     domOffset = textContent.length;
   }
-  focusEditableTarget(element);
   const range = ownerDocument.createRange();
   range.setStart(textNode, domOffset);
   range.collapse(true);

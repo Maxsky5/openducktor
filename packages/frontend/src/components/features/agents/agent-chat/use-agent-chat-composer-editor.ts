@@ -12,6 +12,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
   useCallback,
+  useLayoutEffect,
   useRef,
 } from "react";
 import {
@@ -96,7 +97,9 @@ export const useAgentChatComposerEditor = ({
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
   const latestDraftRef = useRef(draft);
 
-  latestDraftRef.current = draft;
+  useLayoutEffect(() => {
+    latestDraftRef.current = draft;
+  }, [draft]);
 
   const selection = useAgentChatComposerEditorSelection({ editorRef });
   const {

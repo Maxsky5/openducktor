@@ -184,6 +184,8 @@ const EditorHarness = ({
   searchFiles = async () => [],
   onSend,
   initialDraft = createComposerDraft(""),
+  draft: controlledDraft,
+  onDraftChange,
   disabled = false,
   onAddFiles,
 }: {
@@ -201,20 +203,30 @@ const EditorHarness = ({
   searchFiles?: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>;
   onSend?: () => void;
   initialDraft?: AgentChatComposerDraft;
+  draft?: AgentChatComposerDraft;
+  onDraftChange?: (draft: AgentChatComposerDraft) => void;
   disabled?: boolean;
   onAddFiles?: (files: File[]) => void;
 }): ReactElement => {
-  const [draft, setDraft] = useReducer(
+  const [localDraft, setDraft] = useReducer(
     (_current: AgentChatComposerDraft, next: AgentChatComposerDraft) => next,
     initialDraft,
   );
+  const draft = controlledDraft ?? localDraft;
+  let handleDraftChange = setDraft;
+  if (controlledDraft !== undefined) {
+    if (!onDraftChange) {
+      throw new Error("Controlled EditorHarness requires onDraftChange.");
+    }
+    handleDraftChange = onDraftChange;
+  }
   const editorRef = useRef<HTMLDivElement>(null);
 
   return (
     <>
       <AgentChatComposerEditor
         draft={draft}
-        onDraftChange={setDraft}
+        onDraftChange={handleDraftChange}
         placeholder="Type a message"
         disabled={disabled}
         editorRef={editorRef}
@@ -613,6 +625,62 @@ describe("AgentChatComposerEditor", () => {
       const editable = rendered.container.querySelector("[data-text-segment-id]");
       expect(editable?.textContent).toBe("abc");
     });
+  });
+
+  test("edits the latest draft supplied by a parent rerender", async () => {
+    const onDraftChange = mock((_draft: AgentChatComposerDraft) => {});
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        draft={createComposerDraft("before")}
+        onDraftChange={onDraftChange}
+      />,
+    );
+
+    rendered.rerender(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        draft={createComposerDraft("after")}
+        onDraftChange={onDraftChange}
+      />,
+    );
+    await expectComposerText(rendered.container, "after");
+
+    const editable = getLastTextSegment(rendered.container);
+    selectTextSegmentRange(editable, 5, 5);
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    expect(onDraftChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        segments: [expect.objectContaining({ text: "after\n" })],
+      }),
+    );
+  });
+
+  test("composes sequential local edits before the parent commits", async () => {
+    const onDraftChange = mock((_draft: AgentChatComposerDraft) => {});
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        draft={createComposerDraft("hello")}
+        onDraftChange={onDraftChange}
+      />,
+    );
+    await expectComposerText(rendered.container, "hello");
+
+    const editable = getLastTextSegment(rendered.container);
+    selectTextSegmentRange(editable, 5, 5);
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    expect(onDraftChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        segments: [expect.objectContaining({ text: "hello\n\n" })],
+      }),
+    );
   });
 
   test("does not rebuild composer markup for unchanged draft segments", async () => {
