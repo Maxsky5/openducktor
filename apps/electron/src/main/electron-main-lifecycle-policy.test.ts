@@ -18,21 +18,6 @@ const readRepoFile = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
 
 describe("Electron main lifecycle policy", () => {
-  test("one persistent main logger is created before host resources and shared by lifecycle consumers", () => {
-    const source = readRepoFile("apps/electron/src/main/main.ts");
-    const loggerCreationIndex = source.indexOf(
-      "const electronMainLogger = await Effect.runPromise(createElectronMainLogger());",
-    );
-
-    expect(loggerCreationIndex).toBeGreaterThanOrEqual(0);
-    expect(source.indexOf("const hostEventBus = createHostEventBus();")).toBeGreaterThan(
-      loggerCreationIndex,
-    );
-    expect(source).toContain("lifecycleLogger: electronMainLogger");
-    expect(source).toContain("logger: electronMainLogger");
-    expect(source).not.toContain("import { electronMainLogger }");
-  });
-
   test("main window uses the tracked application icon", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
@@ -156,18 +141,6 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("window.isDestroyed() || window.webContents.isDestroyed()");
     expect(source).toContain("window.webContents.send(ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL");
     expect(source).toContain("OpenDucktor update state forwarding failed");
-  });
-
-  test("main owns detached lifecycle and update promises at one fatal boundary", () => {
-    const source = readRepoFile("apps/electron/src/main/main.ts");
-
-    expect(source).toContain("const reportElectronMainFatalFailure");
-    expect(source).toContain('appUpdateService.check({ initiator: "menu" }).then(() => {})');
-    expect(source).toContain(
-      'runElectronMainTask(() => shutdownController.shutdownHostAndQuit({ reason: "before-quit" }))',
-    );
-    expect(source).not.toContain("void appUpdateService.check(");
-    expect(source).not.toContain("void shutdownController.shutdownHostAndQuit(");
   });
 
   test("startup creates the window before initializing background host services", async () => {

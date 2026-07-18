@@ -59,8 +59,8 @@ export type RuntimeOrchestratorService = {
   ): Effect.Effect<RepoRuntimeHealthCheck, RuntimeOrchestratorError>;
 };
 export type RuntimeOrchestratorLogger = {
-  info(message: string): void;
-  error(message: string): void;
+  info(message: string): Effect.Effect<void, unknown>;
+  error(message: string): Effect.Effect<void, unknown>;
 };
 export const isoFromMillis = (millis: number): string => new Date(millis).toISOString();
 export const ACTIVE_MCP_PROBE_ATTEMPTS = 20;

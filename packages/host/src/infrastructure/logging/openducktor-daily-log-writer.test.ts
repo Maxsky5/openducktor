@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber, Option } from "effect";
 import {
   createOpenDucktorDailyLogWriter,
   OpenDucktorLogPersistenceError,
@@ -162,9 +162,13 @@ describe("createOpenDucktorDailyLogWriter", () => {
     const recordedAt = localDate(2026, 5, 13);
     const startedRecords: string[] = [];
     const releases: Array<() => void> = [];
-    let markAppendStarted: () => void = () => {};
-    let appendStarted = new Promise<void>((resolve) => {
-      markAppendStarted = resolve;
+    let markFirstAppendStarted: () => void = () => {};
+    const firstAppendStarted = new Promise<void>((resolve) => {
+      markFirstAppendStarted = resolve;
+    });
+    let markSecondAppendStarted: () => void = () => {};
+    const secondAppendStarted = new Promise<void>((resolve) => {
+      markSecondAppendStarted = resolve;
     });
     const writer = await Effect.runPromise(
       createOpenDucktorDailyLogWriterWithDependencies(
@@ -176,27 +180,44 @@ describe("createOpenDucktorDailyLogWriter", () => {
         {
           appendFile: (_filePath, contents) => {
             startedRecords.push(contents);
-            markAppendStarted();
+            if (startedRecords.length === 1) {
+              markFirstAppendStarted();
+            } else {
+              markSecondAppendStarted();
+            }
             return new Promise<void>((resolve) => releases.push(resolve));
           },
         },
       ),
     );
 
-    const first = Effect.runPromise(writer.append(recordedAt, "first"));
-    await appendStarted;
-    appendStarted = new Promise<void>((resolve) => {
-      markAppendStarted = resolve;
-    });
-    const second = Effect.runPromise(writer.append(recordedAt, "second"));
-    await Promise.resolve();
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const first = yield* Effect.fork(writer.append(recordedAt, "first"));
+        yield* Effect.promise(() => firstAppendStarted);
 
-    expect(startedRecords).toEqual(["first\n"]);
-    releases.shift()?.();
-    await appendStarted;
-    expect(startedRecords).toEqual(["first\n", "second\n"]);
-    releases.shift()?.();
-    await Promise.all([first, second]);
+        const secondFiberStarted = yield* Deferred.make<void>();
+        const second = yield* Effect.fork(
+          Effect.gen(function* () {
+            yield* Deferred.succeed(secondFiberStarted, undefined);
+            yield* writer.append(recordedAt, "second");
+          }),
+        );
+        yield* Deferred.await(secondFiberStarted);
+        yield* Effect.yieldNow();
+
+        expect(startedRecords).toEqual(["first\n"]);
+        expect(Option.isNone(yield* Fiber.poll(second))).toBeTrue();
+
+        releases.shift()?.();
+        yield* Effect.promise(() => secondAppendStarted);
+        expect(startedRecords).toEqual(["first\n", "second\n"]);
+
+        releases.shift()?.();
+        yield* Fiber.join(first);
+        yield* Fiber.join(second);
+      }),
+    );
   });
 
   test("routes each record by its observed local date", async () => {

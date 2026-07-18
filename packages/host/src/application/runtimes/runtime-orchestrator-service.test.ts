@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createGitPort,
@@ -10,6 +10,58 @@ import {
 } from "./runtime-orchestrator-service.test-support";
 
 describe("createRuntimeOrchestratorService", () => {
+  test("executes the runtime-ready logger Effect", async () => {
+    const infos: string[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      logger: {
+        error: () => Effect.void,
+        info: (message) => Effect.sync(() => infos.push(message)),
+      },
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(),
+      taskReader: createTaskStore(),
+    });
+
+    await Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }));
+
+    expect(infos).toEqual([
+      "opencode workspace runtime opencode-runtime-1 is ready at http://127.0.0.1:4096",
+    ]);
+  });
+
+  test("executes the runtime-startup failure logger Effect", async () => {
+    const errors: string[] = [];
+    const startupFailure = new HostOperationError({
+      operation: "test.runtime-startup",
+      message: "runtime failed to start",
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      logger: {
+        error: (message) => Effect.sync(() => errors.push(message)),
+        info: () => Effect.void,
+      },
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        ensureWorkspaceRuntime: () => Effect.fail(startupFailure),
+      }),
+      taskReader: createTaskStore(),
+    });
+
+    const exit = await Effect.runPromiseExit(
+      service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toBe(startupFailure);
+    }
+    expect(errors).toEqual([
+      "Failed to ensure opencode workspace runtime for repository /canonical/repo: runtime failed to start",
+    ]);
+  });
+
   test("ensures a workspace runtime for the canonical repository path", async () => {
     const registry = createRegistry();
     const service = createRuntimeOrchestratorService({

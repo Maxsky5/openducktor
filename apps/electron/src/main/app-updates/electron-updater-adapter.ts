@@ -1,5 +1,6 @@
 import type { AppUpdater, Logger, ProgressInfo } from "electron-updater";
 import { ElectronOperationError } from "../../effect/electron-errors";
+import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
 import type {
   ElectronAppUpdaterAdapter,
   ElectronInstallHandoff,
@@ -61,52 +62,22 @@ export const createElectronUpdaterAdapter = ({
   let resolvedRelease: GitHubRelease | undefined;
   let updaterPromise: Promise<AppUpdater> | undefined;
   let disposed = false;
-  let firstNativeLogFailure: unknown | undefined;
-  const pendingNativeLogs = new Set<Promise<void>>();
+  const nativeLogOwner = createElectronDetachedTaskOwner((cause) =>
+    requireConfiguration().onLogFailure(cause),
+  );
   const listeners = createEventListeners();
-
-  const trackNativeLog = (
-    options: ElectronUpdaterConfigureOptions,
-    operation: () => void | Promise<void>,
-  ): void => {
-    const pending = Promise.resolve()
-      .then(operation)
-      .then(
-        () => {},
-        (cause: unknown) => {
-          firstNativeLogFailure ??= cause;
-          options.onLogFailure(cause);
-        },
-      );
-    pendingNativeLogs.add(pending);
-    void pending.then(
-      () => {
-        pendingNativeLogs.delete(pending);
-      },
-      () => {
-        pendingNativeLogs.delete(pending);
-      },
-    );
-  };
 
   const createNativeLogger = (options: ElectronUpdaterConfigureOptions): Logger => ({
     error: (message) => {
-      trackNativeLog(options, () => options.logger.error(String(message)));
+      nativeLogOwner.run(() => options.logger.error(String(message)), options.onLogFailure);
     },
     info: (message) => {
-      trackNativeLog(options, () => options.logger.info(String(message)));
+      nativeLogOwner.run(() => options.logger.info(String(message)), options.onLogFailure);
     },
     warn: (message) => {
-      trackNativeLog(options, () => options.logger.warn(String(message)));
+      nativeLogOwner.run(() => options.logger.warn(String(message)), options.onLogFailure);
     },
   });
-
-  const drainNativeLogs = async (): Promise<void> => {
-    await Promise.all(pendingNativeLogs);
-    if (firstNativeLogFailure !== undefined) {
-      throw firstNativeLogFailure;
-    }
-  };
 
   const requireActive = (operation: string): void => {
     if (!disposed) {
@@ -215,7 +186,7 @@ export const createElectronUpdaterAdapter = ({
       for (const eventListeners of Object.values(listeners)) {
         eventListeners.clear();
       }
-      await drainNativeLogs();
+      await nativeLogOwner.drain();
     },
     downloadUpdate: async () => {
       requireActive("electron.updater.download");

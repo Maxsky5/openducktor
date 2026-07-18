@@ -111,6 +111,47 @@ describe("host lifecycle shutdown", () => {
     expect(calls).toEqual(["first", "second", "third"]);
   });
 
+  test("preserves cleanup failures when lifecycle logging also rejects", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-host.log",
+    );
+    const cleanupError = new HostOperationError({
+      operation: "test.cleanup",
+      message: "child process is still running",
+    });
+    const rejectingLogger: HostLifecycleLogger = {
+      error: () => Effect.fail(persistenceError),
+      info: () => Effect.fail(persistenceError),
+    };
+
+    const exit = await Effect.runPromiseExit(
+      runShutdownSteps(
+        [
+          {
+            label: "runtime child",
+            run: () => Effect.fail(cleanupError),
+          },
+        ],
+        rejectingLogger,
+      ),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "host.shutdown",
+        details: {
+          failedSteps: ["runtime child: child process is still running"],
+          loggingFailure: {
+            operation: "host.lifecycle.log-info",
+            cause: persistenceError,
+          },
+        },
+      });
+    }
+  });
+
   test("propagates MCP host bridge close failures", async () => {
     const logger = createLogger();
     const step = createStopMcpHostBridgeStep(

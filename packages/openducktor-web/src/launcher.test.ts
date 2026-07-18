@@ -247,14 +247,6 @@ describe("launcher internals", () => {
     expect(clearedTimers).toEqual([timer]);
   });
 
-  test("keeps signal handlers registered while shutdown is pending", async () => {
-    const source = await Bun.file(new URL("./launcher.ts", import.meta.url)).text();
-
-    expect(source).toContain('process.on("SIGINT"');
-    expect(source).toContain('process.on("SIGTERM"');
-    expect(source).toContain("OpenDucktor web shutdown is already in progress");
-  });
-
   test("awaits a delayed duplicate-signal persistence failure before exiting", async () => {
     const persistenceError = new Error(
       "openducktor.logs.append failed for /tmp/openducktor-web.log",
@@ -288,9 +280,16 @@ describe("launcher internals", () => {
       ),
     );
     await logStarted;
+    let markDuplicateAwaitStarted: () => void = () => {};
+    const duplicateAwaitStarted = new Promise<void>((resolve) => {
+      markDuplicateAwaitStarted = resolve;
+    });
 
     const shutdown = runWebSignalShutdown({
-      awaitDuplicateTerminationLog: () => duplicateLogFailed,
+      awaitDuplicateTerminationLog: () => {
+        markDuplicateAwaitStarted();
+        return duplicateLogFailed;
+      },
       boundary: {
         exit: (exitCode) => exitCodes.push(exitCode),
         flush: async () => {},
@@ -306,7 +305,7 @@ describe("launcher internals", () => {
       stop: Effect.void,
     });
 
-    await Promise.resolve();
+    await duplicateAwaitStarted;
     expect(exitCodes).toEqual([]);
     rejectLog();
     await shutdown;
@@ -410,14 +409,6 @@ describe("launcher internals", () => {
         resource: "persistent-log",
       }),
     ]);
-  });
-
-  test("registers launcher resource cleanup in Effect finalizers", async () => {
-    const source = await Bun.file(new URL("./launcher.ts", import.meta.url)).text();
-
-    expect(source).toContain("if (!servicesReleased)");
-    expect(source).toContain("const stopExit = yield* Effect.exit(stopEffect())");
-    expect(source).toContain("Effect.onInterrupt");
   });
 
   test("does not wait for the host exit code when host stop fails", async () => {

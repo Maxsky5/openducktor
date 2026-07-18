@@ -11,6 +11,7 @@ import {
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
+  causeToWebBoundaryError,
   errorMessage,
   runWebBoundary,
   toWebOperationError,
@@ -678,13 +679,20 @@ export const startTypescriptHostBackendEffect = ({
         const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
         yield* Effect.sync(() => server.stop(true));
         if (disposeExit._tag === "Failure") {
-          yield* writeWebLogEffect(
-            logger,
-            "error",
-            `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
-              disposeExit.cause,
-            )}`,
-          ).pipe(Effect.orDie);
+          const loggingExit = yield* Effect.exit(
+            writeWebLogEffect(
+              logger,
+              "error",
+              `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
+                disposeExit.cause,
+              )}`,
+            ),
+          );
+          if (loggingExit._tag === "Failure") {
+            yield* Effect.sync(() =>
+              onBackgroundFailure(causeToWebBoundaryError(loggingExit.cause)),
+            );
+          }
         }
       });
 

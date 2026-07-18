@@ -9,6 +9,7 @@ import type {
 } from "@openducktor/contracts";
 import { canDownloadAppUpdate, canInstallAppUpdate } from "@openducktor/contracts";
 import { parse as parseYaml } from "yaml";
+import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
 import {
   createDisabledUpdateState,
   markAvailable,
@@ -245,36 +246,7 @@ export const createElectronAppUpdateService = ({
   let initializationAttempted = false;
   let updaterReady = false;
   let state: AppUpdateState = { status: "idle", currentVersion };
-  let firstDetachedLogFailure: unknown | undefined;
-  const pendingDetachedLogs = new Set<Promise<void>>();
-
-  const trackDetachedLog = (operation: () => void | Promise<void>): void => {
-    const pending = Promise.resolve()
-      .then(operation)
-      .then(
-        () => {},
-        (cause: unknown) => {
-          firstDetachedLogFailure ??= cause;
-          onFatalError(cause);
-        },
-      );
-    pendingDetachedLogs.add(pending);
-    void pending.then(
-      () => {
-        pendingDetachedLogs.delete(pending);
-      },
-      () => {
-        pendingDetachedLogs.delete(pending);
-      },
-    );
-  };
-
-  const drainDetachedLogs = async (): Promise<void> => {
-    await Promise.all(pendingDetachedLogs);
-    if (firstDetachedLogFailure !== undefined) {
-      throw firstDetachedLogFailure;
-    }
-  };
+  const detachedLogOwner = createElectronDetachedTaskOwner(onFatalError);
 
   if (!isPackaged) {
     state = createDisabledUpdateState({
@@ -509,7 +481,7 @@ export const createElectronAppUpdateService = ({
     }
     const previousState = state;
     if (previousState.status === "downloaded" && previousState.installRetryDisabled === true) {
-      trackDetachedLog(() =>
+      detachedLogOwner.run(() =>
         logger.warn("Ignoring Electron updater error after terminal install failure", cause),
       );
       return;
@@ -744,7 +716,7 @@ export const createElectronAppUpdateService = ({
         unsubscribe();
       }
       const [detachedLogsResult, adapterResult] = await Promise.allSettled([
-        drainDetachedLogs(),
+        detachedLogOwner.drain(),
         adapter.dispose(),
       ]);
       if (detachedLogsResult.status === "rejected") {

@@ -1,5 +1,52 @@
 import { expect, test } from "bun:test";
-import { runElectronMainTask } from "./electron-main-task-owner";
+import { createElectronDetachedTaskOwner, runElectronMainTask } from "./electron-main-task-owner";
+
+test("detached task owner reports the first failure and drains all admitted work", async () => {
+  const firstFailure = new Error("first persistent log failed");
+  const reported: unknown[] = [];
+  let rejectFirst: (cause: unknown) => void = () => {};
+  let resolveSecond: () => void = () => {};
+  let markFirstStarted: () => void = () => {};
+  const firstStarted = new Promise<void>((resolve) => {
+    markFirstStarted = resolve;
+  });
+  let markSecondStarted: () => void = () => {};
+  const secondStarted = new Promise<void>((resolve) => {
+    markSecondStarted = resolve;
+  });
+  let markFailureReported: () => void = () => {};
+  const failureReported = new Promise<void>((resolve) => {
+    markFailureReported = resolve;
+  });
+  const owner = createElectronDetachedTaskOwner((cause) => {
+    reported.push(cause);
+    markFailureReported();
+  });
+
+  owner.run(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectFirst = reject;
+        markFirstStarted();
+      }),
+  );
+  owner.run(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveSecond = resolve;
+        markSecondStarted();
+      }),
+  );
+  const drain = owner.drain();
+  await Promise.all([firstStarted, secondStarted]);
+
+  rejectFirst(firstFailure);
+  await failureReported;
+  expect(reported).toEqual([firstFailure]);
+
+  resolveSecond();
+  await expect(drain).rejects.toBe(firstFailure);
+});
 
 test("reports a synchronous task failure exactly once", async () => {
   const failure = new Error("synchronous persistence failure");

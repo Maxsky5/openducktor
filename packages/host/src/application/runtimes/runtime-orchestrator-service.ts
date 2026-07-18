@@ -5,7 +5,7 @@ import {
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
@@ -50,6 +50,22 @@ export const createRuntimeOrchestratorService = ({
   logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
+  const writeRuntimeLog = (
+    level: "error" | "info",
+    message: string,
+  ): Effect.Effect<void, HostOperationError> =>
+    logger
+      ? logger[level](message).pipe(
+          Effect.mapError(
+            (cause) =>
+              new HostOperationError({
+                operation: `runtime-orchestrator.log-${level}`,
+                message: errorMessage(cause),
+                cause,
+              }),
+          ),
+        )
+      : Effect.void;
   const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
     `${runtimeKind}::${repoPath}`;
   const ensureWorkspaceRuntime = ({
@@ -166,7 +182,8 @@ export const createRuntimeOrchestratorService = ({
       if (ensureResult._tag === "Right") {
         const parsed = ensureResult.right;
         runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
-        logger?.info(
+        yield* writeRuntimeLog(
+          "info",
           `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(parsed.runtimeRoute)}`,
         );
         return parsed;
@@ -184,7 +201,8 @@ export const createRuntimeOrchestratorService = ({
           message,
         ),
       );
-      logger?.error(
+      yield* writeRuntimeLog(
+        "error",
         `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
       );
       return yield* Effect.fail(ensureResult.left);

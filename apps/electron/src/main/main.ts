@@ -67,7 +67,7 @@ import {
   runElectronMainStartupBoundary,
 } from "./electron-main-lifecycle";
 import { createElectronMainLogger } from "./electron-main-logger";
-import { runElectronMainTask as ownElectronMainTask } from "./electron-main-task-owner";
+import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
@@ -82,12 +82,9 @@ const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
 
 const electronMainLogger = await Effect.runPromise(createElectronMainLogger());
-const electronAppUpdateLogger = {
-  error: (message: string, error?: unknown) =>
-    runElectronEffect(electronMainLogger.error(message, error)),
-  info: (message: string) => runElectronEffect(electronMainLogger.info(message)),
-  warn: (message: string) => runElectronEffect(electronMainLogger.warn(message)),
-};
+const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);
+const electronAppUpdateLogger = electronMainRuntimeBindings.appUpdateLogger;
+const electronLifecycleLogger = electronMainRuntimeBindings.lifecycleLogger;
 const reportElectronMainFailure = (cause: unknown): void => {
   process.stderr.write(`OpenDucktor Electron fatal boundary: ${errorMessage(cause)}\n`);
 };
@@ -114,7 +111,7 @@ const shutdownController = createElectronMainShutdownController({
   exitProcess: (exitCode) => {
     process.exit(exitCode);
   },
-  logger: electronMainLogger,
+  logger: electronLifecycleLogger,
   quitApp: () => {
     app.quit();
   },
@@ -139,8 +136,9 @@ const reportElectronMainFatalFailure = (cause: unknown): void => {
     });
 };
 
-const runElectronMainTask = (operation: () => void | Promise<void>): void =>
-  ownElectronMainTask(operation, reportElectronMainFatalFailure);
+const runElectronMainTask = electronMainRuntimeBindings.createTaskRunner(
+  reportElectronMainFatalFailure,
+);
 
 const runElectronMainOperation = async <Result>(operation: Promise<Result>): Promise<Result> => {
   try {
@@ -193,7 +191,7 @@ const createElectronHostCommandRouter = (
   createElectronEffectHostCommandRouter({
     clientVersion: app.getVersion(),
     eventBus: hostEventBus,
-    lifecycleLogger: electronMainLogger,
+    lifecycleLogger: electronLifecycleLogger,
     onBackgroundFailure: (failure) =>
       Effect.sync(() => {
         reportElectronMainFatalFailure(failure);
@@ -853,7 +851,7 @@ runElectronMainTask(() =>
     exitProcess: (exitCode) => {
       process.exit(exitCode);
     },
-    logger: electronMainLogger,
+    logger: electronLifecycleLogger,
     markShutdownComplete: shutdownController.markHostShutdownComplete,
     markShutdownStarted: shutdownController.markHostShutdownStarted,
     reportFailure: reportElectronMainFailure,

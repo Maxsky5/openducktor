@@ -85,6 +85,16 @@ export const runShutdownSteps = (
         );
       }
     }
+    if (loggingFailure && errors.length > 0) {
+      return yield* Effect.fail(
+        new HostOperationError({
+          message: `${errors.join("\n")}\nLifecycle logging: ${loggingFailure.message}`,
+          operation: "host.shutdown",
+          cause: loggingFailure,
+          details: { failedSteps: errors, loggingFailure },
+        }),
+      );
+    }
     if (loggingFailure) {
       return yield* Effect.fail(loggingFailure);
     }
