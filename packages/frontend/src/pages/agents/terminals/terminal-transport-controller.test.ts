@@ -204,6 +204,33 @@ describe("createTerminalTransportController", () => {
     await controller.dispose();
   });
 
+  test("reports an initial connection failure while reconnecting", async () => {
+    const failures: string[] = [];
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => {
+        connectionCount += 1;
+        if (connectionCount === 1) throw new Error("terminal authentication failed");
+        return {
+          send: async () => undefined,
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(
+      bridge,
+      () => undefined,
+      (failure) => failures.push(failure.message),
+    );
+
+    await expect(controller.connect()).rejects.toThrow("terminal authentication failed");
+    await Bun.sleep(10);
+
+    expect(connectionCount).toBe(2);
+    expect(failures).toEqual(["terminal authentication failed"]);
+    await controller.dispose();
+  });
+
   test("invalidates and replaces a connection when an established send rejects", async () => {
     const states: string[] = [];
     const failures: string[] = [];

@@ -196,7 +196,12 @@ const forceStopProcessTree = (pid: number) =>
 
 const createFakeOpenCode = async (
   root: string,
-  options: { childPidPath?: string; configCapturePath?: string; exitAfterMs?: number } = {},
+  options: {
+    childPidPath?: string;
+    configCapturePath?: string;
+    environmentCapturePath?: string;
+    exitAfterMs?: number;
+  } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "opencode.mjs");
   await writeFile(
@@ -216,9 +221,16 @@ if (Number(args[portFlagIndex + 1]) !== 43123) {
 }
 const childPidPath = ${JSON.stringify(options.childPidPath ?? null)};
 const configCapturePath = ${JSON.stringify(options.configCapturePath ?? null)};
+const environmentCapturePath = ${JSON.stringify(options.environmentCapturePath ?? null)};
 const exitAfterMs = ${JSON.stringify(options.exitAfterMs ?? null)};
 if (configCapturePath) {
   writeFileSync(configCapturePath, process.env.OPENCODE_CONFIG_CONTENT ?? "");
+}
+if (environmentCapturePath) {
+  writeFileSync(environmentCapturePath, JSON.stringify({
+    password: process.env.OPENCODE_SERVER_PASSWORD ?? null,
+    username: process.env.OPENCODE_SERVER_USERNAME ?? null,
+  }));
 }
 if (childPidPath) {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
@@ -277,11 +289,20 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       const configCapturePath = join(root, "opencode-config.json");
+      const environmentCapturePath = join(root, "opencode-environment.json");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath });
+      const opencodeBinary = await createFakeOpenCode(root, {
+        configCapturePath,
+        environmentCapturePath,
+      });
       const portProbeCalls: number[] = [];
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
+        processEnv: {
+          ...process.env,
+          OPENCODE_SERVER_PASSWORD: "inherited-password",
+          OPENCODE_SERVER_USERNAME: "inherited-username",
+        },
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.tryPromise({
@@ -367,6 +388,11 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
             },
           },
         },
+      });
+      await waitFor(() => existsSync(environmentCapturePath));
+      expect(JSON.parse(await readFile(environmentCapturePath, "utf8"))).toEqual({
+        password: null,
+        username: null,
       });
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
     } finally {

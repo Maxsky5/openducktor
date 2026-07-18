@@ -178,6 +178,7 @@ export const createTerminalTransportController = (
       connected = await pending;
     } catch (cause) {
       if (!isDisposed() && generation === connectionGeneration) {
+        reportConnectionFailure(cause);
         connectionState = { status: "disconnected" };
         onStateChange("disconnected");
         scheduleReconnect();

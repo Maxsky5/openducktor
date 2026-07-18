@@ -306,6 +306,7 @@ export const terminalPresentationReducer = (
     }
     const forgottenTab = scope.tabs.find((tab) => tab.terminalId === event.terminalId);
     if (!forgottenTab) return scope;
+    if (scope.closingTabIds.includes(forgottenTab.tabId)) return scope;
     const lostTabId = `lost:${event.terminalId}`;
     return {
       ...scope,

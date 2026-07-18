@@ -1,7 +1,7 @@
 import type { AppPlatform, TerminalCloseResponse, TerminalLifecycle } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
@@ -83,6 +83,7 @@ export const useAgentStudioTerminals = (
     scopeKey,
     createTerminalPresentationState,
   );
+  const abandonedCreationTabIds = useRef(new Set<string>());
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
   const enabled = repoPath !== null && taskId !== null;
   const terminalOptions = enabled
@@ -174,11 +175,32 @@ export const useAgentStudioTerminals = (
           workingDir,
           context: { repoPath, taskId },
         });
+        if (abandonedCreationTabIds.current.delete(tabId)) {
+          dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
+          let closed = false;
+          try {
+            const closeResult = await dependencies.hostClient.terminalClose({
+              terminalId: created.ref.terminalId,
+              confirmTerminate: true,
+            });
+            closed = closeResult.closed;
+          } finally {
+            dispatch({ type: closed ? "closeCompleted" : "closeRejected", scopeKey, tabId });
+            await queryClient.invalidateQueries({
+              queryKey: terminalQueryKeys.task({ repoPath, taskId }),
+            });
+          }
+          return;
+        }
         dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
         await queryClient.invalidateQueries({
           queryKey: terminalQueryKeys.task({ repoPath, taskId }),
         });
       } catch (cause) {
+        if (abandonedCreationTabIds.current.delete(tabId)) {
+          dispatch({ type: "closeCompleted", scopeKey, tabId });
+          return;
+        }
         const message = cause instanceof Error ? cause.message : String(cause);
         const requestState =
           cause instanceof HostTerminalClientError && cause.code === "unsupported_runtime"
@@ -263,7 +285,12 @@ export const useAgentStudioTerminals = (
     ): Promise<TerminalCloseResponse> => {
       if (!scopeKey) throw new Error("Terminal scope is unavailable.");
       if (!tab.terminalId) {
-        dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
+        if (tab.requestState === "creating") {
+          abandonedCreationTabIds.current.add(tab.tabId);
+          dispatch({ type: "closeStarted", scopeKey, tabId: tab.tabId });
+        } else {
+          dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
+        }
         return { closed: true };
       }
       const terminalId = tab.terminalId;

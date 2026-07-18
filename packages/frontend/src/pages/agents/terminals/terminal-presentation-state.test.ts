@@ -55,4 +55,36 @@ describe("terminalPresentationReducer", () => {
     expect(state.scopes[scopeKey]?.activeTabId).toBe("tab:terminal-a");
     expect(state.scopes[scopeKey]?.visibility.value).toBe(true);
   });
+
+  test("does not turn an intentionally closing terminal into a lost tab", () => {
+    const scopeKey = "/repo:task-1";
+    let state = createTerminalPresentationState(scopeKey);
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      summaries: [summary("terminal-a")],
+    });
+    state = terminalPresentationReducer(state, {
+      type: "closeStarted",
+      scopeKey,
+      tabId: "tab:terminal-a",
+    });
+    state = terminalPresentationReducer(state, {
+      type: "terminalForgotten",
+      scopeKey,
+      terminalId: "terminal-a",
+      message: "Terminal terminal-a was forgotten.",
+    });
+
+    expect(state.scopes[scopeKey]?.tabs).toMatchObject([
+      { tabId: "tab:terminal-a", terminalId: "terminal-a", requestState: "ready" },
+    ]);
+
+    state = terminalPresentationReducer(state, {
+      type: "closeCompleted",
+      scopeKey,
+      tabId: "tab:terminal-a",
+    });
+    expect(state.scopes[scopeKey]?.tabs).toEqual([]);
+  });
 });

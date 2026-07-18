@@ -107,6 +107,19 @@ const outputDetail = (stderr: string, stdout: string, fallback: string): string 
   return trimmedStdout || fallback;
 };
 
+const buildManagedOpenCodeEnvironment = (
+  processEnv: NodeJS.ProcessEnv,
+  configContent: string,
+): NodeJS.ProcessEnv => {
+  const runtimeEnv: NodeJS.ProcessEnv = {
+    ...processEnv,
+    OPENCODE_CONFIG_CONTENT: configContent,
+  };
+  delete runtimeEnv.OPENCODE_SERVER_PASSWORD;
+  delete runtimeEnv.OPENCODE_SERVER_USERNAME;
+  return runtimeEnv;
+};
+
 const startupProbeSchedule = (startupTimeoutMs: number, retryDelayMs: number) =>
   Schedule.addDelay(
     Schedule.recurs(Math.max(1, Math.ceil(startupTimeoutMs / Math.max(1, retryDelayMs))) - 1),
@@ -188,10 +201,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),
         ),
       );
-      const runtimeEnv = {
-        ...processEnv,
-        OPENCODE_CONFIG_CONTENT: configContent,
-      };
+      const runtimeEnv = buildManagedOpenCodeEnvironment(processEnv, configContent);
       const command = createProcessCommandLaunch(
         binary,
         ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],

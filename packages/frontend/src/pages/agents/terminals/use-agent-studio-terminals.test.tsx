@@ -214,6 +214,81 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
+  test("terminates a terminal whose pending creation tab was closed", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    const terminals: TerminalSummary[] = [];
+    const closeCalls: Array<{ terminalId: string; confirmTerminate: boolean }> = [];
+    let resolveCreate = (_value: { ref: { terminalId: string }; summary: TerminalSummary }): void =>
+      undefined;
+    const createPending = new Promise<{
+      ref: { terminalId: string };
+      summary: TerminalSummary;
+    }>((resolve) => {
+      resolveCreate = resolve;
+    });
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalCreate: async () => {
+          const created = await createPending;
+          terminals.push(created.summary);
+          return created;
+        },
+        terminalClose: async (input) => {
+          closeCalls.push(input);
+          terminals.splice(
+            0,
+            terminals.length,
+            ...terminals.filter((terminal) => terminal.terminalId !== input.terminalId),
+          );
+          return { closed: true };
+        },
+      },
+    };
+    let latest: ReturnType<typeof useAgentStudioTerminals> | null = null;
+    const getLatest = (): ReturnType<typeof useAgentStudioTerminals> => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().isLoading).toBe(false));
+      act(() => getLatest().onCreate());
+      await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("creating"));
+      const pendingTab = getLatest().tabs[0];
+      if (!pendingTab) throw new Error("Expected the pending terminal tab.");
+
+      await act(async () => {
+        expect(await getLatest().onClose(pendingTab, false)).toEqual({ closed: true });
+      });
+      expect(getLatest().tabs).toEqual([]);
+
+      resolveCreate({
+        ref: { terminalId: "terminal-abandoned" },
+        summary: { ...summaryForTask("task-a"), terminalId: "terminal-abandoned" },
+      });
+
+      await waitFor(() =>
+        expect(closeCalls).toEqual([{ terminalId: "terminal-abandoned", confirmTerminate: true }]),
+      );
+      await waitFor(() => expect(getLatest().mountedTabs).toEqual([]));
+      expect(terminals).toEqual([]);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("uses the typed terminal failure code for unsupported runtimes", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const dependencies: TerminalTestDependencies = {
