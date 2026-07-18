@@ -23,7 +23,7 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
     latest = useWorkspaceBranchOperations({
       activeRepo: args.activeRepo,
       hostClient: workspaceHost,
-      clearBranchSyncDegraded: () => {},
+      updateBranchSyncDegradedForRepo: () => {},
     });
     return null;
   };

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
-import { useMemo, useRef } from "react";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
@@ -15,28 +14,30 @@ beforeEach(() => {
 });
 
 type ProbeHarnessArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeRepoPath: string | null;
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
-  setBranchSyncDegraded: (value: boolean) => void;
+  setBranchSyncDegraded: (repoPath: string, value: boolean) => void;
   refreshBranchesForRepo?: (repoPath: string) => Promise<void>;
 };
 
 const ProbeHarness = ({
-  activeWorkspace,
+  activeRepoPath,
   isSwitchingWorkspace,
   isLoadingBranches,
   isSwitchingBranch,
   setBranchSyncDegraded,
   refreshBranchesForRepo = noopRefreshBranchesForRepo,
 }: ProbeHarnessArgs) => {
-  const currentWorkspaceRepoPathRef = useRef<string | null>(activeWorkspace?.repoPath ?? null);
+  const currentWorkspaceRepoPathRef = useRef<string | null>(activeRepoPath);
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const lastKnownRevisionRef = useRef<string | null>(null);
 
-  currentWorkspaceRepoPathRef.current = activeWorkspace?.repoPath ?? null;
+  useLayoutEffect(() => {
+    currentWorkspaceRepoPathRef.current = activeRepoPath;
+  }, [activeRepoPath]);
 
   const branchProbeController = useMemo(
     () => ({
@@ -50,7 +51,7 @@ const ProbeHarness = ({
   );
 
   useWorkspaceBranchProbe({
-    activeWorkspace,
+    activeRepoPath,
     isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
@@ -61,12 +62,6 @@ const ProbeHarness = ({
 
   return null;
 };
-
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
 
 describe("use-workspace-branch-probe", () => {
   test("keeps listeners mounted while transient branch flags change", async () => {
@@ -81,11 +76,11 @@ describe("use-workspace-branch-probe", () => {
       name: "main",
       detached: false,
     }));
-    const setBranchSyncDegraded = mock((_value: boolean) => {});
+    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
 
     const rendered = render(
       <ProbeHarness
-        activeWorkspace={createActiveWorkspace("/repo-a")}
+        activeRepoPath="/repo-a"
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -97,7 +92,7 @@ describe("use-workspace-branch-probe", () => {
     try {
       rendered.rerender(
         <ProbeHarness
-          activeWorkspace={createActiveWorkspace("/repo-a")}
+          activeRepoPath="/repo-a"
           isSwitchingWorkspace={false}
           isLoadingBranches
           isSwitchingBranch={false}
@@ -106,7 +101,7 @@ describe("use-workspace-branch-probe", () => {
       );
       rendered.rerender(
         <ProbeHarness
-          activeWorkspace={createActiveWorkspace("/repo-a")}
+          activeRepoPath="/repo-a"
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch
@@ -131,13 +126,13 @@ describe("use-workspace-branch-probe", () => {
   test("suppresses stale degraded updates after the active repository changes", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const branchProbeDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
-    const setBranchSyncDegraded = mock((_value: boolean) => {});
+    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => branchProbeDeferred.promise);
 
     const rendered = render(
       <ProbeHarness
-        activeWorkspace={createActiveWorkspace("/repo-a")}
+        activeRepoPath="/repo-a"
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -150,7 +145,7 @@ describe("use-workspace-branch-probe", () => {
       await triggerFocus();
       rendered.rerender(
         <ProbeHarness
-          activeWorkspace={createActiveWorkspace("/repo-b")}
+          activeRepoPath="/repo-b"
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}
@@ -161,40 +156,31 @@ describe("use-workspace-branch-probe", () => {
       branchProbeDeferred.reject(new Error("permission denied while reading branch"));
       await flush();
 
-      expect(setBranchSyncDegraded).not.toHaveBeenCalledWith(true);
+      expect(setBranchSyncDegraded).not.toHaveBeenCalledWith("/repo-b", true);
     } finally {
       rendered.unmount();
       restoreBrowserGlobals();
     }
   });
 
-  test("keeps the new repo probe gate active when a stale repo probe finishes", async () => {
+  test("uses the committed repository without letting a stale probe release its gate", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const repoAProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
     const repoBProbe = createDeferred<{ name: string | undefined; detached: boolean }>();
-    const setBranchSyncDegraded = mock((_value: boolean) => {});
-    const gitGetCurrentBranch = mock(async () => {
-      const callIndex = gitGetCurrentBranch.mock.calls.length;
-
-      if (callIndex === 1) {
+    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
+    const gitGetCurrentBranch = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-a") {
         return repoAProbe.promise;
       }
 
-      if (callIndex === 2) {
-        return repoBProbe.promise;
-      }
-
-      return {
-        name: "main",
-        detached: false,
-      };
+      return repoBProbe.promise;
     });
 
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
 
     const rendered = render(
       <ProbeHarness
-        activeWorkspace={createActiveWorkspace("/repo-a")}
+        activeRepoPath="/repo-a"
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -206,10 +192,11 @@ describe("use-workspace-branch-probe", () => {
     try {
       await triggerFocus();
       expect(gitGetCurrentBranch).toHaveBeenCalledTimes(1);
+      expect(gitGetCurrentBranch).toHaveBeenNthCalledWith(1, "/repo-a");
 
       rendered.rerender(
         <ProbeHarness
-          activeWorkspace={createActiveWorkspace("/repo-b")}
+          activeRepoPath="/repo-b"
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}
@@ -219,6 +206,7 @@ describe("use-workspace-branch-probe", () => {
 
       await triggerFocus();
       expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
+      expect(gitGetCurrentBranch).toHaveBeenNthCalledWith(2, "/repo-b");
 
       repoAProbe.resolve({
         name: "main",
@@ -226,6 +214,7 @@ describe("use-workspace-branch-probe", () => {
       });
       await flush();
 
+      expect(setBranchSyncDegraded).not.toHaveBeenCalled();
       await triggerFocus();
       expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
 
@@ -246,7 +235,7 @@ describe("use-workspace-branch-probe", () => {
   test("ignores stale synced outcomes after the repo changes during branch refresh", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const refreshDeferred = createDeferred<void>();
-    const setBranchSyncDegraded = mock((_value: boolean) => {});
+    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -255,7 +244,7 @@ describe("use-workspace-branch-probe", () => {
 
     const rendered = render(
       <ProbeHarness
-        activeWorkspace={createActiveWorkspace("/repo-a")}
+        activeRepoPath="/repo-a"
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -269,7 +258,7 @@ describe("use-workspace-branch-probe", () => {
       await triggerFocus();
       rendered.rerender(
         <ProbeHarness
-          activeWorkspace={createActiveWorkspace("/repo-b")}
+          activeRepoPath="/repo-b"
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}
@@ -291,7 +280,7 @@ describe("use-workspace-branch-probe", () => {
   test("ignores stale refresh failures after the repo changes during branch refresh", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const refreshDeferred = createDeferred<void>();
-    const setBranchSyncDegraded = mock((_value: boolean) => {});
+    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -300,7 +289,7 @@ describe("use-workspace-branch-probe", () => {
 
     const rendered = render(
       <ProbeHarness
-        activeWorkspace={createActiveWorkspace("/repo-a")}
+        activeRepoPath="/repo-a"
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -314,7 +303,7 @@ describe("use-workspace-branch-probe", () => {
       await triggerFocus();
       rendered.rerender(
         <ProbeHarness
-          activeWorkspace={createActiveWorkspace("/repo-b")}
+          activeRepoPath="/repo-b"
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}
