@@ -120,6 +120,7 @@ export function TaskWorkflowActionGroup({
           <PopoverTrigger asChild>
             <Button
               type="button"
+              aria-label={compactMenuTrigger ? "Open workflow actions menu" : undefined}
               size={size}
               variant="outline"
               className={cn(
