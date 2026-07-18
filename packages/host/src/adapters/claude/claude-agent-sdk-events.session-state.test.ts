@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage session state and catalog events", () => {
   test("ignores duplicate SDK idle transitions when local session activity is already idle", () => {
@@ -18,13 +18,13 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -44,13 +44,13 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "running",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -72,13 +72,13 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "running",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -104,13 +104,13 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -130,13 +130,13 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "requires_action",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -165,13 +165,13 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "requires_action",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -191,7 +191,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "commands_changed",
         commands: [
@@ -203,7 +203,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         ],
         uuid: "commands-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([

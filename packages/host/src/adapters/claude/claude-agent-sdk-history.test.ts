@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
-
-const toSessionMessage = (message: unknown): SessionMessage => message as SessionMessage;
+import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history", () => {
   test("preserves Claude transcript timestamps when loading history", () => {

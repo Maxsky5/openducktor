@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { type HostError, isHostError, toHostOperationError } from "../../effect/host-errors";
+import { type HostError, HostOperationError } from "../../effect/host-errors";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type { ClaudeRuntimeEventListener } from "./claude-live-session-event-hub";
 
@@ -8,134 +8,149 @@ type CreateClaudeLiveSessionEventCoordinatorInput = {
   readonly processEvent: (
     session: ClaudeSessionContext,
     event: ClaudeAgentSdkEvent,
-  ) => Promise<void>;
-  readonly readForwardingFailure: () => HostError | null;
+  ) => Effect.Effect<void, HostError>;
 };
 
 export const createClaudeLiveSessionEventCoordinator = ({
   processEvent,
-  readForwardingFailure,
   runtimeId,
 }: CreateClaudeLiveSessionEventCoordinatorInput) => {
   const queuedEvents: Array<{
     session: ClaudeSessionContext;
     event: ClaudeAgentSdkEvent;
   }> = [];
-  const barrierWaiters: Array<() => void> = [];
-  let barrierDepth = 0;
+  const operationSemaphore = Effect.unsafeMakeSemaphore(1);
+  let backgroundDrainScheduled = false;
   let forwarding = false;
-  let forwardingChain = Promise.resolve();
+  let forwardingFailure: HostError | null = null;
   let released = false;
 
-  const drainEvents = (): Promise<void> => {
-    forwardingChain = forwardingChain.then(async () => {
-      while (forwarding && !released && barrierDepth === 0 && queuedEvents.length > 0) {
-        const queued = queuedEvents.shift();
-        if (queued) {
-          await processEvent(queued.session, queued.event);
-        }
-      }
+  const runtimeReleasedError = (): HostOperationError =>
+    new HostOperationError({
+      operation: "claude-live-session.event-coordinator",
+      message: `Claude runtime '${runtimeId}' is already released.`,
+      details: { runtimeId },
     });
-    return forwardingChain;
+
+  const drainQueuedEvents = Effect.gen(function* () {
+    while (forwarding && !released && queuedEvents.length > 0) {
+      const queued = queuedEvents.shift();
+      if (!queued) {
+        continue;
+      }
+      const result = yield* Effect.either(processEvent(queued.session, queued.event));
+      if (result._tag === "Left" && forwardingFailure === null) {
+        forwardingFailure = result.left;
+      }
+    }
+  });
+
+  const takeForwardingFailure = (): Effect.Effect<void, HostError> =>
+    Effect.suspend(() => {
+      const failure = forwardingFailure;
+      forwardingFailure = null;
+      return failure ? Effect.fail(failure) : Effect.void;
+    });
+
+  const drainInBackground = (): void => {
+    if (backgroundDrainScheduled) {
+      return;
+    }
+    backgroundDrainScheduled = true;
+    Effect.runFork(
+      operationSemaphore
+        .withPermits(1)(drainQueuedEvents)
+        .pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              backgroundDrainScheduled = false;
+              if (forwarding && !released && queuedEvents.length > 0) {
+                drainInBackground();
+              }
+            }),
+          ),
+        ),
+    );
   };
 
   const enqueueEvent: ClaudeRuntimeEventListener = (session, event) => {
     if (released) {
-      throw new Error(`Claude runtime '${runtimeId}' is already released.`);
+      throw runtimeReleasedError();
     }
     if (session.runtimeId !== runtimeId) {
-      throw new Error(
-        `Claude event for runtime '${session.runtimeId}' cannot enter runtime '${runtimeId}'.`,
-      );
+      throw new HostOperationError({
+        operation: "claude-live-session.enqueue-event",
+        message: `Claude event for runtime '${session.runtimeId}' cannot enter runtime '${runtimeId}'.`,
+        details: { eventRuntimeId: session.runtimeId, runtimeId },
+      });
     }
     queuedEvents.push({ session, event });
-    if (forwarding && barrierDepth === 0) {
-      void drainEvents();
-    }
-  };
-
-  const waitForOpenBarrier = (): Promise<void> => {
-    if (barrierDepth === 0) {
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      barrierWaiters.push(resolve);
-    });
-  };
-
-  const releaseBarrier = (): void => {
-    barrierDepth -= 1;
-    if (barrierDepth > 0) {
-      return;
-    }
-    const waiters = barrierWaiters.splice(0);
-    for (const resolve of waiters) {
-      resolve();
-    }
-    if (forwarding && !released) {
-      void drainEvents();
+    if (forwarding) {
+      drainInBackground();
     }
   };
 
   const flush = (): Effect.Effect<void, HostError> =>
-    Effect.tryPromise({
-      try: async () => {
-        await waitForOpenBarrier();
-        await drainEvents();
-        const forwardingFailure = readForwardingFailure();
-        if (forwardingFailure) {
-          throw forwardingFailure;
-        }
-      },
-      catch: (cause) =>
-        isHostError(cause)
-          ? cause
-          : toHostOperationError(cause, "claude-live-session.flush-events", { runtimeId }),
-    });
+    operationSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        yield* drainQueuedEvents;
+        yield* takeForwardingFailure();
+      }),
+    );
 
   const runControlMutation = <Value>(
     effect: Effect.Effect<Value, HostError>,
   ): Effect.Effect<Value, HostError> =>
-    Effect.gen(function* () {
-      const result = yield* Effect.either(
-        Effect.acquireUseRelease(
-          Effect.sync(() => {
-            barrierDepth += 1;
-          }),
-          () => effect,
-          () => Effect.sync(releaseBarrier),
-        ),
-      );
-      yield* flush();
-      if (result._tag === "Left") {
-        return yield* Effect.fail(result.left);
-      }
-      return result.right;
-    });
+    operationSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        yield* takeForwardingFailure();
+        const result = yield* Effect.either(effect);
+        yield* drainQueuedEvents;
+        yield* takeForwardingFailure();
+        if (result._tag === "Left") {
+          return yield* Effect.fail(result.left);
+        }
+        return result.right;
+      }),
+    );
+
+  const shutdown = <Value>(
+    effect: Effect.Effect<Value, HostError>,
+  ): Effect.Effect<Value, HostError> =>
+    operationSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        if (released) {
+          return yield* Effect.fail(runtimeReleasedError());
+        }
+        forwarding = false;
+        return yield* effect.pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              released = true;
+              forwardingFailure = null;
+              queuedEvents.splice(0);
+            }),
+          ),
+        );
+      }),
+    );
 
   return {
     enqueueEvent,
     flush,
     isReleased: () => released,
-    release: () => {
-      released = true;
-      queuedEvents.splice(0);
-    },
     runControlMutation,
+    shutdown,
     startForwarding: (): Effect.Effect<void, HostError> =>
-      Effect.tryPromise({
-        try: async () => {
+      operationSemaphore.withPermits(1)(
+        Effect.gen(function* () {
           if (released) {
-            throw new Error(`Claude runtime '${runtimeId}' is already released.`);
+            return yield* Effect.fail(runtimeReleasedError());
           }
           forwarding = true;
-          await drainEvents();
-        },
-        catch: (cause) =>
-          toHostOperationError(cause, "claude-live-session.start-forwarding", { runtimeId }),
-      }),
-    stopForwarding: () => {
-      forwarding = false;
-    },
+          yield* drainQueuedEvents;
+          yield* takeForwardingFailure();
+        }),
+      ),
   };
 };

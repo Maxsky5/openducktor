@@ -116,6 +116,7 @@ export const createClaudeLiveSessionState = ({
   readonly runtime: ClaudeRuntimeInstance;
 }) => {
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
+  const retiredSessionKeys = new Set<string>();
   const startupLeases = new Set<string>();
 
   const readSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveSnapshot | undefined =>
@@ -154,8 +155,10 @@ export const createClaudeLiveSessionState = ({
   };
 
   const removeSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
-    startupLeases.delete(refKey(ref));
-    if (!snapshotsByRef.delete(refKey(ref))) {
+    const key = refKey(ref);
+    retiredSessionKeys.add(key);
+    startupLeases.delete(key);
+    if (!snapshotsByRef.delete(key)) {
       return [];
     }
     return [{ type: "session_removed", ref }];
@@ -270,6 +273,10 @@ export const createClaudeLiveSessionState = ({
         },
       ];
     }
+    const ref = eventRef(session, event);
+    if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(refKey(ref))) {
+      return [];
+    }
     if (
       event.type === "approval_required" ||
       event.type === "approval_resolved" ||
@@ -279,7 +286,6 @@ export const createClaudeLiveSessionState = ({
       return applyPendingEvent(session, event);
     }
 
-    const ref = eventRef(session, event);
     const key = refKey(ref);
     if (
       startupLeases.has(key) &&
@@ -366,6 +372,8 @@ export const createClaudeLiveSessionState = ({
     release: (): AgentSessionLiveRef[] => {
       const refs = [...snapshotsByRef.values()].map((snapshot) => snapshot.ref);
       snapshotsByRef.clear();
+      retiredSessionKeys.clear();
+      startupLeases.clear();
       return refs;
     },
     removeSession: removeSessionTree,
@@ -379,6 +387,7 @@ export const createClaudeLiveSessionState = ({
         workingDirectory: summary.workingDirectory,
         externalSessionId: summary.externalSessionId,
       };
+      retiredSessionKeys.delete(refKey(ref));
       const current = readSnapshot(ref);
       if (options.forceRunning) {
         startupLeases.add(refKey(ref));

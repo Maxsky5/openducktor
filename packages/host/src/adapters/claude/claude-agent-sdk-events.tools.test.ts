@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage tool events", () => {
   test("emits completed tool parts for Claude tool result user messages", () => {
@@ -18,7 +18,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -33,7 +33,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -45,7 +45,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -59,7 +59,7 @@ describe("handleClaudeSdkMessage tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -104,7 +104,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -119,7 +119,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -131,7 +131,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -146,7 +146,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events[1]).toEqual(
@@ -177,7 +177,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "orphan-result-1",
         session_id: "session-1",
@@ -191,7 +191,7 @@ describe("handleClaudeSdkMessage tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([]);
@@ -210,7 +210,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -225,7 +225,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -237,7 +237,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -252,7 +252,7 @@ describe("handleClaudeSdkMessage tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(
@@ -286,7 +286,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -302,7 +302,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -336,7 +336,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -351,7 +351,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -363,7 +363,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "tool_progress",
         uuid: "progress-1",
         session_id: "session-1",
@@ -371,7 +371,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         tool_use_id: "tool-1",
         tool_name: "Read",
         elapsed_time_seconds: 3,
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -383,7 +383,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -398,7 +398,7 @@ describe("handleClaudeSdkMessage tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -456,7 +456,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "tool_progress",
         uuid: "progress-1",
         session_id: "session-1",
@@ -464,7 +464,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         tool_use_id: "tool-1",
         tool_name: "Bash",
         elapsed_time_seconds: 4.25,
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -499,7 +499,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "tool_progress",
         uuid: "progress-1",
         session_id: "session-1",
@@ -507,7 +507,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         tool_use_id: "subagent-tool-1",
         tool_name: "Bash",
         elapsed_time_seconds: 4.25,
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([]);
@@ -530,7 +530,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "permission_denied",
         uuid: "permission-1",
@@ -538,7 +538,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
         tool_use_id: "tool-1",
         tool_name: "Bash",
         message: "Denied by policy",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -574,7 +574,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         session_id: "session-1",
@@ -589,7 +589,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
             tool_input: { command: "touch /tmp/outside" },
           },
         ],
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -627,7 +627,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -646,7 +646,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -658,7 +658,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -676,7 +676,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(
@@ -713,7 +713,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -732,7 +732,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -744,7 +744,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -773,7 +773,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(
@@ -810,7 +810,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -829,7 +829,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -841,7 +841,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -855,7 +855,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(
@@ -889,7 +889,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -908,7 +908,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -920,7 +920,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -944,7 +944,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     const event = events.at(-1);
@@ -976,7 +976,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -1003,7 +1003,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -1015,7 +1015,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -1029,7 +1029,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(
@@ -1063,7 +1063,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -1082,7 +1082,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -1094,7 +1094,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -1126,7 +1126,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           userModified: false,
           replaceAll: false,
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(
@@ -1171,7 +1171,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -1189,7 +1189,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -1201,7 +1201,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -1230,7 +1230,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           role: "user",
           content: [],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(
@@ -1267,7 +1267,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -1285,7 +1285,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -1297,7 +1297,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
@@ -1328,7 +1328,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
           originalFile: "# Old\n",
           userModified: false,
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.at(-1)).toEqual(

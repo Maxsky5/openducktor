@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result events", () => {
   test("keeps an active SDK user turn open for non-terminal tool-use results", () => {
@@ -20,13 +20,13 @@ describe("handleClaudeSdkMessage result events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         stop_reason: "tool_use",
         usage: { input_tokens: 1, output_tokens: 1 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activeSdkUserTurnCount).toBe(1);
@@ -49,14 +49,14 @@ describe("handleClaudeSdkMessage result events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         stop_reason: "end_turn",
         result: "done",
         usage: { input_tokens: 1, output_tokens: 1 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activeSdkUserTurnCount).toBe(0);
@@ -82,7 +82,7 @@ describe("handleClaudeSdkMessage result events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -92,7 +92,7 @@ describe("handleClaudeSdkMessage result events", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -130,7 +130,7 @@ describe("handleClaudeSdkMessage result events", () => {
 
     handleClaudeSdkMessage({
       ...input,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-final",
         session_id: "session-1",
@@ -141,13 +141,13 @@ describe("handleClaudeSdkMessage result events", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "Final answer" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...input,
       timestamp: "2026-06-25T20:00:02.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -158,7 +158,7 @@ describe("handleClaudeSdkMessage result events", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 1, output_tokens: 2 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toContainEqual({
@@ -194,7 +194,7 @@ describe("handleClaudeSdkMessage result events", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "partial-event-1",
         session_id: "session-1",
@@ -204,12 +204,12 @@ describe("handleClaudeSdkMessage result events", () => {
           index: 0,
           delta: { type: "text_delta", text: "Final result" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -219,7 +219,7 @@ describe("handleClaudeSdkMessage result events", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -258,7 +258,7 @@ describe("handleClaudeSdkMessage result events", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -268,7 +268,7 @@ describe("handleClaudeSdkMessage result events", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -305,7 +305,7 @@ describe("handleClaudeSdkMessage result events", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "partial-event-1",
         session_id: "session-1",
@@ -315,11 +315,11 @@ describe("handleClaudeSdkMessage result events", () => {
           index: 0,
           delta: { type: "text_delta", text: "First result" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -329,14 +329,14 @@ describe("handleClaudeSdkMessage result events", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     session.acceptedUserMessages.push({});
     session.pendingUserTurnCount = 1;
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "partial-event-2",
         session_id: "session-1",
@@ -346,7 +346,7 @@ describe("handleClaudeSdkMessage result events", () => {
           index: 0,
           delta: { type: "text_delta", text: "Second result" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(
@@ -378,7 +378,7 @@ describe("handleClaudeSdkMessage result events", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "partial-event-1",
         session_id: "session-1",
@@ -388,12 +388,12 @@ describe("handleClaudeSdkMessage result events", () => {
           index: 0,
           delta: { type: "text_delta", text: "Now let me write and persist the spec." },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-tool-use",
         session_id: "session-1",
@@ -412,12 +412,12 @@ describe("handleClaudeSdkMessage result events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -427,7 +427,7 @@ describe("handleClaudeSdkMessage result events", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -477,7 +477,7 @@ describe("handleClaudeSdkMessage result events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -493,7 +493,7 @@ describe("handleClaudeSdkMessage result events", () => {
             maxOutputTokens: 64_000,
           },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -530,7 +530,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -541,12 +541,12 @@ describe("handleClaudeSdkMessage result deduplication", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "Spec persisted." }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -556,7 +556,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(1);
@@ -580,7 +580,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -591,12 +591,12 @@ describe("handleClaudeSdkMessage result deduplication", () => {
           stop_reason: "max_tokens",
           content: [{ type: "text", text: "Partial answer" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -606,7 +606,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(0);
@@ -640,7 +640,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -651,12 +651,12 @@ describe("handleClaudeSdkMessage result deduplication", () => {
           stop_reason: "max_tokens",
           content: [{ type: "text", text: "First queued result" }],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -666,7 +666,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(0);
@@ -695,7 +695,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
@@ -708,7 +708,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
             maxOutputTokens: 64_000,
           },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.pendingUserTurnCount).toBe(0);
@@ -729,13 +729,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:01.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -761,14 +761,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 5, output_tokens: 7 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.pendingUserTurnCount).toBe(0);
@@ -799,13 +799,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -816,14 +816,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:01.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 5, output_tokens: 7 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -853,7 +853,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:00.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -863,13 +863,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:01.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-2",
@@ -879,7 +879,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(
@@ -896,13 +896,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:02.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -923,14 +923,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 5, output_tokens: 7 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.pendingUserTurnCount).toBe(1);
@@ -956,13 +956,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         terminal_reason: "background_requested",
         usage: { input_tokens: 5, output_tokens: 7 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -972,13 +972,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:01.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -1004,13 +1004,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         terminal_reason: "tool_deferred",
         usage: { input_tokens: 5, output_tokens: 7 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -1020,13 +1020,13 @@ describe("handleClaudeSdkMessage result settlement", () => {
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:01.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -1050,13 +1050,13 @@ describe("handleClaudeSdkMessage failed results", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "error_during_execution",
         is_error: true,
         errors: ["API Error: an image in the conversation could not be processed."],
         usage: { input_tokens: 5, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -1080,13 +1080,13 @@ describe("handleClaudeSdkMessage failed results", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -1115,7 +1115,7 @@ describe("handleClaudeSdkMessage failed results", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
@@ -1123,7 +1123,7 @@ describe("handleClaudeSdkMessage failed results", () => {
         terminal_reason: "image_error",
         result: "API Error: an image in the conversation could not be processed and was removed.",
         usage: { input_tokens: 5, output_tokens: 1 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -1147,13 +1147,13 @@ describe("handleClaudeSdkMessage failed results", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("idle");
@@ -1186,13 +1186,13 @@ describe("handleClaudeSdkMessage failed results", () => {
 
     handleClaudeSdkMessage({
       ...commonInput,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         is_error: false,
         stop_reason: "tool_use",
         usage: { input_tokens: 5, output_tokens: 7 },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");
@@ -1201,13 +1201,13 @@ describe("handleClaudeSdkMessage failed results", () => {
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:01.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(session.activity).toBe("running");

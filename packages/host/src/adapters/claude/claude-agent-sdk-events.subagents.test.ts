@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage subagent events", () => {
   test("routes forwarded subagent assistant text only into the nested transcript", () => {
@@ -19,7 +19,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -30,7 +30,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
           content: [{ type: "text", text: "nested subagent text" }],
           stop_reason: "end_turn",
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -57,7 +57,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
         runtimeKind: "claude",
       }),
       emit: (event) => events.push(event),
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-subagent-1",
         session_id: "session-1",
@@ -66,7 +66,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
           role: "user",
           content: "Inspect the runtime subscription",
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -97,7 +97,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
     handleClaudeSdkMessage({
       ...input,
       timestamp: "2026-06-25T20:00:00.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-1",
         session_id: "session-1",
@@ -106,12 +106,12 @@ describe("handleClaudeSdkMessage subagent events", () => {
           type: "message_start",
           message: {},
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
       timestamp: "2026-06-25T20:00:00.100Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "stream_event",
         uuid: "stream-2",
         session_id: "session-1",
@@ -121,7 +121,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
           index: 0,
           delta: { type: "text_delta", text: "live nested text" },
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -150,7 +150,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
     handleClaudeSdkMessage({
       ...input,
       timestamp: "2026-06-25T20:00:00.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-tool-1",
         session_id: "session-1",
@@ -168,12 +168,12 @@ describe("handleClaudeSdkMessage subagent events", () => {
           ],
           stop_reason: "tool_use",
         },
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       ...input,
       timestamp: "2026-06-25T20:00:01.000Z",
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "user-tool-1",
         session_id: "session-1",
@@ -188,7 +188,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
             },
           ],
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -231,7 +231,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_started",
         task_id: "hidden-task",
@@ -239,21 +239,21 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         skip_transcript: true,
         uuid: "task-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
     handleClaudeSdkMessage({
       session,
       timestamp: "2026-06-25T20:00:01.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_updated",
         task_id: "hidden-task",
         patch: { status: "completed" },
         uuid: "task-2",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([]);
@@ -276,7 +276,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_started",
         task_id: "shell-task-1",
@@ -285,7 +285,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         task_type: "shell",
         uuid: "shell-task-started-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -293,14 +293,14 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
       timestamp: "2026-06-25T20:00:01.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_updated",
         task_id: "shell-task-1",
         patch: { status: "completed" },
         uuid: "shell-task-updated-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -308,7 +308,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_notification",
         task_id: "shell-task-1",
@@ -316,7 +316,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         summary: "Harmless live lifecycle verification command",
         uuid: "shell-task-notification-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([]);
@@ -341,7 +341,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_started",
         task_id: "agent-task-1",
@@ -350,7 +350,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         prompt: "Find the root package.json",
         uuid: "agent-task-started-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -385,7 +385,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_started",
         task_id: "task-1",
@@ -395,7 +395,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         subagent_type: "builder",
         uuid: "task-started-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -403,7 +403,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:01.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_progress",
         task_id: "task-1",
@@ -412,7 +412,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         subagent_type: "builder",
         uuid: "task-progress-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -420,7 +420,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_notification",
         task_id: "task-1",
@@ -429,7 +429,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         output_file: "/tmp/auth-report.md",
         uuid: "task-notification-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -495,14 +495,14 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         timestamp: "2026-06-25T20:00:00.000Z",
         modelSelection,
         emit,
-        message: {
+        message: claudeSdkMessageFixture({
           type: "system",
           subtype: "task_updated",
           task_id,
           patch: { status },
           uuid: `${task_id}-event`,
           session_id: "session-1",
-        } as unknown as SDKMessage,
+        }),
       });
     }
 
@@ -536,7 +536,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_updated",
         task_id: "task-1",
@@ -545,7 +545,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         patch: { status: "failed" },
         uuid: "task-updated-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -579,7 +579,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_updated",
         task_id: "task-1",
@@ -587,7 +587,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         patch: { status: "failed" },
         uuid: "task-updated-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -621,7 +621,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:03.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_notification",
         task_id: "task-1",
@@ -629,7 +629,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         summary: "Locate callback.mjs absolute path failed",
         uuid: "task-notification-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -664,7 +664,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       timestamp: "2026-06-25T20:00:04.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_notification",
         task_id: "task-1",
@@ -672,7 +672,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         message: "Subagent process exited before producing a transcript",
         uuid: "task-notification-2",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toEqual([
@@ -707,7 +707,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -728,7 +728,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           ],
           stop_reason: "tool_use",
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -736,7 +736,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       timestamp: "2026-06-25T20:00:03.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "tool-result-1",
         session_id: "session-1",
@@ -760,7 +760,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           totalDurationMs: 1200,
           totalTokens: 42,
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     const subagentPart = events.find(
@@ -888,7 +888,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         timestamp: "2026-06-25T20:00:00.000Z",
         modelSelection,
         emit,
-        message: message as unknown as SDKMessage,
+        message: claudeSdkMessageFixture(message),
       });
     }
 
@@ -915,7 +915,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -936,7 +936,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           ],
           stop_reason: "tool_use",
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -944,7 +944,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       timestamp: "2026-06-25T20:00:03.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "tool-result-1",
         session_id: "session-1",
@@ -967,7 +967,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           reason: "Tool permission request failed",
           totalDurationMs: 23,
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     const subagentPart = events.find(
@@ -1003,7 +1003,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       timestamp: "2026-06-25T20:10:00.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-async",
         session_id: "session-1",
@@ -1025,7 +1025,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           ],
           stop_reason: "tool_use",
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     handleClaudeSdkMessage({
@@ -1033,7 +1033,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       timestamp: "2026-06-25T20:10:01.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "user",
         uuid: "tool-result-async",
         session_id: "session-1",
@@ -1057,7 +1057,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           outputFile: "/tmp/async-agent-1.out",
           canReadOutputFile: true,
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     const subagentPart = events.find(
@@ -1095,7 +1095,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       timestamp: "2026-06-25T20:10:02.000Z",
       modelSelection,
       emit,
-      message: {
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-async-progress",
         session_id: "session-1",
@@ -1106,7 +1106,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           content: [{ type: "text", text: "Background verification progress" }],
           stop_reason: "end_turn",
         },
-      } as unknown as SDKMessage,
+      }),
     });
 
     expect(events).toContainEqual(

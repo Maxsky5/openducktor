@@ -140,6 +140,54 @@ describe("Claude host live-session state", () => {
     });
   });
 
+  test("drops late root and subagent events after release until an explicit resume", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+
+    expect(state.removeSession(ref)).toEqual([{ type: "session_removed", ref }]);
+    expect(
+      state.applyEvent(session, {
+        type: "assistant_message",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:02:00.000Z",
+        messageId: "late-root",
+        message: "Late root response",
+      }),
+    ).toEqual([]);
+    expect(
+      state.applyEvent(session, {
+        type: "approval_required",
+        externalSessionId: childExternalSessionId,
+        timestamp: "2026-07-17T10:02:01.000Z",
+        requestId: "late-child",
+        requestType: "command_execution",
+        title: "Late child approval",
+        parentExternalSessionId: "session-1",
+        childExternalSessionId,
+        subagentCorrelationKey: "child-1",
+      }),
+    ).toEqual([]);
+    expect(state.readRetainedSnapshot(ref)).toEqual({ type: "missing", ref });
+
+    expect(state.retainControlSummary({ ...summary, status: "running" })).toContainEqual({
+      type: "session_upsert",
+      snapshot: expect.objectContaining({ activity: "running", ref }),
+    });
+    expect(
+      state.applyEvent(session, {
+        type: "assistant_message",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:02:02.000Z",
+        messageId: "resumed-root",
+        message: "Resumed response",
+      }),
+    ).toContainEqual({
+      type: "transcript_event",
+      event: expect.objectContaining({ messageId: "resumed-root" }),
+    });
+  });
+
   test("does not overwrite newer streamed context with an explicit load", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary(summary);

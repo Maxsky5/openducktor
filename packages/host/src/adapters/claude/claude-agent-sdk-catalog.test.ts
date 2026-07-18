@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ModelInfo, SessionMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import {
   searchClaudeWorkspaceFiles,
   toClaudeHistoryMessages,
@@ -10,6 +10,7 @@ import {
   toClaudeSkillCatalog,
   toClaudeSlashCommandCatalog,
 } from "./claude-agent-sdk-catalog";
+import { claudeSessionMessageFixtures } from "./claude-agent-sdk-test-messages";
 
 const tempWorkspaces: string[] = [];
 
@@ -200,7 +201,7 @@ describe("toClaudeSkillCatalog", () => {
 describe("toClaudeHistoryMessages", () => {
   test("skips empty user and assistant transcript envelopes", () => {
     const history = toClaudeHistoryMessages(
-      [
+      claudeSessionMessageFixtures([
         {
           type: "user",
           uuid: "user-empty",
@@ -213,7 +214,7 @@ describe("toClaudeHistoryMessages", () => {
           parent_tool_use_id: null,
           message: { role: "assistant", content: [] },
         },
-      ] as unknown as SessionMessage[],
+      ]),
       () => "2026-06-25T20:00:00.000Z",
     );
 
@@ -222,7 +223,7 @@ describe("toClaudeHistoryMessages", () => {
 
   test("hydrates Claude tool-use and tool-result entries as tool parts instead of blank messages", () => {
     const history = toClaudeHistoryMessages(
-      [
+      claudeSessionMessageFixtures([
         {
           type: "assistant",
           uuid: "assistant-tool",
@@ -250,7 +251,7 @@ describe("toClaudeHistoryMessages", () => {
           },
           message: { role: "user", content: [] },
         },
-      ] as unknown as SessionMessage[],
+      ]),
       () => "2026-06-25T20:00:00.000Z",
     );
 

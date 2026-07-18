@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
@@ -12,6 +12,7 @@ import {
   waitForTimers,
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("consumeClaudeSession lifecycle", () => {
   test("sends the first resumed user message after an unattributed running replay", async () => {
@@ -23,13 +24,13 @@ describe("consumeClaudeSession lifecycle", () => {
     };
     const sessionStore = createClaudeAgentSdkSessionStore();
     const openQuery = openClaudeQueryWithMessages([
-      {
+      claudeSdkMessageFixture({
         type: "system",
         subtype: "session_state_changed",
         state: "running",
         uuid: "state-1",
         session_id: "session-1",
-      } as unknown as SDKMessage,
+      }),
     ]);
     const session = createClaudeSession({
       activity: "idle",
@@ -113,7 +114,7 @@ describe("consumeClaudeSession lifecycle", () => {
       activity: "running",
       pendingUserTurnCount: 2,
       query: claudeQueryWithMessages([
-        {
+        claudeSdkMessageFixture({
           type: "assistant",
           uuid: "assistant-1",
           session_id: "session-1",
@@ -124,8 +125,8 @@ describe("consumeClaudeSession lifecycle", () => {
             stop_reason: "end_turn",
             content: [{ type: "text", text: "first turn done" }],
           },
-        } as unknown as SDKMessage,
-        {
+        }),
+        claudeSdkMessageFixture({
           type: "result",
           subtype: "success",
           uuid: "result-1",
@@ -135,7 +136,7 @@ describe("consumeClaudeSession lifecycle", () => {
           stop_reason: "end_turn",
           terminal_reason: "completed",
           usage: { input_tokens: 0, output_tokens: 0 },
-        } as unknown as SDKMessage,
+        }),
       ]),
       queue,
       queuedSdkMessages: [queuedMessage],
@@ -171,7 +172,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const events: AgentEvent[] = [];
     const sessionStore = createClaudeAgentSdkSessionStore();
     const openQuery = openClaudeQueryWithMessages([
-      {
+      claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -182,7 +183,7 @@ describe("consumeClaudeSession lifecycle", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "done" }],
         },
-      } as unknown as SDKMessage,
+      }),
     ]);
     const session = createClaudeSession({
       acceptedUserMessages: [
@@ -240,7 +241,7 @@ describe("consumeClaudeSession lifecycle", () => {
     };
     const sessionStore = createClaudeAgentSdkSessionStore();
     const openQuery = openClaudeQueryWithMessages([
-      {
+      claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-1",
         session_id: "session-1",
@@ -251,8 +252,8 @@ describe("consumeClaudeSession lifecycle", () => {
           stop_reason: "end_turn",
           content: [{ type: "text", text: "first turn done" }],
         },
-      } as unknown as SDKMessage,
-      {
+      }),
+      claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "result-1",
@@ -262,7 +263,7 @@ describe("consumeClaudeSession lifecycle", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
-      } as unknown as SDKMessage,
+      }),
     ]);
     const session = createClaudeSession({
       acceptedUserMessages: [
