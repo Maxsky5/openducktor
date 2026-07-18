@@ -4,7 +4,7 @@ import type {
   AgentSlashCommand,
   AgentSubagentReference,
 } from "@openducktor/core";
-import { type ReactElement, useLayoutEffect, useState } from "react";
+import { type ReactElement, useId, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { badgeVariants } from "@/components/ui/badge-variants";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,10 @@ import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
+import {
+  getComposerPopupOptionId,
+  resolveAgentChatComposerReferenceMenuVisibility,
+} from "./agent-chat-composer-menu-state";
 import { AgentChatComposerReferenceMenu } from "./agent-chat-composer-reference-menu";
 import {
   readEditableTextContent,
@@ -95,6 +99,25 @@ type ComposerFileReferenceTooltipState = {
 type AgentChatComposerSegments = AgentChatComposerDraft["segments"];
 type AgentChatComposerSegment = AgentChatComposerSegments[number];
 type AgentChatComposerTextSegment = Extract<AgentChatComposerSegment, { kind: "text" }>;
+type ActiveComposerPopup = {
+  listboxId: string;
+  activeOptionId?: string;
+};
+
+const buildActiveComposerPopup = (
+  listboxId: string,
+  activeIndex: number,
+  itemCount: number,
+): ActiveComposerPopup => {
+  if (activeIndex < 0 || activeIndex >= itemCount) {
+    return { listboxId };
+  }
+
+  return {
+    listboxId,
+    activeOptionId: getComposerPopupOptionId(listboxId, activeIndex),
+  };
+};
 
 const readComposerFileReferenceChipElement = (target: EventTarget | null): HTMLElement | null => {
   if (!(target instanceof Element)) {
@@ -370,6 +393,9 @@ export function AgentChatComposerEditor({
   isSubagentsLoading,
   searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
+  const referenceListboxId = useId();
+  const slashListboxId = useId();
+  const skillListboxId = useId();
   const [composerFileReferenceTooltip, setComposerFileReferenceTooltip] =
     useState<ComposerFileReferenceTooltipState | null>(null);
   const {
@@ -415,6 +441,32 @@ export function AgentChatComposerEditor({
     searchFiles,
   });
   const draftSegments = draft.segments;
+  const isReferenceMenuVisible =
+    showReferenceMenu &&
+    resolveAgentChatComposerReferenceMenuVisibility({
+      itemCount: referenceMenuItems.length,
+      fileSearchError,
+      isFileSearchPending,
+      isFileSearchLoading,
+      subagentsError,
+      isSubagentsLoading,
+    }).shouldRenderMenu;
+  let activePopup: ActiveComposerPopup | null = null;
+  if (isReferenceMenuVisible) {
+    activePopup = buildActiveComposerPopup(
+      referenceListboxId,
+      activeReferenceIndex,
+      referenceMenuItems.length,
+    );
+  } else if (showSlashMenu) {
+    activePopup = buildActiveComposerPopup(
+      slashListboxId,
+      activeSlashIndex,
+      filteredSlashCommands.length,
+    );
+  } else if (showSkillMenu) {
+    activePopup = buildActiveComposerPopup(skillListboxId, activeSkillIndex, filteredSkills.length);
+  }
 
   useLayoutEffect(() => {
     const editor = editorRef.current?.querySelector<HTMLDivElement>("[data-composer-content-root]");
@@ -472,6 +524,7 @@ export function AgentChatComposerEditor({
         : null}
       {showReferenceMenu ? (
         <AgentChatComposerReferenceMenu
+          listboxId={referenceListboxId}
           items={referenceMenuItems}
           activeIndex={activeReferenceIndex}
           fileSearchError={fileSearchError}
@@ -486,6 +539,7 @@ export function AgentChatComposerEditor({
       ) : null}
       {showSlashMenu ? (
         <AgentChatComposerSlashMenu
+          listboxId={slashListboxId}
           commands={filteredSlashCommands}
           activeIndex={activeSlashIndex}
           slashCommandsError={slashCommandsError}
@@ -495,6 +549,7 @@ export function AgentChatComposerEditor({
       ) : null}
       {showSkillMenu ? (
         <AgentChatComposerSkillMenu
+          listboxId={skillListboxId}
           skills={filteredSkills}
           activeIndex={activeSkillIndex}
           skillsError={skillsError}
@@ -502,12 +557,14 @@ export function AgentChatComposerEditor({
           onSelectSkill={selectSkillReference}
         />
       ) : null}
-      {/* biome-ignore lint/a11y/useSemanticElements: the contenteditable root supports inline chips and file references. */}
       <div
         ref={editorRef}
-        role="textbox"
+        role="combobox"
         aria-label="Message composer"
-        aria-multiline="true"
+        aria-expanded={activePopup !== null}
+        aria-controls={activePopup?.listboxId}
+        aria-autocomplete="list"
+        aria-activedescendant={activePopup?.activeOptionId}
         tabIndex={disabled ? -1 : 0}
         contentEditable={!disabled}
         suppressContentEditableWarning

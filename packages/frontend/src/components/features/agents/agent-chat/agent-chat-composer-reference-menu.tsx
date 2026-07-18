@@ -1,11 +1,16 @@
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
 import { Bot, ChevronRight, LoaderCircle } from "lucide-react";
-import { type ReactElement, useEffect, useId, useRef } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import {
+  getComposerPopupOptionId,
+  resolveAgentChatComposerReferenceMenuVisibility,
+} from "./agent-chat-composer-menu-state";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
 import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
 
 type AgentChatComposerReferenceMenuProps = {
+  listboxId: string;
   items: ReferenceMenuItem[];
   activeIndex: number;
   fileSearchError: string | null;
@@ -19,6 +24,7 @@ type AgentChatComposerReferenceMenuProps = {
 };
 
 export function AgentChatComposerReferenceMenu({
+  listboxId,
   items,
   activeIndex,
   fileSearchError,
@@ -30,27 +36,20 @@ export function AgentChatComposerReferenceMenu({
   onSelectFile,
   onSelectSubagent,
 }: AgentChatComposerReferenceMenuProps): ReactElement | null {
-  const hasResults = items.length > 0;
-  const listboxId = useId();
-  const activeOptionId =
-    activeIndex >= 0 && activeIndex < items.length
-      ? `${listboxId}-option-${activeIndex}`
-      : undefined;
-  const showSubagentsLoading = isSubagentsLoading && !hasResults;
-  const showFileSearchLoading = isFileSearchLoading && !hasResults;
-  const showEmptyState =
-    !hasResults &&
-    !isFileSearchPending &&
-    !isSubagentsLoading &&
-    !fileSearchError &&
-    !subagentsError;
-  const shouldRenderMenu =
-    hasResults ||
-    showFileSearchLoading ||
-    showSubagentsLoading ||
-    Boolean(fileSearchError) ||
-    Boolean(subagentsError) ||
-    showEmptyState;
+  const {
+    hasResults,
+    showSubagentsLoading,
+    showFileSearchLoading,
+    showEmptyState,
+    shouldRenderMenu,
+  } = resolveAgentChatComposerReferenceMenuVisibility({
+    itemCount: items.length,
+    fileSearchError,
+    isFileSearchPending,
+    isFileSearchLoading,
+    subagentsError,
+    isSubagentsLoading,
+  });
 
   if (!shouldRenderMenu) {
     return null;
@@ -59,66 +58,71 @@ export function AgentChatComposerReferenceMenu({
   return (
     <div className="absolute bottom-full z-20 mb-2 rounded-xl border border-border bg-popover shadow-lg">
       {showSubagentsLoading ? (
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
+        >
           <LoaderCircle className="size-4 animate-spin" />
           <span>Loading subagents</span>
         </div>
       ) : null}
       {subagentsError ? (
-        <div className="border-b border-border px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
           {subagentsError}
         </div>
       ) : null}
       {showFileSearchLoading ? (
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground"
+        >
           <LoaderCircle className="size-4 animate-spin" />
           <span>Searching files</span>
         </div>
       ) : null}
       {fileSearchError ? (
-        <div className="border-b border-border px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
           {fileSearchError}
         </div>
       ) : null}
       {showEmptyState ? (
-        <div className="px-3 py-2 text-sm text-muted-foreground">
+        <div role="status" className="px-3 py-2 text-sm text-muted-foreground">
           {supportsSubagentReferences ? "No references found." : "No files found."}
         </div>
       ) : null}
-      {hasResults ? (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label="References"
-          aria-activedescendant={activeOptionId}
-          tabIndex={0}
-          className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
-        >
-          {items.map((item, index) => {
-            const isActive = index === activeIndex;
-            if (item.kind === "subagent") {
+      <div
+        id={listboxId}
+        role="listbox"
+        aria-label="References"
+        aria-busy={showSubagentsLoading || showFileSearchLoading || undefined}
+        className="hide-scrollbar flex max-h-64 flex-col overflow-y-auto rounded-xl"
+      >
+        {hasResults
+          ? items.map((item, index) => {
+              const isActive = index === activeIndex;
+              if (item.kind === "subagent") {
+                return (
+                  <SubagentReferenceMenuRow
+                    key={item.id}
+                    optionId={getComposerPopupOptionId(listboxId, index)}
+                    subagent={item.subagent}
+                    isActive={isActive}
+                    onSelect={onSelectSubagent}
+                  />
+                );
+              }
               return (
-                <SubagentReferenceMenuRow
+                <FileReferenceMenuRow
                   key={item.id}
-                  optionId={`${listboxId}-option-${index}`}
-                  subagent={item.subagent}
+                  optionId={getComposerPopupOptionId(listboxId, index)}
+                  result={item.result}
                   isActive={isActive}
-                  onSelect={onSelectSubagent}
+                  onSelect={onSelectFile}
                 />
               );
-            }
-            return (
-              <FileReferenceMenuRow
-                key={item.id}
-                optionId={`${listboxId}-option-${index}`}
-                result={item.result}
-                isActive={isActive}
-                onSelect={onSelectFile}
-              />
-            );
-          })}
-        </div>
-      ) : null}
+            })
+          : null}
+      </div>
     </div>
   );
 }
@@ -155,6 +159,7 @@ function SubagentReferenceMenuRow({
       id={optionId}
       role="option"
       aria-selected={isActive}
+      tabIndex={-1}
       type="button"
       className={referenceMenuRowClassName(isActive)}
       onPointerDown={(event) => {
@@ -211,6 +216,7 @@ function FileReferenceMenuRow({
       id={optionId}
       role="option"
       aria-selected={isActive}
+      tabIndex={-1}
       type="button"
       className={referenceMenuRowClassName(isActive)}
       onPointerDown={(event) => {
