@@ -1,10 +1,19 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { IDisposable, IEvent, Terminal } from "@xterm/xterm";
 import {
   attachInteractiveTerminalRenderer,
   type ContextAwareTerminalRenderer,
-  createTerminalResizeFrameBuffer,
+  createBufferedTerminalFitter,
 } from "./interactive-terminal-renderer";
+
+if (typeof document === "undefined") {
+  GlobalRegistrator.register();
+}
+
+afterEach(() => {
+  document.body.innerHTML = "";
+});
 
 const createContextLossEvent = (): {
   event: IEvent<void>;
@@ -76,57 +85,99 @@ describe("attachInteractiveTerminalRenderer", () => {
   });
 });
 
-describe("createTerminalResizeFrameBuffer", () => {
-  test("keeps the captured frame until xterm renders the resized grid", () => {
-    const render = createContextLossEvent();
-    const disposeFrame = mock(() => undefined);
-    const scheduledFrames = new Map<number, FrameRequestCallback>();
-    const buffer = createTerminalResizeFrameBuffer({
-      captureFrame: () => ({ dispose: disposeFrame }),
-      onRender: render.event,
-      requestFrame: (callback) => {
-        scheduledFrames.set(1, callback);
-        return 1;
-      },
-      cancelFrame: (frameId) => {
-        scheduledFrames.delete(frameId);
-      },
+const createTerminalCanvas = () => {
+  const container = document.createElement("div");
+  const screen = document.createElement("div");
+  screen.className = "xterm-screen";
+  const linkCanvas = document.createElement("canvas");
+  linkCanvas.className = "xterm-link-layer";
+  const rendererCanvas = document.createElement("canvas");
+  rendererCanvas.width = 1280;
+  rendererCanvas.height = 800;
+  Object.defineProperties(rendererCanvas, {
+    clientWidth: { value: 640 },
+    clientHeight: { value: 400 },
+  });
+  screen.append(linkCanvas, rendererCanvas);
+  container.append(screen);
+  document.body.append(container);
+  return { container, screen, rendererCanvas };
+};
+
+const withCanvasContext = async (
+  run: (drawImage: ReturnType<typeof mock>) => Promise<void> | void,
+): Promise<void> => {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "getContext");
+  const drawImage = mock(() => undefined);
+  Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value: () => ({ drawImage }),
+  });
+  try {
+    await run(drawImage);
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(HTMLCanvasElement.prototype, "getContext", descriptor);
+    } else {
+      Reflect.deleteProperty(HTMLCanvasElement.prototype, "getContext");
+    }
+  }
+};
+
+describe("createBufferedTerminalFitter", () => {
+  test("buffers only grid-changing fits until xterm renders", async () => {
+    await withCanvasContext(async (drawImage) => {
+      const { container, screen, rendererCanvas } = createTerminalCanvas();
+      const render = createContextLossEvent();
+      let proposed = { cols: 80, rows: 24 };
+      const fit = mock(() => undefined);
+      const fitter = createBufferedTerminalFitter({
+        container,
+        terminal: { cols: 80, rows: 24, onRender: render.event },
+        fitAddon: { fit, proposeDimensions: () => proposed },
+      });
+
+      fitter.fit();
+      expect(fit).toHaveBeenCalledTimes(1);
+      expect(drawImage).not.toHaveBeenCalled();
+
+      proposed = { cols: 100, rows: 30 };
+      fitter.fit();
+      expect(fit).toHaveBeenCalledTimes(2);
+      expect(drawImage).toHaveBeenCalledWith(rendererCanvas, 0, 0);
+      expect(screen.querySelectorAll("canvas")).toHaveLength(3);
+
+      render.fire();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(screen.querySelectorAll("canvas")).toHaveLength(2);
+
+      fitter.dispose();
+      expect(render.dispose).toHaveBeenCalledTimes(1);
     });
-
-    buffer.preserveCurrentFrame();
-    expect(disposeFrame).not.toHaveBeenCalled();
-
-    render.fire();
-    expect(scheduledFrames.size).toBe(1);
-    scheduledFrames.get(1)?.(0);
-    expect(disposeFrame).toHaveBeenCalledTimes(1);
-
-    buffer.dispose();
-    expect(render.dispose).toHaveBeenCalledTimes(1);
   });
 
-  test("replaces a stale frame and cancels its pending removal", () => {
-    const render = createContextLossEvent();
-    const firstFrame = { dispose: mock(() => undefined) };
-    const secondFrame = { dispose: mock(() => undefined) };
-    const frames = [firstFrame, secondFrame];
-    const cancelledFrames: number[] = [];
-    const buffer = createTerminalResizeFrameBuffer({
-      captureFrame: () => frames.shift() ?? null,
-      onRender: render.event,
-      requestFrame: () => 7,
-      cancelFrame: (frameId) => cancelledFrames.push(frameId),
+  test("replaces a stale frame and cancels its pending removal", async () => {
+    await withCanvasContext(async () => {
+      const { container, screen } = createTerminalCanvas();
+      const render = createContextLossEvent();
+      const fitter = createBufferedTerminalFitter({
+        container,
+        terminal: { cols: 80, rows: 24, onRender: render.event },
+        fitAddon: {
+          fit: () => undefined,
+          proposeDimensions: () => ({ cols: 100, rows: 30 }),
+        },
+      });
+
+      fitter.fit();
+      render.fire();
+      fitter.fit();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+      expect(screen.querySelectorAll("canvas")).toHaveLength(3);
+      fitter.dispose();
+      expect(screen.querySelectorAll("canvas")).toHaveLength(2);
+      expect(render.dispose).toHaveBeenCalledTimes(1);
     });
-
-    buffer.preserveCurrentFrame();
-    render.fire();
-    buffer.preserveCurrentFrame();
-
-    expect(cancelledFrames).toEqual([7]);
-    expect(firstFrame.dispose).toHaveBeenCalledTimes(1);
-    expect(secondFrame.dispose).not.toHaveBeenCalled();
-
-    buffer.dispose();
-    expect(secondFrame.dispose).toHaveBeenCalledTimes(1);
   });
 });

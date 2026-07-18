@@ -19,8 +19,7 @@ import {
 } from "./interactive-terminal-policy";
 import {
   attachInteractiveTerminalRenderer,
-  captureTerminalRendererFrame,
-  createTerminalResizeFrameBuffer,
+  createBufferedTerminalFitter,
 } from "./interactive-terminal-renderer";
 import { createTerminalKeyEventHandler } from "./terminal-keyboard-policy";
 
@@ -104,9 +103,10 @@ export function InteractiveTerminal({
       reportInteractionFailure(cause);
       return;
     }
+    const terminalFitter = createBufferedTerminalFitter({ container, terminal, fitAddon });
     terminalRef.current = terminal;
     activateViewportRef.current = createTerminalViewportActivator({
-      fit: () => fitAddon.fit(),
+      fit: terminalFitter.fit,
       scrollToBottom: () => terminal.scrollToBottom(),
       refresh: (start, end) => terminal.refresh(start, end),
       readRows: () => terminal.rows,
@@ -172,30 +172,20 @@ export function InteractiveTerminal({
       void outputSequencer.enqueue(message, payload).catch(reportInteractionFailure);
     };
     const unsubscribe = controller.subscribe(terminalId, handleFrame);
-    const resizeFrameBuffer = createTerminalResizeFrameBuffer({
-      captureFrame: () => captureTerminalRendererFrame(container),
-      onRender: (listener) => terminal.onRender(listener),
-    });
     const fitScheduler = createLiveTerminalFitScheduler({
-      fit: () => {
-        const proposed = fitAddon.proposeDimensions();
-        if (proposed && (proposed.cols !== terminal.cols || proposed.rows !== terminal.rows)) {
-          resizeFrameBuffer.preserveCurrentFrame();
-        }
-        fitAddon.fit();
-      },
+      fit: terminalFitter.fit,
       isActive,
     });
     const observer = new ResizeObserver(() => fitScheduler.schedule());
     observer.observe(container);
-    if (isActive()) fitAddon.fit();
+    if (isActive()) terminalFitter.fit();
     return () => {
       generation += 1;
       controller.releaseEmulator(terminalId);
       unsubscribe();
       observer.disconnect();
       fitScheduler.dispose();
-      resizeFrameBuffer.dispose();
+      terminalFitter.dispose();
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();

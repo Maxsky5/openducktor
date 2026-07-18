@@ -26,53 +26,7 @@ export const attachInteractiveTerminalRenderer = ({
   return contextLossSubscription;
 };
 
-export const createTerminalResizeFrameBuffer = ({
-  captureFrame,
-  onRender,
-  requestFrame = (callback) => requestAnimationFrame(callback),
-  cancelFrame = (frameId) => cancelAnimationFrame(frameId),
-}: {
-  captureFrame: () => IDisposable | null;
-  onRender: (listener: () => void) => IDisposable;
-  requestFrame?: (callback: FrameRequestCallback) => number;
-  cancelFrame?: (frameId: number) => void;
-}) => {
-  let frame: IDisposable | null = null;
-  let removalFrame: number | null = null;
-
-  const removeFrame = (): void => {
-    if (removalFrame !== null) {
-      cancelFrame(removalFrame);
-      removalFrame = null;
-    }
-    frame?.dispose();
-    frame = null;
-  };
-
-  const renderSubscription = onRender(() => {
-    if (!frame || removalFrame !== null) return;
-    removalFrame = requestFrame(() => {
-      removalFrame = null;
-      frame?.dispose();
-      frame = null;
-    });
-  });
-
-  return {
-    preserveCurrentFrame(): void {
-      removeFrame();
-      frame = captureFrame();
-    },
-    dispose(): void {
-      renderSubscription.dispose();
-      removeFrame();
-    },
-  };
-};
-
-// addon-webgl 0.19 clears its canvas before its deferred resize render (xterm.js#4922).
-// Keep the last complete frame visible until xterm reports the replacement render.
-export const captureTerminalRendererFrame = (container: HTMLElement): IDisposable | null => {
+const captureTerminalRendererFrame = (container: HTMLElement): IDisposable | null => {
   const source = container.querySelector<HTMLCanvasElement>(
     ".xterm-screen canvas:not(.xterm-link-layer)",
   );
@@ -93,4 +47,62 @@ export const captureTerminalRendererFrame = (container: HTMLElement): IDisposabl
   context.drawImage(source, 0, 0);
   parent.append(overlay);
   return { dispose: () => overlay.remove() };
+};
+
+/**
+ * Prevents the canvas-clear frame in addon-webgl 0.19 while keeping fits live.
+ * Delete this buffer and disable preserveDrawingBuffer after a stable addon-webgl
+ * release includes xtermjs/xterm.js#5529.
+ */
+export const createBufferedTerminalFitter = ({
+  container,
+  terminal,
+  fitAddon,
+}: {
+  container: HTMLElement;
+  terminal: {
+    readonly cols: number;
+    readonly rows: number;
+    onRender: (listener: () => void) => IDisposable;
+  };
+  fitAddon: {
+    fit: () => void;
+    proposeDimensions: () => { cols: number; rows: number } | undefined;
+  };
+}) => {
+  let bufferedFrame: IDisposable | null = null;
+  let removalFrame: number | null = null;
+
+  const removeBufferedFrame = (): void => {
+    if (removalFrame !== null) {
+      cancelAnimationFrame(removalFrame);
+      removalFrame = null;
+    }
+    bufferedFrame?.dispose();
+    bufferedFrame = null;
+  };
+
+  const renderSubscription = terminal.onRender(() => {
+    if (!bufferedFrame || removalFrame !== null) return;
+    removalFrame = requestAnimationFrame(() => {
+      removalFrame = null;
+      bufferedFrame?.dispose();
+      bufferedFrame = null;
+    });
+  });
+
+  return {
+    fit(): void {
+      const proposed = fitAddon.proposeDimensions();
+      if (proposed && (proposed.cols !== terminal.cols || proposed.rows !== terminal.rows)) {
+        removeBufferedFrame();
+        bufferedFrame = captureTerminalRendererFrame(container);
+      }
+      fitAddon.fit();
+    },
+    dispose(): void {
+      renderSubscription.dispose();
+      removeBufferedFrame();
+    },
+  };
 };
