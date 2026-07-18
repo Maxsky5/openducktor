@@ -222,6 +222,8 @@ import type {
   TerminalListFilter,
   TerminalListRequest,
   TerminalListResponse,
+  TerminalPreparePathInputRequest,
+  TerminalPreparePathInputResponse,
   TerminalRef,
   TerminalServerMessage,
   TerminalSummary,
@@ -646,6 +648,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "terminalListFilterSchema",
   "terminalListRequestSchema",
   "terminalListResponseSchema",
+  "terminalPreparePathInputRequestSchema",
+  "terminalPreparePathInputResponseSchema",
   "terminalRefSchema",
   "terminalServerMessageSchema",
   "terminalSummarySchema",
@@ -890,6 +894,8 @@ type ExportedTypeContract = {
   TerminalListFilter: TerminalListFilter;
   TerminalListRequest: TerminalListRequest;
   TerminalListResponse: TerminalListResponse;
+  TerminalPreparePathInputRequest: TerminalPreparePathInputRequest;
+  TerminalPreparePathInputResponse: TerminalPreparePathInputResponse;
   TerminalRef: TerminalRef;
   TerminalServerMessage: TerminalServerMessage;
   TerminalSummary: TerminalSummary;

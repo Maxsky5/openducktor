@@ -10,13 +10,13 @@ import type {
   TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
 import { TerminalServiceError } from "./terminal-service-error";
 import {
   activateTerminalSession,
   createTerminalSession,
   disposeTerminalSession,
   isLiveTerminal,
-  type TerminalAttachment,
   type TerminalSession,
 } from "./terminal-session";
 import {
@@ -25,13 +25,13 @@ import {
   terminalOperationFailure,
 } from "./terminal-session-lifecycle";
 import {
-  createTerminalSessionStream,
+  TerminalOutputStateError,
   type TerminalSessionAttachInput,
-} from "./terminal-session-stream";
+} from "./terminal-session-output";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
 
-export type { TerminalSessionAttachInput } from "./terminal-session-stream";
+export type { TerminalSessionAttachInput } from "./terminal-session-output";
 
 export const createTerminalSessionEngine = ({
   now,
@@ -43,7 +43,6 @@ export const createTerminalSessionEngine = ({
   scheduleTitleSettlement?: TerminalTitleSettlementScheduler;
 }) => {
   const sessions = new Map<string, TerminalSession>();
-  const stream = createTerminalSessionStream();
   const {
     applyStreamEvents,
     closeSession,
@@ -52,22 +51,20 @@ export const createTerminalSessionEngine = ({
     handleExit,
     handleFailure,
     pruneExited,
-  } = createTerminalSessionLifecycle({ now, sessions, stream });
+  } = createTerminalSessionLifecycle({ now, sessions });
 
   const publishTitle = (session: TerminalSession, title: string): void => {
     if (title === session.summary.label) return;
     session.summary.label = title;
-    for (const attachment of session.output.attachmentValues()) {
-      applyStreamEvents(
-        session,
-        stream.publishSafely(session, attachment, {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "title",
-          terminalId: session.summary.terminalId,
-          title,
-        }),
-      );
-    }
+    applyStreamEvents(
+      session,
+      session.output.publish({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "title",
+        terminalId: session.summary.terminalId,
+        title,
+      }),
+    );
   };
 
   return {
@@ -96,13 +93,14 @@ export const createTerminalSessionEngine = ({
           titleTracker,
           operations: yield* Effect.makeSemaphore(1),
           replayByteLimit: TERMINAL_LIMITS.replayBytes,
+          shell: plan.shell,
         });
         sessions.set(summary.terminalId, session);
         const handleResult = yield* Effect.either(
           ptyPort.start(plan, {
             onOutput: (data) => {
               session.resources.consumeOutput(data);
-              applyStreamEvents(session, stream.handleOutput(session, data));
+              applyStreamEvents(session, session.output.accept(data, session.resources.handle));
             },
             onFailure: () => handleFailure(session),
             onExit: ({ exitCode, signal }) => handleExit(session, exitCode, signal),
@@ -136,48 +134,49 @@ export const createTerminalSessionEngine = ({
         return matches ? [{ ...session.summary, context: { ...session.summary.context } }] : [];
       });
     },
+    preparePathInput: (
+      terminalId: string,
+      paths: readonly string[],
+    ): Effect.Effect<string, TerminalServiceError> =>
+      Effect.try({
+        try: () => {
+          const session = getSession(terminalId, "prepare_path_input");
+          return formatTerminalPathInput(session.resources.shell, paths);
+        },
+        catch: (cause) => {
+          if (cause instanceof TerminalServiceError) return cause;
+          if (cause instanceof TerminalPathInputError) {
+            return terminalFailure(
+              cause.code,
+              "prepare_path_input",
+              cause.message,
+              terminalId,
+              cause,
+            );
+          }
+          return terminalOperationFailure(cause, "prepare_path_input");
+        },
+      }),
     attach: (input: TerminalSessionAttachInput): Effect.Effect<void, TerminalServiceError> =>
       Effect.try({
         try: () => {
           const session = getSession(input.terminalId, "attach");
-          const requested = input.lastConsumedSequence ?? 0;
-          if (requested > session.output.nextSequence) {
-            throw terminalFailure(
-              "protocol_error",
-              "attach",
-              `Terminal replay position ${requested} is beyond the published sequence ${session.output.nextSequence}.`,
-              input.terminalId,
-            );
-          }
-          const earliest = session.output.earliestRetainedSequence;
-          const complete = requested >= earliest;
-          const attachment: TerminalAttachment = {
-            attachmentId: input.attachmentId,
-            sink: input.sink,
-            acknowledgedSequence: requested,
-            deliveredSequence: requested,
-            pendingBytes: 0,
-          };
-          const previousAttachment = session.output.setAttachment(attachment);
-          try {
-            stream.publish(attachment, {
-              version: TERMINAL_PROTOCOL_VERSION,
-              type: "snapshot",
-              terminalId: input.terminalId,
-              earliestRetainedSequence: earliest,
-              snapshotSequenceEnd: session.output.nextSequence,
-              lifecycle: session.summary.lifecycle,
-              title: session.summary.label,
-              complete,
-            });
-            applyStreamEvents(session, stream.flushAttachment(session, attachment, true));
-          } catch (cause) {
-            session.output.restoreAttachment(input.attachmentId, previousAttachment);
-            throw cause;
-          }
+          applyStreamEvents(
+            session,
+            session.output.attach(input, session.summary, session.resources.handle),
+          );
         },
         catch: (cause) => {
           if (cause instanceof TerminalServiceError) return cause;
+          if (cause instanceof TerminalOutputStateError) {
+            return terminalFailure(
+              "protocol_error",
+              "attach",
+              cause.message,
+              input.terminalId,
+              cause,
+            );
+          }
           const message = cause instanceof Error ? cause.message : String(cause);
           return terminalFailure("protocol_error", "attach", message, input.terminalId, cause);
         },
@@ -269,33 +268,23 @@ export const createTerminalSessionEngine = ({
           try: () => getSession(terminalId, "ack"),
           catch: (cause) => terminalOperationFailure(cause, "ack"),
         });
-        const attachment = session.output.getAttachment(attachmentId);
-        if (!attachment)
-          return yield* Effect.fail(
-            terminalFailure(
-              "terminal_not_found",
+        yield* Effect.try({
+          try: () => session.output.acknowledge(attachmentId, sequenceEnd),
+          catch: (cause) => {
+            if (!(cause instanceof TerminalOutputStateError)) {
+              return terminalOperationFailure(cause, "ack");
+            }
+            return terminalFailure(
+              cause.code === "attachment_not_found" ? "terminal_not_found" : "protocol_error",
               "ack",
-              `Terminal attachment not found: ${attachmentId}`,
+              cause.message,
               terminalId,
-            ),
-          );
-        if (
-          !Number.isInteger(sequenceEnd) ||
-          sequenceEnd < attachment.acknowledgedSequence ||
-          sequenceEnd > attachment.deliveredSequence
-        )
-          return yield* Effect.fail(
-            terminalFailure(
-              "protocol_error",
-              "ack",
-              "Terminal ACK is outside the delivered sequence range.",
-              terminalId,
-            ),
-          );
-        attachment.acknowledgedSequence = sequenceEnd;
-        attachment.pendingBytes = attachment.deliveredSequence - sequenceEnd;
-        const events = yield* stream
-          .resumeOutputIfUnblocked(session)
+              cause,
+            );
+          },
+        });
+        const events = yield* session.output
+          .resumeIfUnblocked(session.resources.handle)
           .pipe(
             Effect.mapError((cause) =>
               terminalFailure(
@@ -315,9 +304,9 @@ export const createTerminalSessionEngine = ({
           try: () => getSession(terminalId, "detach"),
           catch: (cause) => terminalOperationFailure(cause, "detach"),
         });
-        session.output.deleteAttachment(attachmentId);
-        const events = yield* stream
-          .resumeOutputIfUnblocked(session)
+        session.output.detach(attachmentId);
+        const events = yield* session.output
+          .resumeIfUnblocked(session.resources.handle)
           .pipe(
             Effect.mapError((cause) =>
               terminalFailure(

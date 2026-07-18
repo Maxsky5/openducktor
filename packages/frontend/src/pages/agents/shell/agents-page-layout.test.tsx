@@ -1,8 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { act, render } from "@testing-library/react";
-import { createElement } from "react";
+import { act, render as testingLibraryRender } from "@testing-library/react";
+import { createElement, type ReactElement } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
+
+const render = (element: ReactElement) => {
+  const result = testingLibraryRender(
+    createElement(QueryProvider, { useIsolatedClient: true }, element),
+  );
+  return {
+    ...result,
+    rerender: (next: ReactElement) =>
+      result.rerender(createElement(QueryProvider, { useIsolatedClient: true }, next)),
+  };
+};
 
 const renderWorkspacePanes = (hasSelectedFilePreview: boolean) =>
   render(
@@ -60,6 +72,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       isLoading: false,
       isCreating: false,
       transportError: null,
+      platform: "darwin",
+      platformError: null,
       focusRequest: 1,
       controller: null,
       onToggle: () => undefined,
@@ -136,6 +150,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       isLoading: false,
       isCreating: false,
       transportError: null,
+      platform: "darwin",
+      platformError: null,
       focusRequest: 1,
       controller: null,
       onToggle: () => undefined,

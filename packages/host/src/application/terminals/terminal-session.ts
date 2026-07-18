@@ -1,123 +1,24 @@
-import type { TerminalServerMessage, TerminalSummary } from "@openducktor/contracts";
+import type { TerminalSummary } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { TerminalPtyHandle } from "../../ports/terminal-pty-port";
+import { TerminalSessionOutput } from "./terminal-session-output";
 import type { TerminalTitleTracker } from "./terminal-title-tracker";
-
-export type ReplayChunk = {
-  sequenceStart: number;
-  sequenceEnd: number;
-  data: Uint8Array;
-};
-
-export type TerminalAttachment = {
-  attachmentId: string;
-  sink: (event: TerminalServerMessage, payload: Uint8Array) => void;
-  acknowledgedSequence: number;
-  deliveredSequence: number;
-  pendingBytes: number;
-};
 
 export type TerminalSession = {
   summary: TerminalSummary;
   resources: TerminalSessionResources;
-  output: TerminalSessionOutputState;
+  output: TerminalSessionOutput;
   operations: Effect.Semaphore;
 };
-
-export class TerminalSessionOutputState {
-  private readonly replay: ReplayChunk[] = [];
-  private replayBytes = 0;
-  private sequence = 0;
-  private readonly attachments = new Map<string, TerminalAttachment>();
-  private outputPaused = false;
-  private outputOverflowed = false;
-
-  constructor(private readonly replayByteLimit: number) {}
-
-  get nextSequence(): number {
-    return this.sequence;
-  }
-
-  get earliestRetainedSequence(): number {
-    return this.replay[0]?.sequenceStart ?? this.sequence;
-  }
-
-  get paused(): boolean {
-    return this.outputPaused;
-  }
-
-  get overflowed(): boolean {
-    return this.outputOverflowed;
-  }
-
-  get attachmentCount(): number {
-    return this.attachments.size;
-  }
-
-  replayChunks(): readonly ReplayChunk[] {
-    return this.replay;
-  }
-
-  attachmentValues(): IterableIterator<TerminalAttachment> {
-    return this.attachments.values();
-  }
-
-  getAttachment(attachmentId: string): TerminalAttachment | undefined {
-    return this.attachments.get(attachmentId);
-  }
-
-  setAttachment(attachment: TerminalAttachment): TerminalAttachment | undefined {
-    const previous = this.attachments.get(attachment.attachmentId);
-    this.attachments.set(attachment.attachmentId, attachment);
-    return previous;
-  }
-
-  restoreAttachment(attachmentId: string, attachment: TerminalAttachment | undefined): void {
-    if (attachment) this.attachments.set(attachmentId, attachment);
-    else this.attachments.delete(attachmentId);
-  }
-
-  deleteAttachment(attachmentId: string): void {
-    this.attachments.delete(attachmentId);
-  }
-
-  append(data: Uint8Array): ReplayChunk {
-    const chunk = {
-      sequenceStart: this.sequence,
-      sequenceEnd: this.sequence + data.byteLength,
-      data,
-    };
-    this.sequence = chunk.sequenceEnd;
-    this.replay.push(chunk);
-    this.replayBytes += data.byteLength;
-    while (this.replayBytes > this.replayByteLimit) {
-      const removed = this.replay.shift();
-      if (!removed) break;
-      this.replayBytes -= removed.data.byteLength;
-    }
-    return chunk;
-  }
-
-  pause(): void {
-    this.outputPaused = true;
-  }
-
-  resume(): void {
-    this.outputPaused = false;
-  }
-
-  markOverflowed(): boolean {
-    if (this.outputOverflowed) return false;
-    this.outputOverflowed = true;
-    return true;
-  }
-}
 
 export class TerminalSessionResources {
   private currentHandle: TerminalPtyHandle | null = null;
   private disposed = false;
 
-  constructor(private readonly titleTracker: TerminalTitleTracker) {}
+  constructor(
+    readonly shell: string,
+    private readonly titleTracker: TerminalTitleTracker,
+  ) {}
 
   get handle(): TerminalPtyHandle | null {
     return this.currentHandle;
@@ -146,15 +47,17 @@ export const createTerminalSession = ({
   titleTracker,
   operations,
   replayByteLimit,
+  shell,
 }: {
   summary: TerminalSummary;
   titleTracker: TerminalTitleTracker;
   operations: Effect.Semaphore;
   replayByteLimit: number;
+  shell: string;
 }): TerminalSession => ({
   summary,
-  resources: new TerminalSessionResources(titleTracker),
-  output: new TerminalSessionOutputState(replayByteLimit),
+  resources: new TerminalSessionResources(shell, titleTracker),
+  output: new TerminalSessionOutput(summary.terminalId, replayByteLimit),
   operations,
 });
 

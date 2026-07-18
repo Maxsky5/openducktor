@@ -11,7 +11,6 @@ import {
 import {
   createTerminalImagePasteHandler,
   extractTransferredImageFiles,
-  formatTerminalDroppedImagePaths,
   pasteDroppedTerminalImages,
 } from "./terminal-image-transfer-policy";
 import {
@@ -177,7 +176,7 @@ describe("InteractiveTerminal policies", () => {
     expect(encodeTerminalTextInput("text")).toEqual(new TextEncoder().encode("text"));
   });
 
-  test("stages dropped images and pastes shell-safe paths", async () => {
+  test("stages bounded dropped images sequentially and pastes host-formatted input", async () => {
     const first = new File([new Uint8Array([1])], "first image.png", { type: "image/png" });
     const second = new File([new Uint8Array([2])], "second.jpg", { type: "image/jpeg" });
     const text = new File(["notes"], "notes.txt", { type: "text/plain" });
@@ -186,24 +185,65 @@ describe("InteractiveTerminal policies", () => {
       items: [],
     } as unknown as DataTransfer;
     const stagedFiles: string[] = [];
+    const preparedPaths: string[][] = [];
     const pasted: string[] = [];
+    let activeStages = 0;
+    let maximumActiveStages = 0;
 
     const imageFiles = extractTransferredImageFiles(transfer);
     await pasteDroppedTerminalImages({
       files: imageFiles,
-      platform: "darwin",
       stageFile: async (file) => {
+        activeStages += 1;
+        maximumActiveStages = Math.max(maximumActiveStages, activeStages);
+        await Promise.resolve();
         stagedFiles.push(file.name);
+        activeStages -= 1;
         return `/tmp/${file.name}`;
+      },
+      prepareInput: async (paths) => {
+        preparedPaths.push([...paths]);
+        return `prepared:${paths.join("|")}`;
       },
       paste: (value) => pasted.push(value),
     });
 
     expect(stagedFiles).toEqual(["first image.png", "second.jpg"]);
-    expect(pasted).toEqual(["'/tmp/first image.png' '/tmp/second.jpg'"]);
-    expect(formatTerminalDroppedImagePaths(["C:\\Temp\\image one.png"], "win32")).toBe(
-      '"C:\\Temp\\image one.png"',
+    expect(maximumActiveStages).toBe(1);
+    expect(preparedPaths).toEqual([["/tmp/first image.png", "/tmp/second.jpg"]]);
+    expect(pasted).toEqual(["prepared:/tmp/first image.png|/tmp/second.jpg"]);
+  });
+
+  test("rejects oversized and excessive terminal image drops before staging", async () => {
+    const stageFile = async () => {
+      throw new Error("Oversized images must not be staged.");
+    };
+    const largeImage = {
+      name: "large.png",
+      size: 20 * 1024 * 1024 + 1,
+      type: "image/png",
+    } as File;
+    await expect(
+      pasteDroppedTerminalImages({
+        files: [largeImage],
+        stageFile,
+        prepareInput: async () => "unused",
+        paste: () => undefined,
+      }),
+    ).rejects.toThrow("20 MiB");
+
+    const images = Array.from(
+      { length: 9 },
+      (_, index) => new File([new Uint8Array([index])], `${index}.png`, { type: "image/png" }),
     );
+    await expect(
+      pasteDroppedTerminalImages({
+        files: images,
+        stageFile,
+        prepareInput: async () => "unused",
+        paste: () => undefined,
+      }),
+    ).rejects.toThrow("8 images");
   });
 
   test("maps macOS navigation shortcuts to standard shell editing sequences", async () => {

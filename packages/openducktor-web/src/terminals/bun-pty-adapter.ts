@@ -4,7 +4,10 @@ import {
   processTreeHasChildren,
   processTreeIsAlive,
   TerminalPtyError,
+  type TerminalPtyExit,
   type TerminalPtyHandle,
+  type TerminalPtyHandlers,
+  type TerminalPtyLaunchPlan,
   type TerminalPtyPort,
   terminateProcessTree,
   waitForObservedState,
@@ -51,6 +54,18 @@ type CreateBunPtyPortInput = {
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
+type CompletionState = {
+  subprocessClosed: boolean;
+  terminalEof: boolean;
+  exit: TerminalPtyExit | null;
+  exitPublished: boolean;
+};
+
+type CleanupState =
+  | { status: "idle" }
+  | { status: "running"; promise: Promise<void> }
+  | { status: "complete" };
+
 const unsupported = (): TerminalPtyError =>
   new TerminalPtyError({
     code: "unsupported_runtime",
@@ -58,42 +73,292 @@ const unsupported = (): TerminalPtyError =>
     message: "This Bun runtime does not provide terminal-backed process spawning.",
   });
 
+const operationFailure = (
+  operation: TerminalPtyError["operation"],
+  message: string,
+  cause?: unknown,
+): TerminalPtyError =>
+  new TerminalPtyError({
+    code: "operation_failed",
+    operation,
+    message,
+    ...(cause !== undefined ? { cause } : {}),
+  });
+
+class BunPtySession implements TerminalPtyHandle {
+  readonly supportsOutputPause = false;
+  private subprocess: BunPtySubprocess | null = null;
+  private terminal: BunPtyTerminal | null = null;
+  private readonly completion: CompletionState = {
+    subprocessClosed: false,
+    terminalEof: false,
+    exit: null,
+    exitPublished: false,
+  };
+  private cleanup: CleanupState = { status: "idle" };
+  private termination: "open" | "requested" | "complete" = "open";
+  private naturalFinalizationStarted = false;
+  private drainGeneration = 0;
+  private readonly subprocessExitWaiters = new Set<() => void>();
+  private readonly terminalEofWaiters = new Set<() => void>();
+  private readonly drainWaiters = new Set<() => void>();
+
+  constructor(
+    private readonly handlers: TerminalPtyHandlers,
+    private readonly platform: NodeJS.Platform,
+    private readonly processTreeInspector: ProcessTreeInspector,
+    private readonly processTreeTerminator: ProcessTreeTerminator,
+  ) {}
+
+  bind(subprocess: BunPtySubprocess, terminal: BunPtyTerminal): void {
+    this.subprocess = subprocess;
+    this.terminal = terminal;
+    this.startNaturalFinalization();
+  }
+
+  onOutput(data: Uint8Array): void {
+    this.handlers.onOutput(data.slice());
+  }
+
+  onTerminalEof(): void {
+    this.completion.terminalEof = true;
+    for (const waiter of this.terminalEofWaiters) waiter();
+    this.notifyDrain();
+    this.startNaturalFinalization();
+  }
+
+  onSubprocessExit(exitCode: number | null, signalCode: number | null): void {
+    this.completion.subprocessClosed = true;
+    this.completion.exit = {
+      exitCode,
+      signal: signalCode === null ? null : String(signalCode),
+    };
+    for (const waiter of this.subprocessExitWaiters) waiter();
+    this.notifyDrain();
+    this.startNaturalFinalization();
+  }
+
+  notifyDrain(): void {
+    this.drainGeneration += 1;
+    for (const waiter of this.drainWaiters) waiter();
+  }
+
+  hasChildProcesses = (): Effect.Effect<boolean, TerminalPtyError> =>
+    this.processTreeInspector(this.subprocess?.pid ?? 0).pipe(
+      Effect.mapError((cause) =>
+        operationFailure("inspect", "Bun terminal child-process inspection failed.", cause),
+      ),
+    );
+
+  write = (data: Uint8Array): Effect.Effect<void, TerminalPtyError> =>
+    Effect.gen(this, function* () {
+      let offset = 0;
+      while (offset < data.byteLength) {
+        const generation = this.drainGeneration;
+        const remaining = data.subarray(offset);
+        const written = yield* this.ensureOpen("write", (terminal) => terminal.write(remaining));
+        if (!Number.isInteger(written) || written < 0 || written > remaining.byteLength) {
+          return yield* Effect.fail(
+            operationFailure("write", "Bun terminal reported an invalid input write length."),
+          );
+        }
+        offset += written;
+        if (offset < data.byteLength) yield* this.waitForDrain(generation);
+      }
+    });
+
+  resize = ({ columns, rows }: { columns: number; rows: number }) =>
+    this.ensureOpen("resize", (terminal) => terminal.resize(columns, rows));
+
+  pauseOutput = (): Effect.Effect<void, TerminalPtyError> =>
+    Effect.fail(operationFailure("pause", "Bun terminal output pause is unsupported."));
+
+  resumeOutput = (): Effect.Effect<void, TerminalPtyError> =>
+    Effect.fail(operationFailure("resume", "Bun terminal output resume is unsupported."));
+
+  terminate = (): Effect.Effect<void, TerminalPtyError> => {
+    if (this.termination === "complete") return Effect.void;
+    this.termination = "requested";
+    return this.finalize(true).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          this.termination = "complete";
+        }),
+      ),
+    );
+  };
+
+  private ensureOpen<Value>(
+    operation: TerminalPtyError["operation"],
+    run: (terminal: BunPtyTerminal) => Value,
+  ): Effect.Effect<Value, TerminalPtyError> {
+    return Effect.try({
+      try: () => {
+        const terminal = this.terminal;
+        if (
+          !terminal ||
+          this.termination !== "open" ||
+          this.completion.subprocessClosed ||
+          terminal.closed
+        ) {
+          throw new Error("The terminal is already closed.");
+        }
+        return run(terminal);
+      },
+      catch: (cause) => operationFailure(operation, `Bun terminal ${operation} failed.`, cause),
+    });
+  }
+
+  private processTreeClosed = (): boolean =>
+    this.completion.subprocessClosed &&
+    !processTreeIsAlive(this.subprocess?.pid ?? 0, this.platform);
+
+  private waitForProcessExit = (timeoutMs: number): Effect.Effect<boolean> =>
+    waitForObservedState({
+      isComplete: this.processTreeClosed,
+      subscribe: (listener) => {
+        this.subprocessExitWaiters.add(listener);
+        return () => this.subprocessExitWaiters.delete(listener);
+      },
+      timeoutMs,
+    });
+
+  private waitForTerminalEof = (timeoutMs: number): Effect.Effect<boolean> =>
+    waitForObservedState({
+      isComplete: () => this.completion.terminalEof,
+      subscribe: (listener) => {
+        this.terminalEofWaiters.add(listener);
+        return () => this.terminalEofWaiters.delete(listener);
+      },
+      timeoutMs,
+    });
+
+  private terminateProcessTree(): Effect.Effect<void, TerminalPtyError> {
+    return this.processTreeTerminator({
+      pid: this.subprocess?.pid ?? 0,
+      label: "interactive terminal",
+      isClosed: this.processTreeClosed,
+      waitForExit: this.waitForProcessExit,
+      stopTimeoutMs: 500,
+    }).pipe(
+      Effect.mapError((cause) =>
+        operationFailure("terminate", "Bun terminal process-tree termination failed.", cause),
+      ),
+    );
+  }
+
+  private ensureProcessTreeTerminated(): Effect.Effect<void, TerminalPtyError> {
+    if (this.cleanup.status === "complete") return Effect.void;
+    if (this.cleanup.status === "idle") {
+      const promise = Effect.runPromise(this.terminateProcessTree()).then(
+        () => {
+          this.cleanup = { status: "complete" };
+        },
+        (cause) => {
+          this.cleanup = { status: "idle" };
+          throw cause;
+        },
+      );
+      this.cleanup = { status: "running", promise };
+    }
+    const pending = this.cleanup;
+    if (pending.status !== "running") return Effect.void;
+    return Effect.tryPromise({
+      try: () => pending.promise,
+      catch: (cause) =>
+        operationFailure("terminate", "Bun terminal process-tree termination failed.", cause),
+    });
+  }
+
+  private closeTerminal(): Effect.Effect<void, TerminalPtyError> {
+    return Effect.try({
+      try: () => {
+        if (this.terminal && !this.terminal.closed) this.terminal.close();
+      },
+      catch: (cause) => operationFailure("terminate", "Bun terminal close failed.", cause),
+    });
+  }
+
+  private finalize(closeTerminal: boolean): Effect.Effect<void, TerminalPtyError> {
+    if (!this.subprocess) {
+      return Effect.fail(operationFailure("terminate", "Bun terminal process id is unavailable."));
+    }
+    return Effect.gen(this, function* () {
+      yield* this.ensureProcessTreeTerminated();
+      if (closeTerminal) yield* this.closeTerminal();
+      if (!(yield* this.waitForTerminalEof(1_000))) {
+        return yield* Effect.fail(
+          operationFailure(
+            "terminate",
+            "Bun terminal did not publish EOF after process-tree termination.",
+          ),
+        );
+      }
+      this.publishExit();
+    });
+  }
+
+  private publishExit(): void {
+    if (this.completion.exitPublished || !this.completion.terminalEof || !this.completion.exit) {
+      return;
+    }
+    this.completion.exitPublished = true;
+    this.handlers.onExit(this.completion.exit);
+  }
+
+  private startNaturalFinalization(): void {
+    if (
+      !this.subprocess ||
+      !this.completion.exit ||
+      this.completion.exitPublished ||
+      this.naturalFinalizationStarted
+    ) {
+      return;
+    }
+    this.naturalFinalizationStarted = true;
+    Effect.runFork(
+      this.finalize(false).pipe(
+        Effect.tapError((failure) => Effect.sync(() => this.handlers.onFailure(failure))),
+      ),
+    );
+  }
+
+  private waitForDrain(generation: number): Effect.Effect<void> {
+    if (this.drainGeneration !== generation) return Effect.void;
+    return Effect.async<void>((resume, signal) => {
+      const finish = (): void => {
+        this.drainWaiters.delete(finish);
+        signal.removeEventListener("abort", finish);
+        resume(Effect.void);
+      };
+      this.drainWaiters.add(finish);
+      signal.addEventListener("abort", finish, { once: true });
+      if (this.drainGeneration !== generation) finish();
+      return Effect.sync(() => {
+        this.drainWaiters.delete(finish);
+        signal.removeEventListener("abort", finish);
+      });
+    });
+  }
+}
+
 export const createBunPtyPort = ({
   spawn = Bun.spawn as BunPtySpawn,
   platform = process.platform,
   processTreeInspector = processTreeHasChildren,
   processTreeTerminator = terminateProcessTree,
 }: CreateBunPtyPortInput = {}): TerminalPtyPort => ({
-  start: (plan, handlers) =>
+  start: (plan: TerminalPtyLaunchPlan, handlers: TerminalPtyHandlers) =>
     Effect.try({
-      try: () => {
+      try: (): TerminalPtyHandle => {
         if (typeof Bun.Terminal !== "function") throw unsupported();
-        let subprocessExit: { exitCode: number | null; signal: string | null } | null = null;
-        let terminalEof = false;
-        let exitPublished = false;
-        let subprocess: BunPtySubprocess | null = null;
-        let subprocessClosed = false;
-        let cleanupPromise: Promise<void> | null = null;
-        let cleanupVerified = false;
-        let terminationRequested = false;
-        let terminationComplete = false;
-        let naturalFinalizationStarted = false;
-        let drainGeneration = 0;
-        const subprocessExitWaiters = new Set<() => void>();
-        const terminalEofWaiters = new Set<() => void>();
-        const drainWaiters = new Set<() => void>();
-        const notifyDrainWaiters = (): void => {
-          drainGeneration += 1;
-          for (const waiter of drainWaiters) waiter();
-        };
-        let startNaturalFinalization = (): void => undefined;
-        const publishExit = (): void => {
-          if (!exitPublished && terminalEof && subprocessExit) {
-            exitPublished = true;
-            handlers.onExit(subprocessExit);
-          }
-        };
-        subprocess = spawn([plan.shell, ...plan.args], {
+        const session = new BunPtySession(
+          handlers,
+          platform,
+          processTreeInspector,
+          processTreeTerminator,
+        );
+        const subprocess = spawn([plan.shell, ...plan.args], {
           cwd: plan.cwd,
           env: plan.env,
           detached: true,
@@ -101,240 +366,20 @@ export const createBunPtyPort = ({
             cols: plan.grid.columns,
             rows: plan.grid.rows,
             name: "xterm-256color",
-            data: (_terminal, data) => handlers.onOutput(data.slice()),
-            exit: () => {
-              terminalEof = true;
-              for (const waiter of terminalEofWaiters) waiter();
-              notifyDrainWaiters();
-              startNaturalFinalization();
-            },
-            drain: notifyDrainWaiters,
+            data: (_terminal, data) => session.onOutput(data),
+            exit: () => session.onTerminalEof(),
+            drain: () => session.notifyDrain(),
           },
-          onExit: (_process, exitCode, signalCode) => {
-            subprocessClosed = true;
-            for (const waiter of subprocessExitWaiters) waiter();
-            notifyDrainWaiters();
-            subprocessExit = {
-              exitCode,
-              signal: signalCode === null ? null : String(signalCode),
-            };
-            startNaturalFinalization();
-          },
+          onExit: (_process, exitCode, signalCode) =>
+            session.onSubprocessExit(exitCode, signalCode),
         });
         const terminal = subprocess.terminal;
         if (!terminal) {
           subprocess.kill();
           throw unsupported();
         }
-        const processTreeClosed = (): boolean =>
-          subprocessClosed && !processTreeIsAlive(subprocess?.pid ?? 0, platform);
-        const waitForExit = (timeoutMs: number): Effect.Effect<boolean> =>
-          waitForObservedState({
-            isComplete: processTreeClosed,
-            subscribe: (listener) => {
-              subprocessExitWaiters.add(listener);
-              return () => subprocessExitWaiters.delete(listener);
-            },
-            timeoutMs,
-          });
-        const waitForTerminalEof = (timeoutMs: number): Effect.Effect<boolean> =>
-          waitForObservedState({
-            isComplete: () => terminalEof,
-            subscribe: (listener) => {
-              terminalEofWaiters.add(listener);
-              return () => terminalEofWaiters.delete(listener);
-            },
-            timeoutMs,
-          });
-        const terminateProcessTreeEffect = () =>
-          processTreeTerminator({
-            pid: subprocess?.pid ?? 0,
-            label: "interactive terminal",
-            isClosed: processTreeClosed,
-            waitForExit,
-            stopTimeoutMs: 500,
-          }).pipe(
-            Effect.mapError(
-              (cause) =>
-                new TerminalPtyError({
-                  code: "operation_failed",
-                  operation: "terminate",
-                  message: "Bun terminal process-tree termination failed.",
-                  cause,
-                }),
-            ),
-          );
-        const ensureProcessTreeTerminated = (): Effect.Effect<void, TerminalPtyError> =>
-          Effect.tryPromise({
-            try: () => {
-              if (cleanupVerified) return Promise.resolve();
-              cleanupPromise ??= Promise.resolve()
-                .then(() => Effect.runPromise(terminateProcessTreeEffect()))
-                .then(() => {
-                  cleanupVerified = true;
-                })
-                .catch((cause) => {
-                  cleanupPromise = null;
-                  throw cause;
-                });
-              return cleanupPromise;
-            },
-            catch: (cause) =>
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation: "terminate",
-                message: "Bun terminal process-tree termination failed.",
-                cause,
-              }),
-          });
-        const waitForEofAfterCleanup = (): Effect.Effect<void, TerminalPtyError> =>
-          Effect.gen(function* () {
-            yield* ensureProcessTreeTerminated();
-            if (!(yield* waitForTerminalEof(1_000))) {
-              return yield* Effect.fail(
-                new TerminalPtyError({
-                  code: "operation_failed",
-                  operation: "terminate",
-                  message: "Bun terminal did not publish EOF after process-tree termination.",
-                }),
-              );
-            }
-            publishExit();
-          });
-        const closeTerminal = (): Effect.Effect<void, TerminalPtyError> =>
-          Effect.try({
-            try: () => {
-              if (!terminal.closed) terminal.close();
-            },
-            catch: (cause) =>
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation: "terminate",
-                message: "Bun terminal close failed.",
-                cause,
-              }),
-          });
-        const completeTermination = Effect.gen(function* () {
-          const pid = subprocess?.pid;
-          if (!pid) {
-            return yield* Effect.fail(
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation: "terminate",
-                message: "Bun terminal process id is unavailable.",
-              }),
-            );
-          }
-          yield* ensureProcessTreeTerminated();
-          yield* closeTerminal();
-          yield* waitForEofAfterCleanup();
-        });
-        startNaturalFinalization = (): void => {
-          if (!subprocessExit || exitPublished || naturalFinalizationStarted) return;
-          naturalFinalizationStarted = true;
-          Effect.runFork(
-            waitForEofAfterCleanup().pipe(
-              Effect.tapError((failure) => Effect.sync(() => handlers.onFailure(failure))),
-            ),
-          );
-        };
-        const ensureOpen = <Value>(operation: TerminalPtyError["operation"], run: () => Value) =>
-          Effect.try({
-            try: () => {
-              if (terminationRequested || subprocessClosed || terminal.closed)
-                throw new Error("The terminal is already closed.");
-              return run();
-            },
-            catch: (cause) =>
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation,
-                message: `Bun terminal ${operation} failed.`,
-                cause,
-              }),
-          });
-        const waitForDrain = (generation: number): Effect.Effect<void> => {
-          if (drainGeneration !== generation) return Effect.void;
-          return Effect.async<void>((resume, signal) => {
-            const finish = (): void => {
-              drainWaiters.delete(finish);
-              signal.removeEventListener("abort", finish);
-              resume(Effect.void);
-            };
-            drainWaiters.add(finish);
-            signal.addEventListener("abort", finish, { once: true });
-            if (drainGeneration !== generation) finish();
-            return Effect.sync(() => {
-              drainWaiters.delete(finish);
-              signal.removeEventListener("abort", finish);
-            });
-          });
-        };
-        const writeAll = (data: Uint8Array): Effect.Effect<void, TerminalPtyError> =>
-          Effect.gen(function* () {
-            let offset = 0;
-            while (offset < data.byteLength) {
-              const generation = drainGeneration;
-              const remaining = data.subarray(offset);
-              const written = yield* ensureOpen("write", () => terminal.write(remaining));
-              if (!Number.isInteger(written) || written < 0 || written > remaining.byteLength) {
-                return yield* Effect.fail(
-                  new TerminalPtyError({
-                    code: "operation_failed",
-                    operation: "write",
-                    message: "Bun terminal reported an invalid input write length.",
-                  }),
-                );
-              }
-              offset += written;
-              if (offset < data.byteLength) yield* waitForDrain(generation);
-            }
-          });
-        const handle: TerminalPtyHandle = {
-          supportsOutputPause: false,
-          hasChildProcesses: () =>
-            processTreeInspector(subprocess?.pid ?? 0).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new TerminalPtyError({
-                    code: "operation_failed",
-                    operation: "inspect",
-                    message: "Bun terminal child-process inspection failed.",
-                    cause,
-                  }),
-              ),
-            ),
-          write: writeAll,
-          resize: ({ columns, rows }) => ensureOpen("resize", () => terminal.resize(columns, rows)),
-          pauseOutput: () =>
-            Effect.fail(
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation: "pause",
-                message: "Bun terminal output pause is unsupported.",
-              }),
-            ),
-          resumeOutput: () =>
-            Effect.fail(
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation: "resume",
-                message: "Bun terminal output resume is unsupported.",
-              }),
-            ),
-          terminate: () => {
-            terminationRequested = true;
-            if (terminationComplete) return Effect.void;
-            return completeTermination.pipe(
-              Effect.tap(() =>
-                Effect.sync(() => {
-                  terminationComplete = true;
-                }),
-              ),
-            );
-          },
-        };
-        return handle;
+        session.bind(subprocess, terminal);
+        return session;
       },
       catch: (cause) => {
         if (cause instanceof TerminalPtyError) return cause;

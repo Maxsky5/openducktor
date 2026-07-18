@@ -15,7 +15,22 @@ const invokeClose = (service: TerminalService) => {
   return Effect.runPromise(handler(closeInput, { command: "terminal_close", args: closeInput }));
 };
 
+const invokePreparePathInput = (service: TerminalService) => {
+  const input = { terminalId: "terminal-1", paths: ["/tmp/image.png"] };
+  const handler = createTerminalCommandHandlers(service).terminal_prepare_path_input;
+  if (!handler) throw new Error("Expected the terminal_prepare_path_input handler.");
+  return Effect.runPromise(handler(input, { command: "terminal_prepare_path_input", args: input }));
+};
+
 describe("createTerminalCommandHandlers", () => {
+  test("delegates path-input preparation to the host terminal", async () => {
+    const service = {
+      preparePathInput: () => Effect.succeed({ text: "'/tmp/image.png'" }),
+    } as unknown as TerminalService;
+
+    await expect(invokePreparePathInput(service)).resolves.toEqual({ text: "'/tmp/image.png'" });
+  });
+
   test("returns a typed confirmation response only for blocking terminal work", async () => {
     const service = createService(() =>
       Effect.fail(

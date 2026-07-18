@@ -6,12 +6,16 @@ import {
   type TerminalFailure,
   type TerminalListRequest,
   type TerminalListResponse,
+  type TerminalPreparePathInputRequest,
+  type TerminalPreparePathInputResponse,
   terminalCloseRequestSchema,
   terminalCloseResponseSchema,
   terminalCreateRequestSchema,
   terminalCreateResponseSchema,
   terminalListRequestSchema,
   terminalListResponseSchema,
+  terminalPreparePathInputRequestSchema,
+  terminalPreparePathInputResponseSchema,
 } from "@openducktor/contracts";
 import { HostInvokeError, type InvokeFn } from "./invoke-utils";
 
@@ -33,7 +37,7 @@ export class HostTerminalClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   private async invoke<TResponse>(
-    command: "terminal_create" | "terminal_list" | "terminal_close",
+    command: "terminal_create" | "terminal_list" | "terminal_prepare_path_input" | "terminal_close",
     request: Record<string, unknown>,
     parse: (value: unknown) => TResponse,
   ): Promise<TResponse> {
@@ -55,6 +59,17 @@ export class HostTerminalClient {
   async terminalList(input: TerminalListRequest): Promise<TerminalListResponse> {
     const request = terminalListRequestSchema.parse(input);
     return this.invoke("terminal_list", request, terminalListResponseSchema.parse);
+  }
+
+  async terminalPreparePathInput(
+    input: TerminalPreparePathInputRequest,
+  ): Promise<TerminalPreparePathInputResponse> {
+    const request = terminalPreparePathInputRequestSchema.parse(input);
+    return this.invoke(
+      "terminal_prepare_path_input",
+      request,
+      terminalPreparePathInputResponseSchema.parse,
+    );
   }
 
   async terminalClose(input: TerminalCloseRequest): Promise<TerminalCloseResponse> {

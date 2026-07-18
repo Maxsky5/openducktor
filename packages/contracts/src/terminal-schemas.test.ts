@@ -6,6 +6,8 @@ import {
   terminalIdSchema,
   terminalLaunchSpecSchema,
   terminalListFilterSchema,
+  terminalPreparePathInputRequestSchema,
+  terminalPreparePathInputResponseSchema,
   terminalSummarySchema,
 } from "./terminal-schemas";
 
@@ -47,6 +49,30 @@ describe("terminal schemas", () => {
     expect(
       terminalCloseResponseSchema.parse({ closed: false, confirmationRequired: true }),
     ).toEqual({ closed: false, confirmationRequired: true });
+  });
+
+  test("bounds terminal path-input preparation", () => {
+    expect(
+      terminalPreparePathInputRequestSchema.parse({
+        terminalId: "terminal-1",
+        paths: ["/tmp/first image.png", "/tmp/second.png"],
+      }),
+    ).toEqual({
+      terminalId: "terminal-1",
+      paths: ["/tmp/first image.png", "/tmp/second.png"],
+    });
+    expect(() =>
+      terminalPreparePathInputRequestSchema.parse({ terminalId: "terminal-1", paths: [] }),
+    ).toThrow();
+    expect(() =>
+      terminalPreparePathInputRequestSchema.parse({
+        terminalId: "terminal-1",
+        paths: Array.from({ length: 9 }, (_, index) => `/tmp/${index}.png`),
+      }),
+    ).toThrow();
+    expect(terminalPreparePathInputResponseSchema.parse({ text: "'/tmp/image.png'" })).toEqual({
+      text: "'/tmp/image.png'",
+    });
   });
 
   test("rejects malformed and legacy summary state", () => {

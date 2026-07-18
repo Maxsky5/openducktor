@@ -104,6 +104,7 @@ export const HOST_COMMAND_NAMES = [
   "terminal_close",
   "terminal_create",
   "terminal_list",
+  "terminal_prepare_path_input",
   "workspace_add",
   "workspace_detect_github_repository",
   "workspace_get_repo_config",

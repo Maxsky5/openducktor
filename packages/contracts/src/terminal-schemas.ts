@@ -61,6 +61,7 @@ export const terminalFailureCodeSchema = z.enum([
   "working_directory_not_directory",
   "task_worktree_unavailable",
   "shell_unavailable",
+  "unsupported_shell",
   "unsupported_runtime",
   "spawn_failed",
   "terminal_not_found",
@@ -130,6 +131,21 @@ export const terminalListResponseSchema = z
   })
   .strict();
 export type TerminalListResponse = z.infer<typeof terminalListResponseSchema>;
+
+export const terminalPreparePathInputRequestSchema = z
+  .object({
+    terminalId: terminalIdSchema,
+    paths: z.array(z.string().min(1).max(32_768)).min(1).max(8),
+  })
+  .strict();
+export type TerminalPreparePathInputRequest = z.infer<typeof terminalPreparePathInputRequestSchema>;
+
+export const terminalPreparePathInputResponseSchema = z
+  .object({ text: z.string().min(1).max(262_144) })
+  .strict();
+export type TerminalPreparePathInputResponse = z.infer<
+  typeof terminalPreparePathInputResponseSchema
+>;
 
 export const terminalCloseRequestSchema = z
   .object({

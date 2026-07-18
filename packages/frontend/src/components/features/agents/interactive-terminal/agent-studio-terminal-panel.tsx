@@ -1,6 +1,7 @@
-import type { TerminalLifecycle } from "@openducktor/contracts";
+import type { AppPlatform, TerminalLifecycle } from "@openducktor/contracts";
 import { Loader2, Plus } from "lucide-react";
-import { lazy, memo, type ReactElement, Suspense, useCallback, useState } from "react";
+import { lazy, memo, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +30,7 @@ const TerminalViewport = memo(function TerminalViewport({
   controller,
   focusRequest,
   active,
+  platform,
   onRetryCreate,
   onAttention,
   onLifecycle,
@@ -39,6 +41,7 @@ const TerminalViewport = memo(function TerminalViewport({
   controller: AgentStudioTerminalPanelModel["controller"];
   focusRequest: number;
   active: boolean;
+  platform: AppPlatform | undefined;
   onRetryCreate: AgentStudioTerminalPanelModel["onRetryCreate"];
   onAttention: (tabId: string, message: string | null) => void;
   onLifecycle: (
@@ -112,6 +115,7 @@ const TerminalViewport = memo(function TerminalViewport({
       <InteractiveTerminal
         terminalId={tab.terminalId}
         controller={controller}
+        platform={platform}
         active={active}
         focusRequest={focusRequest}
         onAttention={handleAttention}
@@ -132,6 +136,18 @@ export function AgentStudioTerminalPanel({
   const [attentionByTab, setAttentionByTab] = useState<Record<string, string | null>>({});
   const [closeError, setCloseError] = useState<string | null>(null);
   const [isConfirmingClose, setIsConfirmingClose] = useState(false);
+
+  useEffect(() => {
+    if (!model.platformError) return;
+    const toastId = "terminal:platform";
+    toast.error("Terminal shortcuts unavailable", {
+      id: toastId,
+      description: model.platformError,
+    });
+    return () => {
+      toast.dismiss(toastId);
+    };
+  }, [model.platformError]);
   const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
   const showsEmptyTerminalState = model.tabs.length === 0 && model.mountedTabs.length === 0;
   const setTabAttention = useCallback((tabId: string, message: string | null): void => {
@@ -241,6 +257,7 @@ export function AgentStudioTerminalPanel({
                   controller={model.controller}
                   focusRequest={model.focusRequest}
                   active={tab.tabId === activeTab?.tabId}
+                  platform={model.platform}
                   onRetryCreate={model.onRetryCreate}
                   onAttention={setTabAttention}
                   onLifecycle={setTerminalLifecycle}

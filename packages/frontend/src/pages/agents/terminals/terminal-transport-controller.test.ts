@@ -204,6 +204,41 @@ describe("createTerminalTransportController", () => {
     await controller.dispose();
   });
 
+  test("invalidates and replaces a connection when an established send rejects", async () => {
+    const states: string[] = [];
+    const failures: string[] = [];
+    let connectionCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => {
+        connectionCount += 1;
+        const attempt = connectionCount;
+        return {
+          send: async () => {
+            if (attempt === 1) throw new Error("socket send failed");
+          },
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(
+      bridge,
+      (state) => states.push(state),
+      (failure) => failures.push(failure.message),
+    );
+    await controller.connect();
+
+    await expect(controller.write(terminalId, new Uint8Array([1]))).rejects.toThrow(
+      "socket send failed",
+    );
+    await Bun.sleep(10);
+
+    expect(connectionCount).toBe(2);
+    expect(states).toContain("disconnected");
+    expect(failures).toEqual(["socket send failed"]);
+    await expect(controller.write(terminalId, new Uint8Array([2]))).resolves.toBeUndefined();
+    await controller.dispose();
+  });
+
   test("backs off when attachment sends fail repeatedly", async () => {
     let connectionCount = 0;
     const bridge: TerminalBridge = {

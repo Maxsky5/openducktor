@@ -1,11 +1,22 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TerminalSummary } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, render as testingLibraryRender, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import type {
   AgentStudioTerminalPanelModel,
   AgentStudioTerminalTab,
 } from "@/pages/agents/terminals/use-agent-studio-terminals";
 import { AgentStudioTerminalPanel } from "./agent-studio-terminal-panel";
+
+const render = (element: ReactElement) => {
+  const result = testingLibraryRender(<QueryProvider useIsolatedClient>{element}</QueryProvider>);
+  return {
+    ...result,
+    rerender: (next: ReactElement) =>
+      result.rerender(<QueryProvider useIsolatedClient>{next}</QueryProvider>),
+  };
+};
 
 const lostTab: AgentStudioTerminalTab = {
   tabId: "lost:terminal-1",
@@ -39,6 +50,8 @@ const model: AgentStudioTerminalPanelModel = {
   isLoading: false,
   isCreating: false,
   transportError: null,
+  platform: "darwin",
+  platformError: null,
   focusRequest: 0,
   controller: null,
   onToggle: () => undefined,

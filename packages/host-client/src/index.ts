@@ -89,6 +89,7 @@ const TASK_METHODS = [
 const TERMINAL_METHODS = [
   "terminalCreate",
   "terminalList",
+  "terminalPreparePathInput",
   "terminalClose",
 ] as const satisfies readonly MethodName<HostTerminalClient>[];
 

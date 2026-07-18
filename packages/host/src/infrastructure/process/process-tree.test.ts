@@ -4,6 +4,7 @@ import {
   processTreeHasChildren,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
+  waitForChildProcessClose,
 } from "./process-tree";
 
 const noopKill: KillProcess = () => true;
@@ -237,5 +238,31 @@ describe("process-tree", () => {
         }),
       ),
     ).resolves.toBeUndefined();
+  });
+
+  test("observes child close and removes its listener", async () => {
+    const closeListeners: Array<() => void> = [];
+    const removed: Array<() => void> = [];
+    const child = {
+      once: (_event: "close", listener: () => void) => {
+        closeListeners.push(listener);
+        return child;
+      },
+      off: (_event: "close", listener: () => void) => {
+        removed.push(listener);
+        return child;
+      },
+    } as unknown as Parameters<typeof waitForChildProcessClose>[0];
+    let closed = false;
+    const waiting = Effect.runPromise(waitForChildProcessClose(child, () => closed, 100));
+
+    await Promise.resolve();
+    const closeListener = closeListeners[0];
+    if (!closeListener) throw new Error("Expected a child close listener.");
+    closed = true;
+    closeListener();
+
+    await expect(waiting).resolves.toBe(true);
+    expect(removed).toEqual([closeListener]);
   });
 });

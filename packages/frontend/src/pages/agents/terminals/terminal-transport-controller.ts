@@ -71,8 +71,15 @@ export const createTerminalTransportController = (
     message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"],
     payload: Uint8Array = emptyPayload,
   ): Promise<void> => {
-    const activeConnection = await getConnection();
-    await activeConnection.send(encodeTerminalProtocolFrame({ message, payload }));
+    const connection = await getConnection();
+    try {
+      await connection.send(encodeTerminalProtocolFrame({ message, payload }));
+    } catch (cause) {
+      if (connectionState.status === "connected" && connectionState.connection === connection) {
+        transitionToDisconnected({ cause });
+      }
+      throw cause;
+    }
   };
 
   const enqueueTerminalOperation = (
@@ -126,7 +133,7 @@ export const createTerminalTransportController = (
     failure?: TerminalFailure;
     cause?: unknown;
   } = {}): void {
-    if (connectionState.status === "disposed") return;
+    if (connectionState.status === "disposed" || connectionState.status === "disconnected") return;
     const failedConnection = activeConnection();
     connectionGeneration += 1;
     connectionState = { status: "disconnected" };

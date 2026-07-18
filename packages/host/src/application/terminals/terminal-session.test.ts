@@ -9,7 +9,6 @@ import {
   disposeTerminalSession,
   exitTerminalSession,
   markTerminalCloseFailed,
-  TerminalSessionOutputState,
 } from "./terminal-session";
 
 const summary = (): TerminalSummary => ({
@@ -36,47 +35,12 @@ const makeSession = async () => {
     },
     operations: await Effect.runPromise(Effect.makeSemaphore(1)),
     replayByteLimit: 1024,
+    shell: "/bin/zsh",
   });
   return { session, disposeCalls: () => disposeCalls };
 };
 
 describe("TerminalSession", () => {
-  test("owns replay retention, attachment replacement, and output flow state", () => {
-    const output = new TerminalSessionOutputState(5);
-    const firstAttachment = {
-      attachmentId: "attachment-1",
-      sink: () => undefined,
-      acknowledgedSequence: 0,
-      deliveredSequence: 0,
-      pendingBytes: 0,
-    };
-    const replacement = { ...firstAttachment, acknowledgedSequence: 1 };
-
-    expect(output.append(new Uint8Array([1, 2, 3]))).toMatchObject({
-      sequenceStart: 0,
-      sequenceEnd: 3,
-    });
-    expect(output.append(new Uint8Array([4, 5, 6]))).toMatchObject({
-      sequenceStart: 3,
-      sequenceEnd: 6,
-    });
-    expect(output.earliestRetainedSequence).toBe(3);
-    expect(output.nextSequence).toBe(6);
-
-    expect(output.setAttachment(firstAttachment)).toBeUndefined();
-    expect(output.setAttachment(replacement)).toBe(firstAttachment);
-    output.restoreAttachment("attachment-1", firstAttachment);
-    expect(output.getAttachment("attachment-1")).toBe(firstAttachment);
-
-    expect(output.paused).toBe(false);
-    output.pause();
-    expect(output.paused).toBe(true);
-    output.resume();
-    expect(output.paused).toBe(false);
-    expect(output.markOverflowed()).toBe(true);
-    expect(output.markOverflowed()).toBe(false);
-  });
-
   test("keeps failed-close resources live and finalizes them exactly once", async () => {
     const { session, disposeCalls } = await makeSession();
 

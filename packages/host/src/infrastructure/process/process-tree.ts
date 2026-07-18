@@ -267,33 +267,15 @@ export const waitForChildProcessClose = (
   child: Pick<ChildProcess, "once" | "off">,
   isClosed: () => boolean,
   timeoutMs: number,
-): Effect.Effect<boolean> => {
-  if (isClosed()) {
-    return Effect.succeed(true);
-  }
-
-  return Effect.async<boolean>((resume, signal) => {
-    let settled = false;
-    const finish = (closed: boolean) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      child.off("close", onClose);
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", onAbort);
-      resume(Effect.succeed(closed));
-    };
-    const onClose = () => finish(true);
-    const onAbort = () => finish(false);
-    const timeout = setTimeout(() => finish(false), timeoutMs);
-    signal.addEventListener("abort", onAbort, { once: true });
-    child.once("close", onClose);
-    if (isClosed()) {
-      finish(true);
-    }
+): Effect.Effect<boolean> =>
+  waitForObservedState({
+    isComplete: isClosed,
+    timeoutMs,
+    subscribe: (listener) => {
+      child.once("close", listener);
+      return () => child.off("close", listener);
+    },
   });
-};
 
 export const shouldStartDetachedProcessGroup = (
   platform: ProcessTreePlatform = process.platform,

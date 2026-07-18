@@ -11,7 +11,7 @@ import {
   markTerminalOverflowed,
   type TerminalSession,
 } from "./terminal-session";
-import type { TerminalStreamEvents } from "./terminal-session-stream";
+import type { TerminalOutputEvents } from "./terminal-session-output";
 
 export type TerminalOperation = ConstructorParameters<typeof TerminalServiceError>[0]["operation"];
 
@@ -44,18 +44,12 @@ export const terminalOperationFailure = (
         cause,
       );
 
-type TerminalSessionStream = ReturnType<
-  typeof import("./terminal-session-stream").createTerminalSessionStream
->;
-
 export const createTerminalSessionLifecycle = ({
   now,
   sessions,
-  stream,
 }: {
   now: () => Date;
   sessions: Map<string, TerminalSession>;
-  stream: TerminalSessionStream;
 }) => {
   const getSession = (terminalId: string, operation: TerminalOperation): TerminalSession => {
     const session = sessions.get(terminalId);
@@ -71,24 +65,22 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const emitLifecycle = (session: TerminalSession): void => {
-    for (const attachment of session.output.attachmentValues()) {
-      applyStreamEvents(
-        session,
-        stream.publishSafely(session, attachment, {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "lifecycle",
-          terminalId: session.summary.terminalId,
-          lifecycle: session.summary.lifecycle,
-          ...(session.summary.exit
-            ? {
-                finalSequence: session.summary.exit.finalSequence,
-                exitCode: session.summary.exit.exitCode,
-                signal: session.summary.exit.signal,
-              }
-            : {}),
-        }),
-      );
-    }
+    applyStreamEvents(
+      session,
+      session.output.publish({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "lifecycle",
+        terminalId: session.summary.terminalId,
+        lifecycle: session.summary.lifecycle,
+        ...(session.summary.exit
+          ? {
+              finalSequence: session.summary.exit.finalSequence,
+              exitCode: session.summary.exit.exitCode,
+              signal: session.summary.exit.signal,
+            }
+          : {}),
+      }),
+    );
   };
 
   const handleFailure = (session: TerminalSession): void => {
@@ -111,16 +103,14 @@ export const createTerminalSessionLifecycle = ({
     );
     for (const session of new Set([...expired, ...overCapacity])) {
       disposeTerminalSession(session);
-      for (const attachment of session.output.attachmentValues()) {
-        applyStreamEvents(
-          session,
-          stream.publishSafely(session, attachment, {
-            version: TERMINAL_PROTOCOL_VERSION,
-            type: "terminal_forgotten",
-            terminalId: session.summary.terminalId,
-          }),
-        );
-      }
+      applyStreamEvents(
+        session,
+        session.output.publish({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "terminal_forgotten",
+          terminalId: session.summary.terminalId,
+        }),
+      );
       sessions.delete(session.summary.terminalId);
     }
   };
@@ -144,16 +134,14 @@ export const createTerminalSessionLifecycle = ({
 
   function terminateForOverflow(session: TerminalSession): void {
     if (!markTerminalOverflowed(session)) return;
-    for (const attachment of session.output.attachmentValues()) {
-      applyStreamEvents(
-        session,
-        stream.publishSafely(session, attachment, {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "output_overflow",
-          terminalId: session.summary.terminalId,
-        }),
-      );
-    }
+    applyStreamEvents(
+      session,
+      session.output.publish({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "output_overflow",
+        terminalId: session.summary.terminalId,
+      }),
+    );
     const handle = session.resources.handle;
     if (!handle) return;
     beginTerminalClose(session);
@@ -166,7 +154,7 @@ export const createTerminalSessionLifecycle = ({
     );
   }
 
-  function applyStreamEvents(session: TerminalSession, events: TerminalStreamEvents): void {
+  function applyStreamEvents(session: TerminalSession, events: TerminalOutputEvents): void {
     for (const event of events) {
       if (event.type === "overflow") {
         terminateForOverflow(session);

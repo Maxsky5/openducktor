@@ -1,6 +1,7 @@
-import type { AppPlatform } from "@openducktor/contracts";
-
 const NATIVE_IMAGE_PASTE_INPUT = new Uint8Array([22]);
+const MAX_DROPPED_IMAGE_COUNT = 8;
+const MAX_DROPPED_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_DROPPED_IMAGE_TOTAL_BYTES = 40 * 1024 * 1024;
 
 type TerminalImagePasteEvent = Pick<
   ClipboardEvent,
@@ -13,8 +14,8 @@ type TerminalImagePasteHandlerInput = {
 
 type PasteDroppedTerminalImagesInput = {
   files: readonly File[];
-  platform: AppPlatform;
   stageFile: (file: File) => Promise<string>;
+  prepareInput: (paths: readonly string[]) => Promise<string>;
   paste: (value: string) => void;
 };
 
@@ -42,25 +43,28 @@ export const createTerminalImagePasteHandler = ({
   };
 };
 
-const quotePosixPath = (path: string): string => `'${path.replaceAll("'", "'\\''")}'`;
-
-const quoteWindowsPath = (path: string): string => `"${path.replaceAll('"', '""')}"`;
-
-export const formatTerminalDroppedImagePaths = (
-  paths: readonly string[],
-  platform: AppPlatform,
-): string => {
-  const quotePath = platform === "win32" ? quoteWindowsPath : quotePosixPath;
-  return paths.map(quotePath).join(" ");
-};
-
 export const pasteDroppedTerminalImages = async ({
   files,
-  platform,
   stageFile,
+  prepareInput,
   paste,
 }: PasteDroppedTerminalImagesInput): Promise<void> => {
   if (files.length === 0) return;
-  const paths = await Promise.all(files.map((file) => stageFile(file)));
-  paste(formatTerminalDroppedImagePaths(paths, platform));
+  if (files.length > MAX_DROPPED_IMAGE_COUNT) {
+    throw new Error(`You can drop at most ${MAX_DROPPED_IMAGE_COUNT} images at once.`);
+  }
+  let totalBytes = 0;
+  for (const file of files) {
+    if (file.size > MAX_DROPPED_IMAGE_BYTES) {
+      throw new Error(`Each dropped image must be 20 MiB or smaller: ${file.name}`);
+    }
+    totalBytes += file.size;
+  }
+  if (totalBytes > MAX_DROPPED_IMAGE_TOTAL_BYTES) {
+    throw new Error("Dropped images must total 40 MiB or less.");
+  }
+
+  const paths: string[] = [];
+  for (const file of files) paths.push(await stageFile(file));
+  paste(await prepareInput(paths));
 };

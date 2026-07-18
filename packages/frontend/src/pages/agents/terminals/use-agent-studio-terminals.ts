@@ -1,10 +1,11 @@
-import type { TerminalCloseResponse, TerminalLifecycle } from "@openducktor/contracts";
+import type { AppPlatform, TerminalCloseResponse, TerminalLifecycle } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { platformQueryOptions } from "@/state/queries/system";
 import { terminalListQueryOptions, terminalQueryKeys } from "@/state/queries/terminals";
 import { isTerminalToggleShortcut, toggleTerminalPanel } from "./terminal-panel-policy";
 import {
@@ -21,7 +22,7 @@ export type { AgentStudioTerminalTab } from "./terminal-presentation-state";
 type AgentStudioTerminalDependencies = {
   hostClient: Pick<
     typeof host,
-    "taskWorktreeGet" | "terminalClose" | "terminalCreate" | "terminalList"
+    "systemGetPlatform" | "taskWorktreeGet" | "terminalClose" | "terminalCreate" | "terminalList"
   >;
   terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
 };
@@ -41,6 +42,8 @@ export type AgentStudioTerminalPanelModel = {
   isLoading: boolean;
   isCreating: boolean;
   transportError: string | null;
+  platform: AppPlatform | undefined;
+  platformError: string | null;
   focusRequest: number;
   controller: TerminalTransportController | null;
   onToggle: () => void;
@@ -109,6 +112,7 @@ export const useAgentStudioTerminals = (
     ...worktreeOptions,
     enabled,
   });
+  const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
   useLayoutEffect(() => {
     if (repoPath && taskId) localStorage.removeItem(legacyPreferenceKey(repoPath, taskId));
@@ -318,6 +322,8 @@ export const useAgentStudioTerminals = (
       isLoading,
       isCreating,
       transportError,
+      platform: platformQuery.data,
+      platformError: platformQuery.isError ? platformQuery.error.message : null,
       focusRequest,
       controller,
       onToggle: togglePanel,
@@ -343,6 +349,9 @@ export const useAgentStudioTerminals = (
       isLoading,
       isVisible,
       mountedTabs,
+      platformQuery.data,
+      platformQuery.error,
+      platformQuery.isError,
       reorderTab,
       retryCreate,
       selectTab,

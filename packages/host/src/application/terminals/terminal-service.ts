@@ -4,10 +4,13 @@ import {
   type TerminalCreateResponse,
   type TerminalListFilter,
   type TerminalListResponse,
+  type TerminalPreparePathInputRequest,
+  type TerminalPreparePathInputResponse,
   type TerminalSummary,
   terminalCloseRequestSchema,
   terminalCreateRequestSchema,
   terminalListFilterSchema,
+  terminalPreparePathInputRequestSchema,
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
 import type { FilesystemPort } from "../../ports/filesystem-port";
@@ -34,6 +37,9 @@ export type TerminalService = {
   readonly hostInstanceId: string;
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
+  preparePathInput(
+    input: TerminalPreparePathInputRequest,
+  ): Effect.Effect<TerminalPreparePathInputResponse, TerminalServiceError>;
   attach(input: TerminalAttachInput): Effect.Effect<void, TerminalServiceError>;
   write(terminalId: string, data: Uint8Array): Effect.Effect<void, TerminalServiceError>;
   resize(terminalId: string, grid: TerminalGrid): Effect.Effect<void, TerminalServiceError>;
@@ -119,6 +125,12 @@ export const createTerminalService = ({
           hostInstanceId,
           terminals: engine.list(terminalListFilterSchema.parse(rawFilter)),
         })),
+      preparePathInput: (rawInput) =>
+        Effect.gen(function* () {
+          const input = terminalPreparePathInputRequestSchema.parse(rawInput);
+          const text = yield* engine.preparePathInput(input.terminalId, input.paths);
+          return { text };
+        }),
       attach: engine.attach,
       write: engine.write,
       resize: engine.resize,

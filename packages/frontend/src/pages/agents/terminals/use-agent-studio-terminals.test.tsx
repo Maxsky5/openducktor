@@ -35,6 +35,7 @@ const createTerminalTestDependencies = (): TerminalTestDependencies => {
   return {
     hostClient: {
       ...unavailable.client,
+      systemGetPlatform: async () => "darwin",
       terminalList: async ({ filter }) => {
         const taskId = filter.kind === "task" ? filter.taskId : "unassociated";
         return { hostInstanceId: "host-1", terminals: [summaryForTask(taskId)] };

@@ -30,9 +30,10 @@ describe("HostTerminalClient", () => {
     ]);
   });
 
-  test("validates list and close payloads", async () => {
+  test("validates list, path-input, and close payloads", async () => {
     const client = new HostTerminalClient(async (command) => {
       if (command === "terminal_list") return { hostInstanceId: "host-1", terminals: [summary] };
+      if (command === "terminal_prepare_path_input") return { text: "'/tmp/image.png'" };
       if (command === "terminal_close") return { closed: true };
       throw new Error(`Unexpected ${command}`);
     });
@@ -42,6 +43,9 @@ describe("HostTerminalClient", () => {
       hostInstanceId: "host-1",
       terminals: [summary],
     });
+    await expect(
+      client.terminalPreparePathInput({ terminalId: "terminal-1", paths: ["/tmp/image.png"] }),
+    ).resolves.toEqual({ text: "'/tmp/image.png'" });
     await expect(
       client.terminalClose({ terminalId: "terminal-1", confirmTerminate: true }),
     ).resolves.toEqual({ closed: true });

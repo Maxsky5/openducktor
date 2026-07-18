@@ -2,6 +2,7 @@ import {
   terminalCloseRequestSchema,
   terminalCreateRequestSchema,
   terminalListRequestSchema,
+  terminalPreparePathInputRequestSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TerminalService } from "../../application/terminals/terminal-service";
@@ -18,6 +19,12 @@ export const createTerminalCommandHandlers = (
   terminal_list: (args) =>
     terminalService.list(
       terminalListRequestSchema.parse(requireRecord(args, "terminal_list input")).filter,
+    ),
+  terminal_prepare_path_input: (args) =>
+    terminalService.preparePathInput(
+      terminalPreparePathInputRequestSchema.parse(
+        requireRecord(args, "terminal_prepare_path_input input"),
+      ),
     ),
   terminal_close: (args) =>
     terminalService
