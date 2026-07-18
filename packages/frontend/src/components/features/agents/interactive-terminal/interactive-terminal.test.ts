@@ -9,7 +9,14 @@ import {
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
 import {
+  createTerminalImagePasteHandler,
+  extractTransferredImageFiles,
+  formatTerminalDroppedImagePaths,
+  pasteDroppedTerminalImages,
+} from "./terminal-image-transfer-policy";
+import {
   createTerminalKeyEventHandler,
+  encodeTerminalTextInput,
   resolveTerminalKeyAction,
 } from "./terminal-keyboard-policy";
 
@@ -77,7 +84,7 @@ describe("InteractiveTerminal policies", () => {
     );
   });
 
-  test("wires copy, paste, and interrupt to clipboard and terminal input", async () => {
+  test("wires copy and interrupt while delegating text paste to xterm", async () => {
     const clipboardWrites: string[] = [];
     const inputWrites: number[][] = [];
     const failures: unknown[] = [];
@@ -100,20 +107,103 @@ describe("InteractiveTerminal policies", () => {
       writeClipboard: async (text) => {
         clipboardWrites.push(text);
       },
-      readClipboard: async () => "pasted input",
       enqueueInput,
       reportFailure: (cause) => failures.push(cause),
     });
 
     expect(handleKey(keyEvent({ ctrlKey: true, key: "c", shiftKey: true }))).toBe(false);
-    expect(handleKey(keyEvent({ ctrlKey: true, key: "v", shiftKey: true }))).toBe(false);
+    expect(handleKey(keyEvent({ ctrlKey: true, key: "v", shiftKey: true }))).toBe(true);
     selected = false;
     expect(handleKey(keyEvent({ ctrlKey: true, key: "c" }))).toBe(false);
     await inputIdle;
 
     expect(clipboardWrites).toEqual(["selected output"]);
-    expect(inputWrites).toEqual([[...new TextEncoder().encode("pasted input")], [3]]);
+    expect(inputWrites).toEqual([[3]]);
     expect(failures).toEqual([]);
+  });
+
+  test("forwards image clipboard paste as Ctrl+V instead of empty input", async () => {
+    const inputWrites: number[][] = [];
+    const failures: unknown[] = [];
+    let inputIdle = Promise.resolve();
+    const sequenceInput = createTerminalInputSequencer({
+      writeInput: async (data) => {
+        inputWrites.push([...data]);
+      },
+      reportFailure: (cause) => failures.push(cause),
+    });
+    const preventDefaultCalls: string[] = [];
+    const stopPropagationCalls: string[] = [];
+    const handlePaste = createTerminalImagePasteHandler({
+      enqueueInput: (operation) => {
+        inputIdle = sequenceInput(operation);
+        return inputIdle;
+      },
+    });
+
+    handlePaste({
+      clipboardData: {
+        files: [],
+        items: [{ kind: "file", type: "image/png" }],
+      } as unknown as DataTransfer,
+      preventDefault: () => preventDefaultCalls.push("prevented"),
+      stopPropagation: () => stopPropagationCalls.push("stopped"),
+    });
+    await inputIdle;
+
+    expect(inputWrites).toEqual([[22]]);
+    expect(preventDefaultCalls).toEqual(["prevented"]);
+    expect(stopPropagationCalls).toEqual(["stopped"]);
+    expect(failures).toEqual([]);
+  });
+
+  test("lets xterm handle text clipboard paste and drops empty terminal data", () => {
+    const calls: string[] = [];
+    const handlePaste = createTerminalImagePasteHandler({
+      enqueueInput: async () => undefined,
+    });
+
+    handlePaste({
+      clipboardData: {
+        files: [],
+        items: [{ kind: "string", type: "text/plain" }],
+      } as unknown as DataTransfer,
+      preventDefault: () => calls.push("prevented"),
+      stopPropagation: () => calls.push("stopped"),
+    });
+
+    expect(calls).toEqual([]);
+    expect(encodeTerminalTextInput("")).toBeNull();
+    expect(encodeTerminalTextInput("text")).toEqual(new TextEncoder().encode("text"));
+  });
+
+  test("stages dropped images and pastes shell-safe paths", async () => {
+    const first = new File([new Uint8Array([1])], "first image.png", { type: "image/png" });
+    const second = new File([new Uint8Array([2])], "second.jpg", { type: "image/jpeg" });
+    const text = new File(["notes"], "notes.txt", { type: "text/plain" });
+    const transfer = {
+      files: [first, text, second],
+      items: [],
+    } as unknown as DataTransfer;
+    const stagedFiles: string[] = [];
+    const pasted: string[] = [];
+
+    const imageFiles = extractTransferredImageFiles(transfer);
+    await pasteDroppedTerminalImages({
+      files: imageFiles,
+      platform: "darwin",
+      stageFile: async (file) => {
+        stagedFiles.push(file.name);
+        return `/tmp/${file.name}`;
+      },
+      paste: (value) => pasted.push(value),
+    });
+
+    expect(stagedFiles).toEqual(["first image.png", "second.jpg"]);
+    expect(pasted).toEqual(["'/tmp/first image.png' '/tmp/second.jpg'"]);
+    expect(formatTerminalDroppedImagePaths(["C:\\Temp\\image one.png"], "win32")).toBe(
+      '"C:\\Temp\\image one.png"',
+    );
   });
 
   test("maps macOS navigation shortcuts to standard shell editing sequences", async () => {
@@ -130,7 +220,6 @@ describe("InteractiveTerminal policies", () => {
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,
-      readClipboard: async () => "",
       enqueueInput: (operation) => {
         inputIdle = sequenceInput(operation);
         return inputIdle;
@@ -162,7 +251,6 @@ describe("InteractiveTerminal policies", () => {
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,
-      readClipboard: async () => "",
       enqueueInput: (operation) => {
         inputIdle = sequenceInput(operation);
         return inputIdle;
@@ -210,7 +298,6 @@ describe("InteractiveTerminal policies", () => {
       hasSelection: () => false,
       getSelection: () => "",
       writeClipboard: async () => undefined,
-      readClipboard: async () => "",
       enqueueInput: async () => undefined,
       reportFailure: () => undefined,
     });
@@ -218,7 +305,7 @@ describe("InteractiveTerminal policies", () => {
     expect(handleKey(keyEvent({ ctrlKey: true, key: "ArrowLeft" }))).toBe(true);
   });
 
-  test("surfaces clipboard failures without injecting terminal input", async () => {
+  test("surfaces clipboard copy failures without injecting terminal input", async () => {
     const inputWrites: number[][] = [];
     const failures: string[] = [];
     let inputIdle = Promise.resolve();
@@ -235,10 +322,9 @@ describe("InteractiveTerminal policies", () => {
     };
     const handleKey = createTerminalKeyEventHandler({
       getPlatform: () => "darwin",
-      hasSelection: () => false,
-      getSelection: () => "",
-      writeClipboard: async () => undefined,
-      readClipboard: async () => {
+      hasSelection: () => true,
+      getSelection: () => "selected output",
+      writeClipboard: async () => {
         throw new Error("clipboard denied");
       },
       enqueueInput,
@@ -246,7 +332,7 @@ describe("InteractiveTerminal policies", () => {
         failures.push(cause instanceof Error ? cause.message : String(cause)),
     });
 
-    expect(handleKey(keyEvent({ key: "v", metaKey: true }))).toBe(false);
+    expect(handleKey(keyEvent({ key: "c", metaKey: true }))).toBe(false);
     await inputIdle;
 
     expect(inputWrites).toEqual([]);

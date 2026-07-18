@@ -92,10 +92,12 @@ type TerminalKeyEventHandlerInput = {
   hasSelection: () => boolean;
   getSelection: () => string;
   writeClipboard: (text: string) => Promise<void>;
-  readClipboard: () => Promise<string>;
   enqueueInput: (operation: () => Uint8Array | Promise<Uint8Array>) => Promise<void>;
   reportFailure: (cause: unknown) => void;
 };
+
+export const encodeTerminalTextInput = (data: string): Uint8Array | null =>
+  data.length > 0 ? new TextEncoder().encode(data) : null;
 
 export const resolveTerminalKeyAction = (
   event: TerminalKeyEvent,
@@ -124,7 +126,6 @@ export const createTerminalKeyEventHandler = ({
   hasSelection,
   getSelection,
   writeClipboard,
-  readClipboard,
   enqueueInput,
   reportFailure,
 }: TerminalKeyEventHandlerInput) => {
@@ -137,8 +138,7 @@ export const createTerminalKeyEventHandler = ({
         void writeClipboard(getSelection()).catch(reportFailure);
         return false;
       case "paste":
-        void enqueueInput(() => readClipboard().then((text) => new TextEncoder().encode(text)));
-        return false;
+        return true;
       case "input":
         void enqueueInput(() => new Uint8Array(action.bytes));
         return false;

@@ -5,6 +5,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { type IDisposable, Terminal } from "@xterm/xterm";
 import { type ReactElement, useEffect, useEffectEvent, useRef, useState } from "react";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
+import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { cn } from "@/lib/utils";
 import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
 import { platformQueryOptions } from "@/state/queries/system";
@@ -21,7 +24,13 @@ import {
   attachInteractiveTerminalRenderer,
   createBufferedTerminalFitter,
 } from "./interactive-terminal-renderer";
-import { createTerminalKeyEventHandler } from "./terminal-keyboard-policy";
+import {
+  containsTransferredImage,
+  createTerminalImagePasteHandler,
+  extractTransferredImageFiles,
+  pasteDroppedTerminalImages,
+} from "./terminal-image-transfer-policy";
+import { createTerminalKeyEventHandler, encodeTerminalTextInput } from "./terminal-keyboard-policy";
 
 export function InteractiveTerminal({
   terminalId,
@@ -53,13 +62,26 @@ export function InteractiveTerminal({
     onForgotten,
     onTitleChange,
   });
-  const [interactionError, setInteractionError] = useState<string | null>(null);
+  const [rendererError, setRendererError] = useState<string | null>(null);
+  const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const isActive = useEffectEvent(() => active);
 
   useEffect(() => {
     platformRef.current = platformQuery.data;
   }, [platformQuery.data]);
+
+  useEffect(() => {
+    if (!platformQuery.isError) return;
+    const toastId = `terminal:${terminalId}:platform`;
+    toast.error("Terminal shortcuts unavailable", {
+      id: toastId,
+      description: platformQuery.error.message,
+    });
+    return () => {
+      toast.dismiss(toastId);
+    };
+  }, [platformQuery.error, platformQuery.isError, terminalId]);
 
   useEffect(() => {
     callbacksRef.current = {
@@ -74,10 +96,17 @@ export function InteractiveTerminal({
     const container = containerRef.current;
     if (!container) return;
     setIsHydrated(false);
-    const reportInteractionFailure = (cause: unknown): void => {
-      setInteractionError(cause instanceof Error ? cause.message : String(cause));
-    };
+    setIsImageDragActive(false);
+    setRendererError(null);
     let generation = 0;
+    const interactionToastId = `terminal:${terminalId}:interaction`;
+    const reportInteractionFailure = (title: string, cause: unknown): void => {
+      if (generation !== 0) return;
+      toast.error(title, {
+        id: interactionToastId,
+        description: errorMessage(cause),
+      });
+    };
     const terminal = new Terminal(
       createTerminalOptions(container, {
         cursorBlink: true,
@@ -93,14 +122,13 @@ export function InteractiveTerminal({
         terminal,
         renderer: new WebglAddon(/* preserveDrawingBuffer */ true),
         onContextLoss: () => {
-          reportInteractionFailure(
-            new Error("The terminal renderer was lost. Reopen this terminal tab."),
-          );
+          if (generation !== 0) return;
+          setRendererError("The terminal renderer stopped responding.");
         },
       });
     } catch (cause) {
       terminal.dispose();
-      reportInteractionFailure(cause);
+      setRendererError(errorMessage(cause));
       return;
     }
     const terminalFitter = createBufferedTerminalFitter({ container, terminal, fitAddon });
@@ -115,7 +143,9 @@ export function InteractiveTerminal({
       write: (payload, parsed) => terminal.write(payload, parsed),
       onConsumed: (sequenceEnd) => {
         if (generation !== 0) return;
-        void controller.acknowledge(terminalId, sequenceEnd).catch(reportInteractionFailure);
+        void controller
+          .acknowledge(terminalId, sequenceEnd)
+          .catch((cause) => reportInteractionFailure("Terminal output sync failed", cause));
       },
       onHydrated: () => {
         if (generation !== 0) return;
@@ -124,17 +154,21 @@ export function InteractiveTerminal({
     });
     const enqueueInput = createTerminalInputSequencer({
       writeInput: (data) => controller.write(terminalId, data),
-      reportFailure: reportInteractionFailure,
+      reportFailure: (cause) => reportInteractionFailure("Terminal input failed", cause),
     });
     const resizeScheduler = createLatestResizeScheduler((columns, rows) => {
-      void controller.resize(terminalId, columns, rows).catch(reportInteractionFailure);
+      void controller
+        .resize(terminalId, columns, rows)
+        .catch((cause) => reportInteractionFailure("Terminal resize failed", cause));
     });
     const resizeSubscription = terminal.onResize(({ cols, rows }) => {
       resizeScheduler.schedule(cols, rows);
     });
     const dataSubscription = terminal.onData((data) => {
+      const input = encodeTerminalTextInput(data);
+      if (!input) return;
       resizeScheduler.flush();
-      void enqueueInput(() => new TextEncoder().encode(data));
+      void enqueueInput(() => input);
     });
     const oscClipboardSubscription = terminal.parser.registerOscHandler(52, () => true);
     terminal.attachCustomKeyEventHandler(
@@ -143,11 +177,55 @@ export function InteractiveTerminal({
         hasSelection: () => terminal.hasSelection(),
         getSelection: () => terminal.getSelection(),
         writeClipboard: (text) => navigator.clipboard.writeText(text),
-        readClipboard: () => navigator.clipboard.readText(),
         enqueueInput,
-        reportFailure: reportInteractionFailure,
+        reportFailure: (cause) => reportInteractionFailure("Clipboard action failed", cause),
       }),
     );
+    const handleImagePaste = createTerminalImagePasteHandler({ enqueueInput });
+    const handleImageDragEnter = (event: DragEvent): void => {
+      if (!containsTransferredImage(event.dataTransfer)) return;
+      event.preventDefault();
+      setIsImageDragActive(true);
+    };
+    const handleImageDragOver = (event: DragEvent): void => {
+      if (!containsTransferredImage(event.dataTransfer)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    };
+    const handleImageDragLeave = (event: DragEvent): void => {
+      if (event.relatedTarget instanceof Node && container.contains(event.relatedTarget)) return;
+      setIsImageDragActive(false);
+    };
+    const handleImageDrop = (event: DragEvent): void => {
+      const files = extractTransferredImageFiles(event.dataTransfer);
+      if (files.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsImageDragActive(false);
+      const platform = platformRef.current;
+      if (!platform) {
+        reportInteractionFailure(
+          "Image drop failed",
+          new Error("The host platform is still loading. Try dropping the image again."),
+        );
+        return;
+      }
+      void pasteDroppedTerminalImages({
+        files,
+        platform,
+        stageFile: stageLocalAttachmentFile,
+        paste: (value) => {
+          if (generation !== 0) return;
+          terminal.paste(value);
+          terminal.focus();
+        },
+      }).catch((cause) => reportInteractionFailure("Image drop failed", cause));
+    };
+    container.addEventListener("paste", handleImagePaste, true);
+    container.addEventListener("dragenter", handleImageDragEnter);
+    container.addEventListener("dragover", handleImageDragOver);
+    container.addEventListener("dragleave", handleImageDragLeave);
+    container.addEventListener("drop", handleImageDrop);
     const handleFrame = (message: TerminalServerMessage, payload: Uint8Array): void => {
       if (message.type === "snapshot") {
         outputSequencer.setSnapshotBoundary(message.snapshotSequenceEnd);
@@ -156,7 +234,7 @@ export function InteractiveTerminal({
       if (isReplayGap) {
         void outputSequencer
           .skipTo(message.missingSequenceEnd, () => terminal.reset())
-          .catch(reportInteractionFailure);
+          .catch((cause) => reportInteractionFailure("Terminal output failed", cause));
       }
       if (
         handleTerminalMetadataFrame(message, {
@@ -169,7 +247,9 @@ export function InteractiveTerminal({
         })
       )
         return;
-      void outputSequencer.enqueue(message, payload).catch(reportInteractionFailure);
+      void outputSequencer
+        .enqueue(message, payload)
+        .catch((cause) => reportInteractionFailure("Terminal output failed", cause));
     };
     const unsubscribe = controller.subscribe(terminalId, handleFrame);
     const fitScheduler = createLiveTerminalFitScheduler({
@@ -186,6 +266,12 @@ export function InteractiveTerminal({
       observer.disconnect();
       fitScheduler.dispose();
       terminalFitter.dispose();
+      container.removeEventListener("paste", handleImagePaste, true);
+      container.removeEventListener("dragenter", handleImageDragEnter);
+      container.removeEventListener("dragover", handleImageDragOver);
+      container.removeEventListener("dragleave", handleImageDragLeave);
+      container.removeEventListener("drop", handleImageDrop);
+      toast.dismiss(interactionToastId);
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();
@@ -208,25 +294,31 @@ export function InteractiveTerminal({
     return () => cancelAnimationFrame(frameId);
   }, [active, focusRequest, isHydrated]);
 
-  const visibleInteractionError = platformQuery.isError
-    ? platformQuery.error.message
-    : interactionError;
-
   return (
     <div className="relative h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
       <div
         ref={containerRef}
-        className={cn("h-full min-h-0 px-2 py-1", !isHydrated && "invisible")}
+        className={cn("h-full min-h-0 px-2 py-1", (!isHydrated || rendererError) && "invisible")}
         role="application"
         aria-label={`Interactive terminal ${terminalId}`}
       />
-      {visibleInteractionError ? (
-        <p
-          role="alert"
-          className="absolute inset-x-2 bottom-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+      {isImageDragActive ? (
+        <div
+          role="status"
+          className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-md border border-dashed border-primary bg-background/90 text-sm font-medium text-foreground"
         >
-          Terminal interaction failed: {visibleInteractionError}
-        </p>
+          Drop image to paste its path
+        </div>
+      ) : null}
+      {rendererError ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--dev-server-terminal-panel)] p-6">
+          <div role="alert" className="flex max-w-md flex-col items-center gap-2 text-center">
+            <p className="text-sm font-semibold text-foreground">Terminal renderer unavailable</p>
+            <p className="text-xs text-muted-foreground">
+              {rendererError} Close and reopen this terminal tab.
+            </p>
+          </div>
+        </div>
       ) : null}
     </div>
   );
