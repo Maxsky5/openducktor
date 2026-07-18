@@ -62,13 +62,11 @@ const managedLogDateKey = (fileName: string): string | null => {
   const year = Number(yearText);
   const month = Number(monthText);
   const day = Number(dayText);
-  const parsedDate = new Date(0);
-  parsedDate.setHours(0, 0, 0, 0);
-  parsedDate.setFullYear(year, month - 1, day);
+  const parsedDate = new Date(Date.UTC(year, month - 1, day));
   if (
-    parsedDate.getFullYear() !== year ||
-    parsedDate.getMonth() !== month - 1 ||
-    parsedDate.getDate() !== day
+    parsedDate.getUTCFullYear() !== year ||
+    parsedDate.getUTCMonth() !== month - 1 ||
+    parsedDate.getUTCDate() !== day
   ) {
     return null;
   }
@@ -107,6 +105,7 @@ const runFileOperation = <Result>(
 const normalizeRecord = (record: string): string =>
   `${stripVTControlCharacters(record).replace(/(?:\r?\n)+$/u, "")}\n`;
 
+/** @internal Test-only dependency seam; production callers use the default writer factory. */
 export const createOpenDucktorDailyLogWriterWithDependencies = (
   {
     surface,

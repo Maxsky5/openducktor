@@ -253,7 +253,8 @@ export const createRuntimeOrchestratorService = ({
         const { runtimeKind, repoPath } = input;
         const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
         const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-        logger?.info(
+        yield* writeRuntimeLog(
+          "info",
           `Checking ${runtimeKind} repo runtime health for repository ${canonicalRepoPath}`,
         );
         const runtimeResult = yield* Effect.either(runtimeEnsure(input));
@@ -274,7 +275,8 @@ export const createRuntimeOrchestratorService = ({
             mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
           },
         );
-        logger?.info(
+        yield* writeRuntimeLog(
+          "info",
           `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
         );
         return health;

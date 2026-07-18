@@ -352,9 +352,13 @@ export const createNodeEffectHostCommandRouter = (
       }),
     dispose: () =>
       Effect.gen(function* () {
+        const loggingFailures: HostOperationError[] = [];
         const startLogResult = yield* Effect.either(
           writeHostLifecycleLog(lifecycleLogger, "info", "Shutting down OpenDucktor host services"),
         );
+        if (startLogResult._tag === "Left") {
+          loggingFailures.push(startLogResult.left);
+        }
         const shutdownResult = yield* Effect.either(
           runShutdownSteps(
             [
@@ -366,17 +370,47 @@ export const createNodeEffectHostCommandRouter = (
             lifecycleLogger,
           ),
         );
-        const completeLogResult = yield* Effect.either(
-          writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped"),
-        );
-        if (startLogResult._tag === "Left") {
-          return yield* Effect.fail(startLogResult.left);
+        if (shutdownResult._tag === "Right") {
+          const completeLogResult = yield* Effect.either(
+            writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped"),
+          );
+          if (completeLogResult._tag === "Left") {
+            loggingFailures.push(completeLogResult.left);
+          }
+        }
+        if (shutdownResult._tag === "Left" && loggingFailures.length > 0) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "host.dispose",
+              message: `${shutdownResult.left.message}\nLifecycle logging: ${loggingFailures
+                .map((failure) => failure.message)
+                .join("\n")}`,
+              cause: shutdownResult.left,
+              details: {
+                shutdownFailure: shutdownResult.left,
+                loggingFailures,
+              },
+            }),
+          );
         }
         if (shutdownResult._tag === "Left") {
           return yield* Effect.fail(shutdownResult.left);
         }
-        if (completeLogResult._tag === "Left") {
-          return yield* Effect.fail(completeLogResult.left);
+        if (loggingFailures.length === 1) {
+          const [loggingFailure] = loggingFailures;
+          if (loggingFailure) {
+            return yield* Effect.fail(loggingFailure);
+          }
+        }
+        if (loggingFailures.length > 1) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "host.dispose",
+              message: loggingFailures.map((failure) => failure.message).join("\n"),
+              cause: loggingFailures[0],
+              details: { loggingFailures },
+            }),
+          );
         }
       }),
     handlers: {

@@ -44,11 +44,12 @@ export const createElectronDetachedTaskOwner = (
     drain: () => {
       drainPromise ??= (async () => {
         await Promise.all(pendingTasks);
+      })();
+      return drainPromise.then(() => {
         if (firstFailure) {
           throw firstFailure.cause;
         }
-      })();
-      return drainPromise;
+      });
     },
     run,
   };

@@ -322,6 +322,15 @@ describe("createCodexAppServerCommandHandlers", () => {
         params: { omitted: undefined },
       }),
     ).rejects.toThrow("params must be JSON-serializable.");
+    for (const params of [null, true, 1, "params", []]) {
+      await expect(
+        router.invoke("codex_app_server_request", {
+          runtimeId: "runtime-1",
+          method: "model/list",
+          params,
+        }),
+      ).rejects.toThrow("params must be a JSON object.");
+    }
     expect(calls).toEqual([]);
   });
 });

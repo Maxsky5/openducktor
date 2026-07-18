@@ -51,6 +51,9 @@ const captureHostLifecycleLogFailure = (
     ),
   );
 
+const isHostLifecycleLoggingFailure = (cause: unknown): cause is HostOperationError =>
+  cause instanceof HostOperationError && cause.operation.startsWith("host.lifecycle.log-");
+
 export const runShutdownSteps = (
   steps: HostShutdownStep[],
   logger: HostLifecycleLogger,
@@ -68,6 +71,10 @@ export const runShutdownSteps = (
       const result = yield* Effect.exit(step.run());
       if (result._tag === "Failure") {
         const cause = causeToHostBoundaryError(result.cause);
+        if (isHostLifecycleLoggingFailure(cause)) {
+          loggingFailure ??= cause;
+          continue;
+        }
         const message = cause instanceof Error ? cause.message : String(cause);
         loggingFailure = yield* captureHostLifecycleLogFailure(
           logger,
@@ -150,7 +157,20 @@ export const createStopRuntimesStep = (
 
       const stopResult = yield* Effect.either(runtimeRegistry.stopAllRuntimes());
       if (stopResult._tag === "Left") {
-        return yield* Effect.fail(loggingFailure ?? stopResult.left);
+        if (!loggingFailure) {
+          return yield* Effect.fail(stopResult.left);
+        }
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "host.shutdown.runtimes",
+            message: `${stopResult.left.message}\nLifecycle logging: ${loggingFailure.message}`,
+            cause: stopResult.left,
+            details: {
+              runtimeFailure: stopResult.left,
+              loggingFailure,
+            },
+          }),
+        );
       }
       const stoppedRuntimes = stopResult.right;
       if (stoppedRuntimes.length === 0) {

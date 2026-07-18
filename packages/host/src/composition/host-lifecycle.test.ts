@@ -2,6 +2,7 @@ import { Cause, Effect } from "effect";
 import { HostOperationError } from "../effect/host-errors";
 import {
   createStopMcpHostBridgeStep,
+  createStopRuntimesStep,
   type HostLifecycleLogger,
   runShutdownSteps,
 } from "./host-lifecycle";
@@ -147,6 +148,37 @@ describe("host lifecycle shutdown", () => {
             operation: "host.lifecycle.log-info",
             cause: persistenceError,
           },
+        },
+      });
+    }
+  });
+
+  test("preserves runtime cleanup and lifecycle logging failures together", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const runtimeError = new HostOperationError({
+      operation: "runtimeRegistry.stopAllRuntimes",
+      message: "runtime child is still running",
+    });
+    const step = createStopRuntimesStep(
+      {
+        stopAllRuntimes: () => Effect.fail(runtimeError),
+      } as never,
+      {
+        error: () => Effect.fail(persistenceError),
+        info: () => Effect.fail(persistenceError),
+      },
+    );
+
+    const exit = await Effect.runPromiseExit(step.run());
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "host.shutdown.runtimes",
+        details: {
+          runtimeFailure: runtimeError,
+          loggingFailure: expect.objectContaining({ cause: persistenceError }),
         },
       });
     }

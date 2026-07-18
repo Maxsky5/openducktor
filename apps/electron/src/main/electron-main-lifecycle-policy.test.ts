@@ -367,6 +367,36 @@ describe("Electron main lifecycle policy", () => {
     });
   });
 
+  test("startup boundary reports cleanup failures when persistence succeeds", async () => {
+    const cleanupError = new ElectronLifecycleError({
+      operation: "electron.main.cleanup-startup",
+      message: "cleanup failed",
+    });
+    const reportedFailures: unknown[] = [];
+
+    await runElectronMainStartupBoundary({
+      cleanupAfterFailure: () => Effect.fail(cleanupError),
+      exitProcess: () => {},
+      logger: {
+        error: () => Effect.void,
+        info: () => Effect.void,
+      },
+      markShutdownComplete: () => {},
+      markShutdownStarted: () => {},
+      reportFailure: (cause) => {
+        reportedFailures.push(cause);
+      },
+      startupEffect: Effect.fail(
+        new ElectronLifecycleError({
+          operation: "electron.main.integration-startup",
+          message: "startup failed",
+        }),
+      ),
+    });
+
+    expect(reportedFailures).toEqual([cleanupError]);
+  });
+
   test("persists real startup failure and shutdown lifecycle events with console parity", async () => {
     const configDirectory = mkdtempSync(resolve(tmpdir(), "openducktor-electron-lifecycle-"));
     let consoleOutput = "";
@@ -482,6 +512,7 @@ describe("Electron main lifecycle policy", () => {
       message: "dispose failed",
       reason: "SIGTERM",
     });
+    const reportedFailures: unknown[] = [];
 
     const controller = createElectronMainShutdownController({
       disposeHost: () => Effect.fail(disposalError),
@@ -497,7 +528,9 @@ describe("Electron main lifecycle policy", () => {
       quitApp: () => {
         throw new Error("Expected signal shutdown to exit instead of quitting the app.");
       },
-      reportFailure: () => {},
+      reportFailure: (cause) => {
+        reportedFailures.push(cause);
+      },
     });
 
     await controller.shutdownHostAndQuit({ exitAfterShutdown: true, reason: "SIGTERM" });
@@ -509,6 +542,7 @@ describe("Electron main lifecycle policy", () => {
         error: disposalError,
       },
     ]);
+    expect(reportedFailures).toEqual([disposalError]);
   });
 
   test("shutdown controller disposes and exits when persistent logging fails", async () => {

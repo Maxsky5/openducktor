@@ -83,6 +83,20 @@ test("detached task owner closes admission when draining begins", async () => {
   await expect(owner.drain()).rejects.toBe(reported[0]);
 });
 
+test("detached task owner exposes work rejected after a completed drain", async () => {
+  const reported: unknown[] = [];
+  const owner = createElectronDetachedTaskOwner((cause) => reported.push(cause));
+
+  await owner.drain();
+  owner.run(() => {
+    throw new Error("late work must not start");
+  });
+
+  expect(reported).toHaveLength(1);
+  expect(reported[0]).toBeInstanceOf(ElectronOperationError);
+  await expect(owner.drain()).rejects.toBe(reported[0]);
+});
+
 test("reports a synchronous task failure exactly once", async () => {
   const failure = new Error("synchronous persistence failure");
   const reported: unknown[] = [];

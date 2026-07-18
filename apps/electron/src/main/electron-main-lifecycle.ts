@@ -33,10 +33,10 @@ const lifecycleReportingFailure = ({
   operation: string;
   relatedFailures: unknown[];
 }): unknown | undefined => {
-  if (loggingFailures.length === 0) {
+  const failures = [...new Set([...loggingFailures, ...relatedFailures])];
+  if (failures.length === 0) {
     return undefined;
   }
-  const failures = [...new Set([...loggingFailures, ...relatedFailures])];
   if (failures.length === 1) {
     return failures[0];
   }

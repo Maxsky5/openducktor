@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import { WebOperationError } from "./effect/web-errors";
 import { logDuplicateWebTerminationNotice, runWebSignalShutdown } from "./launcher";
 import {
   buildBrowserRuntimeConfigJson,
@@ -76,6 +77,27 @@ describe("launcher internals", () => {
         sleep: async () => {},
       }),
     ).rejects.toMatchObject({ _tag: "WebOperationError" });
+  });
+
+  test("fails fast when the host readiness exit rejects", async () => {
+    const backgroundFailure = new Error("task-sync persistent logging failed");
+
+    await expect(
+      waitForBackend(
+        "http://127.0.0.1:14327",
+        "app-token",
+        0,
+        createHostProcess(Promise.reject(backgroundFailure)),
+        {
+          fetch: async () => new Response(null, { status: 503 }),
+          sleep: async () => {},
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.wait-for-backend",
+      cause: backgroundFailure,
+    });
   });
 
   test("aborts readiness fetches when the launcher timeout expires", async () => {
@@ -411,6 +433,37 @@ describe("launcher internals", () => {
     ]);
   });
 
+  test("signal shutdown persists cleanup and logging failures together", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const cleanupError = new WebOperationError({
+      operation: "web.launcher.cleanup",
+      message: "frontend cleanup failed",
+    });
+    const persistedErrors: string[] = [];
+    const exitCodes: number[] = [];
+
+    await runWebSignalShutdown({
+      boundary: {
+        exit: (exitCode) => exitCodes.push(exitCode),
+        flush: async () => {},
+        reportFailure: () => {},
+      },
+      exitCode: 143,
+      logger: {
+        error: (message) => Effect.sync(() => persistedErrors.push(message)),
+        info: () => Effect.fail(persistenceError),
+        success: () => Effect.void,
+      },
+      signal: "SIGTERM",
+      stop: Effect.fail(cleanupError),
+    });
+
+    expect(persistedErrors).toHaveLength(1);
+    expect(persistedErrors[0]).toContain("frontend cleanup failed");
+    expect(persistedErrors[0]).toContain("openducktor.logs.append failed");
+    expect(exitCodes).toEqual([1]);
+  });
+
   test("does not wait for the host exit code when host stop fails", async () => {
     const hostBackend = {
       exited: new Promise<number>(() => {}),
@@ -447,7 +500,44 @@ describe("launcher internals", () => {
           },
         },
       ),
-    ).rejects.toMatchObject({ _tag: "WebOperationError" });
+    ).rejects.toMatchObject({
+      _tag: "WebDependencyError",
+      dependency: "typescript-host-backend",
+      operation: "stop",
+    });
+  });
+
+  test("preserves frontend and host shutdown failures together", async () => {
+    const frontendFailure = new Error("frontend close failed");
+    const hostFailure = new Error("host stop failed");
+    const hostBackend = {
+      exited: new Promise<number>(() => {}),
+      port: 14327,
+      stop: async () => {},
+    };
+
+    await expect(
+      stopLauncherServices(
+        { frontendServer: null, hostBackend, logger: testLogger },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {
+            throw hostFailure;
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.shutdown",
+      details: {
+        failures: [
+          expect.objectContaining({ cause: frontendFailure }),
+          expect.objectContaining({ cause: hostFailure }),
+        ],
+      },
+    });
   });
 
   test("builds runtime config JSON for the browser shell", () => {

@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { ViteDevServer } from "vite";
 import {
   causeToWebBoundaryError,
+  combineWebErrors,
   errorMessage,
   runWebBoundary,
   WebDependencyError,
@@ -90,11 +91,20 @@ const stopLauncherForSignalEffect = (
       writeWebLogEffect(logger, "info", `Stopping OpenDucktor web after ${signal}...`),
     );
     const stopExit = yield* Effect.exit(stop);
-    if (signalLogExit._tag === "Failure") {
-      return yield* causeToWebBoundaryError(signalLogExit.cause);
-    }
+    const failures: WebError[] = [];
     if (stopExit._tag === "Failure") {
-      return yield* causeToWebBoundaryError(stopExit.cause);
+      failures.push(causeToWebBoundaryError(stopExit.cause));
+    }
+    if (signalLogExit._tag === "Failure") {
+      failures.push(causeToWebBoundaryError(signalLogExit.cause));
+    }
+    const failure = combineWebErrors(
+      "web.launcher.signal-shutdown",
+      failures.map(errorMessage).join("\n"),
+      failures,
+    );
+    if (failure) {
+      return yield* failure;
     }
   });
 

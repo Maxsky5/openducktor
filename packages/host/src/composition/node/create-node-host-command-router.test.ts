@@ -3,6 +3,7 @@ import path from "node:path";
 import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
+import { HostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
@@ -111,5 +112,51 @@ describe("createNodeEffectHostCommandRouter", () => {
     }
 
     expect(stopRuntimeCalls).toBe(1);
+  });
+
+  test("does not log successful disposal when a shutdown step fails", async () => {
+    const { infos, logger } = createLogger();
+    const runtimeFailure = new Error("runtime child is still running");
+    const runtimeRegistry = createRuntimeRegistry(() =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "runtimeRegistry.stopAllRuntimes",
+          message: runtimeFailure.message,
+          cause: runtimeFailure,
+        }),
+      ),
+    );
+
+    const exit = await Effect.runPromiseExit(createRouter({ logger, runtimeRegistry }).dispose());
+
+    expect(exit._tag).toBe("Failure");
+    expect(infos).not.toContain("OpenDucktor host services stopped");
+  });
+
+  test("preserves shutdown and lifecycle logging failures together", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const runtimeFailure = new HostOperationError({
+      operation: "runtimeRegistry.stopAllRuntimes",
+      message: "runtime child is still running",
+    });
+    const logger: HostLifecycleLogger = {
+      error: () => Effect.fail(persistenceError),
+      info: () => Effect.fail(persistenceError),
+    };
+    const runtimeRegistry = createRuntimeRegistry(() => Effect.fail(runtimeFailure));
+
+    const exit = await Effect.runPromiseExit(createRouter({ logger, runtimeRegistry }).dispose());
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "host.dispose",
+        details: {
+          shutdownFailure: expect.objectContaining({ operation: "host.shutdown" }),
+          loggingFailures: [expect.objectContaining({ cause: persistenceError })],
+        },
+      });
+    }
   });
 });

@@ -145,7 +145,13 @@ const logCodexPolicyRequest = (
 const isCodexRequestMethod = (method: string): method is CodexAppServerRequestMethod =>
   CODEX_APP_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
 
-const requireCodexJsonValue = (value: unknown, context: string) => {
+const requireCodexJsonObject = (value: unknown, context: string) => {
+  if (!isRecordValue(value)) {
+    throw new HostValidationError({
+      message: `${context} must be a JSON object.`,
+      details: { context },
+    });
+  }
   if (!isCodexAppServerJsonValue(value)) {
     throw new HostValidationError({
       message: `${context} must be JSON-serializable.`,
@@ -172,7 +178,7 @@ const parseRequestInput = (
 ): CodexAppServerRequestInput => {
   const record = requireRecord(args, "codex_app_server_request input");
   const params =
-    record.params === undefined ? undefined : requireCodexJsonValue(record.params, "params");
+    record.params === undefined ? undefined : requireCodexJsonObject(record.params, "params");
   return {
     runtimeId: requireString(record.runtimeId, "runtimeId"),
     method: requireCodexRequestMethod(record.method),

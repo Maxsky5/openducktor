@@ -7,9 +7,13 @@ import {
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
+  causeToWebBoundaryError,
+  combineWebErrors,
   errorMessage,
   runWebBoundary,
   runWebSyncBoundary,
+  toWebOperationError,
+  type WebError,
   WebOperationError,
   WebResourceError,
   WebValidationError,
@@ -28,7 +32,7 @@ type StopTypescriptHostBackendServicesInput = {
   disposeHost: () => Effect.Effect<void, unknown>;
   logger: WebLogger;
   resolveExited: (exitCode: number) => void;
-  stopServer: () => void;
+  stopServer: () => void | Promise<void>;
 };
 
 const EVENT_BUFFER_CAPACITY = 256;
@@ -215,26 +219,28 @@ export const stopTypescriptHostBackendServicesEffect = ({
   logger,
   resolveExited,
   stopServer,
-}: StopTypescriptHostBackendServicesInput): Effect.Effect<
-  void,
-  WebOperationError | WebResourceError
-> =>
+}: StopTypescriptHostBackendServicesInput): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     let exitCode = 0;
-    let loggingFailure: WebResourceError | undefined;
+    const failures: WebError[] = [];
     const disposeExit = yield* Effect.exit(disposeHost());
     if (disposeExit._tag === "Failure") {
       exitCode = 1;
+      failures.push(
+        toWebOperationError(causeToWebBoundaryError(disposeExit.cause), "web.host.dispose"),
+      );
       const logResult = yield* Effect.either(
         writeWebLogEffect(logger, "error", Cause.pretty(disposeExit.cause)),
       );
       if (logResult._tag === "Left") {
-        loggingFailure = logResult.left;
+        failures.push(logResult.left);
       }
     }
     const stopServerResult = yield* Effect.either(
-      Effect.try({
-        try: stopServer,
+      Effect.tryPromise({
+        try: async () => {
+          await stopServer();
+        },
         catch: (cause) =>
           new WebOperationError({
             operation: "web.host.stop-server",
@@ -245,13 +251,16 @@ export const stopTypescriptHostBackendServicesEffect = ({
     );
     if (stopServerResult._tag === "Left") {
       exitCode = 1;
+      failures.push(stopServerResult.left);
     }
     resolveExited(exitCode);
-    if (loggingFailure) {
-      return yield* Effect.fail(loggingFailure);
-    }
-    if (stopServerResult._tag === "Left") {
-      return yield* Effect.fail(stopServerResult.left);
+    const failure = combineWebErrors(
+      "web.host.shutdown",
+      "OpenDucktor TypeScript host shutdown failed.",
+      failures,
+    );
+    if (failure) {
+      return yield* failure;
     }
   });
 

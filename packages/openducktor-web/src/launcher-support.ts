@@ -3,6 +3,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import {
   causeToWebBoundaryError,
+  combineWebErrors,
   errorMessage,
   runWebBoundary,
   WebDependencyError,
@@ -185,22 +186,43 @@ export const waitForBackendEffect = (
   Effect.gen(function* () {
     const startedAt = Date.now();
     let lastError: unknown;
-    let earlyExitCode: number | null = null;
+    const earlyExit: {
+      current:
+        | { readonly _tag: "exit-code"; readonly exitCode: number }
+        | { readonly _tag: "failure"; readonly cause: unknown }
+        | null;
+    } = { current: null };
 
     yield* Effect.sync(() => {
-      void hostProcess.exited.then((exitCode) => {
-        earlyExitCode = exitCode;
-      });
+      void hostProcess.exited.then(
+        (exitCode) => {
+          earlyExit.current = { _tag: "exit-code", exitCode };
+        },
+        (cause) => {
+          earlyExit.current = { _tag: "failure", cause };
+        },
+      );
     });
     // Let an already-settled host exit promise win before applying the timeout path.
     yield* Effect.promise(() => Promise.resolve());
 
     while (Date.now() - startedAt < timeoutMs) {
-      if (earlyExitCode !== null) {
+      const observedExit = earlyExit.current;
+      if (observedExit?._tag === "failure") {
         return yield* new WebOperationError({
           operation: "web.launcher.wait-for-backend",
-          message: `OpenDucktor web host exited before startup completed with code ${earlyExitCode}.`,
-          details: { backendUrl, exitCode: earlyExitCode },
+          message: `OpenDucktor web host failed before startup completed: ${errorMessage(
+            observedExit.cause,
+          )}`,
+          cause: observedExit.cause,
+          details: { backendUrl },
+        });
+      }
+      if (observedExit?._tag === "exit-code") {
+        return yield* new WebOperationError({
+          operation: "web.launcher.wait-for-backend",
+          message: `OpenDucktor web host exited before startup completed with code ${observedExit.exitCode}.`,
+          details: { backendUrl, exitCode: observedExit.exitCode },
         });
       }
 
@@ -229,11 +251,22 @@ export const waitForBackendEffect = (
       });
     }
 
-    if (earlyExitCode !== null) {
+    const observedExit = earlyExit.current;
+    if (observedExit?._tag === "failure") {
       return yield* new WebOperationError({
         operation: "web.launcher.wait-for-backend",
-        message: `OpenDucktor web host exited before startup completed with code ${earlyExitCode}.`,
-        details: { backendUrl, exitCode: earlyExitCode },
+        message: `OpenDucktor web host failed before startup completed: ${errorMessage(
+          observedExit.cause,
+        )}`,
+        cause: observedExit.cause,
+        details: { backendUrl },
+      });
+    }
+    if (observedExit?._tag === "exit-code") {
+      return yield* new WebOperationError({
+        operation: "web.launcher.wait-for-backend",
+        message: `OpenDucktor web host exited before startup completed with code ${observedExit.exitCode}.`,
+        details: { backendUrl, exitCode: observedExit.exitCode },
       });
     }
 
@@ -319,25 +352,6 @@ export const resolveIndexedStaticAssetPath = (
   return path.extname(assetPath) ? null : indexPath;
 };
 
-const launcherShutdownFailure = (failures: unknown[]): WebOperationError | null => {
-  if (failures.length === 0) {
-    return null;
-  }
-  if (failures.length === 1) {
-    const [failure] = failures;
-    return new WebOperationError({
-      operation: "web.launcher.shutdown",
-      message: errorMessage(failure),
-      cause: failure,
-    });
-  }
-  return new WebOperationError({
-    operation: "web.launcher.shutdown",
-    message: "OpenDucktor web shutdown failed.",
-    details: { failures: failures.map(errorMessage) },
-  });
-};
-
 const defaultLauncherShutdownDependencies: LauncherShutdownDependencies = {
   closeServer: closeFrontendServer,
   stopHost: (hostBackend) => hostBackend.stop(),
@@ -384,7 +398,11 @@ export const stopLauncherServicesEffect = (
       yield* writeWebLogEffect(logger, "error", errorMessage(failure));
     }
     if (hostStopExit._tag === "Failure") {
-      const failure = launcherShutdownFailure(shutdownFailures);
+      const failure = combineWebErrors(
+        "web.launcher.shutdown",
+        "OpenDucktor web shutdown failed.",
+        shutdownFailures,
+      );
       if (failure) {
         return yield* failure;
       }
@@ -411,7 +429,11 @@ export const stopLauncherServicesEffect = (
       );
     }
 
-    const failure = launcherShutdownFailure(shutdownFailures);
+    const failure = combineWebErrors(
+      "web.launcher.shutdown",
+      "OpenDucktor web shutdown failed.",
+      shutdownFailures,
+    );
     if (failure) {
       return yield* failure;
     }

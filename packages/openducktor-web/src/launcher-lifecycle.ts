@@ -1,10 +1,9 @@
 import { Deferred, Effect } from "effect";
 import {
   causeToWebBoundaryError,
-  errorMessage,
+  combineWebErrors,
   runWebBoundary,
   type WebError,
-  WebOperationError,
 } from "./effect/web-errors";
 import type { FrontendServer } from "./launcher-support";
 import { type WebLogger, writeWebLogEffect } from "./logger";
@@ -79,20 +78,6 @@ export type WebLauncherLifecycle = {
   stop(): Effect.Effect<void, WebError>;
 };
 
-const combinedLifecycleFailure = (failures: WebError[]): WebError | null => {
-  if (failures.length === 0) {
-    return null;
-  }
-  if (failures.length === 1) {
-    return failures[0] ?? null;
-  }
-  return new WebOperationError({
-    operation: "web.launcher.lifecycle",
-    message: "OpenDucktor web lifecycle failed.",
-    details: { failures: failures.map(errorMessage) },
-  });
-};
-
 export const createWebLauncherLifecycle = (
   options: WebLauncherLifecycleOptions,
 ): Effect.Effect<WebLauncherLifecycle> =>
@@ -154,7 +139,11 @@ export const createWebLauncherLifecycle = (
           }
         }
 
-        const failure = combinedLifecycleFailure(failures);
+        const failure = combineWebErrors(
+          "web.launcher.lifecycle",
+          "OpenDucktor web lifecycle failed.",
+          failures,
+        );
         if (failure) {
           return yield* failure;
         }
@@ -195,7 +184,11 @@ export const createWebLauncherLifecycle = (
             if (failures.length === 0) {
               yield* writeWebLogEffect(options.logger, "success", "OpenDucktor web stopped.");
             }
-            const failure = combinedLifecycleFailure(failures);
+            const failure = combineWebErrors(
+              "web.launcher.lifecycle",
+              "OpenDucktor web lifecycle failed.",
+              failures,
+            );
             if (failure) {
               return yield* failure;
             }

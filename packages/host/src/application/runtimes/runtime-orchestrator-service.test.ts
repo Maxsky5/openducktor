@@ -62,6 +62,57 @@ describe("createRuntimeOrchestratorService", () => {
     ]);
   });
 
+  test("executes repo runtime health logger Effects", async () => {
+    const infos: string[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      logger: {
+        error: () => Effect.void,
+        info: (message) => Effect.sync(() => infos.push(message)),
+      },
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(),
+      taskReader: createTaskStore(),
+    });
+
+    await Effect.runPromise(
+      service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
+
+    expect(infos).toEqual([
+      "Checking opencode repo runtime health for repository /canonical/repo",
+      "opencode workspace runtime opencode-runtime-1 is ready at http://127.0.0.1:4096",
+      "opencode repo runtime health is ready for repository /canonical/repo",
+    ]);
+  });
+
+  test("propagates repo runtime health logging failures", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      logger: {
+        error: () => Effect.void,
+        info: () => Effect.fail(persistenceError),
+      },
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(),
+      taskReader: createTaskStore(),
+    });
+
+    const exit = await Effect.runPromiseExit(
+      service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "runtime-orchestrator.log-info",
+        cause: persistenceError,
+      });
+    }
+  });
+
   test("preserves runtime startup and logging failures together", async () => {
     const startupFailure = new HostOperationError({
       operation: "test.runtime-startup",
