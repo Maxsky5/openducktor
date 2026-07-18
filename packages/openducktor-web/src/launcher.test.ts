@@ -544,6 +544,37 @@ describe("launcher internals", () => {
     });
   });
 
+  test("preserves frontend shutdown and rejected host exit failures together", async () => {
+    const frontendFailure = new Error("frontend close failed");
+    const hostExitFailure = new Error("host background logging failed");
+    const hostBackend = {
+      exited: Promise.reject(hostExitFailure),
+      port: 14327,
+      stop: async () => {},
+    };
+
+    await expect(
+      stopLauncherServices(
+        { frontendServer: null, hostBackend, logger: testLogger },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {},
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.shutdown",
+      details: {
+        failures: [
+          expect.objectContaining({ cause: frontendFailure }),
+          expect.objectContaining({ cause: hostExitFailure, operation: "await-exit" }),
+        ],
+      },
+    });
+  });
+
   test("preserves cleanup failures when shutdown error logging fails", async () => {
     const frontendFailure = new Error("frontend close failed");
     const persistenceFailure = new Error("log append failed");

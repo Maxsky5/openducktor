@@ -273,10 +273,7 @@ const startViteServerEffect = (
           }),
         ).pipe(
           Effect.catchAll((error) =>
-            Effect.gen(function* () {
-              yield* cleanupStartedFrontendServerEffect(server, logger);
-              return yield* error;
-            }),
+            preserveLauncherFailureAfterStop(error, closeFrontendServerEffect(server), logger),
           ),
           Effect.onInterrupt(() =>
             cleanupStartedFrontendServerEffect(server, logger).pipe(

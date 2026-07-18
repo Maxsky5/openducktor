@@ -259,6 +259,12 @@ export const createRuntimeOrchestratorService = ({
         );
         const runtimeResult = yield* Effect.either(runtimeEnsure(input));
         if (runtimeResult._tag === "Left") {
+          if (
+            runtimeResult.left instanceof HostOperationError &&
+            runtimeResult.left.operation === "runtime-orchestrator.log-info"
+          ) {
+            return yield* Effect.fail(runtimeResult.left);
+          }
           return yield* buildHealthStatus(
             descriptor,
             yield* loadRuntimeStartupStatus({ runtimeKind, repoPath: canonicalRepoPath }),

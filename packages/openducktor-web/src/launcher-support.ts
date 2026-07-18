@@ -416,22 +416,26 @@ export const stopLauncherServicesEffect = (
       return;
     }
 
-    const hostExitCode = yield* Effect.tryPromise({
-      try: () => hostBackend.exited,
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "typescript-host-backend",
-          operation: "await-exit",
-          message: errorMessage(cause),
-          cause,
-        }),
-    });
-    if (hostExitCode !== 0) {
+    const hostExit = yield* Effect.exit(
+      Effect.tryPromise({
+        try: () => hostBackend.exited,
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "typescript-host-backend",
+            operation: "await-exit",
+            message: errorMessage(cause),
+            cause,
+          }),
+      }),
+    );
+    if (hostExit._tag === "Failure") {
+      shutdownFailures.push(causeToWebBoundaryError(hostExit.cause));
+    } else if (hostExit.value !== 0) {
       shutdownFailures.push(
         new WebOperationError({
           operation: "web.launcher.shutdown",
-          message: `OpenDucktor TypeScript host shutdown failed with exit code ${hostExitCode}.`,
-          details: { hostExitCode },
+          message: `OpenDucktor TypeScript host shutdown failed with exit code ${hostExit.value}.`,
+          details: { hostExitCode: hostExit.value },
         }),
       );
     }

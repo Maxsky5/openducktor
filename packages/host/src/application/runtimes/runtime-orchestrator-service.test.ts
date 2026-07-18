@@ -113,6 +113,37 @@ describe("createRuntimeOrchestratorService", () => {
     }
   });
 
+  test("propagates runtime-ready logging failures from repo runtime health", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    let infoCalls = 0;
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      logger: {
+        error: () => Effect.void,
+        info: () => {
+          infoCalls += 1;
+          return infoCalls === 2 ? Effect.fail(persistenceError) : Effect.void;
+        },
+      },
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(),
+      taskReader: createTaskStore(),
+    });
+
+    const exit = await Effect.runPromiseExit(
+      service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "runtime-orchestrator.log-info",
+        cause: persistenceError,
+      });
+    }
+  });
+
   test("preserves runtime startup and logging failures together", async () => {
     const startupFailure = new HostOperationError({
       operation: "test.runtime-startup",

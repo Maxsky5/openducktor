@@ -451,6 +451,43 @@ describe("electron app update install handoff", () => {
     expect(fatalErrors).toEqual([persistenceError]);
   });
 
+  test("preserves detached logging and updater disposal failures together", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const adapterDisposeError = new Error("updater adapter dispose failed");
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    adapter.dispose = async () => {
+      adapter.disposeCalls += 1;
+      throw adapterDisposeError;
+    };
+    const { service } = createService({
+      adapter,
+      logger: {
+        error() {},
+        info() {},
+        warn: async () => {
+          throw persistenceError;
+        },
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+    adapter.emit("error", new Error("native install failed"));
+    adapter.emit("error", new Error("native install still failed"));
+
+    await expect(service.dispose()).rejects.toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.app-update.dispose",
+      details: {
+        failures: [persistenceError, adapterDisposeError],
+      },
+    });
+  });
+
   test("host shutdown failures disable same-process install retry", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {

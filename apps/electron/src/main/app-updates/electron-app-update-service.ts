@@ -9,6 +9,7 @@ import type {
 } from "@openducktor/contracts";
 import { canDownloadAppUpdate, canInstallAppUpdate } from "@openducktor/contracts";
 import { parse as parseYaml } from "yaml";
+import { ElectronLifecycleError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
 import {
   createDisabledUpdateState,
@@ -719,6 +720,16 @@ export const createElectronAppUpdateService = ({
         detachedLogOwner.drain(),
         adapter.dispose(),
       ]);
+      if (detachedLogsResult.status === "rejected" && adapterResult.status === "rejected") {
+        throw new ElectronLifecycleError({
+          operation: "electron.app-update.dispose",
+          message: "Electron app update disposal failed in detached logging and updater cleanup.",
+          cause: detachedLogsResult.reason,
+          details: {
+            failures: [detachedLogsResult.reason, adapterResult.reason],
+          },
+        });
+      }
       if (detachedLogsResult.status === "rejected") {
         throw detachedLogsResult.reason;
       }
