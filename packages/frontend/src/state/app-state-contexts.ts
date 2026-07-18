@@ -199,6 +199,9 @@ export const useAgentSessionHistoryLoadContext = (): AgentSessionHistoryLoadCont
 export const useAgentSessionReadModelStateContext = (): AgentSessionReadModelStateContextValue =>
   useRequiredContext(AgentSessionReadModelStateContext, "useAgentSessionReadModelState");
 
+export const useWorkspaceStateContext = (): WorkspaceStateContextValue =>
+  useRequiredContext(WorkspaceStateContext, "useWorkspaceState");
+
 export const useWorkspaceBranchStateContext = (): WorkspaceBranchStateContextValue =>
   useRequiredContext(WorkspaceBranchStateContext, "useWorkspaceBranchState");
 

@@ -14,11 +14,11 @@ import {
 } from "@/features/autopilot/autopilot-events";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
-import { useWorkspaceState } from "@/state";
 import {
   useAgentOperationsContext,
   useRuntimeDefinitionsContext,
   useTaskSnapshotContext,
+  useWorkspaceStateContext,
 } from "../app-state-contexts";
 import { loadTaskWorktree } from "../operations/agent-orchestrator/runtime/runtime";
 import { loadAgentSessionListFromQuery } from "../queries/agent-sessions";
@@ -26,7 +26,7 @@ import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
-  const { activeWorkspace } = useWorkspaceState();
+  const { activeWorkspace } = useWorkspaceStateContext();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { tasks } = useTaskSnapshotContext();
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
