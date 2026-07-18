@@ -451,7 +451,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     const upsertedRecords: unknown[] = [];
-    let storedSession = persistedSessionFixture;
+    let storedSession = structuredClone(persistedSessionFixture);
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
