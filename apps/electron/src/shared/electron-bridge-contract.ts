@@ -14,11 +14,22 @@ export const ELECTRON_APP_UPDATE_CHECK_CHANNEL = "openducktor:app-update:check";
 export const ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL = "openducktor:app-update:download";
 export const ELECTRON_APP_UPDATE_INSTALL_CHANNEL = "openducktor:app-update:install";
 export const ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL = "openducktor:app-update:state-changed";
+export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
+  "OpenDucktor is shutting down. The requested command was not run.";
 
 export type ElectronHostInvokeRequest = {
-  command: HostCommandName;
+  command: string;
   args?: Record<string, unknown>;
 };
+
+export type ElectronHostInvokeResponse =
+  | {
+      status: "success";
+      payload: unknown;
+    }
+  | {
+      status: "shutdown";
+    };
 
 export type ElectronHostEventEnvelope = {
   channel: string;

@@ -44,6 +44,14 @@ type TestHostCommandInvoke = (
   args?: Record<string, unknown>,
 ) => Effect.Effect<unknown, unknown>;
 
+const createDeferred = <Value = void>() => {
+  let resolve: (value: Value | PromiseLike<Value>) => void = () => {};
+  const promise = new Promise<Value>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+};
+
 const PENDING_STREAM_READ = Symbol("pending-stream-read");
 type StreamReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
 
@@ -458,6 +466,176 @@ describe("TypeScript web host backend", () => {
     expect(response.status).toBe(202);
     expect(shutdownStarted).toBe(true);
     expect(stopCalls).toBe(0);
+  });
+
+  test("rejects invokes after the shutdown gate while host teardown remains pending", async () => {
+    const disposeStarted = createDeferred();
+    const disposeReleased = createDeferred();
+    let invokeCalls = 0;
+    const teardown = stopTypescriptHostBackendServices({
+      disposeHost: () =>
+        Effect.promise(async () => {
+          disposeStarted.resolve();
+          await disposeReleased.promise;
+        }),
+      resolveExited: () => {},
+      stopServer: () => {},
+    });
+
+    await disposeStarted.promise;
+    try {
+      const response = await handleTestRequest(
+        new Request("http://127.0.0.1/invoke/runtime_ensure", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-openducktor-app-token": APP_TOKEN,
+          },
+          body: JSON.stringify({}),
+        }),
+        {
+          hostCommandRouter: createTestHostCommandRouter(() => {
+            invokeCalls += 1;
+            return Effect.succeed(null);
+          }),
+          shutdownStarted: true,
+        },
+      );
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: "Browser backend is shutting down and is no longer accepting new work.",
+        message: "Browser backend is shutting down and is no longer accepting new work.",
+      });
+      expect(invokeCalls).toBe(0);
+    } finally {
+      disposeReleased.resolve();
+      await teardown;
+    }
+  });
+
+  test("rejects new SSE streams after the shutdown gate without opening a subscription", async () => {
+    const eventBus = new BufferedHostEventBus();
+    const stream = eventBus.stream();
+    const originalStream = eventBus.stream.bind(eventBus);
+    const originalSubscribe = stream.subscribe.bind(stream);
+    let streamCalls = 0;
+    let subscribeCalls = 0;
+    eventBus.stream = () => {
+      streamCalls += 1;
+      return originalStream();
+    };
+    stream.subscribe = (listener) => {
+      subscribeCalls += 1;
+      return originalSubscribe(listener);
+    };
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/events", {
+        method: "GET",
+        headers: { "x-openducktor-app-token": APP_TOKEN },
+      }),
+      { eventBus, shutdownStarted: true },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "Browser backend is shutting down and is no longer accepting new work.",
+      message: "Browser backend is shutting down and is no longer accepting new work.",
+    });
+    expect(streamCalls).toBe(0);
+    expect(subscribeCalls).toBe(0);
+  });
+
+  test("keeps active SSE streams open until forced server shutdown", async () => {
+    const eventBus = new BufferedHostEventBus();
+    const disposeStarted = createDeferred();
+    const disposeReleased = createDeferred();
+    let shutdownStarted = false;
+    let server!: ReturnType<typeof Bun.serve>;
+    let stopPromise: Promise<void> | null = null;
+    const stop = (): Promise<void> => {
+      if (stopPromise) {
+        return stopPromise;
+      }
+      shutdownStarted = true;
+      stopPromise = stopTypescriptHostBackendServices({
+        disposeHost: () =>
+          Effect.promise(async () => {
+            disposeStarted.resolve();
+            await disposeReleased.promise;
+          }),
+        resolveExited: () => {},
+        stopServer: () => server.stop(true),
+      });
+      return stopPromise;
+    };
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, requestServer) =>
+        Effect.runPromise(
+          handleTypescriptHostBackendRequest({
+            allowedOrigins: new Set(),
+            appToken: APP_TOKEN,
+            controlToken: CONTROL_TOKEN,
+            eventBus,
+            hostCommandRouter: createTestHostCommandRouter(),
+            localAttachments: createLocalAttachmentAdapter(),
+            request,
+            requestTimeouts: requestServer,
+            shutdownStarted,
+            beginShutdown: () => {
+              shutdownStarted = true;
+            },
+            stop,
+          }),
+        ),
+    });
+
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const response = await Bun.fetch(`http://127.0.0.1:${server.port}/events`, {
+        headers: { "x-openducktor-app-token": APP_TOKEN },
+      });
+      expect(response.status).toBe(200);
+      reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Expected SSE response body.");
+      }
+      expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toBe(
+        ": openducktor-ready\n\n",
+      );
+
+      const shutdown = stop();
+      await disposeStarted.promise;
+      eventBus.publish("openducktor://run-event", { type: "run" });
+      expect(new TextDecoder().decode((await reader.read()).value)).toContain('"type":"run"');
+
+      disposeReleased.resolve();
+      await shutdown;
+      const terminalRead = await reader.read().then(
+        (result) => ({ result }),
+        (error: unknown) => ({ error }),
+      );
+      if ("error" in terminalRead) {
+        expect(terminalRead.error).toBeInstanceOf(Error);
+      } else {
+        expect(terminalRead.result.done).toBe(true);
+      }
+    } finally {
+      disposeReleased.resolve();
+      if (stopPromise) {
+        await stopPromise;
+      } else {
+        server.stop(true);
+      }
+      try {
+        await reader?.cancel();
+      } catch {
+        // Bun rejects an SSE reader after server.stop(true) force-closes its socket.
+      }
+    }
   });
 
   test("keeps the backend server alive until host disposal finishes", async () => {
