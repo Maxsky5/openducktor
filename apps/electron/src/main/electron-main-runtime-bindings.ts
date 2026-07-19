@@ -4,6 +4,8 @@ import { ElectronOperationError } from "../effect/electron-errors";
 import type { ElectronMainLogger } from "./electron-main-logger";
 import { runElectronMainTask } from "./electron-main-task-owner";
 
+class ElectronHostCommandLoggingError extends ElectronOperationError {}
+
 export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) => {
   const activeHostCommands = new Set<Promise<unknown>>();
   let acceptsHostCommands = true;
@@ -20,7 +22,16 @@ export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) =>
         runElectronMainTask(operation, reportFailure),
     drainHostCommands(): Promise<void> {
       acceptsHostCommands = false;
-      return Promise.allSettled([...activeHostCommands]).then(() => undefined);
+      return Promise.allSettled([...activeHostCommands]).then((results) => {
+        for (const result of results) {
+          if (
+            result.status === "rejected" &&
+            result.reason instanceof ElectronHostCommandLoggingError
+          ) {
+            throw result.reason;
+          }
+        }
+      });
     },
     lifecycleLogger: logger,
     runHostCommand<Result, Failure extends Error>(
@@ -42,7 +53,7 @@ export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) =>
           logger.error(`Electron host command '${command}' failed`, commandFailure).pipe(
             Effect.mapError(
               (persistenceFailure) =>
-                new ElectronOperationError({
+                new ElectronHostCommandLoggingError({
                   operation: "electron.main.host-command",
                   message: `Electron host command '${command}' failed and its error could not be persisted.`,
                   cause: commandFailure,

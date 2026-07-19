@@ -584,6 +584,53 @@ describe("Electron main lifecycle policy", () => {
     expect(quitCalled).toBe(true);
   });
 
+  test("shutdown reports admitted host command log persistence failures before exiting", async () => {
+    const commandFailure = new Error("Codex session was released during shutdown");
+    const persistenceFailure = new Error("openducktor.logs.append failed");
+    const logger = {
+      error: () => Effect.fail(persistenceFailure),
+      info: () => Effect.void,
+      warn: () => Effect.void,
+    };
+    const runtimeBindings = createElectronMainRuntimeBindings(logger);
+    const reportedFailures: unknown[] = [];
+    const exitCodes: number[] = [];
+    let quitCalls = 0;
+    const controller = createElectronMainShutdownController({
+      disposeHost: () => Effect.void,
+      drainHostCommands: runtimeBindings.drainHostCommands,
+      exitProcess: (exitCode) => {
+        exitCodes.push(exitCode);
+      },
+      logger,
+      quitApp: () => {
+        quitCalls += 1;
+      },
+      reportFailure: (cause) => {
+        reportedFailures.push(cause);
+      },
+    });
+
+    const commandOutcome = runtimeBindings
+      .runHostCommand("runtime.session.context-usage", Effect.fail(commandFailure))
+      .then(
+        () => null,
+        (cause: unknown) => cause,
+      );
+    await controller.shutdownHostAndQuit({ reason: "window-close" });
+    const rejectedCommand = await commandOutcome;
+
+    expect(rejectedCommand).toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.main.host-command",
+      cause: commandFailure,
+      details: { commandFailure, persistenceFailure },
+    });
+    expect(reportedFailures).toEqual([rejectedCommand]);
+    expect(exitCodes).toEqual([1]);
+    expect(quitCalls).toBe(0);
+  });
+
   test("shutdown controller exits with failure when host disposal fails on a signal path", async () => {
     const errors: Array<{ error: unknown; message: string }> = [];
     const exitCodes: number[] = [];

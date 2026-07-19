@@ -230,7 +230,10 @@ export const createElectronMainShutdownController = ({
     }
 
     hostShutdownStarted = true;
-    const hostCommandDrain = drainHostCommands();
+    const hostCommandDrain = drainHostCommands().then(
+      () => undefined,
+      (cause: unknown) => cause,
+    );
     let exitCode = hostShutdownExitCode ?? 0;
     const loggingFailures: unknown[] = [];
     const shutdownFailures: unknown[] = [];
@@ -241,7 +244,10 @@ export const createElectronMainShutdownController = ({
       loggingFailures.push(startLoggingFailure);
     }
     const disposeExit = await Effect.runPromiseExit(disposeHost(reason));
-    await hostCommandDrain;
+    const hostCommandLoggingFailure = await hostCommandDrain;
+    if (hostCommandLoggingFailure !== undefined) {
+      loggingFailures.push(hostCommandLoggingFailure);
+    }
     let completionLoggingFailure: unknown | undefined;
     if (Exit.isFailure(disposeExit)) {
       exitCode = 1;
