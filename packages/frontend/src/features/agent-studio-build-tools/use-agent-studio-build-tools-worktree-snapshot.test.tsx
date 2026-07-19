@@ -576,41 +576,41 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
-  test.each([
-    "spec",
-    "planner",
-  ] as const)("uses a fresh %s session worktree for Git context and Open In", async (role) => {
-    const specSession = createAgentSessionFixture({
-      role,
-      workingDirectory: "/repo/.worktrees/task-24",
-    });
-    const harness = createHookHarness(
-      createBaseArgs({
-        selectedView: createSelectedView({
-          role,
-          loadedSession: specSession,
+  test.each(["spec", "planner"] as const)(
+    "uses a fresh %s session worktree for Git context and Open In",
+    async (role) => {
+      const specSession = createAgentSessionFixture({
+        role,
+        workingDirectory: "/repo/.worktrees/task-24",
+      });
+      const harness = createHookHarness(
+        createBaseArgs({
+          selectedView: createSelectedView({
+            role,
+            loadedSession: specSession,
+          }),
         }),
-      }),
-    );
+      );
 
-    try {
-      await harness.mount();
+      try {
+        await harness.mount();
 
-      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
-      expect(harness.getLatest().gitPanelContextMode).toBe("worktree");
-      expect(harness.getLatest().worktree.path).toBe("/repo/.worktrees/task-24");
-      expect(harness.getLatest().openInTarget).toEqual({
-        path: "/repo/.worktrees/task-24",
-        disabledReason: null,
-      });
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        repoPath: "/repo",
-        worktreePath: "/repo/.worktrees/task-24",
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
+        expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+        expect(harness.getLatest().gitPanelContextMode).toBe("worktree");
+        expect(harness.getLatest().worktree.path).toBe("/repo/.worktrees/task-24");
+        expect(harness.getLatest().openInTarget).toEqual({
+          path: "/repo/.worktrees/task-24",
+          disabledReason: null,
+        });
+        expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+          repoPath: "/repo",
+          worktreePath: "/repo/.worktrees/task-24",
+        });
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("keeps a legacy root-backed Spec session in repository context", async () => {
     const specSession = createAgentSessionFixture({ role: "spec", workingDirectory: "/repo" });

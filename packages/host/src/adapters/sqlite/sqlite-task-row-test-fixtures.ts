@@ -20,10 +20,3 @@ export const taskRowFixture = (overrides: Partial<TaskRow> = {}): TaskRow => ({
   updatedAt: now(),
   ...overrides,
 });
-
-export const taskRowRecordFixture = (
-  overrides: Record<string, unknown> = {},
-): Record<string, unknown> => ({
-  ...taskRowFixture(),
-  ...overrides,
-});

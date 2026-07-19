@@ -191,16 +191,17 @@ describe("runtime schemas", () => {
     expect(() => runtimeInstanceRefSchema.parse({ kind: "opencode" })).toThrow();
   });
 
-  test.each(
-    invalidRuntimeDescriptorCases,
-  )("shared invalid runtime descriptor fixture is rejected: $name", (fixtureCase) => {
-    const descriptor = cloneJson(opencodeRuntimeDescriptorFixture) as JsonObject;
-    applyJsonPatch(descriptor, fixtureCase.patch);
+  test.each(invalidRuntimeDescriptorCases)(
+    "shared invalid runtime descriptor fixture is rejected: $name",
+    (fixtureCase) => {
+      const descriptor = cloneJson(opencodeRuntimeDescriptorFixture) as JsonObject;
+      applyJsonPatch(descriptor, fixtureCase.patch);
 
-    const result = runtimeDescriptorSchema.safeParse(descriptor);
+      const result = runtimeDescriptorSchema.safeParse(descriptor);
 
-    expect(result.success).toBe(false);
-  });
+      expect(result.success).toBe(false);
+    },
+  );
 
   test("task card parses workflow status from host payloads", () => {
     const parsed = taskCardSchema.parse({

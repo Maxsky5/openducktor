@@ -387,38 +387,34 @@ describe("AgentChatMessageCard tool duration", () => {
       input: {},
       output: "[]",
     },
-  ])("renders ListTodo icon for $tool tool rows", ({
-    id,
-    tool,
-    content,
-    timestamp,
-    input,
-    output,
-  }) => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatMessageCard, {
-        message: {
-          id,
-          role: "tool",
-          content,
-          timestamp,
-          meta: {
-            kind: "tool",
-            partId: `part-${id}`,
-            callId: `call-${id}`,
-            tool,
-            toolType: "todo",
-            status: "completed",
-            input,
-            output,
+  ])(
+    "renders ListTodo icon for $tool tool rows",
+    ({ id, tool, content, timestamp, input, output }) => {
+      const html = renderToStaticMarkup(
+        createElement(AgentChatMessageCard, {
+          message: {
+            id,
+            role: "tool",
+            content,
+            timestamp,
+            meta: {
+              kind: "tool",
+              partId: `part-${id}`,
+              callId: `call-${id}`,
+              tool,
+              toolType: "todo",
+              status: "completed",
+              input,
+              output,
+            },
           },
-        },
-        sessionAgentColors: {},
-      }),
-    );
+          sessionAgentColors: {},
+        }),
+      );
 
-    expect(html).toContain("lucide-list-todo");
-  });
+      expect(html).toContain("lucide-list-todo");
+    },
+  );
 
   test("uses the adapter-provided display label as the visible tool label", () => {
     const html = renderToStaticMarkup(

@@ -131,65 +131,68 @@ describe("createTaskService build start worktree handling", () => {
       after: task({ issueType: "feature", status: "closed" }),
     },
     { role: "qa", before: task({ status: "blocked" }), after: task({ status: "in_progress" }) },
-  ] as const)("rejects a $role bootstrap when its workflow becomes unavailable before completion", async (entry) => {
-    const calls: unknown[] = [];
-    const coordinator = createTaskSessionBootstrapCoordinator();
-    let currentTask = entry.before;
-    const service = createTaskService({
-      taskStore: {
-        getTask: () => Effect.succeed(currentTask),
-      } as TaskStorePort,
-      taskSessionBootstrapCoordinator: coordinator,
-      gitPort: createBuildStartGitPort({ calls }),
-      runtimeDefinitionsService: createRuntimeDefinitionsService(),
-      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
-      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-      systemCommands: createBuildSystemCommands(calls),
-      worktreeFiles: createBuildStartWorktreeFiles(calls),
-      workspaceSettingsService: createBuildWorkspaceSettingsService({
-        workspaceId: "repo",
-        repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
-      }),
-    });
-    const bootstrap = await Effect.runPromise(
-      service.taskSessionBootstrapPrepare({
-        repoPath: "/repo",
-        taskId: "task-1",
-        role: entry.role,
-        runtimeKind: "opencode",
-      }),
-    );
+  ] as const)(
+    "rejects a $role bootstrap when its workflow becomes unavailable before completion",
+    async (entry) => {
+      const calls: unknown[] = [];
+      const coordinator = createTaskSessionBootstrapCoordinator();
+      let currentTask = entry.before;
+      const service = createTaskService({
+        taskStore: {
+          getTask: () => Effect.succeed(currentTask),
+        } as TaskStorePort,
+        taskSessionBootstrapCoordinator: coordinator,
+        gitPort: createBuildStartGitPort({ calls }),
+        runtimeDefinitionsService: createRuntimeDefinitionsService(),
+        runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        systemCommands: createBuildSystemCommands(calls),
+        worktreeFiles: createBuildStartWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      });
+      const bootstrap = await Effect.runPromise(
+        service.taskSessionBootstrapPrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: entry.role,
+          runtimeKind: "opencode",
+        }),
+      );
 
-    currentTask = entry.after;
-    await expect(
-      Effect.runPromise(
-        service.taskSessionBootstrapComplete({
+      currentTask = entry.after;
+      await expect(
+        Effect.runPromise(
+          service.taskSessionBootstrapComplete({
+            repoPath: "/repo",
+            taskId: "task-1",
+            bootstrapId: bootstrap.bootstrapId,
+          }),
+        ),
+      ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
+        ),
+      ).rejects.toThrow("bootstrap is in progress");
+
+      await Effect.runPromise(
+        service.taskSessionBootstrapAbort({
           repoPath: "/repo",
           taskId: "task-1",
           bootstrapId: bootstrap.bootstrapId,
         }),
-      ),
-    ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
-    await expect(
-      Effect.runPromise(
-        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-      ),
-    ).rejects.toThrow("bootstrap is in progress");
-
-    await Effect.runPromise(
-      service.taskSessionBootstrapAbort({
-        repoPath: "/repo",
-        taskId: "task-1",
-        bootstrapId: bootstrap.bootstrapId,
-      }),
-    );
-    await expect(
-      Effect.runPromise(
-        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-      ),
-    ).resolves.toBeUndefined();
-  });
+      );
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
+        ),
+      ).resolves.toBeUndefined();
+    },
+  );
 
   test("rejects lifecycle changes during Builder startup and replays terminal calls safely", async () => {
     const status: ReturnType<typeof task>["status"] = "ready_for_dev";
@@ -385,53 +388,56 @@ describe("createTaskService build start worktree handling", () => {
       after: task({ issueType: "feature", status: "spec_ready" }),
     },
     { role: "qa", before: task({ status: "blocked" }), after: task({ status: "in_progress" }) },
-  ] as const)("rejects a $role fork lease when its workflow becomes unavailable before completion", async (entry) => {
-    const coordinator = createTaskSessionBootstrapCoordinator();
-    let currentTask = entry.before;
-    const service = createTaskService({
-      taskStore: {
-        getTask: () => Effect.succeed(currentTask),
-      } as TaskStorePort,
-      taskSessionBootstrapCoordinator: coordinator,
-      gitPort: createBuildStartGitPort({ calls: [] }),
-    });
-    const leaseId = await Effect.runPromise(
-      service.taskSessionStartupLeasePrepare({
-        repoPath: "/repo",
-        taskId: "task-1",
-        role: entry.role,
-      }),
-    );
+  ] as const)(
+    "rejects a $role fork lease when its workflow becomes unavailable before completion",
+    async (entry) => {
+      const coordinator = createTaskSessionBootstrapCoordinator();
+      let currentTask = entry.before;
+      const service = createTaskService({
+        taskStore: {
+          getTask: () => Effect.succeed(currentTask),
+        } as TaskStorePort,
+        taskSessionBootstrapCoordinator: coordinator,
+        gitPort: createBuildStartGitPort({ calls: [] }),
+      });
+      const leaseId = await Effect.runPromise(
+        service.taskSessionStartupLeasePrepare({
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: entry.role,
+        }),
+      );
 
-    currentTask = entry.after;
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeaseComplete({
+      currentTask = entry.after;
+      await expect(
+        Effect.runPromise(
+          service.taskSessionStartupLeaseComplete({
+            repoPath: "/repo",
+            taskId: "task-1",
+            leaseId,
+          }),
+        ),
+      ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
+        ),
+      ).rejects.toThrow("bootstrap is in progress");
+
+      await Effect.runPromise(
+        service.taskSessionStartupLeaseAbort({
           repoPath: "/repo",
           taskId: "task-1",
           leaseId,
         }),
-      ),
-    ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
-    await expect(
-      Effect.runPromise(
-        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-      ),
-    ).rejects.toThrow("bootstrap is in progress");
-
-    await Effect.runPromise(
-      service.taskSessionStartupLeaseAbort({
-        repoPath: "/repo",
-        taskId: "task-1",
-        leaseId,
-      }),
-    );
-    await expect(
-      Effect.runPromise(
-        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-      ),
-    ).resolves.toBeUndefined();
-  });
+      );
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
+        ),
+      ).resolves.toBeUndefined();
+    },
+  );
 
   test("completes a QA fork lease across available statuses and replays completion", async () => {
     let currentTask = task({ status: "blocked" });
