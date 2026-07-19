@@ -11,9 +11,15 @@ type ElectronAppIdentity = {
 type CreateProfileDirectory = (profilePath: string) => void;
 type ResolveConfigDirectory = (env?: NodeJS.ProcessEnv) => string;
 
+export type ElectronProfileKind = "development" | "production";
+
+export const resolveElectronProfileKind = (isPackaged: boolean): ElectronProfileKind =>
+  isPackaged ? "production" : "development";
+
 type ConfigureElectronAppIdentityOptions = {
   appName: string;
   createDirectory?: CreateProfileDirectory;
+  profileKind: ElectronProfileKind;
   processEnv?: NodeJS.ProcessEnv;
   resolveConfigDirectory?: ResolveConfigDirectory;
 };
@@ -22,16 +28,22 @@ const createProfileDirectory: CreateProfileDirectory = (profilePath) => {
   mkdirSync(profilePath, { recursive: true });
 };
 
-const ELECTRON_PROFILE_DIR_NAME = "electron-profile";
+const ELECTRON_PROFILE_DIRECTORY: Record<ElectronProfileKind, string> = {
+  development: "electron-profile-dev",
+  production: "electron-profile",
+};
 
-export const resolveElectronProfilePath = (configDirectory: string): string =>
-  path.resolve(configDirectory, ELECTRON_PROFILE_DIR_NAME);
+export const resolveElectronProfilePath = (
+  configDirectory: string,
+  profileKind: ElectronProfileKind,
+): string => path.resolve(configDirectory, ELECTRON_PROFILE_DIRECTORY[profileKind]);
 
 export const configureElectronAppIdentity = (
   app: ElectronAppIdentity,
   {
     appName,
     createDirectory = createProfileDirectory,
+    profileKind,
     processEnv = process.env,
     resolveConfigDirectory = resolveOpenDucktorBaseDir,
   }: ConfigureElectronAppIdentityOptions,
@@ -39,7 +51,7 @@ export const configureElectronAppIdentity = (
   app.setName(appName);
   let profilePath = "";
   try {
-    profilePath = resolveElectronProfilePath(resolveConfigDirectory(processEnv));
+    profilePath = resolveElectronProfilePath(resolveConfigDirectory(processEnv), profileKind);
     createDirectory(profilePath);
   } catch (cause) {
     const pathContext = profilePath.length > 0 ? ` at ${profilePath}` : "";
