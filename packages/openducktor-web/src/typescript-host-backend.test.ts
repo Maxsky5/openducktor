@@ -15,8 +15,8 @@ import {
   TerminalServiceError,
 } from "@openducktor/host";
 import { Deferred, Effect, TestClock, TestContext } from "effect";
-import { createWebLogger, type WebLogger } from "./logger";
 import WebSocket from "ws";
+import { createWebLogger, type WebLogger } from "./logger";
 import {
   BufferedHostEventBus,
   stopTypescriptHostBackendServices,
