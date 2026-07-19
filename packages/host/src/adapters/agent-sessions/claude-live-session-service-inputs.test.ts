@@ -14,42 +14,35 @@ describe("Claude live-session service inputs", () => {
   });
 
   test("maps public inputs without leaking present undefined optional fields", () => {
-    const binding = Effect.runSync(requireClaudePolicy("claude", "test"));
-    const startInput = toClaudeStartInput(
-      {
-        repoPath: "/repo",
-        runtimeKind: "claude",
-        workingDirectory: "/repo/worktree",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        systemPrompt: "Build",
-        model: undefined,
-      },
-      binding,
-    );
-    const sendInput = toClaudeSendInput(
-      {
-        repoPath: "/repo",
-        runtimeKind: "claude",
-        workingDirectory: "/repo/worktree",
-        externalSessionId: "session-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        parts: [
-          {
-            kind: "attachment",
-            attachment: {
-              id: "attachment-1",
-              path: "/repo/worktree/image.png",
-              name: "image.png",
-              kind: "image",
-              mime: undefined,
-            },
+    const startInput = toClaudeStartInput({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      systemPrompt: "Build",
+      model: undefined,
+    });
+    const sendInput = toClaudeSendInput({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      parts: [
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-1",
+            path: "/repo/worktree/image.png",
+            name: "image.png",
+            kind: "image",
+            mime: undefined,
           },
-        ],
-        model: undefined,
-        systemPrompt: undefined,
-      },
-      binding,
-    );
+        },
+      ],
+      model: undefined,
+      systemPrompt: undefined,
+    });
 
     expect(startInput).toEqual({
       repoPath: "/repo",

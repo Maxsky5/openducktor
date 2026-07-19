@@ -38,7 +38,7 @@ const CLAUDE_RUNTIME_POLICY_BINDING = {
 export const requireClaudePolicy = (
   runtimeKind: RuntimeKind,
   operation: string,
-): Effect.Effect<ClaudeRuntimePolicyBinding, HostValidationError> => {
+): Effect.Effect<void, HostValidationError> => {
   if (runtimeKind !== "claude") {
     return Effect.fail(
       new HostValidationError({
@@ -48,80 +48,72 @@ export const requireClaudePolicy = (
       }),
     );
   }
-  return Effect.succeed(CLAUDE_RUNTIME_POLICY_BINDING);
+  return Effect.void;
 };
 
 export const toClaudeLoadContextInput = (
   input: AgentSessionLiveLoadContextInput,
-  binding: ClaudeRuntimePolicyBinding,
 ): LoadAgentSessionHistoryInput => ({
   repoPath: input.repoPath,
   workingDirectory: input.workingDirectory,
   externalSessionId: input.externalSessionId,
-  ...binding,
+  ...CLAUDE_RUNTIME_POLICY_BINDING,
   ...(input.sessionScope === undefined ? {} : { sessionScope: input.sessionScope }),
 });
 
 export const toClaudeReplyApprovalInput = (
   input: AgentSessionLiveReplyApprovalInput,
-  binding: ClaudeRuntimePolicyBinding,
 ): ReplyApprovalInput => ({
   repoPath: input.repoPath,
   workingDirectory: input.workingDirectory,
   externalSessionId: input.externalSessionId,
   requestId: input.requestId,
   outcome: input.outcome,
-  ...binding,
+  ...CLAUDE_RUNTIME_POLICY_BINDING,
   ...(input.message === undefined ? {} : { message: input.message }),
 });
 
 export const toClaudeReplyQuestionInput = (
   input: AgentSessionLiveReplyQuestionInput,
-  binding: ClaudeRuntimePolicyBinding,
 ): ReplyQuestionInput => ({
   repoPath: input.repoPath,
   workingDirectory: input.workingDirectory,
   externalSessionId: input.externalSessionId,
   requestId: input.requestId,
   answers: input.answers,
-  ...binding,
+  ...CLAUDE_RUNTIME_POLICY_BINDING,
 });
 
 export const toClaudeStartInput = (
   input: AgentSessionControlStartInput,
-  binding: ClaudeRuntimePolicyBinding,
 ): StartAgentSessionInput => ({
   repoPath: input.repoPath,
   workingDirectory: input.workingDirectory,
   sessionScope: input.sessionScope,
   systemPrompt: input.systemPrompt,
-  ...binding,
+  ...CLAUDE_RUNTIME_POLICY_BINDING,
   ...(input.model === undefined ? {} : { model: input.model }),
 });
 
 export const toClaudeResumeInput = (
   input: AgentSessionControlResumeInput,
-  binding: ClaudeRuntimePolicyBinding,
 ): ResumeAgentSessionInput => ({
   repoPath: input.repoPath,
   workingDirectory: input.workingDirectory,
   externalSessionId: input.externalSessionId,
   sessionScope: input.sessionScope,
-  ...binding,
+  ...CLAUDE_RUNTIME_POLICY_BINDING,
   ...(input.model === undefined ? {} : { model: input.model }),
   ...(input.systemPrompt === undefined ? {} : { systemPrompt: input.systemPrompt }),
 });
 
-export const toClaudeForkInput = (
-  input: AgentSessionControlForkInput,
-  binding: ClaudeRuntimePolicyBinding,
-): ForkAgentSessionInput => ({
+export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgentSessionInput => ({
   repoPath: input.repoPath,
   workingDirectory: input.workingDirectory,
   sessionScope: input.sessionScope,
   systemPrompt: input.systemPrompt,
   parentExternalSessionId: input.parentExternalSessionId,
-  ...binding,
+  ...CLAUDE_RUNTIME_POLICY_BINDING,
   ...(input.model === undefined ? {} : { model: input.model }),
   ...(input.runtimeHistoryAnchor === undefined
     ? {}
@@ -146,14 +138,13 @@ const toClaudeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMe
 
 export const toClaudeSendInput = (
   input: AgentSessionControlSendInput,
-  binding: ClaudeRuntimePolicyBinding,
 ): SendAgentUserMessageInput => ({
   repoPath: input.repoPath,
   workingDirectory: input.workingDirectory,
   externalSessionId: input.externalSessionId,
   sessionScope: input.sessionScope,
   parts: input.parts.map(toClaudeUserMessagePart),
-  ...binding,
+  ...CLAUDE_RUNTIME_POLICY_BINDING,
   ...(input.model === undefined ? {} : { model: input.model }),
   ...(input.systemPrompt === undefined ? {} : { systemPrompt: input.systemPrompt }),
 });

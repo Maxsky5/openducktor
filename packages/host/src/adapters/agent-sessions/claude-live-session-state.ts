@@ -274,7 +274,8 @@ export const createClaudeLiveSessionState = ({
       ];
     }
     const ref = eventRef(session, event);
-    if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(refKey(ref))) {
+    const key = refKey(ref);
+    if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(key)) {
       return [];
     }
     if (
@@ -285,8 +286,6 @@ export const createClaudeLiveSessionState = ({
     ) {
       return applyPendingEvent(session, event);
     }
-
-    const key = refKey(ref);
     if (
       startupLeases.has(key) &&
       (event.type === "session_idle" ||
@@ -387,10 +386,11 @@ export const createClaudeLiveSessionState = ({
         workingDirectory: summary.workingDirectory,
         externalSessionId: summary.externalSessionId,
       };
-      retiredSessionKeys.delete(refKey(ref));
+      const key = refKey(ref);
+      retiredSessionKeys.delete(key);
       const current = readSnapshot(ref);
       if (options.forceRunning) {
-        startupLeases.add(refKey(ref));
+        startupLeases.add(key);
       }
       return commitSnapshot({
         ref,

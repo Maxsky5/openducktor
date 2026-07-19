@@ -7,6 +7,13 @@ type ClaudeSdkMessageFixture<MessageType extends SDKMessage["type"]> = {
   readonly session_id?: string;
 };
 
+type ClaudeSdkMessageFixtureResult<
+  MessageType extends SDKMessage["type"],
+  ExtraFields extends object,
+> = Extract<SDKMessage, { readonly type: MessageType }> &
+  Required<ClaudeSdkMessageFixture<MessageType>> &
+  ExtraFields;
+
 /**
  * Keeps intentionally partial SDK event fixtures honest about their public envelope while
  * centralizing the single assertion needed to omit unrelated protocol fields in focused tests.
@@ -16,19 +23,12 @@ export const claudeSdkMessageFixture = <
   ExtraFields extends object,
 >(
   message: ClaudeSdkMessageFixture<MessageType> & ExtraFields,
-): Extract<SDKMessage, { readonly type: MessageType }> &
-  ClaudeSdkMessageFixture<MessageType> & {
-    readonly uuid: string;
-    readonly session_id: string;
-  } & ExtraFields =>
-  ({ uuid: "fixture-message", session_id: "session-1", ...message }) as unknown as Extract<
-    SDKMessage,
-    { readonly type: MessageType }
-  > &
-    ClaudeSdkMessageFixture<MessageType> & {
-      readonly uuid: string;
-      readonly session_id: string;
-    } & ExtraFields;
+): ClaudeSdkMessageFixtureResult<MessageType, ExtraFields> =>
+  ({
+    uuid: "fixture-message",
+    session_id: "session-1",
+    ...message,
+  }) as unknown as ClaudeSdkMessageFixtureResult<MessageType, ExtraFields>;
 
 type ClaudeSessionMessageFixture = {
   readonly type: SessionMessage["type"];
