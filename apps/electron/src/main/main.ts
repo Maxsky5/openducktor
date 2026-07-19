@@ -47,7 +47,7 @@ import {
 } from "./app-updates/electron-app-update-service";
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
-import { configureElectronAppIdentity } from "./electron-app-identity";
+import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
@@ -181,7 +181,11 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
 > =>
   Effect.gen(function* () {
     yield* Effect.try({
-      try: () => configureElectronAppIdentity(app, { appName: APPLICATION_NAME }),
+      try: () =>
+        configureElectronAppIdentity(app, {
+          appName: APPLICATION_NAME,
+          profileKind: resolveElectronProfileKind(app.isPackaged),
+        }),
       catch: (cause) =>
         mapStartupPreparationError(
           cause,

@@ -78,6 +78,19 @@ describe("Electron main lifecycle policy", () => {
     );
   });
 
+  test("startup selects the Chromium profile from Electron packaging state", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("profileKind: resolveElectronProfileKind(app.isPackaged)");
+  });
+
+  test("startup does not claim single-instance ownership of the selected profile", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).not.toContain("requestSingleInstanceLock");
+    expect(source).not.toContain('app.on("second-instance"');
+  });
+
   test("startup does not initialize the native updater on the main-process path", () => {
     const mainSource = readRepoFile("apps/electron/src/main/main.ts");
     const nativeAdapterSource = readRepoFile(

@@ -2,33 +2,53 @@ import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import path from "node:path";
 import { ElectronOperationError } from "../effect/electron-errors";
-import { configureElectronAppIdentity, resolveElectronProfilePath } from "./electron-app-identity";
+import {
+  configureElectronAppIdentity,
+  resolveElectronProfileKind,
+  resolveElectronProfilePath,
+} from "./electron-app-identity";
 
 const customAppName = "Custom App";
 const sampleAbsolutePath = (...segments: string[]): string =>
   path.join(path.parse(process.cwd()).root, ...segments);
 const defaultConfigPath = sampleAbsolutePath("Users", "alice", ".openducktor");
 const customConfigPath = sampleAbsolutePath("Users", "alice", ".openducktor-local");
-const customProfilePath = resolveElectronProfilePath(customConfigPath);
+const customProfilePath = resolveElectronProfilePath(customConfigPath, "production");
+
+describe("resolveElectronProfileKind", () => {
+  test("uses development profiles for unpackaged Electron runtimes", () => {
+    expect(resolveElectronProfileKind(false)).toBe("development");
+    expect(resolveElectronProfileKind(true)).toBe("production");
+  });
+});
 
 describe("resolveElectronProfilePath", () => {
   test("stores Electron profile data under the OpenDucktor config directory", () => {
-    expect(resolveElectronProfilePath(`${defaultConfigPath}${path.sep}`)).toBe(
+    expect(resolveElectronProfilePath(`${defaultConfigPath}${path.sep}`, "production")).toBe(
       path.join(defaultConfigPath, "electron-profile"),
     );
   });
 
   test("keeps default and local config directories on separate profiles", () => {
-    expect(resolveElectronProfilePath(defaultConfigPath)).toBe(
+    expect(resolveElectronProfilePath(defaultConfigPath, "production")).toBe(
       path.join(defaultConfigPath, "electron-profile"),
     );
-    expect(resolveElectronProfilePath(customConfigPath)).toBe(
+    expect(resolveElectronProfilePath(customConfigPath, "production")).toBe(
       path.join(customConfigPath, "electron-profile"),
     );
   });
 
+  test("keeps development Chromium storage separate from the installed app profile", () => {
+    expect(resolveElectronProfilePath(defaultConfigPath, "development")).toBe(
+      path.join(defaultConfigPath, "electron-profile-dev"),
+    );
+    expect(resolveElectronProfilePath(defaultConfigPath, "production")).toBe(
+      path.join(defaultConfigPath, "electron-profile"),
+    );
+  });
+
   test("resolves relative config directories to absolute Electron profile paths", () => {
-    expect(resolveElectronProfilePath("./.openducktor-local")).toBe(
+    expect(resolveElectronProfilePath("./.openducktor-local", "production")).toBe(
       path.resolve("./.openducktor-local", "electron-profile"),
     );
   });
@@ -49,6 +69,7 @@ describe("configureElectronAppIdentity", () => {
       },
       {
         appName: customAppName,
+        profileKind: "production",
         processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
         createDirectory(profilePath) {
           calls.push(["mkdir", profilePath]);
@@ -79,6 +100,7 @@ describe("configureElectronAppIdentity", () => {
       },
       {
         appName: customAppName,
+        profileKind: "production",
         processEnv: { OPENDUCKTOR_CONFIG_DIR: ` "~/.openducktor-local" ` },
         createDirectory(profilePath) {
           calls.push(["mkdir", profilePath]);
@@ -109,6 +131,7 @@ describe("configureElectronAppIdentity", () => {
       },
       {
         appName: customAppName,
+        profileKind: "production",
         processEnv: {},
         createDirectory(profilePath) {
           calls.push(["mkdir", profilePath]);
@@ -139,6 +162,7 @@ describe("configureElectronAppIdentity", () => {
       },
       {
         appName: customAppName,
+        profileKind: "production",
         processEnv: { OPENDUCKTOR_CONFIG_DIR: "./.openducktor-local" },
         createDirectory(profilePath) {
           calls.push(["mkdir", profilePath]);
@@ -166,6 +190,7 @@ describe("configureElectronAppIdentity", () => {
           },
           {
             appName: customAppName,
+            profileKind: "production",
             processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
             createDirectory() {
               throw new Error("permission denied");
@@ -200,6 +225,7 @@ describe("configureElectronAppIdentity", () => {
         },
         {
           appName: customAppName,
+          profileKind: "production",
           processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
           createDirectory() {
             throw "permission denied";
@@ -226,6 +252,7 @@ describe("configureElectronAppIdentity", () => {
         },
         {
           appName: customAppName,
+          profileKind: "production",
           processEnv: { OPENDUCKTOR_CONFIG_DIR: "" },
           createDirectory() {
             throw new Error("mkdir should not run after config resolution failure");
