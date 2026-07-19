@@ -19,32 +19,24 @@ export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) =>
     command: string,
     operation: Effect.Effect<Result, Failure>,
   ): Promise<Result> {
-    const hostCommandEffect: Effect.Effect<Result, Failure | ElectronOperationError> = Effect.gen(
-      function* () {
-        const commandResult = yield* Effect.either(operation);
-        if (commandResult._tag === "Right") {
-          return commandResult.right;
-        }
-        const commandFailure = commandResult.left;
-        const loggingResult = yield* Effect.either(
-          logger.error(`Electron host command '${command}' failed`, commandFailure),
-        );
-        if (loggingResult._tag === "Left") {
-          return yield* Effect.fail(
-            new ElectronOperationError({
-              operation: "electron.main.host-command",
-              message: `Electron host command '${command}' failed and its error could not be persisted.`,
-              cause: commandFailure,
-              details: {
-                command,
-                commandFailure,
-                persistenceFailure: loggingResult.left,
-              },
-            }),
-          );
-        }
-        return yield* Effect.fail(commandFailure);
-      },
+    const hostCommandEffect = operation.pipe(
+      Effect.tapError((commandFailure) =>
+        logger.error(`Electron host command '${command}' failed`, commandFailure).pipe(
+          Effect.mapError(
+            (persistenceFailure) =>
+              new ElectronOperationError({
+                operation: "electron.main.host-command",
+                message: `Electron host command '${command}' failed and its error could not be persisted.`,
+                cause: commandFailure,
+                details: {
+                  command,
+                  commandFailure,
+                  persistenceFailure,
+                },
+              }),
+          ),
+        ),
+      ),
     );
     return runElectronEffect(hostCommandEffect);
   },

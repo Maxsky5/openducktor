@@ -46,7 +46,9 @@ describe("createElectronMainRuntimeBindings", () => {
 
   test("persists rejected host commands before returning the original failure", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-host-command-log-"));
+    const command = "runtime.session.context-usage";
     const failure = new Error("Codex session was released while context usage was loading");
+    const expectedLogMessage = `ERROR Electron host command '${command}' failed`;
     let consoleOutput = "";
 
     try {
@@ -63,21 +65,15 @@ describe("createElectronMainRuntimeBindings", () => {
       );
       const bindings = createElectronMainRuntimeBindings(logger);
 
-      await expect(
-        bindings.runHostCommand("runtime.session.context-usage", Effect.fail(failure)),
-      ).rejects.toBe(failure);
+      await expect(bindings.runHostCommand(command, Effect.fail(failure))).rejects.toBe(failure);
 
       const persisted = await readFile(
         path.join(configDirectory, "logs", "openducktor-electron-2026-07-19.log"),
         "utf8",
       );
-      expect(consoleOutput).toContain(
-        "ERROR Electron host command 'runtime.session.context-usage' failed",
-      );
+      expect(consoleOutput).toContain(expectedLogMessage);
       expect(consoleOutput).toContain(failure.message);
-      expect(persisted).toContain(
-        "ERROR Electron host command 'runtime.session.context-usage' failed",
-      );
+      expect(persisted).toContain(expectedLogMessage);
       expect(persisted).toContain(failure.message);
     } finally {
       await rm(configDirectory, { force: true, recursive: true });
@@ -85,6 +81,7 @@ describe("createElectronMainRuntimeBindings", () => {
   });
 
   test("preserves host command and persistence failures together", async () => {
+    const command = "runtime.session.context-usage";
     const commandFailure = new Error("Codex session was released");
     const persistenceFailure = new Error("openducktor.logs.append failed");
     const logger: ElectronMainLogger = {
@@ -95,13 +92,13 @@ describe("createElectronMainRuntimeBindings", () => {
     const bindings = createElectronMainRuntimeBindings(logger);
 
     await expect(
-      bindings.runHostCommand("runtime.session.context-usage", Effect.fail(commandFailure)),
+      bindings.runHostCommand(command, Effect.fail(commandFailure)),
     ).rejects.toMatchObject({
       _tag: "ElectronOperationError",
       operation: "electron.main.host-command",
       cause: commandFailure,
       details: {
-        command: "runtime.session.context-usage",
+        command,
         commandFailure,
         persistenceFailure,
       },
