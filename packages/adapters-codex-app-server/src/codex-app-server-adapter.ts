@@ -180,10 +180,12 @@ const toLivePendingQuestion = (
 });
 
 type ContextUsageLoadGuard = {
-  ref: PolicyBoundSessionRef;
+  ref: SessionRef;
   runtimeId: string | null;
   releasedRuntimeIds: Set<string>;
   error: Error | null;
+  cancellation: Promise<never>;
+  cancel: (error: Error) => void;
 };
 
 export class CodexAppServerAdapter
@@ -540,40 +542,49 @@ export class CodexAppServerAdapter
     }
     const guard = this.beginContextLoad(input);
     try {
-      const runtime = await this.runtimeClients.resolve(input, "load Codex session context usage");
+      const runtime = await this.awaitContextLoad(
+        guard,
+        this.runtimeClients.resolve(input, "load Codex session context usage"),
+      );
       this.bindContextLoadRuntime(guard, runtime.runtimeId);
       this.assertContextLoadActive(guard);
-      await this.prepareRuntime(runtime.runtimeId);
+      await this.awaitContextLoad(guard, this.prepareRuntime(runtime.runtimeId));
       this.assertContextLoadActive(guard);
       const policy = requireCodexRuntimePolicy(
         input.runtimePolicy,
         "load Codex session context usage",
       );
-      return await this.runtimeEvents.loadSessionContextUsage(
-        runtime.runtimeId,
-        input.externalSessionId,
-        async () => {
-          const response = await runtime.client.threadResume({
-            ...codexTransportPolicy(policy),
-            threadId: input.externalSessionId,
-            cwd: input.workingDirectory,
-            excludeTurns: false,
-          });
-          this.assertContextLoadActive(guard);
-          const recoveredSession = sessionStateFromExistingThread(
-            input,
-            runtime.runtimeId,
-            input.model,
-            response,
-          );
-          this.localSessions.remember(
-            preserveRuntimeContextForExistingThread(
-              recoveredSession,
-              this.localSessions.get(input.externalSessionId),
-            ),
-          );
-          this.clearThreadInventory(runtime.runtimeId);
-        },
+      return await this.awaitContextLoad(
+        guard,
+        this.runtimeEvents.loadSessionContextUsage(
+          runtime.runtimeId,
+          input.externalSessionId,
+          async () => {
+            const response = await this.awaitContextLoad(
+              guard,
+              runtime.client.threadResume({
+                ...codexTransportPolicy(policy),
+                threadId: input.externalSessionId,
+                cwd: input.workingDirectory,
+                excludeTurns: false,
+              }),
+            );
+            this.assertContextLoadActive(guard);
+            const recoveredSession = sessionStateFromExistingThread(
+              input,
+              runtime.runtimeId,
+              input.model,
+              response,
+            );
+            this.localSessions.remember(
+              preserveRuntimeContextForExistingThread(
+                recoveredSession,
+                this.localSessions.get(input.externalSessionId),
+              ),
+            );
+            this.clearThreadInventory(runtime.runtimeId);
+          },
+        ),
       );
     } finally {
       this.inFlightContextLoads.delete(guard);
@@ -600,24 +611,41 @@ export class CodexAppServerAdapter
         `Cannot load Codex session context usage because session '${input.externalSessionId}' is not retained by runtime '${input.runtimeId}'.`,
       );
     }
-    await this.prepareRuntime(input.runtimeId);
-    const policy = requireCodexRuntimePolicy(
-      session.runtimePolicy,
-      "load Codex session context usage",
-    );
-    return this.runtimeEvents.loadSessionContextUsage(
-      input.runtimeId,
-      input.externalSessionId,
-      async () => {
-        await this.runtimeClients.clientForRuntime(input.runtimeId).threadResume({
-          ...codexTransportPolicy(policy),
-          threadId: input.externalSessionId,
-          cwd: session.workingDirectory,
-          excludeTurns: false,
-        });
-        this.clearThreadInventory(input.runtimeId);
-      },
-    );
+    const guard = this.beginContextLoad({
+      ...codexSessionRef(session),
+      externalSessionId: input.externalSessionId,
+    });
+    this.bindContextLoadRuntime(guard, input.runtimeId);
+    try {
+      await this.awaitContextLoad(guard, this.prepareRuntime(input.runtimeId));
+      this.assertContextLoadActive(guard);
+      const policy = requireCodexRuntimePolicy(
+        session.runtimePolicy,
+        "load Codex session context usage",
+      );
+      return await this.awaitContextLoad(
+        guard,
+        this.runtimeEvents.loadSessionContextUsage(
+          input.runtimeId,
+          input.externalSessionId,
+          async () => {
+            await this.awaitContextLoad(
+              guard,
+              this.runtimeClients.clientForRuntime(input.runtimeId).threadResume({
+                ...codexTransportPolicy(policy),
+                threadId: input.externalSessionId,
+                cwd: session.workingDirectory,
+                excludeTurns: false,
+              }),
+            );
+            this.assertContextLoadActive(guard);
+            this.clearThreadInventory(input.runtimeId);
+          },
+        ),
+      );
+    } finally {
+      this.inFlightContextLoads.delete(guard);
+    }
   }
 
   listLiveSessionSnapshots(runtimeId: string): AgentSessionLiveSnapshot[] {
@@ -728,12 +756,17 @@ export class CodexAppServerAdapter
     }
   }
 
-  private beginContextLoad(input: PolicyBoundSessionRef): ContextUsageLoadGuard {
+  private beginContextLoad(input: SessionRef): ContextUsageLoadGuard {
+    let cancel: (error: Error) => void = () => {};
     const guard = {
       ref: input,
       runtimeId: null,
       releasedRuntimeIds: new Set<string>(),
       error: null,
+      cancellation: new Promise<never>((_, reject) => {
+        cancel = reject;
+      }),
+      cancel,
     };
     this.inFlightContextLoads.add(guard);
     return guard;
@@ -742,8 +775,9 @@ export class CodexAppServerAdapter
   private bindContextLoadRuntime(guard: ContextUsageLoadGuard, runtimeId: string): void {
     guard.runtimeId = runtimeId;
     if (guard.releasedRuntimeIds.has(runtimeId)) {
-      guard.error = new Error(
-        `Codex runtime '${runtimeId}' was released while loading context usage.`,
+      this.cancelContextLoad(
+        guard,
+        new Error(`Codex runtime '${runtimeId}' was released while loading context usage.`),
       );
     }
   }
@@ -751,8 +785,11 @@ export class CodexAppServerAdapter
   private cancelSessionContextLoads(input: SessionRef): void {
     for (const guard of this.inFlightContextLoads) {
       if (agentSessionRefsEqual(guard.ref, input)) {
-        guard.error = new Error(
-          `Codex session '${input.externalSessionId}' was released while loading context usage.`,
+        this.cancelContextLoad(
+          guard,
+          new Error(
+            `Codex session '${input.externalSessionId}' was released while loading context usage.`,
+          ),
         );
       }
     }
@@ -762,8 +799,9 @@ export class CodexAppServerAdapter
     for (const guard of this.inFlightContextLoads) {
       guard.releasedRuntimeIds.add(runtimeId);
       if (guard.runtimeId === runtimeId) {
-        guard.error = new Error(
-          `Codex runtime '${runtimeId}' was released while loading context usage.`,
+        this.cancelContextLoad(
+          guard,
+          new Error(`Codex runtime '${runtimeId}' was released while loading context usage.`),
         );
       }
     }
@@ -773,6 +811,21 @@ export class CodexAppServerAdapter
     if (guard.error) {
       throw guard.error;
     }
+  }
+
+  private awaitContextLoad<Value>(
+    guard: ContextUsageLoadGuard,
+    operation: Promise<Value>,
+  ): Promise<Value> {
+    return Promise.race([operation, guard.cancellation]);
+  }
+
+  private cancelContextLoad(guard: ContextUsageLoadGuard, error: Error): void {
+    if (guard.error) {
+      return;
+    }
+    guard.error = error;
+    guard.cancel(error);
   }
 
   async listSessionRuntimeSnapshots(

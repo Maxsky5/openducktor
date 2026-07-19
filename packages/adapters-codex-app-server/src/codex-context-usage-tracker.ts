@@ -31,6 +31,7 @@ const canonicalZeroUsage = (params: unknown): CodexSessionContextUsage | null =>
 
 export class CodexContextUsageTracker {
   private readonly latestByKey = new Map<string, CodexSessionContextUsage>();
+  private readonly inFlightLoadsByKey = new Map<string, Promise<CodexSessionContextUsage | null>>();
 
   latest(runtimeId: string, threadId: string): CodexSessionContextUsage | null {
     return this.latestByKey.get(contextUsageKey(runtimeId, threadId)) ?? null;
@@ -45,16 +46,31 @@ export class CodexContextUsageTracker {
     if (retained) {
       return retained;
     }
-    try {
-      await resumeWithTurns();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to load Codex context usage for runtime '${runtimeId}' session '${threadId}': ${message}`,
-        { cause: error },
-      );
+    const key = contextUsageKey(runtimeId, threadId);
+    const inFlight = this.inFlightLoadsByKey.get(key);
+    if (inFlight) {
+      return inFlight;
     }
-    return this.latest(runtimeId, threadId);
+    const load = Promise.resolve().then(async () => {
+      try {
+        await resumeWithTurns();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to load Codex context usage for runtime '${runtimeId}' session '${threadId}': ${message}`,
+          { cause: error },
+        );
+      }
+      return this.latest(runtimeId, threadId);
+    });
+    this.inFlightLoadsByKey.set(key, load);
+    try {
+      return await load;
+    } finally {
+      if (this.inFlightLoadsByKey.get(key) === load) {
+        this.inFlightLoadsByKey.delete(key);
+      }
+    }
   }
 
   observeNotification(runtimeId: string, notification: CodexNotificationRecord): void {
