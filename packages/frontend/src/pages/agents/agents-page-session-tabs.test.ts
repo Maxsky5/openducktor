@@ -770,47 +770,47 @@ describe("agents-page-session-tabs", () => {
       session: buildSession({ role: "qa", status: "error" }),
       expected: { tone: "failed" as const, liveSession: "error" as const },
     },
-  ])("shows qa step as active in ai_review when a new qa review session is $name", ({
-    session,
-    expected,
-  }) => {
-    const task = buildTask({
-      issueType: "feature",
-      status: "ai_review",
-      documentSummary: {
-        spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
-        plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
-        qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
-      },
-      agentWorkflows: {
-        spec: { required: true, canSkip: false, available: true, completed: true },
-        planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
-        qa: { required: true, canSkip: false, available: true, completed: false },
-      },
-    });
+  ])(
+    "shows qa step as active in ai_review when a new qa review session is $name",
+    ({ session, expected }) => {
+      const task = buildTask({
+        issueType: "feature",
+        status: "ai_review",
+        documentSummary: {
+          spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
+          plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
+          qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
+        },
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: { required: true, canSkip: false, available: true, completed: true },
+          builder: { required: true, canSkip: false, available: true, completed: true },
+          qa: { required: true, canSkip: false, available: true, completed: false },
+        },
+      });
 
-    const states = buildWorkflowStateByRole({
-      task,
-      roleWorkflowsByTask: {
-        spec: task.agentWorkflows.spec,
-        planner: task.agentWorkflows.planner,
-        build: task.agentWorkflows.builder,
-        qa: task.agentWorkflows.qa,
-      },
-      liveSessionByRole: buildLiveSessionByRoleMap([
-        buildSession({ role: "build", status: "stopped" }),
-        session,
-      ]),
-    });
+      const states = buildWorkflowStateByRole({
+        task,
+        roleWorkflowsByTask: {
+          spec: task.agentWorkflows.spec,
+          planner: task.agentWorkflows.planner,
+          build: task.agentWorkflows.builder,
+          qa: task.agentWorkflows.qa,
+        },
+        liveSessionByRole: buildLiveSessionByRoleMap([
+          buildSession({ role: "build", status: "stopped" }),
+          session,
+        ]),
+      });
 
-    expect(states.qa).toEqual({
-      tone: expected.tone,
-      availability: "available",
-      completion: "in_progress",
-      liveSession: expected.liveSession,
-    });
-  });
+      expect(states.qa).toEqual({
+        tone: expected.tone,
+        availability: "available",
+        completion: "in_progress",
+        liveSession: expected.liveSession,
+      });
+    },
+  );
 
   test("does not mark builder done from stale approved qa report after build reopens", () => {
     const task = buildTask({

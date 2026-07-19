@@ -62,29 +62,28 @@ const configure = (adapter: ReturnType<typeof createElectronUpdaterAdapter>): vo
 };
 
 describe("electron updater adapter", () => {
-  test.each([
-    "darwin",
-    "win32",
-    "linux",
-  ] as const)("keeps electron-updater unloaded during %s background checks", async (platform) => {
-    const nativeUpdater = new FakeNativeUpdater();
-    const loadUpdater = mock(async () => nativeUpdater);
-    const adapter = createElectronUpdaterAdapter({
-      currentVersion: "0.4.4",
-      loadUpdater,
-      platform,
-      releaseSource: createReleaseSource(),
-    });
-    configure(adapter);
+  test.each(["darwin", "win32", "linux"] as const)(
+    "keeps electron-updater unloaded during %s background checks",
+    async (platform) => {
+      const nativeUpdater = new FakeNativeUpdater();
+      const loadUpdater = mock(async () => nativeUpdater);
+      const adapter = createElectronUpdaterAdapter({
+        currentVersion: "0.4.4",
+        loadUpdater,
+        platform,
+        releaseSource: createReleaseSource(),
+      });
+      configure(adapter);
 
-    await expect(adapter.checkForUpdates()).resolves.toMatchObject({
-      isUpdateAvailable: true,
-      updateInfo: { version: "0.5.0" },
-    });
+      await expect(adapter.checkForUpdates()).resolves.toMatchObject({
+        isUpdateAvailable: true,
+        updateInfo: { version: "0.5.0" },
+      });
 
-    expect(loadUpdater).not.toHaveBeenCalled();
-    expect(nativeUpdater.checkForUpdates).not.toHaveBeenCalled();
-  });
+      expect(loadUpdater).not.toHaveBeenCalled();
+      expect(nativeUpdater.checkForUpdates).not.toHaveBeenCalled();
+    },
+  );
 
   test("loads the native updater only for download and applies the complete configuration", async () => {
     const nativeUpdater = new FakeNativeUpdater();

@@ -17,7 +17,7 @@ export type TaskStorePortContractHarness = {
 
 export type CreateTaskStorePortContractHarness = () => Promise<TaskStorePortContractHarness>;
 
-export const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
+const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
   const exit = await Effect.runPromiseExit(effect);
   if (!Exit.isFailure(exit)) {
     throw new Error("Expected Effect failure.");
@@ -68,7 +68,7 @@ export const createPullRequestRecord = (overrides: Partial<PullRequest> = {}): P
   ...overrides,
 });
 
-export const createDirectMergeRecord = (
+const createDirectMergeRecord = (
   overrides: Partial<DirectMergeRecord> = {},
 ): DirectMergeRecord => ({
   method: "squash",

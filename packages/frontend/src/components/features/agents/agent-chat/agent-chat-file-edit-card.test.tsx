@@ -329,23 +329,23 @@ describe("AgentChatFileEditCard", () => {
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
   });
 
-  test.each([
-    true,
-    false,
-  ])("keeps no-diff cards on the metadata-only path when expandFileDiffsByDefault is %p", (expandFileDiffsByDefault) => {
-    renderFileEditCard(
-      buildPathFileEditData({
-        filePath: "src/no-diff.ts",
-      }),
-      expandFileDiffsByDefault,
-    );
+  test.each([true, false])(
+    "keeps no-diff cards on the metadata-only path when expandFileDiffsByDefault is %p",
+    (expandFileDiffsByDefault) => {
+      renderFileEditCard(
+        buildPathFileEditData({
+          filePath: "src/no-diff.ts",
+        }),
+        expandFileDiffsByDefault,
+      );
 
-    expect(screen.getByRole("button", { name: /no-diff\.ts/i })).toBeDefined();
-    expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
-    expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
-    expect(preloaderMock).not.toHaveBeenCalled();
-    expect(preloadedViewerMock).not.toHaveBeenCalled();
-    expect(viewerMock).not.toHaveBeenCalled();
-    expect(fileViewerMock).not.toHaveBeenCalled();
-  });
+      expect(screen.getByRole("button", { name: /no-diff\.ts/i })).toBeDefined();
+      expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
+      expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+      expect(preloaderMock).not.toHaveBeenCalled();
+      expect(preloadedViewerMock).not.toHaveBeenCalled();
+      expect(viewerMock).not.toHaveBeenCalled();
+      expect(fileViewerMock).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -78,7 +78,11 @@ describe("main menu template", () => {
       enabled: true,
     });
 
-    (updateItem?.click as () => void)();
+    const click = updateItem?.click;
+    if (!click) {
+      throw new Error("Expected Check for Updates menu item click handler.");
+    }
+    (click as () => void)();
     expect(onCheckForUpdates).toHaveBeenCalled();
   });
 });

@@ -968,9 +968,14 @@ describe("KanbanPage session start modal flow", () => {
       (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
     });
 
+    const sessionStartModal = renderer.getSessionStartModalModel();
+    if (!sessionStartModal) {
+      throw new Error("Expected session start modal.");
+    }
+
     await act(async () => {
       (
-        renderer.getSessionStartModalModel()?.onConfirm as (input: {
+        sessionStartModal.onConfirm as (input: {
           runInBackground?: boolean;
           startMode?: "fresh" | "reuse" | "fork";
           sourceSessionOptionValue?: string | null;
@@ -978,9 +983,7 @@ describe("KanbanPage session start modal flow", () => {
       )({
         startMode: "reuse",
         sourceSessionOptionValue:
-          (renderer.getSessionStartModalModel()?.selectedSourceSessionValue as
-            | string
-            | undefined) ?? null,
+          (sessionStartModal.selectedSourceSessionValue as string | undefined) ?? null,
       });
       await Promise.resolve();
     });
@@ -1130,14 +1133,15 @@ describe("KanbanPage session start modal flow", () => {
       (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
     });
 
+    const sessionStartModal = renderer.getSessionStartModalModel();
+    if (!sessionStartModal) {
+      throw new Error("Expected session start modal.");
+    }
+
     await act(async () => {
-      (renderer.getSessionStartModalModel()?.onSelectModel as (value: string) => void)(
-        "openai/gpt-5",
-      );
-      (renderer.getSessionStartModalModel()?.onSelectAgent as (value: string) => void)(
-        "build-agent",
-      );
-      (renderer.getSessionStartModalModel()?.onSelectVariant as (value: string) => void)("default");
+      (sessionStartModal.onSelectModel as (value: string) => void)("openai/gpt-5");
+      (sessionStartModal.onSelectAgent as (value: string) => void)("build-agent");
+      (sessionStartModal.onSelectVariant as (value: string) => void)("default");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1240,8 +1244,13 @@ describe("KanbanPage session start modal flow", () => {
         )("TASK-123");
       });
 
+      const feedbackModal = renderer.getHumanReviewFeedbackModalModel();
+      if (!feedbackModal) {
+        throw new Error("Expected human review feedback modal.");
+      }
+
       await act(async () => {
-        (renderer.getHumanReviewFeedbackModalModel()?.onMessageChange as (message: string) => void)(
+        (feedbackModal.onMessageChange as (message: string) => void)(
           "Apply the requested human review changes.",
         );
       });
@@ -1304,8 +1313,13 @@ describe("KanbanPage session start modal flow", () => {
 
       expect(renderer.getHumanReviewFeedbackModalModel()?.open).toBe(true);
 
+      const feedbackModal = renderer.getHumanReviewFeedbackModalModel();
+      if (!feedbackModal) {
+        throw new Error("Expected human review feedback modal.");
+      }
+
       await act(async () => {
-        (renderer.getHumanReviewFeedbackModalModel()?.onMessageChange as (message: string) => void)(
+        (feedbackModal.onMessageChange as (message: string) => void)(
           "Use a fresh builder session for these changes.",
         );
       });
@@ -1343,8 +1357,13 @@ describe("KanbanPage session start modal flow", () => {
         )("TASK-123");
       });
 
+      const feedbackModal = renderer.getHumanReviewFeedbackModalModel();
+      if (!feedbackModal) {
+        throw new Error("Expected human review feedback modal.");
+      }
+
       await act(async () => {
-        (renderer.getHumanReviewFeedbackModalModel()?.onMessageChange as (message: string) => void)(
+        (feedbackModal.onMessageChange as (message: string) => void)(
           "Keep this request-changes draft.",
         );
       });
@@ -1360,10 +1379,14 @@ describe("KanbanPage session start modal flow", () => {
 
       await waitForSessionStartModalReady(renderer);
 
-      expect(renderer.getSessionStartModalModel()?.open).toBe(true);
+      const sessionStartModal = renderer.getSessionStartModalModel();
+      if (!sessionStartModal) {
+        throw new Error("Expected session start modal.");
+      }
+      expect(sessionStartModal.open).toBe(true);
 
       await act(async () => {
-        (renderer.getSessionStartModalModel()?.onOpenChange as (open: boolean) => void)(false);
+        (sessionStartModal.onOpenChange as (open: boolean) => void)(false);
       });
 
       await waitFor(() => {
@@ -1416,8 +1439,13 @@ describe("KanbanPage session start modal flow", () => {
 
     expect(renderer.getResetImplementationModalModel()?.open).toBe(true);
 
+    const resetModal = renderer.getResetImplementationModalModel();
+    if (!resetModal) {
+      throw new Error("Expected reset implementation modal.");
+    }
+
     await act(async () => {
-      (renderer.getResetImplementationModalModel()?.onConfirm as () => void)();
+      (resetModal.onConfirm as () => void)();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1566,8 +1594,13 @@ describe("KanbanPage session start modal flow", () => {
       throw new Error("reset failed");
     });
 
+    const resetModal = renderer.getResetImplementationModalModel();
+    if (!resetModal) {
+      throw new Error("Expected reset implementation modal.");
+    }
+
     await act(async () => {
-      (renderer.getResetImplementationModalModel()?.onConfirm as () => void)();
+      (resetModal.onConfirm as () => void)();
       await Promise.resolve();
       await Promise.resolve();
     });

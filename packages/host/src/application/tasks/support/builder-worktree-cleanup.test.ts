@@ -94,19 +94,20 @@ describe("builder worktree cleanup", () => {
     ["planner", ["workspace"]],
     ["qa", ["task"]],
     ["build", ["build", "workspace"]],
-  ] satisfies Array<
-    [AgentRole, RuntimeSupportedScope[]]
-  >)("accepts the shared %s runtime scope contract", async (role, supportedScopes) => {
-    await expect(
-      Effect.runPromise(
-        resolveRuntimeDescriptorForTaskSession(
-          runtimeDefinitionsWithScopes(supportedScopes),
-          "opencode",
-          role,
+  ] satisfies Array<[AgentRole, RuntimeSupportedScope[]]>)(
+    "accepts the shared %s runtime scope contract",
+    async (role, supportedScopes) => {
+      await expect(
+        Effect.runPromise(
+          resolveRuntimeDescriptorForTaskSession(
+            runtimeDefinitionsWithScopes(supportedScopes),
+            "opencode",
+            role,
+          ),
         ),
-      ),
-    ).resolves.toMatchObject({ kind: "opencode" });
-  });
+      ).resolves.toMatchObject({ kind: "opencode" });
+    },
+  );
 
   test("selects the task worktree before older build sessions when it is on the source branch", async () => {
     const calls: unknown[] = [];

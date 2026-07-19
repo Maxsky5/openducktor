@@ -31,28 +31,6 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
   descriptor: CODEX_RUNTIME_DESCRIPTOR,
 });
 
-export const bufferedNotificationEvent = (
-  message: unknown,
-  runtimeId = "runtime-live",
-  receivedAt = new Date().toISOString(),
-) => ({
-  runtimeId,
-  kind: "notification" as const,
-  receivedAt,
-  message,
-});
-
-export const bufferedServerRequestEvent = (
-  message: unknown,
-  runtimeId = "runtime-live",
-  receivedAt = new Date().toISOString(),
-) => ({
-  runtimeId,
-  kind: "server_request" as const,
-  receivedAt,
-  message,
-});
-
 export const codexSessionRef = (
   externalSessionId = "thread/start-runtime-live",
 ): PolicyBoundSessionRef => ({

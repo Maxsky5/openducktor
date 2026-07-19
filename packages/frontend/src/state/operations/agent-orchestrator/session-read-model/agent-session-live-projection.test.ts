@@ -297,54 +297,54 @@ describe("agent session live projection", () => {
     expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("running");
   });
 
-  test.each([
-    "stopped",
-    "error",
-  ] as const)("does not resurrect a session after terminal %s activity", (terminalStatus) => {
-    const tasks = taskSessionRecords({ taskId: "task-1", record: record("thread-1") });
-    const loaded = buildAgentSessionLiveCollection({
-      current: emptyAgentSessionCollection(),
-      taskSessionRecords: tasks,
-      snapshots: [snapshot("thread-1")],
-    });
-    const removed = applyAgentSessionLiveDelta({
-      current: loaded,
-      taskSessionRecords: tasks,
-      envelope: {
-        type: "session_removed",
-        ref: snapshot("thread-1").ref,
-      },
-    });
-    const current = getAgentSession(removed, identity("thread-1"));
-    if (!current) {
-      throw new Error("Expected projected session.");
-    }
-    const terminal = replaceAgentSession(removed, { ...current, status: terminalStatus });
+  test.each(["stopped", "error"] as const)(
+    "does not resurrect a session after terminal %s activity",
+    (terminalStatus) => {
+      const tasks = taskSessionRecords({ taskId: "task-1", record: record("thread-1") });
+      const loaded = buildAgentSessionLiveCollection({
+        current: emptyAgentSessionCollection(),
+        taskSessionRecords: tasks,
+        snapshots: [snapshot("thread-1")],
+      });
+      const removed = applyAgentSessionLiveDelta({
+        current: loaded,
+        taskSessionRecords: tasks,
+        envelope: {
+          type: "session_removed",
+          ref: snapshot("thread-1").ref,
+        },
+      });
+      const current = getAgentSession(removed, identity("thread-1"));
+      if (!current) {
+        throw new Error("Expected projected session.");
+      }
+      const terminal = replaceAgentSession(removed, { ...current, status: terminalStatus });
 
-    const afterIdle = applyAgentSessionLiveDelta({
-      current: terminal,
-      taskSessionRecords: tasks,
-      envelope: {
-        type: "session_upsert",
-        session: snapshot("thread-1", {
-          activity: "idle",
-          pendingApprovals: [
-            {
-              requestId: "stale-approval",
-              requestType: "command_execution",
-              title: "Stale approval",
-            },
-          ],
+      const afterIdle = applyAgentSessionLiveDelta({
+        current: terminal,
+        taskSessionRecords: tasks,
+        envelope: {
+          type: "session_upsert",
+          session: snapshot("thread-1", {
+            activity: "idle",
+            pendingApprovals: [
+              {
+                requestId: "stale-approval",
+                requestType: "command_execution",
+                title: "Stale approval",
+              },
+            ],
+          }),
+        },
+      });
+
+      expect(getAgentSession(afterIdle, identity("thread-1"))).toEqual(
+        expect.objectContaining({
+          status: terminalStatus,
+          pendingApprovals: [],
+          pendingQuestions: [],
         }),
-      },
-    });
-
-    expect(getAgentSession(afterIdle, identity("thread-1"))).toEqual(
-      expect.objectContaining({
-        status: terminalStatus,
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-    );
-  });
+      );
+    },
+  );
 });
