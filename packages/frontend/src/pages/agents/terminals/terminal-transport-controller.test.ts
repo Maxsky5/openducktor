@@ -86,10 +86,17 @@ describe("createTerminalTransportController", () => {
 
   test("chunks oversized input without reordering its bytes", async () => {
     const sent: Uint8Array[] = [];
+    let releaseFirstChunk = (): void => {
+      throw new Error("The first terminal input chunk was not sent.");
+    };
+    const firstChunkBlocked = new Promise<void>((resolve) => {
+      releaseFirstChunk = resolve;
+    });
     const bridge: TerminalBridge = {
       connect: async () => ({
         send: async (frame) => {
           sent.push(frame);
+          if (sent.length === 1) await firstChunkBlocked;
         },
         close: () => undefined,
       }),
@@ -101,7 +108,12 @@ describe("createTerminalTransportController", () => {
       (_, index) => index % 256,
     );
 
-    await controller.write(terminalId, payload);
+    const writing = controller.write(terminalId, payload);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sent).toHaveLength(1);
+    releaseFirstChunk();
+    await writing;
 
     const decoded = sent.map(decodeTerminalProtocolFrame);
     expect(decoded.map(({ message }) => message.type)).toEqual(["input", "input"]);

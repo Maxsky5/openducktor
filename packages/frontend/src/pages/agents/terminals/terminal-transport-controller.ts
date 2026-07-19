@@ -19,6 +19,17 @@ export type { TerminalFrameListener } from "./terminal-transport-channel-registr
 
 export type TerminalTransportController = ReturnType<typeof createTerminalTransportController>;
 
+const splitTerminalInput = (payload: Uint8Array): Uint8Array[] => {
+  if (payload.byteLength === 0) return [payload];
+  return Array.from(
+    { length: Math.ceil(payload.byteLength / TERMINAL_PROTOCOL_MAX_INPUT_BYTES) },
+    (_, index) => {
+      const offset = index * TERMINAL_PROTOCOL_MAX_INPUT_BYTES;
+      return payload.subarray(offset, offset + TERMINAL_PROTOCOL_MAX_INPUT_BYTES);
+    },
+  );
+};
+
 type TerminalConnectionState =
   | { status: "disconnected" }
   | {
@@ -236,20 +247,10 @@ export const createTerminalTransportController = (
           type: "input" as const,
           terminalId,
         };
-        if (payload.byteLength === 0) {
-          await send(inputMessage, payload);
-          return;
-        }
-        for (
-          let offset = 0;
-          offset < payload.byteLength;
-          offset += TERMINAL_PROTOCOL_MAX_INPUT_BYTES
-        ) {
-          await send(
-            inputMessage,
-            payload.subarray(offset, offset + TERMINAL_PROTOCOL_MAX_INPUT_BYTES),
-          );
-        }
+        await splitTerminalInput(payload).reduce(
+          (previousSend, chunk) => previousSend.then(() => send(inputMessage, chunk)),
+          Promise.resolve(),
+        );
       }),
     resize: (terminalId: string, columns: number, rows: number) =>
       enqueueTerminalOperation(terminalId, () =>
