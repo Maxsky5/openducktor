@@ -261,7 +261,8 @@ export const createRuntimeOrchestratorService = ({
         if (runtimeResult._tag === "Left") {
           if (
             runtimeResult.left instanceof HostOperationError &&
-            runtimeResult.left.operation === "runtime-orchestrator.log-info"
+            (runtimeResult.left.operation === "runtime-orchestrator.log-info" ||
+              runtimeResult.left.details?.loggingFailure instanceof HostOperationError)
           ) {
             return yield* Effect.fail(runtimeResult.left);
           }

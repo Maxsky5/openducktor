@@ -692,7 +692,9 @@ export const createElectronAppUpdateService = ({
             applyUpToDate();
           }
         }
-        await logger.info(`OpenDucktor update check completed (${initiator})`);
+        detachedLogOwner.run(() =>
+          logger.info(`OpenDucktor update check completed (${initiator})`),
+        );
         return commandAccepted();
       } finally {
         activeOperation = null;
@@ -792,7 +794,7 @@ export const createElectronAppUpdateService = ({
           return rejectDisposed("download");
         }
         applyDownloaded(result);
-        await logger.info("OpenDucktor update download completed");
+        detachedLogOwner.run(() => logger.info("OpenDucktor update download completed"));
         return commandAccepted();
       } finally {
         activeOperation = null;

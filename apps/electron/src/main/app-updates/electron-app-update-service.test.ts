@@ -431,6 +431,32 @@ describe("electron app update service", () => {
     }
   });
 
+  test("keeps successful checks committed when completion logging fails", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    const { service } = createService({
+      logger: {
+        error: async () => {},
+        info: async () => {
+          throw persistenceError;
+        },
+        warn: async () => {},
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+    });
+
+    const result = await service.check({ initiator: "settings" });
+    await flushAsyncWork();
+
+    expect(result).toMatchObject({
+      accepted: true,
+      state: { status: "upToDate", checkedAt: fixedNow },
+    });
+    expect(fatalErrors).toEqual([persistenceError]);
+  });
+
   test("promotes an active background check when the menu requests a manual check", async () => {
     const adapter = new FakeUpdaterAdapter();
     const fakeScheduler = createFakeScheduler();
@@ -761,5 +787,45 @@ describe("electron app update service", () => {
         operation: "download",
       },
     });
+  });
+
+  test("keeps successful downloads committed when completion logging fails", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {},
+        info: async (message) => {
+          if (message === "OpenDucktor update download completed") {
+            throw persistenceError;
+          }
+        },
+        warn: async () => {},
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await flushAsyncWork();
+
+    const result = await service.download();
+    await flushAsyncWork();
+
+    expect(result).toMatchObject({
+      accepted: true,
+      state: {
+        status: "downloaded",
+        availableVersion: "0.4.3",
+        progressPercent: 100,
+      },
+    });
+    expect(fatalErrors).toEqual([persistenceError]);
   });
 });
