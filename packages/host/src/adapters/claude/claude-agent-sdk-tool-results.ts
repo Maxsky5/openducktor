@@ -2,11 +2,14 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
+import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import { isRecord } from "./claude-agent-sdk-utils";
 
 type ClaudeToolResultSession = {
   externalSessionId: string;
+  retractedSubagentTaskIds?: Set<string>;
+  retractedToolUseIds?: Set<string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolInputsByCallId: Map<string, Record<string, unknown>>;
@@ -73,6 +76,9 @@ export const handleClaudeUserToolResultMessage = ({
 }): void => {
   const result = readToolUseResult(message);
   if (!result) {
+    return;
+  }
+  if (isClaudeToolUseRetracted(session, result.toolUseId)) {
     return;
   }
   const tool = session.toolNamesByCallId.get(result.toolUseId) ?? result.toolName;

@@ -295,6 +295,195 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(hydratedIds).toEqual(["assistant-canonical"]);
   });
 
+  test("does not resurrect retracted subagents when late task events arrive", () => {
+    const toolUseMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-retracted-agent",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-agent-retracted",
+            name: "Agent",
+            input: {
+              description: "Inspect auth",
+              prompt: "Inspect the authentication flow",
+              subagent_type: "Explore",
+            },
+          },
+        ],
+        stop_reason: "tool_use",
+      },
+    });
+    const taskStarted = claudeSdkMessageFixture({
+      type: "system",
+      subtype: "task_started",
+      uuid: "task-started-retracted",
+      session_id: "session-1",
+      task_id: "task-retracted",
+      tool_use_id: "tool-agent-retracted",
+      description: "Inspect auth",
+      prompt: "Inspect the authentication flow",
+      subagent_type: "Explore",
+    });
+    const replacementMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-replacement",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      supersedes: ["assistant-retracted-agent"],
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Continuing without that subagent." }],
+        stop_reason: "end_turn",
+      },
+    });
+    const lateTaskNotification = claudeSdkMessageFixture({
+      type: "system",
+      subtype: "task_notification",
+      uuid: "task-notification-late",
+      session_id: "session-1",
+      task_id: "task-retracted",
+      status: "completed",
+      summary: "Late completion",
+    });
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+
+    for (const [message, eventTimestamp] of [
+      [toolUseMessage, timestamp],
+      [taskStarted, timestamp],
+      [replacementMessage, resultTimestamp],
+    ] as const) {
+      handleClaudeSdkMessage({
+        emit,
+        message,
+        modelSelection,
+        session: liveSession,
+        timestamp: eventTimestamp,
+      });
+    }
+    const eventCountBeforeLateNotification = liveEvents.length;
+    handleClaudeSdkMessage({
+      emit,
+      message: lateTaskNotification,
+      modelSelection,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(liveEvents.slice(eventCountBeforeLateNotification)).toEqual([]);
+    const hydrated = toClaudeHistoryMessages(
+      claudeHistoryMessageFixtures([
+        toolUseMessage,
+        taskStarted,
+        replacementMessage,
+        lateTaskNotification,
+      ]),
+      () => resultTimestamp,
+    );
+    expect(
+      hydrated.flatMap((message) => message.parts).filter((part) => part.kind === "subagent"),
+    ).toEqual([]);
+    expect(hydrated.map((message) => message.messageId)).toEqual(["assistant-replacement"]);
+  });
+
+  test("does not resurrect retracted tools when late results arrive", () => {
+    const toolUseMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-retracted-tool",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-read-retracted",
+            name: "Read",
+            input: { file_path: "src/index.ts" },
+          },
+        ],
+        stop_reason: "tool_use",
+      },
+    });
+    const replacementMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-tool-replacement",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      supersedes: ["assistant-retracted-tool"],
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Continuing without that read." }],
+        stop_reason: "end_turn",
+      },
+    });
+    const lateToolResult = claudeSdkMessageFixture({
+      type: "user",
+      uuid: "tool-result-late",
+      session_id: "session-1",
+      parent_tool_use_id: "tool-read-retracted",
+      timestamp: resultTimestamp,
+      tool_use_result: {
+        type: "tool_result",
+        tool_use_id: "tool-read-retracted",
+        tool_name: "Read",
+        content: [{ type: "text", text: "Late file contents" }],
+      },
+      message: { role: "user", content: [] },
+    });
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+
+    handleClaudeSdkMessage({
+      emit,
+      message: toolUseMessage,
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: replacementMessage,
+      modelSelection,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+    const eventCountBeforeLateResult = liveEvents.length;
+    handleClaudeSdkMessage({
+      emit,
+      message: lateToolResult,
+      modelSelection,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(liveEvents.slice(eventCountBeforeLateResult)).toEqual([]);
+    const hydrated = toClaudeHistoryMessages(
+      claudeHistoryMessageFixtures([toolUseMessage, replacementMessage, lateToolResult]),
+      () => resultTimestamp,
+    );
+    expect(hydrated.map((message) => message.messageId)).toEqual(["assistant-tool-replacement"]);
+  });
+
   test("preserves final response duration and model across live and hydrated projections", () => {
     const assistantMessage = claudeSdkMessageFixture({
       type: "assistant",

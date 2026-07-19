@@ -5,6 +5,7 @@ import {
   type ClaudeEventSession,
   streamedTextMessageIdsForContent,
 } from "./claude-agent-sdk-event-session";
+import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
 import { isRecord } from "./claude-agent-sdk-utils";
 
 const readStringArrayProp = (value: unknown, key: string): string[] => {
@@ -26,13 +27,14 @@ export const emitTranscriptRetraction = ({
 }: {
   emit: (event: AgentEvent) => void;
   messageIds: string[];
-  session: Pick<ClaudeEventSession, "externalSessionId">;
+  session: ClaudeEventSession;
   timestamp: string;
 }): void => {
   const uniqueMessageIds = [...new Set(messageIds)];
   if (uniqueMessageIds.length === 0) {
     return;
   }
+  retractClaudeTranscriptCorrelations(session, uniqueMessageIds);
   emit({
     type: "transcript_retracted",
     externalSessionId: session.externalSessionId,
@@ -74,7 +76,7 @@ export const emitSupersededTranscriptMessage = ({
 }: {
   emit: (event: AgentEvent) => void;
   message: Extract<SDKMessage, { type: "assistant" }>;
-  session: Pick<ClaudeEventSession, "externalSessionId">;
+  session: ClaudeEventSession;
   timestamp: string;
 }): void => {
   emitTranscriptRetraction({
@@ -96,7 +98,7 @@ export const emitRetractedTranscriptMessages = ({
     SDKMessage,
     { type: "result" } | { type: "system"; subtype: "model_refusal_fallback" }
   >;
-  session: Pick<ClaudeEventSession, "externalSessionId">;
+  session: ClaudeEventSession;
   timestamp: string;
 }): void => {
   emitTranscriptRetraction({

@@ -36,6 +36,10 @@ import {
 } from "./claude-agent-sdk-subagents";
 import { isClaudeToolUseBlockType, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import {
+  isClaudeToolUseRetracted,
+  retractClaudeTranscriptCorrelations,
+} from "./claude-agent-sdk-transcript-correlation";
+import {
   createClaudeAssistantReasoningPart,
   createClaudeAssistantTextPart,
   createClaudeCompletedToolPart,
@@ -128,6 +132,17 @@ export const toClaudeHistoryMessages = (
   const hiddenSubagentTaskIds = new Set<string>();
   const subagentMessageIdsByTaskId = new Map<string, string>();
   const subagentTaskIdsByToolUseId = new Map<string, string>();
+  const retractedSubagentTaskIds = new Set<string>();
+  const retractedToolUseIds = new Set<string>();
+  const correlationState = {
+    hiddenSubagentTaskIds,
+    retractedSubagentTaskIds,
+    retractedToolUseIds,
+    subagentMessageIdsByTaskId,
+    subagentTaskIdsByToolUseId,
+    toolMessageIdsByCallId,
+    toolNamesByCallId,
+  };
   const resolveLiveUserMessageId = createLiveUserMessageIdResolver(liveUserMessages);
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;
@@ -160,6 +175,10 @@ export const toClaudeHistoryMessages = (
   };
   const removeRetractedMessages = (messageIds: string[]) => {
     const retractedIds = new Set(messageIds);
+    const retractedCorrelations = retractClaudeTranscriptCorrelations(correlationState, messageIds);
+    for (const toolUseId of retractedCorrelations.toolUseIds) {
+      assistantMessagesByToolCallId.delete(toolUseId);
+    }
     let removed = false;
     for (let index = history.length - 1; index >= 0; index -= 1) {
       const message = history[index];
@@ -168,15 +187,6 @@ export const toClaudeHistoryMessages = (
       }
       history.splice(index, 1);
       removed = true;
-      if (message.role !== "assistant") {
-        continue;
-      }
-      for (const part of message.parts) {
-        if (part.kind === "tool") {
-          assistantMessagesByToolCallId.delete(part.callId);
-          toolNamesByCallId.delete(part.callId);
-        }
-      }
     }
     if (removed) {
       rebuildLastAssistantTracking();
@@ -205,6 +215,8 @@ export const toClaudeHistoryMessages = (
           subagentTaskIdsByToolUseId,
           toolMessageIdsByCallId,
           toolNamesByCallId,
+          retractedSubagentTaskIds,
+          retractedToolUseIds,
         },
         timestamp,
       });
@@ -226,6 +238,9 @@ export const toClaudeHistoryMessages = (
       const toolResults = readHistoryToolResults(entry);
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          if (isClaudeToolUseRetracted(correlationState, toolResult.toolUseId)) {
+            continue;
+          }
           const existingMessage = assistantMessagesByToolCallId.get(toolResult.toolUseId);
           const existingPart = existingMessage?.parts.find(
             (part) => part.kind === "tool" && part.callId === toolResult.toolUseId,
@@ -266,6 +281,8 @@ export const toClaudeHistoryMessages = (
                 subagentTaskIdsByToolUseId,
                 toolMessageIdsByCallId,
                 toolNamesByCallId,
+                retractedSubagentTaskIds,
+                retractedToolUseIds,
               },
               timestamp,
               toolUseId: toolResult.toolUseId,

@@ -16,6 +16,7 @@ import {
 } from "../mcp/openducktor-mcp-environment";
 import { createClaudeCanUseTool } from "./claude-agent-sdk-permissions";
 import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
+import { createClaudePreToolUseHook } from "./claude-agent-sdk-pre-tool-use-hook";
 import {
   CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS,
   createClaudeUserDialogHandler,
@@ -90,17 +91,18 @@ export const buildClaudeAgentSdkOptions = async ({
   session,
   sessionOptions,
 }: BuildClaudeAgentSdkOptionsInput): Promise<Options> => {
+  const workflowRole = claudeWorkflowRole(input);
   const [mcpServers, resolvedSettings] = await Promise.all([
     buildClaudeMcpServers({
       resolvedDependencies,
       session,
+      workflowRole,
     }),
     resolveSettings({ cwd: input.workingDirectory }),
   ]);
   const permissionMode =
     filterEscalatingDefaultMode(resolvedSettings).permissions?.defaultMode ?? "default";
   const model = input.model;
-  const workflowRole = claudeWorkflowRole(input);
   const readOnlyWorkflowRole = isReadOnlyWorkflowRole(workflowRole);
   const systemPrompt = [
     "systemPrompt" in input && input.systemPrompt ? input.systemPrompt : null,
@@ -121,6 +123,11 @@ export const buildClaudeAgentSdkOptions = async ({
     forwardSubagentText: true,
     includePartialMessages: true,
     hooks: {
+      PreToolUse: [
+        {
+          hooks: [createClaudePreToolUseHook({ session, permissionMode })],
+        },
+      ],
       PostToolUse: [
         {
           hooks: [
@@ -172,9 +179,11 @@ export const applyClaudeCodeExecutablePath = (options: Options, executablePath: 
 const buildClaudeMcpServers = async ({
   resolvedDependencies,
   session,
+  workflowRole,
 }: {
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
   session: ClaudeSessionContext;
+  workflowRole: ReturnType<typeof claudeWorkflowRole>;
 }): Promise<Record<string, McpServerConfig>> => {
   const [command, ...args] = resolvedDependencies.mcpCommand;
   if (!command) {
@@ -183,10 +192,10 @@ const buildClaudeMcpServers = async ({
       message: "OpenDucktor MCP command cannot be empty.",
     });
   }
-  const bridgeEnvironment = buildOpenDucktorMcpBridgeEnvironment(
-    resolvedDependencies.mcpBridgeConnection,
-    "Claude",
-  );
+  const bridgeEnvironment = {
+    ...buildOpenDucktorMcpBridgeEnvironment(resolvedDependencies.mcpBridgeConnection, "Claude"),
+    ...(workflowRole ? { ODT_ALLOWED_TOOLS: AGENT_ROLE_TOOL_POLICY[workflowRole].join(",") } : {}),
+  };
   const { ODT_HOST_TOKEN: hostToken, ...publicBridgeEnvironment } = bridgeEnvironment;
   const hostTokenFile = await createSessionScopedClaudeMcpTokenFile({
     hostToken,
