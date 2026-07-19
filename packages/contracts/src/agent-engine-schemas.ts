@@ -1,63 +1,16 @@
 import { z } from "zod";
-import { type RuntimeDescriptor, runtimeDescriptorSchema } from "./agent-runtime-schemas";
+import { runtimeDescriptorSchema } from "./agent-runtime-schemas";
 import {
-  type AgentTranscriptStreamPart,
-  type AgentTranscriptUserMessageDisplayPart,
   agentSessionTodoItemSchema,
   agentStreamPartSchema,
   agentUserMessageDisplayPartSchema,
 } from "./agent-session-event-schemas";
-import {
-  type AgentTranscriptModelSelection,
-  agentModelSelectionSchema,
-} from "./agent-session-schemas";
+import { agentModelSelectionSchema } from "./agent-session-schemas";
 import { fileDiffSchema, fileStatusSchema } from "./git-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
-export type AgentModelAttachmentSupport = {
-  image: boolean;
-  audio: boolean;
-  video: boolean;
-  pdf: boolean;
-  mimeTypes?: Partial<Record<"image" | "audio" | "video" | "pdf", string[]>>;
-};
-
-export type AgentModelDescriptor = {
-  id: string;
-  providerId: string;
-  providerName: string;
-  modelId: string;
-  modelName: string;
-  variants: string[];
-  contextWindow?: number;
-  outputLimit?: number;
-  attachmentSupport?: AgentModelAttachmentSupport;
-  liveSessionUpdates?: {
-    profile?: boolean;
-    variants?: string[];
-  };
-};
-
-export type AgentDescriptor = {
-  id?: string;
-  label?: string;
-  name?: string;
-  description?: string;
-  mode: "subagent" | "primary" | "all";
-  hidden?: boolean;
-  native?: boolean;
-  color?: string;
-};
-
-export type AgentModelCatalog = {
-  runtime?: RuntimeDescriptor;
-  models: AgentModelDescriptor[];
-  defaultModelsByProvider: Record<string, string>;
-  profiles?: AgentDescriptor[];
-};
-
-const inferredAgentModelAttachmentSupportSchema = z
+export const agentModelAttachmentSupportSchema = z
   .object({
     image: z.boolean(),
     audio: z.boolean(),
@@ -73,10 +26,9 @@ const inferredAgentModelAttachmentSupportSchema = z
       .optional(),
   })
   .strict();
-export const agentModelAttachmentSupportSchema =
-  inferredAgentModelAttachmentSupportSchema as unknown as z.ZodType<AgentModelAttachmentSupport>;
+export type AgentModelAttachmentSupport = z.infer<typeof agentModelAttachmentSupportSchema>;
 
-const inferredAgentModelDescriptorSchema = z
+export const agentModelDescriptorSchema = z
   .object({
     id: nonEmptyStringSchema,
     providerId: nonEmptyStringSchema,
@@ -96,10 +48,9 @@ const inferredAgentModelDescriptorSchema = z
       .optional(),
   })
   .strict();
-export const agentModelDescriptorSchema =
-  inferredAgentModelDescriptorSchema as unknown as z.ZodType<AgentModelDescriptor>;
+export type AgentModelDescriptor = z.infer<typeof agentModelDescriptorSchema>;
 
-const inferredAgentDescriptorSchema = z
+export const agentDescriptorSchema = z
   .object({
     id: nonEmptyStringSchema.optional(),
     label: nonEmptyStringSchema.optional(),
@@ -111,10 +62,9 @@ const inferredAgentDescriptorSchema = z
     color: nonEmptyStringSchema.optional(),
   })
   .strict();
-export const agentDescriptorSchema =
-  inferredAgentDescriptorSchema as unknown as z.ZodType<AgentDescriptor>;
+export type AgentDescriptor = z.infer<typeof agentDescriptorSchema>;
 
-const inferredAgentModelCatalogSchema = z
+export const agentModelCatalogSchema = z
   .object({
     runtime: runtimeDescriptorSchema.optional(),
     models: z.array(agentModelDescriptorSchema),
@@ -122,8 +72,7 @@ const inferredAgentModelCatalogSchema = z
     profiles: z.array(agentDescriptorSchema).optional(),
   })
   .strict();
-export const agentModelCatalogSchema =
-  inferredAgentModelCatalogSchema as unknown as z.ZodType<AgentModelCatalog>;
+export type AgentModelCatalog = z.infer<typeof agentModelCatalogSchema>;
 
 const sessionHistoryNoticeSchema = z.discriminatedUnion("reason", [
   z
@@ -150,52 +99,7 @@ const sessionHistoryMessageShape = {
   text: z.string(),
 };
 
-export type AgentSessionHistoryMessage =
-  | {
-      messageId: string;
-      role: "user";
-      timestamp: string;
-      timestampIsApproximate?: true;
-      text: string;
-      displayParts: AgentTranscriptUserMessageDisplayPart[];
-      state: "queued" | "read";
-      model?: AgentTranscriptModelSelection;
-      parts: AgentTranscriptStreamPart[];
-    }
-  | {
-      messageId: string;
-      role: "assistant";
-      timestamp: string;
-      timestampIsApproximate?: true;
-      text: string;
-      durationMs?: number;
-      totalTokens?: number;
-      contextWindow?: number;
-      model?: AgentTranscriptModelSelection;
-      parts: AgentTranscriptStreamPart[];
-    }
-  | {
-      messageId: string;
-      role: "system";
-      timestamp: string;
-      timestampIsApproximate?: true;
-      text: string;
-      notice?:
-        | {
-            tone: "info";
-            reason: "session_compacted";
-            title: string;
-          }
-        | {
-            tone: "info";
-            reason: "session_forked";
-            title: string;
-            parentExternalSessionId: string;
-          };
-      parts: [];
-    };
-
-const inferredAgentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
+export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
   z
     .object({
       ...sessionHistoryMessageShape,
@@ -226,8 +130,7 @@ const inferredAgentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
     })
     .strict(),
 ]);
-export const agentSessionHistoryMessageSchema =
-  inferredAgentSessionHistoryMessageSchema as unknown as z.ZodType<AgentSessionHistoryMessage>;
+export type AgentSessionHistoryMessage = z.infer<typeof agentSessionHistoryMessageSchema>;
 
 export const agentSessionHistorySchema = z.array(agentSessionHistoryMessageSchema);
 export const agentSessionTodosSchema = z.array(agentSessionTodoItemSchema);

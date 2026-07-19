@@ -1,7 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { McpServerConfig, Options } from "@anthropic-ai/claude-agent-sdk";
+import {
+  filterEscalatingDefaultMode,
+  type McpServerConfig,
+  type Options,
+  resolveSettings,
+} from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
@@ -10,11 +15,11 @@ import {
   type OpenDucktorMcpBridgeConnection,
 } from "../mcp/openducktor-mcp-environment";
 import { createClaudeCanUseTool } from "./claude-agent-sdk-permissions";
+import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
 import {
   CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS,
   createClaudeUserDialogHandler,
 } from "./claude-agent-sdk-questions";
-import type { ClaudeTranscriptMirrorStore } from "./claude-agent-sdk-transcript-mirror-store";
 import type {
   ClaudeAgentSdkEventEmitter,
   ClaudeSessionContext,
@@ -34,7 +39,6 @@ type BuildClaudeAgentSdkOptionsInput = {
   session: ClaudeSessionContext;
   sessionOptions: Partial<Options>;
   serviceInput: CreateClaudeAgentSdkServiceInput;
-  transcriptStore?: ClaudeTranscriptMirrorStore | undefined;
   now: () => string;
   randomId: () => string;
   emit: ClaudeAgentSdkEventEmitter;
@@ -85,12 +89,16 @@ export const buildClaudeAgentSdkOptions = async ({
   serviceInput,
   session,
   sessionOptions,
-  transcriptStore,
 }: BuildClaudeAgentSdkOptionsInput): Promise<Options> => {
-  const mcpServers = await buildClaudeMcpServers({
-    resolvedDependencies,
-    session,
-  });
+  const [mcpServers, resolvedSettings] = await Promise.all([
+    buildClaudeMcpServers({
+      resolvedDependencies,
+      session,
+    }),
+    resolveSettings({ cwd: input.workingDirectory }),
+  ]);
+  const permissionMode =
+    filterEscalatingDefaultMode(resolvedSettings).permissions?.defaultMode ?? "default";
   const model = input.model;
   const workflowRole = claudeWorkflowRole(input);
   const readOnlyWorkflowRole = isReadOnlyWorkflowRole(workflowRole);
@@ -112,13 +120,22 @@ export const buildClaudeAgentSdkOptions = async ({
     allowedTools: allowedClaudeWorkflowTools(workflowRole),
     forwardSubagentText: true,
     includePartialMessages: true,
+    hooks: {
+      PostToolUse: [
+        {
+          hooks: [
+            createClaudePostToolUseHook({
+              session,
+              now,
+              emit: (event) => emit(session, event),
+            }),
+          ],
+        },
+      ],
+    },
     mcpServers,
-    ...(transcriptStore
-      ? {
-          sessionStore: transcriptStore,
-          sessionStoreFlush: "eager" as const,
-        }
-      : {}),
+    permissionMode,
+    ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
     systemPrompt,
     canUseTool: createClaudeCanUseTool({ session, now, randomId, emit }),
     onUserDialog: createClaudeUserDialogHandler({

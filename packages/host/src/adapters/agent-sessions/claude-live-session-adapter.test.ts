@@ -87,6 +87,8 @@ const createHarness = async () => {
     Effect.die("startSession was not configured");
   let sendUserMessageImpl: ClaudeAgentSdkService["sendUserMessage"] = () =>
     Effect.die("sendUserMessage was not configured");
+  let updateSessionModelImpl: ClaudeAgentSdkService["updateSessionModel"] = () =>
+    Effect.die("updateSessionModel was not configured");
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
   startSessionImpl = () => {
     eventHub.emit(session, {
@@ -111,6 +113,8 @@ const createHarness = async () => {
       input: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0],
       runtimeId: string,
     ) => sendUserMessageImpl(input, runtimeId),
+    updateSessionModel: (input: Parameters<ClaudeAgentSdkService["updateSessionModel"]>[0]) =>
+      updateSessionModelImpl(input),
     releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
       releaseSessionImpl(input),
   } as unknown as ClaudeAgentSdkService;
@@ -143,6 +147,9 @@ const createHarness = async () => {
     },
     setSendUserMessage: (implementation: ClaudeAgentSdkService["sendUserMessage"]) => {
       sendUserMessageImpl = implementation;
+    },
+    setUpdateSessionModel: (implementation: ClaudeAgentSdkService["updateSessionModel"]) => {
+      updateSessionModelImpl = implementation;
     },
     setReleaseSession: (implementation: ClaudeAgentSdkService["releaseSession"]) => {
       releaseSessionImpl = implementation;
@@ -276,5 +283,62 @@ describe("Claude host live-session adapter", () => {
         },
       },
     ]);
+  });
+
+  test("serializes live model updates in selection order", async () => {
+    const harness = await createHarness();
+    const startedModels: string[] = [];
+    let releaseFirstUpdate: (() => void) | undefined;
+    const firstUpdateReleased = new Promise<void>((resolve) => {
+      releaseFirstUpdate = resolve;
+    });
+    let markFirstUpdateStarted: (() => void) | undefined;
+    const firstUpdateStarted = new Promise<void>((resolve) => {
+      markFirstUpdateStarted = resolve;
+    });
+    harness.setUpdateSessionModel((input) =>
+      Effect.promise(async () => {
+        startedModels.push(input.model?.modelId ?? "default");
+        if (startedModels.length === 1) {
+          markFirstUpdateStarted?.();
+          await firstUpdateReleased;
+        }
+      }),
+    );
+    const controlRef = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+
+    const firstUpdate = Effect.runPromise(
+      harness.adapter.updateSessionModel({
+        ...controlRef,
+        model: {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-a",
+        },
+      }),
+    );
+    await firstUpdateStarted;
+    const secondUpdate = Effect.runPromise(
+      harness.adapter.updateSessionModel({
+        ...controlRef,
+        model: {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-b",
+        },
+      }),
+    );
+    await Promise.resolve();
+
+    expect(startedModels).toEqual(["claude-a"]);
+
+    releaseFirstUpdate?.();
+    await Promise.all([firstUpdate, secondUpdate]);
+    expect(startedModels).toEqual(["claude-a", "claude-b"]);
   });
 });

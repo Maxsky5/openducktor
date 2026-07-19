@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentRole } from "@openducktor/core";
 import { Effect } from "effect";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { buildClaudeAgentSdkOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { createClaudeTranscriptMirrorStore } from "./claude-agent-sdk-transcript-mirror-store";
 import type {
   ClaudeSessionContext,
   CreateClaudeAgentSdkServiceInput,
@@ -136,7 +137,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options).not.toHaveProperty("sandbox");
     expect(options.forwardSubagentText).toBe(true);
     expect(options.includePartialMessages).toBe(true);
-    expect(options).not.toHaveProperty("permissionMode");
+    expect(options).toHaveProperty("permissionMode");
     expect(options.allowedTools).toEqual([
       "mcp__openducktor__odt_read_task",
       "mcp__openducktor__odt_read_task_documents",
@@ -200,9 +201,8 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options.additionalDirectories).toEqual(["/repo/fairnest-task-worktree"]);
   });
 
-  test("uses the Claude SDK transcript mirror when provided", async () => {
+  test("leaves Claude persistence authoritative and observes file edits through hooks", async () => {
     const session = createSession();
-    const transcriptStore = createClaudeTranscriptMirrorStore();
 
     const options = await buildClaudeAgentSdkOptions({
       input: session.input,
@@ -220,12 +220,69 @@ describe("buildClaudeAgentSdkOptions", () => {
       now: () => "2026-06-25T20:00:00.000Z",
       randomId: () => "id",
       emit: () => {},
-      transcriptStore,
-      sessionOptions: {},
+      sessionOptions: {
+        resume: "persisted-session-1",
+        forkSession: true,
+      },
     });
 
-    expect(options.sessionStore).toBe(transcriptStore);
-    expect(options.sessionStoreFlush).toBe("eager");
+    expect(options.resume).toBe("persisted-session-1");
+    expect(options.forkSession).toBe(true);
+    expect(options).not.toHaveProperty("sessionStore");
+    expect(options).not.toHaveProperty("sessionStoreFlush");
+    expect(options.hooks?.PostToolUse).toHaveLength(1);
+  });
+
+  test("inherits a trusted local default permission mode", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "openducktor-claude-permissions-"));
+    const session = createSession();
+    session.input = {
+      ...session.input,
+      repoPath: cwd,
+      workingDirectory: cwd,
+    };
+
+    try {
+      await mkdir(join(cwd, ".claude"), { recursive: true });
+      await writeFile(
+        join(cwd, ".claude", "settings.local.json"),
+        JSON.stringify({ permissions: { defaultMode: "acceptEdits" } }),
+      );
+
+      const options = await buildOptions(session);
+
+      expect(options.permissionMode).toBe("acceptEdits");
+      expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
+    } finally {
+      session.abortController.abort();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("enables the SDK safety acknowledgement for a trusted local bypass mode", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "openducktor-claude-permissions-"));
+    const session = createSession();
+    session.input = {
+      ...session.input,
+      repoPath: cwd,
+      workingDirectory: cwd,
+    };
+
+    try {
+      await mkdir(join(cwd, ".claude"), { recursive: true });
+      await writeFile(
+        join(cwd, ".claude", "settings.local.json"),
+        JSON.stringify({ permissions: { defaultMode: "bypassPermissions" } }),
+      );
+
+      const options = await buildOptions(session);
+
+      expect(options.permissionMode).toBe("bypassPermissions");
+      expect(options.allowDangerouslySkipPermissions).toBe(true);
+    } finally {
+      session.abortController.abort();
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 
   test("blocks Bash and mutating tools for read-only workflow roles", async () => {

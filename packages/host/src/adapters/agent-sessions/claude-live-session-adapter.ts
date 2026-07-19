@@ -362,13 +362,15 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         updateSessionModel: (input) =>
-          service
-            .updateSessionModel(input)
-            .pipe(
-              Effect.mapError(
-                sessionError("claude-live-session.update-session-model", input.externalSessionId),
+          eventCoordinator.runControlMutation(
+            service
+              .updateSessionModel(input)
+              .pipe(
+                Effect.mapError(
+                  sessionError("claude-live-session.update-session-model", input.externalSessionId),
+                ),
               ),
-            ),
+          ),
         stopSession: (input) =>
           eventCoordinator.runControlMutation(
             service.stopSession(input).pipe(

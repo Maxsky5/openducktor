@@ -15,10 +15,8 @@ import {
   shouldRefreshClaudeContextUsageForMessage,
 } from "./claude-agent-sdk-context-usage";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { enrichClaudeLiveUserToolResultFromMirror } from "./claude-agent-sdk-live-tool-result-enrichment";
 import { encodeClaudePromptText, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
-import type { ClaudeTranscriptMirrorStore } from "./claude-agent-sdk-transcript-mirror-store";
 import type {
   ClaudeAgentSdkEventEmitter,
   ClaudeSession,
@@ -166,9 +164,8 @@ export const consumeClaudeSession = async (input: {
   now: () => string;
   session: ClaudeSession;
   sessionStore: Pick<ClaudeSessionStore, "close" | "get">;
-  transcriptStore?: ClaudeTranscriptMirrorStore | undefined;
 }): Promise<void> => {
-  const { emit, now, session, sessionStore, transcriptStore } = input;
+  const { emit, now, session, sessionStore } = input;
   const isLiveSession = (): boolean => sessionStore.get(session.externalSessionId) === session;
   const closeLiveSession = (): void => {
     if (isLiveSession()) {
@@ -191,17 +188,9 @@ export const consumeClaudeSession = async (input: {
   try {
     for await (const message of session.query) {
       const timestamp = readClaudeSdkMessageTimestamp(message, now);
-      const messageForHandling =
-        message.type === "user" && transcriptStore
-          ? enrichClaudeLiveUserToolResultFromMirror({
-              message,
-              session,
-              transcriptStore,
-            })
-          : message;
       handleClaudeSdkMessage({
         session,
-        message: messageForHandling,
+        message,
         timestamp,
         emit: (event) => emit(session, event),
         modelSelection,

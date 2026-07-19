@@ -8,7 +8,6 @@ import {
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
 import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
-import type { ClaudeTranscriptMirrorStore } from "./claude-agent-sdk-transcript-mirror-store";
 import type {
   ClaudeAgentSdkEventEmitter,
   ClaudeSession,
@@ -35,7 +34,6 @@ export type CreateClaudeAgentSdkSessionInput = {
     title?: string;
   };
   sessionStore: ClaudeSessionStore;
-  transcriptStore: ClaudeTranscriptMirrorStore;
 };
 
 export const createClaudeAgentSdkSession = async ({
@@ -48,7 +46,6 @@ export const createClaudeAgentSdkSession = async ({
   serviceInput,
   sessionInput,
   sessionStore,
-  transcriptStore,
 }: CreateClaudeAgentSdkSessionInput): Promise<AgentSessionSummary> => {
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
@@ -84,10 +81,6 @@ export const createClaudeAgentSdkSession = async ({
   };
   let sdkQuery: ReturnType<typeof query>;
   try {
-    transcriptStore.registerSessionDirectory({
-      dir: input.workingDirectory,
-      sessionId: sessionInput.externalSessionId,
-    });
     const options = await buildClaudeAgentSdkOptions({
       input,
       session: sessionContext,
@@ -96,7 +89,6 @@ export const createClaudeAgentSdkSession = async ({
       randomId,
       resolvedDependencies,
       emit,
-      transcriptStore,
       sessionOptions: {
         ...sessionInput.options,
         ...(sessionInput.title ? { title: sessionInput.title } : {}),
@@ -113,7 +105,6 @@ export const createClaudeAgentSdkSession = async ({
   void consumeClaudeSession({
     session,
     sessionStore,
-    transcriptStore,
     now,
     emit,
   });

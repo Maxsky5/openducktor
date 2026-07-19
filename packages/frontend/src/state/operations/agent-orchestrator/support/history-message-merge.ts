@@ -1,6 +1,7 @@
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { matchesLoadedTool, mergeToolMessages } from "./history-tool-message-merge";
 import { applyPreferredMessageTimestamp } from "./message-timestamp";
+import { sessionMessageTimestampInsertionIndex } from "./message-timestamp-ordering";
 import {
   createSessionMessagesState,
   findSessionMessageById,
@@ -79,7 +80,7 @@ const isUserMessage = (
 
 const LOCAL_ACCEPTED_USER_CONFIRMATION_WINDOW_MS = 10_000;
 
-const timestampMs = (timestamp: string): number | null => {
+const userMessageTimestampMs = (timestamp: string): number | null => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? null : parsed;
 };
@@ -92,24 +93,7 @@ const insertSubagentMessageByTimestamp = (
     messages.push(message);
     return;
   }
-  const messageTimeMs = timestampMs(message.timestamp);
-  if (messageTimeMs === null) {
-    messages.push(message);
-    return;
-  }
-
-  let insertIndex = messages.length;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const candidate = messages[index];
-    if (!candidate || isSessionSystemPromptMessage(candidate)) {
-      continue;
-    }
-    const candidateTimeMs = timestampMs(candidate.timestamp);
-    if (candidateTimeMs === null || candidateTimeMs <= messageTimeMs) {
-      break;
-    }
-    insertIndex = index;
-  }
+  const insertIndex = sessionMessageTimestampInsertionIndex(messages, message);
   messages.splice(insertIndex, 0, message);
 };
 
@@ -127,8 +111,8 @@ const confirmsLocalAcceptedUserMessage = (
     return null;
   }
 
-  const loadedTimestampMs = timestampMs(loadedMessage.timestamp);
-  const currentTimestampMs = timestampMs(currentMessage.timestamp);
+  const loadedTimestampMs = userMessageTimestampMs(loadedMessage.timestamp);
+  const currentTimestampMs = userMessageTimestampMs(currentMessage.timestamp);
   if (loadedTimestampMs === null || currentTimestampMs === null) {
     return null;
   }
