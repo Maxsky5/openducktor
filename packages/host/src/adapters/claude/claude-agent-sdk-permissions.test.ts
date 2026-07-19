@@ -493,6 +493,125 @@ describe("Claude permission request lifecycle", () => {
 });
 
 describe("Claude permission path routing", () => {
+  test("routes Windows descendant and blocked paths through the session worktree", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("build");
+    session.input = {
+      ...session.input,
+      repoPath: "C:\\Repo\\Fairnest",
+      workingDirectory: "C:\\Repo\\Fairnest-task-worktree",
+    };
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    const resultPromise = canUseTool(
+      "Write",
+      { file_path: "c:\\repo\\fairnest\\apps\\api\\src\\auth.ts" },
+      {
+        signal: new AbortController().signal,
+        toolUseID: "tool-use-1",
+        blockedPath: "c:\\repo\\fairnest\\apps\\api\\src\\auth.ts",
+      },
+    );
+
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: {
+        file_path: "C:/Repo/Fairnest-task-worktree/apps/api/src/auth.ts",
+      },
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        affectedPaths: ["C:/Repo/Fairnest-task-worktree/apps/api/src/auth.ts"],
+      }),
+    ]);
+  });
+
+  test("routes the exact Windows repository path through the session worktree", async () => {
+    const session = createSession("build");
+    session.input = {
+      ...session.input,
+      repoPath: "C:\\Repo\\Fairnest",
+      workingDirectory: "C:\\Repo\\Fairnest-task-worktree",
+    };
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: () => {},
+    });
+
+    const resultPromise = canUseTool(
+      "Write",
+      { file_path: "c:\\repo\\fairnest" },
+      {
+        signal: new AbortController().signal,
+        toolUseID: "tool-use-1",
+      },
+    );
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { file_path: "C:\\Repo\\Fairnest-task-worktree" },
+    });
+  });
+
+  test("routes mixed-separator Windows descendants without matching sibling prefixes", async () => {
+    const session = createSession("build");
+    session.input = {
+      ...session.input,
+      repoPath: "C:\\Repo\\Fairnest",
+      workingDirectory: "C:\\Repo\\Fairnest-task-worktree",
+    };
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: () => {},
+    });
+
+    const mixedResultPromise = canUseTool(
+      "Write",
+      { file_path: "c:/repo/fairnest\\apps/api/src/auth.ts" },
+      {
+        signal: new AbortController().signal,
+        toolUseID: "tool-use-1",
+      },
+    );
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+
+    await expect(mixedResultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: {
+        file_path: "C:/Repo/Fairnest-task-worktree/apps/api/src/auth.ts",
+      },
+    });
+
+    const siblingResultPromise = canUseTool(
+      "Write",
+      { file_path: "C:\\Repo\\Fairnest-copy\\apps\\api\\src\\auth.ts" },
+      {
+        signal: new AbortController().signal,
+        toolUseID: "tool-use-2",
+      },
+    );
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+
+    await expect(siblingResultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: {
+        file_path: "C:\\Repo\\Fairnest-copy\\apps\\api\\src\\auth.ts",
+      },
+    });
+  });
+
   test("routes Claude file paths through the session worktree", async () => {
     const events: AgentEvent[] = [];
     const session = createSession("build");

@@ -3,7 +3,12 @@ import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
-import { resolveAgainstWorkingDirectory } from "@openducktor/path-support";
+import {
+  normalizePathForComparison,
+  pathStartsWith,
+  resolveAgainstWorkingDirectory,
+  toProjectRelativePath,
+} from "@openducktor/path-support";
 import {
   claudeSubagentPendingInputRoute,
   emitClaudePendingInputEvent,
@@ -57,15 +62,14 @@ const SESSION_PATH_INPUT_KEYS = [
 
 const rewriteSessionPath = (session: ClaudeSessionContext, value: string): string => {
   const { repoPath, workingDirectory } = session.input;
-  if (repoPath === workingDirectory) {
+  if (normalizePathForComparison(repoPath) === normalizePathForComparison(workingDirectory)) {
     return value;
   }
-  if (value === repoPath) {
+  if (normalizePathForComparison(value) === normalizePathForComparison(repoPath)) {
     return workingDirectory;
   }
-  const prefix = `${repoPath}/`;
-  if (value.startsWith(prefix)) {
-    return `${workingDirectory}/${value.slice(prefix.length)}`;
+  if (pathStartsWith(value, repoPath)) {
+    return resolveAgainstWorkingDirectory(workingDirectory, toProjectRelativePath(value, repoPath));
   }
   return value;
 };

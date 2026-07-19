@@ -1,5 +1,6 @@
 import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 import { applyMessageTimestamp, haveSameMessageTimestamp } from "./message-timestamp";
+import { sessionMessageTimestampInsertionIndex } from "./message-timestamp-ordering";
 
 type MessageRole = AgentChatMessage["role"];
 
@@ -422,17 +423,8 @@ const insertSessionMessageByTimestamp = (
   previous: SessionMessagesState,
   message: AgentChatMessage,
 ): SessionMessagesState => {
-  const incomingMs = timestampMs(message.timestamp);
-  if (incomingMs === null) {
-    return createDerivedState(previous, [...previous.items, message]);
-  }
-
-  const insertionIndex = previous.items.findIndex((existing) => {
-    const existingMs = timestampMs(existing.timestamp);
-    return existingMs !== null && existingMs > incomingMs;
-  });
-
-  if (insertionIndex < 0) {
+  const insertionIndex = sessionMessageTimestampInsertionIndex(previous.items, message);
+  if (insertionIndex === previous.items.length) {
     return createDerivedState(previous, [...previous.items, message]);
   }
 
@@ -453,6 +445,15 @@ export const upsertSessionMessageByTimestamp = (
 
   return insertSessionMessageByTimestamp(previous, message);
 };
+
+export const sessionMessageBelongsToSourceMessage = (
+  message: AgentChatMessage,
+  sourceMessageId: string,
+): boolean =>
+  message.id === sourceMessageId ||
+  message.id.startsWith(`thinking:${sourceMessageId}:`) ||
+  message.id.startsWith(`tool:${sourceMessageId}:`) ||
+  (message.meta?.kind === "subagent" && message.meta.sourceMessageId === sourceMessageId);
 
 export const findFirstChangedSessionMessageIndex = (
   previousMessages: SessionMessagesState | null,

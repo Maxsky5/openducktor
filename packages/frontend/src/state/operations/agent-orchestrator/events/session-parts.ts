@@ -231,6 +231,7 @@ const handleSubagentPart = (
       kind: "subagent",
       partId: part.partId,
       correlationKey: part.correlationKey,
+      sourceMessageId: part.messageId,
       status: part.status,
       ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
       ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),

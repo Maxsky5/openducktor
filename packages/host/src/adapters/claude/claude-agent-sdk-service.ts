@@ -38,11 +38,6 @@ import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-s
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
-import { emitClaudeMirroredFileEditToolResult } from "./claude-agent-sdk-transcript-mirror-events";
-import {
-  type ClaudeTranscriptMirrorStore,
-  createClaudeTranscriptMirrorStore,
-} from "./claude-agent-sdk-transcript-mirror-store";
 import type {
   ClaudeAgentSdkEvent,
   ClaudeAgentSdkService,
@@ -58,7 +53,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   private readonly now: () => string;
   private readonly randomId: () => string;
   private readonly sessionStore: ClaudeSessionStore;
-  private readonly transcriptStore: ClaudeTranscriptMirrorStore;
 
   constructor(private readonly input: CreateClaudeAgentSdkServiceInput) {
     this.now = input.now ?? (() => new Date().toISOString());
@@ -69,28 +63,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         now: this.now,
         ...(input.emit ? { emit: input.emit } : {}),
       });
-    this.transcriptStore = createClaudeTranscriptMirrorStore({
-      onAppend: ({ entries, key }) => {
-        if (key.subpath !== undefined) {
-          return;
-        }
-        const session = this.sessionStore.get(key.sessionId);
-        if (!session) {
-          return;
-        }
-        for (const entry of entries) {
-          emitClaudeMirroredFileEditToolResult({
-            entry,
-            session,
-            now: this.now,
-            emit: (event) => this.emit(session, event),
-          });
-        }
-      },
-    });
-    this.sessionStore.subscribeClose((session) => {
-      this.transcriptStore.deleteSession(session.externalSessionId);
-    });
   }
 
   startSession(input: StartAgentSessionInput, runtimeId: string) {
@@ -386,7 +358,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           serviceInput: service.input,
           sessionInput,
           sessionStore: service.sessionStore,
-          transcriptStore: service.transcriptStore,
         }),
       );
     });

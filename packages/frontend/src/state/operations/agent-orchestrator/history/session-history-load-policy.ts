@@ -8,11 +8,6 @@ type SessionHistoryLoadPolicySession = Pick<
   "externalSessionId" | "messages" | "historyLoadState"
 >;
 
-type SelectedSessionContextUsageSession = Pick<
-  AgentSessionState,
-  "contextUsage" | "historyLoadState" | "status"
->;
-
 export type SessionHistoryLoadPolicy = {
   canClaimLoad(session: SessionHistoryLoadPolicySession): boolean;
   propagateFailure: boolean;
@@ -40,13 +35,6 @@ const restoreLoadedHistoryState = (session: AgentSessionState): AgentSessionStat
 export const shouldRequestSelectedSessionBaselineHistory = (
   session: SessionHistoryLoadPolicySession,
 ): boolean => session.historyLoadState === "not_requested";
-
-export const shouldRequestSelectedSessionContextUsage = (
-  session: SelectedSessionContextUsageSession,
-): boolean =>
-  session.status === "idle" &&
-  session.historyLoadState === "loaded" &&
-  session.contextUsage == null;
 
 export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
   canClaimLoad: (session) => !hasLoadedSessionHistory(session),

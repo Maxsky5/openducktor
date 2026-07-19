@@ -1,9 +1,10 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import {
   appendSessionMessage,
   createSessionMessagesState,
+  sessionMessageBelongsToSourceMessage,
   upsertSessionMessage,
   upsertUserSessionMessage,
 } from "../support/messages";
@@ -152,13 +153,9 @@ export const handleTranscriptRetracted = (
   event: Extract<SessionEvent, { type: "transcript_retracted" }>,
 ): void => {
   const retractedMessageIds = new Set(event.messageIds);
-  const belongsToRetractedMessage = (messageId: string): boolean => {
+  const belongsToRetractedMessage = (message: AgentChatMessage): boolean => {
     for (const retractedMessageId of retractedMessageIds) {
-      if (
-        messageId === retractedMessageId ||
-        messageId.startsWith(`thinking:${retractedMessageId}:`) ||
-        messageId.startsWith(`tool:${retractedMessageId}:`)
-      ) {
+      if (sessionMessageBelongsToSourceMessage(message, retractedMessageId)) {
         return true;
       }
     }
@@ -168,7 +165,7 @@ export const handleTranscriptRetracted = (
     ...current,
     messages: createSessionMessagesState(
       current.externalSessionId,
-      current.messages.items.filter((message) => !belongsToRetractedMessage(message.id)),
+      current.messages.items.filter((message) => !belongsToRetractedMessage(message)),
       current.messages.version + 1,
     ),
   }));

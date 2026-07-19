@@ -77,6 +77,7 @@ export type AgentChatMessageMeta =
       kind: "subagent";
       partId: string;
       correlationKey: string;
+      sourceMessageId?: string;
       status: AgentSubagentStatus;
       agent?: string;
       prompt?: string;
