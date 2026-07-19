@@ -120,7 +120,7 @@ describe("process-tree", () => {
             calls.push({ command, args });
             return noopProcessCommand();
           },
-          isAlive: processIsAlive,
+          isAlive: () => calls.length === 0,
         },
       }),
     );
@@ -134,7 +134,7 @@ describe("process-tree", () => {
     expect(calls.at(0)?.args).not.toContain("-1234");
   });
 
-  test("selects detached startup and negative process group signals on Unix-like platforms", async () => {
+  test("signals every Unix descendant process group before the root group", async () => {
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
 
     expect(shouldStartDetachedProcessGroup("linux")).toBe(true);
@@ -146,7 +146,7 @@ describe("process-tree", () => {
         pid: 1234,
         label: "test runtime",
         isClosed: () => false,
-        waitForExit: () => Effect.succeed(signals.length >= 2),
+        waitForExit: () => Effect.succeed(signals.length >= 4),
         stopTimeoutMs: 10,
         signalDependencies: {
           platform: "linux",
@@ -157,14 +157,21 @@ describe("process-tree", () => {
             signals.push({ pid, signal });
             return true;
           },
-          runCommand: noopProcessCommand,
-          isAlive: processIsAlive,
+          runCommand: () =>
+            Effect.succeed({
+              status: 0,
+              stderr: Buffer.alloc(0),
+              stdout: Buffer.from(["1234 1 1234", "2345 1234 2345", "3456 2345 2345"].join("\n")),
+            }),
+          isAlive: () => signals.length < 4,
         },
       }),
     );
 
     expect(signals).toEqual([
+      { pid: -2345, signal: "SIGTERM" },
       { pid: -1234, signal: "SIGTERM" },
+      { pid: -2345, signal: "SIGKILL" },
       { pid: -1234, signal: "SIGKILL" },
     ]);
   });

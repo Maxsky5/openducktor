@@ -134,12 +134,9 @@ export const verifyLiveTerminalPtyProcessTreeTermination = async (
     port.start(
       {
         shell,
-        args: [
-          "-c",
-          'trap "" TERM; sleep 60 & child=$!; printf "CHILD:%s\\n" "$child"; wait "$child"',
-        ],
+        args: ["-i"],
         cwd: process.cwd(),
-        env: { ...process.env, TERM: "xterm-256color" },
+        env: { ...process.env, PS1: "", TERM: "xterm-256color" },
         grid: { columns: 80, rows: 24 },
       },
       {
@@ -155,11 +152,19 @@ export const verifyLiveTerminalPtyProcessTreeTermination = async (
       },
     ),
   );
+  let childPid: number | null = null;
   try {
-    const childPid = await withTimeout(
+    await Effect.runPromise(
+      handle.write(
+        new TextEncoder().encode(
+          'sh -c \'trap "" HUP TERM; printf "CHILD:%s\\\\n" "$$"; while :; do sleep 60; done\'\n',
+        ),
+      ),
+    );
+    childPid = await withTimeout(
       Promise.race([childPidPromise, failurePromise]),
       5_000,
-      "Timed out waiting for the PTY descendant process id.",
+      "Timed out waiting for the PTY foreground process id.",
     );
     await Effect.runPromise(handle.terminate());
     const deadline = Date.now() + 1_000;
@@ -173,6 +178,18 @@ export const verifyLiveTerminalPtyProcessTreeTermination = async (
   } catch (cause) {
     await Effect.runPromise(Effect.ignore(handle.terminate()));
     throw cause;
+  } finally {
+    if (childPid !== null && processIsAlive(childPid)) {
+      try {
+        process.kill(-childPid, "SIGKILL");
+      } catch {
+        try {
+          process.kill(childPid, "SIGKILL");
+        } catch {
+          // The fixture exited between the liveness check and cleanup.
+        }
+      }
+    }
   }
 };
 

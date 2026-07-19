@@ -72,7 +72,10 @@ export type OpenDucktorElectronTerminalApi = {
 };
 
 export type OpenDucktorElectronApi = {
-  invoke(command: HostCommandName, args?: Record<string, unknown>): Promise<unknown>;
+  invoke(
+    command: HostCommandName,
+    args?: Record<string, unknown>,
+  ): Promise<ElectronHostInvokeResult>;
   subscribe(channel: string, listener: (payload: unknown) => void): () => void;
   appUpdates: OpenDucktorElectronAppUpdateApi;
   openExternalUrl(url: string): Promise<void>;

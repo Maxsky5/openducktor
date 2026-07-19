@@ -52,8 +52,8 @@ import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-ada
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
-import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import { runElectronHostInvoke } from "./electron-host-invoke";
+import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
   createElectronLocalAttachmentPreviewUrl,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,

@@ -30,6 +30,12 @@ type SignalProcessTreeDependencies = {
   isAlive: (pid: number) => boolean;
 };
 
+type ProcessTreeSignalTargets = {
+  pid: number;
+  platform: ProcessTreePlatform;
+  processGroupIds: number[];
+};
+
 export type TerminateProcessTreeInput = {
   pid: number;
   label: string;
@@ -185,12 +191,75 @@ const assertValidPid = (pid: number, label: string): void => {
     });
   }
 };
-const signalProcessTree = (
+
+const inspectProcessTreeSignalTargets = (
   pid: number,
+  dependencies: SignalProcessTreeDependencies,
+): Effect.Effect<ProcessTreeSignalTargets, HostOperationError> =>
+  Effect.gen(function* () {
+    if (dependencies.platform === "win32") {
+      return { pid, platform: dependencies.platform, processGroupIds: [] };
+    }
+
+    const result = yield* dependencies.runCommand("ps", ["-Ao", "pid=,ppid=,pgid="]);
+    if (result.error || result.status !== 0) {
+      return yield* Effect.fail(
+        new HostOperationError({
+          message: `Failed to inspect Unix process groups for process ${pid}.`,
+          operation: "process-tree.stop",
+          details: {
+            pid,
+            platform: dependencies.platform,
+            status: result.status,
+            stderr: result.stderr.toString("utf8").trim(),
+          },
+          ...(result.error ? { cause: result.error } : {}),
+        }),
+      );
+    }
+
+    const processes = result.stdout
+      .toString("utf8")
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/).map(Number))
+      .filter(
+        (entry): entry is [number, number, number] =>
+          entry.length === 3 && entry.every((value) => Number.isInteger(value) && value >= 0),
+      );
+    const childrenByParent = new Map<number, Array<[number, number]>>();
+    let rootProcessGroupId = pid;
+    for (const [processId, parentProcessId, processGroupId] of processes) {
+      if (processId === pid && processGroupId > 0) rootProcessGroupId = processGroupId;
+      const children = childrenByParent.get(parentProcessId) ?? [];
+      children.push([processId, processGroupId]);
+      childrenByParent.set(parentProcessId, children);
+    }
+
+    const descendants = [...(childrenByParent.get(pid) ?? [])];
+    const descendantGroupIds = new Set<number>();
+    for (let index = 0; index < descendants.length; index += 1) {
+      const [processId, processGroupId] = descendants[index] ?? [];
+      if (processId === undefined || processGroupId === undefined) continue;
+      if (processGroupId > 0 && processGroupId !== rootProcessGroupId) {
+        descendantGroupIds.add(processGroupId);
+      }
+      descendants.push(...(childrenByParent.get(processId) ?? []));
+    }
+
+    return {
+      pid,
+      platform: dependencies.platform,
+      processGroupIds: [...descendantGroupIds, rootProcessGroupId],
+    };
+  });
+
+const signalProcessTree = (
+  targets: ProcessTreeSignalTargets,
   signal: NodeJS.Signals,
   dependencies: SignalProcessTreeDependencies = defaultSignalProcessTreeDependencies(),
 ): Effect.Effect<void, HostOperationError> =>
   Effect.gen(function* () {
+    const { pid, processGroupIds } = targets;
     const { platform, kill, runCommand, isAlive } = dependencies;
 
     if (platform === "win32") {
@@ -205,27 +274,85 @@ const signalProcessTree = (
       });
     }
 
-    yield* Effect.try({
-      try: () => {
-        try {
-          kill(-pid, signal);
-        } catch (error) {
-          if (isAlreadyExitedError(error) || !isAlive(pid)) return;
-          throw error;
-        }
-      },
-      catch: (cause) => toHostOperationError(cause, "process-tree.signal", { pid, signal }),
-    });
+    for (const processGroupId of processGroupIds) {
+      yield* Effect.try({
+        try: () => {
+          try {
+            kill(-processGroupId, signal);
+          } catch (error) {
+            if (isAlreadyExitedError(error) || !isAlive(-processGroupId)) return;
+            throw error;
+          }
+        },
+        catch: (cause) =>
+          toHostOperationError(cause, "process-tree.signal", { pid, processGroupId, signal }),
+      });
+    }
   });
 
 const signalProcessTreeEffect = (
-  pid: number,
+  targets: ProcessTreeSignalTargets,
   signal: NodeJS.Signals,
-  dependencies?: SignalProcessTreeDependencies,
+  dependencies: SignalProcessTreeDependencies,
 ) =>
-  signalProcessTree(pid, signal, dependencies).pipe(
-    Effect.mapError((cause) => toHostOperationError(cause, "process-tree.signal", { pid, signal })),
+  signalProcessTree(targets, signal, dependencies).pipe(
+    Effect.mapError((cause) =>
+      toHostOperationError(cause, "process-tree.signal", { pid: targets.pid, signal }),
+    ),
   );
+
+const signalTargetsAreClosed = (
+  targets: ProcessTreeSignalTargets,
+  dependencies: SignalProcessTreeDependencies,
+): boolean => {
+  if (targets.platform === "win32") return !dependencies.isAlive(targets.pid);
+  return targets.processGroupIds.every((processGroupId) => !dependencies.isAlive(-processGroupId));
+};
+
+const waitForSignalTargetsExit = (
+  targets: ProcessTreeSignalTargets,
+  dependencies: SignalProcessTreeDependencies,
+  timeoutMs: number,
+): Effect.Effect<boolean> => {
+  if (signalTargetsAreClosed(targets, dependencies)) return Effect.succeed(true);
+  return Effect.async<boolean>((resume, signal) => {
+    const deadline = Date.now() + timeoutMs;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const finish = (closed: boolean): void => {
+      if (timeout) clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      resume(Effect.succeed(closed));
+    };
+    const check = (): void => {
+      if (signalTargetsAreClosed(targets, dependencies)) {
+        finish(true);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        finish(false);
+        return;
+      }
+      timeout = setTimeout(check, Math.min(10, Math.max(1, deadline - Date.now())));
+    };
+    const onAbort = (): void => finish(false);
+    signal.addEventListener("abort", onAbort, { once: true });
+    check();
+    return Effect.sync(() => {
+      if (timeout) clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+    });
+  });
+};
+
+const waitForProcessTreeExit = (
+  targets: ProcessTreeSignalTargets,
+  dependencies: SignalProcessTreeDependencies,
+  waitForExit: TerminateProcessTreeInput["waitForExit"],
+  timeoutMs: number,
+): Effect.Effect<boolean, HostOperationError> =>
+  Effect.all([waitForExit(timeoutMs), waitForSignalTargetsExit(targets, dependencies, timeoutMs)], {
+    concurrency: "unbounded",
+  }).pipe(Effect.map(([ownerClosed, targetsClosed]) => ownerClosed && targetsClosed));
 
 export const terminateProcessTree = ({
   pid,
@@ -244,13 +371,16 @@ export const terminateProcessTree = ({
       return;
     }
 
-    yield* signalProcessTreeEffect(pid, "SIGTERM", signalDependencies);
-    if (isClosed() || (yield* waitForExit(stopTimeoutMs))) {
+    const dependencies = signalDependencies ?? defaultSignalProcessTreeDependencies();
+    const targets = yield* inspectProcessTreeSignalTargets(pid, dependencies);
+
+    yield* signalProcessTreeEffect(targets, "SIGTERM", dependencies);
+    if (yield* waitForProcessTreeExit(targets, dependencies, waitForExit, stopTimeoutMs)) {
       return;
     }
 
-    yield* signalProcessTreeEffect(pid, "SIGKILL", signalDependencies);
-    if (isClosed() || (yield* waitForExit(stopTimeoutMs))) {
+    yield* signalProcessTreeEffect(targets, "SIGKILL", dependencies);
+    if (yield* waitForProcessTreeExit(targets, dependencies, waitForExit, stopTimeoutMs)) {
       return;
     }
 

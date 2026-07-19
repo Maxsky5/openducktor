@@ -2,6 +2,7 @@ import {
   ELECTRON_HOST_INVOKE_CHANNEL,
   ELECTRON_HOST_SHUTDOWN_MESSAGE,
   type ElectronHostInvokeRequest,
+  type ElectronHostInvokeResult,
   type OpenDucktorElectronApi,
 } from "../shared/electron-bridge-contract";
 
@@ -15,12 +16,18 @@ type ElectronIpcRendererLike = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const unwrapResponse = (response: unknown): unknown => {
+const isElectronHostInvokeResult = (value: unknown): value is ElectronHostInvokeResult => {
+  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+  if (value.ok) return Object.hasOwn(value, "value");
+  return isRecord(value.error) && typeof value.error.message === "string";
+};
+
+const unwrapResponse = (response: unknown): ElectronHostInvokeResult => {
   if (!isRecord(response) || !Object.hasOwn(response, "status")) {
     throw new Error(ELECTRON_HOST_INVOKE_PROTOCOL_ERROR_MESSAGE);
   }
 
-  if (response.status === "success" && Object.hasOwn(response, "payload")) {
+  if (response.status === "success" && isElectronHostInvokeResult(response.payload)) {
     return response.payload;
   }
 

@@ -1,9 +1,4 @@
-import {
-  appUpdateCommandResultSchema,
-  appUpdateStateSchema,
-  hostInvokeFailureSchema,
-} from "@openducktor/contracts";
-import { HostInvokeError } from "@openducktor/host-client";
+import { appUpdateCommandResultSchema, appUpdateStateSchema } from "@openducktor/contracts";
 import electron from "electron";
 import {
   ELECTRON_APP_UPDATE_CHECK_CHANNEL,
@@ -19,7 +14,6 @@ import {
   ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
-  type ElectronHostInvokeResult,
   type ElectronTerminalEventEnvelope,
   type OpenDucktorElectronApi,
   type OpenDucktorElectronAppUpdateApi,
@@ -91,16 +85,7 @@ const terminals: OpenDucktorElectronTerminalApi = {
 };
 
 const electronApi: OpenDucktorElectronApi = {
-  async invoke(command, args) {
-    const response = (await invokeHost(command, args)) as ElectronHostInvokeResult;
-    if (!response.ok) {
-      const failure = response.error.failure
-        ? hostInvokeFailureSchema.parse(response.error.failure)
-        : null;
-      throw new HostInvokeError(response.error.message, failure);
-    }
-    return response.value;
-  },
+  invoke: invokeHost,
   subscribe(channel, listener) {
     const handleEvent = (
       _event: Electron.IpcRendererEvent,
