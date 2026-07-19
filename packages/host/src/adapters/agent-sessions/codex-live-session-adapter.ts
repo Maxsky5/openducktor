@@ -5,13 +5,12 @@ import {
   type CodexLiveSessionMutation,
 } from "@openducktor/adapters-codex-app-server";
 import {
-  type AgentSessionContextUsage,
   type AgentSessionControlSummary,
   type AgentSessionLiveRef,
   type AgentSessionWorkflowScope,
   acceptedAgentUserMessageSchema,
-  agentSessionContextUsageSchema,
   agentSessionControlSummarySchema,
+  agentSessionLiveLoadContextResultSchema,
   type CodexEffectivePolicy,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
@@ -352,8 +351,8 @@ export const createCodexLiveSessionAdapterPreparer =
                     ),
                   });
                 });
-            const normalized = yield* parseOutput<AgentSessionContextUsage>(
-              agentSessionContextUsageSchema,
+            const normalized = yield* parseOutput(
+              agentSessionLiveLoadContextResultSchema,
               usage,
               "codex-live-session.normalize-context",
             );

@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
   codexSessionRef,
+  codexSessionRuntimeRef,
   codexStartSessionInput,
   createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
+  makeRuntimeSummary,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
-import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 
@@ -29,24 +30,15 @@ const tokenUsageNotification = (
   },
 });
 
+const expectNoContextReadOrResume = (transport?: RecordingTransport): void => {
+  expect(
+    transport?.calls.filter(
+      (call) => call.method === "thread/read" || call.method === "thread/resume",
+    ) ?? [],
+  ).toEqual([]);
+};
+
 describe("CodexAppServerAdapter context loading", () => {
-  test("shares the initialized recovery with a synchronous reentrant load", async () => {
-    const tracker = new CodexContextUsageTracker(async () => undefined);
-    let reentrant: Promise<unknown> | null = null;
-    const loading = tracker.load("runtime-live", "thread-live", async () => {
-      reentrant = tracker.load("runtime-live", "thread-live", async () => {
-        throw new Error("unexpected duplicate recovery");
-      });
-    });
-    const outcome = loading.catch((error: unknown) => error);
-
-    await Promise.resolve();
-
-    expect(reentrant).toBe(loading);
-    tracker.releaseRuntime("runtime-live", new Error("runtime released"));
-    await expect(outcome).resolves.toBeInstanceOf(Error);
-  });
-
   test("returns retained context without a Codex read or resume", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({
@@ -82,262 +74,337 @@ describe("CodexAppServerAdapter context loading", () => {
     ]);
   });
 
-  test("shares one include-turns resume for concurrent missing-context loads", async () => {
+  test("returns null immediately after a successful resume without usage", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
     });
     await adapter.startSession(codexStartSessionInput());
-    const resumeResponseDelivered = createDeferred<void>();
-    const transport = transports.get("runtime-live");
-    expect(transport).toBeDefined();
-    const originalRequest = transport?.request.bind(transport);
-    if (transport && originalRequest) {
-      transport.request = async <Response>(request): Promise<Response> => {
-        const response = await originalRequest<Response>(request);
-        if (request.method === "thread/resume") {
-          resumeResponseDelivered.resolve(undefined);
-        }
-        return response;
-      };
-    }
 
-    const first = adapter.loadSessionContextUsage(codexSessionRef());
-    const second = adapter.loadSessionContextUsage(codexSessionRef());
-    await resumeResponseDelivered.promise;
-    await flushCodexAdapterWork();
-    runtimeStream.emitNotification(tokenUsageNotification(2_000));
-
-    await expect(Promise.all([first, second])).resolves.toEqual([
-      { totalTokens: 2_000, contextWindow: 200_000 },
-      { totalTokens: 2_000, contextWindow: 200_000 },
-    ]);
-    expect(transport?.calls.filter((call) => call.method === "thread/resume")).toEqual([
-      expect.objectContaining({
-        params: expect.objectContaining({
-          threadId: "thread/start-runtime-live",
-          excludeTurns: false,
-        }),
-      }),
-    ]);
+    await expect(adapter.loadSessionContextUsage(codexSessionRef())).resolves.toBeNull();
+    expect(
+      transports.get("runtime-live")?.calls.filter((call) => call.method === "thread/resume"),
+    ).toHaveLength(1);
   });
 
-  test("waits for matching context usage emitted after the resume response", async () => {
+  test("returns usage observed while resume is outstanding", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
     });
     await adapter.startSession(codexStartSessionInput());
-    const resumeResponseDelivered = createDeferred<void>();
+    const resume = createDeferred<void>();
     const transport = transports.get("runtime-live");
-    expect(transport).toBeDefined();
-    const originalRequest = transport?.request.bind(transport);
-    if (transport && originalRequest) {
-      transport.request = async <Response>(request): Promise<Response> => {
-        const response = await originalRequest<Response>(request);
-        if (request.method === "thread/resume") {
-          resumeResponseDelivered.resolve(undefined);
+    const request = transport?.request.bind(transport);
+    if (transport && request) {
+      transport.request = async <Response>(input): Promise<Response> => {
+        const response = await request<Response>(input);
+        if (input.method === "thread/resume") {
+          await resume.promise;
         }
         return response;
       };
     }
 
     const loading = adapter.loadSessionContextUsage(codexSessionRef());
-    const outcome = loading.then(
-      (usage) => ({ status: "resolved" as const, usage }),
-      (error: unknown) => ({ status: "rejected" as const, error }),
-    );
-    await resumeResponseDelivered.promise;
+    while (!transport?.calls.some((call) => call.method === "thread/resume")) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    runtimeStream.emitNotification(tokenUsageNotification(2_000));
     await flushCodexAdapterWork();
-    runtimeStream.emitNotification(tokenUsageNotification(2_100));
+    resume.resolve(undefined);
 
-    await expect(outcome).resolves.toEqual({
-      status: "resolved",
-      usage: { totalTokens: 2_100, contextWindow: 200_000 },
+    await expect(loading).resolves.toEqual({ totalTokens: 2_000, contextWindow: 200_000 });
+  });
+
+  test("propagates usage arriving after a null result through the live snapshot", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents: runtimeStream.subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+
+    await expect(adapter.loadSessionContextUsage(codexSessionRef())).resolves.toBeNull();
+    runtimeStream.emitNotification(tokenUsageNotification(2_100));
+    await flushCodexAdapterWork();
+
+    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.contextUsage).toEqual({
+      totalTokens: 2_100,
+      contextWindow: 200_000,
     });
   });
 
-  test("retains a previously unloaded session after successful include-turns recovery", async () => {
+  test("retains an unloaded session after a successful null resume", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
-    const transport = new RecordingTransport("runtime-live", false);
-    const resumeResponseDelivered = createDeferred<void>();
-    const originalRequest = transport.request.bind(transport);
-    transport.request = async <Response>(request): Promise<Response> => {
-      const response = await originalRequest<Response>(request);
-      if (request.method === "thread/resume") {
-        resumeResponseDelivered.resolve(undefined);
-      }
-      return response;
-    };
-    const { adapter } = createHarness({
-      subscribeEvents: runtimeStream.subscribeEvents,
-      transportFactory: () => transport,
-    });
+    const { adapter } = createHarness({ subscribeEvents: runtimeStream.subscribeEvents });
 
-    const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
-    await resumeResponseDelivered.promise;
-    await flushCodexAdapterWork();
-    runtimeStream.emitNotification(tokenUsageNotification(2_250, 200_000, "thread-idle"));
-
-    await expect(loading).resolves.toEqual({
-      totalTokens: 2_250,
-      contextWindow: 200_000,
-    });
+    await expect(
+      adapter.loadSessionContextUsage(codexSessionRef("thread-idle")),
+    ).resolves.toBeNull();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
       expect.objectContaining({
         ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
-        contextUsage: { totalTokens: 2_250, contextWindow: 200_000 },
+        contextUsage: null,
       }),
     );
-    expect(
-      transport.calls.filter((call) =>
-        ["thread/resume", "thread/read", "turn/start"].includes(call.method),
-      ),
-    ).toEqual([
-      expect.objectContaining({
-        method: "thread/resume",
-        params: expect.objectContaining({ threadId: "thread-idle", excludeTurns: false }),
-      }),
-    ]);
   });
 
-  test("preserves the latest live usage when updates arrive before the persisted replay", async () => {
-    const runtimeStream = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({
-      subscribeEvents: runtimeStream.subscribeEvents,
-    });
-    await adapter.startSession(codexStartSessionInput());
-    const resumeResponse = createDeferred<void>();
-    const transport = transports.get("runtime-live");
-    expect(transport).toBeDefined();
-    const originalRequest = transport?.request.bind(transport);
-    if (transport && originalRequest) {
-      transport.request = async <Response>(request): Promise<Response> => {
-        const response = await originalRequest<Response>(request);
-        if (request.method === "thread/resume") {
-          await resumeResponse.promise;
-        }
-        return response;
-      };
-    }
-
-    const loading = adapter.loadSessionContextUsage(codexSessionRef());
-    while (!transport?.calls.some((call) => call.method === "thread/resume")) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    runtimeStream.emitNotification(tokenUsageNotification(2_000));
-    runtimeStream.emitNotification(tokenUsageNotification(2_500));
-    await flushCodexAdapterWork();
-    resumeResponse.resolve(undefined);
-    await flushCodexAdapterWork();
-    runtimeStream.emitNotification(tokenUsageNotification(1_000));
-
-    await expect(loading).resolves.toEqual({ totalTokens: 2_500, contextWindow: 200_000 });
-  });
-
-  test("does not let a later persisted replay overwrite a live update during recovery", async () => {
-    const runtimeStream = createRuntimeStreamSubscription();
-    const resumeResponse = createDeferred<void>();
-    const { adapter, transports } = createHarness({
-      subscribeEvents: runtimeStream.subscribeEvents,
-    });
-    await adapter.startSession(codexStartSessionInput());
-    const transport = transports.get("runtime-live");
-    expect(transport).toBeDefined();
-    const originalRequest = transport?.request.bind(transport);
-    if (transport && originalRequest) {
-      transport.request = async <Response>(request): Promise<Response> => {
-        const response = await originalRequest<Response>(request);
-        if (request.method === "thread/resume") {
-          await resumeResponse.promise;
-        }
-        return response;
-      };
-    }
-
-    const loading = adapter.loadSessionContextUsage(codexSessionRef());
-    while (!transport?.calls.some((call) => call.method === "thread/resume")) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    runtimeStream.emitNotification(tokenUsageNotification(3_000));
-    await flushCodexAdapterWork();
-    resumeResponse.resolve(undefined);
-    await flushCodexAdapterWork();
-    runtimeStream.emitNotification(tokenUsageNotification(1_000));
-    await flushCodexAdapterWork();
-
-    await expect(loading).resolves.toEqual({ totalTokens: 3_000, contextWindow: 200_000 });
-    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.contextUsage).toEqual({
-      totalTokens: 3_000,
-      contextWindow: 200_000,
-    });
-  });
-
-  test("fails actionably and allows retry after a failed resume", async () => {
+  test("fails actionably and permits a later explicit resume retry", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
     });
     await adapter.startSession(codexStartSessionInput());
     const transport = transports.get("runtime-live");
-    expect(transport).toBeDefined();
-    const originalRequest = transport?.request.bind(transport);
-    const retryResumeResponseDelivered = createDeferred<void>();
+    const request = transport?.request.bind(transport);
     let resumeAttempts = 0;
-    if (transport && originalRequest) {
-      transport.request = async <Response>(request): Promise<Response> => {
-        if (request.method === "thread/resume") {
+    if (transport && request) {
+      transport.request = async <Response>(input): Promise<Response> => {
+        if (input.method === "thread/resume") {
           resumeAttempts += 1;
           if (resumeAttempts === 1) {
             throw new Error("resume unavailable");
           }
         }
-        const response = await originalRequest<Response>(request);
-        if (request.method === "thread/resume") {
-          retryResumeResponseDelivered.resolve(undefined);
-        }
-        return response;
+        return request<Response>(input);
       };
     }
 
     await expect(adapter.loadSessionContextUsage(codexSessionRef())).rejects.toThrow(
-      "Failed to load Codex context usage for runtime 'runtime-live' session 'thread/start-runtime-live': resume unavailable",
+      "resume unavailable",
     );
-
-    const retry = adapter.loadSessionContextUsage(codexSessionRef());
-    await retryResumeResponseDelivered.promise;
-    await flushCodexAdapterWork();
-    runtimeStream.emitNotification(tokenUsageNotification(3_000));
-    await expect(retry).resolves.toEqual({ totalTokens: 3_000, contextWindow: 200_000 });
+    await expect(adapter.loadSessionContextUsage(codexSessionRef())).resolves.toBeNull();
     expect(resumeAttempts).toBe(2);
   });
-
-  test("fails a post-resume context wait when its session is released", async () => {
+  test("does not retain an unloaded session resumed after its release", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({
+    const transport = new RecordingTransport("runtime-live", false);
+    const { adapter } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
+      transportFactory: () => transport,
     });
-    await adapter.startSession(codexStartSessionInput());
-    const resumeResponseDelivered = createDeferred<void>();
-    const transport = transports.get("runtime-live");
-    expect(transport).toBeDefined();
-    const originalRequest = transport?.request.bind(transport);
-    if (transport && originalRequest) {
-      transport.request = async <Response>(request): Promise<Response> => {
-        const response = await originalRequest<Response>(request);
-        if (request.method === "thread/resume") {
-          resumeResponseDelivered.resolve(undefined);
+    const request = transport.request.bind(transport);
+    const resume = createDeferred<void>();
+    const resumeStarted = createDeferred<void>();
+    let resumeAttempts = 0;
+    transport.request = async <Response>(input): Promise<Response> => {
+      if (input.method === "thread/resume") {
+        resumeAttempts += 1;
+        if (resumeAttempts === 1) {
+          resumeStarted.resolve(undefined);
+          await resume.promise;
         }
-        return response;
+      }
+      return request<Response>(input);
+    };
+
+    const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    await resumeStarted.promise;
+    await adapter.releaseSession(codexSessionRef("thread-idle"));
+    resume.resolve(undefined);
+
+    await expect(loading).rejects.toThrow("was released while loading context usage");
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).not.toContainEqual(
+      expect.objectContaining({
+        ref: expect.objectContaining({
+          externalSessionId: "thread-idle",
+          repoPath: "/repo",
+          workingDirectory: "/repo",
+        }),
+      }),
+    );
+    await expect(
+      adapter.loadSessionContextUsage(codexSessionRef("thread-idle")),
+    ).resolves.toBeNull();
+  });
+
+  test("does not retain an unloaded session resumed after its runtime release", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const transport = new RecordingTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      subscribeEvents: runtimeStream.subscribeEvents,
+      transportFactory: () => transport,
+    });
+    const request = transport.request.bind(transport);
+    const resume = createDeferred<void>();
+    const resumeStarted = createDeferred<void>();
+    transport.request = async <Response>(input): Promise<Response> => {
+      if (input.method === "thread/resume") {
+        resumeStarted.resolve(undefined);
+        await resume.promise;
+      }
+      return request<Response>(input);
+    };
+
+    const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    await resumeStarted.promise;
+    adapter.releaseRuntime("runtime-live");
+    resume.resolve(undefined);
+
+    await expect(loading).rejects.toThrow("was released while loading context usage");
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).not.toContainEqual(
+      expect.objectContaining({
+        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
+      }),
+    );
+  });
+
+  test("rejects a session release during runtime resolution without resuming or retaining", async () => {
+    const ref = codexSessionRef("thread-idle");
+    const runtime = createDeferred<ReturnType<typeof makeRuntimeSummary>>();
+    const { adapter, transports } = createHarness({
+      repoRuntimeResolver: { requireRepoRuntime: () => runtime.promise },
+    });
+
+    const loading = adapter.loadSessionContextUsage(ref);
+    await adapter.releaseSession(ref);
+    runtime.resolve(makeRuntimeSummary("runtime-live"));
+
+    await expect(loading).rejects.toThrow("was released while loading context usage");
+    expectNoContextReadOrResume(transports.get("runtime-live"));
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+  });
+
+  test("rejects a runtime release during runtime resolution without resuming or retaining", async () => {
+    const runtime = createDeferred<ReturnType<typeof makeRuntimeSummary>>();
+    const { adapter, transports } = createHarness({
+      repoRuntimeResolver: { requireRepoRuntime: () => runtime.promise },
+    });
+
+    const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    adapter.releaseRuntime("runtime-live");
+    runtime.resolve(makeRuntimeSummary("runtime-live"));
+
+    await expect(loading).rejects.toThrow("was released while loading context usage");
+    expectNoContextReadOrResume(transports.get("runtime-live"));
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+  });
+
+  test("rejects a session release during runtime preparation without resuming or retaining", async () => {
+    const ref = codexSessionRef("thread-idle");
+    const preparationStarted = createDeferred<void>();
+    const preparation = createDeferred<() => void>();
+    const { adapter, transports } = createHarness({
+      subscribeEvents: () => {
+        preparationStarted.resolve(undefined);
+        return preparation.promise;
+      },
+    });
+
+    const loading = adapter.loadSessionContextUsage(ref);
+    await preparationStarted.promise;
+    await adapter.releaseSession(ref);
+    preparation.resolve(() => {});
+
+    await expect(loading).rejects.toThrow("was released while loading context usage");
+    expectNoContextReadOrResume(transports.get("runtime-live"));
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+  });
+
+  test("rejects a runtime release during runtime preparation without resuming or retaining", async () => {
+    const preparationStarted = createDeferred<void>();
+    const preparation = createDeferred<() => void>();
+    const { adapter, transports } = createHarness({
+      subscribeEvents: () => {
+        preparationStarted.resolve(undefined);
+        return preparation.promise;
+      },
+    });
+
+    const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    await preparationStarted.promise;
+    adapter.releaseRuntime("runtime-live");
+    preparation.resolve(() => {});
+
+    await expect(loading).rejects.toThrow("was released while loading context usage");
+    expectNoContextReadOrResume(transports.get("runtime-live"));
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+  });
+
+  test("does not cancel a context load when a mismatched retained-session release is rejected", async () => {
+    const ref = codexSessionRef("thread-idle");
+    const transport = new RecordingTransport("runtime-live", false);
+    const originalRequest = transport.request.bind(transport);
+    const firstResumeStarted = createDeferred<void>();
+    const unblockFirstResume = createDeferred<void>();
+    let resumeCount = 0;
+    transport.request = async <Response>(input): Promise<Response> => {
+      const response = await originalRequest<Response>(input);
+      if (input.method === "thread/resume") {
+        resumeCount += 1;
+        if (resumeCount === 1) {
+          firstResumeStarted.resolve(undefined);
+          await unblockFirstResume.promise;
+        }
+      }
+      return response;
+    };
+    const { adapter } = createHarness({ transportFactory: () => transport });
+
+    const loading = adapter.loadSessionContextUsage(ref);
+    await firstResumeStarted.promise;
+    await adapter.resumeSession(codexSessionRuntimeRef("thread-idle"));
+    await expect(adapter.releaseSession({ ...ref, repoPath: "/other-repo" })).rejects.toThrow(
+      "Cannot release Codex session",
+    );
+    unblockFirstResume.resolve(undefined);
+
+    await expect(loading).resolves.toBeNull();
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
+      expect.objectContaining({
+        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
+      }),
+    );
+  });
+  test("cancels a matching blocked load before failing session cleanup", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const transport = new RecordingTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      subscribeEvents: runtimeStream.subscribeEvents,
+      transportFactory: () => transport,
+    });
+    const request = transport.request.bind(transport);
+    const resume = createDeferred<void>();
+    const resumeStarted = createDeferred<void>();
+    transport.request = async <Response>(input): Promise<Response> => {
+      if (input.method === "thread/resume") {
+        resumeStarted.resolve(undefined);
+        await resume.promise;
+      }
+      return request<Response>(input);
+    };
+    const loading = adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    await resumeStarted.promise;
+    await adapter.startSession(codexStartSessionInput());
+    const localSessions = adapter as unknown as {
+      localSessions: {
+        get(id: string): { summary: { externalSessionId: string }; threadId: string } | undefined;
+        remember(session: unknown): void;
+        release(id: string): void;
       };
+    };
+    const retained = localSessions.localSessions.get("thread/start-runtime-live");
+    if (!retained) {
+      throw new Error("Expected retained session.");
     }
+    localSessions.localSessions.remember({
+      ...retained,
+      threadId: "thread-idle",
+      summary: { ...retained.summary, externalSessionId: "thread-idle" },
+    });
+    const release = localSessions.localSessions.release.bind(localSessions.localSessions);
+    localSessions.localSessions.release = (id) => {
+      release(id);
+      throw new Error("cleanup failed");
+    };
 
-    const loading = adapter.loadSessionContextUsage(codexSessionRef());
-    await resumeResponseDelivered.promise;
-    await adapter.releaseSession(codexSessionRef());
-
-    await expect(loading).rejects.toThrow(
-      "Codex session 'thread/start-runtime-live' was released while context usage was loading",
+    await expect(adapter.releaseSession(codexSessionRef("thread-idle"))).rejects.toThrow(
+      "cleanup failed",
+    );
+    resume.resolve(undefined);
+    await expect(loading).rejects.toThrow("was released while loading context usage");
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).not.toContainEqual(
+      expect.objectContaining({
+        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
+      }),
     );
   });
 });
@@ -428,14 +495,17 @@ describe("CodexAppServerAdapter live child projection", () => {
       externalSessionId: route.childExternalSessionId,
     });
     await resumeResponseDelivered.promise;
-    await flushCodexAdapterWork();
+    await expect(contextLoading).resolves.toBeNull();
     runtimeStream.emitNotification(
       tokenUsageNotification(4_200, 200_000, route.childExternalSessionId),
     );
-    await expect(contextLoading).resolves.toEqual({
-      totalTokens: 4_200,
-      contextWindow: 200_000,
-    });
+    await flushCodexAdapterWork();
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
+      expect.objectContaining({
+        ref: expect.objectContaining({ externalSessionId: route.childExternalSessionId }),
+        contextUsage: { totalTokens: 4_200, contextWindow: 200_000 },
+      }),
+    );
     expect(transport?.calls.filter((call) => call.method === "thread/resume")).toEqual([
       expect.objectContaining({
         params: expect.objectContaining({
