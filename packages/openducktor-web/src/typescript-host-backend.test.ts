@@ -655,6 +655,7 @@ describe("TypeScript web host backend", () => {
           disposeStarted.resolve();
           await disposeReleased.promise;
         }),
+      logger: testLogger,
       resolveExited: () => {},
       stopServer: () => {},
     });
@@ -742,6 +743,7 @@ describe("TypeScript web host backend", () => {
             disposeStarted.resolve();
             await disposeReleased.promise;
           }),
+        logger: testLogger,
         resolveExited: () => {},
         stopServer: () => server.stop(true),
       });
@@ -759,6 +761,7 @@ describe("TypeScript web host backend", () => {
             eventBus,
             hostCommandRouter: createTestHostCommandRouter(),
             localAttachments: createLocalAttachmentAdapter(),
+            logger: testLogger,
             request,
             requestTimeouts: requestServer,
             shutdownStarted,

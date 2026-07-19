@@ -224,6 +224,42 @@ describe("createRuntimeOrchestratorService", () => {
     }
   });
 
+  test("reports runtime startup failures as health even when their details mention logging", async () => {
+    const startupFailure = new HostOperationError({
+      operation: "test.runtime-startup",
+      message: "runtime failed to start",
+      details: {
+        loggingFailure: new HostOperationError({
+          operation: "test.unrelated-log",
+          message: "an earlier optional log failed",
+        }),
+      },
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      logger: {
+        error: () => Effect.void,
+        info: () => Effect.void,
+      },
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        ensureWorkspaceRuntime: () => Effect.fail(startupFailure),
+      }),
+      taskReader: createTaskStore(),
+    });
+
+    await expect(
+      Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).resolves.toMatchObject({
+      status: "error",
+      runtime: {
+        status: "error",
+        stage: "startup_failed",
+        detail: "runtime failed to start",
+      },
+    });
+  });
+
   test("ensures a workspace runtime for the canonical repository path", async () => {
     const registry = createRegistry();
     const service = createRuntimeOrchestratorService({

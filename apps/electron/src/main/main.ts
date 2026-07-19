@@ -112,6 +112,7 @@ const isTaggedHostValidationError = (
 
 const shutdownController = createElectronMainShutdownController({
   disposeHost: (reason) => disposeActiveElectronRuntimeForShutdownEffect(reason),
+  drainHostCommands: electronMainRuntimeBindings.drainHostCommands,
   exitProcess: (exitCode) => {
     process.exit(exitCode);
   },
@@ -611,10 +612,7 @@ const registerIpcHandlers = (
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
     invoke: (command, args) =>
-      electronMainRuntimeBindings.runHostCommand(
-        command,
-        hostCommandRouter.invoke(command, args),
-      ),
+      electronMainRuntimeBindings.runHostCommand(command, hostCommandRouter.invoke(command, args)),
   });
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {

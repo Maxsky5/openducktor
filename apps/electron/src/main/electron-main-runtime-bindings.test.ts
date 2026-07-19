@@ -104,4 +104,75 @@ describe("createElectronMainRuntimeBindings", () => {
       },
     });
   });
+
+  test("drains an admitted host command only after its failure is persisted", async () => {
+    const commandFailure = new Error("Codex session was released during shutdown");
+    let markErrorStarted: () => void = () => {};
+    const errorStarted = new Promise<void>((resolve) => {
+      markErrorStarted = resolve;
+    });
+    let releaseErrorLog: () => void = () => {};
+    const errorLogGate = new Promise<void>((resolve) => {
+      releaseErrorLog = resolve;
+    });
+    let errorPersisted = false;
+    const logger: ElectronMainLogger = {
+      error: () =>
+        Effect.tryPromise({
+          try: async () => {
+            markErrorStarted();
+            await errorLogGate;
+            errorPersisted = true;
+          },
+          catch: (cause) => cause,
+        }),
+      info: () => Effect.void,
+      warn: () => Effect.void,
+    };
+    const bindings = createElectronMainRuntimeBindings(logger);
+    const command = bindings.runHostCommand(
+      "runtime.session.context-usage",
+      Effect.fail(commandFailure),
+    );
+    await errorStarted;
+
+    const drain = bindings.drainHostCommands();
+    let drainSettled = false;
+    void drain.then(() => {
+      drainSettled = true;
+    });
+    await Promise.resolve();
+
+    expect(drainSettled).toBe(false);
+    releaseErrorLog();
+    await expect(command).rejects.toBe(commandFailure);
+    await drain;
+    expect(errorPersisted).toBe(true);
+  });
+
+  test("rejects host commands admitted after shutdown starts", async () => {
+    const logger: ElectronMainLogger = {
+      error: () => Effect.void,
+      info: () => Effect.void,
+      warn: () => Effect.void,
+    };
+    const bindings = createElectronMainRuntimeBindings(logger);
+    let commandRan = false;
+
+    await bindings.drainHostCommands();
+
+    await expect(
+      bindings.runHostCommand(
+        "task.list",
+        Effect.sync(() => {
+          commandRan = true;
+        }),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "ElectronOperationError",
+      operation: "electron.main.host-command",
+      details: { command: "task.list", reason: "shutdown-started" },
+    });
+    expect(commandRan).toBe(false);
+  });
 });

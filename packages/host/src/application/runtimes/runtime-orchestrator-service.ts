@@ -34,6 +34,9 @@ export type {
   RuntimeRepoInput,
   RuntimeStopInput,
 } from "./runtime-orchestrator-model";
+
+class RuntimeOrchestratorLoggingError extends HostOperationError {}
+
 export const createRuntimeOrchestratorService = ({
   gitPort,
   runtimeDefinitionsService,
@@ -58,7 +61,7 @@ export const createRuntimeOrchestratorService = ({
       ? logger[level](message).pipe(
           Effect.mapError(
             (cause) =>
-              new HostOperationError({
+              new RuntimeOrchestratorLoggingError({
                 operation: `runtime-orchestrator.log-${level}`,
                 message: errorMessage(cause),
                 cause,
@@ -209,7 +212,7 @@ export const createRuntimeOrchestratorService = ({
       );
       if (loggingResult._tag === "Left") {
         return yield* Effect.fail(
-          new HostOperationError({
+          new RuntimeOrchestratorLoggingError({
             operation: "runtime-orchestrator.ensure",
             message: `${message}; additionally failed to persist the runtime startup failure: ${loggingResult.left.message}`,
             cause: ensureResult.left,
@@ -259,11 +262,7 @@ export const createRuntimeOrchestratorService = ({
         );
         const runtimeResult = yield* Effect.either(runtimeEnsure(input));
         if (runtimeResult._tag === "Left") {
-          if (
-            runtimeResult.left instanceof HostOperationError &&
-            (runtimeResult.left.operation === "runtime-orchestrator.log-info" ||
-              runtimeResult.left.details?.loggingFailure instanceof HostOperationError)
-          ) {
+          if (runtimeResult.left instanceof RuntimeOrchestratorLoggingError) {
             return yield* Effect.fail(runtimeResult.left);
           }
           return yield* buildHealthStatus(

@@ -11,6 +11,7 @@ import {
   runElectronMainStartupBoundary,
 } from "./electron-main-lifecycle";
 import { createElectronMainLogger } from "./electron-main-logger";
+import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
 
@@ -428,6 +429,7 @@ describe("Electron main lifecycle policy", () => {
       });
       const controller = createElectronMainShutdownController({
         disposeHost: () => Effect.void,
+        drainHostCommands: () => Promise.resolve(),
         exitProcess: () => {},
         logger,
         quitApp: () => {},
@@ -478,6 +480,7 @@ describe("Electron main lifecycle policy", () => {
               cause,
             }),
         }),
+      drainHostCommands: () => Promise.resolve(),
       exitProcess: () => {},
       logger: {
         error: () => Effect.void,
@@ -504,6 +507,83 @@ describe("Electron main lifecycle policy", () => {
     expect(controller.isHostShutdownComplete()).toBe(true);
   });
 
+  test("shutdown persists an admitted host command failure before quitting", async () => {
+    const records: string[] = [];
+    let markErrorAppendStarted: () => void = () => {};
+    const errorAppendStarted = new Promise<void>((resolve) => {
+      markErrorAppendStarted = resolve;
+    });
+    let releaseErrorAppend: () => void = () => {};
+    const errorAppendGate = new Promise<void>((resolve) => {
+      releaseErrorAppend = resolve;
+    });
+    const logger = await Effect.runPromise(
+      createElectronMainLogger({
+        stream: { write: () => {} },
+        writer: {
+          append: (_recordedAt, record) => {
+            if (!record.includes("Electron host command")) {
+              return Effect.sync(() => {
+                records.push(record);
+              });
+            }
+            return Effect.promise(async () => {
+              markErrorAppendStarted();
+              await errorAppendGate;
+              records.push(record);
+            });
+          },
+        },
+      }),
+    );
+    const runtimeBindings = createElectronMainRuntimeBindings(logger);
+    let markDisposeCompleted: () => void = () => {};
+    const disposeCompleted = new Promise<void>((resolve) => {
+      markDisposeCompleted = resolve;
+    });
+    let quitCalled = false;
+    const controller = createElectronMainShutdownController({
+      disposeHost: () =>
+        Effect.sync(() => {
+          markDisposeCompleted();
+        }),
+      drainHostCommands: runtimeBindings.drainHostCommands,
+      exitProcess: () => {},
+      logger: {
+        error: logger.error,
+        info: logger.info,
+      },
+      quitApp: () => {
+        quitCalled = true;
+      },
+      reportFailure: () => {},
+    });
+
+    const commandFailure = new Error("Codex session was released during shutdown");
+    const command = runtimeBindings.runHostCommand(
+      "runtime.session.context-usage",
+      Effect.fail(commandFailure),
+    );
+    await errorAppendStarted;
+    const shutdown = controller.shutdownHostAndQuit({ reason: "window-close" });
+    await disposeCompleted;
+
+    expect(quitCalled).toBe(false);
+    releaseErrorAppend();
+    await expect(command).rejects.toBe(commandFailure);
+    await shutdown;
+
+    const commandErrorIndex = records.findIndex((record) =>
+      record.includes("ERROR Electron host command 'runtime.session.context-usage' failed"),
+    );
+    const shutdownCompleteIndex = records.findIndex((record) =>
+      record.includes("INFO OpenDucktor host shutdown complete"),
+    );
+    expect(commandErrorIndex).toBeGreaterThanOrEqual(0);
+    expect(shutdownCompleteIndex).toBeGreaterThan(commandErrorIndex);
+    expect(quitCalled).toBe(true);
+  });
+
   test("shutdown controller exits with failure when host disposal fails on a signal path", async () => {
     const errors: Array<{ error: unknown; message: string }> = [];
     const exitCodes: number[] = [];
@@ -516,6 +596,7 @@ describe("Electron main lifecycle policy", () => {
 
     const controller = createElectronMainShutdownController({
       disposeHost: () => Effect.fail(disposalError),
+      drainHostCommands: () => Promise.resolve(),
       exitProcess: (exitCode) => {
         exitCodes.push(exitCode);
       },
@@ -557,6 +638,7 @@ describe("Electron main lifecycle policy", () => {
         Effect.sync(() => {
           disposeCalls += 1;
         }),
+      drainHostCommands: () => Promise.resolve(),
       exitProcess: (exitCode) => {
         exitCodes.push(exitCode);
       },
@@ -590,6 +672,7 @@ describe("Electron main lifecycle policy", () => {
     const reportedFailures: unknown[] = [];
     const controller = createElectronMainShutdownController({
       disposeHost: () => Effect.fail(disposalError),
+      drainHostCommands: () => Promise.resolve(),
       exitProcess: () => {},
       logger: {
         error: () => Effect.fail(persistenceError),
@@ -625,6 +708,7 @@ describe("Electron main lifecycle policy", () => {
         disposeCalls += 1;
         return Effect.fail(disposalError);
       },
+      drainHostCommands: () => Promise.resolve(),
       exitProcess: () => {},
       logger: {
         error: () => Effect.void,
@@ -666,6 +750,7 @@ describe("Electron main lifecycle policy", () => {
     const installError = new Error("updater handoff failed");
     const controller = createElectronMainShutdownController({
       disposeHost: () => Effect.void,
+      drainHostCommands: () => Promise.resolve(),
       exitProcess: () => {},
       logger: {
         error: () => Effect.void,

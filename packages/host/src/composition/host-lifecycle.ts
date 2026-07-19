@@ -21,6 +21,8 @@ export type HostShutdownStep = {
   run: () => Effect.Effect<void, DevServerServiceError | HostError>;
 };
 
+class HostLifecycleLoggingError extends HostOperationError {}
+
 const formatRuntimeTaskLabel = (taskId: string | null): string => taskId ?? "workspace";
 
 export const writeHostLifecycleLog = (
@@ -31,7 +33,7 @@ export const writeHostLifecycleLog = (
   logger[level](message).pipe(
     Effect.mapError(
       (cause) =>
-        new HostOperationError({
+        new HostLifecycleLoggingError({
           operation: `host.lifecycle.log-${level}`,
           message: cause instanceof Error ? cause.message : String(cause),
           cause,
@@ -52,7 +54,7 @@ const captureHostLifecycleLogFailure = (
   );
 
 const isHostLifecycleLoggingFailure = (cause: unknown): cause is HostOperationError =>
-  cause instanceof HostOperationError && cause.operation.startsWith("host.lifecycle.log-");
+  cause instanceof HostLifecycleLoggingError;
 
 export const runShutdownSteps = (
   steps: HostShutdownStep[],

@@ -182,6 +182,7 @@ export type ElectronMainShutdownRunOptions = {
 
 type ShutdownControllerOptions = {
   disposeHost(reason: string): Effect.Effect<void, ElectronLifecycleError>;
+  drainHostCommands(): Promise<void>;
   exitProcess(exitCode: number): void;
   logger: ElectronMainLifecycleLogger;
   quitApp(): void;
@@ -200,6 +201,7 @@ export type ElectronMainShutdownController = {
 
 export const createElectronMainShutdownController = ({
   disposeHost,
+  drainHostCommands,
   exitProcess,
   logger,
   quitApp,
@@ -228,6 +230,7 @@ export const createElectronMainShutdownController = ({
     }
 
     hostShutdownStarted = true;
+    const hostCommandDrain = drainHostCommands();
     let exitCode = hostShutdownExitCode ?? 0;
     const loggingFailures: unknown[] = [];
     const shutdownFailures: unknown[] = [];
@@ -238,6 +241,7 @@ export const createElectronMainShutdownController = ({
       loggingFailures.push(startLoggingFailure);
     }
     const disposeExit = await Effect.runPromiseExit(disposeHost(reason));
+    await hostCommandDrain;
     let completionLoggingFailure: unknown | undefined;
     if (Exit.isFailure(disposeExit)) {
       exitCode = 1;
