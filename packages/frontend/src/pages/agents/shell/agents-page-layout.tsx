@@ -275,10 +275,10 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   const terminalPanelToggleModel = useMemo(
     () => ({
       isVisible: terminalPanel.isVisible,
-      disabled: terminalPanel.taskId === null,
+      disabled: !terminalPanel.isAvailable,
       onToggle: terminalPanel.onToggle,
     }),
-    [terminalPanel.isVisible, terminalPanel.onToggle, terminalPanel.taskId],
+    [terminalPanel.isAvailable, terminalPanel.isVisible, terminalPanel.onToggle],
   );
   const taskTabsContent = useMemo(
     () => (

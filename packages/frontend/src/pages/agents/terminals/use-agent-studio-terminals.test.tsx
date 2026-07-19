@@ -4,10 +4,11 @@ import type { TerminalSummary } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
+import type { TerminalTab } from "@/features/terminals";
+import { terminalTabLabel } from "@/features/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/lib/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { terminalTabLabel } from "./terminal-presentation-state";
-import { type AgentStudioTerminalTab, useAgentStudioTerminals } from "./use-agent-studio-terminals";
+import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
 
 if (typeof document === "undefined") {
   GlobalRegistrator.register();
@@ -23,7 +24,7 @@ const summaryForTask = (taskId: string): TerminalSummary => ({
   exit: null,
 });
 
-const requireTab = (tab: AgentStudioTerminalTab | undefined): AgentStudioTerminalTab => {
+const requireTab = (tab: TerminalTab | undefined): TerminalTab => {
   if (!tab) throw new Error("Expected a terminal tab.");
   return tab;
 };
@@ -415,7 +416,7 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
       const actions = {
         onToggle: getLatest().onToggle,
-        onBackToChat: getLatest().onBackToChat,
+        onHide: getLatest().onHide,
         onSelectTab: getLatest().onSelectTab,
         onCreate: getLatest().onCreate,
         onRetryCreate: getLatest().onRetryCreate,
@@ -433,7 +434,7 @@ describe("useAgentStudioTerminals", () => {
 
       expect({
         onToggle: getLatest().onToggle,
-        onBackToChat: getLatest().onBackToChat,
+        onHide: getLatest().onHide,
         onSelectTab: getLatest().onSelectTab,
         onCreate: getLatest().onCreate,
         onRetryCreate: getLatest().onRetryCreate,

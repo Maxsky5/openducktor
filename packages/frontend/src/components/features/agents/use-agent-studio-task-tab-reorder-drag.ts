@@ -1,4 +1,4 @@
-import { useHorizontalSortableTabs } from "./use-horizontal-sortable-tabs";
+import { useHorizontalSortableTabs } from "@/components/ui/use-horizontal-sortable-tabs";
 
 type UseAgentStudioTaskTabReorderDragArgs = {
   tabTaskIds: string[];

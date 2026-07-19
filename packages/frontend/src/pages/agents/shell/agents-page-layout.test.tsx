@@ -64,7 +64,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     })) as typeof window.matchMedia;
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
-      taskId: "task-1",
+      isAvailable: true,
       tabs: [],
       mountedTabs: [],
       activeTabId: null,
@@ -77,7 +77,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       focusRequest: 1,
       controller: null,
       onToggle: () => undefined,
-      onBackToChat: () => undefined,
+      onHide: () => undefined,
       onSelectTab: () => undefined,
       onCreate: () => undefined,
       onRetryCreate: () => undefined,
@@ -98,7 +98,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         terminalPanel: { ...terminalPanel, isVisible },
       });
     const view = render(renderWorkspace(false));
-    const panel = view.getByText("No terminals for this task.");
+    const panel = view.getByText("No terminals.");
     const workspacePanel = view.container.querySelector<HTMLElement>(
       "#agent-studio-workspace-panel",
     );
@@ -123,12 +123,12 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     view.rerender(renderWorkspace(false));
     expect(workspacePanel?.style.flexGrow).toBe("100");
     expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
-    expect(view.getByText("No terminals for this task.")).toBe(panel);
+    expect(view.getByText("No terminals.")).toBe(panel);
     view.rerender(renderWorkspace(true));
-    expect(view.getByText("No terminals for this task.")).toBe(panel);
+    expect(view.getByText("No terminals.")).toBe(panel);
   });
 
-  test("uses terminal mode at 767px and keeps a path back to chat", () => {
+  test("uses terminal mode at 767px and keeps a path back to the workspace", () => {
     window.matchMedia = ((query: string) => ({
       matches: query === "(max-width: 767px)",
       media: query,
@@ -139,10 +139,10 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       removeEventListener: () => undefined,
       dispatchEvent: () => true,
     })) as typeof window.matchMedia;
-    const onBackToChat = () => undefined;
+    const onHide = () => undefined;
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
-      taskId: "task-1",
+      isAvailable: true,
       tabs: [],
       mountedTabs: [],
       activeTabId: null,
@@ -155,7 +155,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       focusRequest: 1,
       controller: null,
       onToggle: () => undefined,
-      onBackToChat,
+      onHide,
       onSelectTab: () => undefined,
       onCreate: () => undefined,
       onRetryCreate: () => undefined,
@@ -176,8 +176,8 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         terminalPanel,
       }),
     );
-    expect(view.getByRole("button", { name: "Back to chat" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Back to workspace" })).toBeTruthy();
     expect(view.getByTestId("narrow-chat").closest("[hidden]")).toBeTruthy();
-    expect(view.getByText("No terminals for this task.").closest("[hidden]")).toBeNull();
+    expect(view.getByText("No terminals.").closest("[hidden]")).toBeNull();
   });
 });

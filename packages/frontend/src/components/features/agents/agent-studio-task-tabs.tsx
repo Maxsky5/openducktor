@@ -16,6 +16,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  horizontalTabDropAnimation,
+  horizontalTabSortTransition,
+} from "@/components/ui/use-horizontal-sortable-tabs";
 import { cn } from "@/lib/utils";
 import {
   agentStudioPanelToggleButtonClassName,
@@ -23,10 +27,6 @@ import {
   type TaskExecutionPanelToggleModel,
 } from "./task-execution-panel";
 import { useAgentStudioTaskTabReorderDrag } from "./use-agent-studio-task-tab-reorder-drag";
-import {
-  horizontalTabDropAnimation,
-  horizontalTabSortTransition,
-} from "./use-horizontal-sortable-tabs";
 
 export type AgentStudioTaskTabStatus = "working" | "idle" | "waiting_input";
 

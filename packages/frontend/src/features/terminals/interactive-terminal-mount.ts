@@ -2,8 +2,6 @@ import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@ope
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { type IDisposable, Terminal } from "@xterm/xterm";
-import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
-import { createTerminalOptions } from "../terminal-xterm-options";
 import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
@@ -23,6 +21,8 @@ import {
   pasteDroppedTerminalImages,
 } from "./terminal-image-transfer-policy";
 import { createTerminalKeyEventHandler, encodeTerminalTextInput } from "./terminal-keyboard-policy";
+import type { TerminalTransportController } from "./terminal-transport-controller";
+import { createTerminalOptions } from "./terminal-xterm-options";
 
 export type InteractiveTerminalMount = {
   activate(focus: boolean): void;

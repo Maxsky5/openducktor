@@ -4,10 +4,11 @@ import type { TerminalSummary } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
+import type { TerminalTab } from "@/features/terminals";
+import { terminalTabLifecycle } from "@/features/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/lib/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { terminalTabLifecycle } from "./terminal-presentation-state";
-import { type AgentStudioTerminalTab, useAgentStudioTerminals } from "./use-agent-studio-terminals";
+import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
 
 if (typeof document === "undefined") {
   GlobalRegistrator.register();
@@ -23,7 +24,7 @@ const summaryForTask = (taskId: string): TerminalSummary => ({
   exit: null,
 });
 
-const requireTab = (tab: AgentStudioTerminalTab | undefined): AgentStudioTerminalTab => {
+const requireTab = (tab: TerminalTab | undefined): TerminalTab => {
   if (!tab) throw new Error("Expected a terminal tab.");
   return tab;
 };

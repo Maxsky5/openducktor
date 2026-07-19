@@ -14,13 +14,16 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import {
+  terminalTabsListClassName,
+  terminalTabTriggerClassName,
+} from "@/features/terminals/terminal-tab-styles";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import {
   createDevServerTaskScope,
   formatDevServerTaskScopeKey,
 } from "@/types/dev-server-task-scope";
-import { terminalTabsListClassName, terminalTabTriggerClassName } from "./terminal-tab-styles";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
 

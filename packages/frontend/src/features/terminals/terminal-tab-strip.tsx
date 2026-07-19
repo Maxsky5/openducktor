@@ -5,20 +5,20 @@ import { Loader2, X } from "lucide-react";
 import { type ReactElement, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
-import {
-  terminalTabLabel,
-  terminalTabLifecycle,
-} from "@/pages/agents/terminals/terminal-presentation-state";
-import type { AgentStudioTerminalTab } from "@/pages/agents/terminals/use-agent-studio-terminals";
-import { terminalTabsListClassName, terminalTabTriggerClassName } from "../terminal-tab-styles";
 import {
   horizontalTabDropAnimation,
   horizontalTabSortTransition,
-} from "../use-horizontal-sortable-tabs";
+} from "@/components/ui/use-horizontal-sortable-tabs";
+import { cn } from "@/lib/utils";
+import {
+  type TerminalTab,
+  terminalTabLabel,
+  terminalTabLifecycle,
+} from "./terminal-presentation-state";
+import { terminalTabsListClassName, terminalTabTriggerClassName } from "./terminal-tab-styles";
 import { useTerminalTabReorderDrag } from "./use-terminal-tab-reorder-drag";
 
-const lifecycleText = (tab: AgentStudioTerminalTab): string => {
+const lifecycleText = (tab: TerminalTab): string => {
   if (tab.requestState === "creating") return "Creating";
   if (tab.requestState === "unsupported_runtime") return "Unsupported runtime";
   if (tab.requestState === "creation_failed") return "Creation failed";
@@ -31,7 +31,7 @@ const lifecycleText = (tab: AgentStudioTerminalTab): string => {
   return "Running";
 };
 
-const detailText = (tab: AgentStudioTerminalTab): string =>
+const detailText = (tab: TerminalTab): string =>
   tab.summary
     ? `${lifecycleText(tab)}. Started in ${tab.summary.initialWorkingDir}`
     : lifecycleText(tab);
@@ -39,7 +39,7 @@ const detailText = (tab: AgentStudioTerminalTab): string =>
 const terminalTabShellClassName =
   "group relative inline-flex h-8 min-w-52 max-w-80 shrink-0 cursor-pointer touch-none select-none items-center font-mono text-[11px]";
 
-function TerminalTabLabel({ tab }: { tab: AgentStudioTerminalTab }): ReactElement {
+function TerminalTabLabel({ tab }: { tab: TerminalTab }): ReactElement {
   return (
     <span className="min-w-0 flex-1 truncate px-3 text-left" title={detailText(tab)}>
       {terminalTabLabel(tab)}
@@ -47,7 +47,7 @@ function TerminalTabLabel({ tab }: { tab: AgentStudioTerminalTab }): ReactElemen
   );
 }
 
-function TerminalTabDragOverlay({ tab }: { tab: AgentStudioTerminalTab }): ReactElement {
+function TerminalTabDragOverlay({ tab }: { tab: TerminalTab }): ReactElement {
   return (
     <div
       aria-hidden="true"
@@ -68,11 +68,11 @@ function SortableTerminalTab({
   onSelectTab,
   onCloseTab,
 }: {
-  tab: AgentStudioTerminalTab;
+  tab: TerminalTab;
   isActiveDrag: boolean;
   shouldSuppressSelection: boolean;
   onSelectTab: (tabId: string) => void;
-  onCloseTab: (tab: AgentStudioTerminalTab) => void;
+  onCloseTab: (tab: TerminalTab) => void;
 }): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tab.tabId,
@@ -134,10 +134,10 @@ export function TerminalTabStrip({
   onReorderTab,
   onCloseTab,
 }: {
-  tabs: AgentStudioTerminalTab[];
+  tabs: TerminalTab[];
   onSelectTab: (tabId: string) => void;
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
-  onCloseTab: (tab: AgentStudioTerminalTab) => void;
+  onCloseTab: (tab: TerminalTab) => void;
 }): ReactElement {
   const tabIds = useMemo(() => tabs.map((tab) => tab.tabId), [tabs]);
   const {
@@ -166,7 +166,7 @@ export function TerminalTabStrip({
     >
       <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
         <TabsList
-          aria-label="Task terminal tabs"
+          aria-label="Terminal tabs"
           className={cn(terminalTabsListClassName, "hide-scrollbar")}
         >
           {tabs.map((tab) => (

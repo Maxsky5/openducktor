@@ -2,7 +2,10 @@ import { FitAddon } from "@xterm/addon-fit";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-import { createTerminalOptions, createTerminalTheme } from "./terminal-xterm-options";
+import {
+  createTerminalOptions,
+  createTerminalTheme,
+} from "@/features/terminals/terminal-xterm-options";
 
 export type TerminalBinding = {
   terminal: Pick<Terminal, "clear" | "dispose" | "loadAddon" | "open" | "options" | "reset"> & {

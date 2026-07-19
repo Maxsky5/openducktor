@@ -19,17 +19,17 @@ type PendingTerminalTab = {
   requestState: "creating" | "creation_failed" | "unsupported_runtime" | "lost";
 };
 
-export type AgentStudioTerminalTab = ReadyTerminalTab | PendingTerminalTab;
+export type TerminalTab = ReadyTerminalTab | PendingTerminalTab;
 
-export const terminalTabLabel = (tab: AgentStudioTerminalTab): string =>
+export const terminalTabLabel = (tab: TerminalTab): string =>
   tab.requestState === "ready" ? tab.summary.label : tab.label;
 
-export const terminalTabLifecycle = (tab: AgentStudioTerminalTab): TerminalLifecycle | null =>
+export const terminalTabLifecycle = (tab: TerminalTab): TerminalLifecycle | null =>
   tab.requestState === "ready" ? tab.summary.lifecycle : null;
 
 export type TerminalScopePresentation = {
   hostInstanceId: string | null;
-  tabs: AgentStudioTerminalTab[];
+  tabs: TerminalTab[];
   closingTabIds: string[];
   activeTabId: string | null;
   visibility: { value: boolean; isExplicit: boolean };
@@ -91,10 +91,7 @@ export const createTerminalPresentationState = (
   scopes: scopeKey ? { [scopeKey]: emptyTerminalScopePresentation() } : {},
 });
 
-export const toHostTab = (
-  summary: TerminalSummary,
-  previous?: AgentStudioTerminalTab,
-): AgentStudioTerminalTab => {
+export const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): TerminalTab => {
   const previousSummary = previous?.requestState === "ready" ? previous.summary : null;
   const previousLabel = previous ? terminalTabLabel(previous) : null;
   const preserveLiveLifecycle =
@@ -127,7 +124,7 @@ const toLostTab = (tab: ReadyTerminalTab, message: string): PendingTerminalTab =
 });
 
 const resolveActiveTabId = (
-  tabs: AgentStudioTerminalTab[],
+  tabs: TerminalTab[],
   currentActiveTabId: string | null,
   preferredActiveTabId: string | null = null,
 ): string | null => {

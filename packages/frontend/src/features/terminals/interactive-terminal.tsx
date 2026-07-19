@@ -6,11 +6,11 @@ import { errorMessage } from "@/lib/errors";
 import { hostClient } from "@/lib/host-client";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { cn } from "@/lib/utils";
-import type { TerminalTransportController } from "@/pages/agents/terminals/terminal-transport-controller";
 import {
   type InteractiveTerminalMount,
   mountInteractiveTerminal,
 } from "./interactive-terminal-mount";
+import type { TerminalTransportController } from "./terminal-transport-controller";
 
 export function InteractiveTerminal({
   terminalId,
