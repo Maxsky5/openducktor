@@ -16,7 +16,12 @@ const canonicalZeroUsage = (params: unknown): CodexSessionContextUsage | null =>
   if (!isPlainObject(usage.last) || !isPlainObject(usage.total)) {
     return null;
   }
-  if (usage.last.totalTokens !== 0 || usage.total.totalTokens !== 0) {
+  if (
+    usage.last.totalTokens !== 0 ||
+    typeof usage.total.totalTokens !== "number" ||
+    !Number.isFinite(usage.total.totalTokens) ||
+    usage.total.totalTokens < 0
+  ) {
     return null;
   }
   const contextWindow = usage.modelContextWindow;

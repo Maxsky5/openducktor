@@ -241,6 +241,8 @@ export class CodexAppServerAdapter
       sessionEvents: {
         clear: (session) => this.sessionEvents.clear(codexSessionRef(session)),
       },
+      onLastRuntimeSessionReleased: (runtimeId) =>
+        this.stopRuntimeEventSubscriptionIfUnused(runtimeId),
       runtimeEvents: this.runtimeEvents,
     });
   }
@@ -274,7 +276,10 @@ export class CodexAppServerAdapter
       }
     };
 
-    cleanup("sessions", () => this.localSessions.releaseRuntime(runtimeId));
+    cleanup("sessions", () => {
+      this.localSessions.releaseRuntime(runtimeId);
+      this.runtimeEvents.stopRuntimeEventSubscription(runtimeId);
+    });
     cleanup("pending input", () => this.pendingInput.clearRuntime(runtimeId));
     cleanup("subagents", () => this.subagents.clearRuntime(runtimeId));
     cleanup("runtime events", () => this.runtimeEvents.clearRuntime(runtimeId));
@@ -588,6 +593,7 @@ export class CodexAppServerAdapter
       );
     } finally {
       this.inFlightContextLoads.delete(guard);
+      this.stopRuntimeEventSubscriptionIfUnused(guard.runtimeId);
     }
   }
 
@@ -645,6 +651,7 @@ export class CodexAppServerAdapter
       );
     } finally {
       this.inFlightContextLoads.delete(guard);
+      this.stopRuntimeEventSubscriptionIfUnused(guard.runtimeId);
     }
   }
 
@@ -826,6 +833,26 @@ export class CodexAppServerAdapter
     }
     guard.error = error;
     guard.cancel(error);
+  }
+
+  private stopRuntimeEventSubscriptionIfUnused(runtimeId: string | null): void {
+    if (
+      !runtimeId ||
+      this.localSessions.hasRuntimeSession(runtimeId) ||
+      this.hasRuntimeBoundContextLoad(runtimeId)
+    ) {
+      return;
+    }
+    this.runtimeEvents.stopRuntimeEventSubscription(runtimeId);
+  }
+
+  private hasRuntimeBoundContextLoad(runtimeId: string): boolean {
+    for (const guard of this.inFlightContextLoads) {
+      if (guard.runtimeId === runtimeId) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async listSessionRuntimeSnapshots(
@@ -1164,6 +1191,7 @@ export class CodexAppServerAdapter
       );
     }
 
+    this.cancelSessionContextLoads(input);
     this.localSessions.release(input.externalSessionId);
   }
 

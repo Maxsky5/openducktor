@@ -46,8 +46,8 @@ const createStore = () => {
     runtimeEvents: {
       clearSession: (externalSessionId, runtimeId) =>
         clearedRuntimeEvents.push({ externalSessionId, runtimeId }),
-      stopRuntimeEventSubscription: (runtimeId) => stoppedRuntimeSubscriptions.push(runtimeId),
     },
+    onLastRuntimeSessionReleased: (runtimeId) => stoppedRuntimeSubscriptions.push(runtimeId),
   });
   return {
     store,
@@ -147,7 +147,7 @@ describe("CodexLocalSessionState", () => {
       { externalSessionId: "thread-1", runtimeId: "runtime-1" },
       { externalSessionId: "thread-2", runtimeId: "runtime-1" },
     ]);
-    expect(stoppedRuntimeSubscriptions).toEqual(["runtime-1"]);
+    expect(stoppedRuntimeSubscriptions).toEqual([]);
   });
 
   test("clears missing local sessions without throwing", () => {
