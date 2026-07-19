@@ -101,23 +101,26 @@ describe("Electron host invoke IPC handler", () => {
       "args",
       "Electron host invoke arguments must be an object when provided.",
     ],
-  ] as const)("rejects %s without invoking the router", async (_case, invalidRequest, field, message) => {
-    const invoke = mock(async () => ({ repoPath: "/workspace" }));
-    const registered = createRegisteredHandler();
+  ] as const)(
+    "rejects %s without invoking the router",
+    async (_case, invalidRequest, field, message) => {
+      const invoke = mock(async () => ({ repoPath: "/workspace" }));
+      const registered = createRegisteredHandler();
 
-    registerElectronHostInvokeHandler(registered.ipcMain, {
-      isHostShutdownStarted: () => false,
-      invoke,
-    });
+      registerElectronHostInvokeHandler(registered.ipcMain, {
+        isHostShutdownStarted: () => false,
+        invoke,
+      });
 
-    await expect(registered.handler({}, invalidRequest)).rejects.toMatchObject({
-      _tag: "ElectronValidationError",
-      operation: "electron.ipc.host-invoke.validate",
-      field,
-      message,
-    });
-    expect(invoke).not.toHaveBeenCalled();
-  });
+      await expect(registered.handler({}, invalidRequest)).rejects.toMatchObject({
+        _tag: "ElectronValidationError",
+        operation: "electron.ipc.host-invoke.validate",
+        field,
+        message,
+      });
+      expect(invoke).not.toHaveBeenCalled();
+    },
+  );
 
   test("preserves genuine host failures", async () => {
     const failure = new Error("host failure");

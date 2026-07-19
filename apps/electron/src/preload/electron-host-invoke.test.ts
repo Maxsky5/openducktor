@@ -24,16 +24,16 @@ describe("Electron preload host invoke", () => {
     );
   });
 
-  test.each([
-    { status: "success" },
-    { status: "shutdown", payload: null },
-  ])("rejects malformed responses with an explicit protocol error", async (response) => {
-    const hostInvoke = createElectronHostInvoke({ invoke: async () => response });
+  test.each([{ status: "success" }, { status: "shutdown", payload: null }])(
+    "rejects malformed responses with an explicit protocol error",
+    async (response) => {
+      const hostInvoke = createElectronHostInvoke({ invoke: async () => response });
 
-    await expect(hostInvoke("workspace_get_context")).rejects.toThrow(
-      "Received an invalid host invoke response from the Electron main process.",
-    );
-  });
+      await expect(hostInvoke("workspace_get_context")).rejects.toThrow(
+        "Received an invalid host invoke response from the Electron main process.",
+      );
+    },
+  );
 
   test("preserves raw IPC invocation failures", async () => {
     const failure = new Error("IPC unavailable");
