@@ -1,5 +1,6 @@
-import type { AppUpdater, ProgressInfo } from "electron-updater";
+import type { AppUpdater, Logger, ProgressInfo } from "electron-updater";
 import { ElectronOperationError } from "../../effect/electron-errors";
+import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
 import type {
   ElectronAppUpdaterAdapter,
   ElectronInstallHandoff,
@@ -41,12 +42,13 @@ const loadNativeUpdater: NativeUpdaterLoader = async () => {
 const configureNativeUpdater = (
   updater: AppUpdater,
   options: ElectronUpdaterConfigureOptions,
+  logger: Logger,
 ): void => {
   updater.allowPrerelease = options.allowPrerelease;
   updater.autoDownload = options.autoDownload;
   updater.autoInstallOnAppQuit = options.autoInstallOnAppQuit;
   updater.channel = options.channel;
-  updater.logger = options.logger;
+  updater.logger = logger;
 };
 
 export const createElectronUpdaterAdapter = ({
@@ -60,7 +62,22 @@ export const createElectronUpdaterAdapter = ({
   let resolvedRelease: GitHubRelease | undefined;
   let updaterPromise: Promise<AppUpdater> | undefined;
   let disposed = false;
+  const nativeLogOwner = createElectronDetachedTaskOwner((cause) =>
+    requireConfiguration().onLogFailure(cause),
+  );
   const listeners = createEventListeners();
+
+  const createNativeLogger = (options: ElectronUpdaterConfigureOptions): Logger => ({
+    error: (message) => {
+      nativeLogOwner.run(() => options.logger.error(String(message)), options.onLogFailure);
+    },
+    info: (message) => {
+      nativeLogOwner.run(() => options.logger.info(String(message)), options.onLogFailure);
+    },
+    warn: (message) => {
+      nativeLogOwner.run(() => options.logger.warn(String(message)), options.onLogFailure);
+    },
+  });
 
   const requireActive = (operation: string): void => {
     if (!disposed) {
@@ -128,7 +145,8 @@ export const createElectronUpdaterAdapter = ({
     requireConfiguration();
     updaterPromise ??= loadUpdater().then((updater) => {
       requireActive("electron.updater.initialize");
-      configureNativeUpdater(updater, requireConfiguration());
+      const options = requireConfiguration();
+      configureNativeUpdater(updater, options, createNativeLogger(options));
       attachNativeListeners(updater);
       loadedUpdater = updater;
       return updater;
@@ -153,7 +171,7 @@ export const createElectronUpdaterAdapter = ({
       requireActive("electron.updater.configure");
       configuration = options;
       if (loadedUpdater) {
-        configureNativeUpdater(loadedUpdater, options);
+        configureNativeUpdater(loadedUpdater, options, createNativeLogger(options));
       }
     },
     dispose: async () => {
@@ -163,10 +181,12 @@ export const createElectronUpdaterAdapter = ({
       disposed = true;
       if (loadedUpdater) {
         detachNativeListeners(loadedUpdater);
+        loadedUpdater.logger = null;
       }
       for (const eventListeners of Object.values(listeners)) {
         eventListeners.clear();
       }
+      await nativeLogOwner.drain();
     },
     downloadUpdate: async () => {
       requireActive("electron.updater.download");

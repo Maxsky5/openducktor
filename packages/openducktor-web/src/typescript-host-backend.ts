@@ -11,13 +11,14 @@ import {
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
+  causeToWebBoundaryError,
   errorMessage,
   runWebBoundary,
   toWebOperationError,
   WebHostRequestError,
   WebOperationError,
 } from "./effect/web-errors";
-import { logError, logInfo } from "./logger";
+import { type WebLogger, writeWebLogEffect } from "./logger";
 import {
   allowedOriginsForFrontendOrigin,
   type BufferedHostEvent,
@@ -32,6 +33,8 @@ export type TypescriptHostBackendOptions = {
   frontendOrigin: string;
   controlToken: string;
   appToken: string;
+  logger: WebLogger;
+  onBackgroundFailure(failure: unknown): void;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
 };
@@ -445,6 +448,7 @@ const routeCorsRequest = ({
   eventBus,
   hostCommandRouter,
   localAttachments,
+  logger,
   request,
   requestTimeouts,
   shutdownStarted,
@@ -457,6 +461,7 @@ const routeCorsRequest = ({
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
+  logger: WebLogger;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
@@ -488,7 +493,12 @@ const routeCorsRequest = ({
         beginShutdown();
         setTimeout(() => {
           void stop().catch((error: unknown) => {
-            logError(errorMessage(error));
+            void runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(error))).catch(
+              (logError: unknown) => {
+                console.error(errorMessage(logError));
+                process.exitCode = 1;
+              },
+            );
           });
         }, 10);
       });
@@ -557,6 +567,7 @@ export const handleTypescriptHostBackendRequest = ({
   eventBus,
   hostCommandRouter,
   localAttachments,
+  logger,
   request,
   requestTimeouts,
   shutdownStarted,
@@ -569,6 +580,7 @@ export const handleTypescriptHostBackendRequest = ({
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
+  logger: WebLogger;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
@@ -592,6 +604,7 @@ export const handleTypescriptHostBackendRequest = ({
       eventBus,
       hostCommandRouter,
       localAttachments,
+      logger,
       request,
       requestTimeouts,
       shutdownStarted,
@@ -607,6 +620,8 @@ export const startTypescriptHostBackendEffect = ({
   frontendOrigin,
   controlToken,
   appToken,
+  logger,
+  onBackgroundFailure,
   providedToolPaths,
   runtimeDistribution,
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
@@ -617,25 +632,32 @@ export const startTypescriptHostBackendEffect = ({
     const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
     const eventBus = new BufferedHostEventBus();
     const localAttachments = createLocalAttachmentAdapter();
-    const hostCommandRouter: EffectHostCommandRouter = createNodeEffectHostCommandRouter({
-      eventBus,
-      lifecycleLogger: {
-        error: logError,
-        info: logInfo,
-      },
-      localAttachments,
-      ...(providedToolPaths ? { providedToolPaths } : {}),
-      runtimeDistribution,
-    });
     let shutdownStarted = false;
     const beginShutdown = (): void => {
       shutdownStarted = true;
     };
     let stopPromise: Promise<void> | null = null;
+    let rejectExited: (failure: unknown) => void = () => {};
     let resolveExited: (exitCode: number) => void = () => {};
     let server: TypescriptHostBackendServer;
-    const exited = new Promise<number>((resolve) => {
+    const exited = new Promise<number>((resolve, reject) => {
+      rejectExited = reject;
       resolveExited = resolve;
+    });
+    const hostCommandRouter: EffectHostCommandRouter = createNodeEffectHostCommandRouter({
+      eventBus,
+      lifecycleLogger: {
+        error: logger.error,
+        info: logger.info,
+      },
+      localAttachments,
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          rejectExited(failure);
+          onBackgroundFailure(failure);
+        }),
+      ...(providedToolPaths ? { providedToolPaths } : {}),
+      runtimeDistribution,
     });
 
     const stop = async (): Promise<void> => {
@@ -645,6 +667,7 @@ export const startTypescriptHostBackendEffect = ({
       beginShutdown();
       stopPromise = stopTypescriptHostBackendServices({
         disposeHost: () => hostCommandRouter.dispose(),
+        logger,
         resolveExited,
         stopServer: () => server.stop(true),
       });
@@ -656,11 +679,20 @@ export const startTypescriptHostBackendEffect = ({
         const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
         yield* Effect.sync(() => server.stop(true));
         if (disposeExit._tag === "Failure") {
-          logError(
-            `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
-              disposeExit.cause,
-            )}`,
+          const loggingExit = yield* Effect.exit(
+            writeWebLogEffect(
+              logger,
+              "error",
+              `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
+                disposeExit.cause,
+              )}`,
+            ),
           );
+          if (loggingExit._tag === "Failure") {
+            yield* Effect.sync(() =>
+              onBackgroundFailure(causeToWebBoundaryError(loggingExit.cause)),
+            );
+          }
         }
       });
 
@@ -681,6 +713,7 @@ export const startTypescriptHostBackendEffect = ({
                     eventBus,
                     hostCommandRouter,
                     localAttachments,
+                    logger,
                     request,
                     requestTimeouts: server,
                     shutdownStarted,

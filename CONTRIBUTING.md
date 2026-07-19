@@ -133,6 +133,7 @@ For local development, it is recommended to use a separate config root such as `
 Important paths:
 
 - config file: `$OPENDUCKTOR_CONFIG_DIR/config.json` or `~/.openducktor/config.json`
+- Electron and web lifecycle logs: `$OPENDUCKTOR_CONFIG_DIR/logs/` or `~/.openducktor/logs/` (daily files, retained for 30 local calendar dates)
 - workspace task-store databases: `$OPENDUCKTOR_CONFIG_DIR/task-stores/<workspaceId>/database.sqlite` or `~/.openducktor/task-stores/<workspaceId>/database.sqlite`
 
 OpenDucktor uses one SQLite database per configured workspace. Existing repo-local `.beads` folders are not the V1 source of truth.

@@ -5,7 +5,7 @@ import {
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
@@ -34,6 +34,9 @@ export type {
   RuntimeRepoInput,
   RuntimeStopInput,
 } from "./runtime-orchestrator-model";
+
+class RuntimeOrchestratorLoggingError extends HostOperationError {}
+
 export const createRuntimeOrchestratorService = ({
   gitPort,
   runtimeDefinitionsService,
@@ -50,6 +53,22 @@ export const createRuntimeOrchestratorService = ({
   logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
+  const writeRuntimeLog = (
+    level: "error" | "info",
+    message: string,
+  ): Effect.Effect<void, HostOperationError> =>
+    logger
+      ? logger[level](message).pipe(
+          Effect.mapError(
+            (cause) =>
+              new RuntimeOrchestratorLoggingError({
+                operation: `runtime-orchestrator.log-${level}`,
+                message: errorMessage(cause),
+                cause,
+              }),
+          ),
+        )
+      : Effect.void;
   const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
     `${runtimeKind}::${repoPath}`;
   const ensureWorkspaceRuntime = ({
@@ -166,7 +185,8 @@ export const createRuntimeOrchestratorService = ({
       if (ensureResult._tag === "Right") {
         const parsed = ensureResult.right;
         runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
-        logger?.info(
+        yield* writeRuntimeLog(
+          "info",
           `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(parsed.runtimeRoute)}`,
         );
         return parsed;
@@ -184,9 +204,25 @@ export const createRuntimeOrchestratorService = ({
           message,
         ),
       );
-      logger?.error(
-        `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
+      const loggingResult = yield* Effect.either(
+        writeRuntimeLog(
+          "error",
+          `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
+        ),
       );
+      if (loggingResult._tag === "Left") {
+        return yield* Effect.fail(
+          new RuntimeOrchestratorLoggingError({
+            operation: "runtime-orchestrator.ensure",
+            message: `${message}; additionally failed to persist the runtime startup failure: ${loggingResult.left.message}`,
+            cause: ensureResult.left,
+            details: {
+              runtimeFailure: ensureResult.left,
+              loggingFailure: loggingResult.left,
+            },
+          }),
+        );
+      }
       return yield* Effect.fail(ensureResult.left);
     });
   const service: RuntimeOrchestratorService = {
@@ -220,11 +256,15 @@ export const createRuntimeOrchestratorService = ({
         const { runtimeKind, repoPath } = input;
         const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
         const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-        logger?.info(
+        yield* writeRuntimeLog(
+          "info",
           `Checking ${runtimeKind} repo runtime health for repository ${canonicalRepoPath}`,
         );
         const runtimeResult = yield* Effect.either(runtimeEnsure(input));
         if (runtimeResult._tag === "Left") {
+          if (runtimeResult.left instanceof RuntimeOrchestratorLoggingError) {
+            return yield* Effect.fail(runtimeResult.left);
+          }
           return yield* buildHealthStatus(
             descriptor,
             yield* loadRuntimeStartupStatus({ runtimeKind, repoPath: canonicalRepoPath }),
@@ -241,7 +281,8 @@ export const createRuntimeOrchestratorService = ({
             mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
           },
         );
-        logger?.info(
+        yield* writeRuntimeLog(
+          "info",
           `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
         );
         return health;

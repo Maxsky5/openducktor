@@ -104,8 +104,10 @@ describe("createCodexAppServerCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service, {
         logger: {
-          info: (message) => infos.push(message),
+          info: (message) => Effect.sync(() => infos.push(message)),
+          error: () => Effect.void,
         },
+        onBackgroundFailure: () => Effect.void,
       }),
     });
 
@@ -162,6 +164,49 @@ describe("createCodexAppServerCommandHandlers", () => {
       "Codex session policy thread/start runtime=runtime-1 thread=thread-1 cwd=/repo sandboxMode=workspace-write approvalPolicy=on-request promptReviewer=user networkAccess=true",
       "Codex session policy turn/start runtime=runtime-1 thread=thread-1 cwd=/repo sandboxMode=workspace-write approvalPolicy=on-request promptReviewer=user networkAccess=true",
       "Codex session policy turn/start runtime=runtime-1 thread=thread-1 cwd=unknown sandboxMode=read-only approvalPolicy=on-request promptReviewer=user networkAccess=true",
+    ]);
+  });
+
+  test("reports policy log failures without failing a completed Codex request", async () => {
+    const committedResult = {
+      thread: { id: "thread-1" },
+    } as unknown as CodexAppServerRequestResult;
+    const persistenceFailure = new HostOperationError({
+      operation: "openducktor.logs.append",
+      message: "log append failed",
+    });
+    const reportedFailures: HostOperationError[] = [];
+    const service: CodexAppServerService = {
+      request: () => Effect.succeed(committedResult),
+      listLoadedThreads: () => Effect.succeed({ data: [], nextCursor: null }),
+      listThreads: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
+    };
+    const router = createHostCommandRouter({
+      handlers: createCodexAppServerCommandHandlers(service, {
+        logger: {
+          info: () => Effect.fail(persistenceFailure),
+          error: () => Effect.void,
+        },
+        onBackgroundFailure: (failure) =>
+          Effect.sync(() => {
+            reportedFailures.push(failure);
+          }),
+      }),
+    });
+
+    await expect(
+      router.invoke("codex_app_server_request", {
+        runtimeId: "runtime-1",
+        method: "thread/start",
+        params: { cwd: "/repo" },
+      }),
+    ).resolves.toBe(committedResult);
+    expect(reportedFailures).toEqual([
+      expect.objectContaining({
+        _tag: "HostOperationError",
+        operation: "host.lifecycle.log-info",
+        cause: persistenceFailure,
+      }),
     ]);
   });
 
@@ -321,6 +366,15 @@ describe("createCodexAppServerCommandHandlers", () => {
         params: { omitted: undefined },
       }),
     ).rejects.toThrow("params must be JSON-serializable.");
+    for (const params of [null, true, 1, "params", []]) {
+      await expect(
+        router.invoke("codex_app_server_request", {
+          runtimeId: "runtime-1",
+          method: "model/list",
+          params,
+        }),
+      ).rejects.toThrow("params must be a JSON object.");
+    }
     expect(calls).toEqual([]);
   });
 });

@@ -7,14 +7,18 @@ import {
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
+  causeToWebBoundaryError,
+  combineWebErrors,
   errorMessage,
   runWebBoundary,
   runWebSyncBoundary,
+  toWebOperationError,
+  type WebError,
   WebOperationError,
   WebResourceError,
   WebValidationError,
 } from "./effect/web-errors";
-import { logError } from "./logger";
+import { type WebLogger, writeWebLogEffect } from "./logger";
 
 export type BufferedHostEvent = {
   id: number;
@@ -26,8 +30,9 @@ export type BufferedHostEventReplay = {
 };
 type StopTypescriptHostBackendServicesInput = {
   disposeHost: () => Effect.Effect<void, unknown>;
+  logger: WebLogger;
   resolveExited: (exitCode: number) => void;
-  stopServer: () => void;
+  stopServer: () => void | Promise<void>;
 };
 
 const EVENT_BUFFER_CAPACITY = 256;
@@ -211,19 +216,31 @@ export const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<str
 
 export const stopTypescriptHostBackendServicesEffect = ({
   disposeHost,
+  logger,
   resolveExited,
   stopServer,
-}: StopTypescriptHostBackendServicesInput): Effect.Effect<void, WebOperationError> =>
+}: StopTypescriptHostBackendServicesInput): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     let exitCode = 0;
+    const failures: WebError[] = [];
     const disposeExit = yield* Effect.exit(disposeHost());
     if (disposeExit._tag === "Failure") {
       exitCode = 1;
-      logError(Cause.pretty(disposeExit.cause));
+      failures.push(
+        toWebOperationError(causeToWebBoundaryError(disposeExit.cause), "web.host.dispose"),
+      );
+      const logResult = yield* Effect.either(
+        writeWebLogEffect(logger, "error", Cause.pretty(disposeExit.cause)),
+      );
+      if (logResult._tag === "Left") {
+        failures.push(logResult.left);
+      }
     }
-    const stopServerExit = yield* Effect.exit(
-      Effect.try({
-        try: stopServer,
+    const stopServerResult = yield* Effect.either(
+      Effect.tryPromise({
+        try: async () => {
+          await stopServer();
+        },
         catch: (cause) =>
           new WebOperationError({
             operation: "web.host.stop-server",
@@ -232,22 +249,18 @@ export const stopTypescriptHostBackendServicesEffect = ({
           }),
       }),
     );
-    let stopServerError: WebOperationError | null = null;
-    if (stopServerExit._tag === "Failure") {
-      stopServerError =
-        Array.from(Cause.failures(stopServerExit.cause))[0] ??
-        new WebOperationError({
-          operation: "web.host.stop-server",
-          message: Cause.pretty(stopServerExit.cause),
-          cause: stopServerExit.cause,
-        });
-    }
-    if (stopServerError) {
+    if (stopServerResult._tag === "Left") {
       exitCode = 1;
+      failures.push(stopServerResult.left);
     }
     resolveExited(exitCode);
-    if (stopServerError) {
-      return yield* stopServerError;
+    const failure = combineWebErrors(
+      "web.host.shutdown",
+      "OpenDucktor TypeScript host shutdown failed.",
+      failures,
+    );
+    if (failure) {
+      return yield* failure;
     }
   });
 

@@ -1,7 +1,8 @@
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { HostOperationError } from "../effect/host-errors";
 import {
   createStopMcpHostBridgeStep,
+  createStopRuntimesStep,
   type HostLifecycleLogger,
   runShutdownSteps,
 } from "./host-lifecycle";
@@ -12,8 +13,8 @@ const createLogger = (): HostLifecycleLogger & { infos: string[]; errors: string
   return {
     infos,
     errors,
-    info: (message) => infos.push(message),
-    error: (message) => errors.push(message),
+    info: (message) => Effect.sync(() => infos.push(message)),
+    error: (message) => Effect.sync(() => errors.push(message)),
   };
 };
 
@@ -74,6 +75,113 @@ describe("host lifecycle shutdown", () => {
       "Failed to stop first: first failed",
       "Failed to stop third: third failed",
     ]);
+  });
+
+  test("runs every shutdown step when lifecycle logging rejects", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-host.log",
+    );
+    const calls: string[] = [];
+    const rejectingLogger: HostLifecycleLogger = {
+      error: () => Effect.fail(persistenceError),
+      info: () => Effect.fail(persistenceError),
+    };
+
+    const exit = await Effect.runPromiseExit(
+      runShutdownSteps(
+        ["first", "second", "third"].map((label) => ({
+          label,
+          run: () =>
+            Effect.sync(() => {
+              calls.push(label);
+            }),
+        })),
+        rejectingLogger,
+      ),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "host.lifecycle.log-info",
+        cause: persistenceError,
+      });
+    }
+
+    expect(calls).toEqual(["first", "second", "third"]);
+  });
+
+  test("preserves cleanup failures when lifecycle logging also rejects", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-host.log",
+    );
+    const cleanupError = new HostOperationError({
+      operation: "test.cleanup",
+      message: "child process is still running",
+    });
+    const rejectingLogger: HostLifecycleLogger = {
+      error: () => Effect.fail(persistenceError),
+      info: () => Effect.fail(persistenceError),
+    };
+
+    const exit = await Effect.runPromiseExit(
+      runShutdownSteps(
+        [
+          {
+            label: "runtime child",
+            run: () => Effect.fail(cleanupError),
+          },
+        ],
+        rejectingLogger,
+      ),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "host.shutdown",
+        details: {
+          failedSteps: ["runtime child: child process is still running"],
+          loggingFailure: {
+            operation: "host.lifecycle.log-info",
+            cause: persistenceError,
+          },
+        },
+      });
+    }
+  });
+
+  test("preserves runtime cleanup and lifecycle logging failures together", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const runtimeError = new HostOperationError({
+      operation: "runtimeRegistry.stopAllRuntimes",
+      message: "runtime child is still running",
+    });
+    const step = createStopRuntimesStep(
+      {
+        stopAllRuntimes: () => Effect.fail(runtimeError),
+      } as never,
+      {
+        error: () => Effect.fail(persistenceError),
+        info: () => Effect.fail(persistenceError),
+      },
+    );
+
+    const exit = await Effect.runPromiseExit(step.run());
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Array.from(Cause.failures(exit.cause))[0]).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "host.shutdown.runtimes",
+        details: {
+          runtimeFailure: runtimeError,
+          loggingFailure: expect.objectContaining({ cause: persistenceError }),
+        },
+      });
+    }
   });
 
   test("propagates MCP host bridge close failures", async () => {

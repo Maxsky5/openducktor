@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { Deferred, Effect } from "effect";
+import { Effect } from "effect";
 import type { ViteDevServer } from "vite";
 import {
   causeToWebBoundaryError,
+  combineWebErrors,
   errorMessage,
   runWebBoundary,
   WebDependencyError,
   type WebError,
   WebResourceError,
 } from "./effect/web-errors";
+import { createWebLauncherLifecycle, type WebLauncherLifecycle } from "./launcher-lifecycle";
 import {
   buildBackendUrl,
   buildBrowserRuntimeConfigJson,
@@ -24,7 +26,7 @@ import {
   stopLauncherServicesEffect,
   waitForBackendEffect,
 } from "./launcher-support";
-import { logError, logInfo, logSuccess } from "./logger";
+import { type WebLogger, writeWebLogEffect } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import { startTypescriptHostBackendEffect } from "./typescript-host-backend";
 import { resolveWebRuntimeDistributionEffect } from "./web-runtime-distribution";
@@ -39,11 +41,124 @@ export type LauncherOptions = {
   readinessTimeoutMs?: number;
 };
 
-const logFrontendAvailability = (port: number): void => {
-  logSuccess("OpenDucktor web is ready:");
-  for (const url of buildFrontendDisplayUrls(port)) {
-    logSuccess(`  ➜  Local:   ${url}`);
+const logFrontendAvailability = (port: number, logger: WebLogger): Effect.Effect<void, WebError> =>
+  Effect.gen(function* () {
+    yield* writeWebLogEffect(logger, "success", "OpenDucktor web is ready:");
+    for (const url of buildFrontendDisplayUrls(port)) {
+      yield* writeWebLogEffect(logger, "success", `  ➜  Local:   ${url}`);
+    }
+  });
+
+const flushProcessOutput = async (): Promise<void> => {
+  await Promise.all([
+    new Promise<void>((resolve, reject) =>
+      process.stdout.write("", (error) => (error ? reject(error) : resolve())),
+    ),
+    new Promise<void>((resolve, reject) =>
+      process.stderr.write("", (error) => (error ? reject(error) : resolve())),
+    ),
+  ]);
+};
+
+type WebSignalProcessBoundary = {
+  exit(exitCode: number): void;
+  flush(): Promise<void>;
+  reportFailure(cause: unknown): void;
+};
+
+const defaultWebSignalProcessBoundary: WebSignalProcessBoundary = {
+  exit: (exitCode) => process.exit(exitCode),
+  flush: flushProcessOutput,
+  reportFailure: (cause) => {
+    console.error(`OpenDucktor web fatal boundary: ${errorMessage(cause)}`);
+  },
+};
+
+export { logDuplicateWebTerminationNotice } from "./launcher-lifecycle";
+
+export const resolveWebSignalExitCode = (
+  requestedExitCode: number,
+  duplicateTerminationLogFailed: boolean,
+): number => (duplicateTerminationLogFailed ? 1 : requestedExitCode);
+
+const stopLauncherForSignalEffect = (
+  signal: NodeJS.Signals,
+  logger: WebLogger,
+  stop: Effect.Effect<void, WebError>,
+): Effect.Effect<void, WebError> =>
+  Effect.gen(function* () {
+    const signalLogExit = yield* Effect.exit(
+      writeWebLogEffect(logger, "info", `Stopping OpenDucktor web after ${signal}...`),
+    );
+    const stopExit = yield* Effect.exit(stop);
+    const failures: WebError[] = [];
+    if (stopExit._tag === "Failure") {
+      failures.push(causeToWebBoundaryError(stopExit.cause));
+    }
+    if (signalLogExit._tag === "Failure") {
+      failures.push(causeToWebBoundaryError(signalLogExit.cause));
+    }
+    const failure = combineWebErrors(
+      "web.launcher.signal-shutdown",
+      failures.map(errorMessage).join("\n"),
+      failures,
+    );
+    if (failure) {
+      return yield* failure;
+    }
+  });
+
+export const runWebSignalShutdown = async ({
+  awaitDuplicateTerminationLog = async () => false,
+  boundary = defaultWebSignalProcessBoundary,
+  closeDuplicateTerminationLogAdmission = () => {},
+  exitCode,
+  logger,
+  signal,
+  stop,
+}: {
+  awaitDuplicateTerminationLog?: () => Promise<boolean>;
+  boundary?: WebSignalProcessBoundary;
+  closeDuplicateTerminationLogAdmission?: () => void;
+  exitCode: number;
+  logger: WebLogger;
+  signal: NodeJS.Signals;
+  stop: Effect.Effect<void, WebError>;
+}): Promise<void> => {
+  let resolvedExitCode = exitCode;
+  try {
+    await runWebBoundary(
+      keepProcessAliveDuringEffect(stopLauncherForSignalEffect(signal, logger, stop)),
+    );
+  } catch (cause) {
+    resolvedExitCode = 1;
+    if (cause instanceof WebResourceError && cause.resource === "persistent-log") {
+      boundary.reportFailure(cause);
+    } else {
+      try {
+        await runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(cause)));
+      } catch (loggingCause) {
+        boundary.reportFailure(loggingCause);
+      }
+    }
   }
+
+  try {
+    closeDuplicateTerminationLogAdmission();
+    const duplicateTerminationLogFailed = await awaitDuplicateTerminationLog();
+    resolvedExitCode = resolveWebSignalExitCode(resolvedExitCode, duplicateTerminationLogFailed);
+  } catch (duplicateLogCause) {
+    boundary.reportFailure(duplicateLogCause);
+    resolvedExitCode = 1;
+  }
+
+  try {
+    await boundary.flush();
+  } catch (flushCause) {
+    boundary.reportFailure(flushCause);
+    resolvedExitCode = 1;
+  }
+  boundary.exit(resolvedExitCode);
 };
 
 const contentTypeForPath = (filePath: string): string => {
@@ -74,11 +189,18 @@ const contentTypeForPath = (filePath: string): string => {
   }
 };
 
-const cleanupStartedFrontendServerEffect = (server: FrontendServer): Effect.Effect<void> =>
+const cleanupStartedFrontendServerEffect = (
+  server: FrontendServer,
+  logger: WebLogger,
+): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     const closeExit = yield* Effect.exit(closeFrontendServerEffect(server));
     if (closeExit._tag === "Failure") {
-      logError(errorMessage(causeToWebBoundaryError(closeExit.cause)));
+      yield* writeWebLogEffect(
+        logger,
+        "error",
+        errorMessage(causeToWebBoundaryError(closeExit.cause)),
+      );
     }
   });
 
@@ -86,6 +208,7 @@ const startViteServerEffect = (
   options: LauncherOptions,
   backendUrl: string,
   appToken: string,
+  logger: WebLogger,
 ): Effect.Effect<ViteDevServer, WebError> =>
   Effect.gen(function* () {
     const { createServer } = yield* Effect.tryPromise({
@@ -150,12 +273,15 @@ const startViteServerEffect = (
           }),
         ).pipe(
           Effect.catchAll((error) =>
-            Effect.gen(function* () {
-              yield* cleanupStartedFrontendServerEffect(server);
-              return yield* error;
-            }),
+            preserveLauncherFailureAfterStop(error, closeFrontendServerEffect(server), logger),
           ),
-          Effect.onInterrupt(() => cleanupStartedFrontendServerEffect(server)),
+          Effect.onInterrupt(() =>
+            cleanupStartedFrontendServerEffect(server, logger).pipe(
+              Effect.catchAll((cause) =>
+                Effect.sync(() => defaultWebSignalProcessBoundary.reportFailure(cause)),
+              ),
+            ),
+          ),
         );
         return server;
       }),
@@ -247,12 +373,45 @@ const startFrontendServerEffect = (
   options: LauncherOptions,
   backendUrl: string,
   appToken: string,
+  logger: WebLogger,
 ): Effect.Effect<FrontendServer, WebError> =>
   options.workspaceMode
-    ? startViteServerEffect(options, backendUrl, appToken)
+    ? startViteServerEffect(options, backendUrl, appToken, logger)
     : startStaticFrontendServerEffect(options, backendUrl, appToken);
 
-export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<number, WebError> =>
+export const preserveLauncherFailureAfterStop = (
+  launcherFailure: WebError,
+  stop: Effect.Effect<void, WebError>,
+  logger: WebLogger,
+): Effect.Effect<never, WebError> =>
+  Effect.gen(function* () {
+    const failures: WebError[] = [launcherFailure];
+    const stopExit = yield* Effect.exit(stop);
+    if (stopExit._tag === "Failure") {
+      const stopFailure = causeToWebBoundaryError(stopExit.cause);
+      failures.push(stopFailure);
+      const loggingExit = yield* Effect.exit(
+        writeWebLogEffect(logger, "error", errorMessage(stopFailure)),
+      );
+      if (loggingExit._tag === "Failure") {
+        failures.push(causeToWebBoundaryError(loggingExit.cause));
+      }
+    }
+    const failure = combineWebErrors(
+      "web.launcher.failure-cleanup",
+      errorMessage(launcherFailure),
+      failures,
+    );
+    if (failure) {
+      return yield* failure;
+    }
+    return yield* launcherFailure;
+  });
+
+export const runLauncherEffect = (
+  options: LauncherOptions,
+  logger: WebLogger,
+): Effect.Effect<number, WebError> =>
   Effect.gen(function* () {
     const readinessTimeoutMs = options.readinessTimeoutMs ?? 60_000;
     const frontendUrl = buildFrontendUrl(options.frontendPort);
@@ -265,21 +424,7 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
       ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
     });
     const providedToolPaths = yield* resolveWebProvidedToolPathsEffect();
-    let frontendServer: FrontendServer | null = null;
-    let frontendClosed = false;
-    let servicesReleased = false;
-    let stopEffectRef: (() => Effect.Effect<void, WebError>) | null = null;
-
-    const closeFrontendOnceEffect = (
-      server: FrontendServer | null,
-    ): Effect.Effect<void, WebError> =>
-      Effect.suspend(() => {
-        if (!server || frontendClosed) {
-          return Effect.void;
-        }
-        frontendClosed = true;
-        return closeFrontendServerEffect(server);
-      });
+    let lifecycle: WebLauncherLifecycle | null = null;
 
     return yield* Effect.acquireUseRelease(
       startTypescriptHostBackendEffect({
@@ -287,75 +432,35 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
         frontendOrigin: frontendUrl,
         controlToken,
         appToken,
+        onBackgroundFailure: defaultWebSignalProcessBoundary.reportFailure,
         providedToolPaths,
         runtimeDistribution,
+        logger,
       }),
       (hostBackend) =>
         Effect.gen(function* () {
-          const stopDeferred = yield* Deferred.make<void, WebError>();
-          let stopStarted = false;
-          let terminationStarted = false;
-          let duplicateTerminationNoticeLogged = false;
-
-          const stopServicesWithLogsEffect = (): Effect.Effect<void, WebError> =>
-            Effect.gen(function* () {
-              logInfo("Stopping OpenDucktor frontend server...");
-              logInfo("Stopping OpenDucktor TypeScript host services...");
-
-              yield* stopLauncherServicesEffect(
-                { frontendServer, hostBackend },
+          const owner = yield* createWebLauncherLifecycle({
+            closeFrontend: closeFrontendServerEffect,
+            logger,
+            onSignalShutdownFailure: (cause) => {
+              console.error(`OpenDucktor web fatal boundary: ${errorMessage(cause)}`);
+              process.exit(1);
+            },
+            reportFailure: defaultWebSignalProcessBoundary.reportFailure,
+            runSignalShutdown: runWebSignalShutdown,
+            stopResources: ({ closeFrontend, frontendServer }) =>
+              stopLauncherServicesEffect(
+                { frontendServer, hostBackend, logger },
                 {
-                  closeServer: (server) => runWebBoundary(closeFrontendOnceEffect(server)),
+                  closeServer: (server) => runWebBoundary(closeFrontend(server)),
                   stopHost: (backend) => backend.stop(),
                 },
-              );
-              logSuccess("OpenDucktor web stopped.");
-            });
+              ),
+          });
+          lifecycle = owner;
 
-          const stopEffect = (): Effect.Effect<void, WebError> =>
-            Effect.suspend(() => {
-              if (stopStarted) {
-                return Deferred.await(stopDeferred);
-              }
-              stopStarted = true;
-              return Effect.gen(function* () {
-                const stopExit = yield* Effect.exit(stopServicesWithLogsEffect());
-                servicesReleased = true;
-                yield* Deferred.done(stopDeferred, stopExit);
-                return yield* Deferred.await(stopDeferred);
-              });
-            });
-          stopEffectRef = stopEffect;
-
-          const stopForSignal = (): Promise<void> =>
-            runWebBoundary(keepProcessAliveDuringEffect(stopEffect()));
-
-          const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
-            if (terminationStarted) {
-              if (!duplicateTerminationNoticeLogged) {
-                duplicateTerminationNoticeLogged = true;
-                logInfo(
-                  "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.",
-                );
-              }
-              return;
-            }
-            terminationStarted = true;
-            logInfo(`Stopping OpenDucktor web after ${signal}...`);
-
-            void stopForSignal().then(
-              () => {
-                process.exit(exitCode);
-              },
-              (error: unknown) => {
-                logError(errorMessage(error));
-                process.exit(1);
-              },
-            );
-          };
-
-          const handleSigint = (): void => handleTerminationSignal("SIGINT", 130);
-          const handleSigterm = (): void => handleTerminationSignal("SIGTERM", 143);
+          const handleSigint = (): void => owner.handleTermination("SIGINT", 130);
+          const handleSigterm = (): void => owner.handleTermination("SIGTERM", 143);
 
           return yield* Effect.acquireUseRelease(
             Effect.sync(() => {
@@ -366,95 +471,87 @@ export const runLauncherEffect = (options: LauncherOptions): Effect.Effect<numbe
               Effect.gen(function* () {
                 const launcherExit = yield* Effect.exit(
                   Effect.gen(function* () {
-                    logInfo("Starting OpenDucktor TypeScript host...");
-                    logInfo("Waiting for OpenDucktor TypeScript host readiness...");
+                    yield* writeWebLogEffect(
+                      logger,
+                      "info",
+                      "Starting OpenDucktor TypeScript host...",
+                    );
+                    yield* writeWebLogEffect(
+                      logger,
+                      "info",
+                      "Waiting for OpenDucktor TypeScript host readiness...",
+                    );
                     yield* waitForBackendEffect(
                       backendUrl,
                       appToken,
                       readinessTimeoutMs,
                       hostBackend,
                     );
-                    logInfo("Starting OpenDucktor frontend server...");
-                    return yield* Effect.acquireUseRelease(
-                      startFrontendServerEffect(options, backendUrl, appToken),
-                      (server) =>
-                        Effect.gen(function* () {
-                          frontendServer = server;
-                          logFrontendAvailability(options.frontendPort);
-
-                          const exitCode = yield* Effect.tryPromise({
-                            try: () => hostBackend.exited,
-                            catch: (cause) =>
-                              new WebDependencyError({
-                                dependency: "typescript-host-backend",
-                                operation: "await-exit",
-                                message: errorMessage(cause),
-                                cause,
-                              }),
-                          });
-                          if (stopStarted) {
-                            yield* stopEffect();
-                          } else {
-                            logInfo(
-                              "OpenDucktor TypeScript host exited; stopping frontend server...",
-                            );
-                            yield* closeFrontendOnceEffect(server);
-                            logSuccess("OpenDucktor web stopped.");
-                            servicesReleased = true;
-                          }
-                          return exitCode;
-                        }),
-                      (server) =>
-                        Effect.gen(function* () {
-                          const closeExit = yield* Effect.exit(closeFrontendOnceEffect(server));
-                          if (closeExit._tag === "Failure") {
-                            logError(errorMessage(causeToWebBoundaryError(closeExit.cause)));
-                          }
-                        }),
+                    yield* writeWebLogEffect(
+                      logger,
+                      "info",
+                      "Starting OpenDucktor frontend server...",
                     );
+                    const server = yield* startFrontendServerEffect(
+                      options,
+                      backendUrl,
+                      appToken,
+                      logger,
+                    );
+                    yield* owner.registerFrontend(server);
+                    yield* logFrontendAvailability(options.frontendPort, logger);
+
+                    const exitCode = yield* Effect.tryPromise({
+                      try: () => hostBackend.exited,
+                      catch: (cause) =>
+                        new WebDependencyError({
+                          dependency: "typescript-host-backend",
+                          operation: "await-exit",
+                          message: errorMessage(cause),
+                          cause,
+                        }),
+                    });
+                    yield* owner.completeAfterHostExit();
+                    return exitCode;
                   }),
                 );
 
                 if (launcherExit._tag === "Success") {
                   return launcherExit.value;
                 }
-
-                const stopExit = yield* Effect.exit(stopEffect());
-                if (stopExit._tag === "Failure") {
-                  logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
-                }
-                return yield* causeToWebBoundaryError(launcherExit.cause);
+                return yield* preserveLauncherFailureAfterStop(
+                  causeToWebBoundaryError(launcherExit.cause),
+                  owner.stop(),
+                  logger,
+                );
               }),
             () =>
               Effect.gen(function* () {
                 process.off("SIGINT", handleSigint);
                 process.off("SIGTERM", handleSigterm);
-                if (!servicesReleased) {
-                  const stopExit = yield* Effect.exit(stopEffect());
-                  if (stopExit._tag === "Failure") {
-                    logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
-                  }
-                }
+                yield* owner.release();
               }),
           );
         }),
       (hostBackend) =>
         Effect.gen(function* () {
-          if (servicesReleased) {
+          if (lifecycle) {
+            yield* lifecycle.release();
             return;
           }
           const stopExit = yield* Effect.exit(
-            stopEffectRef
-              ? stopEffectRef()
-              : stopLauncherServicesEffect({ frontendServer, hostBackend }),
+            stopLauncherServicesEffect({ frontendServer: null, hostBackend, logger }),
           );
-          servicesReleased = true;
           if (stopExit._tag === "Failure") {
-            logError(errorMessage(causeToWebBoundaryError(stopExit.cause)));
+            yield* Effect.sync(() =>
+              defaultWebSignalProcessBoundary.reportFailure(
+                causeToWebBoundaryError(stopExit.cause),
+              ),
+            );
           }
         }),
     );
   });
 
-export const runLauncher = (options: LauncherOptions): Promise<number> =>
-  runWebBoundary(runLauncherEffect(options));
+export const runLauncher = (options: LauncherOptions, logger: WebLogger): Promise<number> =>
+  runWebBoundary(runLauncherEffect(options, logger));

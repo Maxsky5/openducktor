@@ -1,3 +1,11 @@
+import {
+  createOpenDucktorDailyLogWriter,
+  type OpenDucktorDailyLogWriter,
+  type OpenDucktorLogPersistenceError,
+} from "@openducktor/host";
+import { Effect, Exit } from "effect";
+import { causeToElectronBoundaryError } from "../effect/electron-errors";
+
 const ANSI_RESET = "\u001b[0m";
 const ANSI_DIM = "\u001b[2m";
 const ANSI_BLUE = "\u001b[34m";
@@ -16,12 +24,19 @@ type ElectronMainLoggerInput = {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
   stream?: LogStream;
+  writer?: OpenDucktorDailyLogWriter;
 };
 
 export type ElectronMainLogger = {
-  error(message: string, error?: unknown): void;
-  info(message: string): void;
-  warn(message: string): void;
+  error(message: string, error?: unknown): Effect.Effect<void, OpenDucktorLogPersistenceError>;
+  info(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
+  warn(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
+};
+
+type InitializeElectronMainLoggerOptions = {
+  exitProcess(exitCode: number): never;
+  loggerEffect: Effect.Effect<ElectronMainLogger, unknown>;
+  reportFailure(cause: unknown): void;
 };
 
 const pad = (value: number, length = 2): string => value.toString().padStart(length, "0");
@@ -106,26 +121,51 @@ export const createElectronMainLogger = ({
   env = process.env,
   now = () => new Date(),
   stream = process.stderr,
-}: ElectronMainLoggerInput = {}): ElectronMainLogger => {
-  const log = (level: LogLevel, message: string): void => {
-    const useAnsi = shouldUseAnsi(env, stream);
-    const renderedTimestamp = colorize(useAnsi, ANSI_DIM, timestamp(now()));
-    const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
-    const renderedMessage = colorMessage(useAnsi, level, message);
-    stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
-  };
+  writer,
+}: ElectronMainLoggerInput = {}) =>
+  (writer
+    ? Effect.succeed(writer)
+    : createOpenDucktorDailyLogWriter({ surface: "electron", environment: env, clock: now })
+  ).pipe(
+    Effect.map((resolvedWriter): ElectronMainLogger => {
+      const log = (
+        level: LogLevel,
+        message: string,
+      ): Effect.Effect<void, OpenDucktorLogPersistenceError> =>
+        Effect.gen(function* () {
+          const recordedAt = now();
+          const useAnsi = shouldUseAnsi(env, stream);
+          const plainTimestamp = timestamp(recordedAt);
+          const renderedTimestamp = colorize(useAnsi, ANSI_DIM, plainTimestamp);
+          const renderedLevel = colorize(useAnsi, colorForLevel(level), level);
+          const renderedMessage = colorMessage(useAnsi, level, message);
+          stream.write(`${renderedTimestamp}  ${renderedLevel} ${renderedMessage}\n`);
+          yield* resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`);
+        });
 
-  return {
-    error(message, error) {
-      log("ERROR", error === undefined ? message : `${message}: ${formatError(error)}`);
-    },
-    info(message) {
-      log("INFO", message);
-    },
-    warn(message) {
-      log("WARN", message);
-    },
-  };
+      return {
+        error(message, error) {
+          return log("ERROR", error === undefined ? message : `${message}: ${formatError(error)}`);
+        },
+        info(message) {
+          return log("INFO", message);
+        },
+        warn(message) {
+          return log("WARN", message);
+        },
+      };
+    }),
+  );
+
+export const initializeElectronMainLogger = async ({
+  exitProcess,
+  loggerEffect,
+  reportFailure,
+}: InitializeElectronMainLoggerOptions): Promise<ElectronMainLogger> => {
+  const exit = await Effect.runPromiseExit(loggerEffect);
+  if (Exit.isSuccess(exit)) {
+    return exit.value;
+  }
+  reportFailure(causeToElectronBoundaryError(exit.cause));
+  return exitProcess(1);
 };
-
-export const electronMainLogger = createElectronMainLogger();

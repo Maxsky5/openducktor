@@ -57,6 +57,25 @@ export const isWebError = (cause: unknown): cause is WebError =>
 export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
+export const combineWebErrors = (
+  operation: string,
+  message: string,
+  failures: readonly WebError[],
+): WebError | null => {
+  if (failures.length === 0) {
+    return null;
+  }
+  if (failures.length === 1) {
+    return failures[0] ?? null;
+  }
+  return new WebOperationError({
+    operation,
+    message,
+    cause: failures[0],
+    details: { failures },
+  });
+};
+
 export const toWebOperationError = (
   cause: unknown,
   operation: string,

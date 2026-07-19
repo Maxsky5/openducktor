@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
-import type { HostLifecycleLogger } from "../../composition/host-lifecycle";
-import { HostValidationError } from "../../effect/host-errors";
+import { type HostLifecycleLogger, writeHostLifecycleLog } from "../../composition/host-lifecycle";
+import { type HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   CodexAppServerRequestInput,
   CodexAppServerRequestMethod,
@@ -16,7 +16,12 @@ import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 
 type CodexAppServerCommandHandlerOptions = {
-  logger?: Pick<HostLifecycleLogger, "info">;
+  logger?: HostLifecycleLogger;
+  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
+};
+
+const defaultCodexAppServerCommandHandlerOptions: CodexAppServerCommandHandlerOptions = {
+  onBackgroundFailure: () => Effect.void,
 };
 
 const CODEX_POLICY_REQUEST_METHODS = new Set<CodexAppServerRequestMethod>([
@@ -97,12 +102,12 @@ const threadIdFromResult = (result: unknown): string | undefined => {
 };
 
 const logCodexPolicyRequest = (
-  logger: Pick<HostLifecycleLogger, "info"> | undefined,
+  logger: HostLifecycleLogger | undefined,
   input: CodexAppServerRequestInput,
   result: CodexAppServerRequestResult,
-): void => {
+): Effect.Effect<void, HostOperationError> => {
   if (!logger || !CODEX_POLICY_REQUEST_METHODS.has(input.method)) {
-    return;
+    return Effect.void;
   }
   const params = recordFromValue(input.params);
   const resultRecord = recordFromValue(result);
@@ -122,7 +127,9 @@ const logCodexPolicyRequest = (
     stringField(resultRecord, "cwd") ??
     cwdFromSandboxPolicy(sandboxPolicy);
 
-  logger.info(
+  return writeHostLifecycleLog(
+    logger,
+    "info",
     [
       `Codex session policy ${input.method}`,
       `runtime=${input.runtimeId}`,
@@ -143,7 +150,13 @@ const logCodexPolicyRequest = (
 const isCodexRequestMethod = (method: string): method is CodexAppServerRequestMethod =>
   CODEX_APP_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
 
-const requireCodexJsonValue = (value: unknown, context: string) => {
+const requireCodexJsonObject = (value: unknown, context: string) => {
+  if (!isRecordValue(value)) {
+    throw new HostValidationError({
+      message: `${context} must be a JSON object.`,
+      details: { context },
+    });
+  }
   if (!isCodexAppServerJsonValue(value)) {
     throw new HostValidationError({
       message: `${context} must be JSON-serializable.`,
@@ -170,7 +183,7 @@ const parseRequestInput = (
 ): CodexAppServerRequestInput => {
   const record = requireRecord(args, "codex_app_server_request input");
   const params =
-    record.params === undefined ? undefined : requireCodexJsonValue(record.params, "params");
+    record.params === undefined ? undefined : requireCodexJsonObject(record.params, "params");
   return {
     runtimeId: requireString(record.runtimeId, "runtimeId"),
     method: requireCodexRequestMethod(record.method),
@@ -180,7 +193,7 @@ const parseRequestInput = (
 
 export const createCodexAppServerCommandHandlers = (
   codexAppServerService: CodexAppServerService,
-  options: CodexAppServerCommandHandlerOptions = {},
+  options: CodexAppServerCommandHandlerOptions = defaultCodexAppServerCommandHandlerOptions,
 ): HostCommandHandlers => ({
   codex_app_server_request: (args) => {
     const input = parseRequestInput(args);
@@ -188,7 +201,13 @@ export const createCodexAppServerCommandHandlers = (
       .request(input)
       .pipe(
         Effect.tap((result) =>
-          Effect.sync(() => logCodexPolicyRequest(options.logger, input, result)),
+          Effect.either(logCodexPolicyRequest(options.logger, input, result)).pipe(
+            Effect.flatMap((loggingResult) =>
+              loggingResult._tag === "Left"
+                ? options.onBackgroundFailure(loggingResult.left)
+                : Effect.void,
+            ),
+          ),
         ),
       );
   },

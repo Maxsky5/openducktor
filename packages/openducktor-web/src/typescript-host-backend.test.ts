@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -7,7 +7,8 @@ import {
   createSourceRuntimeDistribution,
   type EffectHostCommandRouter,
 } from "@openducktor/host";
-import { Effect } from "effect";
+import { Deferred, Effect, TestClock, TestContext } from "effect";
+import { createWebLogger, type WebLogger } from "./logger";
 import {
   BufferedHostEventBus,
   stopTypescriptHostBackendServices,
@@ -18,9 +19,11 @@ const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
   nativeResponse.constructor as typeof Response;
 
-const { handleTypescriptHostBackendRequest, startTypescriptHostBackend } = await import(
-  "./typescript-host-backend"
-);
+const {
+  handleTypescriptHostBackendRequest,
+  startTypescriptHostBackend,
+  startTypescriptHostBackendEffect,
+} = await import("./typescript-host-backend");
 
 const APP_TOKEN = "app-token";
 const CONTROL_TOKEN = "control-token";
@@ -28,6 +31,11 @@ const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
 const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../.."),
 );
+const testLogger: WebLogger = {
+  error: () => Effect.void,
+  info: () => Effect.void,
+  success: () => Effect.void,
+};
 
 class StructuredHostCommandFailure extends Error {
   readonly details: { readonly command: string; readonly failureKind: "timeout" };
@@ -100,6 +108,7 @@ const handleTestRequest = (
       eventBus: options.eventBus ?? new BufferedHostEventBus(),
       hostCommandRouter,
       localAttachments: createLocalAttachmentAdapter(),
+      logger: testLogger,
       request,
       shutdownStarted: options.shutdownStarted ?? false,
       beginShutdown: options.beginShutdown ?? (() => {}),
@@ -112,15 +121,28 @@ describe("TypeScript web host backend", () => {
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
     const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
-    process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
+    const consoleLines: string[] = [];
 
     try {
+      process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
+      const logger = await Effect.runPromise(
+        createWebLogger({
+          console: {
+            error: (message) => consoleLines.push(message),
+            log: (message) => consoleLines.push(message),
+          },
+          environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
+          now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
+        }),
+      );
       backend = await startTypescriptHostBackend({
         port: 0,
         frontendOrigin: FRONTEND_ORIGIN,
         controlToken: CONTROL_TOKEN,
         appToken: APP_TOKEN,
+        logger,
+        onBackgroundFailure: () => {},
         runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
       });
       const backendUrl = `http://127.0.0.1:${backend.port}`;
@@ -164,10 +186,102 @@ describe("TypeScript web host backend", () => {
       });
       expect(shutdown.status).toBe(202);
       await expect(backend.exited).resolves.toBe(0);
+      const persisted = await readFile(
+        path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log"),
+        "utf8",
+      );
+      expect(persisted).toContain("INFO Shutting down OpenDucktor host services\n");
+      expect(persisted).toContain("INFO OpenDucktor host services stopped\n");
+      expect(
+        consoleLines.some((line) => line.includes("Shutting down OpenDucktor host services")),
+      ).toBe(true);
     } finally {
       if (backend) {
         await backend.stop();
       }
+      if (previousConfigDir === undefined) {
+        delete process.env.OPENDUCKTOR_CONFIG_DIR;
+      } else {
+        process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
+      }
+      await rm(tempConfigDir, { force: true, recursive: true });
+    }
+  }, 5_000);
+
+  test("owns a scheduled task-sync disk-write failure through the browser host lifecycle", async () => {
+    const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
+    const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-task-sync-"));
+    const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
+    const configPath = path.join(tempConfigDir, "config.json");
+    const logFilePath = path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log");
+    let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
+    process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
+
+    try {
+      const logger = await Effect.runPromise(
+        createWebLogger({
+          console: { error: () => {}, log: () => {} },
+          environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
+          now: () => recordedAt,
+        }),
+      );
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const failureReported = yield* Deferred.make<unknown>();
+          const startedBackend = yield* startTypescriptHostBackendEffect({
+            port: 0,
+            frontendOrigin: FRONTEND_ORIGIN,
+            controlToken: CONTROL_TOKEN,
+            appToken: APP_TOKEN,
+            logger,
+            onBackgroundFailure: (failure) => {
+              Effect.runSync(Deferred.succeed(failureReported, failure));
+            },
+            runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
+          });
+          backend = startedBackend;
+          const exitedFailure = startedBackend.exited.then(
+            () => new Error("expected browser host background failure"),
+            (failure: unknown) => failure,
+          );
+
+          yield* Effect.promise(() => mkdir(configPath));
+          yield* Effect.promise(() => mkdir(logFilePath));
+          yield* TestClock.adjust("5 minutes");
+          const failure = yield* Deferred.await(failureReported);
+          const rejectedExit = yield* Effect.promise(() => exitedFailure);
+          yield* Effect.promise(() => rm(configPath, { recursive: true }));
+          yield* Effect.promise(() => rm(logFilePath, { recursive: true }));
+          const stopFailure = yield* Effect.promise(() =>
+            startedBackend.stop().then(
+              () => null,
+              (cause: unknown) => cause,
+            ),
+          );
+          return { failure, rejectedExit, stopFailure };
+        }).pipe(Effect.provide(TestContext.TestContext)),
+      );
+
+      expect(result.failure).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "task-sync.log-iteration-failure",
+        cause: {
+          _tag: "OpenDucktorLogPersistenceError",
+          operation: "openducktor.logs.append",
+          path: logFilePath,
+        },
+      });
+      expect(result.rejectedExit).toBe(result.failure);
+      expect(result.stopFailure).toMatchObject({
+        _tag: "WebOperationError",
+        operation: "web.host.dispose",
+        cause: expect.objectContaining({
+          _tag: "HostOperationError",
+          operation: "host.shutdown",
+        }),
+      });
+    } finally {
+      await backend?.stop().catch(() => {});
       if (previousConfigDir === undefined) {
         delete process.env.OPENDUCKTOR_CONFIG_DIR;
       } else {
@@ -362,6 +476,7 @@ describe("TypeScript web host backend", () => {
     await expect(
       stopTypescriptHostBackendServices({
         disposeHost: () => Effect.void,
+        logger: testLogger,
         resolveExited: (exitCode) => {
           resolvedExitCodes.push(exitCode);
         },
@@ -370,6 +485,68 @@ describe("TypeScript web host backend", () => {
         },
       }),
     ).rejects.toMatchObject({ _tag: "WebOperationError" });
+    expect(resolvedExitCodes).toEqual([1]);
+  });
+
+  test("resolves host backend exit after asynchronous stop server failures", async () => {
+    const resolvedExitCodes: number[] = [];
+
+    await expect(
+      stopTypescriptHostBackendServices({
+        disposeHost: () => Effect.void,
+        logger: testLogger,
+        resolveExited: (exitCode) => {
+          resolvedExitCodes.push(exitCode);
+        },
+        stopServer: async () => {
+          throw new Error("async stop server failed");
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.host.stop-server",
+    });
+    expect(resolvedExitCodes).toEqual([1]);
+  });
+
+  test("stops the backend and resolves exit when failure logging rejects", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-web.log",
+    );
+    const resolvedExitCodes: number[] = [];
+    let stopCalls = 0;
+
+    await expect(
+      stopTypescriptHostBackendServices({
+        disposeHost: () => Effect.fail(new Error("host disposal failed")),
+        logger: {
+          error: () => Effect.fail(persistenceError),
+          info: () => Effect.void,
+          success: () => Effect.void,
+        },
+        resolveExited: (exitCode) => {
+          resolvedExitCodes.push(exitCode);
+        },
+        stopServer: () => {
+          stopCalls += 1;
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.host.shutdown",
+      details: {
+        failures: [
+          expect.objectContaining({ message: "host disposal failed" }),
+          expect.objectContaining({
+            _tag: "WebResourceError",
+            cause: persistenceError,
+            resource: "persistent-log",
+          }),
+        ],
+      },
+    });
+
+    expect(stopCalls).toBe(1);
     expect(resolvedExitCodes).toEqual([1]);
   });
 
@@ -478,6 +655,7 @@ describe("TypeScript web host backend", () => {
           disposeStarted.resolve();
           await disposeReleased.promise;
         }),
+      logger: testLogger,
       resolveExited: () => {},
       stopServer: () => {},
     });
@@ -565,6 +743,7 @@ describe("TypeScript web host backend", () => {
             disposeStarted.resolve();
             await disposeReleased.promise;
           }),
+        logger: testLogger,
         resolveExited: () => {},
         stopServer: () => server.stop(true),
       });
@@ -582,6 +761,7 @@ describe("TypeScript web host backend", () => {
             eventBus,
             hostCommandRouter: createTestHostCommandRouter(),
             localAttachments: createLocalAttachmentAdapter(),
+            logger: testLogger,
             request,
             requestTimeouts: requestServer,
             shutdownStarted,
@@ -660,6 +840,7 @@ describe("TypeScript web host backend", () => {
       resolveExited: (exitCode) => {
         calls.push(`exited-${exitCode}`);
       },
+      logger: testLogger,
       stopServer: () => {
         calls.push("server-stopped");
       },

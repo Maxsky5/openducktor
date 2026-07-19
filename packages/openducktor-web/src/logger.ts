@@ -1,25 +1,68 @@
-type LogLevel = "INFO" | "WARN" | "ERROR";
+import { createOpenDucktorDailyLogWriter, type OpenDucktorDailyLogWriter } from "@openducktor/host";
+import { Effect } from "effect";
+import { errorMessage, WebResourceError } from "./effect/web-errors";
+
+type LogLevel = "INFO" | "ERROR";
+
+type WebLogConsole = {
+  error(message: string): void;
+  log(message: string): void;
+};
+
+type WebLogOutputStream = {
+  isTTY?: boolean;
+};
+
+type WebLoggerInput = {
+  console?: WebLogConsole;
+  environment?: NodeJS.ProcessEnv;
+  now?: () => Date;
+  stdout?: WebLogOutputStream;
+  writer?: OpenDucktorDailyLogWriter;
+};
+
+export type WebLogger = {
+  error(message: string): Effect.Effect<void, unknown>;
+  info(message: string): Effect.Effect<void, unknown>;
+  success(message: string): Effect.Effect<void, unknown>;
+};
+
+export const writeWebLogEffect = (
+  logger: WebLogger,
+  level: keyof WebLogger,
+  message: string,
+): Effect.Effect<void, WebResourceError> =>
+  logger[level](message).pipe(
+    Effect.mapError(
+      (cause) =>
+        new WebResourceError({
+          resource: "persistent-log",
+          operation: `web.log-${level}`,
+          message: errorMessage(cause),
+          cause,
+        }),
+    ),
+  );
 
 const RESET = "\u001b[0m";
 const BOLD = "\u001b[1m";
 const DIM = "\u001b[2m";
 const BLUE = "\u001b[34m";
 const CYAN = "\u001b[36m";
-const ORANGE = "\u001b[33m";
 const MAGENTA = "\u001b[35m";
 const GREEN = "\u001b[32m";
 const RED = "\u001b[31m";
 
-const forceColorEnabled = (): boolean => {
-  const value = process.env.FORCE_COLOR?.trim();
+const forceColorEnabled = (environment: NodeJS.ProcessEnv): boolean => {
+  const value = environment.FORCE_COLOR?.trim();
   return value !== undefined && value !== "" && value !== "0";
 };
 
-const supportsColor = (): boolean => {
-  if (process.env.NO_COLOR !== undefined) {
+const supportsColor = (environment: NodeJS.ProcessEnv, stdout: WebLogOutputStream): boolean => {
+  if (environment.NO_COLOR !== undefined) {
     return false;
   }
-  return forceColorEnabled() || Boolean(process.stdout.isTTY);
+  return forceColorEnabled(environment) || stdout.isTTY === true;
 };
 
 const pad = (value: number, length = 2): string => String(value).padStart(length, "0");
@@ -31,42 +74,30 @@ const timezoneOffset = (date: Date): string => {
   return `${sign}${pad(Math.floor(absoluteMinutes / 60))}:${pad(absoluteMinutes % 60)}`;
 };
 
-const timestamp = (): string => {
-  const date = new Date();
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+const timestamp = (date: Date): string =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours(),
   )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(
     date.getMilliseconds(),
     3,
   )}${timezoneOffset(date)}`;
-};
 
-const levelColor = (level: LogLevel): string => {
-  if (level === "INFO") {
-    return BLUE;
-  }
-  if (level === "WARN") {
-    return ORANGE;
-  }
-  return RED;
-};
-
-const colorLevel = (level: LogLevel): string => {
-  if (!supportsColor()) {
+const colorLevel = (useColor: boolean, level: LogLevel): string => {
+  if (!useColor) {
     return level;
   }
-  return `${levelColor(level)}${level}${RESET}`;
+  return `${level === "INFO" ? BLUE : RED}${level}${RESET}`;
 };
 
-const colorMessage = (message: string, color: string | null): string => {
-  if (!supportsColor() || !color) {
+const colorMessage = (useColor: boolean, message: string, color: string | null): string => {
+  if (!useColor || !color) {
     return message;
   }
   return `${color}${message}${RESET}`;
 };
 
-const colorSuccessMessage = (message: string): string => {
-  if (!supportsColor()) {
+const colorSuccessMessage = (useColor: boolean, message: string): string => {
+  if (!useColor) {
     return message;
   }
 
@@ -83,25 +114,54 @@ const colorSuccessMessage = (message: string): string => {
   return `${GREEN}${message}${RESET}`;
 };
 
-const writeLog = (level: LogLevel, message: string, messageColor: string | null = null): void => {
-  const line = `${supportsColor() ? `${DIM}${timestamp()}${RESET}` : timestamp()}  ${colorLevel(
-    level,
-  )} ${colorMessage(message, messageColor)}`;
-  if (level === "ERROR") {
-    console.error(line);
-    return;
-  }
-  console.log(line);
-};
+export const createWebLogger = ({
+  console: consoleOutput = console,
+  environment = process.env,
+  now = () => new Date(),
+  stdout = process.stdout,
+  writer,
+}: WebLoggerInput = {}) =>
+  (writer
+    ? Effect.succeed(writer)
+    : createOpenDucktorDailyLogWriter({ surface: "web", environment, clock: now })
+  ).pipe(
+    Effect.map((resolvedWriter): WebLogger => {
+      const writeLog = (
+        level: LogLevel,
+        message: string,
+        renderMessage: (useColor: boolean, message: string) => string,
+      ): Effect.Effect<void, unknown> =>
+        Effect.gen(function* () {
+          const recordedAt = now();
+          const useColor = supportsColor(environment, stdout);
+          const plainTimestamp = timestamp(recordedAt);
+          const renderedTimestamp = useColor ? `${DIM}${plainTimestamp}${RESET}` : plainTimestamp;
+          const line = `${renderedTimestamp}  ${colorLevel(useColor, level)} ${renderMessage(
+            useColor,
+            message,
+          )}`;
+          if (level === "ERROR") {
+            consoleOutput.error(line);
+          } else {
+            consoleOutput.log(line);
+          }
+          yield* resolvedWriter.append(recordedAt, `${plainTimestamp}  ${level} ${message}`);
+        });
 
-export const logInfo = (message: string): void => writeLog("INFO", message);
-export const logSuccess = (message: string): void => {
-  if (!supportsColor()) {
-    writeLog("INFO", message);
-    return;
-  }
-
-  const line = `${DIM}${timestamp()}${RESET}  ${colorLevel("INFO")} ${colorSuccessMessage(message)}`;
-  console.log(line);
-};
-export const logError = (message: string): void => writeLog("ERROR", message, RED);
+      return {
+        error(message) {
+          return writeLog("ERROR", message, (useColor, value) =>
+            colorMessage(useColor, value, RED),
+          );
+        },
+        info(message) {
+          return writeLog("INFO", message, (useColor, value) =>
+            colorMessage(useColor, value, null),
+          );
+        },
+        success(message) {
+          return writeLog("INFO", message, colorSuccessMessage);
+        },
+      };
+    }),
+  );

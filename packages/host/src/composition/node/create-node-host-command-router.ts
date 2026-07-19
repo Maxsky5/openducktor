@@ -76,6 +76,7 @@ import {
   createStopRuntimesStep,
   type HostLifecycleLogger,
   runShutdownSteps,
+  writeHostLifecycleLog,
 } from "../host-lifecycle";
 import {
   type CreateNodeHostDefaultPortsInput,
@@ -87,8 +88,14 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   eventBus?: HostEventBusPort;
   lifecycleLogger?: HostLifecycleLogger;
   mcpHostBridge?: McpHostBridgeServer;
+  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   runtimeRegistry?: RuntimeRegistryPort;
   taskStore?: TaskStorePort;
+};
+
+const defaultLifecycleLogger: HostLifecycleLogger = {
+  error: (message) => Effect.sync(() => console.error(message)),
+  info: (message) => Effect.sync(() => console.info(message)),
 };
 
 export const createNodeEffectHostCommandRouter = (
@@ -97,8 +104,9 @@ export const createNodeEffectHostCommandRouter = (
   const {
     clientVersion,
     eventBus,
-    lifecycleLogger = console,
+    lifecycleLogger = defaultLifecycleLogger,
     mcpHostBridge,
+    onBackgroundFailure,
     runtimeRegistry,
     taskStore: configuredTaskStore,
   } = input;
@@ -269,6 +277,7 @@ export const createNodeEffectHostCommandRouter = (
     ? createTaskSyncService({
         eventBus,
         logger: lifecycleLogger,
+        onBackgroundFailure,
         taskService,
         workspaceSettingsService,
       })
@@ -309,13 +318,17 @@ export const createNodeEffectHostCommandRouter = (
   const stopPullRequestSyncLoop = () =>
     Effect.gen(function* () {
       if (!pullRequestSyncLoop) {
-        lifecycleLogger.info("No pull request sync loop is running");
+        yield* writeHostLifecycleLog(
+          lifecycleLogger,
+          "info",
+          "No pull request sync loop is running",
+        );
         return;
       }
 
       yield* pullRequestSyncLoop.stop();
       pullRequestSyncLoop = null;
-      lifecycleLogger.info("Pull request sync loop stopped");
+      yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");
     });
 
   return createEffectHostCommandRouter({
@@ -339,23 +352,73 @@ export const createNodeEffectHostCommandRouter = (
       }),
     dispose: () =>
       Effect.gen(function* () {
-        lifecycleLogger.info("Shutting down OpenDucktor host services");
-        yield* runShutdownSteps(
-          [
-            { label: "pull request sync loop", run: stopPullRequestSyncLoop },
-            createStopDevServersStep(devServerService, lifecycleLogger),
-            createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
-            createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
-          ],
-          lifecycleLogger,
+        const loggingFailures: HostOperationError[] = [];
+        const startLogResult = yield* Effect.either(
+          writeHostLifecycleLog(lifecycleLogger, "info", "Shutting down OpenDucktor host services"),
         );
-        lifecycleLogger.info("OpenDucktor host services stopped");
+        if (startLogResult._tag === "Left") {
+          loggingFailures.push(startLogResult.left);
+        }
+        const shutdownResult = yield* Effect.either(
+          runShutdownSteps(
+            [
+              { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+              createStopDevServersStep(devServerService, lifecycleLogger),
+              createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
+              createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
+            ],
+            lifecycleLogger,
+          ),
+        );
+        if (shutdownResult._tag === "Right") {
+          const completeLogResult = yield* Effect.either(
+            writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped"),
+          );
+          if (completeLogResult._tag === "Left") {
+            loggingFailures.push(completeLogResult.left);
+          }
+        }
+        if (shutdownResult._tag === "Left" && loggingFailures.length > 0) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "host.dispose",
+              message: `${shutdownResult.left.message}\nLifecycle logging: ${loggingFailures
+                .map((failure) => failure.message)
+                .join("\n")}`,
+              cause: shutdownResult.left,
+              details: {
+                shutdownFailure: shutdownResult.left,
+                loggingFailures,
+              },
+            }),
+          );
+        }
+        if (shutdownResult._tag === "Left") {
+          return yield* Effect.fail(shutdownResult.left);
+        }
+        if (loggingFailures.length === 1) {
+          const [loggingFailure] = loggingFailures;
+          if (loggingFailure) {
+            return yield* Effect.fail(loggingFailure);
+          }
+        }
+        if (loggingFailures.length > 1) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "host.dispose",
+              message: loggingFailures.map((failure) => failure.message).join("\n"),
+              cause: loggingFailures[0],
+              details: { loggingFailures },
+            }),
+          );
+        }
       }),
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionLiveStateService),
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService, {
         logger: lifecycleLogger,
+        onBackgroundFailure,
       }),
       ...createFilesystemCommandHandlers(filesystemService),
       ...createWorkspaceFilesCommandHandlers(workspaceFilesService),

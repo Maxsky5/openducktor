@@ -7,16 +7,21 @@ import {
   runWebBoundary,
   runWebSyncBoundary,
   type WebError,
+  WebResourceError,
   WebValidationError,
 } from "./effect/web-errors";
 import { runLauncherEffect } from "./launcher";
-import { logError } from "./logger";
+import { createWebLogger, type WebLogger, writeWebLogEffect } from "./logger";
 
 type CliOptions = {
   workspaceMode: boolean;
   frontendPort: number;
   backendPort: number;
 };
+
+type CliInvocation =
+  | { readonly _tag: "Help" }
+  | { readonly _tag: "Launch"; readonly options: CliOptions };
 
 const DEFAULT_FRONTEND_PORT = 1420;
 const DEFAULT_BACKEND_PORT = 14327;
@@ -63,7 +68,9 @@ const parsePortEffect = (
     return parsed;
   });
 
-export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, WebValidationError> =>
+export const parseCliArgsEffect = (
+  args: string[],
+): Effect.Effect<CliInvocation, WebValidationError> =>
   Effect.gen(function* () {
     const options: CliOptions = {
       workspaceMode: false,
@@ -102,9 +109,7 @@ export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, We
         continue;
       }
       if (arg === "-h" || arg === "--help") {
-        yield* Effect.sync(printHelp);
-        yield* Effect.sync(() => process.exit(0));
-        return options;
+        return { _tag: "Help" } as const;
       }
 
       return yield* new WebValidationError({
@@ -114,14 +119,13 @@ export const parseCliArgsEffect = (args: string[]): Effect.Effect<CliOptions, We
       });
     }
 
-    return options;
+    return { _tag: "Launch", options } as const;
   });
 
-const runCliEffect = (): Effect.Effect<number, WebError> =>
+const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<number, WebError> =>
   Effect.gen(function* () {
     const __filename = fileURLToPath(import.meta.url);
     const packageRoot = path.resolve(path.dirname(__filename), "..");
-    const cliOptions = yield* parseCliArgsEffect(process.argv.slice(2));
     const launcherOptions = {
       packageRoot,
       ...(cliOptions.workspaceMode ? { workspaceRoot: path.resolve(packageRoot, "../..") } : {}),
@@ -129,19 +133,67 @@ const runCliEffect = (): Effect.Effect<number, WebError> =>
       frontendPort: cliOptions.frontendPort,
       backendPort: cliOptions.backendPort,
     };
-    return yield* runLauncherEffect(launcherOptions);
+    return yield* runLauncherEffect(launcherOptions, logger);
   });
 
 const runCli = async (): Promise<void> => {
-  const exitCode = await runWebBoundary(runCliEffect()).catch((error: unknown) => {
-    logError(errorMessage(error));
-    return 1;
-  });
+  const parseResult = await runWebBoundary(
+    Effect.either(parseCliArgsEffect(process.argv.slice(2))),
+  );
+  if (parseResult._tag === "Right" && parseResult.right._tag === "Help") {
+    printHelp();
+    process.exit(0);
+    return;
+  }
+
+  let logger: WebLogger;
+  try {
+    logger = await runWebBoundary(createWebLogger());
+  } catch (error) {
+    console.error(errorMessage(error));
+    process.exit(1);
+    return;
+  }
+
+  const reportFailure = async (cause: unknown): Promise<void> => {
+    if (cause instanceof WebResourceError && cause.resource === "persistent-log") {
+      console.error(`OpenDucktor web fatal boundary: ${errorMessage(cause)}`);
+      return;
+    }
+    try {
+      await runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(cause)));
+    } catch (loggingCause) {
+      console.error(`OpenDucktor web fatal boundary: ${errorMessage(loggingCause)}`);
+    }
+  };
+
+  if (parseResult._tag === "Left") {
+    await reportFailure(parseResult.left);
+    process.exit(1);
+    return;
+  }
+  if (parseResult.right._tag === "Help") {
+    return;
+  }
+
+  let exitCode: number;
+  try {
+    exitCode = await runWebBoundary(runCliEffect(parseResult.right.options, logger));
+  } catch (cause) {
+    await reportFailure(cause);
+    exitCode = 1;
+  }
   process.exit(exitCode);
 };
 
-export const parseCliArgs = (args: string[]): CliOptions =>
-  runWebSyncBoundary(parseCliArgsEffect(args));
+export const parseCliArgs = (args: string[]): CliOptions => {
+  const invocation = runWebSyncBoundary(parseCliArgsEffect(args));
+  if (invocation._tag === "Help") {
+    printHelp();
+    process.exit(0);
+  }
+  return invocation.options;
+};
 
 if (import.meta.main) {
   await runCli();

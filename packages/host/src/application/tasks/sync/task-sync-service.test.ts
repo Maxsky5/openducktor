@@ -1,16 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { HostEventBusPort } from "../../../events/host-event-bus";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskService } from "../task-service";
 import { createTaskSyncService } from "./task-sync-service";
 
-const sleep = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, durationMs));
+type TaskSyncServiceTestInput = Omit<
+  Parameters<typeof createTaskSyncService>[0],
+  "onBackgroundFailure"
+> &
+  Partial<Pick<Parameters<typeof createTaskSyncService>[0], "onBackgroundFailure">>;
 
-const createTaskSyncServiceForTest = (input: Parameters<typeof createTaskSyncService>[0]) =>
-  createTaskSyncService(input);
+const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
+  createTaskSyncService({
+    ...input,
+    onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
+  });
 const createEventBus = () => {
   const events: Array<{
     channel: string;
@@ -186,71 +192,240 @@ describe("createTaskSyncService", () => {
     await Effect.runPromise(loop.stop());
     expect(calls).toEqual([]);
   });
+  test("reports lifecycle logging failures to the live owner before shutdown", async () => {
+    const { eventBus } = createEventBus();
+    const persistenceError = new HostOperationError({
+      operation: "host.lifecycle.log-error",
+      message: "persistent task-sync log failed",
+    });
+    const { reportedFailure, stopResult } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const failureReported = yield* Deferred.make<HostOperationError>();
+        const service = createTaskSyncServiceForTest({
+          eventBus,
+          intervalMs: 0,
+          logger: {
+            error: () => Effect.fail(persistenceError),
+          },
+          onBackgroundFailure: (failure) =>
+            Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
+          taskService: createTaskServiceFake({
+            repoPullRequestSyncDetailed() {
+              return Effect.succeed({ ran: true, changedTaskIds: [] });
+            },
+          }),
+          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+            listWorkspaces() {
+              return Effect.fail(
+                new HostOperationError({
+                  operation: "test.task-sync.list-workspaces",
+                  message: "workspace read failed",
+                }),
+              );
+            },
+          }),
+        });
+
+        const loop = yield* service.startPullRequestSyncLoop();
+        const reportedFailure = yield* Deferred.await(failureReported);
+        const stopResult = yield* Effect.either(loop.stop());
+        return { reportedFailure, stopResult };
+      }),
+    );
+
+    expect(reportedFailure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "task-sync.log-iteration-failure",
+      cause: persistenceError,
+    });
+    expect(stopResult._tag).toBe("Left");
+    if (stopResult._tag === "Right") {
+      throw new Error("expected task-sync loop logging failure");
+    }
+    expect(stopResult.left).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "task-sync.log-iteration-failure",
+      cause: persistenceError,
+    });
+  });
+  test("waits for an admitted lifecycle log append before shutdown completes", async () => {
+    const { eventBus } = createEventBus();
+    const { stopBeforeRelease, stopResult } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const logStarted = yield* Deferred.make<void>();
+        const releaseLog = yield* Deferred.make<void>();
+        const stopStarted = yield* Deferred.make<void>();
+        const service = createTaskSyncServiceForTest({
+          eventBus,
+          intervalMs: 0,
+          logger: {
+            error: () =>
+              Effect.gen(function* () {
+                yield* Deferred.succeed(logStarted, undefined);
+                yield* Deferred.await(releaseLog);
+              }),
+          },
+          onBackgroundFailure: () => Effect.void,
+          taskService: createTaskServiceFake({
+            repoPullRequestSyncDetailed() {
+              return Effect.succeed({ ran: true, changedTaskIds: [] });
+            },
+          }),
+          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+            listWorkspaces() {
+              return Effect.fail(
+                new HostOperationError({
+                  operation: "test.task-sync.list-workspaces",
+                  message: "workspace read failed",
+                }),
+              );
+            },
+          }),
+        });
+
+        const loop = yield* service.startPullRequestSyncLoop();
+        yield* Deferred.await(logStarted);
+        const stopFiber = yield* Effect.fork(
+          Effect.gen(function* () {
+            yield* Deferred.succeed(stopStarted, undefined);
+            return yield* Effect.either(loop.stop());
+          }),
+        );
+        yield* Deferred.await(stopStarted);
+        yield* Effect.yieldNow();
+        const stopBeforeRelease = yield* Fiber.poll(stopFiber);
+        yield* Deferred.succeed(releaseLog, undefined);
+        const stopResult = yield* Fiber.join(stopFiber);
+        return { stopBeforeRelease, stopResult };
+      }),
+    );
+
+    expect(stopBeforeRelease._tag).toBe("None");
+    expect(stopResult._tag).toBe("Right");
+  });
+  test("does not lose an admitted lifecycle logging failure racing shutdown", async () => {
+    const { eventBus } = createEventBus();
+    const persistenceError = new HostOperationError({
+      operation: "host.lifecycle.log-error",
+      message: "persistent task-sync log failed during shutdown",
+    });
+    const reportedFailures: HostOperationError[] = [];
+    const { stopBeforeRelease, stopResult } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const logStarted = yield* Deferred.make<void>();
+        const releaseLog = yield* Deferred.make<void>();
+        const stopStarted = yield* Deferred.make<void>();
+        const service = createTaskSyncServiceForTest({
+          eventBus,
+          intervalMs: 0,
+          logger: {
+            error: () =>
+              Effect.gen(function* () {
+                yield* Deferred.succeed(logStarted, undefined);
+                yield* Deferred.await(releaseLog);
+                return yield* Effect.fail(persistenceError);
+              }),
+          },
+          onBackgroundFailure: (failure) =>
+            Effect.sync(() => {
+              reportedFailures.push(failure);
+            }),
+          taskService: createTaskServiceFake({
+            repoPullRequestSyncDetailed() {
+              return Effect.succeed({ ran: true, changedTaskIds: [] });
+            },
+          }),
+          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+            listWorkspaces() {
+              return Effect.fail(
+                new HostOperationError({
+                  operation: "test.task-sync.list-workspaces",
+                  message: "workspace read failed",
+                }),
+              );
+            },
+          }),
+        });
+
+        const loop = yield* service.startPullRequestSyncLoop();
+        yield* Deferred.await(logStarted);
+        const stopFiber = yield* Effect.fork(
+          Effect.gen(function* () {
+            yield* Deferred.succeed(stopStarted, undefined);
+            return yield* Effect.either(loop.stop());
+          }),
+        );
+        yield* Deferred.await(stopStarted);
+        yield* Effect.yieldNow();
+        const stopBeforeRelease = yield* Fiber.poll(stopFiber);
+        yield* Deferred.succeed(releaseLog, undefined);
+        const stopResult = yield* Fiber.join(stopFiber);
+        return { stopBeforeRelease, stopResult };
+      }),
+    );
+
+    expect(stopBeforeRelease._tag).toBe("None");
+    expect(stopResult._tag).toBe("Left");
+    expect(reportedFailures).toEqual([
+      expect.objectContaining({
+        _tag: "HostOperationError",
+        operation: "task-sync.log-iteration-failure",
+        cause: persistenceError,
+      }),
+    ]);
+  });
   test("stops without waiting for an in-flight pull request sync iteration", async () => {
     const { eventBus, events } = createEventBus();
-    let resolveSyncStarted: () => void = () => {};
-    const syncStarted = new Promise<void>((resolve) => {
-      resolveSyncStarted = resolve;
-    });
-    let releaseSync: () => void = () => {};
-    const syncReleased = new Promise<void>((resolve) => {
-      releaseSync = resolve;
-    });
-    let resolveSyncFinished: () => void = () => {};
-    const syncFinished = new Promise<void>((resolve) => {
-      resolveSyncFinished = resolve;
-    });
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      intervalMs: 1,
-      taskService: createTaskServiceFake({
-        repoPullRequestSyncDetailed() {
-          return Effect.uninterruptible(
-            Effect.gen(function* () {
-              resolveSyncStarted();
-              yield* Effect.promise(() => syncReleased);
-              resolveSyncFinished();
-              return { ran: true, changedTaskIds: ["task-1"] };
-            }),
-          );
-        },
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
-        listWorkspaces() {
-          return Effect.succeed([
-            {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              repoPath: "/repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: null,
-              effectiveWorktreeBasePath: null,
+    const eventsBeforeAndAfterRelease = await Effect.runPromise(
+      Effect.gen(function* () {
+        const syncStarted = yield* Deferred.make<void>();
+        const releaseSync = yield* Deferred.make<void>();
+        const syncFinished = yield* Deferred.make<void>();
+        const service = createTaskSyncServiceForTest({
+          eventBus,
+          intervalMs: 1,
+          taskService: createTaskServiceFake({
+            repoPullRequestSyncDetailed() {
+              return Effect.uninterruptible(
+                Effect.gen(function* () {
+                  yield* Deferred.succeed(syncStarted, undefined);
+                  yield* Deferred.await(releaseSync);
+                  yield* Deferred.succeed(syncFinished, undefined);
+                  return { ran: true, changedTaskIds: ["task-1"] };
+                }),
+              );
             },
-          ]);
-        },
-      }),
-    });
+          }),
+          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+            listWorkspaces() {
+              return Effect.succeed([
+                {
+                  workspaceId: "repo",
+                  workspaceName: "Repo",
+                  repoPath: "/repo",
+                  isActive: true,
+                  hasConfig: true,
+                  configuredWorktreeBasePath: null,
+                  defaultWorktreeBasePath: null,
+                  effectiveWorktreeBasePath: null,
+                },
+              ]);
+            },
+          }),
+        });
 
-    const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
-    await syncStarted;
+        const loop = yield* service.startPullRequestSyncLoop();
+        yield* TestClock.adjust(1);
+        yield* Deferred.await(syncStarted);
+        yield* loop.stop();
+        const beforeRelease = [...events];
+        yield* Deferred.succeed(releaseSync, undefined);
+        yield* Deferred.await(syncFinished);
+        yield* Effect.yieldNow();
+        return { beforeRelease, afterRelease: [...events] };
+      }).pipe(Effect.provide(TestContext.TestContext)),
+    );
 
-    try {
-      const stopPromise = Effect.runPromise(loop.stop()).then(() => "stopped" as const);
-      const stopBeforeRelease = await Promise.race([
-        stopPromise,
-        sleep(50).then(() => "waiting" as const),
-      ]);
-
-      expect(stopBeforeRelease).toBe("stopped");
-      expect(events).toEqual([]);
-      releaseSync();
-      await syncFinished;
-      await Effect.runPromise(Effect.yieldNow());
-      expect(events).toEqual([]);
-    } finally {
-      releaseSync();
-    }
+    expect(eventsBeforeAndAfterRelease).toEqual({ beforeRelease: [], afterRelease: [] });
   });
 });

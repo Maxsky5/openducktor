@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { AppUpdateState } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { runElectronEffect } from "../../effect/electron-boundary";
+import { createElectronMainLogger } from "../electron-main-logger";
 import { DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS } from "./electron-app-update-service";
 import {
   createFakeScheduler,
@@ -273,6 +279,33 @@ describe("electron app update service", () => {
     expect(adapter.checkCalls).toBe(2);
   });
 
+  test("routes background logging failures to the owning fatal boundary", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    const fakeScheduler = createFakeScheduler();
+    const { service } = createService({
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {
+          throw persistenceError;
+        },
+        warn() {},
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+      scheduler: fakeScheduler.scheduler,
+    });
+
+    service.startBackgroundChecks();
+    await fakeScheduler.runTimeout();
+    await flushAsyncWork();
+
+    expect(fatalErrors).toEqual([persistenceError]);
+  });
+
   test("does not register duplicate background check intervals", async () => {
     const fakeScheduler = createFakeScheduler();
     const { adapter, service } = createService({
@@ -361,6 +394,69 @@ describe("electron app update service", () => {
     expect(adapter.downloadCalls).toBe(0);
   });
 
+  test("persists a real Electron update event through the main logger", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-update-log-"));
+    let consoleOutput = "";
+    try {
+      const logger = await Effect.runPromise(
+        createElectronMainLogger({
+          env: { NO_COLOR: "1", OPENDUCKTOR_CONFIG_DIR: configDirectory },
+          now: () => new Date(2026, 6, 8, 22, 0, 0),
+          stream: {
+            write(chunk) {
+              consoleOutput += chunk;
+            },
+          },
+        }),
+      );
+      const { service } = createService({
+        logger: {
+          error: (message, error) => runElectronEffect(logger.error(message, error)),
+          info: (message) => runElectronEffect(logger.info(message)),
+          warn: (message) => runElectronEffect(logger.warn(message)),
+        },
+      });
+
+      await service.check({ initiator: "settings" });
+      await service.dispose();
+
+      const persisted = await readFile(
+        path.join(configDirectory, "logs", "openducktor-electron-2026-07-08.log"),
+        "utf8",
+      );
+      expect(consoleOutput).toContain("OpenDucktor update check completed (settings)");
+      expect(persisted).toContain("OpenDucktor update check completed (settings)");
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("keeps successful checks committed when completion logging fails", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    const { service } = createService({
+      logger: {
+        error: async () => {},
+        info: async () => {
+          throw persistenceError;
+        },
+        warn: async () => {},
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+    });
+
+    const result = await service.check({ initiator: "settings" });
+    await flushAsyncWork();
+
+    expect(result).toMatchObject({
+      accepted: true,
+      state: { status: "upToDate", checkedAt: fixedNow },
+    });
+    expect(fatalErrors).toEqual([persistenceError]);
+  });
+
   test("promotes an active background check when the menu requests a manual check", async () => {
     const adapter = new FakeUpdaterAdapter();
     const fakeScheduler = createFakeScheduler();
@@ -432,6 +528,32 @@ describe("electron app update service", () => {
     expect(result.state.error.message).not.toContain("Headers");
     expect(result.state.error.message).not.toContain("x-github-request-id");
     expect(result.state.error.message).not.toContain("at createHttpError");
+  });
+
+  test("commits a failed check before surfacing its logging failure", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    adapter.nextCheckResult = Promise.reject(new Error("GitHub update check failed"));
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {},
+        warn: async () => {},
+      },
+    });
+
+    await expect(service.check({ initiator: "settings" })).rejects.toBe(persistenceError);
+
+    expect(service.getState()).toMatchObject({
+      status: "error",
+      error: {
+        code: "check_failed",
+        operation: "check",
+      },
+    });
   });
 
   test("sanitizes updater error events before publishing them to renderers", async () => {
@@ -633,5 +755,77 @@ describe("electron app update service", () => {
       },
     });
     expect(adapter.downloadCalls).toBe(2);
+  });
+
+  test("commits a failed download before surfacing its logging failure", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    adapter.nextDownloadResult = Promise.reject(new Error("network unavailable"));
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {},
+        warn: async () => {},
+      },
+    });
+    await service.check({ initiator: "settings" });
+
+    await expect(service.download()).rejects.toBe(persistenceError);
+
+    expect(service.getState()).toMatchObject({
+      status: "error",
+      availableVersion: "0.4.3",
+      error: {
+        code: "download_failed",
+        operation: "download",
+      },
+    });
+  });
+
+  test("keeps successful downloads committed when completion logging fails", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {},
+        info: async (message) => {
+          if (message === "OpenDucktor update download completed") {
+            throw persistenceError;
+          }
+        },
+        warn: async () => {},
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await flushAsyncWork();
+
+    const result = await service.download();
+    await flushAsyncWork();
+
+    expect(result).toMatchObject({
+      accepted: true,
+      state: {
+        status: "downloaded",
+        availableVersion: "0.4.3",
+        progressPercent: 100,
+      },
+    });
+    expect(fatalErrors).toEqual([persistenceError]);
   });
 });

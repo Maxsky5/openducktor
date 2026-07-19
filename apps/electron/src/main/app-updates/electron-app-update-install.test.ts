@@ -64,6 +64,41 @@ describe("electron app update install handoff", () => {
     expect(canInstallAppUpdate(result.state)).toBe(true);
   });
 
+  test("commits a failed install before surfacing its logging failure", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    adapter.onPrepareInstall = () => {
+      throw new Error("updater preparation failed");
+    };
+    const { service } = createService({
+      adapter,
+      logger: {
+        error: async () => {
+          throw persistenceError;
+        },
+        info: async () => {},
+        warn: async () => {},
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await service.download();
+
+    await expect(service.install()).rejects.toBe(persistenceError);
+
+    expect(service.getState()).toMatchObject({
+      status: "downloaded",
+      error: {
+        operation: "install",
+        message: expect.stringContaining("updater preparation failed"),
+      },
+    });
+    expect(canInstallAppUpdate(service.getState())).toBe(true);
+  });
+
   test("does not start the install handoff after disposal begins", async () => {
     const adapter = new FakeUpdaterAdapter();
     adapter.nextCheckResult = {
@@ -382,6 +417,75 @@ describe("electron app update install handoff", () => {
     });
     expect(canInstallAppUpdate(service.getState())).toBe(false);
     expect(canDownloadAppUpdate(service.getState())).toBe(false);
+  });
+
+  test("owns rejected warning logs emitted by synchronous updater callbacks", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const fatalErrors: unknown[] = [];
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    const { service } = createService({
+      adapter,
+      logger: {
+        error() {},
+        info() {},
+        warn: async () => {
+          throw persistenceError;
+        },
+      },
+      onFatalError: (cause) => {
+        fatalErrors.push(cause);
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+    adapter.emit("error", new Error("native install failed"));
+
+    adapter.emit("error", new Error("native install still failed"));
+
+    await expect(service.dispose()).rejects.toBe(persistenceError);
+    expect(fatalErrors).toEqual([persistenceError]);
+  });
+
+  test("preserves detached logging and updater disposal failures together", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const adapterDisposeError = new Error("updater adapter dispose failed");
+    adapter.nextCheckResult = {
+      isUpdateAvailable: true,
+      updateInfo: { version: "0.4.3" },
+    };
+    adapter.dispose = async () => {
+      adapter.disposeCalls += 1;
+      throw adapterDisposeError;
+    };
+    const { service } = createService({
+      adapter,
+      logger: {
+        error() {},
+        info() {},
+        warn: async () => {
+          throw persistenceError;
+        },
+      },
+    });
+    await service.check({ initiator: "settings" });
+    await service.download();
+    await service.install();
+    adapter.emit("error", new Error("native install failed"));
+    adapter.emit("error", new Error("native install still failed"));
+
+    await expect(service.dispose()).rejects.toMatchObject({
+      _tag: "ElectronLifecycleError",
+      operation: "electron.app-update.dispose",
+      details: {
+        failures: [persistenceError, adapterDisposeError],
+      },
+    });
   });
 
   test("host shutdown failures disable same-process install retry", async () => {

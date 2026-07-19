@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createElectronMainLogger } from "./electron-main-logger";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { OpenDucktorLogPersistenceError } from "@openducktor/host";
+import { Effect } from "effect";
+import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 
 const createLogStream = (isTTY = false) => {
   let output = "";
@@ -15,34 +20,150 @@ const createLogStream = (isTTY = false) => {
 };
 
 describe("createElectronMainLogger", () => {
-  test("formats host logs like the legacy human logger without ANSI when color is disabled", () => {
-    const { stream, output } = createLogStream(true);
-    const logger = createElectronMainLogger({
-      env: { NO_COLOR: "1" },
-      now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
-      stream,
+  test("reports logger initialization failures before exiting", async () => {
+    const failure = new OpenDucktorLogPersistenceError({
+      message: "openducktor.logs.create-directory failed for /logs",
+      operation: "openducktor.logs.create-directory",
+      path: "/logs",
+      cause: new Error("permission denied"),
     });
+    const processExit = new Error("process exited");
+    const reportedFailures: unknown[] = [];
+    const exitCodes: number[] = [];
 
-    logger.info("OpenDucktor host services stopped");
+    await expect(
+      initializeElectronMainLogger({
+        loggerEffect: Effect.fail(failure),
+        reportFailure: (cause) => reportedFailures.push(cause),
+        exitProcess: (exitCode) => {
+          exitCodes.push(exitCode);
+          throw processExit;
+        },
+      }),
+    ).rejects.toBe(processExit);
+
+    expect(reportedFailures).toEqual([failure]);
+    expect(exitCodes).toEqual([1]);
+  });
+
+  test("formats host logs like the legacy human logger without ANSI when color is disabled", async () => {
+    const { stream, output } = createLogStream(true);
+    const logger = await Effect.runPromise(
+      createElectronMainLogger({
+        env: { NO_COLOR: "1" },
+        now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
+        stream,
+        writer: { append: () => Effect.void },
+      }),
+    );
+
+    await Effect.runPromise(logger.info("OpenDucktor host services stopped"));
 
     expect(output()).toMatch(
       /^2026-05-13T23:45:12\.345[+-]\d\d:\d\d {2}INFO OpenDucktor host services stopped\n$/,
     );
   });
 
-  test("uses ANSI colors when FORCE_COLOR is enabled", () => {
+  test("uses ANSI colors when FORCE_COLOR is enabled", async () => {
     const { stream, output } = createLogStream(false);
-    const logger = createElectronMainLogger({
-      env: { FORCE_COLOR: "1" },
-      now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
-      stream,
-    });
+    const logger = await Effect.runPromise(
+      createElectronMainLogger({
+        env: { FORCE_COLOR: "1" },
+        now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
+        stream,
+        writer: { append: () => Effect.void },
+      }),
+    );
 
-    logger.error("OpenDucktor host shutdown failed", new Error("cleanup failed"));
+    await Effect.runPromise(
+      logger.error("OpenDucktor host shutdown failed", new Error("cleanup failed")),
+    );
 
     const rendered = output();
     expect(rendered).toContain("\u001b[2m2026-05-13T23:45:12.345");
     expect(rendered).toContain("\u001b[31mERROR\u001b[0m");
     expect(rendered).toContain("\u001b[31mOpenDucktor host shutdown failed: Error: cleanup failed");
+  });
+
+  test("persists INFO, WARN, and multiline ERROR records without ANSI", async () => {
+    const configDirectory = mkdtempSync(path.join(tmpdir(), "openducktor-electron-logger-"));
+    try {
+      const { stream, output } = createLogStream(false);
+      const logger = await Effect.runPromise(
+        createElectronMainLogger({
+          env: { FORCE_COLOR: "1", OPENDUCKTOR_CONFIG_DIR: configDirectory },
+          now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
+          stream,
+        }),
+      );
+
+      await Effect.runPromise(logger.info("Host is ready"));
+      await Effect.runPromise(logger.warn("Host warning"));
+      const failure = new Error("cleanup failed");
+      failure.stack = "Error: cleanup failed\n    at shutdown (host.ts:1:1)";
+      await Effect.runPromise(logger.error("Host shutdown failed", failure));
+
+      expect(output()).toContain("\u001b[");
+      const persisted = readFileSync(
+        path.join(configDirectory, "logs", "openducktor-electron-2026-05-13.log"),
+        "utf8",
+      );
+      expect(persisted).not.toContain("\u001b[");
+      expect(persisted).toContain("INFO Host is ready\n");
+      expect(persisted).toContain("WARN Host warning\n");
+      expect(persisted).toContain(
+        "ERROR Host shutdown failed: Error: cleanup failed\n    at shutdown (host.ts:1:1)\n",
+      );
+      expect(persisted.endsWith("\n")).toBeTrue();
+    } finally {
+      rmSync(configDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("uses the same observed time for console rendering and file routing", async () => {
+    const { stream, output } = createLogStream();
+    const recordedAt = new Date(2026, 4, 13, 23, 59, 59, 999);
+    const appended: Array<{ recordedAt: Date; record: string }> = [];
+    const logger = await Effect.runPromise(
+      createElectronMainLogger({
+        env: { NO_COLOR: "1" },
+        now: () => recordedAt,
+        stream,
+        writer: {
+          append: (date, record) => Effect.sync(() => appended.push({ recordedAt: date, record })),
+        },
+      }),
+    );
+
+    await Effect.runPromise(logger.info("boundary record"));
+
+    expect(appended).toEqual([
+      {
+        recordedAt,
+        record: output().trimEnd(),
+      },
+    ]);
+  });
+
+  test("propagates persistent writer failures", async () => {
+    const { stream } = createLogStream();
+    const failure = new OpenDucktorLogPersistenceError({
+      message: "openducktor.logs.append failed for /logs/file.log",
+      operation: "openducktor.logs.append",
+      path: "/logs/file.log",
+      cause: new Error("append failed"),
+    });
+    const logger = await Effect.runPromise(
+      createElectronMainLogger({
+        stream,
+        writer: {
+          append: () => Effect.fail(failure),
+        },
+      }),
+    );
+
+    await expect(Effect.runPromise(Effect.flip(logger.info("Host is ready")))).resolves.toBe(
+      failure,
+    );
   });
 });

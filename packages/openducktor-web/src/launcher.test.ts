@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
+import { WebOperationError } from "./effect/web-errors";
+import {
+  logDuplicateWebTerminationNotice,
+  preserveLauncherFailureAfterStop,
+  runWebSignalShutdown,
+} from "./launcher";
 import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
@@ -13,6 +20,13 @@ import {
   stopLauncherServices,
   waitForBackend,
 } from "./launcher-support";
+import type { WebLogger } from "./logger";
+
+const testLogger: WebLogger = {
+  error: () => Effect.void,
+  info: () => Effect.void,
+  success: () => Effect.void,
+};
 
 const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
   return { exited } as Bun.Subprocess;
@@ -69,6 +83,27 @@ describe("launcher internals", () => {
     ).rejects.toMatchObject({ _tag: "WebOperationError" });
   });
 
+  test("fails fast when the host readiness exit rejects", async () => {
+    const backgroundFailure = new Error("task-sync persistent logging failed");
+
+    await expect(
+      waitForBackend(
+        "http://127.0.0.1:14327",
+        "app-token",
+        0,
+        createHostProcess(Promise.reject(backgroundFailure)),
+        {
+          fetch: async () => new Response(null, { status: 503 }),
+          sleep: async () => {},
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.wait-for-backend",
+      cause: backgroundFailure,
+    });
+  });
+
   test("aborts readiness fetches when the launcher timeout expires", async () => {
     let aborted = false;
     const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) =>
@@ -119,6 +154,7 @@ describe("launcher internals", () => {
       {
         frontendServer,
         hostBackend,
+        logger: testLogger,
       },
       {
         closeServer: async (server) => {
@@ -237,20 +273,199 @@ describe("launcher internals", () => {
     expect(clearedTimers).toEqual([timer]);
   });
 
-  test("keeps signal handlers registered while shutdown is pending", async () => {
-    const source = await Bun.file(new URL("./launcher.ts", import.meta.url)).text();
+  test("awaits a delayed duplicate-signal persistence failure before exiting", async () => {
+    const persistenceError = new Error(
+      "openducktor.logs.append failed for /tmp/openducktor-web.log",
+    );
+    const exitCodes: number[] = [];
+    const reportedFailures: unknown[] = [];
+    let markLogStarted: () => void = () => {};
+    const logStarted = new Promise<void>((resolve) => {
+      markLogStarted = resolve;
+    });
+    let rejectLog: () => void = () => {};
 
-    expect(source).toContain('process.on("SIGINT"');
-    expect(source).toContain('process.on("SIGTERM"');
-    expect(source).toContain("OpenDucktor web shutdown is already in progress");
+    const duplicateLogFailed = Effect.runPromise(
+      logDuplicateWebTerminationNotice(
+        {
+          error: () => Effect.void,
+          info: () =>
+            Effect.tryPromise({
+              try: () =>
+                new Promise<void>((_resolve, reject) => {
+                  markLogStarted();
+                  rejectLog = () => reject(persistenceError);
+                }),
+              catch: (cause) => cause,
+            }),
+          success: () => Effect.void,
+        },
+        (cause) => {
+          reportedFailures.push(cause);
+        },
+      ),
+    );
+    await logStarted;
+    let markDuplicateAwaitStarted: () => void = () => {};
+    const duplicateAwaitStarted = new Promise<void>((resolve) => {
+      markDuplicateAwaitStarted = resolve;
+    });
+
+    const shutdown = runWebSignalShutdown({
+      awaitDuplicateTerminationLog: () => {
+        markDuplicateAwaitStarted();
+        return duplicateLogFailed;
+      },
+      boundary: {
+        exit: (exitCode) => exitCodes.push(exitCode),
+        flush: async () => {},
+        reportFailure: (cause) => reportedFailures.push(cause),
+      },
+      exitCode: 143,
+      logger: {
+        error: () => Effect.void,
+        info: () => Effect.void,
+        success: () => Effect.void,
+      },
+      signal: "SIGTERM",
+      stop: Effect.void,
+    });
+
+    await duplicateAwaitStarted;
+    expect(exitCodes).toEqual([]);
+    rejectLog();
+    await shutdown;
+
+    expect(exitCodes).toEqual([1]);
+    expect(reportedFailures).toEqual([
+      expect.objectContaining({
+        _tag: "WebResourceError",
+        cause: persistenceError,
+        resource: "persistent-log",
+      }),
+    ]);
   });
 
-  test("registers launcher resource cleanup in Effect finalizers", async () => {
-    const source = await Bun.file(new URL("./launcher.ts", import.meta.url)).text();
+  test("closes duplicate-signal log admission before the final output flush", async () => {
+    const exitCodes: number[] = [];
+    let admissionOpen = true;
+    let duplicateLogStarts = 0;
+    let markFlushStarted: () => void = () => {};
+    const flushStarted = new Promise<void>((resolve) => {
+      markFlushStarted = resolve;
+    });
+    let releaseFlush: () => void = () => {};
+    const flushReleased = new Promise<void>((resolve) => {
+      releaseFlush = resolve;
+    });
 
-    expect(source).toContain("if (!servicesReleased)");
-    expect(source).toContain("const stopExit = yield* Effect.exit(stopEffect())");
-    expect(source).toContain("Effect.onInterrupt");
+    const shutdown = runWebSignalShutdown({
+      awaitDuplicateTerminationLog: async () => false,
+      boundary: {
+        exit: (exitCode) => exitCodes.push(exitCode),
+        flush: async () => {
+          if (admissionOpen) {
+            duplicateLogStarts += 1;
+          }
+          markFlushStarted();
+          await flushReleased;
+        },
+        reportFailure: () => {},
+      },
+      closeDuplicateTerminationLogAdmission: () => {
+        admissionOpen = false;
+      },
+      exitCode: 143,
+      logger: {
+        error: () => Effect.void,
+        info: () => Effect.void,
+        success: () => Effect.void,
+      },
+      signal: "SIGTERM",
+      stop: Effect.void,
+    });
+
+    await flushStarted;
+    expect(duplicateLogStarts).toBe(0);
+    expect(exitCodes).toEqual([]);
+
+    releaseFlush();
+    await shutdown;
+    expect(exitCodes).toEqual([143]);
+  });
+
+  test("signal logging failures still run cleanup and exit through the explicit boundary", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const exitCodes: number[] = [];
+    const reportedFailures: unknown[] = [];
+    let cleanupCalls = 0;
+    let flushCalls = 0;
+
+    await runWebSignalShutdown({
+      boundary: {
+        exit: (exitCode) => {
+          exitCodes.push(exitCode);
+        },
+        flush: async () => {
+          flushCalls += 1;
+        },
+        reportFailure: (cause) => {
+          reportedFailures.push(cause);
+        },
+      },
+      exitCode: 143,
+      logger: {
+        error: () => Effect.die("The failed persistent logger must not be retried."),
+        info: () => Effect.fail(persistenceError),
+        success: () => Effect.void,
+      },
+      signal: "SIGTERM",
+      stop: Effect.sync(() => {
+        cleanupCalls += 1;
+      }),
+    });
+
+    expect(cleanupCalls).toBe(1);
+    expect(flushCalls).toBe(1);
+    expect(exitCodes).toEqual([1]);
+    expect(reportedFailures).toEqual([
+      expect.objectContaining({
+        _tag: "WebResourceError",
+        cause: persistenceError,
+        resource: "persistent-log",
+      }),
+    ]);
+  });
+
+  test("signal shutdown persists cleanup and logging failures together", async () => {
+    const persistenceError = new Error("openducktor.logs.append failed");
+    const cleanupError = new WebOperationError({
+      operation: "web.launcher.cleanup",
+      message: "frontend cleanup failed",
+    });
+    const persistedErrors: string[] = [];
+    const exitCodes: number[] = [];
+
+    await runWebSignalShutdown({
+      boundary: {
+        exit: (exitCode) => exitCodes.push(exitCode),
+        flush: async () => {},
+        reportFailure: () => {},
+      },
+      exitCode: 143,
+      logger: {
+        error: (message) => Effect.sync(() => persistedErrors.push(message)),
+        info: () => Effect.fail(persistenceError),
+        success: () => Effect.void,
+      },
+      signal: "SIGTERM",
+      stop: Effect.fail(cleanupError),
+    });
+
+    expect(persistedErrors).toHaveLength(1);
+    expect(persistedErrors[0]).toContain("frontend cleanup failed");
+    expect(persistedErrors[0]).toContain("openducktor.logs.append failed");
+    expect(exitCodes).toEqual([1]);
   });
 
   test("does not wait for the host exit code when host stop fails", async () => {
@@ -265,6 +480,7 @@ describe("launcher internals", () => {
         {
           frontendServer: null,
           hostBackend,
+          logger: testLogger,
         },
         {
           closeServer: async () => {},
@@ -279,6 +495,7 @@ describe("launcher internals", () => {
         {
           frontendServer: null,
           hostBackend,
+          logger: testLogger,
         },
         {
           closeServer: async () => {},
@@ -287,7 +504,151 @@ describe("launcher internals", () => {
           },
         },
       ),
-    ).rejects.toMatchObject({ _tag: "WebOperationError" });
+    ).rejects.toMatchObject({
+      _tag: "WebDependencyError",
+      dependency: "typescript-host-backend",
+      operation: "stop",
+    });
+  });
+
+  test("preserves frontend and host shutdown failures together", async () => {
+    const frontendFailure = new Error("frontend close failed");
+    const hostFailure = new Error("host stop failed");
+    const hostBackend = {
+      exited: new Promise<number>(() => {}),
+      port: 14327,
+      stop: async () => {},
+    };
+
+    await expect(
+      stopLauncherServices(
+        { frontendServer: null, hostBackend, logger: testLogger },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {
+            throw hostFailure;
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.shutdown",
+      details: {
+        failures: [
+          expect.objectContaining({ cause: frontendFailure }),
+          expect.objectContaining({ cause: hostFailure }),
+        ],
+      },
+    });
+  });
+
+  test("preserves frontend shutdown and rejected host exit failures together", async () => {
+    const frontendFailure = new Error("frontend close failed");
+    const hostExitFailure = new Error("host background logging failed");
+    const hostBackend = {
+      exited: Promise.reject(hostExitFailure),
+      port: 14327,
+      stop: async () => {},
+    };
+
+    await expect(
+      stopLauncherServices(
+        { frontendServer: null, hostBackend, logger: testLogger },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {},
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.shutdown",
+      details: {
+        failures: [
+          expect.objectContaining({ cause: frontendFailure }),
+          expect.objectContaining({ cause: hostExitFailure, operation: "await-exit" }),
+        ],
+      },
+    });
+  });
+
+  test("preserves cleanup failures when shutdown error logging fails", async () => {
+    const frontendFailure = new Error("frontend close failed");
+    const persistenceFailure = new Error("log append failed");
+    const hostBackend = {
+      exited: Promise.resolve(0),
+      port: 14327,
+      stop: async () => {},
+    };
+
+    await expect(
+      stopLauncherServices(
+        {
+          frontendServer: null,
+          hostBackend,
+          logger: {
+            error: () => Effect.fail(persistenceFailure),
+            info: () => Effect.void,
+            success: () => Effect.void,
+          },
+        },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {},
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.shutdown",
+      details: {
+        failures: [
+          expect.objectContaining({ cause: frontendFailure }),
+          expect.objectContaining({ cause: persistenceFailure }),
+        ],
+      },
+    });
+  });
+
+  test("preserves launcher, cleanup, and cleanup-log failures together", async () => {
+    const launcherFailure = new WebOperationError({
+      operation: "web.launcher.start",
+      message: "launcher failed",
+    });
+    const cleanupFailure = new WebOperationError({
+      operation: "web.launcher.cleanup",
+      message: "cleanup failed",
+    });
+    const loggingFailure = new Error("log append failed");
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          preserveLauncherFailureAfterStop(launcherFailure, Effect.fail(cleanupFailure), {
+            error: () => Effect.fail(loggingFailure),
+            info: () => Effect.void,
+            success: () => Effect.void,
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.failure-cleanup",
+      details: {
+        failures: [
+          launcherFailure,
+          cleanupFailure,
+          expect.objectContaining({
+            _tag: "WebResourceError",
+            cause: loggingFailure,
+          }),
+        ],
+      },
+    });
   });
 
   test("builds runtime config JSON for the browser shell", () => {
