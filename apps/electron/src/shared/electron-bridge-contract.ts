@@ -18,7 +18,7 @@ export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
   "OpenDucktor is shutting down. The requested command was not run.";
 
 export type ElectronHostInvokeRequest = {
-  command: HostCommandName;
+  command: string;
   args?: Record<string, unknown>;
 };
 

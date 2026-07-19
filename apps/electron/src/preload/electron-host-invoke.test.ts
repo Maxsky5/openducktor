@@ -24,10 +24,11 @@ describe("Electron preload host invoke", () => {
     );
   });
 
-  test("rejects malformed responses with an explicit protocol error", async () => {
-    const hostInvoke = createElectronHostInvoke({
-      invoke: async () => ({ status: "success" }),
-    });
+  test.each([
+    { status: "success" },
+    { status: "shutdown", payload: null },
+  ])("rejects malformed responses with an explicit protocol error", async (response) => {
+    const hostInvoke = createElectronHostInvoke({ invoke: async () => response });
 
     await expect(hostInvoke("workspace_get_context")).rejects.toThrow(
       "Received an invalid host invoke response from the Electron main process.",
