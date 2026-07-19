@@ -23,6 +23,7 @@ export const createTaskDirectMergeUseCase = ({
   taskStore,
   settingsConfig,
   taskWorktreeService,
+  terminalService,
   workspaceSettingsService,
 }: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "directMerge"> => ({
   directMerge(input) {
@@ -35,6 +36,7 @@ export const createTaskDirectMergeUseCase = ({
           githubDependencies,
           settingsConfig,
           taskWorktreeService,
+          terminalService,
           workspaceSettingsService,
         }),
       );

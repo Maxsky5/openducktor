@@ -2,9 +2,14 @@ import { describe, expect, test } from "bun:test";
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_VERSION,
 } from "@openducktor/contracts";
-import type { TerminalBridge, TerminalTransportConnection } from "@/lib/shell-bridge";
+import type {
+  TerminalBridge,
+  TerminalTransportConnection,
+  TerminalTransportState,
+} from "@/lib/shell-bridge";
 import { createTerminalTransportController } from "./terminal-transport-controller";
 
 const terminalId = "terminal-1";
@@ -77,6 +82,57 @@ describe("createTerminalTransportController", () => {
     releaseAttach();
     await Promise.all([resizing, writing]);
     expect(operations).toEqual(["attach", "resize", "input"]);
+  });
+
+  test("chunks oversized input without reordering its bytes", async () => {
+    const sent: Uint8Array[] = [];
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          sent.push(frame);
+        },
+        close: () => undefined,
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    await controller.connect();
+    const payload = Uint8Array.from(
+      { length: TERMINAL_PROTOCOL_MAX_INPUT_BYTES + 3 },
+      (_, index) => index % 256,
+    );
+
+    await controller.write(terminalId, payload);
+
+    const decoded = sent.map(decodeTerminalProtocolFrame);
+    expect(decoded.map(({ message }) => message.type)).toEqual(["input", "input"]);
+    expect(decoded.map(({ payload: chunk }) => chunk.byteLength)).toEqual([
+      TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
+      3,
+    ]);
+    expect(Uint8Array.from(decoded.flatMap(({ payload: chunk }) => [...chunk]))).toEqual(payload);
+  });
+
+  test("does not disconnect when local frame validation rejects input", async () => {
+    const states: TerminalTransportState[] = [];
+    let closeCount = 0;
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async () => undefined,
+        close: () => {
+          closeCount += 1;
+        },
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, (state) => states.push(state));
+    await controller.connect();
+
+    await expect(controller.write(terminalId, new Uint8Array())).rejects.toThrow(
+      "non-empty binary payload",
+    );
+
+    expect(states).not.toContain("disconnected");
+    expect(closeCount).toBe(0);
+    await controller.dispose();
   });
 
   test("attaches once, preserves consumed sequence when replacing the transport, and detaches the last listener", async () => {

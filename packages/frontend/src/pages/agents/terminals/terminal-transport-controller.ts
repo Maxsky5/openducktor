@@ -1,6 +1,7 @@
 import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
 } from "@openducktor/contracts";
@@ -71,9 +72,10 @@ export const createTerminalTransportController = (
     message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"],
     payload: Uint8Array = emptyPayload,
   ): Promise<void> => {
+    const frame = encodeTerminalProtocolFrame({ message, payload });
     const connection = await getConnection();
     try {
-      await connection.send(encodeTerminalProtocolFrame({ message, payload }));
+      await connection.send(frame);
     } catch (cause) {
       if (connectionState.status === "connected" && connectionState.connection === connection) {
         transitionToDisconnected({ cause });
@@ -228,9 +230,27 @@ export const createTerminalTransportController = (
       };
     },
     write: (terminalId: string, payload: Uint8Array) =>
-      enqueueTerminalOperation(terminalId, () =>
-        send({ version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId }, payload),
-      ),
+      enqueueTerminalOperation(terminalId, async () => {
+        const inputMessage = {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "input" as const,
+          terminalId,
+        };
+        if (payload.byteLength === 0) {
+          await send(inputMessage, payload);
+          return;
+        }
+        for (
+          let offset = 0;
+          offset < payload.byteLength;
+          offset += TERMINAL_PROTOCOL_MAX_INPUT_BYTES
+        ) {
+          await send(
+            inputMessage,
+            payload.subarray(offset, offset + TERMINAL_PROTOCOL_MAX_INPUT_BYTES),
+          );
+        }
+      }),
     resize: (terminalId: string, columns: number, rows: number) =>
       enqueueTerminalOperation(terminalId, () =>
         send({

@@ -22,6 +22,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   taskStore,
   settingsConfig,
   taskWorktreeService,
+  terminalService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "linkMergedPullRequest"> => ({
   linkMergedPullRequest(input) {
@@ -44,6 +45,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           gitPort,
           settingsConfig,
           taskWorktreeService,
+          terminalService,
           workspaceSettingsService,
         ),
       );

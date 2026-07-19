@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
+import type { TaskTerminalCleanupPort } from "../task-service";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -70,6 +71,20 @@ const emptyHooks = {
   preStart: [],
   postComplete: [],
 };
+
+const createTerminalCleanupService = (calls: unknown[]): TaskTerminalCleanupPort => ({
+  acquireTaskCleanup: ({ repoPath, taskIds }) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        calls.push({ type: "acquireTerminalCleanup", repoPath, taskIds });
+        return { closedTerminalIds: [] };
+      }),
+      () =>
+        Effect.sync(() => {
+          calls.push({ type: "releaseTerminalCleanup" });
+        }),
+    ),
+});
 
 const runtimeDefinitionsWithScopes = (
   supportedScopes: RuntimeSupportedScope[],
@@ -248,6 +263,7 @@ describe("builder worktree cleanup", () => {
           }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          terminalService: createTerminalCleanupService(calls),
         },
         taskStoreWithTasks([task()]),
         "/repo",
@@ -258,6 +274,7 @@ describe("builder worktree cleanup", () => {
     );
 
     expect(calls).toEqual([
+      { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
@@ -269,6 +286,7 @@ describe("builder worktree cleanup", () => {
       { type: "listBranches", workingDir: "/repo" },
       { type: "isAncestor", workingDir: "/repo", ancestor: "odt/task-1", descendant: "main" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      { type: "releaseTerminalCleanup" },
     ]);
   });
 
@@ -290,6 +308,7 @@ describe("builder worktree cleanup", () => {
           }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/repo/./task/.."])),
           taskWorktreeService: createDirectMergeTaskWorktreeService("/repo/./task/.."),
+          terminalService: createTerminalCleanupService(calls),
         },
         taskStoreWithTasks([task()]),
         "/repo",
@@ -332,6 +351,7 @@ describe("builder worktree cleanup", () => {
             }),
             settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
             taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+            terminalService: createTerminalCleanupService(calls),
           },
           taskStoreWithTasks([task()]),
           "/repo",

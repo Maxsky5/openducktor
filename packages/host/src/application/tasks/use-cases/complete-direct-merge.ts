@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-cleanup";
-import { requireDirectMergeCompleteDependencies } from "../support/required-task-dependencies";
+import { requireMergedBuilderCleanupDependencies } from "../support/required-task-dependencies";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -13,15 +13,14 @@ export const createTaskCompleteDirectMergeUseCase = ({
   taskStore,
   settingsConfig,
   taskWorktreeService,
+  terminalService,
 }: CreateTaskServiceInput): Pick<TaskService, "completeDirectMerge"> => ({
   completeDirectMerge(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const dependencies = requireDirectMergeCompleteDependencies(
-        devServerService,
-        gitPort,
-        settingsConfig,
-        taskWorktreeService,
+      const dependencies = requireMergedBuilderCleanupDependencies(
+        { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService },
+        "task_direct_merge_complete",
       );
       const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });

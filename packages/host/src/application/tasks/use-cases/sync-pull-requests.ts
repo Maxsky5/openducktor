@@ -7,7 +7,7 @@ import {
 } from "../support/github-pull-requests";
 import {
   requireDependencies,
-  requirePullRequestMergeCleanupDependencies,
+  requireMergedBuilderCleanupDependencies,
   requirePullRequestSyncDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
@@ -22,6 +22,7 @@ export const createTaskPullRequestSyncUseCases = ({
   taskStore,
   settingsConfig,
   taskWorktreeService,
+  terminalService,
   workspaceSettingsService,
 }: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
   TaskService,
@@ -66,11 +67,9 @@ export const createTaskPullRequestSyncUseCases = ({
 
         if (updated.record.state === "merged" && task.status !== "closed") {
           const cleanupDependencies = yield* requireDependencies(() =>
-            requirePullRequestMergeCleanupDependencies(
-              devServerService,
-              gitPort,
-              settingsConfig,
-              taskWorktreeService,
+            requireMergedBuilderCleanupDependencies(
+              { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService },
+              "repo_pull_request_sync",
             ),
           );
           yield* taskStore.setPullRequest({

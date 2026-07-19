@@ -19,6 +19,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
+import type { TaskTerminalCleanupPort } from "../task-service";
 import type {
   TaskWorktreeService,
   TaskWorktreeServiceError,
@@ -97,6 +98,7 @@ export const cleanupMergedBuilderState = (
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
+    terminalService: TaskTerminalCleanupPort;
   },
   taskStore: TaskStorePort,
   repoPath: string,
@@ -104,41 +106,45 @@ export const cleanupMergedBuilderState = (
   sourceBranch: string,
   targetBranch: string,
 ) =>
-  Effect.gen(function* () {
-    yield* dependencies.devServerService.stop({ repoPath, taskId });
-    const cleanupTarget = yield* findLatestCleanupTarget(
-      dependencies,
-      taskStore,
-      repoPath,
-      taskId,
-      sourceBranch,
-    );
-    if (
-      cleanupTarget &&
-      normalizePathForComparison(cleanupTarget) !== normalizePathForComparison(repoPath) &&
-      (yield* dependencies.settingsConfig.pathExists(cleanupTarget))
-    ) {
-      yield* dependencies.gitPort.removeWorktree(repoPath, cleanupTarget, false);
-    }
-    const sourceBranchExists = (yield* dependencies.gitPort.listBranches(repoPath)).some(
-      (branch) => !branch.isRemote && branch.name === sourceBranch,
-    );
-    if (!sourceBranchExists) {
-      return;
-    }
-    const forceDelete = !(yield* dependencies.gitPort.isAncestor(
-      repoPath,
-      sourceBranch,
-      targetBranch,
-    ));
-    yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete);
-  });
+  Effect.scoped(
+    Effect.gen(function* () {
+      yield* dependencies.terminalService.acquireTaskCleanup({ repoPath, taskIds: [taskId] });
+      yield* dependencies.devServerService.stop({ repoPath, taskId });
+      const cleanupTarget = yield* findLatestCleanupTarget(
+        dependencies,
+        taskStore,
+        repoPath,
+        taskId,
+        sourceBranch,
+      );
+      if (
+        cleanupTarget &&
+        normalizePathForComparison(cleanupTarget) !== normalizePathForComparison(repoPath) &&
+        (yield* dependencies.settingsConfig.pathExists(cleanupTarget))
+      ) {
+        yield* dependencies.gitPort.removeWorktree(repoPath, cleanupTarget, false);
+      }
+      const sourceBranchExists = (yield* dependencies.gitPort.listBranches(repoPath)).some(
+        (branch) => !branch.isRemote && branch.name === sourceBranch,
+      );
+      if (!sourceBranchExists) {
+        return;
+      }
+      const forceDelete = !(yield* dependencies.gitPort.isAncestor(
+        repoPath,
+        sourceBranch,
+        targetBranch,
+      ));
+      yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete);
+    }),
+  );
 export const cleanupDirectMergeBuilderState = (
   dependencies: {
     devServerService: DevServerService;
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
+    terminalService: TaskTerminalCleanupPort;
   },
   taskStore: TaskStorePort,
   repoPath: string,
