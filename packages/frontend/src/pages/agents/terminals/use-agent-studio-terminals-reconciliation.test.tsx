@@ -261,13 +261,73 @@ describe("useAgentStudioTerminals", () => {
 
       expect(getLatest().tabs).toHaveLength(1);
       expect(getLatest().tabs[0]).toMatchObject({
-        tabId: "lost:terminal-task-a",
+        tabId: "tab:terminal-task-a",
         terminalId: null,
         requestState: "lost",
       });
       expect(getLatest().tabs[0]?.error).toContain(
         "cannot be recovered or recreated automatically",
       );
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("keeps previous-host terminals visible as lost after the host instance changes", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    let hostInstanceId = "host-1";
+    let terminals = [summaryForTask("task-a")];
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        terminalList: async () => ({ hostInstanceId, terminals }),
+      },
+    };
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    let refetchTerminalList = async (): Promise<void> => {
+      throw new Error("Query client is not ready.");
+    };
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const Harness = () => {
+      const queryClient = useQueryClient();
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      refetchTerminalList = async () => {
+        await queryClient.invalidateQueries();
+      };
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a"), {
+        timeout: 2_000,
+      });
+
+      hostInstanceId = "host-2";
+      terminals = [];
+      await act(refetchTerminalList);
+
+      await waitFor(
+        () =>
+          expect(getLatest().tabs).toMatchObject([
+            {
+              tabId: "tab:terminal-task-a",
+              terminalId: null,
+              requestState: "lost",
+            },
+          ]),
+        { timeout: 2_000 },
+      );
+      expect(getLatest().tabs[0]?.error).toContain("host restarted");
     } finally {
       view.unmount();
     }

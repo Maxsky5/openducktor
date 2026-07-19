@@ -28,6 +28,7 @@ export const terminalTabLifecycle = (tab: AgentStudioTerminalTab): TerminalLifec
   tab.requestState === "ready" ? tab.summary.lifecycle : null;
 
 export type TerminalScopePresentation = {
+  hostInstanceId: string | null;
   tabs: AgentStudioTerminalTab[];
   closingTabIds: string[];
   activeTabId: string | null;
@@ -42,7 +43,12 @@ export type TerminalPresentationState = {
 
 export type TerminalPresentationEvent =
   | { type: "scopeActivated"; scopeKey: string | null }
-  | { type: "hostSynced"; scopeKey: string; summaries: TerminalSummary[] }
+  | {
+      type: "hostSynced";
+      scopeKey: string;
+      hostInstanceId: string;
+      summaries: TerminalSummary[];
+    }
   | { type: "creationStarted"; scopeKey: string; tabId: string; label: string; retry: boolean }
   | {
       type: "creationFailed";
@@ -70,6 +76,7 @@ export type TerminalPresentationEvent =
   | { type: "terminalForgotten"; scopeKey: string; terminalId: string; message: string };
 
 export const emptyTerminalScopePresentation = (): TerminalScopePresentation => ({
+  hostInstanceId: null,
   tabs: [],
   closingTabIds: [],
   activeTabId: null,
@@ -110,6 +117,15 @@ export const toHostTab = (
   };
 };
 
+const toLostTab = (tab: ReadyTerminalTab, message: string): PendingTerminalTab => ({
+  tabId: tab.tabId,
+  terminalId: null,
+  summary: null,
+  label: terminalTabLabel(tab),
+  error: `${message} It cannot be recovered or recreated automatically.`,
+  requestState: "lost",
+});
+
 const resolveActiveTabId = (
   tabs: AgentStudioTerminalTab[],
   currentActiveTabId: string | null,
@@ -134,8 +150,27 @@ const updateScope = (
 
 const reconcileHostTabs = (
   scope: TerminalScopePresentation,
+  hostInstanceId: string,
   summaries: TerminalSummary[],
 ): TerminalScopePresentation => {
+  if (scope.hostInstanceId !== null && scope.hostInstanceId !== hostInstanceId) {
+    const previousHostTabs = scope.tabs.map((tab) =>
+      tab.requestState === "ready" ? toLostTab(tab, "The terminal host restarted.") : tab,
+    );
+    const tabs = [...previousHostTabs, ...summaries.map((summary) => toHostTab(summary))];
+    const closingTabIds = scope.closingTabIds.filter((tabId) =>
+      tabs.some((tab) => tab.tabId === tabId),
+    );
+    const closingTabIdSet = new Set(closingTabIds);
+    const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
+    return {
+      ...scope,
+      hostInstanceId,
+      tabs,
+      closingTabIds,
+      activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
+    };
+  }
   const transient = scope.tabs.filter((tab) => tab.terminalId === null);
   const currentTabsByTerminalId = new Map(
     scope.tabs.flatMap((tab) => (tab.terminalId ? [[tab.terminalId, tab] as const] : [])),
@@ -162,6 +197,7 @@ const reconcileHostTabs = (
   const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
   return {
     ...scope,
+    hostInstanceId,
     tabs,
     closingTabIds,
     activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
@@ -182,7 +218,8 @@ export const terminalPresentationReducer = (
     return { ...activated, activeScopeKey: event.scopeKey };
   }
   return updateScope(state, event.scopeKey, (scope) => {
-    if (event.type === "hostSynced") return reconcileHostTabs(scope, event.summaries);
+    if (event.type === "hostSynced")
+      return reconcileHostTabs(scope, event.hostInstanceId, event.summaries);
     if (event.type === "creationStarted") {
       const tabs = event.retry
         ? scope.tabs.map((tab) => {
@@ -307,23 +344,13 @@ export const terminalPresentationReducer = (
     const forgottenTab = scope.tabs.find((tab) => tab.terminalId === event.terminalId);
     if (!forgottenTab) return scope;
     if (scope.closingTabIds.includes(forgottenTab.tabId)) return scope;
-    const lostTabId = `lost:${event.terminalId}`;
     return {
       ...scope,
       tabs: scope.tabs.map((tab) =>
-        tab.terminalId === event.terminalId
-          ? {
-              ...tab,
-              tabId: lostTabId,
-              terminalId: null,
-              summary: null,
-              label: terminalTabLabel(tab),
-              error: `${event.message} It cannot be recovered or recreated automatically.`,
-              requestState: "lost",
-            }
+        tab.terminalId === event.terminalId && tab.requestState === "ready"
+          ? toLostTab(tab, event.message)
           : tab,
       ),
-      activeTabId: scope.activeTabId === forgottenTab.tabId ? lostTabId : scope.activeTabId,
     };
   });
 };

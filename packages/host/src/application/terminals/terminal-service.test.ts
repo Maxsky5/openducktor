@@ -427,6 +427,31 @@ describe("TerminalService", () => {
     expect(replayed).toEqual(["snapshot"]);
   });
 
+  test("resumes output when a failed sink removes the last attachment", async () => {
+    const { service, pty, settleTitles } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    await Effect.runPromise(
+      service.attach({
+        terminalId: "terminal-1",
+        attachmentId: "closing-renderer",
+        lastConsumedSequence: 0,
+        sink: (event) => {
+          if (event.type === "title") throw new Error("renderer destroyed");
+        },
+      }),
+    );
+    const titleSequence = new TextEncoder().encode("\u001b]2;pnpm run dev\u0007");
+    pty.emit(titleSequence);
+    pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes - titleSequence.byteLength));
+    await Bun.sleep(0);
+    expect(pty.operations).toEqual(["pause"]);
+
+    settleTitles();
+    await Bun.sleep(0);
+
+    expect(pty.operations).toEqual(["pause", "resume"]);
+  });
+
   test("terminates with overflow when output pause is unsupported", async () => {
     let id = 0;
     const { service, pty } = await makeService(makePty(false), () => `terminal-${++id}`);

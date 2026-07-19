@@ -22,6 +22,7 @@ describe("terminalPresentationReducer", () => {
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
+      hostInstanceId: "host-1",
       summaries: [summary("terminal-a"), summary("terminal-b")],
     });
     state = terminalPresentationReducer(state, {
@@ -62,6 +63,7 @@ describe("terminalPresentationReducer", () => {
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
+      hostInstanceId: "host-1",
       summaries: [summary("terminal-a")],
     });
     state = terminalPresentationReducer(state, {
@@ -85,6 +87,40 @@ describe("terminalPresentationReducer", () => {
       scopeKey,
       tabId: "tab:terminal-a",
     });
+    expect(state.scopes[scopeKey]?.tabs).toEqual([]);
+  });
+
+  test("keeps terminal identity stable when a stale close follows a forgotten event", () => {
+    const scopeKey = "/repo:task-1";
+    let state = createTerminalPresentationState(scopeKey);
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [summary("terminal-a")],
+    });
+    state = terminalPresentationReducer(state, {
+      type: "terminalForgotten",
+      scopeKey,
+      terminalId: "terminal-a",
+      message: "Terminal terminal-a was forgotten.",
+    });
+
+    expect(state.scopes[scopeKey]?.tabs).toMatchObject([
+      { tabId: "tab:terminal-a", terminalId: null, requestState: "lost" },
+    ]);
+
+    state = terminalPresentationReducer(state, {
+      type: "closeStarted",
+      scopeKey,
+      tabId: "tab:terminal-a",
+    });
+    state = terminalPresentationReducer(state, {
+      type: "closeCompleted",
+      scopeKey,
+      tabId: "tab:terminal-a",
+    });
+
     expect(state.scopes[scopeKey]?.tabs).toEqual([]);
   });
 });

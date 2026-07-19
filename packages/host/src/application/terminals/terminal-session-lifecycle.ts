@@ -158,6 +158,15 @@ export const createTerminalSessionLifecycle = ({
     for (const event of events) {
       if (event.type === "overflow") {
         terminateForOverflow(session);
+      } else if (event.type === "attachments_empty" && session.resources.handle) {
+        Effect.runFork(
+          session.output.resumeIfUnblocked(session.resources.handle).pipe(
+            Effect.tap((resumeEvents) =>
+              Effect.sync(() => applyStreamEvents(session, resumeEvents)),
+            ),
+            Effect.tapError(() => Effect.sync(() => terminateForOverflow(session))),
+          ),
+        );
       } else if (event.type === "pause_requested" && session.resources.handle) {
         Effect.runFork(
           session.resources.handle

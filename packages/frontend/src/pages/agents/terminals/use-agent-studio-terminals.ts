@@ -122,7 +122,12 @@ export const useAgentStudioTerminals = (
 
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;
-    dispatch({ type: "hostSynced", scopeKey, summaries: terminalQuery.data.terminals });
+    dispatch({
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: terminalQuery.data.hostInstanceId,
+      summaries: terminalQuery.data.terminals,
+    });
   }, [scopeKey, terminalQuery.data]);
 
   const visibleState = useMemo(() => {
