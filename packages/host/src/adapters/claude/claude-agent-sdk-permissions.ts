@@ -35,6 +35,25 @@ type CreateClaudeCanUseToolInput = {
   canonicalizePath?: (path: string) => Promise<string>;
 };
 
+export type ClaudeToolUseAuthorization =
+  | {
+      behavior: "allow";
+      autoApprove: boolean;
+      toolInput: Record<string, unknown>;
+    }
+  | {
+      behavior: "deny";
+      message: string;
+    };
+
+type AuthorizeClaudeToolUseInput = {
+  session: ClaudeSessionContext;
+  toolInput: Record<string, unknown>;
+  toolName: string;
+  blockedPath?: string;
+  canonicalizePath?: (path: string) => Promise<string>;
+};
+
 const withAllowedToolInput = (
   result: PermissionResult,
   toolInput: Record<string, unknown>,
@@ -164,163 +183,215 @@ const findReadOnlyPathPolicyViolation = async (
   return null;
 };
 
+export const authorizeClaudeToolUse = ({
+  blockedPath,
+  canonicalizePath = realpath,
+  session,
+  toolInput,
+  toolName,
+}: AuthorizeClaudeToolUseInput):
+  | ClaudeToolUseAuthorization
+  | Promise<ClaudeToolUseAuthorization> => {
+  const effectiveToolInput = normalizeToolInputForSession(session, toolName, toolInput);
+  if (isClaudeAskUserQuestionTool(toolName)) {
+    return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+  }
+
+  const role = claudeWorkflowRole(session.input);
+  const odtToolName = canonicalOdtToolName(toolName);
+  if (odtToolName && role) {
+    if (!(AGENT_ROLE_TOOL_POLICY[role] as readonly string[]).includes(odtToolName)) {
+      return {
+        behavior: "deny",
+        message: `Tool ${odtToolName} is not allowed for ${role} sessions.`,
+      };
+    }
+    return { behavior: "allow", autoApprove: true, toolInput: effectiveToolInput };
+  }
+
+  const mutation = mutationForTool(toolName, effectiveToolInput);
+  if (isReadOnlyWorkflowRole(role)) {
+    if (
+      CLAUDE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools.some(
+        (blockedTool) => blockedTool.toLowerCase() === toolName.toLowerCase(),
+      )
+    ) {
+      return {
+        behavior: "deny",
+        message: `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
+      };
+    }
+    if (mutation !== "read_only") {
+      return {
+        behavior: "deny",
+        message: `Tool ${toolName} is not classified as read-only for OpenDucktor ${role} sessions.`,
+      };
+    }
+    return findReadOnlyPathPolicyViolation(
+      session,
+      effectiveToolInput,
+      blockedPath,
+      canonicalizePath,
+    ).then((pathViolation): ClaudeToolUseAuthorization => {
+      if (pathViolation) {
+        return {
+          behavior: "deny",
+          message: `Tool ${toolName} attempted to read outside the session working directory: ${pathViolation}`,
+        };
+      }
+      return { behavior: "allow", autoApprove: true, toolInput: effectiveToolInput };
+    });
+  }
+
+  if (mutation === "read_only") {
+    return findReadOnlyPathPolicyViolation(
+      session,
+      effectiveToolInput,
+      blockedPath,
+      canonicalizePath,
+    ).then(
+      (pathViolation): ClaudeToolUseAuthorization => ({
+        behavior: "allow",
+        autoApprove: !pathViolation,
+        toolInput: effectiveToolInput,
+      }),
+    );
+  }
+
+  return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+};
+
 export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanUseTool => {
   const { canonicalizePath = realpath, emit, now, randomId, session } = input;
   return async (toolName, toolInput, options) => {
-    const effectiveToolInput = normalizeToolInputForSession(session, toolName, toolInput);
-    const role = claudeWorkflowRole(session.input);
-    if (isClaudeAskUserQuestionTool(toolName)) {
-      if (options.signal.aborted) {
-        return {
-          behavior: "deny",
-          message: "Claude question request was aborted.",
-          interrupt: true,
-        };
+    const handleAuthorization = (
+      authorization: ClaudeToolUseAuthorization,
+    ): PermissionResult | Promise<PermissionResult> => {
+      if (authorization.behavior === "deny") {
+        return denyReadOnlyPolicy(authorization.message);
       }
-      const result = await requestClaudeAskUserQuestion({
-        emit,
-        now,
-        randomId,
-        session,
-        signal: options.signal,
-        toolInput: effectiveToolInput,
-        toolUseID: options.toolUseID,
-        agentID: options.agentID,
-      });
-      if (!result) {
-        return {
-          behavior: "deny",
-          message: "Claude question request was aborted.",
-          interrupt: true,
-        };
+      const effectiveToolInput = authorization.toolInput;
+      if (isClaudeAskUserQuestionTool(toolName)) {
+        if (options.signal.aborted) {
+          return {
+            behavior: "deny",
+            message: "Claude question request was aborted.",
+            interrupt: true,
+          };
+        }
+        return requestClaudeAskUserQuestion({
+          emit,
+          now,
+          randomId,
+          session,
+          signal: options.signal,
+          toolInput: effectiveToolInput,
+          toolUseID: options.toolUseID,
+          agentID: options.agentID,
+        }).then((result): PermissionResult => {
+          if (!result) {
+            return {
+              behavior: "deny",
+              message: "Claude question request was aborted.",
+              interrupt: true,
+            };
+          }
+          return withAllowedToolInput(
+            {
+              behavior: "allow",
+              updatedInput: {
+                ...effectiveToolInput,
+                answers: result.answers,
+              },
+            },
+            effectiveToolInput,
+          );
+        });
       }
-      return withAllowedToolInput(
-        {
-          behavior: "allow",
-          updatedInput: {
-            ...effectiveToolInput,
-            answers: result.answers,
-          },
-        },
-        effectiveToolInput,
-      );
-    }
 
-    const odtToolName = canonicalOdtToolName(toolName);
-    if (odtToolName && role) {
-      if (!(AGENT_ROLE_TOOL_POLICY[role] as readonly string[]).includes(odtToolName)) {
-        return denyReadOnlyPolicy(`Tool ${odtToolName} is not allowed for ${role} sessions.`);
-      }
-      return withAllowedToolInput({ behavior: "allow" }, effectiveToolInput);
-    }
-    const mutation = mutationForTool(toolName, effectiveToolInput);
-    if (isReadOnlyWorkflowRole(role)) {
-      if (
-        CLAUDE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools.some(
-          (blockedTool) => blockedTool.toLowerCase() === toolName.toLowerCase(),
-        )
-      ) {
-        return denyReadOnlyPolicy(
-          `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
-        );
-      }
-      if (mutation !== "read_only") {
-        return denyReadOnlyPolicy(
-          `Tool ${toolName} is not classified as read-only for OpenDucktor ${role} sessions.`,
-        );
-      }
-      const pathViolation = await findReadOnlyPathPolicyViolation(
-        session,
-        effectiveToolInput,
-        options.blockedPath,
-        canonicalizePath,
-      );
-      if (pathViolation) {
-        return denyReadOnlyPolicy(
-          `Tool ${toolName} attempted to read outside the session working directory: ${pathViolation}`,
-        );
-      }
-      return withAllowedToolInput({ behavior: "allow" }, effectiveToolInput);
-    }
-
-    if (mutation === "read_only") {
-      const pathViolation = await findReadOnlyPathPolicyViolation(
-        session,
-        effectiveToolInput,
-        options.blockedPath,
-        canonicalizePath,
-      );
-      if (!pathViolation) {
+      if (authorization.autoApprove) {
         return withAllowedToolInput({ behavior: "allow" }, effectiveToolInput);
       }
-    }
+      const mutation = mutationForTool(toolName, effectiveToolInput);
 
-    if (options.signal.aborted) {
-      return {
-        behavior: "deny",
-        message: "Claude permission request was aborted.",
-        interrupt: true,
-      };
-    }
-
-    const requestId = randomId();
-    const command = readStringProp(effectiveToolInput, "command");
-    const blockedPath = options.blockedPath
-      ? rewriteSessionPath(session, options.blockedPath)
-      : undefined;
-    const event: Extract<AgentEvent, { type: "approval_required" }> = {
-      type: "approval_required",
-      externalSessionId: session.externalSessionId,
-      timestamp: now(),
-      requestId,
-      requestType: permissionRequestTypeForTool(toolName),
-      title: options.title ?? options.displayName ?? `Approve ${toolName}`,
-      ...(options.description ? { summary: options.description } : {}),
-      ...(options.decisionReason ? { details: options.decisionReason } : {}),
-      ...(blockedPath ? { affectedPaths: [blockedPath] } : {}),
-      ...(command
-        ? {
-            command: {
-              command,
-              workingDirectory: session.input.workingDirectory,
-            },
-          }
-        : {}),
-      tool: {
-        name: toolName,
-        ...(options.displayName ? { title: options.displayName } : {}),
-        input: effectiveToolInput,
-      },
-      mutation,
-      supportedReplyOutcomes: ["approve_once", "reject"],
-      metadata: {
-        runtime: "claude",
-        ...(options.agentID ? { agentId: options.agentID } : {}),
-      },
-      ...claudeSubagentPendingInputRoute(session.externalSessionId, options.agentID),
-    };
-    return new Promise<PermissionResult>((resolveResult) => {
-      const onAbort = () => {
-        session.pendingApprovals.delete(requestId);
-        resolveResult({
+      if (options.signal.aborted) {
+        return {
           behavior: "deny",
           message: "Claude permission request was aborted.",
           interrupt: true,
-        });
-      };
-      options.signal.addEventListener("abort", onAbort, { once: true });
-      session.pendingApprovals.set(requestId, {
-        event,
-        resolve: (result) => {
-          options.signal.removeEventListener("abort", onAbort);
-          resolveResult(withAllowedToolInput(result, effectiveToolInput));
-        },
-      });
-      if (options.signal.aborted) {
-        onAbort();
-        return;
+        };
       }
-      emitClaudePendingInputEvent({ emit, event, session });
+
+      const requestId = randomId();
+      const command = readStringProp(effectiveToolInput, "command");
+      const blockedPath = options.blockedPath
+        ? rewriteSessionPath(session, options.blockedPath)
+        : undefined;
+      const event: Extract<AgentEvent, { type: "approval_required" }> = {
+        type: "approval_required",
+        externalSessionId: session.externalSessionId,
+        timestamp: now(),
+        requestId,
+        requestType: permissionRequestTypeForTool(toolName),
+        title: options.title ?? options.displayName ?? `Approve ${toolName}`,
+        ...(options.description ? { summary: options.description } : {}),
+        ...(options.decisionReason ? { details: options.decisionReason } : {}),
+        ...(blockedPath ? { affectedPaths: [blockedPath] } : {}),
+        ...(command
+          ? {
+              command: {
+                command,
+                workingDirectory: session.input.workingDirectory,
+              },
+            }
+          : {}),
+        tool: {
+          name: toolName,
+          ...(options.displayName ? { title: options.displayName } : {}),
+          input: effectiveToolInput,
+        },
+        mutation,
+        supportedReplyOutcomes: ["approve_once", "reject"],
+        metadata: {
+          runtime: "claude",
+          ...(options.agentID ? { agentId: options.agentID } : {}),
+        },
+        ...claudeSubagentPendingInputRoute(session.externalSessionId, options.agentID),
+      };
+      return new Promise<PermissionResult>((resolveResult) => {
+        const onAbort = () => {
+          session.pendingApprovals.delete(requestId);
+          resolveResult({
+            behavior: "deny",
+            message: "Claude permission request was aborted.",
+            interrupt: true,
+          });
+        };
+        options.signal.addEventListener("abort", onAbort, { once: true });
+        session.pendingApprovals.set(requestId, {
+          event,
+          resolve: (result) => {
+            options.signal.removeEventListener("abort", onAbort);
+            resolveResult(withAllowedToolInput(result, effectiveToolInput));
+          },
+        });
+        if (options.signal.aborted) {
+          onAbort();
+          return;
+        }
+        emitClaudePendingInputEvent({ emit, event, session });
+      });
+    };
+
+    const authorization = authorizeClaudeToolUse({
+      session,
+      toolName,
+      toolInput,
+      ...(options.blockedPath ? { blockedPath: options.blockedPath } : {}),
+      canonicalizePath,
     });
+    return authorization instanceof Promise
+      ? authorization.then(handleAuthorization)
+      : handleAuthorization(authorization);
   };
 };

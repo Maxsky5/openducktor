@@ -12,6 +12,8 @@ export type ClaudeEventSession = {
   pendingApprovals?: Map<string, unknown>;
   pendingQuestions?: Map<string, unknown>;
   pendingUserTurnCount?: number;
+  retractedSubagentTaskIds?: Set<string>;
+  retractedToolUseIds?: Set<string>;
   lastAssistantText?: string;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;

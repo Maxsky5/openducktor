@@ -2,11 +2,18 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
+import {
+  isClaudeSubagentTaskRetracted,
+  isClaudeToolUseRetracted,
+  retireClaudeSubagentTask,
+} from "./claude-agent-sdk-transcript-correlation";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeSubagentSession = {
   externalSessionId: string;
   hiddenSubagentTaskIds?: Set<string>;
+  retractedSubagentTaskIds?: Set<string>;
+  retractedToolUseIds?: Set<string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolMessageIdsByCallId: Map<string, string>;
@@ -185,6 +192,9 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   timestamp: string;
   toolUseId: string;
 }): void => {
+  if (isClaudeToolUseRetracted(session, toolUseId)) {
+    return;
+  }
   const structuredResult = readStructuredAgentResult(resultRaw);
   const agentId =
     readStringProp(structuredResult, "agentId") ?? readStringProp(structuredResult, "taskId");
@@ -268,6 +278,14 @@ export const handleClaudeSubagentSystemMessage = ({
     : undefined;
   const toolMessageId = toolUseId ? session.toolMessageIdsByCallId.get(toolUseId) : undefined;
   const toolName = toolUseId ? session.toolNamesByCallId.get(toolUseId) : undefined;
+
+  if (toolUseId && isClaudeToolUseRetracted(session, toolUseId)) {
+    retireClaudeSubagentTask(session, message.task_id);
+    return;
+  }
+  if (isClaudeSubagentTaskRetracted(session, message.task_id)) {
+    return;
+  }
 
   if (message.subtype === "task_started") {
     if (

@@ -108,6 +108,34 @@ const buildOptions = (
   });
 };
 
+const preToolUseHook = async (
+  options: Awaited<ReturnType<typeof buildClaudeAgentSdkOptions>>,
+  input: {
+    permissionMode: string;
+    toolInput: Record<string, unknown>;
+    toolName: string;
+  },
+) => {
+  const hook = options.hooks?.PreToolUse?.[0]?.hooks[0];
+  if (!hook) {
+    throw new Error("Expected Claude SDK options to register a PreToolUse hook.");
+  }
+  return hook(
+    {
+      hook_event_name: "PreToolUse",
+      session_id: "session-1",
+      transcript_path: "/tmp/session-1.jsonl",
+      cwd: options.cwd ?? process.cwd(),
+      permission_mode: input.permissionMode,
+      tool_name: input.toolName,
+      tool_input: input.toolInput,
+      tool_use_id: "tool-use-1",
+    },
+    "tool-use-1",
+    { signal: new AbortController().signal },
+  );
+};
+
 describe("buildClaudeAgentSdkOptions", () => {
   test("adds the OpenDucktor MCP server without overriding inherited Claude configuration", async () => {
     const session = createSession();
@@ -182,6 +210,13 @@ describe("buildClaudeAgentSdkOptions", () => {
       "mcp__openducktor__odt_read_task_documents",
       "mcp__openducktor__odt_set_spec",
     ]);
+    const openducktorServer = options.mcpServers?.openducktor;
+    if (!openducktorServer || !("env" in openducktorServer)) {
+      throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
+    }
+    expect(openducktorServer.env?.ODT_ALLOWED_TOOLS).toBe(
+      "odt_read_task,odt_read_task_documents,odt_set_spec",
+    );
     session.abortController.abort();
   });
 
@@ -261,7 +296,7 @@ describe("buildClaudeAgentSdkOptions", () => {
 
   test("enables the SDK safety acknowledgement for a trusted local bypass mode", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "openducktor-claude-permissions-"));
-    const session = createSession();
+    const session = createSession("spec");
     session.input = {
       ...session.input,
       repoPath: cwd,
@@ -279,9 +314,79 @@ describe("buildClaudeAgentSdkOptions", () => {
 
       expect(options.permissionMode).toBe("bypassPermissions");
       expect(options.allowDangerouslySkipPermissions).toBe(true);
+      expect(
+        await preToolUseHook(options, {
+          permissionMode: "bypassPermissions",
+          toolName: "mcp__openducktor__odt_set_plan",
+          toolInput: {},
+        }),
+      ).toMatchObject({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: "Tool odt_set_plan is not allowed for spec sessions.",
+        },
+      });
+      expect(
+        await preToolUseHook(options, {
+          permissionMode: "bypassPermissions",
+          toolName: "Bash",
+          toolInput: { command: "touch forbidden" },
+        }),
+      ).toMatchObject({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            "Tool Bash is disabled for read-only OpenDucktor workflow roles.",
+        },
+      });
     } finally {
       session.abortController.abort();
       await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps worktree path routing active in inherited bypass mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openducktor-claude-routing-"));
+    const repoPath = join(root, "repo");
+    const workingDirectory = join(root, "worktree");
+    await mkdir(join(workingDirectory, ".claude"), { recursive: true });
+    await mkdir(repoPath, { recursive: true });
+    await writeFile(
+      join(workingDirectory, ".claude", "settings.local.json"),
+      JSON.stringify({ permissions: { defaultMode: "bypassPermissions" } }),
+    );
+    const session = createSession();
+    session.input = {
+      ...session.input,
+      repoPath,
+      workingDirectory,
+    };
+
+    try {
+      const options = await buildOptions(session);
+      const sourcePath = join(repoPath, "src", "index.ts");
+
+      expect(
+        await preToolUseHook(options, {
+          permissionMode: "bypassPermissions",
+          toolName: "Write",
+          toolInput: { file_path: sourcePath, content: "export {};" },
+        }),
+      ).toMatchObject({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          updatedInput: {
+            file_path: join(workingDirectory, "src", "index.ts"),
+            content: "export {};",
+          },
+        },
+      });
+    } finally {
+      session.abortController.abort();
+      await rm(root, { recursive: true, force: true });
     }
   });
 
