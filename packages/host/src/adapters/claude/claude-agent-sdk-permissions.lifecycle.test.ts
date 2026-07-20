@@ -159,7 +159,7 @@ describe("Claude permission request lifecycle", () => {
     expect(events).toEqual([]);
   });
 
-  test("denies subagents in read-only workflow roles before creating approval requests", async () => {
+  test("delegates subagents to the configured approval flow in read-only roles", async () => {
     const events: AgentEvent[] = [];
     const session = createSession("spec");
     const canUseTool = createClaudeCanUseTool({
@@ -169,22 +169,29 @@ describe("Claude permission request lifecycle", () => {
       emit: (_session, event) => events.push(event),
     });
 
-    const result = await canUseTool(
-      "Agent",
-      { prompt: "Inspect the repo" },
-      {
-        signal: new AbortController().signal,
-        toolUseID: "tool-use-1",
-      },
-    );
-
-    expect(result).toEqual({
-      behavior: "deny",
-      decisionClassification: "user_reject",
-      message: "Tool Agent is not classified as read-only for OpenDucktor spec sessions.",
+    const toolInput = { prompt: "Inspect the repo" };
+    const resultPromise = canUseTool("Agent", toolInput, {
+      signal: new AbortController().signal,
+      toolUseID: "tool-use-1",
     });
-    expect(events).toEqual([]);
-    expect(session.pendingApprovals.size).toBe(0);
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "request-1",
+        mutation: "unknown",
+        tool: {
+          name: "Agent",
+          input: toolInput,
+        },
+      }),
+    ]);
+    expect(session.pendingApprovals.has("request-1")).toBe(true);
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: toolInput,
+    });
   });
 
   test("denies network tools in read-only workflow roles before creating approval requests", async () => {

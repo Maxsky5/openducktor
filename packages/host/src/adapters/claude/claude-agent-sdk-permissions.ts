@@ -221,11 +221,14 @@ export const authorizeClaudeToolUse = ({
         message: `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
       };
     }
-    if (mutation !== "read_only") {
+    if (mutation === "mutating") {
       return {
         behavior: "deny",
-        message: `Tool ${toolName} is not classified as read-only for OpenDucktor ${role} sessions.`,
+        message: `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
       };
+    }
+    if (mutation === "unknown") {
+      return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
     }
     return findReadOnlyPathPolicyViolation(
       session,
