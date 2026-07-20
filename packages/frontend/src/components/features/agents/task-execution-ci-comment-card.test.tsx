@@ -44,6 +44,32 @@ test("opens review comments through the external URL shell bridge", () => {
   }
 });
 
+test("skips unchanged card inputs and renders updated comments", () => {
+  let bodyReadCount = 0;
+  const trackedComment: PullRequestReviewComment = {
+    ...comment,
+    get body() {
+      bodyReadCount += 1;
+      return "Please update this.";
+    },
+  };
+  const card = (cardComment: PullRequestReviewComment) => (
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={cardComment} isBot={false} />
+    </TooltipProvider>
+  );
+  const view = render(card(trackedComment));
+  const initialBodyReadCount = bodyReadCount;
+
+  view.rerender(card(trackedComment));
+
+  expect(bodyReadCount).toBe(initialBodyReadCount);
+
+  view.rerender(card({ ...comment, body: "Updated review guidance." }));
+
+  expect(view.getByText("Updated review guidance.")).toBeTruthy();
+});
+
 test("opens links in review markdown through the external URL shell bridge", () => {
   const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
   const markdownUrl = "https://example.com/review-guidance";

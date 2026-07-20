@@ -1,6 +1,7 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
 import type { ComponentProps, MouseEvent, ReactElement } from "react";
+import { memo } from "react";
 import type { Components, ExtraProps } from "react-markdown";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -106,7 +107,7 @@ function TaskExecutionCiSuggestedChange({
   );
 }
 
-export function TaskExecutionCiCommentCard({
+export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCard({
   comment,
   isBot,
 }: {
@@ -227,4 +228,4 @@ export function TaskExecutionCiCommentCard({
       ) : null}
     </article>
   );
-}
+});
