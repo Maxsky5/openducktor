@@ -147,4 +147,47 @@ describe("CodexContextUsageLoader", () => {
         .find((snapshot) => snapshot.ref.externalSessionId === "child-thread")?.contextUsage,
     ).toBeNull();
   });
+
+  test("cancels routed-child loads when the parent is released or stopped", async () => {
+    for (const action of ["release", "stop"] as const) {
+      const runtimeStream = createRuntimeStreamSubscription();
+      const { adapter, transports } = createHarness({
+        subscribeEvents: runtimeStream.subscribeEvents,
+      });
+      await adapter.startSession(codexStartSessionInput());
+      const transport = transports.get("runtime-live");
+      if (!transport) {
+        throw new Error("Expected Codex transport.");
+      }
+      const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+      state.subagents.upsertLink({
+        runtimeId: "runtime-live",
+        parentThreadId: "thread/start-runtime-live",
+        childThreadId: "child-thread",
+        itemId: "child-thread",
+        status: "running",
+      });
+      const child = blockResume(transport);
+      const loading = adapter.loadLiveSessionContextUsage({
+        runtimeId: "runtime-live",
+        externalSessionId: "child-thread",
+      });
+      await child.started.promise;
+      if (action === "release") {
+        await adapter.releaseSession(codexSessionRef());
+      } else {
+        await adapter.stopSession(codexSessionRef());
+      }
+
+      await expect(loading).rejects.toThrow("was released while loading context usage");
+      child.resume.resolve(undefined);
+      await child.completed.promise;
+      await flushCodexAdapterWork();
+      expect(
+        adapter
+          .listLiveSessionSnapshots("runtime-live")
+          .find((snapshot) => snapshot.ref.externalSessionId === "child-thread"),
+      ).toBeUndefined();
+    }
+  });
 });

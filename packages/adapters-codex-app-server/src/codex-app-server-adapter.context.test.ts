@@ -55,6 +55,31 @@ describe("CodexAppServerAdapter context loading", () => {
     );
   });
 
+  test("rehydrates a cold session when delayed usage is cached", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({
+      subscribeEvents: runtimeStream.subscribeEvents,
+    });
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.releaseSession(codexSessionRef());
+    runtimeStream.emitNotification(tokenUsageNotification(3_000));
+    await flushCodexAdapterWork();
+
+    await expect(adapter.loadSessionContextUsage(codexSessionRef())).resolves.toEqual({
+      totalTokens: 3_000,
+      contextWindow: 200_000,
+    });
+    expect(
+      transports.get("runtime-live")?.calls.filter((call) => call.method === "thread/resume"),
+    ).toHaveLength(1);
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
+      expect.objectContaining({
+        ref: expect.objectContaining({ externalSessionId: "thread/start-runtime-live" }),
+        contextUsage: { totalTokens: 3_000, contextWindow: 200_000 },
+      }),
+    );
+  });
+
   test("uses stream usage that arrives while resume is outstanding", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({

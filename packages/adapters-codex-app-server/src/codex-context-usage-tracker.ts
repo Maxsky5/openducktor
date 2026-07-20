@@ -47,10 +47,6 @@ export class CodexContextUsageTracker {
     threadId: string,
     resumeWithTurns: () => Promise<void>,
   ): Promise<CodexSessionContextUsage | null> {
-    const retained = this.latest(runtimeId, threadId);
-    if (retained) {
-      return retained;
-    }
     const key = contextUsageKey(runtimeId, threadId);
     const inFlight = this.inFlightLoadsByKey.get(key);
     if (inFlight) {

@@ -13,7 +13,7 @@ import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type { CodexLiveSessionLocator, CodexSessionContextUsage } from "./types";
 
 type ContextUsageLoadGuard = {
-  ref: SessionRef;
+  refs: readonly SessionRef[];
   runtimeId: string | null;
   releasedRuntimeIds: Set<string>;
   error: Error | null;
@@ -40,7 +40,7 @@ export class CodexContextUsageLoader {
     if (session) {
       return this.loadLive({ runtimeId: session.runtimeId, externalSessionId: session.threadId });
     }
-    const guard = this.begin(input);
+    const guard = this.begin([input]);
     try {
       const runtime = await this.wait(
         guard,
@@ -110,10 +110,11 @@ export class CodexContextUsageLoader {
         `Cannot load Codex session context usage because session '${input.externalSessionId}' is not retained by runtime '${input.runtimeId}'.`,
       );
     }
-    const guard = this.begin({
+    const targetRef = {
       ...codexSessionRef(session),
       externalSessionId: input.externalSessionId,
-    });
+    };
+    const guard = this.begin(localSession ? [targetRef] : [targetRef, codexSessionRef(session)]);
     this.bindRuntime(guard, input.runtimeId);
     try {
       await this.wait(guard, this.deps.prepareRuntime(input.runtimeId));
@@ -149,7 +150,7 @@ export class CodexContextUsageLoader {
 
   cancelSession(input: SessionRef): void {
     for (const guard of this.inFlightLoads) {
-      if (agentSessionRefsEqual(guard.ref, input)) {
+      if (guard.refs.some((ref) => agentSessionRefsEqual(ref, input))) {
         this.cancel(
           guard,
           new Error(
@@ -172,10 +173,10 @@ export class CodexContextUsageLoader {
     }
   }
 
-  private begin(ref: SessionRef): ContextUsageLoadGuard {
+  private begin(refs: readonly SessionRef[]): ContextUsageLoadGuard {
     let cancel: (error: Error) => void = () => {};
     const guard = {
-      ref,
+      refs,
       runtimeId: null,
       releasedRuntimeIds: new Set<string>(),
       error: null,
