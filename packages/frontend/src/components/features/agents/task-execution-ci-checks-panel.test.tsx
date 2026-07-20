@@ -13,7 +13,10 @@ import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review"
 import { withAnimationFrameTestDriver } from "./agent-chat/test-support/animation-frame-test-driver";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
-import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
+import {
+  TaskExecutionCiChecksPanel,
+  type TaskExecutionCiChecksPanelModel,
+} from "./task-execution-ci-checks-panel";
 import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 import { isBotCommentAuthor } from "./task-execution-ci-presentation";
 
@@ -141,6 +144,34 @@ const renderCheckCard = (
   );
 
 describe("TaskExecutionCiChecksPanel", () => {
+  test("skips stable model inputs and renders changed query input", () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), noPullRequestContext);
+    let queryInputReadCount = 0;
+    const stableModel: TaskExecutionCiChecksPanelModel = {
+      isActive: false,
+      get queryInput() {
+        queryInputReadCount += 1;
+        return null;
+      },
+    };
+    const panel = (model: TaskExecutionCiChecksPanelModel) => (
+      <QueryClientProvider client={queryClient}>
+        <TaskExecutionCiChecksPanel model={model} />
+      </QueryClientProvider>
+    );
+    const view = render(panel(stableModel));
+    const initialQueryInputReadCount = queryInputReadCount;
+
+    view.rerender(panel(stableModel));
+
+    expect(queryInputReadCount).toBe(initialQueryInputReadCount);
+
+    view.rerender(panel({ isActive: false, queryInput }));
+
+    expect(view.getByText("No pull request found")).toBeTruthy();
+  });
+
   test("renders a useful loading state while review data is pending", () => {
     const html = renderPanel();
 

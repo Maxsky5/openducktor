@@ -1,7 +1,7 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { ChevronRight, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { memo, startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -71,7 +71,7 @@ const limitCommentGroups = (groups: CommentGroup[], limit: number): CommentGroup
   });
 };
 
-export function TaskExecutionCiCommentsList({
+export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiCommentsList({
   comments,
 }: {
   comments: PullRequestReviewComment[];
@@ -207,4 +207,4 @@ export function TaskExecutionCiCommentsList({
       </div>
     </details>
   );
-}
+});

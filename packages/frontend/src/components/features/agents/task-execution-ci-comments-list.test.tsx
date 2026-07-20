@@ -21,6 +21,36 @@ const comment = (id: string, author = "reviewer"): PullRequestReviewComment => (
 });
 
 describe("TaskExecutionCiCommentsList", () => {
+  test("skips stable comment inputs and renders changed comments", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      let authorReadCount = 0;
+      const trackedComment: PullRequestReviewComment = {
+        ...comment("one"),
+        get author() {
+          authorReadCount += 1;
+          return "reviewer";
+        },
+      };
+      const comments = [trackedComment];
+      const view = render(<TaskExecutionCiCommentsList comments={comments} />);
+      await frameDriver.flushFrames();
+      const initialAuthorReadCount = authorReadCount;
+
+      view.rerender(<TaskExecutionCiCommentsList comments={comments} />);
+
+      expect(authorReadCount).toBe(initialAuthorReadCount);
+
+      view.rerender(
+        <TaskExecutionCiCommentsList
+          comments={[{ ...comment("one"), body: "Updated review guidance." }]}
+        />,
+      );
+      await frameDriver.flushFrames();
+
+      expect(screen.getByText("Updated review guidance.")).toBeTruthy();
+    });
+  });
+
   test("preserves comment group nodes when refreshed counts change", async () => {
     await withAnimationFrameTestDriver(async () => {
       const view = render(<TaskExecutionCiCommentsList comments={[comment("one")]} />);

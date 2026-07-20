@@ -1,6 +1,7 @@
 import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import { memo } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
   type PullRequestReviewContextQueryInput,
@@ -50,7 +51,7 @@ const pullRequestStateProps = (
   };
 };
 
-export function TaskExecutionCiChecksPanel({
+export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPanel({
   model,
 }: {
   model: TaskExecutionCiChecksPanelModel;
@@ -135,4 +136,4 @@ export function TaskExecutionCiChecksPanel({
       }}
     />
   );
-}
+});
