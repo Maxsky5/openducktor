@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { TaskExecutionCiCommentCard } from "./task-execution-ci-comment-card";
 import {
@@ -237,18 +238,21 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
                 })}
               </div>
               <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={cn("h-9 px-2", commentFilters.hideResolved && "bg-accent/60")}
-                    aria-label="Filter comments"
-                  >
-                    <ListFilter aria-hidden="true" />
-                    <span>Filter</span>
-                  </Button>
-                </PopoverTrigger>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Filter comments"
+                      >
+                        <ListFilter aria-hidden="true" />
+                      </Button>
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Filter comments</TooltipContent>
+                </Tooltip>
                 <PopoverContent align="end" className="w-56 p-2">
                   <div className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5">
                     <label

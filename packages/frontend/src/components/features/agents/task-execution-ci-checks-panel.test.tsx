@@ -245,6 +245,11 @@ describe("TaskExecutionCiChecksPanel", () => {
       );
 
       expect(view.container.innerHTML).not.toContain("This thread still needs work.");
+      expect(
+        view.container
+          .querySelector(".overflow-y-auto")
+          ?.classList.contains("[scrollbar-gutter:stable]"),
+      ).toBe(true);
       await frameDriver.flushFrame();
       const html = view.container.innerHTML;
 

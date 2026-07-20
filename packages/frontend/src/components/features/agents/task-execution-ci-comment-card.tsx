@@ -133,10 +133,10 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
 
   return (
     <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card [--diffs-gap-block:0px]">
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start">
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
         <button
           type="button"
-          className="group/comment grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2 text-left outline-none transition hover:bg-accent/40 focus-visible:bg-accent/50"
+          className="group/comment grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2 text-left outline-none transition hover:bg-accent/40 focus-visible:bg-accent/50"
           aria-expanded={isOpen}
           aria-label={`${isOpen ? "Collapse" : "Expand"} comment from ${author}`}
           data-state={isOpen ? "open" : "closed"}
@@ -144,7 +144,7 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
             setIsOpen((current) => !current);
           }}
         >
-          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <MessageSquare className="size-3.5" />
           </div>
           <div className="min-w-0">
@@ -178,10 +178,10 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
               </div>
             ) : null}
           </div>
-          <ChevronRight className="mt-1 size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/comment:rotate-90" />
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/comment:rotate-90" />
         </button>
         {comment.url ? (
-          <div className="pr-3 pt-2">
+          <div className="flex items-center pr-3">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button

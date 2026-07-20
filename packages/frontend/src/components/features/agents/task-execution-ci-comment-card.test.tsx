@@ -144,3 +144,19 @@ test("collapses resolved comments by default and toggles comment bodies", () => 
 
   expect(unresolvedView.getByText(comment.body)).toBeTruthy();
 });
+
+test("shows the comment header as clickable and vertically centers its actions", () => {
+  const view = render(
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={comment} isBot={false} />
+    </TooltipProvider>,
+  );
+  const collapseButton = view.getByRole("button", { name: "Collapse comment from reviewer" });
+  const externalButton = view.getByRole("button", { name: "Open comment from reviewer" });
+
+  expect(collapseButton.classList.contains("cursor-pointer")).toBe(true);
+  expect(collapseButton.classList.contains("items-center")).toBe(true);
+  expect(collapseButton.classList.contains("items-start")).toBe(false);
+  expect(externalButton.parentElement?.classList.contains("items-center")).toBe(true);
+  expect(externalButton.parentElement?.classList.contains("pt-2")).toBe(false);
+});
