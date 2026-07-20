@@ -31,13 +31,6 @@ type CommentGroup = {
   title: string | null;
 };
 
-type CommentRenderProgress = {
-  comments: readonly PullRequestReviewComment[];
-  filter: CommentFilter;
-  hideResolved: boolean;
-  count: number;
-};
-
 const COMMENT_FILTERS: Array<{ id: CommentFilter; label: string }> = [
   { id: "all", label: "All" },
   { id: "humans", label: "Humans" },
@@ -89,14 +82,14 @@ const groupComments = (comments: readonly PullRequestReviewComment[]): CommentGr
   return groups.filter((group) => group.comments.length > 0);
 };
 
-const limitCommentGroups = (groups: CommentGroup[], limit: number): CommentGroup[] => {
-  let remaining = limit;
-  return groups.map((group) => {
-    const comments = group.comments.slice(0, remaining);
-    remaining -= comments.length;
-    return { ...group, comments };
+const selectRenderedCommentGroups = (
+  groups: CommentGroup[],
+  renderedCommentIds: ReadonlySet<string>,
+): CommentGroup[] =>
+  groups.flatMap((group) => {
+    const comments = group.comments.filter((comment) => renderedCommentIds.has(comment.id));
+    return comments.length > 0 ? [{ ...group, comments }] : [];
   });
-};
 
 export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiCommentsList({
   comments,
@@ -135,46 +128,31 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
         : groupComments(visibleComments),
     [deferredFilter, visibleComments],
   );
-  const [renderProgress, setRenderProgress] = useState<CommentRenderProgress>(() => ({
-    comments: deferredComments,
-    filter: deferredFilter,
-    hideResolved: deferredHideResolved,
-    count: 0,
-  }));
-  const progressMatchesVisibleComments =
-    renderProgress.comments === deferredComments &&
-    renderProgress.filter === deferredFilter &&
-    renderProgress.hideResolved === deferredHideResolved;
-  const renderedCommentCount = progressMatchesVisibleComments
-    ? Math.min(renderProgress.count, visibleComments.length)
-    : 0;
-  const renderedGroups = useMemo(
-    () => limitCommentGroups(commentGroups, renderedCommentCount),
-    [commentGroups, renderedCommentCount],
+  const [renderedCommentIds, setRenderedCommentIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
   );
+  const renderedGroups = useMemo(
+    () => selectRenderedCommentGroups(commentGroups, renderedCommentIds),
+    [commentGroups, renderedCommentIds],
+  );
+  const nextUnrenderedCommentId = visibleComments.find(
+    (comment) => !renderedCommentIds.has(comment.id),
+  )?.id;
 
   useEffect(() => {
-    if (renderedCommentCount >= visibleComments.length) {
+    if (!nextUnrenderedCommentId) {
       return;
     }
 
     const frameId = globalThis.requestAnimationFrame(() => {
       startTransition(() => {
-        setRenderProgress((current) => {
-          let currentCount = 0;
-          if (
-            current.comments === deferredComments &&
-            current.filter === deferredFilter &&
-            current.hideResolved === deferredHideResolved
-          ) {
-            currentCount = current.count;
+        setRenderedCommentIds((current) => {
+          if (current.has(nextUnrenderedCommentId)) {
+            return current;
           }
-          return {
-            comments: deferredComments,
-            filter: deferredFilter,
-            hideResolved: deferredHideResolved,
-            count: Math.min(currentCount + 1, visibleComments.length),
-          };
+          const next = new Set(current);
+          next.add(nextUnrenderedCommentId);
+          return next;
         });
       });
     });
@@ -182,13 +160,7 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
     return () => {
       globalThis.cancelAnimationFrame(frameId);
     };
-  }, [
-    deferredComments,
-    deferredFilter,
-    deferredHideResolved,
-    renderedCommentCount,
-    visibleComments.length,
-  ]);
+  }, [nextUnrenderedCommentId]);
 
   const updateHideResolved = (hideResolved: boolean): void => {
     const nextFilters = { hideResolved };
@@ -275,23 +247,24 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
                 No comments for this filter.
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
-                {renderedGroups.map((group) => (
-                  <section key={group.id} className="flex flex-col gap-2">
-                    {group.title ? (
-                      <h4 className="text-xs font-semibold text-muted-foreground">{group.title}</h4>
-                    ) : null}
-                    <div className="flex flex-col gap-2">
-                      {group.comments.map((comment) => (
-                        <TaskExecutionCiCommentCard
-                          key={comment.id}
-                          comment={comment}
-                          isBot={isBotCommentAuthor(comment.author)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                ))}
+              <div className="flex flex-col gap-2">
+                {renderedGroups.flatMap((group) => [
+                  group.title ? (
+                    <h4
+                      key={`heading-${group.id}`}
+                      className="mt-2 text-xs font-semibold text-muted-foreground first:mt-0"
+                    >
+                      {group.title}
+                    </h4>
+                  ) : null,
+                  ...group.comments.map((comment) => (
+                    <TaskExecutionCiCommentCard
+                      key={comment.id}
+                      comment={comment}
+                      isBot={isBotCommentAuthor(comment.author)}
+                    />
+                  )),
+                ])}
               </div>
             )}
           </div>

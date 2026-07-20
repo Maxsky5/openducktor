@@ -81,15 +81,18 @@ describe("TaskExecutionCiCommentsList", () => {
     });
   });
 
-  test("preserves comment group nodes when refreshed counts change", async () => {
-    await withAnimationFrameTestDriver(async () => {
+  test("preserves comment group headings when refreshed counts change", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
       const view = render(commentsList([comment("one")]));
+      await frameDriver.flushFrames();
       fireEvent.click(screen.getByRole("button", { name: /Humans/ }));
-      const originalSection = screen.getByText("Needs review · 1").closest("section");
+      await frameDriver.flushMicrotasks();
+      const originalHeading = screen.getByText("Needs review · 1");
 
       view.rerender(commentsList([comment("one"), comment("two")]));
+      await frameDriver.flushMicrotasks();
 
-      expect(screen.getByText("Needs review · 2").closest("section")).toBe(originalSection);
+      expect(screen.getByText("Needs review · 2") === originalHeading).toBe(true);
     });
   });
 
@@ -177,6 +180,44 @@ describe("TaskExecutionCiCommentsList", () => {
 
       view.unmount();
 
+      expect(frameDriver.pendingFrameCount()).toBe(0);
+    });
+  });
+
+  test("keeps visible comment nodes mounted when hiding resolved comments", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      render(
+        commentsList([
+          comment("unresolved", "unresolved-author"),
+          { ...comment("resolved", "resolved-author"), isResolved: true },
+        ]),
+      );
+      await frameDriver.flushFrames();
+      const retainedComment = screen.getByText("unresolved-author").closest("article");
+
+      fireEvent.click(screen.getByRole("button", { name: "Filter comments" }));
+      fireEvent.click(screen.getByRole("switch", { name: "Hide resolved" }));
+      await frameDriver.flushMicrotasks();
+
+      expect(screen.queryByText("resolved-author")).toBeNull();
+      expect(screen.getByText("unresolved-author").closest("article") === retainedComment).toBe(
+        true,
+      );
+      expect(frameDriver.pendingFrameCount()).toBe(0);
+    });
+  });
+
+  test("keeps visible comment nodes mounted when changing comment tabs", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      render(commentsList([comment("human", "human-author"), comment("bot", "review-bot[bot]")]));
+      await frameDriver.flushFrames();
+      const retainedComment = screen.getByText("human-author").closest("article");
+
+      fireEvent.click(screen.getByRole("button", { name: /Humans/ }));
+      await frameDriver.flushMicrotasks();
+
+      expect(screen.queryByText("review-bot[bot]")).toBeNull();
+      expect(screen.getByText("human-author").closest("article") === retainedComment).toBe(true);
       expect(frameDriver.pendingFrameCount()).toBe(0);
     });
   });
