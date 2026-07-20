@@ -527,6 +527,45 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     }
   });
 
+  test("bounds readiness probing by the startup deadline", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-opencode-readiness-timeout-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const opencodeBinary = await createFakeOpenCode(root);
+      const starter = createOpenCodeWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
+        startupTimeoutMs: 40,
+        retryDelayMs: 1,
+        portAllocator: () => Effect.succeed(43123),
+        readinessProbe: () => Effect.sleep("50 millis").pipe(Effect.as(false)),
+      });
+
+      const startedAt = Date.now();
+      await expect(
+        Effect.runPromise(
+          starter.startWorkspaceRuntime({
+            runtimeKind: "opencode",
+            repoPath: repo,
+            workingDirectory: repo,
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          }),
+        ),
+      ).rejects.toThrow("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
+
+      expect(Date.now() - startedAt).toBeLessThan(500);
+    } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
   test("releases exactly its live runtime when the OpenCode process exits unexpectedly", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-live-close-"));
     try {
