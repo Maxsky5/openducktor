@@ -341,6 +341,25 @@ describe("buildClaudeAgentSdkOptions", () => {
             "Tool Bash is disabled for read-only OpenDucktor workflow roles.",
         },
       });
+      for (const tool of [
+        { toolName: "mcp__semble__search", toolInput: { query: "authentication flow" } },
+        { toolName: "mcp__serena__initial_instructions", toolInput: {} },
+        {
+          toolName: "Agent",
+          toolInput: {
+            description: "Inspect authentication",
+            prompt: "Inspect the repository without modifying files.",
+            subagent_type: "Explore",
+          },
+        },
+      ]) {
+        expect(
+          await preToolUseHook(options, {
+            permissionMode: "bypassPermissions",
+            ...tool,
+          }),
+        ).toEqual({});
+      }
     } finally {
       session.abortController.abort();
       await rm(cwd, { recursive: true, force: true });

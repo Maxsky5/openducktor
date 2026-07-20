@@ -273,7 +273,7 @@ describe("Claude permission questions", () => {
     expect(session.pendingApprovals.size).toBe(0);
   });
 
-  test("denies unclassified tools in read-only roles before creating approval requests", async () => {
+  test("denies classified mutating tools in read-only roles", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
@@ -284,8 +284,8 @@ describe("Claude permission questions", () => {
     });
 
     const result = await canUseTool(
-      "ExternalWriteTool",
-      {},
+      "TodoWrite",
+      { todos: [] },
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
@@ -295,10 +295,44 @@ describe("Claude permission questions", () => {
     expect(result).toEqual({
       behavior: "deny",
       decisionClassification: "user_reject",
-      message:
-        "Tool ExternalWriteTool is not classified as read-only for OpenDucktor spec sessions.",
+      message: "Tool TodoWrite is disabled for read-only OpenDucktor workflow roles.",
     });
     expect(events).toEqual([]);
     expect(session.pendingApprovals.size).toBe(0);
+  });
+
+  test("delegates unclassified external tools to the configured approval flow", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    const toolInput = { query: "authentication flow" };
+    const resultPromise = canUseTool("mcp__semble__search", toolInput, {
+      signal: new AbortController().signal,
+      toolUseID: "tool-use-1",
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "request-1",
+        mutation: "unknown",
+        tool: {
+          name: "mcp__semble__search",
+          input: toolInput,
+        },
+      }),
+    ]);
+    expect(session.pendingApprovals.has("request-1")).toBe(true);
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: toolInput,
+    });
   });
 });
