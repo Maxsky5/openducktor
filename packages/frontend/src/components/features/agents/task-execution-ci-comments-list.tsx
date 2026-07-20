@@ -25,12 +25,6 @@ import { isBotCommentAuthor } from "./task-execution-ci-presentation";
 
 type CommentFilter = "all" | "humans" | "bots";
 
-type CommentGroup = {
-  id: "all" | "conversation" | "needs-review" | "resolved";
-  comments: PullRequestReviewComment[];
-  title: string | null;
-};
-
 const COMMENT_FILTERS: Array<{ id: CommentFilter; label: string }> = [
   { id: "all", label: "All" },
   { id: "humans", label: "Humans" },
@@ -50,46 +44,20 @@ const filterComments = (
   const commentsByResolution = hideResolved
     ? comments.filter((comment) => comment.isResolved !== true)
     : comments;
-  if (filter === "all") {
-    return commentsByResolution.toSorted(
-      (left, right) => commentTimestamp(right) - commentTimestamp(left),
-    );
+  let commentsByAuthor = commentsByResolution;
+  if (filter !== "all") {
+    commentsByAuthor = commentsByResolution.filter((comment) => {
+      const isBot = isBotCommentAuthor(comment.author);
+      if (filter === "bots") {
+        return isBot;
+      }
+      return !isBot;
+    });
   }
-  return commentsByResolution.filter((comment) => {
-    const isBot = isBotCommentAuthor(comment.author);
-    return filter === "bots" ? isBot : !isBot;
-  });
+  return commentsByAuthor.toSorted(
+    (left, right) => commentTimestamp(right) - commentTimestamp(left),
+  );
 };
-
-const groupComments = (comments: readonly PullRequestReviewComment[]): CommentGroup[] => {
-  const needsReview = comments.filter((comment) => comment.isResolved === false);
-  const conversation = comments.filter((comment) => comment.isResolved === null);
-  const resolved = comments.filter((comment) => comment.isResolved === true);
-
-  const groups: CommentGroup[] = [
-    {
-      id: "needs-review",
-      title: `Needs review · ${needsReview.length}`,
-      comments: needsReview,
-    },
-    {
-      id: "conversation",
-      title: `Conversation · ${conversation.length}`,
-      comments: conversation,
-    },
-    { id: "resolved", title: `Resolved · ${resolved.length}`, comments: resolved },
-  ];
-  return groups.filter((group) => group.comments.length > 0);
-};
-
-const selectRenderedCommentGroups = (
-  groups: CommentGroup[],
-  renderedCommentIds: ReadonlySet<string>,
-): CommentGroup[] =>
-  groups.flatMap((group) => {
-    const comments = group.comments.filter((comment) => renderedCommentIds.has(comment.id));
-    return comments.length > 0 ? [{ ...group, comments }] : [];
-  });
 
 export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiCommentsList({
   comments,
@@ -121,19 +89,12 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
     () => filterComments(deferredComments, deferredFilter, deferredHideResolved),
     [deferredComments, deferredFilter, deferredHideResolved],
   );
-  const commentGroups = useMemo<CommentGroup[]>(
-    () =>
-      deferredFilter === "all"
-        ? [{ id: "all", title: null, comments: visibleComments }]
-        : groupComments(visibleComments),
-    [deferredFilter, visibleComments],
-  );
   const [renderedCommentIds, setRenderedCommentIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const renderedGroups = useMemo(
-    () => selectRenderedCommentGroups(commentGroups, renderedCommentIds),
-    [commentGroups, renderedCommentIds],
+  const renderedComments = useMemo(
+    () => visibleComments.filter((comment) => renderedCommentIds.has(comment.id)),
+    [renderedCommentIds, visibleComments],
   );
   const nextUnrenderedCommentId = visibleComments.find(
     (comment) => !renderedCommentIds.has(comment.id),
@@ -248,23 +209,13 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                {renderedGroups.flatMap((group) => [
-                  group.title ? (
-                    <h4
-                      key={`heading-${group.id}`}
-                      className="mt-2 text-xs font-semibold text-muted-foreground first:mt-0"
-                    >
-                      {group.title}
-                    </h4>
-                  ) : null,
-                  ...group.comments.map((comment) => (
-                    <TaskExecutionCiCommentCard
-                      key={comment.id}
-                      comment={comment}
-                      isBot={isBotCommentAuthor(comment.author)}
-                    />
-                  )),
-                ])}
+                {renderedComments.map((comment) => (
+                  <TaskExecutionCiCommentCard
+                    key={comment.id}
+                    comment={comment}
+                    isBot={isBotCommentAuthor(comment.author)}
+                  />
+                ))}
               </div>
             )}
           </div>

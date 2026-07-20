@@ -81,18 +81,63 @@ describe("TaskExecutionCiCommentsList", () => {
     });
   });
 
-  test("preserves comment group headings when refreshed counts change", async () => {
+  test("renders Humans and Bots newest first without status groups", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
-      const view = render(commentsList([comment("one")]));
+      render(
+        commentsList([
+          {
+            ...comment("new-human", "new-human-author"),
+            createdAt: "2026-07-12T10:00:00Z",
+            isResolved: true,
+          },
+          {
+            ...comment("old-human", "old-human-author"),
+            createdAt: "2026-07-08T10:00:00Z",
+          },
+          {
+            ...comment("middle-human", "middle-human-author"),
+            createdAt: "2026-07-10T10:00:00Z",
+            isResolved: null,
+          },
+          {
+            ...comment("new-bot", "new-bot[bot]"),
+            createdAt: "2026-07-11T10:00:00Z",
+            isResolved: true,
+          },
+          {
+            ...comment("old-bot", "old-bot[bot]"),
+            createdAt: "2026-07-07T10:00:00Z",
+          },
+          {
+            ...comment("middle-bot", "middle-bot[bot]"),
+            createdAt: "2026-07-09T10:00:00Z",
+            isResolved: null,
+          },
+        ]),
+      );
       await frameDriver.flushFrames();
+
       fireEvent.click(screen.getByRole("button", { name: /Humans/ }));
       await frameDriver.flushMicrotasks();
-      const originalHeading = screen.getByText("Needs review · 1");
+      let renderedComments = screen.getAllByRole("article");
 
-      view.rerender(commentsList([comment("one"), comment("two")]));
+      expect(renderedComments[0]?.textContent).toContain("new-human-author");
+      expect(renderedComments[1]?.textContent).toContain("middle-human-author");
+      expect(renderedComments[2]?.textContent).toContain("old-human-author");
+      expect(screen.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /Bots/ }));
       await frameDriver.flushMicrotasks();
+      renderedComments = screen.getAllByRole("article");
 
-      expect(screen.getByText("Needs review · 2") === originalHeading).toBe(true);
+      expect(renderedComments[0]?.textContent).toContain("new-bot[bot]");
+      expect(renderedComments[1]?.textContent).toContain("middle-bot[bot]");
+      expect(renderedComments[2]?.textContent).toContain("old-bot[bot]");
+      expect(screen.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
     });
   });
 
