@@ -263,7 +263,8 @@ describe("TaskExecutionCiChecksPanel", () => {
       expect(html).toContain("Bots");
       expect(html).toContain("codex");
       expect(html).toContain("Bot");
-      expect(html).toContain("Needs review");
+      expect(html).not.toContain("Needs review ·");
+      expect(html).toContain("Filter comments");
       expect(html).toContain("Unresolved");
       expect(html).toContain("This thread still needs work.");
       expect(html).toContain("isAnyLoading");

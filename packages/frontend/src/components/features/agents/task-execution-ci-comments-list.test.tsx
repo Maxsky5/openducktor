@@ -20,6 +20,33 @@ const comment = (id: string, author = "reviewer"): PullRequestReviewComment => (
   source: "review_thread",
 });
 
+const createMemoryStorage = (): Storage => {
+  const values = new Map<string, string>();
+  return {
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => Array.from(values.keys())[index] ?? null,
+    get length() {
+      return values.size;
+    },
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => values.set(key, value),
+  };
+};
+
+const withLocalStorage = async (storage: Storage, run: () => Promise<void>): Promise<void> => {
+  const originalStorage = globalThis.localStorage;
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+  try {
+    await run();
+  } finally {
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: originalStorage,
+    });
+  }
+};
+
 describe("TaskExecutionCiCommentsList", () => {
   test("skips stable comment inputs and renders changed comments", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
@@ -54,11 +81,40 @@ describe("TaskExecutionCiCommentsList", () => {
   test("preserves comment group nodes when refreshed counts change", async () => {
     await withAnimationFrameTestDriver(async () => {
       const view = render(<TaskExecutionCiCommentsList comments={[comment("one")]} />);
+      fireEvent.click(screen.getByRole("button", { name: /Humans/ }));
       const originalSection = screen.getByText("Needs review · 1").closest("section");
 
       view.rerender(<TaskExecutionCiCommentsList comments={[comment("one"), comment("two")]} />);
 
       expect(screen.getByText("Needs review · 2").closest("section")).toBe(originalSection);
+    });
+  });
+
+  test("renders All comments newest first without status groups", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      render(
+        <TaskExecutionCiCommentsList
+          comments={[
+            { ...comment("oldest", "oldest-author"), createdAt: "2026-07-08T10:00:00Z" },
+            {
+              ...comment("newest", "newest-author"),
+              createdAt: "2026-07-12T10:00:00Z",
+              isResolved: true,
+            },
+            { ...comment("middle", "middle-author"), createdAt: "2026-07-10T10:00:00Z" },
+          ]}
+        />,
+      );
+
+      await frameDriver.flushFrames();
+
+      const renderedComments = screen.getAllByRole("article");
+      expect(renderedComments[0]?.textContent).toContain("newest-author");
+      expect(renderedComments[1]?.textContent).toContain("middle-author");
+      expect(renderedComments[2]?.textContent).toContain("oldest-author");
+      expect(screen.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
     });
   });
 
@@ -121,6 +177,45 @@ describe("TaskExecutionCiCommentsList", () => {
       view.unmount();
 
       expect(frameDriver.pendingFrameCount()).toBe(0);
+    });
+  });
+
+  test("hides resolved comments and restores the persisted filter", async () => {
+    const storage = createMemoryStorage();
+    await withLocalStorage(storage, async () => {
+      await withAnimationFrameTestDriver(async (frameDriver) => {
+        const comments = [
+          comment("unresolved", "unresolved-author"),
+          { ...comment("resolved", "resolved-author"), isResolved: true },
+        ];
+        const view = render(<TaskExecutionCiCommentsList comments={comments} />);
+        await frameDriver.flushFrames();
+
+        expect(screen.getByText("resolved-author")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Filter comments" }));
+        const hideResolvedSwitch = screen.getByRole("switch", { name: "Hide resolved" });
+        expect(hideResolvedSwitch.getAttribute("aria-checked")).toBe("false");
+
+        fireEvent.click(hideResolvedSwitch);
+        await frameDriver.flushMicrotasks();
+        await frameDriver.flushFrames();
+
+        expect(screen.queryByText("resolved-author")).toBeNull();
+        expect(screen.getByText("unresolved-author")).toBeTruthy();
+        view.unmount();
+
+        const restoredView = render(<TaskExecutionCiCommentsList comments={comments} />);
+        fireEvent.click(screen.getByRole("button", { name: "Filter comments" }));
+        expect(
+          screen.getByRole("switch", { name: "Hide resolved" }).getAttribute("aria-checked"),
+        ).toBe("true");
+        await frameDriver.flushFrames();
+        expect(screen.queryByText("resolved-author")).toBeNull();
+        expect(screen.getByText("unresolved-author")).toBeTruthy();
+
+        restoredView.unmount();
+        await frameDriver.flushMicrotasks();
+      });
     });
   });
 });

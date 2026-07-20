@@ -112,3 +112,35 @@ test("labels suggested changes as a distinct review section", () => {
   expect(view.getByRole("heading", { name: "Suggested change" })).toBeTruthy();
   expect(view.getByLabelText("Suggested change")).toBeTruthy();
 });
+
+test("collapses resolved comments by default and toggles comment bodies", () => {
+  const resolvedComment = {
+    ...comment,
+    body: "Resolved review guidance.",
+    isResolved: true,
+  };
+  const resolvedView = render(
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={resolvedComment} isBot={false} />
+    </TooltipProvider>,
+  );
+
+  expect(resolvedView.queryByText(resolvedComment.body)).toBeNull();
+
+  fireEvent.click(resolvedView.getByRole("button", { name: "Expand comment from reviewer" }));
+
+  expect(resolvedView.getByText(resolvedComment.body)).toBeTruthy();
+
+  fireEvent.click(resolvedView.getByRole("button", { name: "Collapse comment from reviewer" }));
+
+  expect(resolvedView.queryByText(resolvedComment.body)).toBeNull();
+  resolvedView.unmount();
+
+  const unresolvedView = render(
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={comment} isBot={false} />
+    </TooltipProvider>,
+  );
+
+  expect(unresolvedView.getByText(comment.body)).toBeTruthy();
+});
