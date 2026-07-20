@@ -244,7 +244,7 @@ describe("TaskExecutionCiChecksPanel", () => {
         </QueryProvider>,
       );
 
-      expect(view.container.innerHTML).toContain("Rendering 0 of 1 comment");
+      expect(view.container.innerHTML).not.toContain("This thread still needs work.");
       await frameDriver.flushFrame();
       const html = view.container.innerHTML;
 

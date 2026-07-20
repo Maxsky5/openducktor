@@ -8,7 +8,7 @@ import {
   PanelRightOpen,
 } from "lucide-react";
 import type { ReactElement } from "react";
-import { Activity, memo, useState } from "react";
+import { memo, useState } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -160,7 +160,6 @@ function TaskExecutionPanelHeaderActions({
 
 function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): ReactElement {
   const ciTabIndicator = useTaskExecutionCiTabIndicator(model.ciChecksModel?.queryInput);
-  const ciChecksActivityMode = model.activeTabId === "ci_checks" ? "visible" : "hidden";
 
   return (
     <TooltipProvider>
@@ -202,10 +201,8 @@ function TaskExecutionPanelTabs({ model }: { model: TaskExecutionPanelModel }): 
           <TaskExecutionFileExplorerPanel model={model.fileExplorerModel} />
         </TabsContent>
         {model.ciChecksModel ? (
-          <TabsContent value="ci_checks" className="min-h-0 overflow-hidden" forceMount>
-            <Activity mode={ciChecksActivityMode}>
-              <TaskExecutionCiChecksPanel model={model.ciChecksModel} />
-            </Activity>
+          <TabsContent value="ci_checks" className="min-h-0 overflow-hidden">
+            <TaskExecutionCiChecksPanel model={model.ciChecksModel} />
           </TabsContent>
         ) : null}
       </Tabs>

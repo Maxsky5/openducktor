@@ -669,7 +669,7 @@ describe("TaskExecutionPanel", () => {
 
   test("activates cached CI content within budget before heavy comments render", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
-      const comments = Array.from({ length: 40 }, (_, index) => createPerformanceComment(index));
+      const comments = Array.from({ length: 100 }, (_, index) => createPerformanceComment(index));
       const context = {
         ...createLoadedCiContext({ checks: [], openThreadCount: comments.length }),
         comments,
@@ -688,8 +688,43 @@ describe("TaskExecutionPanel", () => {
 
       expect(ciTab.getAttribute("aria-selected")).toBe("true");
       expect(activationDuration).toBeLessThan(CI_INTERACTION_BUDGET_MS);
-      expect(screen.getByText("Rendering 0 of 40 comments…")).toBeTruthy();
       expect(screen.queryByText("Performance marker 0")).toBeNull();
+      expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
+
+      view.unmount();
+      await frameDriver.flushMicrotasks();
+    });
+  });
+
+  test("unmounts a 100-comment CI panel before reopening", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const comments = Array.from({ length: 100 }, (_, index) => createPerformanceComment(index));
+      const context = {
+        ...createLoadedCiContext({ checks: [], openThreadCount: comments.length }),
+        comments,
+      };
+      const view = renderCiPerformanceHarness({
+        context,
+        initiallyOpen: true,
+        initialTabId: "ci_checks",
+      });
+      const gitTab = screen.getByRole("tab", { name: "Git" });
+
+      expect(screen.getByText("Comments")).toBeTruthy();
+      expect(screen.queryByText("Performance marker 0") === null).toBe(true);
+      expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
+
+      fireEvent.mouseDown(gitTab, { button: 0, ctrlKey: false });
+
+      expect(gitTab.getAttribute("aria-selected")).toBe("true");
+      expect(screen.queryByText("Comments") === null).toBe(true);
+
+      const reopenedCiTab = screen.getByRole("tab", { name: /CI Checks/ });
+      fireEvent.mouseDown(reopenedCiTab, { button: 0, ctrlKey: false });
+
+      expect(reopenedCiTab.getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByText("Comments")).toBeTruthy();
+      expect(screen.queryByText("Performance marker 0") === null).toBe(true);
       expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
 
       view.unmount();
@@ -721,7 +756,6 @@ describe("TaskExecutionPanel", () => {
         "true",
       );
       expect(openDuration).toBeLessThan(CI_INTERACTION_BUDGET_MS);
-      expect(screen.getByText("Rendering 0 of 40 comments…")).toBeTruthy();
       expect(screen.queryByText("Performance marker 0")).toBeNull();
       expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
 

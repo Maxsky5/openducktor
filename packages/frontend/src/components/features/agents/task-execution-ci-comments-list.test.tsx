@@ -71,7 +71,7 @@ describe("TaskExecutionCiCommentsList", () => {
       );
 
       expect(screen.queryByText("Comment human-one")).toBeNull();
-      expect(screen.getByText("Rendering 0 of 3 comments…")).toBeTruthy();
+      expect(screen.queryByText(/Rendering \d+ of/) === null).toBe(true);
       expect(frameDriver.pendingFrameCount()).toBe(1);
 
       await frameDriver.flushFrame();
@@ -83,7 +83,7 @@ describe("TaskExecutionCiCommentsList", () => {
       fireEvent.click(screen.getByRole("button", { name: /Bots/ }));
 
       expect(screen.queryByText("Comment bot")).toBeNull();
-      expect(screen.getByText("Rendering 0 of 1 comment…")).toBeTruthy();
+      expect(screen.queryByText(/Rendering \d+ of/) === null).toBe(true);
       expect(frameDriver.pendingFrameCount()).toBe(1);
 
       await frameDriver.flushFrame();

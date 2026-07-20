@@ -106,7 +106,6 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
     () => limitCommentGroups(groups, renderedCommentCount),
     [groups, renderedCommentCount],
   );
-  const isRenderingComments = renderedCommentCount < visibleComments.length;
 
   useEffect(() => {
     if (renderedCommentCount >= visibleComments.length) {
@@ -180,12 +179,6 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
               </div>
             ) : (
               <div className="space-y-4">
-                {isRenderingComments ? (
-                  <p className="text-xs text-muted-foreground">
-                    Rendering {renderedCommentCount} of {visibleComments.length}{" "}
-                    {visibleComments.length === 1 ? "comment" : "comments"}…
-                  </p>
-                ) : null}
                 {renderedGroups.map((group) => (
                   <section key={group.id} className="space-y-2">
                     <h4 className="text-xs font-semibold text-muted-foreground">{group.title}</h4>
