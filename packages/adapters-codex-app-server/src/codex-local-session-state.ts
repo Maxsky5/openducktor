@@ -11,7 +11,6 @@ type CodexLocalSessionStateDeps = {
   pendingInput: { clearSession(externalSessionId: string, runtimeId?: string): void };
   subagents: { clearSession(externalSessionId: string, runtimeId?: string): void };
   threadStatusOverrides: { clear(runtimeId: string, threadId: string): void };
-  onLastRuntimeSessionReleased(runtimeId: string): void;
   runtimeEvents: {
     clearSession(externalSessionId: string, runtimeId?: string): void;
   };
@@ -39,11 +38,7 @@ export class CodexLocalSessionState implements CodexSessionLookup {
   }
 
   release(externalSessionId: string): CodexSessionState | undefined {
-    const session = this.clearSessionState(externalSessionId);
-    if (session && !this.hasRuntimeSession(session.runtimeId)) {
-      this.deps.onLastRuntimeSessionReleased(session.runtimeId);
-    }
-    return session;
+    return this.clearSessionState(externalSessionId);
   }
 
   releaseRuntime(runtimeId: string): CodexSessionState[] {
@@ -72,14 +67,5 @@ export class CodexLocalSessionState implements CodexSessionLookup {
     this.deps.subagents.clearSession(externalSessionId, session?.runtimeId);
     this.deps.runtimeEvents.clearSession(externalSessionId, session?.runtimeId);
     return session;
-  }
-
-  hasRuntimeSession(runtimeId: string): boolean {
-    for (const session of this.sessions.values()) {
-      if (session.runtimeId === runtimeId) {
-        return true;
-      }
-    }
-    return false;
   }
 }

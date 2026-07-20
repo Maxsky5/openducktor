@@ -26,7 +26,6 @@ const createStore = () => {
   const clearedRuntimeEvents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedSubagents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedThreadStatusOverrides: Array<{ runtimeId: string; threadId: string }> = [];
-  const stoppedRuntimeSubscriptions: string[] = [];
   const activeTurnsBySessionId = new Map<string, unknown>();
   const store = new CodexLocalSessionState({
     sessionEvents: {
@@ -47,7 +46,6 @@ const createStore = () => {
       clearSession: (externalSessionId, runtimeId) =>
         clearedRuntimeEvents.push({ externalSessionId, runtimeId }),
     },
-    onLastRuntimeSessionReleased: (runtimeId) => stoppedRuntimeSubscriptions.push(runtimeId),
   });
   return {
     store,
@@ -57,7 +55,6 @@ const createStore = () => {
     clearedRuntimeEvents,
     clearedSubagents,
     clearedThreadStatusOverrides,
-    stoppedRuntimeSubscriptions,
   };
 };
 
@@ -82,7 +79,6 @@ describe("CodexLocalSessionState", () => {
       clearedRuntimeEvents,
       clearedSubagents,
       clearedThreadStatusOverrides,
-      stoppedRuntimeSubscriptions,
     } = createStore();
     store.remember(session("thread-1"));
     store.remember(session("thread-2"));
@@ -105,27 +101,21 @@ describe("CodexLocalSessionState", () => {
     expect(clearedThreadStatusOverrides).toEqual([
       { runtimeId: "runtime-1", threadId: "thread-1" },
     ]);
-    expect(stoppedRuntimeSubscriptions).toEqual([]);
   });
 
-  test("stops runtime subscription when the last local session for a runtime is released", () => {
-    const { store, stoppedRuntimeSubscriptions } = createStore();
+  test("releases the last local session without runtime coordination", () => {
+    const { store } = createStore();
     store.remember(session("thread-1", "runtime-1"));
     store.remember(session("thread-2", "runtime-2"));
 
     store.release("thread-1");
 
-    expect(stoppedRuntimeSubscriptions).toEqual(["runtime-1"]);
+    expect(store.has("thread-1")).toBe(false);
   });
 
   test("releases every local session for one stopped runtime without affecting another", () => {
-    const {
-      store,
-      activeTurnsBySessionId,
-      clearedSessionEvents,
-      clearedRuntimeEvents,
-      stoppedRuntimeSubscriptions,
-    } = createStore();
+    const { store, activeTurnsBySessionId, clearedSessionEvents, clearedRuntimeEvents } =
+      createStore();
     store.remember(session("thread-1", "runtime-1"));
     store.remember(session("thread-2", "runtime-1"));
     store.remember(session("thread-3", "runtime-2"));
@@ -147,16 +137,10 @@ describe("CodexLocalSessionState", () => {
       { externalSessionId: "thread-1", runtimeId: "runtime-1" },
       { externalSessionId: "thread-2", runtimeId: "runtime-1" },
     ]);
-    expect(stoppedRuntimeSubscriptions).toEqual([]);
   });
 
   test("clears missing local sessions without throwing", () => {
-    const {
-      store,
-      activeTurnsBySessionId,
-      clearedThreadStatusOverrides,
-      stoppedRuntimeSubscriptions,
-    } = createStore();
+    const { store, activeTurnsBySessionId, clearedThreadStatusOverrides } = createStore();
     store.remember(session("thread-2"));
     activeTurnsBySessionId.set("thread-2", {});
 
@@ -165,6 +149,5 @@ describe("CodexLocalSessionState", () => {
     expect(store.has("thread-2")).toBe(true);
     expect(activeTurnsBySessionId.has("thread-2")).toBe(true);
     expect(clearedThreadStatusOverrides).toEqual([]);
-    expect(stoppedRuntimeSubscriptions).toEqual([]);
   });
 });

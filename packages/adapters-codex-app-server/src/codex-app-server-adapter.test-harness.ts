@@ -90,16 +90,9 @@ type TestRuntimeStreamListener = (event: {
 
 export const createRuntimeStreamSubscription = () => {
   const streamListeners: TestRuntimeStreamListener[] = [];
-  const unsubscribedRuntimeIds: string[] = [];
   const subscribeEvents = mock((_runtimeId: string, listener: TestRuntimeStreamListener) => {
     streamListeners.push(listener);
-    return () => {
-      unsubscribedRuntimeIds.push(_runtimeId);
-      const index = streamListeners.indexOf(listener);
-      if (index >= 0) {
-        streamListeners.splice(index, 1);
-      }
-    };
+    return () => {};
   });
   const emitEvent = (
     kind: "notification" | "server_request",
@@ -119,7 +112,7 @@ export const createRuntimeStreamSubscription = () => {
     emitEvent("notification", message, receivedAt);
   const emitServerRequest = (message: unknown, receivedAt?: string) =>
     emitEvent("server_request", message, receivedAt);
-  return { subscribeEvents, emitNotification, emitServerRequest, unsubscribedRuntimeIds };
+  return { subscribeEvents, emitNotification, emitServerRequest };
 };
 
 export const createDeferred = <T>() => {
