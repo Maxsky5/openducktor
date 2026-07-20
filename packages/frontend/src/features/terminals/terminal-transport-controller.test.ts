@@ -4,6 +4,7 @@ import {
   encodeTerminalProtocolFrame,
   TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_VERSION,
+  type TerminalFailure,
 } from "@openducktor/contracts";
 import type {
   TerminalBridge,
@@ -15,6 +16,44 @@ import { createTerminalTransportController } from "./terminal-transport-controll
 const terminalId = "terminal-1";
 
 describe("createTerminalTransportController", () => {
+  test("surfaces a bridge transport failure before reconnecting", async () => {
+    const bridgeCallbacks: {
+      reportFailure: ((failure: TerminalFailure) => void) | undefined;
+    } = { reportFailure: undefined };
+    const failures: TerminalFailure[] = [];
+    const bridge: TerminalBridge = {
+      connect: async (_onFrame, _onStateChange, onFailure?: (failure: TerminalFailure) => void) => {
+        bridgeCallbacks.reportFailure = onFailure;
+        return {
+          send: async () => undefined,
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(
+      bridge,
+      () => undefined,
+      (failure) => failures.push(failure),
+    );
+    await controller.connect();
+
+    const reportFailure = bridgeCallbacks.reportFailure;
+    if (!reportFailure)
+      throw new Error("Expected the controller to bind a transport failure callback.");
+    reportFailure({
+      code: "protocol_error",
+      message: "Terminal outbound queue limit exceeded.",
+    });
+
+    expect(failures).toEqual([
+      {
+        code: "protocol_error",
+        message: "Terminal outbound queue limit exceeded.",
+      },
+    ]);
+    await controller.dispose();
+  });
+
   test("waits for an in-flight connection before sending the initial resize", async () => {
     const sent: Uint8Array[] = [];
     let resolveConnection = (_connection: TerminalTransportConnection): void => {

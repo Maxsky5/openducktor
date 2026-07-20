@@ -3,6 +3,7 @@ import type {
   AgentSessionLiveRefreshInput,
   AppUpdateCommandResult,
   AppUpdateState,
+  TerminalFailure,
 } from "@openducktor/contracts";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 
@@ -48,6 +49,7 @@ export type TerminalBridge = {
   connect(
     onFrame: (frame: Uint8Array) => void,
     onStateChange: (state: TerminalTransportState) => void,
+    onFailure: (failure: TerminalFailure) => void,
   ): Promise<TerminalTransportConnection>;
 };
 

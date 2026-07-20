@@ -332,6 +332,41 @@ describe("OpenCode session runtime connection", () => {
     expect(harness.streamSignal()?.aborted).toBe(true);
   });
 
+  test("aborts initialization while the authoritative session read is pending", async () => {
+    let reportListStarted = (): void => undefined;
+    const listStarted = new Promise<void>((resolve) => {
+      reportListStarted = resolve;
+    });
+    let releaseList = (): void => undefined;
+    const listBarrier = new Promise<void>((resolve) => {
+      releaseList = resolve;
+    });
+    const harness = createLiveClientHarness({
+      onList: reportListStarted,
+      listBarrier,
+    });
+    const controller = new AbortController();
+    const preparing = createPrepareRuntime(harness)({
+      ...runtimeInput,
+      signal: controller.signal,
+    });
+    await listStarted;
+
+    controller.abort();
+    const outcome = await Promise.race([
+      preparing.then(
+        () => "resolved" as const,
+        () => "rejected" as const,
+      ),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 50)),
+    ]);
+    releaseList();
+    await preparing.catch(() => undefined);
+
+    expect(outcome).toBe("rejected");
+    expect(harness.streamSignal()?.aborted).toBe(true);
+  });
+
   test("keeps a shared runtime event stream alive when one initializer is aborted", async () => {
     const harness = createLiveClientHarness({ initiallyConnected: false });
     const prepareRuntime = createPrepareRuntime(harness);

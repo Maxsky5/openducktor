@@ -176,14 +176,21 @@ export const createTerminalTransportController = (
     connectionState = { status: "disconnected" };
     if (replaceExisting && previousConnection) await closeConnection(previousConnection);
     const pending = Promise.resolve().then(() =>
-      bridge.connect(handleFrame, (state) => {
-        if (connectionState.status === "disposed" || generation !== connectionGeneration) return;
-        if (state === "disconnected") {
-          transitionToDisconnected();
-        } else {
-          onStateChange(state);
-        }
-      }),
+      bridge.connect(
+        handleFrame,
+        (state) => {
+          if (connectionState.status === "disposed" || generation !== connectionGeneration) return;
+          if (state === "disconnected") {
+            transitionToDisconnected();
+          } else {
+            onStateChange(state);
+          }
+        },
+        (failure) => {
+          if (connectionState.status === "disposed" || generation !== connectionGeneration) return;
+          transitionToDisconnected({ failure });
+        },
+      ),
     );
     connectionState = { status: "connecting", generation, pending };
     let connected: TerminalTransportConnection;

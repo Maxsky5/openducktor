@@ -79,6 +79,36 @@ export type PrepareOpencodeSessionRuntime = (
   input: PrepareOpencodeSessionRuntimeInput,
 ) => Promise<PreparedOpencodeSessionRuntime>;
 
+const runtimeInitializationAbortFailure = (signal: AbortSignal, runtimeId: string): Error =>
+  signal.reason instanceof Error
+    ? signal.reason
+    : new Error(`OpenCode runtime '${runtimeId}' initialization was aborted.`);
+
+const waitForRuntimeInitialization = <Value>(
+  initialization: Promise<Value>,
+  signal: AbortSignal | undefined,
+  runtimeId: string,
+): Promise<Value> => {
+  if (!signal) return initialization;
+  return new Promise<Value>((resolve, reject) => {
+    let settled = false;
+    const finish = (complete: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      complete();
+    };
+    const abort = (): void =>
+      finish(() => reject(runtimeInitializationAbortFailure(signal, runtimeId)));
+    signal.addEventListener("abort", abort, { once: true });
+    void initialization.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+    if (signal.aborted) abort();
+  });
+};
+
 const releaseEventSessions = async (
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
@@ -294,12 +324,12 @@ export const createPrepareOpencodeSessionRuntime = (
       ...(options.logEvent ? { logEvent: options.logEvent } : {}),
     });
 
-    let initialSources: OpencodeRuntimeSnapshotSource[];
-    try {
-      initialSources = await readSessionSources();
+    const initialize = async (): Promise<OpencodeRuntimeSnapshotSource[]> => {
+      let initialSources = await readSessionSources();
       subscribersReady = true;
       for (const event of eventsBeforeSubscribers.splice(0)) {
         await observation.dispatch(event);
+        requireActive();
       }
       const capturedEvents = initializationEvents.splice(0);
       for (const event of capturedEvents) {
@@ -313,10 +343,21 @@ export const createPrepareOpencodeSessionRuntime = (
         captureContext(event);
       }
       await drainTranscriptSignals();
+      requireActive();
       if (eventsDuringFinalRead.some(opencodeEventInvalidatesSessions)) {
         pendingSignals.push({ type: "sessions_invalidated" });
       }
       initializing = false;
+      return initialSources;
+    };
+
+    let initialSources: OpencodeRuntimeSnapshotSource[];
+    try {
+      initialSources = await waitForRuntimeInitialization(
+        initialize(),
+        input.signal,
+        input.runtimeId,
+      );
     } catch (error) {
       released = true;
       const cleanupFailures: unknown[] = [];

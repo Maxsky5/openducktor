@@ -1,4 +1,4 @@
-import { TERMINAL_PROTOCOL_SUBPROTOCOL } from "@openducktor/contracts";
+import { TERMINAL_PROTOCOL_SUBPROTOCOL, type TerminalFailure } from "@openducktor/contracts";
 import type { TerminalBridge } from "@openducktor/frontend";
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "../browser-config";
@@ -14,8 +14,17 @@ const terminalSocketUrl = (baseUrl: string): string => {
   return url.toString();
 };
 
+const readTerminalSocketCloseFailure = (event: CloseEvent): TerminalFailure | null => {
+  if (event.code === 1000) return null;
+  const reason = event.reason.trim();
+  return {
+    code: "protocol_error",
+    message: reason || `Terminal WebSocket closed unexpectedly with code ${event.code}.`,
+  };
+};
+
 export const createBrowserTerminalBridge = (): TerminalBridge => ({
-  connect: (onFrame, onStateChange) =>
+  connect: (onFrame, onStateChange, onFailure) =>
     runWebBoundary(
       Effect.gen(function* () {
         yield* ensureLocalHostSessionDedupedEffect();
@@ -45,7 +54,11 @@ export const createBrowserTerminalBridge = (): TerminalBridge => ({
         socket.addEventListener("message", (event) => {
           if (event.data instanceof ArrayBuffer) onFrame(new Uint8Array(event.data));
         });
-        socket.addEventListener("close", () => onStateChange("disconnected"));
+        socket.addEventListener("close", (event) => {
+          const failure = readTerminalSocketCloseFailure(event);
+          if (failure) onFailure(failure);
+          onStateChange("disconnected");
+        });
         onStateChange("connected");
         return {
           send: async (frame: Uint8Array): Promise<void> => {
