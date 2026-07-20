@@ -30,6 +30,7 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigation";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
@@ -154,23 +155,20 @@ export function useKanbanSessionStartFlow({
 
   const openAgents = useCallback(
     (taskId: string, role: AgentRole): void => {
-      const params = new URLSearchParams({
-        task: taskId,
-        agent: role,
-      });
-      navigate(`/agents?${params.toString()}`);
+      navigate(buildAgentStudioHref({ taskId, sessionExternalId: null, role }));
     },
     [navigate],
   );
 
   const openSessionInAgentStudio = useCallback(
     (intent: KanbanSessionStartIntent, session: AgentSessionIdentity): void => {
-      const params = new URLSearchParams({
-        task: intent.taskId,
-        session: session.externalSessionId,
-        agent: intent.role,
-      });
-      navigate(`/agents?${params.toString()}`);
+      navigate(
+        buildAgentStudioHref({
+          taskId: intent.taskId,
+          sessionExternalId: session.externalSessionId,
+          role: intent.role,
+        }),
+      );
     },
     [navigate],
   );

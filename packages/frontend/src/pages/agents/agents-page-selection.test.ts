@@ -11,7 +11,6 @@ import {
   resolveAgentStudioBuilderSessionsForTask,
   resolveAgentStudioDefaultRoleForTask,
   resolveAgentStudioSessionSelection,
-  resolveAgentStudioTaskId,
   toContextStorageKey,
   toRightPanelStorageKey,
   toTabsStorageKey,
@@ -161,27 +160,6 @@ describe("agents-page-selection", () => {
         { providerId: "openai", modelId: "gpt-5", variant: "fast" },
       ),
     ).toBe(false);
-  });
-
-  test("prefers explicit task id over session-derived task id", () => {
-    const session = createAgentSessionSummaryFixture({
-      runtimeKind: "opencode",
-      externalSessionId: "session-1",
-      taskId: "task-from-session",
-    });
-
-    expect(
-      resolveAgentStudioTaskId({
-        taskIdParam: "task-from-url",
-        selectedSessionFromRoute: session,
-      }),
-    ).toBe("task-from-url");
-    expect(
-      resolveAgentStudioTaskId({
-        taskIdParam: "",
-        selectedSessionFromRoute: session,
-      }),
-    ).toBe("task-from-session");
   });
 
   test("resolves default role for open tasks from first required available workflow", () => {

@@ -14,7 +14,10 @@ import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { resolveAgentStudioBuilderSessionsForTask } from "./agents-page-selection";
-import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
+import {
+  type AgentStudioQueryUpdate,
+  buildAgentStudioSelectionQueryUpdate,
+} from "./query-sync/agent-studio-navigation";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 
 type AgentStudioRebaseConflictResolutionSelectionContext = {
@@ -100,11 +103,13 @@ export function useAgentStudioRebaseConflictResolution({
         onOpenSession: (session) => {
           const builderSession =
             builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
-          scheduleQueryUpdate({
-            task: view.taskId,
-            session: session.externalSessionId,
-            agent: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
-          });
+          scheduleQueryUpdate(
+            buildAgentStudioSelectionQueryUpdate({
+              taskId: view.taskId,
+              sessionExternalId: session.externalSessionId,
+              role: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
+            }),
+          );
         },
       });
     },

@@ -16,6 +16,7 @@ import {
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigation";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
@@ -261,12 +262,13 @@ export function useKanbanPageModels({
         builderSessions,
         currentViewSession: null,
         onOpenSession: (session) => {
-          const search = new URLSearchParams({
-            task: taskId,
-            session: session.externalSessionId,
-            agent: "build",
-          });
-          navigate(`/agents?${search.toString()}`);
+          navigate(
+            buildAgentStudioHref({
+              taskId,
+              sessionExternalId: session.externalSessionId,
+              role: "build",
+            }),
+          );
         },
       });
     },

@@ -63,16 +63,6 @@ export const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | 
   qa: null,
 });
 
-export const resolveAgentStudioTaskId = ({
-  taskIdParam,
-  selectedSessionFromRoute,
-}: {
-  taskIdParam: string;
-  selectedSessionFromRoute: AgentSessionSummary | null;
-}): string => {
-  return taskIdParam || selectedSessionFromRoute?.taskId || "";
-};
-
 export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): AgentRole | null => {
   if (!task) {
     return null;

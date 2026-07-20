@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "./agent-studio-test-utils";
 import {
+  buildAgentStudioHref,
   buildAgentStudioSelectionQueryUpdate,
   buildSearchParamsFromNavigationState,
   parseNavigationStateFromSearchParams,
@@ -20,7 +21,7 @@ describe("agent-studio-navigation", () => {
     expect(
       buildAgentStudioSelectionQueryUpdate({
         taskId: "task-1",
-        session,
+        sessionExternalId: session.externalSessionId,
         role: "spec",
       }),
     ).toEqual({
@@ -28,6 +29,29 @@ describe("agent-studio-navigation", () => {
       session: "session-1",
       agent: "spec",
     });
+  });
+
+  test("buildAgentStudioHref builds session and sessionless destinations", () => {
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-1",
+    });
+
+    expect(
+      buildAgentStudioHref({
+        taskId: "task-1",
+        sessionExternalId: session.externalSessionId,
+        role: "build",
+      }),
+    ).toBe("/agents?task=task-1&session=session-1&agent=build");
+    expect(
+      buildAgentStudioHref({
+        taskId: "task-1",
+        sessionExternalId: null,
+        role: "qa",
+      }),
+    ).toBe("/agents?task=task-1&agent=qa");
   });
 
   test("round trips a plain external session id through the Agent Studio URL", () => {

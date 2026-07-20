@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
@@ -35,7 +35,6 @@ export type AgentStudioNavigationViewSelection = {
 export type AgentStudioNavigationState = {
   routeSessionResolution: AgentStudioRouteSessionResolution;
   selectedSessionFromRoute: AgentSessionSummary | null;
-  selectedSessionFromSelection: AgentSessionSummary | null;
   taskId: string;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
@@ -83,13 +82,6 @@ export const resolveAgentStudioNavigationState = ({
   });
   const selectedSessionFromRoute =
     routeSessionResolution.kind === "found" ? routeSessionResolution.session : null;
-  const selectionIdentity = selectionState.sessionIdentity;
-  const selectedSessionFromSelection = selectionIdentity
-    ? (sessions.find(
-        (session) =>
-          agentSessionIdentityKey(session) === agentSessionIdentityKey(selectionIdentity),
-      ) ?? null)
-    : null;
   const taskId = selectionState.taskId;
   const selectedTask = taskId ? (tasksById.get(taskId) ?? null) : null;
   const sessionsForTask = taskId ? (sessionsByTaskId.get(taskId) ?? []) : [];
@@ -133,7 +125,6 @@ export const resolveAgentStudioNavigationState = ({
   return {
     routeSessionResolution,
     selectedSessionFromRoute,
-    selectedSessionFromSelection,
     taskId,
     selectedTask,
     sessionsForTask,

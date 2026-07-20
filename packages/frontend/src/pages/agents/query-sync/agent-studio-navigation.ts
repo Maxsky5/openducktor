@@ -1,7 +1,6 @@
 import { agentRoleValues } from "@openducktor/contracts";
 import { type AgentRole, isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
@@ -46,7 +45,7 @@ export type AgentStudioNavigationState = {
 
 type AgentStudioSessionSelectionQueryParams = {
   taskId: string;
-  session: AgentSessionIdentity | null;
+  sessionExternalId: string | null;
   role: AgentRole;
 };
 
@@ -144,9 +143,18 @@ export const buildAgentStudioSelectionQueryUpdate = (
   params: AgentStudioSessionSelectionQueryParams,
 ): AgentStudioQueryUpdate => ({
   [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
-  [AGENT_STUDIO_QUERY_KEYS.session]: params.session?.externalSessionId,
+  [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionExternalId ?? undefined,
   [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
 });
+
+export const buildAgentStudioHref = (params: AgentStudioSessionSelectionQueryParams): string => {
+  const searchParams = buildSearchParamsFromNavigationState(new URLSearchParams(), {
+    taskId: params.taskId,
+    sessionExternalId: params.sessionExternalId,
+    role: params.role,
+  });
+  return `/agents?${searchParams.toString()}`;
+};
 
 export const isSameNavigationState = (
   left: AgentStudioNavigationState,
