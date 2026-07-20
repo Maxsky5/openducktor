@@ -1,11 +1,18 @@
 import { Effect } from "effect";
-import { HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
+import {
+  createTaskCleanupProgressState,
+  runTaskRuntimeCleanup,
+} from "../support/task-cleanup-support";
+import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, recordQaOutcome, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskReviewUseCases = ({
+  devServerService,
   taskStore,
+  terminalService,
 }: CreateTaskServiceInput): Pick<
   TaskService,
   "qaApproved" | "qaRejected" | "humanRequestChanges" | "humanApprove"
@@ -74,7 +81,34 @@ export const createTaskReviewUseCases = ({
         return enrichTask(current, currentTasks);
       }
 
-      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
+      if (!devServerService) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "task dependency",
+            message: "Dev server service is required for human_approve.",
+          }),
+        );
+      }
+      if (!terminalService) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "task dependency",
+            message: "Terminal service is required for human_approve.",
+          }),
+        );
+      }
+      const updated = yield* completeTaskClosure({
+        cleanup: runTaskRuntimeCleanup({
+          devServerService,
+          progress: createTaskCleanupProgressState(),
+          repoPath,
+          taskIds: [taskId],
+          terminalService,
+        }),
+        repoPath,
+        taskId,
+        taskStore,
+      });
       const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
 
       return enrichTask(updated, nextTasks);

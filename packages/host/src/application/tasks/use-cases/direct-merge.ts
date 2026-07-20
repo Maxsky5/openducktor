@@ -13,6 +13,7 @@ import {
   requireDirectMergeDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
+import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -146,18 +147,18 @@ export const createTaskDirectMergeUseCase = ({
       }
 
       yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-      const task = yield* taskStore.transitionTask({
+      const task = yield* completeTaskClosure({
+        cleanup: cleanupDirectMergeBuilderState(
+          dependencies,
+          taskStore,
+          effectiveRepoPath,
+          taskId,
+          directMerge,
+        ),
         repoPath: effectiveRepoPath,
         taskId,
-        status: "closed",
-      });
-      yield* cleanupDirectMergeBuilderState(
-        dependencies,
         taskStore,
-        effectiveRepoPath,
-        taskId,
-        directMerge,
-      );
+      });
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
       return {

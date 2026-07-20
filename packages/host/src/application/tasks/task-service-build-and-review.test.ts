@@ -7,6 +7,7 @@ import {
   createBuildStartWorktreeFiles,
   createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
+  createDirectMergeDevServerService,
   createRuntimeDefinitionsService,
   createTaskService,
   type TaskStorePort,
@@ -1878,14 +1879,34 @@ describe("createTaskService build and review", () => {
       },
     };
     const closed = await Effect.runPromise(
-      createTaskService({ taskStore }).humanApprove({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      createTaskService({
+        devServerService: createDirectMergeDevServerService(calls),
+        taskStore,
+        terminalService: {
+          acquireTaskCleanup(input) {
+            return Effect.acquireRelease(
+              Effect.sync(() => {
+                calls.push({ type: "acquireTerminalCleanup", input });
+                return { closedTerminalIds: ["terminal-1"] };
+              }),
+              () =>
+                Effect.sync(() => {
+                  calls.push({ type: "releaseTerminalCleanup" });
+                }),
+            );
+          },
+        },
+      }).humanApprove({ repoPath: "/repo", taskId: "task-1" }),
     );
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
+      {
+        type: "acquireTerminalCleanup",
+        input: { repoPath: "/repo", taskIds: ["task-1"] },
+      },
+      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "closed" } },
+      { type: "releaseTerminalCleanup" },
     ]);
     expect(closed).toMatchObject({
       id: "task-1",

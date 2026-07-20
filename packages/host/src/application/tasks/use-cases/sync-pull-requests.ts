@@ -11,6 +11,7 @@ import {
   requirePullRequestSyncDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
+import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -77,25 +78,24 @@ export const createTaskPullRequestSyncUseCases = ({
             taskId: task.id,
             pullRequest: updated.record,
           });
-          yield* cleanupMergedBuilderState(
-            cleanupDependencies,
-            taskStore,
-            effectiveRepoPath,
-            task.id,
-            updated.sourceBranch,
-            updated.targetBranch,
-          );
-
           const { current, currentTasks } = yield* taskListWithCurrent(
             taskStore,
             effectiveRepoPath,
             task.id,
           );
           yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-          yield* taskStore.transitionTask({
+          yield* completeTaskClosure({
+            cleanup: cleanupMergedBuilderState(
+              cleanupDependencies,
+              taskStore,
+              effectiveRepoPath,
+              task.id,
+              updated.sourceBranch,
+              updated.targetBranch,
+            ),
             repoPath: effectiveRepoPath,
             taskId: task.id,
-            status: "closed",
+            taskStore,
           });
           changedTaskIds.push(task.id);
         } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {

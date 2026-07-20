@@ -729,10 +729,6 @@ describe("createTaskService direct merge", () => {
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/repo" },
       { type: "aheadBehind", workingDir: "/repo", targetBranch: "origin/main" },
-      {
-        type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
-      },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
@@ -745,6 +741,10 @@ describe("createTaskService direct merge", () => {
       { type: "listBranches", workingDir: "/repo" },
       { type: "isAncestor", workingDir: "/repo", ancestor: "odt/task-1", descendant: "main" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      {
+        type: "transition",
+        input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
+      },
     ]);
   });
   test("rejects direct merge completion until the publish target is synchronized", async () => {

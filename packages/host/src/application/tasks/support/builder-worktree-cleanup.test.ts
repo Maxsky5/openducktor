@@ -246,30 +246,32 @@ describe("builder worktree cleanup", () => {
     const calls: unknown[] = [];
 
     await Effect.runPromise(
-      cleanupMergedBuilderState(
-        {
-          devServerService: createDirectMergeDevServerService(calls),
-          gitPort: createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-            },
-            branches: {
-              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-            },
-            ancestorResults: {
-              "/repo|odt/task-1|main": false,
-            },
-          }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-          terminalService: createTerminalCleanupService(calls),
-        },
-        taskStoreWithTasks([task()]),
-        "/repo",
-        "task-1",
-        "odt/task-1",
-        "main",
+      Effect.scoped(
+        cleanupMergedBuilderState(
+          {
+            devServerService: createDirectMergeDevServerService(calls),
+            gitPort: createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              },
+              branches: {
+                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              },
+              ancestorResults: {
+                "/repo|odt/task-1|main": false,
+              },
+            }),
+            settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+            taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+            terminalService: createTerminalCleanupService(calls),
+          },
+          taskStoreWithTasks([task()]),
+          "/repo",
+          "task-1",
+          "odt/task-1",
+          "main",
+        ),
       ),
     );
 
@@ -294,27 +296,29 @@ describe("builder worktree cleanup", () => {
     const calls: unknown[] = [];
 
     await Effect.runPromise(
-      cleanupMergedBuilderState(
-        {
-          devServerService: createDirectMergeDevServerService(calls),
-          gitPort: createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/repo/./task/..": { name: "odt/task-1", detached: false },
-            },
-            branches: {
-              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-            },
-          }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/repo/./task/.."])),
-          taskWorktreeService: createDirectMergeTaskWorktreeService("/repo/./task/.."),
-          terminalService: createTerminalCleanupService(calls),
-        },
-        taskStoreWithTasks([task()]),
-        "/repo",
-        "task-1",
-        "odt/task-1",
-        "main",
+      Effect.scoped(
+        cleanupMergedBuilderState(
+          {
+            devServerService: createDirectMergeDevServerService(calls),
+            gitPort: createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/repo/./task/..": { name: "odt/task-1", detached: false },
+              },
+              branches: {
+                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              },
+            }),
+            settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/repo/./task/.."])),
+            taskWorktreeService: createDirectMergeTaskWorktreeService("/repo/./task/.."),
+            terminalService: createTerminalCleanupService(calls),
+          },
+          taskStoreWithTasks([task()]),
+          "/repo",
+          "task-1",
+          "odt/task-1",
+          "main",
+        ),
       ),
     );
 
@@ -334,30 +338,34 @@ describe("builder worktree cleanup", () => {
 
     await expect(
       Effect.runPromise(
-        cleanupMergedBuilderState(
-          {
-            devServerService: createDirectMergeDevServerService(calls),
-            gitPort: createDirectMergeGitPort({
-              calls,
-              currentBranches: {
-                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-              },
-              branches: {
-                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-              },
-              removeWorktreeErrors: {
-                "/repo|/worktrees/repo/task-1|false": new Error("git worktree remove failed"),
-              },
-            }),
-            settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-            taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-            terminalService: createTerminalCleanupService(calls),
-          },
-          taskStoreWithTasks([task()]),
-          "/repo",
-          "task-1",
-          "odt/task-1",
-          "main",
+        Effect.scoped(
+          cleanupMergedBuilderState(
+            {
+              devServerService: createDirectMergeDevServerService(calls),
+              gitPort: createDirectMergeGitPort({
+                calls,
+                currentBranches: {
+                  "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+                },
+                branches: {
+                  "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+                },
+                removeWorktreeErrors: {
+                  "/repo|/worktrees/repo/task-1|false": new Error("git worktree remove failed"),
+                },
+              }),
+              settingsConfig: createBuildSettingsConfig(
+                new Set(["/repo", "/worktrees/repo/task-1"]),
+              ),
+              taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+              terminalService: createTerminalCleanupService(calls),
+            },
+            taskStoreWithTasks([task()]),
+            "/repo",
+            "task-1",
+            "odt/task-1",
+            "main",
+          ),
         ),
       ),
     ).rejects.toThrow("git worktree remove failed");

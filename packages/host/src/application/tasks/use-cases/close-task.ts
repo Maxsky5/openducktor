@@ -18,6 +18,7 @@ import {
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
+import { completeTaskClosure } from "../support/task-closure";
 import { validateManualCloseTaskEffect } from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -146,24 +147,24 @@ export const createTaskCloseUseCase = ({
       const cleanupProgress = createTaskCleanupProgressState();
 
       return yield* Effect.gen(function* () {
-        yield* runTaskLocalCleanup({
-          branchNames,
-          devServerService: dependencies.devServerService,
-          gitPort: dependencies.gitPort,
-          managedWorktreeBasePath,
-          progress: cleanupProgress,
-          repoPath: effectiveRepoPath,
-          settingsConfig: dependencies.settingsConfig,
-          taskIds: [taskId],
-          terminalService,
-          worktreeCleanupOperation: "task_close",
-          worktreeFiles,
-          worktreePaths,
-        });
-        const updated = yield* taskStore.transitionTask({
+        const updated = yield* completeTaskClosure({
+          cleanup: runTaskLocalCleanup({
+            branchNames,
+            devServerService: dependencies.devServerService,
+            gitPort: dependencies.gitPort,
+            managedWorktreeBasePath,
+            progress: cleanupProgress,
+            repoPath: effectiveRepoPath,
+            settingsConfig: dependencies.settingsConfig,
+            taskIds: [taskId],
+            terminalService,
+            worktreeCleanupOperation: "task_close",
+            worktreeFiles,
+            worktreePaths,
+          }),
           repoPath: effectiveRepoPath,
           taskId,
-          status: "closed",
+          taskStore,
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(

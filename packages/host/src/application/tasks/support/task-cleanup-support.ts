@@ -339,6 +339,33 @@ const requireTaskCleanupWorktreeFiles = (
   return Effect.succeed(worktreeFiles);
 };
 
+export const runTaskRuntimeCleanup = ({
+  devServerService,
+  progress,
+  repoPath,
+  taskIds,
+  terminalService,
+}: {
+  devServerService: DevServerService;
+  progress: TaskCleanupProgressState;
+  repoPath: string;
+  taskIds: string[];
+  terminalService: TaskTerminalCleanupPort;
+}) =>
+  Effect.gen(function* () {
+    const terminalResult = yield* terminalService.acquireTaskCleanup({ repoPath, taskIds });
+    progress.completedSteps.push(
+      terminalResult.closedTerminalIds.length > 0
+        ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`
+        : "checked task terminals",
+    );
+
+    for (const taskId of taskIds) {
+      yield* devServerService.stop({ repoPath, taskId });
+    }
+    progress.completedSteps.push("stopped task dev servers");
+  });
+
 export const runTaskLocalCleanup = ({
   branchNames,
   devServerService,
@@ -376,21 +403,18 @@ export const runTaskLocalCleanup = ({
         }),
       );
     }
-    const terminalResult = yield* terminalService.acquireTaskCleanup({ repoPath, taskIds });
-    progress.completedSteps.push(
-      terminalResult.closedTerminalIds.length > 0
-        ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`
-        : "checked task terminals",
-    );
     const cleanupFiles =
       worktreePaths.length > 0
         ? yield* requireTaskCleanupWorktreeFiles(worktreeFiles, worktreeCleanupOperation)
         : null;
 
-    for (const taskId of taskIds) {
-      yield* devServerService.stop({ repoPath, taskId });
-    }
-    progress.completedSteps.push("stopped task dev servers");
+    yield* runTaskRuntimeCleanup({
+      devServerService,
+      progress,
+      repoPath,
+      taskIds,
+      terminalService,
+    });
 
     if (cleanupFiles) {
       for (const worktreePath of worktreePaths) {
