@@ -25,11 +25,7 @@ import {
   resolveBuildContinuationLaunchAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
-import {
-  agentSessionIdentityKey,
-  matchesAgentSessionIdentity,
-  toAgentSessionIdentity,
-} from "@/lib/agent-session-identity";
+import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -171,7 +167,7 @@ export function useKanbanSessionStartFlow({
     (intent: KanbanSessionStartIntent, session: AgentSessionIdentity): void => {
       const params = new URLSearchParams({
         task: intent.taskId,
-        session: agentSessionIdentityKey(session),
+        session: session.externalSessionId,
         agent: intent.role,
       });
       navigate(`/agents?${params.toString()}`);

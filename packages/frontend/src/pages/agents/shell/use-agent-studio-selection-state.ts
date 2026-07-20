@@ -12,7 +12,7 @@ import {
 type UseAgentStudioSelectionStateArgs = {
   isRepoNavigationBoundaryPending: boolean;
   taskIdParam: string;
-  sessionKeyParam: string | null;
+  sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
@@ -31,7 +31,7 @@ export type AgentStudioSelectionStateModel = {
 export function useAgentStudioSelectionState({
   isRepoNavigationBoundaryPending,
   taskIdParam,
-  sessionKeyParam,
+  sessionExternalIdParam,
   hasExplicitRoleParam,
   roleFromQuery,
   scheduleQueryUpdate,
@@ -41,7 +41,7 @@ export function useAgentStudioSelectionState({
       createAgentStudioRouteSelectionState({
         isRepoNavigationBoundaryPending,
         taskIdParam,
-        sessionKeyParam,
+        sessionExternalIdParam,
         hasExplicitRoleParam,
         roleFromQuery,
       }),
@@ -49,7 +49,7 @@ export function useAgentStudioSelectionState({
       hasExplicitRoleParam,
       isRepoNavigationBoundaryPending,
       roleFromQuery,
-      sessionKeyParam,
+      sessionExternalIdParam,
       taskIdParam,
     ],
   );

@@ -416,6 +416,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(scheduleQueryUpdate).not.toHaveBeenCalled();
     expect(selectAgentStudioSelection).toHaveBeenCalledWith({
       taskId: "task-1",
+      sessionExternalId: null,
       sessionIdentity: null,
       role: "build",
       hasExplicitRoleSelection: true,
@@ -652,11 +653,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "  hello world  " },
     ]);
-    expect(
-      updateCalls.some(
-        (entry) => entry.session === agentSessionIdentityKey(sessionIdentity("session-new")),
-      ),
-    ).toBe(true);
+    expect(updateCalls.some((entry) => entry.session === "session-new")).toBe(true);
 
     await harness.unmount();
   });
@@ -1664,6 +1661,7 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(selectAgentStudioSelection).toHaveBeenCalledWith({
       taskId: "task-2",
+      sessionExternalId: "session-2",
       sessionIdentity: toAgentSessionIdentity(sessionTwo),
       role: "spec",
       hasExplicitRoleSelection: true,
@@ -1690,6 +1688,7 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(selectAgentStudioSelection).toHaveBeenCalledWith({
       taskId: "task-1",
+      sessionExternalId: null,
       sessionIdentity: null,
       role: "planner",
       hasExplicitRoleSelection: true,
@@ -1878,6 +1877,7 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(selectAgentStudioSelection).toHaveBeenCalledWith({
       taskId: "task-1",
+      sessionExternalId: "session-1",
       sessionIdentity: toAgentSessionIdentity(session),
       role: "spec",
       hasExplicitRoleSelection: true,
@@ -1906,6 +1906,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(selections).toEqual([
       {
         taskId: "task-1",
+        sessionExternalId: "session-1",
         sessionIdentity: toAgentSessionIdentity(session),
         role: "spec",
         hasExplicitRoleSelection: true,
@@ -1920,6 +1921,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(selections).toEqual([
       {
         taskId: "task-1",
+        sessionExternalId: null,
         sessionIdentity: null,
         role: "planner",
         hasExplicitRoleSelection: true,

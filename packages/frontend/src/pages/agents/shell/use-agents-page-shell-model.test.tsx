@@ -54,7 +54,7 @@ const handleResolveRebaseConflict = mock(async () => true);
 
 type QuerySyncState = {
   taskIdParam: string;
-  sessionKeyParam: string;
+  sessionExternalIdParam: string;
   hasExplicitRoleParam: boolean;
   roleFromQuery: "planner";
   launchActionId: "planner_initial";
@@ -223,7 +223,7 @@ let agentOperations: AgentOperationsContextValue = {
 };
 let querySyncState: QuerySyncState = {
   taskIdParam: "task-1",
-  sessionKeyParam: selectedSessionKey(),
+  sessionExternalIdParam: selectedSessionKey(),
   hasExplicitRoleParam: false,
   roleFromQuery: "planner" as const,
   launchActionId: "planner_initial" as const,
@@ -559,7 +559,7 @@ beforeEach(async () => {
   };
   querySyncState = {
     taskIdParam: "task-1",
-    sessionKeyParam: selectedSessionKey(),
+    sessionExternalIdParam: selectedSessionKey(),
     hasExplicitRoleParam: false,
     roleFromQuery: "planner",
     launchActionId: "planner_initial",

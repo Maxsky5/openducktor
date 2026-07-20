@@ -40,7 +40,7 @@ export function useAgentsPageRouteSessionModel({
 
   const {
     taskIdParam,
-    sessionKeyParam,
+    sessionExternalIdParam,
     hasExplicitRoleParam,
     roleFromQuery,
     isRepoNavigationBoundaryPending,
@@ -67,7 +67,7 @@ export function useAgentsPageRouteSessionModel({
   const { selection: selectionState, selectAgentStudioSelection } = useAgentStudioSelectionState({
     isRepoNavigationBoundaryPending,
     taskIdParam,
-    sessionKeyParam,
+    sessionExternalIdParam,
     hasExplicitRoleParam,
     roleFromQuery,
     scheduleQueryUpdate,
@@ -81,7 +81,7 @@ export function useAgentsPageRouteSessionModel({
     isLoadingTasks: isForegroundLoadingTasks,
     sessions,
     taskIdParam,
-    sessionKeyParam,
+    sessionExternalIdParam,
     hasExplicitRoleParam,
     roleFromQuery,
     selectionState,

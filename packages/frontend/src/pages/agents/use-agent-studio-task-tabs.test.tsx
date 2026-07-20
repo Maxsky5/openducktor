@@ -63,6 +63,7 @@ const createSession = (taskId: string, externalSessionId: string) =>
 
 const taskSelection = (taskId: string): AgentStudioSelectionState => ({
   taskId,
+  sessionExternalId: null,
   sessionIdentity: null,
   role: "spec",
   hasExplicitRoleSelection: false,

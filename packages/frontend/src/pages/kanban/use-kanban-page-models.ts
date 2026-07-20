@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import {
   useAgentOperations,
@@ -264,7 +263,7 @@ export function useKanbanPageModels({
         onOpenSession: (session) => {
           const search = new URLSearchParams({
             task: taskId,
-            session: agentSessionIdentityKey(session),
+            session: session.externalSessionId,
             agent: "build",
           });
           navigate(`/agents?${search.toString()}`);

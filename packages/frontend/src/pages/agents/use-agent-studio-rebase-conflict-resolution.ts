@@ -10,7 +10,7 @@ import type {
   SessionStartLaunchRequest,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
-import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { resolveAgentStudioBuilderSessionsForTask } from "./agents-page-selection";
@@ -102,7 +102,7 @@ export function useAgentStudioRebaseConflictResolution({
             builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
           scheduleQueryUpdate({
             task: view.taskId,
-            session: agentSessionIdentityKey(session),
+            session: session.externalSessionId,
             agent: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
           });
         },

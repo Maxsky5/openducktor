@@ -6,6 +6,7 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
+import { inactiveRepoRuntimeReadinessTarget } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -17,7 +18,10 @@ import {
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { resolveAgentStudioViewSessionSelection } from "../agents-page-selection";
+import {
+  type AgentStudioRouteSessionResolution,
+  resolveAgentStudioViewSessionSelection,
+} from "../agents-page-selection";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import {
   deriveSelectedSessionRuntimeTarget,
@@ -28,7 +32,8 @@ type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
   selectedTask: TaskCard | null;
   sessionSummaries: AgentSessionSummary[];
-  sessionKey: string | null;
+  sessionExternalId: string | null;
+  routeSessionResolution: AgentStudioRouteSessionResolution;
   hasExplicitRoleSelection: boolean;
   roleSelection: AgentRole;
   sessionlessRole: AgentRole;
@@ -48,7 +53,8 @@ export function useAgentStudioSelectedSessionView({
   workspaceRepoPath,
   selectedTask,
   sessionSummaries,
-  sessionKey,
+  sessionExternalId,
+  routeSessionResolution,
   hasExplicitRoleSelection,
   roleSelection,
   sessionlessRole,
@@ -63,7 +69,7 @@ export function useAgentStudioSelectedSessionView({
   const selection = useMemo(() => {
     return resolveAgentStudioViewSessionSelection({
       sessionSummaries,
-      sessionKey,
+      sessionExternalId,
       sessionIdentity: sessionIdentityFromRoute,
       hasExplicitRoleParam: hasExplicitRoleSelection,
       roleFromQuery: roleSelection,
@@ -72,7 +78,7 @@ export function useAgentStudioSelectedSessionView({
       keepExplicitRoleSessionless,
     });
   }, [
-    sessionKey,
+    sessionExternalId,
     hasExplicitRoleSelection,
     keepExplicitRoleSessionless,
     roleSelection,
@@ -82,44 +88,92 @@ export function useAgentStudioSelectedSessionView({
     sessionSummaries,
   ]);
 
-  const selectedSessionIdentity = selection.sessionIdentity;
+  const unresolvedRouteSessionExternalId =
+    routeSessionResolution.kind === "pending" ||
+    routeSessionResolution.kind === "missing" ||
+    routeSessionResolution.kind === "failed"
+      ? routeSessionResolution.sessionExternalId
+      : null;
+  const isUnresolvedExplicitRouteSession =
+    sessionExternalId !== null && sessionExternalId === unresolvedRouteSessionExternalId;
+  const selectedSessionIdentity = isUnresolvedExplicitRouteSession
+    ? null
+    : selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const runtimeTarget = useMemo(
     () =>
-      deriveSelectedSessionRuntimeTarget({
-        selectedSessionIdentity,
-        selectedTask,
-        role: selection.role,
-        repoSettings,
-        isLoadingRepoSettings,
-      }),
-    [isLoadingRepoSettings, repoSettings, selectedSessionIdentity, selectedTask, selection.role],
+      isUnresolvedExplicitRouteSession
+        ? inactiveRepoRuntimeReadinessTarget
+        : deriveSelectedSessionRuntimeTarget({
+            selectedSessionIdentity,
+            selectedTask,
+            role: selection.role,
+            repoSettings,
+            isLoadingRepoSettings,
+          }),
+    [
+      isLoadingRepoSettings,
+      isUnresolvedExplicitRouteSession,
+      repoSettings,
+      selectedSessionIdentity,
+      selectedTask,
+      selection.role,
+    ],
   );
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeTarget,
   });
   const repoReadinessState = runtimeReadiness.state;
-  const selectedSessionViewProjection = useMemo(
-    () =>
-      deriveSelectedSessionViewProjection({
-        selectedSessionIdentity,
-        session,
-        sessionSummary: selection.sessionSummary,
-        selectedTask,
-        readModelLoadState: sessionReadModelLoadState,
-        repoReadinessState,
-      }),
-    [
-      repoReadinessState,
+  const selectedSessionViewProjection = useMemo(() => {
+    if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "pending") {
+      return {
+        activityState: null,
+        selectedModel: null,
+        transcriptState: { kind: "session_loading", reason: "preparing" } as const,
+      };
+    }
+    if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "missing") {
+      const missingSessionTask = selectedTask ? `task "${selectedTask.id}"` : "the selected task";
+      return {
+        activityState: null,
+        selectedModel: null,
+        transcriptState: {
+          kind: "failed",
+          message: `Agent session "${routeSessionResolution.sessionExternalId}" was not found for ${missingSessionTask}.`,
+        } as const,
+      };
+    }
+    if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "failed") {
+      return {
+        activityState: null,
+        selectedModel: null,
+        transcriptState: {
+          kind: "failed",
+          message: routeSessionResolution.message,
+        } as const,
+      };
+    }
+
+    return deriveSelectedSessionViewProjection({
       selectedSessionIdentity,
-      selectedTask,
       session,
-      selection.sessionSummary,
-      sessionReadModelLoadState,
-    ],
-  );
+      sessionSummary: selection.sessionSummary,
+      selectedTask,
+      readModelLoadState: sessionReadModelLoadState,
+      repoReadinessState,
+    });
+  }, [
+    repoReadinessState,
+    isUnresolvedExplicitRouteSession,
+    routeSessionResolution,
+    selectedSessionIdentity,
+    selectedTask,
+    session,
+    selection.sessionSummary,
+    sessionReadModelLoadState,
+  ]);
   const selectedSessionActivityState = selectedSessionViewProjection.activityState;
   const selectedSessionModel = selectedSessionViewProjection.selectedModel;
   const transcriptState = selectedSessionViewProjection.transcriptState;

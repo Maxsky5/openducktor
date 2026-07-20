@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AgentActivityCard } from "./agent-activity-card";
 
 const activeSession = {
@@ -30,7 +29,7 @@ const waitingSession = {
 const expectedSessionHref = (session: typeof activeSession | typeof waitingSession): string => {
   const params = new URLSearchParams({
     task: session.taskId,
-    session: agentSessionIdentityKey(session),
+    session: session.externalSessionId,
     agent: session.role,
   });
   return `/agents?${params.toString()}`.replaceAll("&", "&amp;");
