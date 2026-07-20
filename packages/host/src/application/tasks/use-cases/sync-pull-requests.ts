@@ -22,6 +22,7 @@ export const createTaskPullRequestSyncUseCases = ({
   githubDependencies,
   taskStore,
   settingsConfig,
+  taskSessionBootstrapCoordinator,
   taskWorktreeService,
   terminalService,
   workspaceSettingsService,
@@ -93,8 +94,11 @@ export const createTaskPullRequestSyncUseCases = ({
               updated.sourceBranch,
               updated.targetBranch,
             ),
+            gitPort: cleanupDependencies.gitPort,
+            operation: "sync merged pull request",
             repoPath: effectiveRepoPath,
             taskId: task.id,
+            taskSessionBootstrapCoordinator,
             taskStore,
           });
           changedTaskIds.push(task.id);

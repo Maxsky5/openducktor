@@ -719,6 +719,42 @@ describe("createTerminalTransportController", () => {
     ]);
   });
 
+  test("detaches after an unmounted terminal close requires confirmation", async () => {
+    let resolveClose = (_result: { closed: false; confirmationRequired: true }): void => {
+      throw new Error("Terminal close was not started.");
+    };
+    const closeResult = new Promise<{ closed: false; confirmationRequired: true }>((resolve) => {
+      resolveClose = resolve;
+    });
+    const operations: string[] = [];
+    const bridge: TerminalBridge = {
+      connect: async () => ({
+        send: async (frame) => {
+          operations.push(decodeTerminalProtocolFrame(frame).message.type);
+        },
+        close: () => undefined,
+      }),
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    await controller.connect();
+    const unsubscribe = controller.subscribe(terminalId, () => undefined);
+    await Promise.resolve();
+
+    const closing = controller.closeTerminal(terminalId, async () => {
+      operations.push("close");
+      return closeResult;
+    });
+    unsubscribe();
+    await Promise.resolve();
+    expect(operations).toEqual(["attach", "close"]);
+
+    resolveClose({ closed: false, confirmationRequired: true });
+    await expect(closing).resolves.toEqual({ closed: false, confirmationRequired: true });
+    await Promise.resolve();
+
+    expect(operations).toEqual(["attach", "close", "detach"]);
+  });
+
   test("routes binary output and rejects client-directed frames from the host", async () => {
     let receive = (_frame: Uint8Array): void => {
       throw new Error("Terminal bridge did not connect.");

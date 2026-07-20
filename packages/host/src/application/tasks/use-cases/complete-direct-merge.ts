@@ -13,6 +13,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
   gitPort,
   taskStore,
   settingsConfig,
+  taskSessionBootstrapCoordinator,
   taskWorktreeService,
   terminalService,
 }: CreateTaskServiceInput): Pick<TaskService, "completeDirectMerge"> => ({
@@ -85,7 +86,15 @@ export const createTaskCompleteDirectMergeUseCase = ({
       );
       if (current.status !== "closed") {
         yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-        task = yield* completeTaskClosure({ cleanup, repoPath, taskId, taskStore });
+        task = yield* completeTaskClosure({
+          cleanup,
+          gitPort: dependencies.gitPort,
+          operation: "complete direct merge",
+          repoPath,
+          taskId,
+          taskSessionBootstrapCoordinator,
+          taskStore,
+        });
       } else {
         yield* Effect.scoped(cleanup);
       }

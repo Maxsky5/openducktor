@@ -1,5 +1,6 @@
 import {
   type TerminalCloseRequest,
+  type TerminalContext,
   type TerminalCreateRequest,
   type TerminalCreateResponse,
   type TerminalListFilter,
@@ -21,7 +22,7 @@ import {
   createTerminalLaunchPolicy,
   type TerminalLaunchEnvironmentPort,
 } from "./terminal-launch-policy";
-import type { TerminalServiceError } from "./terminal-service-error";
+import { TerminalServiceError } from "./terminal-service-error";
 import {
   createTerminalSessionEngine,
   type TerminalSessionAttachInput,
@@ -94,6 +95,37 @@ export const createTerminalService = ({
       countLive: engine.countLive,
       countLiveForContext: engine.countLiveForContext,
     });
+    const canonicalizeRepositoryPath = (
+      repoPath: string,
+      operation: "create" | "list" | "close_by_task",
+    ): Effect.Effect<string, TerminalServiceError> =>
+      filesystem.canonicalize(repoPath).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TerminalServiceError({
+              code: "working_directory_inaccessible",
+              operation,
+              message: `Cannot resolve terminal repository path: ${repoPath}`,
+              workingDir: repoPath,
+              cause,
+            }),
+        ),
+      );
+    const canonicalizeContext = (
+      context: TerminalContext,
+      operation: "create" | "list",
+    ): Effect.Effect<TerminalContext, TerminalServiceError> =>
+      "taskId" in context
+        ? canonicalizeRepositoryPath(context.repoPath, operation).pipe(
+            Effect.map((repoPath) => ({ repoPath, taskId: context.taskId })),
+          )
+        : Effect.succeed(context);
+    const canonicalizeTaskScope = (
+      scope: TerminalTaskScope,
+    ): Effect.Effect<TerminalTaskScope, TerminalServiceError> =>
+      canonicalizeRepositoryPath(scope.repoPath, "close_by_task").pipe(
+        Effect.map((repoPath) => ({ repoPath, taskIds: scope.taskIds })),
+      );
 
     const service: TerminalService = {
       hostInstanceId,
@@ -101,15 +133,17 @@ export const createTerminalService = ({
         Effect.gen(function* () {
           const input = terminalCreateRequestSchema.parse(rawInput);
           return yield* Effect.acquireUseRelease(
-            admission.reserve(input.context),
-            () =>
+            admission.beginCreation(),
+            (reservation) =>
               Effect.gen(function* () {
-                const plan = yield* launch(input, DEFAULT_GRID);
+                const context = yield* canonicalizeContext(input.context, "create");
+                yield* reservation.bind(context);
+                const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
                 const terminalId = idFactory();
                 const summary: TerminalSummary = {
                   terminalId,
                   label: plan.cwd,
-                  context: input.context,
+                  context,
                   initialWorkingDir: plan.cwd,
                   createdAt: now().toISOString(),
                   lifecycle: "starting",
@@ -122,10 +156,17 @@ export const createTerminalService = ({
           );
         }),
       list: (rawFilter) =>
-        Effect.sync(() => ({
-          hostInstanceId,
-          terminals: engine.list(terminalListFilterSchema.parse(rawFilter)),
-        })),
+        Effect.gen(function* () {
+          const filter = terminalListFilterSchema.parse(rawFilter);
+          const canonicalFilter =
+            filter.kind === "task"
+              ? {
+                  ...filter,
+                  repoPath: yield* canonicalizeRepositoryPath(filter.repoPath, "list"),
+                }
+              : filter;
+          return { hostInstanceId, terminals: engine.list(canonicalFilter) };
+        }),
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalPreparePathInputRequestSchema.parse(rawInput);
@@ -143,20 +184,36 @@ export const createTerminalService = ({
           yield* engine.close(input.terminalId, input.confirmTerminate);
         }),
       closeByTaskScope: (scope) =>
-        engine
-          .closeByTaskScope(scope)
-          .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
+        Effect.gen(function* () {
+          const canonicalScope = yield* canonicalizeTaskScope(scope);
+          const closedTerminalIds = yield* engine.closeByTaskScope(canonicalScope);
+          return { closedTerminalIds };
+        }),
       acquireTaskCleanup: (scope) =>
-        Effect.acquireRelease(admission.acquireTaskCleanupLease(scope), (lease) =>
-          Effect.sync(() => lease.release()),
-        ).pipe(
-          Effect.tap((lease) => lease.awaitPending),
-          Effect.zipRight(
-            engine
-              .closeByTaskScope(scope)
-              .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
-          ),
-        ),
+        Effect.gen(function* () {
+          const { canonicalScope, lease } = yield* Effect.acquireUseRelease(
+            admission.beginTaskCleanupPreparation(),
+            () =>
+              canonicalizeTaskScope(scope).pipe(
+                Effect.flatMap((canonicalScope) =>
+                  admission
+                    .acquireTaskCleanupLease(canonicalScope)
+                    .pipe(Effect.map((lease) => ({ canonicalScope, lease }))),
+                ),
+              ),
+            (preparation) => Effect.sync(() => preparation.release()),
+          );
+          return yield* Effect.acquireRelease(Effect.succeed(lease), (activeLease) =>
+            Effect.sync(() => activeLease.release()),
+          ).pipe(
+            Effect.tap((activeLease) => activeLease.awaitPending),
+            Effect.zipRight(
+              engine
+                .closeByTaskScope(canonicalScope)
+                .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
+            ),
+          );
+        }),
       dispose: () =>
         Effect.gen(function* () {
           yield* admission.stopAccepting();

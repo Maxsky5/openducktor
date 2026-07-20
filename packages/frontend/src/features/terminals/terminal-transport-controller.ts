@@ -217,6 +217,17 @@ export const createTerminalTransportController = (
   const reportTransportFailure = (cause: unknown): void => {
     transitionToDisconnected({ cause });
   };
+  const cancelClose = (terminalId: string): void => {
+    const shouldDetach = terminalChannels.cancelClose(terminalId);
+    if (!shouldDetach || connectionState.status !== "connected") return;
+    void enqueueTerminalOperation(terminalId, () =>
+      send({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "detach",
+        terminalId,
+      }),
+    ).catch(reportTransportFailure);
+  };
 
   return {
     connect,
@@ -281,13 +292,13 @@ export const createTerminalTransportController = (
       try {
         const result = await closeHostTerminal();
         if (!result.closed) {
-          terminalChannels.cancelClose(terminalId);
+          cancelClose(terminalId);
           return result;
         }
         terminalChannels.completeClose(terminalId);
         return result;
       } catch (cause) {
-        terminalChannels.cancelClose(terminalId);
+        cancelClose(terminalId);
         throw cause;
       }
     },

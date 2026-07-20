@@ -246,6 +246,57 @@ describe("TerminalPanel", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(expect.anything(), true));
   });
 
+  test("ignores a late close confirmation request from the previous terminal scope", async () => {
+    let resolveClose = (_result: { closed: false; confirmationRequired: true }): void => {
+      throw new Error("Terminal close was not started.");
+    };
+    const closeResult = new Promise<{ closed: false; confirmationRequired: true }>((resolve) => {
+      resolveClose = resolve;
+    });
+    const previousOnClose = mock(async () => closeResult);
+    const nextOnClose = mock(async () => ({ closed: true as const }));
+    const summary: TerminalSummary = {
+      terminalId: "terminal-previous-scope",
+      label: "Shell 1",
+      context: { repoPath: "/repo", taskId: "task-1" },
+      initialWorkingDir: "/repo",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      lifecycle: "running",
+      exit: null,
+    };
+    const view = render(
+      <TerminalPanel
+        model={{
+          ...model,
+          ...tabsModel([readyTab(summary)]),
+          activeTabId: "tab:terminal-previous-scope",
+          onClose: previousOnClose,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close Shell 1" }));
+    await waitFor(() => expect(previousOnClose).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <TerminalPanel
+        model={{
+          ...model,
+          scopeKey: "/repo:task-2",
+          ...tabsModel([]),
+          activeTabId: null,
+          onClose: nextOnClose,
+        }}
+      />,
+    );
+    await act(async () => {
+      resolveClose({ closed: false, confirmationRequired: true });
+      await closeResult;
+    });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(nextOnClose).not.toHaveBeenCalled();
+  });
+
   test("shows immediate feedback while a terminal close is pending", () => {
     const summary: TerminalSummary = {
       terminalId: "terminal-closing",

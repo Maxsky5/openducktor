@@ -65,7 +65,6 @@ export const createTerminalTransportChannelRegistry = () => {
       channel.listeners.delete(listener);
       if (channel.listeners.size > 0) return { lastListenerRemoved: false, wasClosing: false };
       const wasClosing = channel.isClosing;
-      channel.isClosing = false;
       if (!channel.operationQueue) channel.discardQueuedOperations = false;
       forgetIfUnused(terminalId, channel);
       return { lastListenerRemoved: true, wasClosing };
@@ -98,11 +97,13 @@ export const createTerminalTransportChannelRegistry = () => {
     beginClose(terminalId: string): void {
       getOrCreate(terminalId).isClosing = true;
     },
-    cancelClose(terminalId: string): void {
+    cancelClose(terminalId: string): boolean {
       const channel = channels.get(terminalId);
-      if (!channel) return;
+      if (!channel) return false;
       channel.isClosing = false;
+      const shouldDetach = channel.listeners.size === 0;
       forgetIfUnused(terminalId, channel);
+      return shouldDetach;
     },
     completeClose(terminalId: string): void {
       const channel = getOrCreate(terminalId);

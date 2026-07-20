@@ -8,6 +8,8 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
@@ -140,10 +142,30 @@ export function TerminalPanel({
   model: TerminalPanelModel;
   headerLeading?: ReactNode;
 }): ReactElement {
-  const [closeCandidate, setCloseCandidate] = useState<TerminalTab | null>(null);
+  const [pendingCloseCandidate, setPendingCloseCandidate] = useState<{
+    scopeKey: string | null;
+    tab: TerminalTab;
+  } | null>(null);
   const [attentionByTab, setAttentionByTab] = useState<Record<string, string | null>>({});
-  const [closeError, setCloseError] = useState<string | null>(null);
-  const [isConfirmingClose, setIsConfirmingClose] = useState(false);
+  const [pendingCloseError, setPendingCloseError] = useState<{
+    scopeKey: string | null;
+    message: string;
+  } | null>(null);
+  const [confirmingScopeKey, setConfirmingScopeKey] = useState<string | null | undefined>(
+    undefined,
+  );
+  const currentScopeKey = useRef(model.scopeKey);
+  useLayoutEffect(() => {
+    currentScopeKey.current = model.scopeKey;
+  }, [model.scopeKey]);
+  const closeCandidate =
+    pendingCloseCandidate?.scopeKey === model.scopeKey ? pendingCloseCandidate.tab : null;
+  const closeError =
+    pendingCloseError?.scopeKey === model.scopeKey ? pendingCloseError.message : null;
+  const isConfirmingClose =
+    closeCandidate !== null &&
+    confirmingScopeKey !== undefined &&
+    confirmingScopeKey === pendingCloseCandidate?.scopeKey;
 
   useEffect(() => {
     if (!model.platformError) return;
@@ -174,26 +196,41 @@ export function TerminalPanel({
     [model.onLifecycle, setTabAttention],
   );
   const closeTab = async (tab: TerminalTab): Promise<void> => {
+    const scopeKey = model.scopeKey;
     try {
-      setCloseError(null);
+      setPendingCloseError(null);
       const result = await model.onClose(tab, false);
-      if (!result.closed) setCloseCandidate(tab);
+      if (!result.closed && currentScopeKey.current === scopeKey) {
+        setPendingCloseCandidate({ scopeKey, tab });
+      }
     } catch (cause) {
-      setCloseError(cause instanceof Error ? cause.message : String(cause));
+      if (currentScopeKey.current === scopeKey) {
+        setPendingCloseError({
+          scopeKey,
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
     }
   };
   const confirmClose = async (): Promise<void> => {
-    const candidate = closeCandidate;
-    if (!candidate) return;
-    setIsConfirmingClose(true);
-    setCloseError(null);
+    const candidate = pendingCloseCandidate;
+    if (!candidate || candidate.scopeKey !== model.scopeKey) return;
+    setConfirmingScopeKey(candidate.scopeKey);
+    setPendingCloseError(null);
     try {
-      const result = await model.onClose(candidate, true);
-      if (result.closed) setCloseCandidate(null);
+      const result = await model.onClose(candidate.tab, true);
+      if (result.closed && currentScopeKey.current === candidate.scopeKey) {
+        setPendingCloseCandidate(null);
+      }
     } catch (cause) {
-      setCloseError(cause instanceof Error ? cause.message : String(cause));
+      if (currentScopeKey.current === candidate.scopeKey) {
+        setPendingCloseError({
+          scopeKey: candidate.scopeKey,
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
     } finally {
-      setIsConfirmingClose(false);
+      setConfirmingScopeKey((current) => (current === candidate.scopeKey ? undefined : current));
     }
   };
   return (
@@ -291,7 +328,7 @@ export function TerminalPanel({
 
       <Dialog
         open={closeCandidate !== null}
-        onOpenChange={(open) => !open && !isConfirmingClose && setCloseCandidate(null)}
+        onOpenChange={(open) => !open && !isConfirmingClose && setPendingCloseCandidate(null)}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -306,7 +343,7 @@ export function TerminalPanel({
             <Button
               type="button"
               variant="outline"
-              onClick={() => setCloseCandidate(null)}
+              onClick={() => setPendingCloseCandidate(null)}
               disabled={isConfirmingClose}
             >
               Cancel

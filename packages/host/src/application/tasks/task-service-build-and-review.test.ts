@@ -1881,6 +1881,7 @@ describe("createTaskService build and review", () => {
     const closed = await Effect.runPromise(
       createTaskService({
         devServerService: createDirectMergeDevServerService(calls),
+        gitPort: createBuildStartGitPort({ calls }),
         taskStore,
         terminalService: {
           acquireTaskCleanup(input) {
@@ -1900,6 +1901,7 @@ describe("createTaskService build and review", () => {
     );
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
+      { type: "canonicalizePath", path: "/repo" },
       {
         type: "acquireTerminalCleanup",
         input: { repoPath: "/repo", taskIds: ["task-1"] },

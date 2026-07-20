@@ -26,6 +26,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   gitPort,
   taskStore,
   settingsConfig,
+  taskSessionBootstrapCoordinator,
   taskWorktreeService,
   terminalService,
   workspaceSettingsService,
@@ -126,8 +127,11 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           });
       const task = yield* completeTaskClosure({
         cleanup: cleanupEffect,
+        gitPort: dependencies.gitPort,
+        operation: "link merged pull request",
         repoPath,
         taskId,
+        taskSessionBootstrapCoordinator,
         taskStore,
       });
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));

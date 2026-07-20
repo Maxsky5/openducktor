@@ -551,6 +551,41 @@ describe("TerminalService", () => {
     ).toEqual(["terminal-2"]);
   });
 
+  test("uses canonical repository identity for task listing and cleanup", async () => {
+    const canonicalFilesystem: FilesystemPort = {
+      ...filesystem,
+      canonicalize: (path) =>
+        Effect.succeed(path === "/repo-link" || path === "/repo" ? "/repo" : path),
+    };
+    const { service } = await makeService(
+      makePty(true, false),
+      () => "terminal-1",
+      canonicalFilesystem,
+    );
+    const created = await Effect.runPromise(
+      service.create({
+        workingDir: "/repo-link",
+        context: { repoPath: "/repo-link", taskId: "task-1" },
+      }),
+    );
+
+    expect(created.summary.context).toEqual({ repoPath: "/repo", taskId: "task-1" });
+    expect(
+      (
+        await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" }))
+      ).terminals.map((terminal) => terminal.terminalId),
+    ).toEqual(["terminal-1"]);
+
+    await Effect.runPromise(
+      Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo-link", taskIds: ["task-1"] })),
+    );
+
+    expect(
+      (await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" })))
+        .terminals,
+    ).toEqual([]);
+  });
+
   test("removes a close-failed session after its PTY cleanup retry succeeds", async () => {
     const { service, pty } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
@@ -800,6 +835,9 @@ describe("TerminalService", () => {
         context: { repoPath: "/repo", taskId: "task-1" },
       }),
     );
-    expect(createdAfterCleanup.summary.context).toEqual({ repoPath: "/repo", taskId: "task-1" });
+    expect(createdAfterCleanup.summary.context).toEqual({
+      repoPath: "/canonical/repo",
+      taskId: "task-1",
+    });
   });
 });

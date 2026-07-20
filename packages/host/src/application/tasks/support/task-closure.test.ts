@@ -2,7 +2,15 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
+import { createTaskSessionBootstrapCoordinator } from "../worktrees/task-session-bootstrap-coordinator";
 import { completeTaskClosure } from "./task-closure";
+
+const closureDependencies = () => ({
+  gitPort: {
+    canonicalizePath: (path: string) => Effect.succeed(path),
+  },
+  taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
+});
 
 const closedTask = (): TaskCard => ({
   id: "task-1",
@@ -54,7 +62,9 @@ test("keeps cleanup resources acquired until the task is closed", async () => {
   await expect(
     Effect.runPromise(
       completeTaskClosure({
+        ...closureDependencies(),
         cleanup,
+        operation: "close task",
         repoPath: "/repo",
         taskId: "task-1",
         taskStore,
@@ -82,12 +92,89 @@ test("does not close the task when cleanup fails", async () => {
   await expect(
     Effect.runPromise(
       completeTaskClosure({
+        ...closureDependencies(),
         cleanup,
+        operation: "close task",
         repoPath: "/repo",
         taskId: "task-1",
         taskStore,
       }),
     ),
   ).rejects.toThrow("cleanup failed");
+  expect(transitioned).toBe(false);
+});
+
+test("holds the task lifecycle guard across cleanup and closure", async () => {
+  const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
+  let bootstrapWasBlocked = false;
+  const cleanup = Effect.gen(function* () {
+    const bootstrap = yield* Effect.either(
+      taskSessionBootstrapCoordinator.acquireBootstrap(
+        "/canonical/repo",
+        "task-1",
+        "bootstrap-1",
+        "build",
+      ),
+    );
+    bootstrapWasBlocked = bootstrap._tag === "Left";
+  });
+  const taskStore: Pick<TaskStorePort, "transitionTask"> = {
+    transitionTask: () => Effect.succeed(closedTask()),
+  };
+
+  await Effect.runPromise(
+    completeTaskClosure({
+      cleanup,
+      gitPort: {
+        canonicalizePath: () => Effect.succeed("/canonical/repo"),
+      },
+      operation: "close task",
+      repoPath: "/repo-link",
+      taskId: "task-1",
+      taskSessionBootstrapCoordinator,
+      taskStore,
+    }),
+  );
+
+  expect(bootstrapWasBlocked).toBe(true);
+});
+
+test("does not begin cleanup while a task session bootstrap is active", async () => {
+  const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
+  await Effect.runPromise(
+    taskSessionBootstrapCoordinator.acquireBootstrap(
+      "/canonical/repo",
+      "task-1",
+      "bootstrap-1",
+      "build",
+    ),
+  );
+  let cleanupStarted = false;
+  let transitioned = false;
+  const taskStore: Pick<TaskStorePort, "transitionTask"> = {
+    transitionTask: () => {
+      transitioned = true;
+      return Effect.succeed(closedTask());
+    },
+  };
+
+  await expect(
+    Effect.runPromise(
+      completeTaskClosure({
+        cleanup: Effect.sync(() => {
+          cleanupStarted = true;
+        }),
+        gitPort: {
+          canonicalizePath: () => Effect.succeed("/canonical/repo"),
+        },
+        operation: "close task",
+        repoPath: "/repo-link",
+        taskId: "task-1",
+        taskSessionBootstrapCoordinator,
+        taskStore,
+      }),
+    ),
+  ).rejects.toThrow("bootstrap is in progress");
+  expect(cleanupStarted).toBe(false);
   expect(transitioned).toBe(false);
 });
