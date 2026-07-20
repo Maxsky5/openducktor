@@ -20,6 +20,7 @@ import {
   type CreateTaskServiceInput,
   createTaskService as createProductionTaskService,
 } from "./task-service";
+import { createTaskSessionBootstrapCoordinator } from "./worktrees/task-session-bootstrap-coordinator";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 const run = <A>(effect: Effect.Effect<A, unknown>): Promise<A> => Effect.runPromise(effect);
@@ -286,6 +287,12 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], [], { "task-1": [buildSession] }),
+      devServerService: createDevServerService(),
+      gitPort: createGitPort({}),
+      settingsConfig: createSettingsConfig(),
+      taskWorktreeService: createTaskWorktreeService(null),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(),
     });
 
     await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
@@ -600,6 +607,60 @@ describe("TaskService.closeTask", () => {
     expect(calls.indexOf("terminals:release")).toBeGreaterThan(
       calls.indexOf("transition:task-1:closed"),
     );
+  });
+
+  test("holds the task lifecycle guard while close cleanup inputs are read", async () => {
+    let reportMetadataRead = (): void => undefined;
+    const metadataRead = new Promise<void>((resolve) => {
+      reportMetadataRead = resolve;
+    });
+    let releaseMetadataRead = (): void => undefined;
+    const metadataReadReleased = new Promise<void>((resolve) => {
+      releaseMetadataRead = resolve;
+    });
+    const baseTaskStore = createTaskStore([task()]);
+    const taskStore = {
+      ...baseTaskStore,
+      getTaskMetadata: () =>
+        Effect.promise(async () => {
+          reportMetadataRead();
+          await metadataReadReleased;
+          return createMetadata();
+        }),
+    } as TaskStorePort;
+    const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
+    const service = createTaskService({
+      taskStore,
+      devServerService: createDevServerService(),
+      gitPort: createGitPort({}),
+      settingsConfig: createSettingsConfig(),
+      taskSessionBootstrapCoordinator,
+      taskWorktreeService: createTaskWorktreeService(null),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(),
+    });
+
+    const closing = run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
+    await metadataRead;
+    const bootstrap = await run(
+      Effect.either(
+        taskSessionBootstrapCoordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "build"),
+      ),
+    );
+    if (bootstrap._tag === "Right") {
+      await run(
+        taskSessionBootstrapCoordinator.finishBootstrap(
+          "/repo",
+          "task-1",
+          "bootstrap-1",
+          "completed",
+        ),
+      );
+    }
+    releaseMetadataRead();
+    await closing;
+
+    expect(bootstrap._tag).toBe("Left");
   });
 
   test("guards and cleans legacy Planner worktrees", async () => {

@@ -55,23 +55,6 @@ export const createTaskCloseUseCase = ({
 
       yield* validateManualCloseTaskEffect(current, currentTasks);
 
-      const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      const currentSessions = currentMetadata.agentSessions;
-      const hasWorkflowSessions = taskHasSessionsForRoles(
-        currentSessions,
-        workflowCleanupSessionRoles,
-      );
-      if (hasWorkflowSessions && !taskActivityGuard) {
-        return yield* Effect.fail(
-          new HostDependencyError({
-            dependency: "taskActivityGuard",
-            operation: "task_close",
-            message:
-              "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
-            details: { repoPath, taskId },
-          }),
-        );
-      }
       const dependencies = yield* requireDependencies(() =>
         requireTaskCloseDependencies(
           devServerService,
@@ -83,65 +66,84 @@ export const createTaskCloseUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-
-      if (hasWorkflowSessions && taskActivityGuard) {
-        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath: effectiveRepoPath,
-          taskId,
-          sessions: currentSessions,
-          operationLabel: "close task",
-          sessionRoles: [...workflowCleanupSessionRoleNames],
-        });
-      }
-
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
       );
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
-      const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
-      const taskWorktreePathExists =
-        yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
-      let taskWorktreeDependency = taskWorktreeService;
-      if (!taskWorktreeDependency && taskWorktreePathExists) {
-        taskWorktreeDependency = yield* requireDependencies(() =>
-          requireTaskCloseWorktreeService(taskWorktreeService),
-        );
-      }
-      const closeWorktreeDependencies = taskWorktreeDependency
-        ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
-        : dependencies;
-      const worktreePaths = yield* collectCloseWorktreePaths(
-        closeWorktreeDependencies,
-        effectiveRepoPath,
-        branchPrefix,
-        current,
-        currentSessions,
-      );
-      const branchNames = yield* collectRelatedTaskBranches(
-        dependencies.gitPort,
-        effectiveRepoPath,
-        branchPrefix,
-        [taskId],
-      );
       const cleanupProgress = createTaskCleanupProgressState();
+      const cleanup = Effect.gen(function* () {
+        const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+        const currentSessions = currentMetadata.agentSessions;
+        const hasWorkflowSessions = taskHasSessionsForRoles(
+          currentSessions,
+          workflowCleanupSessionRoles,
+        );
+        if (hasWorkflowSessions && !taskActivityGuard) {
+          return yield* Effect.fail(
+            new HostDependencyError({
+              dependency: "taskActivityGuard",
+              operation: "task_close",
+              message:
+                "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+              details: { repoPath, taskId },
+            }),
+          );
+        }
+        if (hasWorkflowSessions && taskActivityGuard) {
+          yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
+            repoPath: effectiveRepoPath,
+            taskId,
+            sessions: currentSessions,
+            operationLabel: "close task",
+            sessionRoles: [...workflowCleanupSessionRoleNames],
+          });
+        }
+
+        const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+        const taskWorktreePathExists =
+          yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
+        let taskWorktreeDependency = taskWorktreeService;
+        if (!taskWorktreeDependency && taskWorktreePathExists) {
+          taskWorktreeDependency = yield* requireDependencies(() =>
+            requireTaskCloseWorktreeService(taskWorktreeService),
+          );
+        }
+        const closeWorktreeDependencies = taskWorktreeDependency
+          ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
+          : dependencies;
+        const worktreePaths = yield* collectCloseWorktreePaths(
+          closeWorktreeDependencies,
+          effectiveRepoPath,
+          branchPrefix,
+          current,
+          currentSessions,
+        );
+        const branchNames = yield* collectRelatedTaskBranches(
+          dependencies.gitPort,
+          effectiveRepoPath,
+          branchPrefix,
+          [taskId],
+        );
+        yield* runTaskLocalCleanup({
+          branchNames,
+          devServerService: dependencies.devServerService,
+          gitPort: dependencies.gitPort,
+          managedWorktreeBasePath,
+          progress: cleanupProgress,
+          repoPath: effectiveRepoPath,
+          settingsConfig: dependencies.settingsConfig,
+          taskIds: [taskId],
+          terminalService,
+          worktreeCleanupOperation: "task_close",
+          worktreeFiles,
+          worktreePaths,
+        });
+      });
 
       return yield* Effect.gen(function* () {
         const updated = yield* completeTaskClosure({
-          cleanup: runTaskLocalCleanup({
-            branchNames,
-            devServerService: dependencies.devServerService,
-            gitPort: dependencies.gitPort,
-            managedWorktreeBasePath,
-            progress: cleanupProgress,
-            repoPath: effectiveRepoPath,
-            settingsConfig: dependencies.settingsConfig,
-            taskIds: [taskId],
-            terminalService,
-            worktreeCleanupOperation: "task_close",
-            worktreeFiles,
-            worktreePaths,
-          }),
+          cleanup,
           gitPort: dependencies.gitPort,
           operation: "close task",
           repoPath: effectiveRepoPath,

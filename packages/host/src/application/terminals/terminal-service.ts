@@ -191,28 +191,24 @@ export const createTerminalService = ({
         }),
       acquireTaskCleanup: (scope) =>
         Effect.gen(function* () {
-          const { canonicalScope, lease } = yield* Effect.acquireUseRelease(
-            admission.beginTaskCleanupPreparation(),
-            () =>
-              canonicalizeTaskScope(scope).pipe(
-                Effect.flatMap((canonicalScope) =>
-                  admission
-                    .acquireTaskCleanupLease(canonicalScope)
-                    .pipe(Effect.map((lease) => ({ canonicalScope, lease }))),
+          const cleanupLease = yield* Effect.acquireRelease(
+            Effect.acquireUseRelease(
+              admission.beginTaskCleanupPreparation(),
+              () =>
+                canonicalizeTaskScope(scope).pipe(
+                  Effect.flatMap((canonicalScope) =>
+                    admission
+                      .acquireTaskCleanupLease(canonicalScope)
+                      .pipe(Effect.map((lease) => ({ canonicalScope, lease }))),
+                  ),
                 ),
-              ),
-            (preparation) => Effect.sync(() => preparation.release()),
-          );
-          return yield* Effect.acquireRelease(Effect.succeed(lease), (activeLease) =>
-            Effect.sync(() => activeLease.release()),
-          ).pipe(
-            Effect.tap((activeLease) => activeLease.awaitPending),
-            Effect.zipRight(
-              engine
-                .closeByTaskScope(canonicalScope)
-                .pipe(Effect.map((closedTerminalIds) => ({ closedTerminalIds }))),
+              (preparation) => Effect.sync(() => preparation.release()),
             ),
+            ({ lease }) => Effect.sync(() => lease.release()),
           );
+          yield* cleanupLease.lease.awaitPending;
+          const closedTerminalIds = yield* engine.closeByTaskScope(cleanupLease.canonicalScope);
+          return { closedTerminalIds };
         }),
       dispose: () =>
         Effect.gen(function* () {
