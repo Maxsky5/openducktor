@@ -25,7 +25,11 @@ const canonicalZeroUsage = (params: unknown): CodexSessionContextUsage | null =>
     return null;
   }
   const contextWindow = usage.modelContextWindow;
-  if (contextWindow !== null && (typeof contextWindow !== "number" || contextWindow <= 0)) {
+  if (
+    contextWindow !== null &&
+    contextWindow !== undefined &&
+    (typeof contextWindow !== "number" || contextWindow <= 0)
+  ) {
     return null;
   }
   return {

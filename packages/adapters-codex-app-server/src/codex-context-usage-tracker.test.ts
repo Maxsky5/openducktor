@@ -26,6 +26,23 @@ describe("CodexContextUsageTracker", () => {
     });
   });
 
+  test("accepts zero usage without a model context window", () => {
+    const tracker = new CodexContextUsageTracker();
+    tracker.observeNotification("runtime-live", {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-idle",
+        tokenUsage: {
+          last: { totalTokens: 0 },
+          total: { totalTokens: 0 },
+        },
+      },
+      receivedAt: "2026-07-06T12:00:00.000Z",
+    });
+
+    expect(tracker.latest("runtime-live", "thread-idle")).toEqual({ totalTokens: 0 });
+  });
+
   test("shares concurrent and synchronously reentrant loads", async () => {
     const tracker = new CodexContextUsageTracker();
     let nestedLoad: Promise<unknown> | null = null;
