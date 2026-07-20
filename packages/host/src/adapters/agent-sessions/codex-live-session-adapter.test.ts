@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type {
   CodexAppServerAdapter,
   CodexAppServerAdapterOptions,
+  CodexSessionContextUsage,
 } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveSnapshot,
@@ -94,10 +95,19 @@ const createLifecycle = (changes: AgentSessionLiveAdapterChange[]) =>
       ),
   }) satisfies RuntimeLiveSessionLifecyclePort;
 
-const createControllerHarness = (
-  initialSnapshots: AgentSessionLiveSnapshot[] = [liveSnapshot()],
-  releaseRuntime: () => void = () => undefined,
-) => {
+type ControllerHarnessOptions = {
+  initialSnapshots?: AgentSessionLiveSnapshot[];
+  releaseRuntime?: () => void;
+  liveContextUsage?: CodexSessionContextUsage | null;
+  persistedContextUsage?: CodexSessionContextUsage | null;
+};
+
+const createControllerHarness = ({
+  initialSnapshots = [liveSnapshot()],
+  releaseRuntime = () => undefined,
+  liveContextUsage = { totalTokens: 123, contextWindow: 1_000 },
+  persistedContextUsage = { totalTokens: 456, contextWindow: 2_000 },
+}: ControllerHarnessOptions = {}) => {
   let options: CodexAppServerAdapterOptions | null = null;
   let snapshots = initialSnapshots;
   const rawEvents: unknown[] = [];
@@ -128,7 +138,7 @@ const createControllerHarness = (
         listLiveSessionSnapshots: () => snapshots,
         loadLiveSessionContextUsage: async (input: unknown) => {
           liveContextLoads.push(input);
-          const usage = { totalTokens: 123, contextWindow: 1_000 };
+          const usage = liveContextUsage;
           const snapshot = snapshots[0];
           if (!snapshot) {
             throw new Error("Expected a retained Codex snapshot before loading context.");
@@ -140,7 +150,7 @@ const createControllerHarness = (
           input: Parameters<CodexAppServerAdapter["loadSessionContextUsage"]>[0],
         ) => {
           policyBoundContextLoads.push(input);
-          const usage = { totalTokens: 456, contextWindow: 2_000 };
+          const usage = persistedContextUsage;
           snapshots = [
             {
               ...liveSnapshot(),
@@ -423,8 +433,11 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
   test("clears the retained projection when controller cleanup fails", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
-    const harness = createControllerHarness([liveSnapshot()], () => {
-      throw new Error("controller cleanup failed");
+    const harness = createControllerHarness({
+      initialSnapshots: [liveSnapshot()],
+      releaseRuntime: () => {
+        throw new Error("controller cleanup failed");
+      },
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
@@ -472,7 +485,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       adapterRegistry: createLiveSessionAdapterRegistry(),
       publish: (event) => events.push(event),
     });
-    const harness = createControllerHarness(snapshots);
+    const harness = createControllerHarness({ initialSnapshots: snapshots });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: service,
@@ -684,9 +697,33 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     ).resolves.toEqual([]);
   });
 
+  test("returns nullable Codex context usage through the public host adapter", async () => {
+    const harness = createControllerHarness({
+      initialSnapshots: [liveSnapshot()],
+      liveContextUsage: null,
+    });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: "runtime-1",
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    await expect(Effect.runPromise(prepared.adapter.loadContext({ ...ref }))).resolves.toBeNull();
+    expect(harness.liveContextLoads).toHaveLength(1);
+  });
+
   test("loads an unmatched persisted session with host-resolved workflow policy", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
-    const harness = createControllerHarness([]);
+    const harness = createControllerHarness({ initialSnapshots: [] });
     const policyScopes: AgentSessionWorkflowScope[] = [];
     const qaPolicy: CodexEffectivePolicy = {
       ...codexPolicy,
@@ -733,8 +770,45 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
   });
 
+  test("returns nullable context for an unmatched persisted session", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness({
+      initialSnapshots: [],
+      persistedContextUsage: null,
+    });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const persistedRef = {
+      ...ref,
+      externalSessionId: "persisted-thread",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } as const,
+    };
+    await expect(Effect.runPromise(prepared.adapter.loadContext(persistedRef))).resolves.toBeNull();
+    expect(harness.liveContextLoads).toEqual([]);
+    expect(harness.policyBoundContextLoads).toEqual([
+      expect.objectContaining({
+        ...persistedRef,
+        runtimePolicy: { kind: "codex", policy: codexPolicy },
+      }),
+    ]);
+    expect(changes.at(-1)).toMatchObject({
+      type: "session_upsert",
+      snapshot: {
+        ref: expect.objectContaining({ externalSessionId: "persisted-thread" }),
+        contextUsage: null,
+      },
+    });
+  });
+
   test("rejects an unmatched context load without workflow scope", async () => {
-    const harness = createControllerHarness([]);
+    const harness = createControllerHarness({ initialSnapshots: [] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),

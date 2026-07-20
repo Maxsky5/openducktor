@@ -31,11 +31,7 @@ import {
 } from "./codex-app-server-streaming";
 import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
-import {
-  type CodexContextUsageObservation,
-  type CodexContextUsageReplayScheduler,
-  CodexContextUsageTracker,
-} from "./codex-context-usage-tracker";
+import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
@@ -65,7 +61,6 @@ import type {
 type CodexRuntimeSessionEventsDeps = {
   subscribeEvents: CodexAppServerAdapterOptions["subscribeEvents"];
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
-  contextUsageReplayScheduler?: CodexContextUsageReplayScheduler;
   onLiveSessionMutation?: (mutation: CodexRuntimeLiveSessionMutation) => void | Promise<void>;
   onCatalogInvalidated?: CodexAppServerAdapterOptions["onCatalogInvalidated"];
   sessions: CodexSessionLookup;
@@ -142,10 +137,7 @@ export class CodexRuntimeSessionEvents {
       createCodexEventMappers(deps.subagents),
     );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
-    this.contextUsage = new CodexContextUsageTracker(
-      (runtimeId) => this.waitForRuntimeEventBarrier(runtimeId),
-      deps.contextUsageReplayScheduler,
-    );
+    this.contextUsage = new CodexContextUsageTracker();
     this.subagentLifecycle = new CodexSubagentLifecycleProjector({
       sessions: deps.sessions,
       subagents: deps.subagents,
@@ -167,10 +159,7 @@ export class CodexRuntimeSessionEvents {
     try {
       this.runtimeEventSubscriptions.stop(runtimeId);
     } finally {
-      this.contextUsage.releaseRuntime(
-        runtimeId,
-        new Error(`Codex runtime '${runtimeId}' stopped while context usage was loading.`),
-      );
+      this.contextUsage.clearRuntime(runtimeId);
     }
   }
 
@@ -208,16 +197,15 @@ export class CodexRuntimeSessionEvents {
     runtimeId: string,
     threadId: string,
     resumeWithTurns: () => Promise<void>,
-  ): Promise<CodexSessionContextUsage> {
+  ): Promise<CodexSessionContextUsage | null> {
     return this.contextUsage.load(runtimeId, threadId, resumeWithTurns);
   }
 
   private enqueueRuntimeStreamEvent(event: CodexRuntimeStreamEvent): void {
-    const contextUsageObservation = this.contextUsage.reserveObservation(event);
     const previous =
       this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) ?? Promise.resolve();
     const processing = previous
-      .then(() => this.processRuntimeStreamEventMutation(event, contextUsageObservation))
+      .then(() => this.processRuntimeStreamEventMutation(event))
       .catch((error) => this.emitRuntimeStreamEventError(event, error));
     this.runtimeEventProcessingByRuntimeId.set(event.runtimeId, processing);
     void processing.finally(() => {
@@ -227,10 +215,7 @@ export class CodexRuntimeSessionEvents {
     });
   }
 
-  private async processRuntimeStreamEventMutation(
-    event: CodexRuntimeStreamEvent,
-    contextUsageObservation: CodexContextUsageObservation | null,
-  ): Promise<void> {
+  private async processRuntimeStreamEventMutation(event: CodexRuntimeStreamEvent): Promise<void> {
     const mutation: CodexRuntimeLiveSessionMutation = {
       runtimeId: event.runtimeId,
       transcriptEvents: [],
@@ -239,7 +224,7 @@ export class CodexRuntimeSessionEvents {
     this.activeMutationByRuntimeId.set(event.runtimeId, mutation);
     try {
       try {
-        await this.handleRuntimeStreamEvent(event, contextUsageObservation);
+        await this.handleRuntimeStreamEvent(event);
       } catch (error) {
         mutation.fault = this.errorMessage(error);
         this.emitRuntimeStreamEventError(event, error);
@@ -253,10 +238,6 @@ export class CodexRuntimeSessionEvents {
         this.activeMutationByRuntimeId.delete(event.runtimeId);
       }
     }
-  }
-
-  private waitForRuntimeEventBarrier(runtimeId: string): Promise<void> {
-    return this.runtimeEventProcessingByRuntimeId.get(runtimeId) ?? Promise.resolve();
   }
 
   latestTodos(externalSessionId: string): AgentSessionTodoItem[] | undefined {
@@ -399,13 +380,17 @@ export class CodexRuntimeSessionEvents {
     this.emitSessionError(externalSessionId, error);
   }
 
-  private async handleRuntimeStreamEvent(
-    event: CodexRuntimeStreamEvent,
-    contextUsageObservation: CodexContextUsageObservation | null,
-  ): Promise<void> {
+  private async handleRuntimeStreamEvent(event: CodexRuntimeStreamEvent): Promise<void> {
     this.assertRuntimeStreamEventReceivedAt(event);
     if (event.kind === "notification") {
       this.observeCatalogInvalidation(event.runtimeId, event.message);
+    }
+    const notification =
+      event.kind === "notification"
+        ? parseNotificationRecord(event.message, event.receivedAt)
+        : null;
+    if (notification?.method === "thread/tokenUsage/updated") {
+      this.contextUsage.observeNotification(event.runtimeId, notification);
     }
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
@@ -414,13 +399,9 @@ export class CodexRuntimeSessionEvents {
       }
       return;
     }
-    if (event.kind === "notification") {
-      const notification = parseNotificationRecord(event.message, event.receivedAt);
-      this.contextUsage.observeNotification(event.runtimeId, notification, contextUsageObservation);
-      if (notification.method === "serverRequest/resolved") {
-        this.handleServerRequestResolvedNotification(event.runtimeId, notification);
-        return;
-      }
+    if (notification?.method === "serverRequest/resolved") {
+      this.handleServerRequestResolvedNotification(event.runtimeId, notification);
+      return;
     }
     const session = this.deps.sessions.get(threadId);
     if (!session) {
@@ -447,10 +428,9 @@ export class CodexRuntimeSessionEvents {
           `Cannot route Codex server request for thread '${threadId}' because no retained session or subagent route exists.`,
         );
       }
-      this.subagentLifecycle.projectNotification(
-        event.runtimeId,
-        parseNotificationRecord(event.message, event.receivedAt),
-      );
+      if (notification) {
+        this.subagentLifecycle.projectNotification(event.runtimeId, notification);
+      }
       if (route && parentSession) {
         if (parentSession.runtimeId !== event.runtimeId) {
           throw new Error(
@@ -472,11 +452,8 @@ export class CodexRuntimeSessionEvents {
       }
       return;
     }
-    if (event.kind === "notification") {
-      this.subagentLifecycle.projectNotification(
-        event.runtimeId,
-        parseNotificationRecord(event.message, event.receivedAt),
-      );
+    if (notification) {
+      this.subagentLifecycle.projectNotification(event.runtimeId, notification);
     }
     await this.processRuntimeStreamEventForSession(session, event);
   }

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { createDeferred } from "./codex-app-server-adapter.test-harness";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -18,7 +17,6 @@ const flushRuntimeEvents = async (): Promise<void> => {
 };
 
 const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
-const expectedContextUsageReplayTimeoutMs = 10_000;
 
 type RuntimeEventInput = {
   runtimeId: string;
@@ -48,54 +46,6 @@ const createRuntimeEvents = (
     flushQueuedUserMessagesLater: () => undefined,
     ...overrides,
   });
-
-type FakeScheduledTimeout = {
-  callback: () => void;
-  cleared: boolean;
-  timeoutMs: number;
-};
-
-const createFakeTimeoutScheduler = () => {
-  const clearedTimeouts: FakeScheduledTimeout[] = [];
-  const timeouts: FakeScheduledTimeout[] = [];
-  const scheduledWaiters = new Map<number, ReturnType<typeof createDeferred<void>>>();
-  const scheduler = {
-    clearTimeout(handle: unknown): void {
-      const timeout = handle as FakeScheduledTimeout;
-      timeout.cleared = true;
-      clearedTimeouts.push(timeout);
-    },
-    setTimeout(callback: () => void, timeoutMs: number): FakeScheduledTimeout {
-      const timeout = { callback, cleared: false, timeoutMs };
-      timeouts.push(timeout);
-      scheduledWaiters.get(timeouts.length)?.resolve(undefined);
-      return timeout;
-    },
-  };
-  const waitForScheduledCount = (count: number): Promise<void> => {
-    if (timeouts.length >= count) {
-      return Promise.resolve();
-    }
-    const waiter = createDeferred<void>();
-    scheduledWaiters.set(count, waiter);
-    return waiter.promise;
-  };
-
-  return {
-    runTimeout(index: number): void {
-      const timeout = timeouts[index];
-      if (!timeout || timeout.cleared) {
-        throw new Error(`Context usage replay timeout ${index} is unavailable.`);
-      }
-      timeout.cleared = true;
-      timeout.callback();
-    },
-    clearedTimeouts,
-    scheduler,
-    timeouts,
-    waitForScheduledCount,
-  };
-};
 
 const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
 
@@ -560,129 +510,59 @@ describe("CodexRuntimeSessionEvents", () => {
     });
   });
 
-  test("waits only for context usage from the matching runtime and thread", async () => {
-    const listeners = new Map<string, RuntimeListener>();
-    let processedMutation = createDeferred<void>();
-    const runtimeEvents = createRuntimeEvents({
-      subscribeEvents: (runtimeId, next) => {
-        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
-        return () => undefined;
-      },
-      onLiveSessionMutation: () => {
-        processedMutation.resolve(undefined);
-      },
-    });
-    const emitUsageAndWait = async (
-      runtimeId: string,
-      threadId: string,
-      totalTokens: number,
-    ): Promise<void> => {
-      const currentMutation = processedMutation;
-      listeners.get(runtimeId)?.({
-        runtimeId,
-        kind: "notification",
-        message: {
-          method: "thread/tokenUsage/updated",
-          params: {
-            threadId,
-            turnId: `${threadId}-turn`,
-            tokenUsage: {
-              total: { totalTokens },
-              last: { totalTokens },
-              modelContextWindow: 200_000,
-            },
-          },
-        },
-      });
-      await currentMutation.promise;
-      processedMutation = createDeferred<void>();
-    };
+  test("returns null after a successful resume with no retained usage", async () => {
+    const runtimeEvents = createRuntimeEvents();
 
-    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
-    await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
-    const loading = runtimeEvents.loadSessionContextUsage(
-      "runtime-1",
-      "thread-target",
-      async () => undefined,
-    );
-    const outcome = loading.then(
-      (usage) => ({ status: "resolved" as const, usage }),
-      (error: unknown) => ({ status: "rejected" as const, error }),
-    );
-
-    await emitUsageAndWait("runtime-1", "thread-other", 100);
-    await emitUsageAndWait("runtime-2", "thread-target", 200);
-    expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toBeNull();
-
-    await emitUsageAndWait("runtime-1", "thread-target", 300);
-    await expect(outcome).resolves.toEqual({
-      status: "resolved",
-      usage: { totalTokens: 300, contextWindow: 200_000 },
-    });
+    await expect(
+      runtimeEvents.loadSessionContextUsage("runtime-1", "thread-target", async () => undefined),
+    ).resolves.toBeNull();
   });
 
-  test("fails a successful resume with no usage replay and allows an explicit retry", async () => {
+  test("records a malformed token notification as a stream fault without changing usage", async () => {
     let listener: RuntimeListener | null = null;
-    const replayScheduler = createFakeTimeoutScheduler();
+    const mutations: Array<{ fault?: string }> = [];
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
         listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
-      contextUsageReplayScheduler: replayScheduler.scheduler,
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
     });
-    let resumeAttempts = 0;
-    const resumeWithTurns = async (): Promise<void> => {
-      resumeAttempts += 1;
-    };
 
     await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
-    const firstAttempt = runtimeEvents.loadSessionContextUsage(
-      "runtime-1",
-      "thread-target",
-      resumeWithTurns,
-    );
-    const concurrentAttempt = runtimeEvents.loadSessionContextUsage(
-      "runtime-1",
-      "thread-target",
-      resumeWithTurns,
-    );
-    expect(concurrentAttempt).toBe(firstAttempt);
-    const firstAttemptOutcomes = Promise.all(
-      [firstAttempt, concurrentAttempt].map((attempt) =>
-        attempt.then(
-          (usage) => ({ status: "resolved" as const, usage }),
-          (error: unknown) => ({ status: "rejected" as const, error }),
-        ),
-      ),
-    );
-    await replayScheduler.waitForScheduledCount(1);
-    expect(resumeAttempts).toBe(1);
-    expect(replayScheduler.timeouts[0]?.timeoutMs).toBe(expectedContextUsageReplayTimeoutMs);
-    replayScheduler.runTimeout(0);
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "thread/tokenUsage/updated",
+        params: {
+          turnId: "thread-target-turn",
+          tokenUsage: {
+            total: { totalTokens: 300 },
+            last: { totalTokens: 300 },
+            modelContextWindow: 200_000,
+          },
+        },
+      },
+    });
+    await flushRuntimeEvents();
 
-    const outcomes = await firstAttemptOutcomes;
-    expect(outcomes).toHaveLength(2);
-    for (const outcome of outcomes) {
-      expect(outcome.status).toBe("rejected");
-      if (outcome.status === "rejected") {
-        expect(outcome.error).toBeInstanceOf(Error);
-        expect((outcome.error as Error).message).toContain(
-          `Timed out waiting for Codex context usage replay for runtime 'runtime-1' session 'thread-target' after ${expectedContextUsageReplayTimeoutMs}ms: thread/resume completed but no matching thread/tokenUsage/updated notification arrived.`,
-        );
-      }
-    }
-    expect(replayScheduler.timeouts[0]?.cleared).toBe(true);
-    expect(replayScheduler.clearedTimeouts).toEqual([replayScheduler.timeouts[0]]);
+    expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toBeNull();
+    expect(mutations.at(-1)?.fault).toContain("missing threadId");
+  });
 
-    const retry = runtimeEvents.loadSessionContextUsage(
-      "runtime-1",
-      "thread-target",
-      resumeWithTurns,
-    );
-    expect(resumeAttempts).toBe(1);
-    await replayScheduler.waitForScheduledCount(2);
-    expect(resumeAttempts).toBe(2);
+  test("retains canonical zero token usage without a stream fault", async () => {
+    let listener: RuntimeListener | null = null;
+    const mutations: Array<{ fault?: string }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
     listener?.({
       runtimeId: "runtime-1",
       kind: "notification",
@@ -692,17 +572,71 @@ describe("CodexRuntimeSessionEvents", () => {
           threadId: "thread-target",
           turnId: "thread-target-turn",
           tokenUsage: {
-            total: { totalTokens: 400 },
-            last: { totalTokens: 400 },
+            total: { totalTokens: 0 },
+            last: { totalTokens: 0 },
             modelContextWindow: 200_000,
           },
         },
       },
     });
+    await flushRuntimeEvents();
 
-    await expect(retry).resolves.toEqual({ totalTokens: 400, contextWindow: 200_000 });
-    expect(replayScheduler.timeouts[1]?.cleared).toBe(true);
-    expect(resumeAttempts).toBe(2);
+    expect(mutations.at(-1)?.fault).toBeUndefined();
+    expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toEqual({
+      totalTokens: 0,
+      contextWindow: 200_000,
+    });
+  });
+
+  test("clears context usage for only the requested runtime", async () => {
+    const listeners = new Map<string, RuntimeListener>();
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (runtimeId, next) => {
+        listeners.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
+        return () => undefined;
+      },
+    });
+    const emitUsage = (runtimeId: string, totalTokens: number): void => {
+      listeners.get(runtimeId)?.({
+        runtimeId,
+        kind: "notification",
+        message: {
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: "shared-thread",
+            turnId: `${runtimeId}-turn`,
+            tokenUsage: {
+              total: { totalTokens },
+              last: { totalTokens },
+              modelContextWindow: 200_000,
+            },
+          },
+        },
+      });
+    };
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-2");
+    emitUsage("runtime-1", 100);
+    emitUsage("runtime-2", 200);
+    await flushRuntimeEvents();
+
+    expect(runtimeEvents.latestContextUsage("runtime-1", "shared-thread")).toEqual({
+      totalTokens: 100,
+      contextWindow: 200_000,
+    });
+    expect(runtimeEvents.latestContextUsage("runtime-2", "shared-thread")).toEqual({
+      totalTokens: 200,
+      contextWindow: 200_000,
+    });
+
+    runtimeEvents.clearRuntime("runtime-1");
+
+    expect(runtimeEvents.latestContextUsage("runtime-1", "shared-thread")).toBeNull();
+    expect(runtimeEvents.latestContextUsage("runtime-2", "shared-thread")).toEqual({
+      totalTokens: 200,
+      contextWindow: 200_000,
+    });
   });
 
   test("routes buffered child server requests through a loaded linked parent", async () => {

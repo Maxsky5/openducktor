@@ -59,6 +59,7 @@ import { type ActiveCodexTurn, unsupported } from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
 import type { CodexThreadInventory } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
+import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { toFileDiffs } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
@@ -187,6 +188,7 @@ export class CodexAppServerAdapter
   private readonly pendingInput = new CodexPendingInputState();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   private readonly localSessions: CodexLocalSessionState;
+  private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
@@ -233,6 +235,14 @@ export class CodexAppServerAdapter
       },
       runtimeEvents: this.runtimeEvents,
     });
+    this.contextUsageLoader = new CodexContextUsageLoader({
+      runtimeClients: this.runtimeClients,
+      runtimeEvents: this.runtimeEvents,
+      localSessions: this.localSessions,
+      subagents: this.subagents,
+      prepareRuntime: (runtimeId) => this.prepareRuntime(runtimeId),
+      clearThreadInventory: (runtimeId) => this.clearThreadInventory(runtimeId),
+    });
   }
 
   getRuntimeDefinition(): RuntimeDescriptor {
@@ -254,6 +264,7 @@ export class CodexAppServerAdapter
   }
 
   releaseRuntime(runtimeId: string): void {
+    this.contextUsageLoader.cancelRuntime(runtimeId);
     const failures: Array<{ label: string; cause: unknown }> = [];
     const cleanup = (label: string, operation: () => void): void => {
       try {
@@ -518,86 +529,17 @@ export class CodexAppServerAdapter
     });
   }
 
-  async loadSessionContextUsage(input: PolicyBoundSessionRef): Promise<CodexSessionContextUsage> {
+  async loadSessionContextUsage(
+    input: PolicyBoundSessionRef,
+  ): Promise<CodexSessionContextUsage | null> {
     assertCodexRuntimePolicyBinding(input, "load Codex session context usage");
-    const session = this.localSessions.get(input.externalSessionId);
-    if (session) {
-      return this.loadLiveSessionContextUsage({
-        runtimeId: session.runtimeId,
-        externalSessionId: session.threadId,
-      });
-    }
-    const runtime = await this.runtimeClients.resolve(input, "load Codex session context usage");
-    await this.prepareRuntime(runtime.runtimeId);
-    const policy = requireCodexRuntimePolicy(
-      input.runtimePolicy,
-      "load Codex session context usage",
-    );
-    return this.runtimeEvents.loadSessionContextUsage(
-      runtime.runtimeId,
-      input.externalSessionId,
-      async () => {
-        const response = await runtime.client.threadResume({
-          ...codexTransportPolicy(policy),
-          threadId: input.externalSessionId,
-          cwd: input.workingDirectory,
-          excludeTurns: false,
-        });
-        const recoveredSession = sessionStateFromExistingThread(
-          input,
-          runtime.runtimeId,
-          input.model,
-          response,
-        );
-        this.localSessions.remember(
-          preserveRuntimeContextForExistingThread(
-            recoveredSession,
-            this.localSessions.get(input.externalSessionId),
-          ),
-        );
-        this.clearThreadInventory(runtime.runtimeId);
-      },
-    );
+    return this.contextUsageLoader.loadSession(input);
   }
 
   async loadLiveSessionContextUsage(
     input: CodexLiveSessionLocator,
-  ): Promise<CodexSessionContextUsage> {
-    const retained = this.runtimeEvents.latestContextUsage(
-      input.runtimeId,
-      input.externalSessionId,
-    );
-    if (retained) {
-      return retained;
-    }
-    const localSession = this.localSessions.get(input.externalSessionId);
-    const route = localSession
-      ? null
-      : this.subagents.routeForChild(input.externalSessionId, input.runtimeId);
-    const session = localSession ?? this.localSessions.get(route?.parentExternalSessionId ?? "");
-    if (!session || session.runtimeId !== input.runtimeId) {
-      throw new Error(
-        `Cannot load Codex session context usage because session '${input.externalSessionId}' is not retained by runtime '${input.runtimeId}'.`,
-      );
-    }
-    await this.prepareRuntime(input.runtimeId);
-    const policy = requireCodexRuntimePolicy(
-      session.runtimePolicy,
-      "load Codex session context usage",
-    );
-    return this.runtimeEvents.loadSessionContextUsage(
-      input.runtimeId,
-      input.externalSessionId,
-      async () => {
-        await this.runtimeClients.clientForRuntime(input.runtimeId).threadResume({
-          ...codexTransportPolicy(policy),
-          threadId: input.externalSessionId,
-          cwd: session.workingDirectory,
-          excludeTurns: false,
-        });
-        this.clearThreadInventory(input.runtimeId);
-      },
-    );
+  ): Promise<CodexSessionContextUsage | null> {
+    return this.contextUsageLoader.loadLive(input);
   }
 
   listLiveSessionSnapshots(runtimeId: string): AgentSessionLiveSnapshot[] {
@@ -694,17 +636,18 @@ export class CodexAppServerAdapter
 
   async releaseSession(input: SessionRef): Promise<void> {
     const session = this.localSessions.get(input.externalSessionId);
-    if (!session) {
-      return;
+    if (session) {
+      const sessionRef = codexSessionRef(session);
+      if (!agentSessionRefsEqual(sessionRef, input)) {
+        throw new Error(
+          `Cannot release Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+        );
+      }
     }
-    const sessionRef = codexSessionRef(session);
-    if (!agentSessionRefsEqual(sessionRef, input)) {
-      throw new Error(
-        `Cannot release Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
-      );
+    this.contextUsageLoader.cancelSession(input);
+    if (session) {
+      this.localSessions.release(input.externalSessionId);
     }
-
-    this.localSessions.release(input.externalSessionId);
   }
 
   async listSessionRuntimeSnapshots(
@@ -1043,6 +986,7 @@ export class CodexAppServerAdapter
       );
     }
 
+    this.contextUsageLoader.cancelSession(input);
     this.localSessions.release(input.externalSessionId);
   }
 

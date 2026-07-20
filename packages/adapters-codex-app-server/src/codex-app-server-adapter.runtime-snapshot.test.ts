@@ -243,7 +243,7 @@ class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
             turnId: "turn-1",
             tokenUsage: {
               total: { totalTokens: 42_000 },
-              last: { totalTokens: 1_000 },
+              last: { totalTokens: 42_000 },
               modelContextWindow: 200_000,
             },
           },
@@ -425,13 +425,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     );
   });
 
-  test("retains explicit Codex context recovery as an idle live session", async () => {
-    const transport = new RestoredUsageStreamTransport("runtime-live", false);
-    const subscribeEvents = mock((runtimeId: string, listener) => {
-      transport.emitRestoredUsage = (message) =>
-        listener(withRuntimeReceivedAt({ runtimeId, kind: "notification", message }));
-      return () => undefined;
-    });
+  test("retains an idle live session after a successful null context resume", async () => {
+    const transport = new StoredIdleHistoryTransport("runtime-live", false);
+    const subscribeEvents = mock((_runtimeId: string, _listener) => () => undefined);
     const { adapter } = createHarness({
       subscribeEvents,
       transportFactory: mock(() => transport),
@@ -447,7 +443,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
-    ).resolves.toEqual({ totalTokens: 1_000, contextWindow: 200_000 });
+    ).resolves.toBeNull();
     expect(transport.calls).toContainEqual(
       expect.objectContaining({
         method: "thread/resume",
@@ -532,7 +528,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
   });
 
-  test("retains restored context usage emitted before the session is observed", async () => {
+  test("applies delayed live context usage to the retained session", async () => {
     const transport = new RestoredUsageStreamTransport("runtime-live", false);
     const subscribeEvents = mock((runtimeId: string, listener) => {
       transport.emitRestoredUsage = (message) =>
@@ -554,23 +550,14 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
-    ).resolves.toEqual({ totalTokens: 1_000, contextWindow: 200_000 });
+    ).resolves.toBeNull();
     expect(localSessions(adapter).has("thread-idle")).toBe(true);
 
-    await adapter.resumeSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      systemPrompt: "Use the repo rules.",
-      externalSessionId: "thread-idle",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await flushCodexAdapterWork();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
       expect.objectContaining({
         ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
-        contextUsage: { totalTokens: 1_000, contextWindow: 200_000 },
+        contextUsage: { totalTokens: 42_000, contextWindow: 200_000 },
       }),
     );
   });
