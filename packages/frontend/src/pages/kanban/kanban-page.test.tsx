@@ -6,6 +6,7 @@ import {
   type RepoConfig,
   type RepoPromptOverrides,
   type SettingsSnapshot,
+  type TaskApprovalContext,
   type TaskCard,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -136,6 +137,8 @@ type LatestKanbanPageModels = {
   isLoadingTasks: boolean | null;
   showHorizontalScrollbars: boolean | null;
   humanReviewFeedbackModalModel: Record<string, unknown> | null;
+  taskApprovalModalModel: KanbanPageModels["taskApprovalModal"];
+  taskGitConflictDialogModel: KanbanPageModels["taskGitConflictDialog"];
   sessionStartModalModel: Record<string, unknown> | null;
   resetImplementationModalModel: Record<string, unknown> | null;
   mergedPullRequestModalProps: Record<string, unknown> | null;
@@ -156,6 +159,8 @@ type KanbanPageHarness = RenderResult & {
   getIsLoadingTasks: () => boolean | null;
   getShowHorizontalScrollbars: () => boolean | null;
   getHumanReviewFeedbackModalModel: () => Record<string, unknown> | null;
+  getTaskApprovalModalModel: () => KanbanPageModels["taskApprovalModal"];
+  getTaskGitConflictDialogModel: () => KanbanPageModels["taskGitConflictDialog"];
   getSessionStartModalModel: () => Record<string, unknown> | null;
   getResetImplementationModalModel: () => Record<string, unknown> | null;
   getMergedPullRequestModalProps: () => Record<string, unknown> | null;
@@ -417,6 +422,8 @@ const publishKanbanPageModels = (
   latest.isLoadingTasks = models.content.isLoadingTasks;
   latest.showHorizontalScrollbars = models.content.showHorizontalScrollbars;
   latest.humanReviewFeedbackModalModel = models.humanReviewFeedbackModal;
+  latest.taskApprovalModalModel = models.taskApprovalModal;
+  latest.taskGitConflictDialogModel = models.taskGitConflictDialog;
   latest.sessionStartModalModel = models.sessionStartModal;
   latest.resetImplementationModalModel = models.resetImplementationModal;
   latest.mergedPullRequestModalProps = models.mergedPullRequestModal;
@@ -450,6 +457,8 @@ const renderPage = async (
     isLoadingTasks: null,
     showHorizontalScrollbars: null,
     humanReviewFeedbackModalModel: null,
+    taskApprovalModalModel: null,
+    taskGitConflictDialogModel: null,
     sessionStartModalModel: null,
     resetImplementationModalModel: null,
     mergedPullRequestModalProps: null,
@@ -570,6 +579,8 @@ const renderPage = async (
     getIsLoadingTasks: () => latest.isLoadingTasks,
     getShowHorizontalScrollbars: () => latest.showHorizontalScrollbars,
     getHumanReviewFeedbackModalModel: () => latest.humanReviewFeedbackModalModel,
+    getTaskApprovalModalModel: () => latest.taskApprovalModalModel,
+    getTaskGitConflictDialogModel: () => latest.taskGitConflictDialogModel,
     getSessionStartModalModel: () => latest.sessionStartModalModel,
     getResetImplementationModalModel: () => latest.resetImplementationModalModel,
     getMergedPullRequestModalProps: () => latest.mergedPullRequestModalProps,
@@ -1656,6 +1667,102 @@ describe("KanbanPage session start modal flow", () => {
       renderer.unmount();
     });
   });
+
+  kanbanTest(
+    "git conflict resolution opens the exact external-session Agent Studio route",
+    async () => {
+      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      const originalTaskApprovalContextGet = hostClient.taskApprovalContextGet;
+      const originalTaskDirectMerge = hostClient.taskDirectMerge;
+      const originalWorkspaceGetRepoConfig = hostClient.workspaceGetRepoConfig;
+      const originalWorkspaceGetSettingsSnapshot = hostClient.workspaceGetSettingsSnapshot;
+      const approvalContext: TaskApprovalContext = {
+        taskId: "TASK-123",
+        taskStatus: "human_review",
+        workingDirectory: "/repo/worktrees/conflict",
+        sourceBranch: "odt/TASK-123",
+        targetBranch: { remote: "origin", branch: "main" },
+        publishTarget: { remote: "origin", branch: "main" },
+        defaultMergeMethod: "merge_commit",
+        hasUncommittedChanges: false,
+        uncommittedFileCount: 0,
+        providers: [],
+      };
+      hostClient.taskApprovalContextGet = async () => ({
+        outcome: "ready",
+        approvalContext,
+      });
+      hostClient.taskDirectMerge = async () => ({
+        outcome: "conflicts",
+        conflict: {
+          operation: "direct_merge_merge_commit",
+          currentBranch: "odt/TASK-123",
+          targetBranch: "main",
+          conflictedFiles: ["src/app.ts"],
+          output: "conflict output",
+          workingDir: "/repo/worktrees/conflict",
+        },
+      });
+      hostClient.workspaceGetRepoConfig = async () => currentRepoConfigFixture;
+      hostClient.workspaceGetSettingsSnapshot = async () => currentSettingsSnapshotFixture;
+
+      const renderer = await renderPage();
+
+      try {
+        await act(async () => {
+          (renderer.getKanbanColumnProps().onHumanApprove as (taskId: string) => void)("TASK-123");
+          await Promise.resolve();
+        });
+        await waitFor(() => {
+          expect(renderer.getTaskApprovalModalModel()?.stage).toBe("approval");
+        });
+
+        const approvalModal = renderer.getTaskApprovalModalModel();
+        if (approvalModal?.stage !== "approval") {
+          throw new Error("Expected the task approval modal.");
+        }
+        await act(async () => {
+          approvalModal.onConfirm();
+          await Promise.resolve();
+        });
+        await waitFor(() => {
+          expect(renderer.getTaskGitConflictDialogModel()?.open).toBe(true);
+        });
+
+        await act(async () => {
+          renderer.getTaskGitConflictDialogModel()?.onAskBuilder();
+          await Promise.resolve();
+        });
+        await confirmSessionStartModal(renderer, {
+          modelId: "openai/gpt-5",
+          profileId: "build-agent",
+          startMode: "fresh",
+          variant: "default",
+        });
+        await waitFor(() => {
+          expect(renderer.getLocation()).toBe(
+            "/agents?task=TASK-123&session=session-1&agent=build",
+          );
+        });
+        const sessionExternalId = new URL(
+          renderer.getLocation(),
+          "https://openducktor.local",
+        ).searchParams.get("session");
+        expect(sessionExternalId).toBe("session-1");
+        expect(sessionExternalId).not.toContain("opencode");
+        expect(sessionExternalId).not.toContain("%2Frepo");
+        expect(sessionExternalId).not.toContain("|");
+      } finally {
+        hostClient.taskApprovalContextGet = originalTaskApprovalContextGet;
+        hostClient.taskDirectMerge = originalTaskDirectMerge;
+        hostClient.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+        hostClient.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+        await act(async () => {
+          renderer.unmount();
+        });
+      }
+    },
+  );
 
   kanbanTest(
     "build action for a QA-rejected task navigates to the QA follow-up builder launch action",
