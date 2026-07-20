@@ -1,5 +1,10 @@
 import type { AgentStreamPart } from "@openducktor/core";
-import { isRecord, previewInput, readStringProp, toolPartType } from "./claude-agent-sdk-utils";
+import {
+  isRecord,
+  previewInput,
+  readStringProp,
+  toolPartPresentation,
+} from "./claude-agent-sdk-utils";
 
 export type ClaudeDecodedToolUse = {
   blockType: string;
@@ -83,7 +88,7 @@ export const createClaudeRunningToolPart = ({
     partId: toolUse.callId,
     callId: toolUse.callId,
     tool: toolUse.toolName,
-    toolType: toolPartType(toolUse.toolName),
+    ...toolPartPresentation(toolUse.toolName),
     status: "running",
     startedAtMs,
     ...(toolUse.metadata ? { metadata: toolUse.metadata } : {}),

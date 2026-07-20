@@ -4,6 +4,7 @@ import type {
   AgentSkillReference,
   AgentStreamPart,
 } from "@openducktor/core";
+import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import {
   isNestedHistoryEntry,
   readHistoryAssistantModel,
@@ -34,6 +35,7 @@ import {
   emitClaudeAgentToolResultSubagentPart,
   handleClaudeSubagentSystemMessage,
 } from "./claude-agent-sdk-subagents";
+import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
 import { isClaudeToolUseBlockType, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import {
   isClaudeToolUseRetracted,
@@ -42,7 +44,6 @@ import {
 import {
   createClaudeAssistantReasoningPart,
   createClaudeAssistantTextPart,
-  createClaudeCompletedToolPart,
   createClaudeFinishStepPart,
 } from "./claude-agent-sdk-transcript-parts";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
@@ -56,10 +57,8 @@ const successfulResultText = (entry: ClaudeHistoryResultMessage): string | null 
   const text = typeof entry.result === "string" ? entry.result.trim() : "";
   return text.length > 0 ? text : null;
 };
-
 const isLiveFinalAssistantStopReason = (stopReason: string | undefined): boolean =>
   stopReason === "end_turn" || stopReason === "stop_sequence";
-
 const messageContent = (message: unknown): unknown =>
   isRecord(message) ? message.content : undefined;
 
@@ -134,6 +133,7 @@ export const toClaudeHistoryMessages = (
   const subagentTaskIdsByToolUseId = new Map<string, string>();
   const retractedSubagentTaskIds = new Set<string>();
   const retractedToolUseIds = new Set<string>();
+  const todosById: ClaudeTodoState = new Map();
   const correlationState = {
     hiddenSubagentTaskIds,
     retractedSubagentTaskIds,
@@ -252,20 +252,22 @@ export const toClaudeHistoryMessages = (
           if (!tool) {
             continue;
           }
-          const completedPart = createClaudeCompletedToolPart({
+          const toolInput = existingPart?.input;
+          const { part: completedPart } = projectClaudeCompletedToolResult({
             callId: toolResult.toolUseId,
             endedAtMs: timestampMs(timestamp),
+            ...(toolInput ? { input: toolInput } : {}),
             isError: toolResult.isError,
             messageId: existingMessage?.messageId ?? entry.uuid ?? toolResult.toolUseId,
-            raw: toolResult.raw,
-            text: toolResult.text,
-            tool,
-            ...(existingPart?.input ? { input: existingPart.input } : {}),
-            ...(existingPart?.preview ? { preview: existingPart.preview } : {}),
             ...(existingPart?.metadata ? { metadata: existingPart.metadata } : {}),
+            ...(existingPart?.preview ? { preview: existingPart.preview } : {}),
+            raw: toolResult.raw,
+            resultText: toolResult.text,
             ...(typeof existingPart?.startedAtMs === "number"
               ? { startedAtMs: existingPart.startedAtMs }
               : {}),
+            state: todosById,
+            tool,
           });
           const subagentParts: AgentStreamPart[] = [];
           if (tool === "Agent") {
@@ -286,7 +288,7 @@ export const toClaudeHistoryMessages = (
               },
               timestamp,
               toolUseId: toolResult.toolUseId,
-              ...(existingPart?.input ? { input: existingPart.input } : {}),
+              ...(toolInput ? { input: toolInput } : {}),
             });
             for (const event of subagentEvents) {
               if (event.type !== "assistant_part" || event.part.kind !== "subagent") {

@@ -53,7 +53,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         type: "user",
         uuid: "tool-result-1",
         session_id: "session-1",
-        parent_tool_use_id: "toolu_agent_1",
+        parent_tool_use_id: null,
         message: {
           role: "user",
           content: [
@@ -64,7 +64,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
             },
           ],
         },
-        toolUseResult: {
+        tool_use_result: {
           status: "completed",
           prompt: "Locate package.json",
           agentId: "aef1c17051550cb2b",
@@ -170,7 +170,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         type: "user",
         uuid: "tool-result-1",
         session_id: "session-1",
-        parent_tool_use_id: "toolu_agent_1",
+        parent_tool_use_id: null,
         message: {
           role: "user",
           content: [
@@ -186,7 +186,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
             },
           ],
         },
-        toolUseResult: {
+        tool_use_result: {
           status: "completed",
           agentId: "agent-1",
           agentType: "Explore",
@@ -261,7 +261,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         type: "user",
         uuid: "tool-result-1",
         session_id: "session-1",
-        parent_tool_use_id: "toolu_agent_failed",
+        parent_tool_use_id: null,
         message: {
           role: "user",
           content: [
@@ -272,7 +272,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
             },
           ],
         },
-        toolUseResult: {
+        tool_use_result: {
           status: "failed",
           prompt: "Locate callback.mjs",
           agentId: "failed-agent-1",
@@ -350,7 +350,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         type: "user",
         uuid: "tool-result-async",
         session_id: "session-1",
-        parent_tool_use_id: "toolu_agent_async",
+        parent_tool_use_id: null,
         message: {
           role: "user",
           content: [
@@ -361,7 +361,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
             },
           ],
         },
-        toolUseResult: {
+        tool_use_result: {
           status: "async_launched",
           agentId: "async-agent-1",
           description: "Run background verification",

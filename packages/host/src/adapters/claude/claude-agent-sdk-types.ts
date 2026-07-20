@@ -8,6 +8,7 @@ import type {
   AgentEvent,
   AgentModelSelection,
   AgentSessionSummary,
+  AgentSessionTodoItem,
   AgentUserMessageDisplayPart,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
@@ -104,6 +105,7 @@ export type ClaudeSession = {
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
+  todosById: Map<string, AgentSessionTodoItem>;
 };
 
 export type ClaudeSessionContext = Omit<ClaudeSession, "query">;

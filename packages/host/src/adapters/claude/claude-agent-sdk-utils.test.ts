@@ -93,6 +93,13 @@ describe("encodeClaudePromptText", () => {
 });
 
 describe("toolPartType", () => {
+  test("classifies Claude task tools as TODO tools", () => {
+    expect(toolPartType("TaskCreate")).toBe("todo");
+    expect(toolPartType("TaskUpdate")).toBe("todo");
+    expect(toolPartType("TaskGet")).toBe("todo");
+    expect(toolPartType("TaskList")).toBe("todo");
+  });
+
   test("classifies Claude AskUserQuestion tool rows as question tools", () => {
     expect(toolPartType("AskUserQuestion")).toBe("question");
     expect(toolPartType("permission_ask_user_question")).toBe("question");
@@ -203,52 +210,18 @@ describe("toClaudeMessageFromParts", () => {
 });
 
 describe("mutationForTool", () => {
-  test("treats every Bash command as mutating at the permission boundary", () => {
-    expect(mutationForTool("Bash", { command: "rg Claude packages/host" })).toBe("mutating");
+  test("leaves Bash mutation classification to Claude", () => {
+    expect(mutationForTool("Bash", { command: "rg Claude packages/host" })).toBe("unknown");
+    expect(mutationForTool("Bash", { command: "rm -rf dist" })).toBe("unknown");
+    expect(mutationForTool("Bash", { command: "node scripts/update.js" })).toBe("unknown");
+  });
+
+  test("classifies native tools without parsing shell commands", () => {
     expect(mutationForTool("Agent")).toBe("unknown");
     expect(mutationForTool("WebFetch")).toBe("unknown");
     expect(mutationForTool("WebSearch")).toBe("unknown");
     expect(mutationForTool("Skill")).toBe("read_only");
-  });
-
-  test("classifies mutating or unrecognized shell commands as mutating", () => {
-    expect(mutationForTool("Bash", { command: "rm -rf dist" })).toBe("mutating");
-    expect(mutationForTool("Bash", { command: "sed -i 's/a/b/' file.txt" })).toBe("mutating");
-    expect(mutationForTool("Bash", { command: "find . -name '*.tmp' -delete" })).toBe("mutating");
-    expect(mutationForTool("Bash", { command: "node scripts/update.js" })).toBe("mutating");
-    expect(
-      mutationForTool("Bash", {
-        command: "node -e \"require('fs').writeFileSync('/tmp/odt-proof','x')\"",
-      }),
-    ).toBe("mutating");
-  });
-
-  test("classifies shell expansion and write-capable inspection tools as mutating", () => {
-    const commands = [
-      "rg Claude packages/host\nnode scripts/update.js",
-      "git diff --stat $(touch /tmp/odt-proof)",
-      "git diff --stat `touch /tmp/odt-proof`",
-      "cat $'/etc/passwd'",
-      'cat $"/etc/passwd"',
-      "cat <(touch /tmp/odt-proof)",
-      "awk 'BEGIN { system(\"touch /tmp/odt-proof\") }'",
-      "sed 'w /tmp/odt-proof' /dev/null",
-      "echo proof > /tmp/odt-proof",
-      "find . -exec touch /tmp/odt-proof ;",
-      "sort -o /tmp/odt-proof package.json",
-      "git branch new-branch",
-      "git branch -D old-branch",
-      "git diff --output=/tmp/odt-proof",
-      "git diff --no-index package.json /etc/passwd",
-      "node -e \"const f=require('../secret.json'); console.log(JSON.stringify(f))\"",
-      "rg --pre 'touch /tmp/odt-proof' foo .",
-      "fd -x touch /tmp/odt-proof",
-      "npm test -- --updateSnapshot",
-      "bun run lint -- --write",
-    ];
-
-    for (const command of commands) {
-      expect(mutationForTool("Bash", { command })).toBe("mutating");
-    }
+    expect(mutationForTool("Write")).toBe("mutating");
+    expect(mutationForTool("TodoWrite")).toBe("mutating");
   });
 });

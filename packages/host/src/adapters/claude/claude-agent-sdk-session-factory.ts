@@ -1,5 +1,5 @@
 import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentSessionSummary } from "@openducktor/core";
+import type { AgentSessionSummary, AgentSessionTodoItem } from "@openducktor/core";
 import { errorMessage } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
@@ -23,6 +23,7 @@ export type CreateClaudeAgentSdkSessionInput = {
   input: ClaudeSessionInput;
   now: () => string;
   randomId: () => string;
+  initialTodos: AgentSessionTodoItem[];
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
   runtimeId: string;
   serviceInput: CreateClaudeAgentSdkServiceInput;
@@ -39,6 +40,7 @@ export type CreateClaudeAgentSdkSessionInput = {
 export const createClaudeAgentSdkSession = async ({
   emit,
   input,
+  initialTodos,
   now,
   randomId,
   resolvedDependencies,
@@ -78,6 +80,7 @@ export const createClaudeAgentSdkSession = async ({
     toolMessageIdsByCallId: new Map(),
     toolNamesByCallId: new Map(),
     toolStartedAtMsByCallId: new Map(),
+    todosById: new Map(initialTodos.map((todo) => [todo.id, todo])),
   };
   let sdkQuery: ReturnType<typeof query>;
   try {

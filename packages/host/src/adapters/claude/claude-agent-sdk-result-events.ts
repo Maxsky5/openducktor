@@ -9,7 +9,6 @@ import {
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeSessionActivity } from "./claude-agent-sdk-types";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeResultEventSession = {
   acceptedUserMessages?: readonly unknown[];
@@ -53,7 +52,6 @@ export const handleClaudeResultMessage = ({
   timestamp,
 }: ClaudeResultEventInput): void => {
   const completedUserTurnIndex = nextCompletedUserTurnIndex(session);
-  emitResultPermissionDenials({ emit, message, session, timestamp });
   emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
   if (isFailedClaudeResult(message)) {
     const errors = "errors" in message && Array.isArray(message.errors) ? message.errors : [];
@@ -121,8 +119,9 @@ export const emitClaudePermissionDeniedToolPart = ({
   const messageId =
     session.toolMessageIdsByCallId.get(permission.toolUseId) ??
     `permission-denied:${permission.toolUseId}`;
+  const toolName = session.toolNamesByCallId.get(permission.toolUseId) ?? permission.toolName;
   session.toolMessageIdsByCallId.set(permission.toolUseId, messageId);
-  session.toolNamesByCallId.set(permission.toolUseId, permission.toolName);
+  session.toolNamesByCallId.set(permission.toolUseId, toolName);
   if (input) {
     session.toolInputsByCallId.set(permission.toolUseId, input);
   }
@@ -137,7 +136,7 @@ export const emitClaudePermissionDeniedToolPart = ({
       isError: true,
       messageId,
       text: permission.message,
-      tool: permission.toolName,
+      tool: toolName,
       ...(input ? { input } : {}),
       ...(permission.metadata ? { metadata: permission.metadata } : {}),
       ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
@@ -189,39 +188,4 @@ const emitSuccessfulResultText = ({
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(session.model ? { model: session.model } : {}),
   });
-};
-
-const emitResultPermissionDenials = ({
-  emit,
-  message,
-  session,
-  timestamp,
-}: ClaudeResultEventInput): void => {
-  const permissionDenials =
-    "permission_denials" in message && Array.isArray(message.permission_denials)
-      ? message.permission_denials
-      : [];
-  for (const denial of permissionDenials) {
-    if (!isRecord(denial)) {
-      continue;
-    }
-    const toolName = readStringProp(denial, "tool_name");
-    const toolUseId = readStringProp(denial, "tool_use_id");
-    const input = isRecord(denial.tool_input) ? denial.tool_input : undefined;
-    if (!toolName || !toolUseId) {
-      continue;
-    }
-    emitClaudePermissionDeniedToolPart({
-      emit,
-      session,
-      timestamp,
-      permission: {
-        toolName,
-        toolUseId,
-        message: `Permission denied for ${toolName}.`,
-        ...(input ? { input } : {}),
-        metadata: { source: "result_permission_denial" },
-      },
-    });
-  }
 };

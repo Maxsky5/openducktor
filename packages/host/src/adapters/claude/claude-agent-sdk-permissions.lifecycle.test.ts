@@ -73,7 +73,7 @@ describe("Claude permission request lifecycle", () => {
     expect(events).toEqual([]);
   });
 
-  test("denies read-only shell inspection outside the session worktree for read-only roles", async () => {
+  test("delegates shell path access to Claude permissions for read-only roles", async () => {
     const events: AgentEvent[] = [];
     const session = createSession("qa");
     const canUseTool = createClaudeCanUseTool({
@@ -83,7 +83,7 @@ describe("Claude permission request lifecycle", () => {
       emit: (_session, event) => events.push(event),
     });
 
-    const result = await canUseTool(
+    const resultPromise = canUseTool(
       "Bash",
       { command: "cat ~/.ssh/config" },
       {
@@ -92,13 +92,22 @@ describe("Claude permission request lifecycle", () => {
       },
     );
 
-    expect(result).toEqual({
-      behavior: "deny",
-      decisionClassification: "user_reject",
-      message: "Tool Bash is disabled for read-only OpenDucktor workflow roles.",
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "request-1",
+        requestType: "command_execution",
+        mutation: "unknown",
+      }),
+    ]);
+    expect(session.pendingApprovals.has("request-1")).toBe(true);
+
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { command: "cat ~/.ssh/config" },
     });
-    expect(events).toEqual([]);
-    expect(session.pendingApprovals.size).toBe(0);
   });
 
   test("denies direct file reads outside the session worktree for read-only roles", async () => {

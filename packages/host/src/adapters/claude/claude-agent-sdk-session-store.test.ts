@@ -45,6 +45,7 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   toolMessageIdsByCallId: new Map(),
   toolNamesByCallId: new Map(),
   toolStartedAtMsByCallId: new Map(),
+  todosById: new Map(),
   ...overrides,
 });
 

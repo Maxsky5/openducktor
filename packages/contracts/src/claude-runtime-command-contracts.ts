@@ -15,6 +15,7 @@ import {
   agentUserMessageDisplayPartSchema,
 } from "./agent-session-event-schemas";
 import {
+  type AgentTranscriptModelSelection,
   agentSessionLiveRefSchema,
   agentSessionWorkflowScopeSchema,
   runtimeWorkingDirectoryRefSchema,
@@ -28,14 +29,19 @@ const claudeRuntimeKindSchema = z.literal("claude");
 const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
-export const claudeAgentModelSelectionSchema = z.object({
+export type ClaudeAgentModelSelection = Omit<AgentTranscriptModelSelection, "runtimeKind"> & {
+  runtimeKind?: "claude";
+};
+
+const inferredClaudeAgentModelSelectionSchema = z.object({
   runtimeKind: claudeRuntimeKindSchema.optional(),
   providerId: nonEmptyStringSchema,
   modelId: nonEmptyStringSchema,
   variant: optionalFromNullable(nonEmptyStringSchema),
   profileId: optionalFromNullable(nonEmptyStringSchema),
 });
-export type ClaudeAgentModelSelection = z.infer<typeof claudeAgentModelSelectionSchema>;
+export const claudeAgentModelSelectionSchema =
+  inferredClaudeAgentModelSelectionSchema as unknown as z.ZodType<ClaudeAgentModelSelection>;
 
 export const claudeRepoRuntimeRefSchema = repoRuntimeRefSchema.extend({
   runtimeKind: claudeRuntimeKindSchema,
@@ -67,6 +73,7 @@ export type ClaudeWorkflowSessionScope = z.infer<typeof claudeWorkflowSessionSco
 const claudePolicyBoundSessionRefSchema = claudeAgentSessionRefSchema.extend({
   runtimePolicy: claudeAgentRuntimePolicySchema,
   sessionScope: claudeWorkflowSessionScopeSchema.optional(),
+  model: claudeAgentModelSelectionSchema.optional(),
 });
 
 export const claudeListAgentModelsInputSchema = claudeRepoRuntimeRefSchema;

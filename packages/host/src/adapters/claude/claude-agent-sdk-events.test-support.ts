@@ -10,6 +10,7 @@ export const createEventTestSession = (activity: "idle" | "running" = "running")
   queuedSdkMessages: [],
   streamAssistantMessageOrdinal: 0,
   streamAssistantMessageIdsByBlockIndex: new Map<number, string>(),
+  todosById: new Map(),
   subagentMessageIdsByTaskId: new Map<string, string>(),
   subagentTaskIdsByToolUseId: new Map<string, string>(),
   toolInputsByCallId: new Map<string, Record<string, unknown>>(),

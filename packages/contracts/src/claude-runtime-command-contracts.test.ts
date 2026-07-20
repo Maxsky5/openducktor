@@ -13,6 +13,7 @@ import {
   claudeAgentSessionTodoItemSchema,
   claudeAgentStreamPartSchema,
   claudeAgentUserMessageDisplayPartSchema,
+  claudeLoadAgentSessionHistoryInputSchema,
   claudeSearchAgentFilesInputSchema,
 } from "./claude-runtime-command-contracts";
 
@@ -45,6 +46,36 @@ describe("Claude runtime command contracts", () => {
       runtimeKind: "claude",
       workingDirectory: "/repo",
       query: "",
+    });
+  });
+
+  test("accepts the selected model carried by a policy-bound history reference", () => {
+    expect(
+      claudeLoadAgentSessionHistoryInputSchema.parse({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        externalSessionId: "session-1",
+        runtimePolicy: { kind: "claude" },
+        model: {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-sonnet-4-6",
+          variant: "high",
+        },
+      }),
+    ).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      runtimePolicy: { kind: "claude" },
+      model: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "claude-sonnet-4-6",
+        variant: "high",
+      },
     });
   });
 

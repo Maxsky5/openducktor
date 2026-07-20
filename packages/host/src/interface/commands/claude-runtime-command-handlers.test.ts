@@ -116,6 +116,12 @@ describe("createClaudeRuntimeCommandHandlers", () => {
           workingDirectory: "/repo",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
+          model: {
+            runtimeKind: "claude",
+            providerId: "claude",
+            modelId: "claude-sonnet-4-6",
+            variant: "high",
+          },
         },
       }),
     ).rejects.toMatchObject({
@@ -156,6 +162,12 @@ describe("createClaudeRuntimeCommandHandlers", () => {
           workingDirectory: "/repo",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
+          model: {
+            runtimeKind: "claude",
+            providerId: "claude",
+            modelId: "claude-sonnet-4-6",
+            variant: "high",
+          },
         },
       }),
     ).resolves.toEqual([]);
@@ -165,6 +177,12 @@ describe("createClaudeRuntimeCommandHandlers", () => {
       workingDirectory: "/repo",
       externalSessionId: "session-1",
       runtimePolicy: { kind: "claude" },
+      model: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "claude-sonnet-4-6",
+        variant: "high",
+      },
     });
   });
 });

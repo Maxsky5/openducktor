@@ -336,7 +336,7 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain("Questions and answers");
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("break-words font-medium text-foreground");
+    expect(html).toContain("break-words line-clamp-2 font-medium text-foreground");
   });
 
   test("wraps long unbroken question tool answers", () => {
@@ -364,7 +364,7 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain("Questions and answers");
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words text-foreground");
+    expect(html).toContain("whitespace-pre-wrap break-words line-clamp-2 text-foreground");
   });
 
   test.each([
@@ -745,7 +745,7 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-inherit");
+    expect(html).toContain("whitespace-pre-wrap break-words line-clamp-2 leading-6 text-inherit");
   });
 
   test("renders session error notices as destructive cards", () => {
@@ -862,7 +862,9 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-foreground");
+    expect(html).toContain(
+      "whitespace-pre-wrap break-words line-clamp-2 leading-6 text-foreground",
+    );
   });
 
   test("renders subagent cards without the shared System header", () => {
@@ -916,7 +918,9 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words text-sm text-muted-foreground");
+    expect(html).toContain(
+      "whitespace-pre-wrap break-words line-clamp-2 text-sm text-muted-foreground",
+    );
   });
 
   test("renders the subagent transcript action when a transcript target is available", () => {
@@ -1141,7 +1145,9 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words text-sm font-medium text-destructive");
+    expect(html).toContain(
+      "whitespace-pre-wrap break-words line-clamp-2 text-sm font-medium text-destructive",
+    );
   });
 
   test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
@@ -1462,7 +1468,7 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words leading-6");
+    expect(html).toContain("whitespace-pre-wrap break-words line-clamp-2 leading-6");
   });
 
   test("wraps long unbroken assistant plain prose", () => {
@@ -1479,7 +1485,7 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words leading-6");
+    expect(html).toContain("whitespace-pre-wrap break-words line-clamp-2 leading-6");
   });
 
   test("does not color legacy user messages without send-time metadata", () => {

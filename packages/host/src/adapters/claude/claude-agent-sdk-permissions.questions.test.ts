@@ -245,7 +245,7 @@ describe("Claude permission questions", () => {
     expect(events).toEqual([]);
   });
 
-  test("denies mutating shell commands in read-only roles before creating approval requests", async () => {
+  test("delegates shell commands to Claude permissions in read-only roles", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
@@ -255,7 +255,7 @@ describe("Claude permission questions", () => {
       emit: (_session, event) => events.push(event),
     });
 
-    const result = await canUseTool(
+    const resultPromise = canUseTool(
       "Bash",
       { command: "rg --pre 'touch /tmp/odt-proof' foo ." },
       {
@@ -264,13 +264,22 @@ describe("Claude permission questions", () => {
       },
     );
 
-    expect(result).toEqual({
-      behavior: "deny",
-      decisionClassification: "user_reject",
-      message: "Tool Bash is disabled for read-only OpenDucktor workflow roles.",
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "request-1",
+        requestType: "command_execution",
+        mutation: "unknown",
+      }),
+    ]);
+    expect(session.pendingApprovals.has("request-1")).toBe(true);
+
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { command: "rg --pre 'touch /tmp/odt-proof' foo ." },
     });
-    expect(events).toEqual([]);
-    expect(session.pendingApprovals.size).toBe(0);
   });
 
   test("denies classified mutating tools in read-only roles", async () => {

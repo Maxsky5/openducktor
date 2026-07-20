@@ -228,11 +228,11 @@ Rules:
 - Runtime adapters must consume `readOnlyRoleBlockedTools` both when constructing runtime permission rules and when building the runtime `tools` selection sent on prompt turns for `spec`, `planner`, and `qa`.
 - Runtime adapters and desktop workflow-tool consumers must resolve native workflow tool IDs through `workflowToolAliasesByCanonical` instead of hardcoded runtime prefixes in shared code.
 - Do not hardcode OpenCode tool IDs in generic orchestration code or assume another runtime uses the same tool names.
-- Do not block `bash` generically for read-only roles. Read-only roles still need shell access for inspections, tests, and lint commands; mutation control for shell commands remains a runtime/permission-flow concern.
+- Do not block `bash` for read-only roles. Read-only roles still need shell access for inspections, tests, and lint commands. The runtime's permission and sandbox settings control shell use.
 
 For OpenCode today, the blocked list is sourced from the runtime's native tool inventory and currently includes edit-style tools such as `edit`, `write`, `apply_patch`, `ast_grep_replace`, and `lsp_rename`.
 
-Claude currently blocks `Bash` in read-only workflow roles because the Agent SDK exposes shell execution as a single tool boundary and OpenDucktor cannot soundly distinguish every mutating shell program or flag. This adapter-owned fail-closed limitation takes precedence over shell convenience until the runtime provides a trustworthy enforcement boundary; generic orchestration must not special-case it.
+Claude inherits the user's permission mode and settings for `Bash`. OpenDucktor does not classify shell commands or add role-specific shell restrictions. Per-role sandbox settings belong in runtime configuration, not command parsing in the adapter.
 
 ## Eligibility Model
 

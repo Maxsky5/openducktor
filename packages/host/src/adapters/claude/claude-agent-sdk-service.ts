@@ -38,6 +38,7 @@ import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-s
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
+import { loadClaudeTodos } from "./claude-agent-sdk-todos";
 import type {
   ClaudeAgentSdkEvent,
   ClaudeAgentSdkService,
@@ -169,8 +170,16 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  loadSessionTodos(_input: LoadAgentSessionTodosInput) {
-    return fromPromise("claudeRuntime.loadSessionTodos", async () => unsupported("session todos"));
+  loadSessionTodos(input: LoadAgentSessionTodosInput) {
+    const target = parseClaudeTranscriptTarget(input.externalSessionId);
+    if (!target.subpath) {
+      const session = this.sessionStore.get(target.sessionId);
+      if (session) {
+        assertClaudeSessionRef(session, input, "load session todos");
+        return Effect.succeed([...session.todosById.values()]);
+      }
+    }
+    return fromPromise("claudeRuntime.loadSessionTodos", () => loadClaudeTodos(input));
   }
 
   loadSessionContextUsage(input: LoadAgentSessionHistoryInput) {
@@ -328,6 +337,15 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   ) {
     const service = this;
     return Effect.gen(function* () {
+      const resumeSessionId = sessionInput.options.resume;
+      const initialTodos = resumeSessionId
+        ? yield* fromPromise("claudeRuntime.loadSessionTodos", () =>
+            loadClaudeTodos({
+              ...input,
+              externalSessionId: resumeSessionId,
+            }),
+          )
+        : [];
       const claudeExecutablePath = yield* resolveClaudeExecutable(
         service.input,
         "claudeRuntime.createSession",
@@ -346,6 +364,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       return yield* fromPromise("claudeRuntime.createSession", () =>
         createClaudeAgentSdkSession({
           emit: service.emit.bind(service),
+          initialTodos,
           input,
           now: service.now,
           randomId: service.randomId,

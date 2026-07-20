@@ -441,7 +441,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
     }
   });
 
-  test("maps real Claude Edit top-level toolUseResult patches without dropping output", () => {
+  test("maps real Claude Edit top-level tool_use_result patches without dropping output", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
 
@@ -489,7 +489,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
-        parent_tool_use_id: "tool-edit-real",
+        parent_tool_use_id: null,
         message: {
           role: "user",
           content: [
@@ -500,7 +500,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-        toolUseResult: {
+        tool_use_result: {
           filePath: "apps/api/src/lib/auth.ts",
           oldString: "providers: []",
           newString: "providers: [facebook]",
@@ -596,30 +596,31 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
-        parent_tool_use_id: "tool-write-1",
+        parent_tool_use_id: null,
         tool_use_result: {
-          type: "tool_result",
-          tool_use_id: "tool-write-1",
-          content: [{ type: "text", text: "written" }],
-          structuredContent: {
-            type: "update",
-            filePath: "README.md",
-            content: "# Updated\n",
-            structuredPatch: [
-              {
-                oldStart: 1,
-                oldLines: 1,
-                newStart: 1,
-                newLines: 1,
-                lines: ["-# Old", "+# Updated"],
-              },
-            ],
-            originalFile: "# Old\n",
-          },
+          type: "update",
+          filePath: "README.md",
+          content: "# Updated\n",
+          structuredPatch: [
+            {
+              oldStart: 1,
+              oldLines: 1,
+              newStart: 1,
+              newLines: 1,
+              lines: ["-# Old", "+# Updated"],
+            },
+          ],
+          originalFile: "# Old\n",
         },
         message: {
           role: "user",
-          content: [],
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool-write-1",
+              content: "written",
+            },
+          ],
         },
       }),
     });
@@ -645,7 +646,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
     );
   });
 
-  test("maps real Claude Write top-level toolUseResult patches without dropping output", () => {
+  test("maps real Claude Write top-level tool_use_result patches without dropping output", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
 
@@ -692,7 +693,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
         type: "user",
         uuid: "user-1",
         session_id: "session-1",
-        parent_tool_use_id: "tool-write-real",
+        parent_tool_use_id: null,
         message: {
           role: "user",
           content: [
@@ -703,7 +704,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             },
           ],
         },
-        toolUseResult: {
+        tool_use_result: {
           type: "update",
           filePath: "README.md",
           content: "# Updated\n",

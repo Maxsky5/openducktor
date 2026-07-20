@@ -180,7 +180,6 @@ export const CODEX_RUNTIME_CAPABILITIES = {
 } as const satisfies RuntimeCapabilities;
 
 const CLAUDE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
-  "Bash",
   "Edit",
   "MultiEdit",
   "NotebookEdit",
@@ -266,7 +265,7 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
   optionalSurfaces: {
     supportsProfiles: false,
     supportsVariants: true,
-    supportsTodos: false,
+    supportsTodos: true,
     supportsDiff: false,
     supportsFileStatus: false,
     supportsMcpStatus: false,

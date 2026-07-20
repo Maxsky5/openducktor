@@ -61,7 +61,7 @@ describe("createClaudeCanUseTool", () => {
     expect(session.pendingApprovals.size).toBe(0);
   });
 
-  test("denies Bash entirely in read-only workflow roles", async () => {
+  test("delegates Bash permission decisions for read-only workflow roles", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
@@ -71,7 +71,7 @@ describe("createClaudeCanUseTool", () => {
       emit: (_session, event) => events.push(event),
     });
 
-    const result = await canUseTool(
+    const resultPromise = canUseTool(
       "Bash",
       { command: "rg Claude packages/host" },
       {
@@ -80,13 +80,26 @@ describe("createClaudeCanUseTool", () => {
       },
     );
 
-    expect(result).toEqual({
-      behavior: "deny",
-      decisionClassification: "user_reject",
-      message: "Tool Bash is disabled for read-only OpenDucktor workflow roles.",
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "request-1",
+        requestType: "command_execution",
+        command: {
+          command: "rg Claude packages/host",
+          workingDirectory: "/repo",
+        },
+        mutation: "unknown",
+      }),
+    ]);
+    expect(session.pendingApprovals.has("request-1")).toBe(true);
+
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { command: "rg Claude packages/host" },
     });
-    expect(events).toEqual([]);
-    expect(session.pendingApprovals.size).toBe(0);
   });
 
   test("requires approval for read-only shell inspection outside the worktree in build roles", async () => {
@@ -121,7 +134,7 @@ describe("createClaudeCanUseTool", () => {
           name: "Bash",
           input: { command: "cat /etc/passwd" },
         },
-        mutation: "mutating",
+        mutation: "unknown",
       }),
     ]);
     expect(session.pendingApprovals.has("request-1")).toBe(true);
