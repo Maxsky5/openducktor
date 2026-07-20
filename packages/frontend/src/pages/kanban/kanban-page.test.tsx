@@ -808,7 +808,7 @@ describe("KanbanPage session start modal flow", () => {
         }),
       );
       expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
-      expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
+      expect(renderer.getLocation()).toBe("/agents?task=TASK-123&session=session-1&agent=build");
 
       await act(async () => {
         renderer.unmount();
@@ -820,13 +820,13 @@ describe("KanbanPage session start modal flow", () => {
     "settings load failure reports an error without issuing a task-list request",
     async () => {
       const originalLoadSettingsSnapshot = hostClient.workspaceGetSettingsSnapshot;
-      hostClient.workspaceGetSettingsSnapshot = async () => {
-        throw new Error("settings unavailable");
-      };
-
-      const renderer = await renderPage({ seedSettingsSnapshot: false });
+      let renderer: KanbanPageHarness | null = null;
 
       try {
+        hostClient.workspaceGetSettingsSnapshot = async () => {
+          throw new Error("settings unavailable");
+        };
+        renderer = await renderPage({ seedSettingsSnapshot: false });
         await waitForMockCall(toastErrorMock);
 
         expect(toastErrorMock).toHaveBeenCalledWith("Failed to load Kanban settings", {
@@ -834,9 +834,12 @@ describe("KanbanPage session start modal flow", () => {
         });
       } finally {
         hostClient.workspaceGetSettingsSnapshot = originalLoadSettingsSnapshot;
-        await act(async () => {
-          renderer.unmount();
-        });
+        if (renderer) {
+          const mountedRenderer = renderer;
+          await act(async () => {
+            mountedRenderer.unmount();
+          });
+        }
       }
     },
   );
@@ -869,36 +872,39 @@ describe("KanbanPage session start modal flow", () => {
     const systemGetPlatform = mock(async () => {
       throw new Error("platform should not be requested for explicit Appearance modes");
     });
-    hostClient.systemGetPlatform = systemGetPlatform;
     currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
       appearance: { horizontalScrollbarVisibility: "show" },
     });
-
-    const renderer = await renderPage();
+    let renderer: KanbanPageHarness | null = null;
 
     try {
+      hostClient.systemGetPlatform = systemGetPlatform;
+      renderer = await renderPage();
       expect(renderer.getKanbanColumnProps()).toBeTruthy();
       expect(systemGetPlatform).toHaveBeenCalledTimes(0);
     } finally {
       hostClient.systemGetPlatform = originalSystemGetPlatform;
-      await act(async () => {
-        renderer.unmount();
-      });
+      if (renderer) {
+        const mountedRenderer = renderer;
+        await act(async () => {
+          mountedRenderer.unmount();
+        });
+      }
     }
   });
 
   kanbanTest("reports System platform resolution failures once", async () => {
     const originalSystemGetPlatform = hostClient.systemGetPlatform;
-    hostClient.systemGetPlatform = async () => {
-      throw new Error("unsupported platform");
-    };
     currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
       appearance: { horizontalScrollbarVisibility: "system" },
     });
-
-    const renderer = await renderPage({ platform: null });
+    let renderer: KanbanPageHarness | null = null;
 
     try {
+      hostClient.systemGetPlatform = async () => {
+        throw new Error("unsupported platform");
+      };
+      renderer = await renderPage({ platform: null });
       await waitForMockCall(toastErrorMock);
       expect(toastErrorMock).toHaveBeenCalledWith(
         "Failed to resolve horizontal scrollbar default",
@@ -910,9 +916,12 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getShowHorizontalScrollbars()).toBeNull();
     } finally {
       hostClient.systemGetPlatform = originalSystemGetPlatform;
-      await act(async () => {
-        renderer.unmount();
-      });
+      if (renderer) {
+        const mountedRenderer = renderer;
+        await act(async () => {
+          mountedRenderer.unmount();
+        });
+      }
     }
   });
 
@@ -960,9 +969,7 @@ describe("KanbanPage session start modal flow", () => {
         actionButton.click();
         await Promise.resolve();
       });
-      expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
-      expect(renderer.getLocation()).toContain("session=session-1");
-      expect(renderer.getLocation()).toContain("agent=build");
+      expect(renderer.getLocation()).toBe("/agents?task=TASK-123&session=session-1&agent=build");
 
       toastDescriptionRender.unmount();
 
@@ -1058,7 +1065,7 @@ describe("KanbanPage session start modal flow", () => {
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
     expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
-    expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
+    expect(renderer.getLocation()).toBe("/agents?task=TASK-123&session=session-1&agent=build");
     await waitForMockCall(toastErrorMock);
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Session started, but the kickoff prompt failed to send.",
@@ -1193,8 +1200,7 @@ describe("KanbanPage session start modal flow", () => {
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
-      expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
-      expect(renderer.getLocation()).toContain("session=session-spec");
+      expect(renderer.getLocation()).toBe("/agents?task=TASK-123&session=session-spec&agent=spec");
 
       await act(async () => {
         renderer.unmount();
@@ -1659,9 +1665,9 @@ describe("KanbanPage session start modal flow", () => {
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
-    expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
-    expect(renderer.getLocation()).toContain("agent=build");
-    expect(renderer.getLocation()).toContain("session=session-build-older");
+    expect(renderer.getLocation()).toBe(
+      "/agents?task=TASK-123&session=session-build-older&agent=build",
+    );
 
     await act(async () => {
       renderer.unmount();
@@ -1688,36 +1694,38 @@ describe("KanbanPage session start modal flow", () => {
         uncommittedFileCount: 0,
         providers: [],
       };
-      hostClient.taskApprovalContextGet = async () => ({
-        outcome: "ready",
-        approvalContext,
-      });
-      hostClient.taskDirectMerge = async () => ({
-        outcome: "conflicts",
-        conflict: {
-          operation: "direct_merge_merge_commit",
-          currentBranch: "odt/TASK-123",
-          targetBranch: "main",
-          conflictedFiles: ["src/app.ts"],
-          output: "conflict output",
-          workingDir: "/repo/worktrees/conflict",
-        },
-      });
-      hostClient.workspaceGetRepoConfig = async () => currentRepoConfigFixture;
-      hostClient.workspaceGetSettingsSnapshot = async () => currentSettingsSnapshotFixture;
-
-      const renderer = await renderPage();
+      let renderer: KanbanPageHarness | null = null;
 
       try {
+        hostClient.taskApprovalContextGet = async () => ({
+          outcome: "ready",
+          approvalContext,
+        });
+        hostClient.taskDirectMerge = async () => ({
+          outcome: "conflicts",
+          conflict: {
+            operation: "direct_merge_merge_commit",
+            currentBranch: "odt/TASK-123",
+            targetBranch: "main",
+            conflictedFiles: ["src/app.ts"],
+            output: "conflict output",
+            workingDir: "/repo/worktrees/conflict",
+          },
+        });
+        hostClient.workspaceGetRepoConfig = async () => currentRepoConfigFixture;
+        hostClient.workspaceGetSettingsSnapshot = async () => currentSettingsSnapshotFixture;
+
+        const page = await renderPage();
+        renderer = page;
         await act(async () => {
-          (renderer.getKanbanColumnProps().onHumanApprove as (taskId: string) => void)("TASK-123");
+          (page.getKanbanColumnProps().onHumanApprove as (taskId: string) => void)("TASK-123");
           await Promise.resolve();
         });
         await waitFor(() => {
-          expect(renderer.getTaskApprovalModalModel()?.stage).toBe("approval");
+          expect(page.getTaskApprovalModalModel()?.stage).toBe("approval");
         });
 
-        const approvalModal = renderer.getTaskApprovalModalModel();
+        const approvalModal = page.getTaskApprovalModalModel();
         if (approvalModal?.stage !== "approval") {
           throw new Error("Expected the task approval modal.");
         }
@@ -1726,26 +1734,24 @@ describe("KanbanPage session start modal flow", () => {
           await Promise.resolve();
         });
         await waitFor(() => {
-          expect(renderer.getTaskGitConflictDialogModel()?.open).toBe(true);
+          expect(page.getTaskGitConflictDialogModel()?.open).toBe(true);
         });
 
         await act(async () => {
-          renderer.getTaskGitConflictDialogModel()?.onAskBuilder();
+          page.getTaskGitConflictDialogModel()?.onAskBuilder();
           await Promise.resolve();
         });
-        await confirmSessionStartModal(renderer, {
+        await confirmSessionStartModal(page, {
           modelId: "openai/gpt-5",
           profileId: "build-agent",
           startMode: "fresh",
           variant: "default",
         });
         await waitFor(() => {
-          expect(renderer.getLocation()).toBe(
-            "/agents?task=TASK-123&session=session-1&agent=build",
-          );
+          expect(page.getLocation()).toBe("/agents?task=TASK-123&session=session-1&agent=build");
         });
         const sessionExternalId = new URL(
-          renderer.getLocation(),
+          page.getLocation(),
           "https://openducktor.local",
         ).searchParams.get("session");
         expect(sessionExternalId).toBe("session-1");
@@ -1757,9 +1763,12 @@ describe("KanbanPage session start modal flow", () => {
         hostClient.taskDirectMerge = originalTaskDirectMerge;
         hostClient.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
         hostClient.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-        await act(async () => {
-          renderer.unmount();
-        });
+        if (renderer) {
+          const mountedRenderer = renderer;
+          await act(async () => {
+            mountedRenderer.unmount();
+          });
+        }
       }
     },
   );
@@ -1781,9 +1790,9 @@ describe("KanbanPage session start modal flow", () => {
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
-      expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
-      expect(renderer.getLocation()).toContain("agent=build");
-      expect(renderer.getLocation()).toContain("session=session-build-older");
+      expect(renderer.getLocation()).toBe(
+        "/agents?task=TASK-123&session=session-build-older&agent=build",
+      );
 
       await act(async () => {
         renderer.unmount();
@@ -1803,9 +1812,9 @@ describe("KanbanPage session start modal flow", () => {
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
-      expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
-      expect(renderer.getLocation()).toContain("agent=build");
-      expect(renderer.getLocation()).toContain("session=session-build-older");
+      expect(renderer.getLocation()).toBe(
+        "/agents?task=TASK-123&session=session-build-older&agent=build",
+      );
 
       await act(async () => {
         renderer.unmount();
@@ -1822,8 +1831,7 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
-    expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
-    expect(renderer.getLocation()).toContain("agent=qa");
+    expect(renderer.getLocation()).toBe("/agents?task=TASK-123&agent=qa");
 
     await act(async () => {
       renderer.unmount();
@@ -1900,9 +1908,9 @@ describe("KanbanPage session start modal flow", () => {
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
       expect(startAgentSessionMock).not.toHaveBeenCalled();
-      expect(renderer.getLocation()).toContain("/agents?task=TASK-123");
-      expect(renderer.getLocation()).toContain("agent=build");
-      expect(renderer.getLocation()).toContain("session=session-build-older");
+      expect(renderer.getLocation()).toBe(
+        "/agents?task=TASK-123&session=session-build-older&agent=build",
+      );
 
       await act(async () => {
         renderer.unmount();
