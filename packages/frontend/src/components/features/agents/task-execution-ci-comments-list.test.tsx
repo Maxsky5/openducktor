@@ -48,16 +48,49 @@ describe("TaskExecutionCiCommentsList", () => {
 
       expect(screen.getByText("Comment human-one")).toBeTruthy();
       expect(screen.queryByText("Comment bot")).toBeNull();
+      expect(frameDriver.pendingFrameCount()).toBe(1);
 
       fireEvent.click(screen.getByRole("button", { name: /Bots/ }));
 
       expect(screen.queryByText("Comment bot")).toBeNull();
       expect(screen.getByText("Rendering 0 of 1 comment…")).toBeTruthy();
+      expect(frameDriver.pendingFrameCount()).toBe(1);
 
       await frameDriver.flushFrame();
 
       expect(screen.getByText("Comment bot")).toBeTruthy();
       expect(screen.queryByText(/Rendering \d+ of/)).toBeNull();
+      expect(frameDriver.pendingFrameCount()).toBe(0);
+    });
+  });
+
+  test("renders every comment and stops scheduling frames when staging completes", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const comments = Array.from({ length: 40 }, (_, index) => comment(String(index)));
+      render(<TaskExecutionCiCommentsList comments={comments} />);
+
+      await frameDriver.flushFrames();
+
+      for (const item of comments) {
+        expect(screen.getByText(item.body)).toBeTruthy();
+      }
+      expect(screen.queryByText(/Rendering \d+ of/)).toBeNull();
+      expect(frameDriver.pendingFrameCount()).toBe(0);
+    });
+  });
+
+  test("cancels the next staged frame when the list unmounts", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const view = render(
+        <TaskExecutionCiCommentsList comments={[comment("one"), comment("two")]} />,
+      );
+
+      await frameDriver.flushFrame();
+      expect(frameDriver.pendingFrameCount()).toBe(1);
+
+      view.unmount();
+
+      expect(frameDriver.pendingFrameCount()).toBe(0);
     });
   });
 });

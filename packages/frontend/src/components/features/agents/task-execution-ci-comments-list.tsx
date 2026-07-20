@@ -109,7 +109,7 @@ export function TaskExecutionCiCommentsList({
   const isRenderingComments = renderedCommentCount < visibleComments.length;
 
   useEffect(() => {
-    if (!isRenderingComments) {
+    if (renderedCommentCount >= visibleComments.length) {
       return;
     }
 
@@ -132,7 +132,7 @@ export function TaskExecutionCiCommentsList({
     return () => {
       globalThis.cancelAnimationFrame(frameId);
     };
-  }, [deferredComments, deferredFilter, isRenderingComments, visibleComments.length]);
+  }, [deferredComments, deferredFilter, renderedCommentCount, visibleComments.length]);
 
   return (
     <details className="group/comments" open>
