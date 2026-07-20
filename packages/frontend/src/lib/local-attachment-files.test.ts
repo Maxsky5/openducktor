@@ -29,6 +29,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
   },
   openExternalUrl: async () => {},
   resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+  terminals: createUnavailableShellBridge().terminals,
   ...overrides,
 });
 

@@ -1,13 +1,21 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { failureKindSchema } from "@openducktor/contracts";
+import {
+  failureKindSchema,
+  type HostInvokeFailure,
+  hostInvokeFailureSchema,
+  TERMINAL_PROTOCOL_SUBPROTOCOL,
+} from "@openducktor/contracts";
 import {
   createLocalAttachmentAdapter,
   createNodeEffectHostCommandRouter,
   type EffectHostCommandRouter,
+  type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
+  TerminalServiceError,
   type ToolDiscoveryId,
+  terminalServiceErrorToFailure,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
@@ -19,6 +27,11 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { createBunPtyPort } from "./terminals/bun-pty-adapter";
+import {
+  type TerminalWebSocketData,
+  terminalWebSocketHandler,
+} from "./terminals/terminal-websocket-handler";
 import {
   allowedOriginsForFrontendOrigin,
   type BufferedHostEvent,
@@ -48,7 +61,7 @@ export type TypescriptHostBackend = {
 type RequestTimeoutController = {
   timeout(request: Request, seconds: number): void;
 };
-type TypescriptHostBackendServer = ReturnType<typeof Bun.serve>;
+type TypescriptHostBackendServer = Bun.Server<TerminalWebSocketData>;
 
 const LOCALHOST = "127.0.0.1";
 const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
@@ -58,6 +71,72 @@ const LAST_EVENT_ID_HEADER = "last-event-id";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const HOST_EVENT_STREAM_PATH = "events";
+
+type TerminalUpgradeResult = { handled: false } | { handled: true; response: Response | undefined };
+
+const tryUpgradeTerminalWebSocket = ({
+  allowedOrigins,
+  appToken,
+  hostCommandRouter,
+  logger,
+  onBackgroundFailure,
+  request,
+  server,
+  shutdownStarted,
+}: {
+  allowedOrigins: Set<string>;
+  appToken: string;
+  hostCommandRouter: EffectNodeHostCommandRouter;
+  logger: WebLogger;
+  onBackgroundFailure(failure: unknown): void;
+  request: Request;
+  server: Bun.Server<TerminalWebSocketData>;
+  shutdownStarted: boolean;
+}): TerminalUpgradeResult => {
+  if (new URL(request.url).pathname !== "/terminal") return { handled: false };
+  if (shutdownStarted) {
+    return { handled: true, response: new Response("Host is shutting down.", { status: 503 }) };
+  }
+  const origin = request.headers.get("origin")?.trim();
+  if (!origin || !allowedOrigins.has(origin)) {
+    return {
+      handled: true,
+      response: new Response("Terminal origin is not allowed.", { status: 403 }),
+    };
+  }
+  if (readCookie(request, APP_SESSION_COOKIE_NAME) !== appToken) {
+    return {
+      handled: true,
+      response: new Response("Terminal session is unauthorized.", { status: 401 }),
+    };
+  }
+  if (request.headers.get("sec-websocket-protocol")?.trim() !== TERMINAL_PROTOCOL_SUBPROTOCOL) {
+    return {
+      handled: true,
+      response: new Response("Terminal protocol version is unsupported.", { status: 426 }),
+    };
+  }
+  const upgraded = server.upgrade(request, {
+    data: {
+      connectionId: globalThis.crypto.randomUUID(),
+      terminalService: hostCommandRouter.terminalService,
+      clientSession: null,
+      backpressured: false,
+      inFlightBytes: 0,
+      pendingBytes: 0,
+      pendingFrames: [],
+      logger,
+      onBackgroundFailure,
+    },
+    headers: { "Sec-WebSocket-Protocol": TERMINAL_PROTOCOL_SUBPROTOCOL },
+  });
+  return {
+    handled: true,
+    response: upgraded
+      ? undefined
+      : new Response("Terminal WebSocket upgrade failed.", { status: 500 }),
+  };
+};
 
 const jsonResponseBody = (payload: unknown): string => {
   const serialized = JSON.stringify(payload);
@@ -83,12 +162,14 @@ const errorResponse = (
   status: number,
   corsHeaders?: HeadersInit,
   failureKind?: string,
+  failure?: HostInvokeFailure,
 ): Response =>
   jsonResponse(
     {
       error: message,
       message,
       ...(failureKind ? { failureKind } : {}),
+      ...(failure ? { failure } : {}),
     },
     { status },
     corsHeaders,
@@ -178,6 +259,13 @@ const extractHostCommandFailureKind = (
 const hostCommandFailureToWebError = (command: string, error: unknown): WebHostRequestError => {
   const failureKind = extractHostCommandFailureKind(error);
   const details = readStructuredDetails(error);
+  const hostInvokeFailure =
+    error instanceof TerminalServiceError
+      ? {
+          kind: "terminal" as const,
+          terminalFailure: terminalServiceErrorToFailure(error),
+        }
+      : undefined;
   return new WebHostRequestError({
     message: errorMessage(error),
     status: 500,
@@ -185,6 +273,7 @@ const hostCommandFailureToWebError = (command: string, error: unknown): WebHostR
     details: {
       command,
       ...(details ? { hostDetails: details } : {}),
+      ...(hostInvokeFailure ? { hostInvokeFailure } : {}),
     },
     ...(failureKind ? { failureKind } : {}),
   });
@@ -337,7 +426,20 @@ const rejectWebHostRequest = (
 const webHostRequestErrorResponse = (
   error: WebHostRequestError,
   corsHeaders: HeadersInit,
-): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
+): Response => {
+  const hostInvokeFailureValue = error.details?.hostInvokeFailure;
+  const hostInvokeFailure =
+    hostInvokeFailureValue === undefined
+      ? undefined
+      : hostInvokeFailureSchema.parse(hostInvokeFailureValue);
+  return errorResponse(
+    error.message,
+    error.status,
+    corsHeaders,
+    error.failureKind,
+    hostInvokeFailure,
+  );
+};
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
 
@@ -644,7 +746,7 @@ export const startTypescriptHostBackendEffect = ({
       rejectExited = reject;
       resolveExited = resolve;
     });
-    const hostCommandRouter: EffectHostCommandRouter = createNodeEffectHostCommandRouter({
+    const hostCommandRouter: EffectNodeHostCommandRouter = createNodeEffectHostCommandRouter({
       eventBus,
       lifecycleLogger: {
         error: logger.error,
@@ -658,6 +760,7 @@ export const startTypescriptHostBackendEffect = ({
         }),
       ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
+      terminalPty: createBunPtyPort(),
     });
 
     const stop = async (): Promise<void> => {
@@ -700,11 +803,22 @@ export const startTypescriptHostBackendEffect = ({
       Effect.gen(function* () {
         server = yield* Effect.try({
           try: () =>
-            Bun.serve({
+            Bun.serve<TerminalWebSocketData>({
               hostname: LOCALHOST,
               idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
               port,
               fetch(request, server) {
+                const terminalUpgrade = tryUpgradeTerminalWebSocket({
+                  allowedOrigins,
+                  appToken,
+                  hostCommandRouter,
+                  logger,
+                  onBackgroundFailure,
+                  request,
+                  server,
+                  shutdownStarted,
+                });
+                if (terminalUpgrade.handled) return terminalUpgrade.response;
                 return Effect.runPromise(
                   handleTypescriptHostBackendRequest({
                     allowedOrigins,
@@ -722,6 +836,7 @@ export const startTypescriptHostBackendEffect = ({
                   }),
                 );
               },
+              websocket: terminalWebSocketHandler,
             }),
           catch: (cause) => toWebOperationError(cause, "web.host.start-server", { port }),
         });

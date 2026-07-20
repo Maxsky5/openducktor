@@ -64,11 +64,12 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
     Effect.gen(function* () {
       const runtime = yield* requireRuntime(runtimeInput);
       const prepared = yield* Effect.tryPromise({
-        try: () =>
+        try: (signal) =>
           prepareRuntime({
             repoPath: runtime.repoPath,
             runtimeId: runtime.runtimeId,
             runtimeEndpoint: runtime.runtimeRoute.endpoint,
+            signal,
           }),
         catch: (cause) =>
           toHostOperationError(cause, "opencode-live-session.prepare-runtime", {

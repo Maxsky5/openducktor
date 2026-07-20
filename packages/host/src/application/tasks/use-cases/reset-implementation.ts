@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { canResetImplementationFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
+  appendImplementationResetCleanupProgress,
   ensureNoActiveImplementationResetActivity,
   excludeCanonicalImplementationTargets,
   resolveCanonicalImplementationResetTarget,
@@ -13,7 +14,6 @@ import {
   requireTaskDeleteDependencies,
 } from "../support/task-cleanup-dependencies";
 import {
-  appendTaskCleanupProgress,
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
   collectSessionsUsingCanonicalWorktree,
@@ -31,6 +31,7 @@ export const createTaskImplementationResetUseCase = ({
   taskStore,
   taskActivityGuard,
   settingsConfig,
+  terminalService,
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
@@ -143,6 +144,7 @@ export const createTaskImplementationResetUseCase = ({
           repoPath: effectiveRepoPath,
           settingsConfig: dependencies.settingsConfig,
           taskIds: [taskId],
+          terminalService,
           worktreeCleanupOperation: "task_reset_implementation",
           worktreeFiles,
           worktreePaths: cleanupTargets.worktreePaths,
@@ -184,14 +186,7 @@ export const createTaskImplementationResetUseCase = ({
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(
         Effect.catchAll((error) =>
-          Effect.fail(
-            appendTaskCleanupProgress(error, {
-              operation: "task_reset_implementation",
-              removedWorktrees: cleanupProgress.removedWorktrees,
-              deletedBranches: cleanupProgress.deletedBranches,
-              completedSteps: cleanupProgress.completedSteps,
-            }),
-          ),
+          Effect.fail(appendImplementationResetCleanupProgress(error, cleanupProgress)),
         ),
       );
     }).pipe(Effect.scoped);

@@ -4,9 +4,14 @@ import {
   agentSessionLiveEnvelopeSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
+  hostInvokeFailureSchema,
 } from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
-import { createAgentSessionLiveAttachment, createHostClient } from "@openducktor/host-client";
+import {
+  createAgentSessionLiveAttachment,
+  createHostClient,
+  HostInvokeError,
+} from "@openducktor/host-client";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -45,7 +50,14 @@ const readAppUpdateCommandResult = (value: unknown): AppUpdateCommandResult =>
 
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
-  const client = createHostClient((command, args) => electronApi.invoke(command, args));
+  const client = createHostClient(async (command, args) => {
+    const response = await electronApi.invoke(command, args);
+    if (response.ok) return response.value;
+    const failure = response.error.failure
+      ? hostInvokeFailureSchema.parse(response.error.failure)
+      : null;
+    throw new HostInvokeError(response.error.message, failure);
+  });
 
   return {
     client,
@@ -86,5 +98,23 @@ export const createElectronShellBridge = (): ShellBridge => {
     },
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
+    terminals: {
+      connect: async (onFrame, onStateChange) => {
+        const clientId = globalThis.crypto.randomUUID();
+        const unsubscribe = electronApi.terminals.subscribe(clientId, onFrame);
+        onStateChange("connected");
+        return {
+          send: (frame) => electronApi.terminals.send(clientId, frame),
+          close: async () => {
+            try {
+              await electronApi.terminals.disconnect(clientId);
+            } finally {
+              unsubscribe();
+              onStateChange("disconnected");
+            }
+          },
+        };
+      },
+    },
   };
 };

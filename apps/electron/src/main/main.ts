@@ -11,6 +11,7 @@ import {
 import {
   createHostEventBus,
   type EffectHostCommandRouter,
+  type EffectNodeHostCommandRouter,
   HOST_EVENT_CHANNELS,
   type HostRuntimeDistribution,
 } from "@openducktor/host";
@@ -38,6 +39,8 @@ import {
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
+  ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
+  ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
 } from "../shared/electron-bridge-contract";
@@ -49,6 +52,7 @@ import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-ada
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
+import { runElectronHostInvoke } from "./electron-host-invoke";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
   createElectronLocalAttachmentPreviewUrl,
@@ -71,6 +75,11 @@ import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindi
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
+import {
+  createElectronTerminalIpcController,
+  shouldDetachTerminalSenderForNavigation,
+} from "./terminals/electron-terminal-ipc";
+import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
 const { app, BrowserWindow, ipcMain, nativeImage, net, protocol, session, shell } = electron;
 const APPLICATION_NAME = "OpenDucktor";
@@ -155,7 +164,7 @@ const runElectronMainOperation = async <Result>(operation: Promise<Result>): Pro
 };
 
 type ElectronPreReadyRuntime = {
-  hostCommandRouter: EffectHostCommandRouter;
+  hostCommandRouter: EffectNodeHostCommandRouter;
 };
 
 type ElectronReadyRuntime = ElectronPreReadyRuntime & {
@@ -192,7 +201,7 @@ const registerPrivilegedProtocolSchemes = (): void => {
 
 const createElectronHostCommandRouter = (
   runtimeDistribution: HostRuntimeDistribution,
-): EffectHostCommandRouter =>
+): EffectNodeHostCommandRouter =>
   createElectronEffectHostCommandRouter({
     clientVersion: app.getVersion(),
     eventBus: hostEventBus,
@@ -202,6 +211,7 @@ const createElectronHostCommandRouter = (
         reportElectronMainFatalFailure(failure);
       }),
     runtimeDistribution,
+    terminalPty: createNodePtyPort(),
   });
 
 const resolveRuntimeDistributionEffect = (): Effect.Effect<
@@ -606,13 +616,48 @@ const createRejectedAppUpdateCommandResult = (
 });
 
 const registerIpcHandlers = (
-  hostCommandRouter: EffectHostCommandRouter,
+  hostCommandRouter: EffectNodeHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
 ): void => {
+  const terminalIpc = createElectronTerminalIpcController(hostCommandRouter.terminalService);
+  const boundTerminalSenders = new WeakSet<Electron.WebContents>();
+  const bindTerminalSenderCleanup = (sender: Electron.WebContents): void => {
+    if (boundTerminalSenders.has(sender)) return;
+    boundTerminalSenders.add(sender);
+    const detach = () => {
+      void runElectronEffect(terminalIpc.detachSender(sender.id));
+    };
+    sender.once("destroyed", detach);
+    sender.on("did-start-navigation", (details) => {
+      if (shouldDetachTerminalSenderForNavigation(details)) detach();
+    });
+  };
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
-    invoke: (command, args) =>
-      electronMainRuntimeBindings.runHostCommand(command, hostCommandRouter.invoke(command, args)),
+    invoke: (command, args) => {
+      const operation = hostCommandRouter.invoke(command, args);
+      return runElectronHostInvoke(operation, (effect) =>
+        electronMainRuntimeBindings.runHostCommand(command, effect),
+      );
+    },
+  });
+
+  ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, request: unknown) => {
+    bindTerminalSenderCleanup(event.sender);
+    const clientId =
+      typeof request === "object" && request !== null && "clientId" in request
+        ? request.clientId
+        : undefined;
+    const frame =
+      typeof request === "object" && request !== null && "frame" in request
+        ? request.frame
+        : undefined;
+    await runElectronEffect(terminalIpc.handleFrame(event.sender, clientId, frame));
+  });
+
+  ipcMain.handle(ELECTRON_TERMINAL_DISCONNECT_CHANNEL, async (event, clientId: unknown) => {
+    bindTerminalSenderCleanup(event.sender);
+    await runElectronEffect(terminalIpc.detachClient(event.sender.id, clientId));
   });
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {

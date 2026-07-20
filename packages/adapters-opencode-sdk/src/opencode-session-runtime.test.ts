@@ -42,6 +42,7 @@ const createLiveClientHarness = (
     onQuestionList?: () => void;
     onQuestionListSettled?: () => void;
     streamCloseBarrier?: Promise<void>;
+    initiallyConnected?: boolean;
   } = {},
 ): LiveClientHarness => {
   const externalSessionIds = input.externalSessionIds ?? [input.externalSessionId ?? "session-1"];
@@ -56,15 +57,18 @@ const createLiveClientHarness = (
   let pendingApproval = input.pendingQuestion !== true;
   let pendingQuestion = input.pendingQuestion === true;
   let signal: AbortSignal | null = null;
-  const queuedEvents: QueuedStreamEntry[] = [
-    {
-      type: "event",
-      event: {
-        type: "server.connected",
-        properties: {},
-      } as unknown as Event,
-    },
-  ];
+  const queuedEvents: QueuedStreamEntry[] =
+    input.initiallyConnected === false
+      ? []
+      : [
+          {
+            type: "event",
+            event: {
+              type: "server.connected",
+              properties: {},
+            } as unknown as Event,
+          },
+        ];
   let wakeStream: (() => void) | null = null;
 
   const client = {
@@ -298,6 +302,92 @@ describe("OpenCode session runtime connection", () => {
     expect(prepared.initialSources[0]?.pendingApprovals[0]?.requestId).toBe("native-request-1");
     expect(harness.messageCalls).toEqual([]);
     await prepared.release();
+  });
+
+  test("aborts initialization while waiting for the runtime event stream", async () => {
+    const harness = createLiveClientHarness({ initiallyConnected: false });
+    const controller = new AbortController();
+    const preparing = createPrepareRuntime(harness)({
+      ...runtimeInput,
+      signal: controller.signal,
+    });
+    while (harness.streamSignal() === null) {
+      await Promise.resolve();
+    }
+
+    controller.abort();
+    const outcome = await Promise.race([
+      preparing.then(
+        () => "resolved" as const,
+        () => "rejected" as const,
+      ),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 50)),
+    ]);
+    if (outcome === "pending") {
+      await harness.completeStream();
+      await preparing.catch(() => undefined);
+    }
+
+    expect(outcome).toBe("rejected");
+    expect(harness.streamSignal()?.aborted).toBe(true);
+  });
+
+  test("aborts initialization while the authoritative session read is pending", async () => {
+    let reportListStarted = (): void => undefined;
+    const listStarted = new Promise<void>((resolve) => {
+      reportListStarted = resolve;
+    });
+    let releaseList = (): void => undefined;
+    const listBarrier = new Promise<void>((resolve) => {
+      releaseList = resolve;
+    });
+    const harness = createLiveClientHarness({
+      onList: reportListStarted,
+      listBarrier,
+    });
+    const controller = new AbortController();
+    const preparing = createPrepareRuntime(harness)({
+      ...runtimeInput,
+      signal: controller.signal,
+    });
+    await listStarted;
+
+    controller.abort();
+    const outcome = await Promise.race([
+      preparing.then(
+        () => "resolved" as const,
+        () => "rejected" as const,
+      ),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 50)),
+    ]);
+    releaseList();
+    await preparing.catch(() => undefined);
+
+    expect(outcome).toBe("rejected");
+    expect(harness.streamSignal()?.aborted).toBe(true);
+  });
+
+  test("keeps a shared runtime event stream alive when one initializer is aborted", async () => {
+    const harness = createLiveClientHarness({ initiallyConnected: false });
+    const prepareRuntime = createPrepareRuntime(harness);
+    const firstController = new AbortController();
+    const firstPreparing = prepareRuntime({
+      ...runtimeInput,
+      signal: firstController.signal,
+    });
+    const secondPreparing = prepareRuntime(runtimeInput);
+    while (harness.streamSignal() === null) {
+      await Promise.resolve();
+    }
+
+    firstController.abort();
+    await expect(firstPreparing).rejects.toBeDefined();
+    expect(harness.streamSignal()?.aborted).toBe(false);
+
+    harness.emit({ type: "server.connected", properties: {} } as unknown as Event);
+    const secondPrepared = await secondPreparing;
+    await secondPrepared.release();
+    expect(harness.streamSignal()?.aborted).toBe(true);
   });
 
   test("serializes concurrent session source reads", async () => {

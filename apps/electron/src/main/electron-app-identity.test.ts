@@ -85,6 +85,37 @@ describe("configureElectronAppIdentity", () => {
     ]);
   });
 
+  test("pins development Chromium storage to its dedicated profile", () => {
+    const calls: Array<[string, string]> = [];
+    const expectedProfilePath = path.join(customConfigPath, "electron-profile-dev");
+
+    configureElectronAppIdentity(
+      {
+        setName(name) {
+          calls.push(["name", name]);
+        },
+        setPath(name, value) {
+          calls.push([name, value]);
+        },
+      },
+      {
+        appName: customAppName,
+        profileKind: "development",
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+        createDirectory(profilePath) {
+          calls.push(["mkdir", profilePath]);
+        },
+      },
+    );
+
+    expect(calls).toEqual([
+      ["name", customAppName],
+      ["mkdir", expectedProfilePath],
+      ["userData", expectedProfilePath],
+      ["sessionData", expectedProfilePath],
+    ]);
+  });
+
   test("expands quoted home-relative config directories before selecting the profile", () => {
     const calls: Array<[string, string]> = [];
     const expectedProfilePath = path.join(homedir(), ".openducktor-local", "electron-profile");

@@ -3,6 +3,7 @@ import type {
   AgentSessionLiveRefreshInput,
   AppUpdateCommandResult,
   AppUpdateState,
+  TerminalFailure,
 } from "@openducktor/contracts";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 
@@ -37,11 +38,27 @@ export type AppUpdateBridge = {
   subscribeState(listener: (state: AppUpdateState) => void): Promise<() => void>;
 };
 
+export type TerminalTransportState = "connected" | "disconnected";
+
+export type TerminalTransportConnection = {
+  send(frame: Uint8Array): Promise<void>;
+  close(): void | Promise<void>;
+};
+
+export type TerminalBridge = {
+  connect(
+    onFrame: (frame: Uint8Array) => void,
+    onStateChange: (state: TerminalTransportState) => void,
+    onFailure: (failure: TerminalFailure) => void,
+  ): Promise<TerminalTransportConnection>;
+};
+
 export type ShellBridge = HostBridge & {
   appUpdates: AppUpdateBridge;
   capabilities: ShellCapabilities;
   openExternalUrl: (url: string) => Promise<void>;
   resolveLocalAttachmentPreviewSrc: (path: string) => Promise<string>;
+  terminals: TerminalBridge;
 };
 
 const DEFAULT_UNAVAILABLE_MESSAGE =
@@ -111,6 +128,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   },
   openExternalUrl: failUnavailable,
   resolveLocalAttachmentPreviewSrc: failUnavailable,
+  terminals: { connect: failUnavailable },
 });
 
 let configuredShellBridge: ShellBridge = createUnavailableShellBridge();

@@ -6,12 +6,24 @@ import type { GitPort } from "../../../ports/git-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./builder-worktree-cleanup";
+import { appendTaskCleanupProgress, type TaskCleanupProgressState } from "./task-cleanup-support";
 
 type CanonicalImplementationResetTarget = {
   branch: string;
   restoreReference: string;
   worktreePath: string;
 };
+
+export const appendImplementationResetCleanupProgress = <E>(
+  error: E,
+  progress: TaskCleanupProgressState,
+) =>
+  appendTaskCleanupProgress(error, {
+    operation: "task_reset_implementation",
+    removedWorktrees: progress.removedWorktrees,
+    deletedBranches: progress.deletedBranches,
+    completedSteps: progress.completedSteps,
+  });
 
 export const ensureNoActiveImplementationResetActivity = (
   taskActivityGuard: TaskActivityGuardPort | undefined,

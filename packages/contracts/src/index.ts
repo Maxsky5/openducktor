@@ -28,3 +28,5 @@ export * from "./spec-template";
 export * from "./subagent-schemas";
 export * from "./system-open-schemas";
 export * from "./task-schemas";
+export * from "./terminal-protocol";
+export * from "./terminal-schemas";

@@ -16,6 +16,7 @@ const makeModel = (
   hasManagedSessionCleanup: true,
   managedWorktreeCount: legacyWorktreeCount + 1,
   legacyWorktreeCount,
+  terminalCount: 0,
   impactError: null,
   errorMessage: null,
   onOpenChange: () => {},
@@ -50,6 +51,12 @@ describe("TaskResetImplementationModal", () => {
       ),
     ).toBeDefined();
     expect(screen.getByText(/uncommitted changes in that worktree will be lost/i)).toBeDefined();
+  });
+
+  test("warns when task terminals will be terminated", () => {
+    render(<TaskResetImplementationModal model={{ ...makeModel(0), terminalCount: 2 }} />);
+
+    expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
   });
 
   test("does not claim retention when only legacy worktrees exist", () => {

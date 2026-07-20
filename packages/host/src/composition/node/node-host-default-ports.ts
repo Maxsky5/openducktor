@@ -31,6 +31,7 @@ import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-to
 import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
 import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
+import { type TerminalPtyPort, TerminalPtyPortTag } from "../../ports/terminal-pty-port";
 import {
   type ToolDiscoveryId,
   type ToolDiscoveryPort,
@@ -52,11 +53,13 @@ export type NodeHostDefaultPorts = {
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
+  terminalPty: TerminalPtyPort;
   worktreeFiles: WorktreeFilePort;
 };
 
 export type CreateNodeHostDefaultPortsInput = {
   runtimeDistribution: HostRuntimeDistribution;
+  terminalPty: TerminalPtyPort;
 } & Partial<{
   codexAppServer: CodexAppServerPort;
   codexAppServerTransportRegistry: CodexAppServerTransportRegistry;
@@ -91,6 +94,7 @@ export type NodeHostDefaultPortServices =
   | SettingsConfigPortTag
   | SystemCommandPortTag
   | ToolDiscoveryPortTag
+  | TerminalPtyPortTag
   | WorktreeFilePortTag;
 
 const isCodexAppServerTransportRegistry = (
@@ -155,6 +159,7 @@ const makeNodeHostDefaultPorts = (
       settingsConfig: input.settingsConfig ?? createSettingsConfigAdapter(),
       systemCommands,
       toolDiscovery,
+      terminalPty: input.terminalPty,
       worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
     };
   });
@@ -176,6 +181,7 @@ const makeNodeHostDefaultPortContext = (
         Context.add(SettingsConfigPortTag, ports.settingsConfig),
         Context.add(SystemCommandPortTag, ports.systemCommands),
         Context.add(ToolDiscoveryPortTag, ports.toolDiscovery),
+        Context.add(TerminalPtyPortTag, ports.terminalPty),
         Context.add(WorktreeFilePortTag, ports.worktreeFiles),
       ),
     ),

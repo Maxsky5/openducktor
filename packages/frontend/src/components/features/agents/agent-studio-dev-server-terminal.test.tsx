@@ -77,9 +77,12 @@ describe("AgentStudioDevServerTerminal", () => {
     });
     const dispose = mock(() => {});
     const onRendererError = mock(() => {});
-    let capturedDisableStdin: boolean | undefined;
-    const createTerminalBinding = (container: HTMLElement, options: { disableStdin?: boolean }) => {
-      capturedDisableStdin = options.disableStdin;
+    let capturedOptions: { disableStdin?: boolean; fontFamily?: string } = {};
+    const createTerminalBinding = (
+      container: HTMLElement,
+      options: { disableStdin?: boolean; fontFamily?: string },
+    ) => {
+      capturedOptions = options;
       open(container);
       loadAddon({});
       return {
@@ -116,7 +119,8 @@ describe("AgentStudioDevServerTerminal", () => {
     await waitFor(() => {
       expect(open).toHaveBeenCalled();
     });
-    expect(capturedDisableStdin).toBe(true);
+    expect(capturedOptions.disableStdin).toBe(true);
+    expect(capturedOptions.fontFamily).toContain('"Symbols Nerd Font Mono"');
     expect(reset).toHaveBeenCalledTimes(1);
     expect(writes).toEqual(["ready\r\n"]);
     expect(onRendererError).toHaveBeenCalledWith(null);

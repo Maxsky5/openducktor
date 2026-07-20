@@ -324,15 +324,20 @@ export const createDevServerService = ({
         });
         targets.push({ handle, scriptId: script.scriptId });
       }
-      for (const target of targets) {
-        const stopError = yield* stopScriptProcessHandle({
-          handle: target.handle,
-          runtime,
-          scriptId: target.scriptId,
-          updateScriptState,
-        });
+      const stopErrors = yield* Effect.forEach(
+        targets,
+        (target) =>
+          stopScriptProcessHandle({
+            handle: target.handle,
+            runtime,
+            scriptId: target.scriptId,
+            updateScriptState,
+          }).pipe(Effect.map((stopError) => ({ scriptId: target.scriptId, stopError }))),
+        { concurrency: "unbounded" },
+      );
+      for (const { scriptId, stopError } of stopErrors) {
         if (stopError !== null) {
-          errors.push(`Failed stopping dev server ${target.scriptId}: ${stopError}`);
+          errors.push(`Failed stopping dev server ${scriptId}: ${stopError}`);
         }
       }
       return errors;
@@ -461,12 +466,22 @@ export const createDevServerService = ({
       return Effect.gen(function* () {
         const errors: string[] = [];
         const stoppedScripts: ReturnType<typeof listRunningScripts> = [];
-        for (const repoGroups of groups.values())
-          for (const runtime of repoGroups.values()) {
-            stoppedScripts.push(...listRunningScripts(runtime));
-            errors.push(...(yield* stopRuntime(runtime)));
-            emitSnapshot(runtime);
-          }
+        const runtimes = [...groups.values()].flatMap((repoGroups) => [...repoGroups.values()]);
+        const results = yield* Effect.forEach(
+          runtimes,
+          (runtime) =>
+            Effect.gen(function* () {
+              const runningScripts = listRunningScripts(runtime);
+              const stopErrors = yield* stopRuntime(runtime);
+              emitSnapshot(runtime);
+              return { runningScripts, stopErrors };
+            }),
+          { concurrency: "unbounded" },
+        );
+        for (const result of results) {
+          stoppedScripts.push(...result.runningScripts);
+          errors.push(...result.stopErrors);
+        }
         if (errors.length > 0) {
           return yield* Effect.fail(
             new HostOperationError({

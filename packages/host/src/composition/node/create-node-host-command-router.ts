@@ -38,10 +38,15 @@ import {
 } from "../../application/tasks/sync/task-sync-service";
 import { createTaskService } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
+import {
+  createTerminalService,
+  type TerminalService,
+} from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
+import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createCodexAppServerCommandHandlers } from "../../interface/commands/codex-app-server-command-handlers";
 import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
@@ -57,6 +62,7 @@ import { createSystemDiagnosticsCommandHandlers } from "../../interface/commands
 import { createSystemPlatformCommandHandlers } from "../../interface/commands/system-platform-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
+import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
 import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/workspace-files-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import {
@@ -74,6 +80,7 @@ import {
   createStopDevServersStep,
   createStopMcpHostBridgeStep,
   createStopRuntimesStep,
+  createStopTerminalsStep,
   type HostLifecycleLogger,
   runShutdownSteps,
   writeHostLifecycleLog,
@@ -98,9 +105,13 @@ const defaultLifecycleLogger: HostLifecycleLogger = {
   info: (message) => Effect.sync(() => console.info(message)),
 };
 
+export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
+  readonly terminalService: TerminalService;
+};
+
 export const createNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
-): EffectHostCommandRouter => {
+): EffectNodeHostCommandRouter => {
   const {
     clientVersion,
     eventBus,
@@ -123,6 +134,7 @@ export const createNodeEffectHostCommandRouter = (
     runtimeHealth,
     settingsConfig,
     systemCommands,
+    terminalPty,
     toolDiscovery,
     worktreeFiles,
   } = createNodeHostDefaultPorts(input);
@@ -250,6 +262,13 @@ export const createNodeEffectHostCommandRouter = (
     settingsConfig,
     workspaceSettingsService,
   });
+  const terminalService = Effect.runSync(
+    createTerminalService({
+      filesystem,
+      ptyPort: terminalPty,
+      resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
+    }),
+  );
   const devServerService = createDevServerService({
     ...(eventBus ? { eventBus } : {}),
     processPort: devServerProcesses,
@@ -261,6 +280,7 @@ export const createNodeEffectHostCommandRouter = (
   });
   const taskService = createTaskService({
     devServerService,
+    terminalService,
     gitPort: git,
     taskStore,
     taskActivityGuard,
@@ -331,7 +351,7 @@ export const createNodeEffectHostCommandRouter = (
       yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");
     });
 
-  return createEffectHostCommandRouter({
+  const router = createEffectHostCommandRouter({
     initialize: () =>
       Effect.gen(function* () {
         if (resolvedMcpHostBridge) {
@@ -363,6 +383,7 @@ export const createNodeEffectHostCommandRouter = (
           runShutdownSteps(
             [
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+              createStopTerminalsStep(terminalService),
               createStopDevServersStep(devServerService, lifecycleLogger),
               createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
               createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
@@ -433,9 +454,11 @@ export const createNodeEffectHostCommandRouter = (
       ...createSystemPlatformCommandHandlers(),
       ...createTaskCommandHandlers(taskService),
       ...createTaskWorktreeCommandHandlers(taskWorktreeService),
+      ...createTerminalCommandHandlers(terminalService),
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),
     },
   });
+  return Object.assign(router, { terminalService });
 };
 
 export const createNodeHostCommandRouter = (

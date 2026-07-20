@@ -36,6 +36,7 @@ import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-dis
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { DevServerService, DevServerServiceError } from "../dev-servers/dev-server-service";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
+import type { TerminalService, TerminalServiceError } from "../terminals/terminal-service";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
@@ -104,6 +105,7 @@ export type TaskServiceError =
   | TaskPolicyError
   | TaskStoreError
   | ToolDiscoveryError
+  | TerminalServiceError
   | WorktreeFileError
   | WorkspaceSettingsError;
 
@@ -193,8 +195,10 @@ export type RepoPullRequestSyncResult = {
   ran: boolean;
   changedTaskIds: string[];
 };
+export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
   devServerService?: DevServerService;
+  terminalService?: TaskTerminalCleanupPort;
   gitPort?: GitPort;
   taskStore: TaskStorePort;
   taskActivityGuard?: TaskActivityGuardPort;

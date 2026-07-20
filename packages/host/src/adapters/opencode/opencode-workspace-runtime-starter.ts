@@ -2,7 +2,7 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
-import { Cause, Effect, Exit, Schedule, Scope } from "effect";
+import { Cause, Clock, Effect, Exit, Option, Scope } from "effect";
 import {
   type HostError,
   HostOperationError,
@@ -29,7 +29,7 @@ import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { buildOpenDucktorMcpBridgeEnvironment } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { startOpenCodeLiveSessionState } from "./opencode-live-session-startup";
-import { canConnect, pickFreePort } from "./opencode-local-port";
+import { isOpenCodeHealthy, pickFreePort } from "./opencode-local-port";
 
 export type OpenCodeMcpBridgeConnection = {
   workspaceId: string;
@@ -43,7 +43,7 @@ export type OpenCodeMcpBridgeConnectionResolver = (
 
 type LocalPortAllocator = () => Effect.Effect<number, HostOperationError>;
 
-type LocalPortProbe = (
+type OpenCodeReadinessProbe = (
   port: number,
   timeoutMs: number,
 ) => Effect.Effect<boolean, HostOperationError>;
@@ -62,7 +62,7 @@ export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   now?: () => Date;
   runtimeId?: () => string;
   portAllocator?: LocalPortAllocator;
-  portProbe?: LocalPortProbe;
+  readinessProbe?: OpenCodeReadinessProbe;
   platform?: ProcessTreePlatform;
   processTreeTerminator?: ProcessTreeTerminator;
 };
@@ -107,11 +107,18 @@ const outputDetail = (stderr: string, stdout: string, fallback: string): string 
   return trimmedStdout || fallback;
 };
 
-const startupProbeSchedule = (startupTimeoutMs: number, retryDelayMs: number) =>
-  Schedule.addDelay(
-    Schedule.recurs(Math.max(1, Math.ceil(startupTimeoutMs / Math.max(1, retryDelayMs))) - 1),
-    () => `${retryDelayMs} millis`,
-  );
+const buildManagedOpenCodeEnvironment = (
+  processEnv: NodeJS.ProcessEnv,
+  configContent: string,
+): NodeJS.ProcessEnv => {
+  const runtimeEnv: NodeJS.ProcessEnv = {
+    ...processEnv,
+    OPENCODE_CONFIG_CONTENT: configContent,
+  };
+  delete runtimeEnv.OPENCODE_SERVER_PASSWORD;
+  delete runtimeEnv.OPENCODE_SERVER_USERNAME;
+  return runtimeEnv;
+};
 
 export const createOpenCodeWorkspaceRuntimeStarter = ({
   toolDiscovery,
@@ -130,10 +137,10 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
     pickFreePort().pipe(
       Effect.mapError((cause) => toHostOperationError(cause, "opencodeRuntime.pickFreePort")),
     ),
-  portProbe = (port, timeoutMs) =>
-    canConnect(port, timeoutMs).pipe(
+  readinessProbe = (port, timeoutMs) =>
+    isOpenCodeHealthy(port, timeoutMs).pipe(
       Effect.mapError((cause) =>
-        toHostOperationError(cause, "opencodeRuntime.probePort", {
+        toHostOperationError(cause, "opencodeRuntime.probeReadiness", {
           port,
           timeoutMs,
         }),
@@ -188,10 +195,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),
         ),
       );
-      const runtimeEnv = {
-        ...processEnv,
-        OPENCODE_CONFIG_CONTENT: configContent,
-      };
+      const runtimeEnv = buildManagedOpenCodeEnvironment(processEnv, configContent);
       const command = createProcessCommandLaunch(
         binary,
         ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
@@ -226,6 +230,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           }),
         );
       }
+      const startupStartedAtMs = yield* Clock.currentTimeMillis;
 
       let closed = false;
       let closeDescription: string | null = null;
@@ -325,9 +330,10 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         }
       });
 
-      const startupProbeDriver = yield* Schedule.driver(
-        startupProbeSchedule(startupTimeoutMs, retryDelayMs),
-      );
+      const remainingStartupTime = () =>
+        Effect.map(Clock.currentTimeMillis, (currentTimeMs) =>
+          Math.max(0, startupTimeoutMs - (currentTimeMs - startupStartedAtMs)),
+        );
       while (true) {
         if (spawnError) {
           return yield* Effect.fail(
@@ -352,13 +358,20 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             }),
           );
         }
-        if (
-          yield* portProbe(port, connectTimeoutMs).pipe(
-            Effect.mapError((cause) =>
-              toHostOperationError(cause, "opencodeWorkspaceRuntime.portProbe"),
-            ),
-          )
-        ) {
+        const remainingProbeTimeMs = yield* remainingStartupTime();
+        if (remainingProbeTimeMs === 0) {
+          break;
+        }
+        const readiness = yield* readinessProbe(port, connectTimeoutMs).pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(cause, "opencodeWorkspaceRuntime.probeReadiness"),
+          ),
+          Effect.timeoutOption(`${remainingProbeTimeMs} millis`),
+        );
+        if (Option.isNone(readiness)) {
+          break;
+        }
+        if (readiness.value) {
           const runtime = yield* Effect.try({
             try: () =>
               runtimeInstanceSummarySchema.parse({
@@ -383,6 +396,16 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
               }),
           });
 
+          const remainingStartupMs = yield* remainingStartupTime();
+          if (remainingStartupMs === 0) {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+                message: `Timed out starting OpenCode runtime on 127.0.0.1:${port} after ${startupTimeoutMs}ms.`,
+                details: { port, startupTimeoutMs },
+              }),
+            );
+          }
           yield* startOpenCodeLiveSessionState({
             runtime,
             runtimeId: nextRuntimeId,
@@ -394,7 +417,17 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
               liveSessionRegistered = true;
             },
             releaseLiveSessionState: awaitLiveSessionRelease(),
-          });
+          }).pipe(
+            Effect.timeoutFail({
+              duration: `${remainingStartupMs} millis`,
+              onTimeout: () =>
+                new HostOperationError({
+                  operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+                  message: `Timed out starting OpenCode runtime on 127.0.0.1:${port} after ${startupTimeoutMs}ms.`,
+                  details: { port, startupTimeoutMs },
+                }),
+            }),
+          );
 
           return {
             runtime,
@@ -411,10 +444,11 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           };
         }
 
-        const nextProbe = yield* Effect.either(startupProbeDriver.next(undefined));
-        if (nextProbe._tag === "Left") {
+        const remainingDelayTimeMs = yield* remainingStartupTime();
+        if (remainingDelayTimeMs === 0) {
           break;
         }
+        yield* Effect.sleep(`${Math.min(retryDelayMs, remainingDelayTimeMs)} millis`);
       }
 
       const timeoutMessage = `Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`;

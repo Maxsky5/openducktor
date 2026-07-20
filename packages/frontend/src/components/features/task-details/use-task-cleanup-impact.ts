@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { terminalListQueryOptions } from "@/state/queries/terminals";
 
 type TaskCleanupImpact = {
   hasCanonicalWorktree: boolean;
@@ -13,6 +14,7 @@ type TaskCleanupImpact = {
   legacyWorktreeCount: number;
   impactError: string | null;
   isLoadingImpact: boolean;
+  terminalCount: number;
 };
 
 type TaskCleanupImpactQuerySnapshot = {
@@ -36,6 +38,7 @@ const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
   legacyWorktreeCount: 0,
   impactError: null,
   isLoadingImpact: false,
+  terminalCount: 0,
 };
 
 export const getManagedTaskCleanupImpact = (
@@ -64,6 +67,7 @@ export const getManagedTaskCleanupImpact = (
     legacyWorktreeCount: managedWorktrees.size,
     impactError: null,
     isLoadingImpact: false,
+    terminalCount: 0,
   };
 };
 
@@ -95,6 +99,7 @@ export const getTaskCleanupImpactFromSessionQueries = (
       legacyWorktreeCount: 0,
       impactError: TASK_CLEANUP_IMPACT_ERROR_MESSAGE,
       isLoadingImpact: false,
+      terminalCount: 0,
     };
   }
 
@@ -164,13 +169,41 @@ export function useTaskCleanupImpact(taskIds: string[], open: boolean): TaskClea
       enabled: open && Boolean(workspaceRepoPath),
     })),
   });
+  const terminalQueries = useQueries({
+    queries: taskIds.map((taskId) => ({
+      ...(workspaceRepoPath
+        ? terminalListQueryOptions({ repoPath: workspaceRepoPath, taskId })
+        : terminalListQueryOptions({ repoPath: "", taskId })),
+      enabled: open && Boolean(workspaceRepoPath),
+    })),
+  });
 
   return useMemo((): TaskCleanupImpact => {
-    return getTaskCleanupImpactFromSessionQueries(
+    const sessionImpact = getTaskCleanupImpactFromSessionQueries(
       open ? workspaceRepoPath : null,
       taskIds,
       taskSessionQueries,
       taskWorktreeQueries,
     );
-  }, [workspaceRepoPath, open, taskIds, taskSessionQueries, taskWorktreeQueries]);
+    if (!open || taskIds.length === 0 || !workspaceRepoPath) return sessionImpact;
+    if (terminalQueries.some((query) => query.error != null)) {
+      return {
+        ...sessionImpact,
+        impactError: "Unable to load terminal cleanup impact.",
+        isLoadingImpact: false,
+      };
+    }
+    if (terminalQueries.some((query) => query.isLoading || query.isFetching)) {
+      return { ...sessionImpact, isLoadingImpact: true };
+    }
+    return {
+      ...sessionImpact,
+      terminalCount: terminalQueries.reduce(
+        (count, query) =>
+          count +
+          (query.data?.terminals.filter((terminal) => terminal.lifecycle !== "exited").length ?? 0),
+        0,
+      ),
+    };
+  }, [workspaceRepoPath, open, taskIds, taskSessionQueries, taskWorktreeQueries, terminalQueries]);
 }

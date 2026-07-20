@@ -33,9 +33,20 @@ export {
 } from "./application/agent-sessions/live-state-coordinator";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
 export {
+  createTerminalClientSession,
+  type TerminalClientSession,
+} from "./application/terminals/terminal-client-session";
+export {
+  createTerminalService,
+  type TerminalService,
+  TerminalServiceError,
+  terminalServiceErrorToFailure,
+} from "./application/terminals/terminal-service";
+export {
   type CreateNodeHostCommandRouterInput,
   createNodeEffectHostCommandRouter,
   createNodeHostCommandRouter,
+  type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
 export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
 export {
@@ -55,6 +66,15 @@ export {
   OpenDucktorLogPersistenceError,
   type OpenDucktorLogSurface,
 } from "./infrastructure/logging/openducktor-daily-log-writer";
+export {
+  type ProcessTreeInspector,
+  type ProcessTreeTerminator,
+  processIsAlive,
+  processTreeHasChildren,
+  processTreeIsAlive,
+  terminateProcessTree,
+  waitForObservedState,
+} from "./infrastructure/process/process-tree";
 export {
   HOST_COMMAND_NAMES,
   type HostCommandName,
@@ -91,9 +111,27 @@ export type {
 export type { SettingsConfigPort } from "./ports/settings-config-port";
 export type { SystemCommandPort } from "./ports/system-command-port";
 export type { TaskStorePort } from "./ports/task-repository-ports";
+export {
+  type TerminalGrid,
+  TerminalPtyError,
+  type TerminalPtyExit,
+  type TerminalPtyHandle,
+  type TerminalPtyHandlers,
+  type TerminalPtyLaunchPlan,
+  type TerminalPtyPort,
+} from "./ports/terminal-pty-port";
 export type {
   ToolDiscoveryError,
   ToolDiscoveryId,
   ToolDiscoveryPort,
 } from "./ports/tool-discovery-port";
 export type { WorktreeFilePort } from "./ports/worktree-file-port";
+export {
+  assertTerminalPtyConformance,
+  type LiveTerminalPtyConformanceObservation,
+  observeLiveTerminalPtyConformance,
+  type TerminalPtyConformanceObservation,
+  verifyLiveTerminalPtyInterrupt,
+  verifyLiveTerminalPtyNaturalExitCleanup,
+  verifyLiveTerminalPtyProcessTreeTermination,
+} from "./testing/terminal-pty-conformance";

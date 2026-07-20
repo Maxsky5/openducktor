@@ -4,6 +4,10 @@ import type {
   DevServerServiceError,
   DisposableDevServerService,
 } from "../application/dev-servers/dev-server-service";
+import type {
+  TerminalService,
+  TerminalServiceError,
+} from "../application/terminals/terminal-service";
 import {
   causeToHostBoundaryError,
   type HostError,
@@ -18,10 +22,15 @@ export type HostLifecycleLogger = {
 
 export type HostShutdownStep = {
   label: string;
-  run: () => Effect.Effect<void, DevServerServiceError | HostError>;
+  run: () => Effect.Effect<void, DevServerServiceError | HostError | TerminalServiceError>;
 };
 
 class HostLifecycleLoggingError extends HostOperationError {}
+
+export const createStopTerminalsStep = (terminalService: TerminalService): HostShutdownStep => ({
+  label: "interactive terminals",
+  run: () => terminalService.dispose(),
+});
 
 const formatRuntimeTaskLabel = (taskId: string | null): string => taskId ?? "workspace";
 

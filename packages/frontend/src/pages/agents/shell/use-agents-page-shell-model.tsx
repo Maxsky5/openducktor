@@ -7,6 +7,7 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state/app-state-provider";
+import { useAgentStudioTerminals } from "../terminals/use-agent-studio-terminals";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRepoSettings } from "../use-agent-studio-repo-settings";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
@@ -46,6 +47,7 @@ type AgentsPageShellModel = {
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
+  terminalPanel: ReturnType<typeof useAgentStudioTerminals>;
 };
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
@@ -101,6 +103,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     isLoadingRepoSettings,
   });
   const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
+  const terminalPanel = useAgentStudioTerminals({
+    repoPath: workspaceRepoPath,
+    taskId: selection.view.selectedTask?.id ?? null,
+    taskVersion: selection.view.selectedTask?.updatedAt ?? null,
+  });
 
   const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
@@ -198,5 +205,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     rightPanelBridge,
     selectedFileRefresh,
     modalContent,
+    terminalPanel,
   };
 }

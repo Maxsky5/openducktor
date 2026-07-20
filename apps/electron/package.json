@@ -13,7 +13,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:main": "bun build --target=node --external electron --splitting --outdir dist --entry-naming 'main.[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts",
+    "build:main": "bun build --target=node --external electron --external node-pty --splitting --outdir dist --entry-naming 'main.[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts",
     "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
     "builder": "electron-builder",
@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
+    "node-pty": "1.2.0-beta.14",
     "semver": "7.8.5",
     "yaml": "^2.9.0"
   }

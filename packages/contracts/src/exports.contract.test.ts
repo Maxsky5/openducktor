@@ -208,6 +208,25 @@ import type {
   TaskStoreCheck,
   TaskUpdatePatch,
   TaskWorktreeSummary,
+  TerminalClientMessage,
+  TerminalCloseRequest,
+  TerminalCloseResponse,
+  TerminalContext,
+  TerminalCreateRequest,
+  TerminalCreateResponse,
+  TerminalExit,
+  TerminalFailure,
+  TerminalFailureCode,
+  TerminalLaunchSpec,
+  TerminalLifecycle,
+  TerminalListFilter,
+  TerminalListRequest,
+  TerminalListResponse,
+  TerminalPreparePathInputRequest,
+  TerminalPreparePathInputResponse,
+  TerminalRef,
+  TerminalServerMessage,
+  TerminalSummary,
   ToolExecutableProvenance,
   ToolExecutableSourceCategory,
   WorkspaceFileGitStatus,
@@ -428,6 +447,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "getWorkspacesResultSchema",
   "issueTypeSchema",
   "isOpencodeExposedOdtToolAlias",
+  "isTerminalClientMessage",
   "knownGitProviderIdSchema",
   "knownGitProviderIdValues",
   "codexReasoningEffortSchema",
@@ -602,6 +622,38 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskUpdatePatchSchema",
   "taskWorktreeSummarySchema",
   "tasksUpdatedEventSchema",
+  "TERMINAL_PROTOCOL_MAX_COLUMNS",
+  "TERMINAL_PROTOCOL_MAX_HEADER_BYTES",
+  "TERMINAL_PROTOCOL_MAX_INPUT_BYTES",
+  "TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES",
+  "TERMINAL_PROTOCOL_MAX_ROWS",
+  "TERMINAL_PROTOCOL_SUBPROTOCOL",
+  "TERMINAL_PROTOCOL_VERSION",
+  "TERMINAL_ID_MAX_LENGTH",
+  "decodeTerminalProtocolFrame",
+  "encodeTerminalProtocolFrame",
+  "hostInvokeFailureSchema",
+  "terminalClientMessageSchema",
+  "terminalCloseRequestSchema",
+  "terminalCloseResponseSchema",
+  "terminalContextSchema",
+  "terminalCreateRequestSchema",
+  "terminalCreateResponseSchema",
+  "terminalExitSchema",
+  "terminalFailureCodeSchema",
+  "terminalFailureSchema",
+  "terminalIdSchema",
+  "terminalLaunchSpecSchema",
+  "terminalLifecycleSchema",
+  "terminalListFilterSchema",
+  "terminalListRequestSchema",
+  "terminalListResponseSchema",
+  "terminalPreparePathInputRequestSchema",
+  "terminalPreparePathInputResponseSchema",
+  "terminalRefSchema",
+  "terminalServerMessageSchema",
+  "terminalSummarySchema",
+  "terminalTaskIdSchema",
   "themeSchema",
   "toolExecutableProvenanceSchema",
   "toolExecutableSourceCategorySchema",
@@ -828,6 +880,25 @@ type ExportedTypeContract = {
   TaskQaDocumentPresence: TaskQaDocumentPresence;
   TaskStatus: TaskStatus;
   TaskWorktreeSummary: TaskWorktreeSummary;
+  TerminalClientMessage: TerminalClientMessage;
+  TerminalCloseRequest: TerminalCloseRequest;
+  TerminalCloseResponse: TerminalCloseResponse;
+  TerminalContext: TerminalContext;
+  TerminalCreateRequest: TerminalCreateRequest;
+  TerminalCreateResponse: TerminalCreateResponse;
+  TerminalExit: TerminalExit;
+  TerminalFailure: TerminalFailure;
+  TerminalFailureCode: TerminalFailureCode;
+  TerminalLaunchSpec: TerminalLaunchSpec;
+  TerminalLifecycle: TerminalLifecycle;
+  TerminalListFilter: TerminalListFilter;
+  TerminalListRequest: TerminalListRequest;
+  TerminalListResponse: TerminalListResponse;
+  TerminalPreparePathInputRequest: TerminalPreparePathInputRequest;
+  TerminalPreparePathInputResponse: TerminalPreparePathInputResponse;
+  TerminalRef: TerminalRef;
+  TerminalServerMessage: TerminalServerMessage;
+  TerminalSummary: TerminalSummary;
   TaskUpdatePatch: TaskUpdatePatch;
   ToolExecutableProvenance: ToolExecutableProvenance;
   ToolExecutableSourceCategory: ToolExecutableSourceCategory;

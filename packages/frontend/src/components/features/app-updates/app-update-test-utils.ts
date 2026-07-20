@@ -1,7 +1,11 @@
 import { mock } from "bun:test";
 import type { AppUpdateCommandResult, AppUpdateState } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import type { AppUpdateBridge, ShellBridge } from "@/lib/shell-bridge";
+import {
+  type AppUpdateBridge,
+  createUnavailableShellBridge,
+  type ShellBridge,
+} from "@/lib/shell-bridge";
 
 export type FakeAppUpdateBridge = AppUpdateBridge & {
   check: ReturnType<typeof mock>;
@@ -66,4 +70,5 @@ export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge 
   },
   openExternalUrl: async () => {},
   resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+  terminals: createUnavailableShellBridge().terminals,
 });

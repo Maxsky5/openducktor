@@ -11,6 +11,11 @@ import { HostPullRequestReviewClient } from "./pull-request-review-client";
 import { HostSystemClient } from "./system-client";
 import { HostTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
+import { HostTerminalClient } from "./terminal-client";
+
+export { HostInvokeError } from "./invoke-utils";
+export { HostTerminalClientError } from "./terminal-client";
+
 import { HostWorkspaceClient } from "./workspace-client";
 
 type MethodName<TClient extends object> = {
@@ -80,6 +85,13 @@ const TASK_METHODS = [
   "agentSessionsListForTasks",
   "agentSessionUpsert",
 ] as const satisfies readonly MethodName<HostTaskClient>[];
+
+const TERMINAL_METHODS = [
+  "terminalCreate",
+  "terminalList",
+  "terminalPreparePathInput",
+  "terminalClose",
+] as const satisfies readonly MethodName<HostTerminalClient>[];
 
 const AGENT_METHODS = [
   "systemCheck",
@@ -164,6 +176,7 @@ type FilesystemMethodName = (typeof FILESYSTEM_METHODS)[number];
 type PullRequestReviewMethodName = (typeof PULL_REQUEST_REVIEW_METHODS)[number];
 type SystemMethodName = (typeof SYSTEM_METHODS)[number];
 type TaskMethodName = (typeof TASK_METHODS)[number];
+type TerminalMethodName = (typeof TERMINAL_METHODS)[number];
 type AgentMethodName = (typeof AGENT_METHODS)[number];
 type AgentSessionLiveMethodName = (typeof AGENT_SESSION_LIVE_METHODS)[number];
 type GitMethodName = (typeof GIT_METHODS)[number];
@@ -173,6 +186,7 @@ type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
   Pick<HostPullRequestReviewClient, PullRequestReviewMethodName> &
   Pick<HostSystemClient, SystemMethodName> &
   Pick<HostTaskClient, TaskMethodName> &
+  Pick<HostTerminalClient, TerminalMethodName> &
   Pick<HostAgentClient, AgentMethodName> &
   Pick<HostAgentSessionLiveClient, AgentSessionLiveMethodName> &
   Pick<HostGitClient, GitMethodName>;
@@ -217,6 +231,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const pullRequestReviewClient = new HostPullRequestReviewClient(invokeFn);
   const systemClient = new HostSystemClient(invokeFn);
   const taskClient = new HostTaskClient(invokeFn, metadataCache);
+  const terminalClient = new HostTerminalClient(invokeFn);
   const agentClient = new HostAgentClient(invokeFn, metadataCache);
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
@@ -227,6 +242,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   bindDelegates(hostClient, pullRequestReviewClient, PULL_REQUEST_REVIEW_METHODS);
   bindDelegates(hostClient, systemClient, SYSTEM_METHODS);
   bindDelegates(hostClient, taskClient, TASK_METHODS);
+  bindDelegates(hostClient, terminalClient, TERMINAL_METHODS);
   bindDelegates(hostClient, agentClient, AGENT_METHODS);
   bindDelegates(hostClient, agentSessionLiveClient, AGENT_SESSION_LIVE_METHODS);
   bindDelegates(hostClient, gitClient, GIT_METHODS);

@@ -10,6 +10,11 @@ import {
   requireLinkMergedPullRequestDependencies,
 } from "../support/required-task-dependencies";
 import {
+  createTaskCleanupProgressState,
+  runTaskRuntimeCleanup,
+} from "../support/task-cleanup-support";
+import { completeTaskClosure } from "../support/task-closure";
+import {
   validatePullRequestManagementStatusEffect,
   validateTaskTransitionEffect,
 } from "../support/task-validation-effects";
@@ -21,7 +26,9 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   gitPort,
   taskStore,
   settingsConfig,
+  taskSessionBootstrapCoordinator,
   taskWorktreeService,
+  terminalService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "linkMergedPullRequest"> => ({
   linkMergedPullRequest(input) {
@@ -44,6 +51,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           gitPort,
           settingsConfig,
           taskWorktreeService,
+          terminalService,
           workspaceSettingsService,
         ),
       );
@@ -100,18 +108,32 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       }
 
       yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
-      if (cleanup) {
-        yield* cleanupMergedBuilderState(
-          dependencies,
-          taskStore,
-          repoPath,
-          taskId,
-          cleanup.sourceBranch,
-          cleanup.targetBranch,
-        );
-      }
       yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-      const task = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
+      const cleanupEffect = cleanup
+        ? cleanupMergedBuilderState(
+            dependencies,
+            taskStore,
+            repoPath,
+            taskId,
+            cleanup.sourceBranch,
+            cleanup.targetBranch,
+          )
+        : runTaskRuntimeCleanup({
+            devServerService: dependencies.devServerService,
+            progress: createTaskCleanupProgressState(),
+            repoPath,
+            taskIds: [taskId],
+            terminalService: dependencies.terminalService,
+          });
+      const task = yield* completeTaskClosure({
+        cleanup: cleanupEffect,
+        gitPort: dependencies.gitPort,
+        operation: "link merged pull request",
+        repoPath,
+        taskId,
+        taskSessionBootstrapCoordinator,
+        taskStore,
+      });
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
       return enrichTask(task, nextTasks);

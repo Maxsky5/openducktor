@@ -6,6 +6,7 @@ import {
   createProcessEnvironment,
   normalizeProcessEnvironment,
   pathEnvironmentValue,
+  sanitizeChildProcessEnvironment,
 } from "./process-environment";
 
 const testIfPosixShellIsAvailable = process.platform === "win32" ? test.skip : test;
@@ -112,5 +113,36 @@ describe("normalizeProcessEnvironment", () => {
         "win32",
       ),
     ).toEqual({ Path: "C:\\Tools" });
+  });
+});
+
+describe("sanitizeChildProcessEnvironment", () => {
+  test("removes host-control values without mutating the resolved environment", () => {
+    const resolvedEnvironment: NodeJS.ProcessEnv = {
+      PATH: "/already/resolved:/usr/bin",
+      ODT_HOST_TOKEN: "host-secret",
+      OPENDUCKTOR_APP_TOKEN: "app-secret",
+      USER_SETTING: "preserved",
+    };
+
+    const childEnvironment = sanitizeChildProcessEnvironment(resolvedEnvironment, "darwin");
+
+    expect(childEnvironment).toEqual({
+      PATH: "/already/resolved:/usr/bin",
+      USER_SETTING: "preserved",
+    });
+    expect(resolvedEnvironment.ODT_HOST_TOKEN).toBe("host-secret");
+  });
+
+  test("removes host-control values case-insensitively on Windows", () => {
+    expect(
+      sanitizeChildProcessEnvironment(
+        {
+          Path: "C:\\Windows",
+          odt_host_token: "host-secret",
+        },
+        "win32",
+      ),
+    ).toEqual({ Path: "C:\\Windows" });
   });
 });

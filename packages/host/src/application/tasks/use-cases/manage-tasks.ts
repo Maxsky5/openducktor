@@ -52,6 +52,16 @@ export const createTaskCrudUseCases = ({
   transitionTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, status } = input;
+      if (status === "closed") {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "status",
+            message:
+              "task_transition cannot close tasks. Use task_close or an explicit delivery completion command.",
+            details: { repoPath, taskId, status },
+          }),
+        );
+      }
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {

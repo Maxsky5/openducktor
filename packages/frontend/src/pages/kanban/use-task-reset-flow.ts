@@ -55,6 +55,7 @@ export function useTaskResetFlow({
     hasManagedSessionCleanup,
     managedWorktreeCount,
     legacyWorktreeCount,
+    terminalCount,
     impactError,
     isLoadingImpact,
   } = useTaskCleanupImpact(taskId ? [taskId] : [], open);
@@ -141,6 +142,7 @@ export function useTaskResetFlow({
       hasManagedSessionCleanup,
       managedWorktreeCount,
       legacyWorktreeCount,
+      terminalCount,
       impactError,
       errorMessage: modalError,
       onOpenChange: (nextOpen) => {

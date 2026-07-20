@@ -214,6 +214,11 @@ const createTaskService = (
   const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
   return createRealTaskService({
     ...rest,
+    terminalService:
+      rest.terminalService ??
+      ({
+        acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+      } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),

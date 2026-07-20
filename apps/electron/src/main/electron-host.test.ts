@@ -1701,7 +1701,12 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: { repo: repoConfig() },
+          workspaceOrder: ["repo"],
+        }),
+      ),
       taskStore: {
         ...createTaskStore(),
         getTaskMetadata: () =>

@@ -1,6 +1,8 @@
 appId: com.openducktor.app
 productName: OpenDucktor
 asar: true
+asarUnpack:
+  - node_modules/node-pty/**/*
 
 publish:
   provider: github
@@ -14,6 +16,8 @@ afterAllArtifactBuild: scripts/print-package-artifacts.cjs
 
 files:
   - dist/**/*
+  - node_modules/node-pty/**/*
+  - "!node_modules/node-pty/scripts/**/*"
 
 extraResources:
   - from: build/sidecars
@@ -27,7 +31,8 @@ extraResources:
 
 extraMetadata:
   main: dist/main.js
-  dependencies: {}
+  dependencies:
+    node-pty: 1.2.0-beta.14
 
 mac:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}

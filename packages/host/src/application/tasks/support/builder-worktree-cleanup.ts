@@ -19,11 +19,13 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
+import type { TaskTerminalCleanupPort } from "../task-service";
 import type {
   TaskWorktreeService,
   TaskWorktreeServiceError,
 } from "../worktrees/task-worktree-service";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
+import { createTaskCleanupProgressState, runTaskRuntimeCleanup } from "./task-cleanup-support";
 
 type BuildWorktreeCleanupError =
   | GitPortError
@@ -97,6 +99,7 @@ export const cleanupMergedBuilderState = (
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
+    terminalService: TaskTerminalCleanupPort;
   },
   taskStore: TaskStorePort,
   repoPath: string,
@@ -105,7 +108,13 @@ export const cleanupMergedBuilderState = (
   targetBranch: string,
 ) =>
   Effect.gen(function* () {
-    yield* dependencies.devServerService.stop({ repoPath, taskId });
+    yield* runTaskRuntimeCleanup({
+      devServerService: dependencies.devServerService,
+      progress: createTaskCleanupProgressState(),
+      repoPath,
+      taskIds: [taskId],
+      terminalService: dependencies.terminalService,
+    });
     const cleanupTarget = yield* findLatestCleanupTarget(
       dependencies,
       taskStore,
@@ -139,6 +148,7 @@ export const cleanupDirectMergeBuilderState = (
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
+    terminalService: TaskTerminalCleanupPort;
   },
   taskStore: TaskStorePort,
   repoPath: string,

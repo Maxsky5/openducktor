@@ -75,6 +75,12 @@ export function TaskResetImplementationModal({
                 ? "Other related local task branches will be deleted if present."
                 : "Related local task branches will be deleted if present."}
             </p>
+            {model.terminalCount > 0 ? (
+              <p>
+                {model.terminalCount} associated terminal{model.terminalCount === 1 ? "" : "s"} will
+                be terminated before the implementation resets.
+              </p>
+            ) : null}
             <p>QA reports and linked pull request metadata will be cleared.</p>
             <p>
               Specs and implementation plans are kept. The task status will move back to{" "}

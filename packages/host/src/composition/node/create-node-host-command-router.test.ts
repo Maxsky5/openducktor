@@ -7,6 +7,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import {
   type CreateNodeHostCommandRouterInput,
@@ -38,6 +39,10 @@ const createEventBus = (): HostEventBusPort => ({
   },
 });
 
+const terminalPty: TerminalPtyPort = {
+  start: () => Effect.die("Terminal PTY is not expected in this composition test."),
+};
+
 const createLogger = () => {
   const infos: string[] = [];
   const errors: string[] = [];
@@ -62,6 +67,7 @@ const createRouter = (input: {
     runtimeDistribution,
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
     taskStore: {} as TaskStorePort,
+    terminalPty,
   });
 
 describe("createNodeEffectHostCommandRouter", () => {

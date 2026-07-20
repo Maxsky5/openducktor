@@ -38,6 +38,7 @@ const configureAttachmentPreviewShellBridge = (
     },
     openExternalUrl: async () => {},
     resolveLocalAttachmentPreviewSrc,
+    terminals: createUnavailableShellBridge().terminals,
   });
 };
 

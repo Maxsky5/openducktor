@@ -6,6 +6,18 @@ const LOGIN_SHELL_ENV_MARKER_TEXT = "__OPENDUCKTOR_ENV_START__";
 const LOGIN_SHELL_ENV_MARKER = `${LOGIN_SHELL_ENV_MARKER_TEXT}\0`;
 const LOGIN_SHELL_TIMEOUT_MS = 5_000;
 
+const HOST_CONTROL_ENV_NAMES = [
+  "ODT_WORKSPACE_ID",
+  "ODT_HOST_URL",
+  "ODT_HOST_TOKEN",
+  "ODT_FORBID_WORKSPACE_ID_INPUT",
+  "ODT_ALLOWED_TOOLS",
+  "VITE_ODT_BROWSER_BACKEND_URL",
+  "VITE_ODT_BROWSER_AUTH_TOKEN",
+  "OPENDUCKTOR_CONTROL_TOKEN",
+  "OPENDUCKTOR_APP_TOKEN",
+] as const;
+
 export type CreateProcessEnvironmentInput = {
   baseEnv?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
@@ -80,6 +92,21 @@ export const normalizeProcessEnvironment = (
   }
   if (pathValue !== undefined) {
     next.Path = pathValue;
+  }
+  return next;
+};
+
+export const sanitizeChildProcessEnvironment = (
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv => {
+  const next = normalizeProcessEnvironment(env, platform);
+  const controlNames = new Set<string>(HOST_CONTROL_ENV_NAMES);
+  for (const name of Object.keys(next)) {
+    const comparableName = platform === "win32" ? name.toUpperCase() : name;
+    if (controlNames.has(comparableName)) {
+      delete next[name];
+    }
   }
   return next;
 };

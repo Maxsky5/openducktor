@@ -25,6 +25,7 @@ type TaskResetConfirmDialogProps = {
   isLoadingImpact: boolean;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
+  terminalCount: number;
   impactError: string | null;
   isResetPending: boolean;
   resetError: string | null;
@@ -39,6 +40,7 @@ export function TaskResetConfirmDialog({
   isLoadingImpact,
   hasManagedSessionCleanup,
   managedWorktreeCount,
+  terminalCount,
   impactError,
   isResetPending,
   resetError,
@@ -61,6 +63,12 @@ export function TaskResetConfirmDialog({
             <p>Linked spec, plan, and QA documents will be removed.</p>
             <p>Linked spec, planner, builder, and QA sessions will be removed.</p>
             <p>Linked pull request and direct-merge metadata will be cleared.</p>
+            {terminalCount === 0 ? null : (
+              <p>
+                {terminalCount} associated terminal{terminalCount === 1 ? "" : "s"} will be
+                terminated before the task resets.
+              </p>
+            )}
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("reset")}</p>
             ) : impactError ? (

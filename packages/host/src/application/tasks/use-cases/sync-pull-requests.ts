@@ -7,10 +7,11 @@ import {
 } from "../support/github-pull-requests";
 import {
   requireDependencies,
-  requirePullRequestMergeCleanupDependencies,
+  requireMergedBuilderCleanupDependencies,
   requirePullRequestSyncDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
+import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -21,7 +22,9 @@ export const createTaskPullRequestSyncUseCases = ({
   githubDependencies,
   taskStore,
   settingsConfig,
+  taskSessionBootstrapCoordinator,
   taskWorktreeService,
+  terminalService,
   workspaceSettingsService,
 }: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
   TaskService,
@@ -66,11 +69,9 @@ export const createTaskPullRequestSyncUseCases = ({
 
         if (updated.record.state === "merged" && task.status !== "closed") {
           const cleanupDependencies = yield* requireDependencies(() =>
-            requirePullRequestMergeCleanupDependencies(
-              devServerService,
-              gitPort,
-              settingsConfig,
-              taskWorktreeService,
+            requireMergedBuilderCleanupDependencies(
+              { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService },
+              "repo_pull_request_sync",
             ),
           );
           yield* taskStore.setPullRequest({
@@ -78,25 +79,27 @@ export const createTaskPullRequestSyncUseCases = ({
             taskId: task.id,
             pullRequest: updated.record,
           });
-          yield* cleanupMergedBuilderState(
-            cleanupDependencies,
-            taskStore,
-            effectiveRepoPath,
-            task.id,
-            updated.sourceBranch,
-            updated.targetBranch,
-          );
-
           const { current, currentTasks } = yield* taskListWithCurrent(
             taskStore,
             effectiveRepoPath,
             task.id,
           );
           yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-          yield* taskStore.transitionTask({
+          yield* completeTaskClosure({
+            cleanup: cleanupMergedBuilderState(
+              cleanupDependencies,
+              taskStore,
+              effectiveRepoPath,
+              task.id,
+              updated.sourceBranch,
+              updated.targetBranch,
+            ),
+            gitPort: cleanupDependencies.gitPort,
+            operation: "sync merged pull request",
             repoPath: effectiveRepoPath,
             taskId: task.id,
-            status: "closed",
+            taskSessionBootstrapCoordinator,
+            taskStore,
           });
           changedTaskIds.push(task.id);
         } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {

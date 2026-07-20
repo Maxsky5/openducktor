@@ -1,5 +1,6 @@
 import { Effect, Exit } from "effect";
 import type { FilesystemListDirectoryError } from "../../application/filesystem/filesystem-service";
+import type { TerminalServiceError } from "../../application/terminals/terminal-service-error";
 import type { TaskPolicyError } from "../../domain/task/task-policy-error";
 import type { HostError } from "../../effect/host-errors";
 import {
@@ -19,7 +20,8 @@ export type HostCommandHandlerError =
   | DevServerProcessStartExitError
   | FilesystemListDirectoryError
   | HostError
-  | TaskPolicyError;
+  | TaskPolicyError
+  | TerminalServiceError;
 
 export type HostCommandHandler = (
   args: HostCommandArgs,

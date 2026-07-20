@@ -18,6 +18,7 @@ import {
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
+import { completeTaskClosure } from "../support/task-closure";
 import { validateManualCloseTaskEffect } from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -28,6 +29,7 @@ export const createTaskCloseUseCase = ({
   taskStore,
   taskActivityGuard,
   settingsConfig,
+  terminalService,
   taskWorktreeService,
   worktreeFiles,
   workspaceSettingsService,
@@ -36,8 +38,8 @@ export const createTaskCloseUseCase = ({
   closeTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      let currentTasks = yield* taskStore.listTasks({ repoPath });
-      let current = currentTasks.find((task) => task.id === taskId);
+      const currentTasks = yield* taskStore.listTasks({ repoPath });
+      const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -52,44 +54,7 @@ export const createTaskCloseUseCase = ({
       }
 
       yield* validateManualCloseTaskEffect(current, currentTasks);
-      if (taskSessionBootstrapCoordinator && gitPort) {
-        const canonicalInputRepo = yield* gitPort.canonicalizePath(repoPath);
-        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
-          canonicalInputRepo,
-          [taskId],
-          "close task",
-        );
-        currentTasks = yield* taskStore.listTasks({ repoPath });
-        current = currentTasks.find((task) => task.id === taskId);
-        if (!current) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Task not found: ${taskId}`,
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        yield* validateManualCloseTaskEffect(current, currentTasks);
-      }
 
-      const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      const currentSessions = currentMetadata.agentSessions;
-      const hasWorkflowSessions = taskHasSessionsForRoles(
-        currentSessions,
-        workflowCleanupSessionRoles,
-      );
-      if (hasWorkflowSessions && !taskActivityGuard) {
-        return yield* Effect.fail(
-          new HostDependencyError({
-            dependency: "taskActivityGuard",
-            operation: "task_close",
-            message:
-              "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
-            details: { repoPath, taskId },
-          }),
-        );
-      }
       const dependencies = yield* requireDependencies(() =>
         requireTaskCloseDependencies(
           devServerService,
@@ -101,50 +66,65 @@ export const createTaskCloseUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-
-      if (hasWorkflowSessions && taskActivityGuard) {
-        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath: effectiveRepoPath,
-          taskId,
-          sessions: currentSessions,
-          operationLabel: "close task",
-          sessionRoles: [...workflowCleanupSessionRoleNames],
-        });
-      }
-
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
       );
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
-      const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
-      const taskWorktreePathExists =
-        yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
-      let taskWorktreeDependency = taskWorktreeService;
-      if (!taskWorktreeDependency && taskWorktreePathExists) {
-        taskWorktreeDependency = yield* requireDependencies(() =>
-          requireTaskCloseWorktreeService(taskWorktreeService),
-        );
-      }
-      const closeWorktreeDependencies = taskWorktreeDependency
-        ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
-        : dependencies;
-      const worktreePaths = yield* collectCloseWorktreePaths(
-        closeWorktreeDependencies,
-        effectiveRepoPath,
-        branchPrefix,
-        current,
-        currentSessions,
-      );
-      const branchNames = yield* collectRelatedTaskBranches(
-        dependencies.gitPort,
-        effectiveRepoPath,
-        branchPrefix,
-        [taskId],
-      );
       const cleanupProgress = createTaskCleanupProgressState();
+      const cleanup = Effect.gen(function* () {
+        const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+        const currentSessions = currentMetadata.agentSessions;
+        const hasWorkflowSessions = taskHasSessionsForRoles(
+          currentSessions,
+          workflowCleanupSessionRoles,
+        );
+        if (hasWorkflowSessions && !taskActivityGuard) {
+          return yield* Effect.fail(
+            new HostDependencyError({
+              dependency: "taskActivityGuard",
+              operation: "task_close",
+              message:
+                "task_close requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+              details: { repoPath, taskId },
+            }),
+          );
+        }
+        if (hasWorkflowSessions && taskActivityGuard) {
+          yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
+            repoPath: effectiveRepoPath,
+            taskId,
+            sessions: currentSessions,
+            operationLabel: "close task",
+            sessionRoles: [...workflowCleanupSessionRoleNames],
+          });
+        }
 
-      return yield* Effect.gen(function* () {
+        const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+        const taskWorktreePathExists =
+          yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
+        let taskWorktreeDependency = taskWorktreeService;
+        if (!taskWorktreeDependency && taskWorktreePathExists) {
+          taskWorktreeDependency = yield* requireDependencies(() =>
+            requireTaskCloseWorktreeService(taskWorktreeService),
+          );
+        }
+        const closeWorktreeDependencies = taskWorktreeDependency
+          ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
+          : dependencies;
+        const worktreePaths = yield* collectCloseWorktreePaths(
+          closeWorktreeDependencies,
+          effectiveRepoPath,
+          branchPrefix,
+          current,
+          currentSessions,
+        );
+        const branchNames = yield* collectRelatedTaskBranches(
+          dependencies.gitPort,
+          effectiveRepoPath,
+          branchPrefix,
+          [taskId],
+        );
         yield* runTaskLocalCleanup({
           branchNames,
           devServerService: dependencies.devServerService,
@@ -154,14 +134,22 @@ export const createTaskCloseUseCase = ({
           repoPath: effectiveRepoPath,
           settingsConfig: dependencies.settingsConfig,
           taskIds: [taskId],
+          terminalService,
           worktreeCleanupOperation: "task_close",
           worktreeFiles,
           worktreePaths,
         });
-        const updated = yield* taskStore.transitionTask({
+      });
+
+      return yield* Effect.gen(function* () {
+        const updated = yield* completeTaskClosure({
+          cleanup,
+          gitPort: dependencies.gitPort,
+          operation: "close task",
           repoPath: effectiveRepoPath,
           taskId,
-          status: "closed",
+          taskSessionBootstrapCoordinator,
+          taskStore,
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(

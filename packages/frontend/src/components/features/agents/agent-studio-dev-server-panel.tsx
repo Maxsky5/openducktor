@@ -14,6 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import {
+  terminalTabsListClassName,
+  terminalTabTriggerClassName,
+} from "@/features/terminals/terminal-tab-styles";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import {
@@ -330,13 +334,13 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       >
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-(--dev-server-terminal-surface) text-(--dev-server-terminal-foreground)">
           <div className="border-b border-(--dev-server-terminal-border) px-0">
-            <TabsList className="h-auto w-full justify-start gap-0 overflow-x-auto rounded-none border-0 bg-transparent p-0">
+            <TabsList className={terminalTabsListClassName}>
               {model.scripts.map((script) => {
                 return (
                   <TabsTrigger
                     key={script.scriptId}
                     value={script.scriptId}
-                    className="h-8 w-auto max-w-[320px] flex-none justify-start rounded-none border-b-0 border-l-0 border-r border-t-4 bg-(--dev-server-terminal-tab-inactive) border-r-(--dev-server-terminal-border) border-t-transparent px-3 py-1 font-mono text-[11px] text-(--dev-server-terminal-muted) data-[state=active]:border-t-selected-accent data-[state=active]:bg-(--dev-server-terminal-tab-active) data-[state=active]:border-r-(--dev-server-terminal-border) data-[state=active]:text-(--dev-server-terminal-foreground)"
+                    className={terminalTabTriggerClassName}
                     data-testid={`agent-studio-dev-server-tab-${script.scriptId}`}
                   >
                     <span className="mr-2 font-mono text-[11px] text-(--dev-server-terminal-subtle)">

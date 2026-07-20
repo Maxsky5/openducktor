@@ -10,10 +10,11 @@ import {
   type ProcessCommandLaunchPlan,
   parseProcessCommandLine,
 } from "../../infrastructure/process/process-command-launch";
-import { normalizeProcessEnvironment } from "../../infrastructure/process/process-environment";
+import { sanitizeChildProcessEnvironment } from "../../infrastructure/process/process-environment";
 import {
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
+  waitForObservedState,
 } from "../../infrastructure/process/process-tree";
 import {
   type DevServerProcessExit,
@@ -90,35 +91,16 @@ const trackDevServerProcess = ({
       listener();
     }
   };
-  const waitForClose = (timeoutMs: number): Effect.Effect<boolean> => {
-    if (closeResult !== null || spawnError !== null) {
-      return Effect.succeed(true);
-    }
-
-    return Effect.async<boolean>((resume, signal) => {
-      let settled = false;
-      const finish = (closed: boolean) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        closeListeners.delete(resolveTrue);
-        clearTimeout(timeout);
-        signal.removeEventListener("abort", abort);
-        resume(Effect.succeed(closed));
-      };
-      const resolveTrue = () => finish(true);
-      const abort = () => finish(false);
-      const timeout = setTimeout(() => {
-        finish(false);
-      }, timeoutMs);
-      signal.addEventListener("abort", abort, { once: true });
-      closeListeners.add(resolveTrue);
-      if (closeResult !== null || spawnError !== null) {
-        resolveTrue();
-      }
+  const isClosed = (): boolean => closeResult !== null || spawnError !== null;
+  const waitForClose = (timeoutMs: number): Effect.Effect<boolean> =>
+    waitForObservedState({
+      isComplete: isClosed,
+      subscribe: (listener) => {
+        closeListeners.add(listener);
+        return () => closeListeners.delete(listener);
+      },
+      timeoutMs,
     });
-  };
 
   child.stdout?.on("data", (chunk: Buffer) => {
     onOutput({ data: chunk.toString("utf8") });
@@ -150,7 +132,7 @@ const trackDevServerProcess = ({
   return {
     getCloseResult: () => closeResult,
     getSpawnError: () => spawnError,
-    isClosed: () => closeResult !== null || spawnError !== null,
+    isClosed,
     waitForClose,
   };
 };
@@ -164,7 +146,10 @@ export const createDevServerProcessAdapter = ({
     let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
       const { command, cwd, env, onExit, onOutput } = input;
-      const commandEnv = normalizeProcessEnvironment({ ...processEnv, ...env }, process.platform);
+      const commandEnv = sanitizeChildProcessEnvironment(
+        { ...processEnv, ...env },
+        process.platform,
+      );
       const launch = yield* Effect.try({
         try: () => createDevServerCommandLaunch(command, commandEnv, process.platform),
         catch: (cause) =>

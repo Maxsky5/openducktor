@@ -160,6 +160,60 @@ describe("AgentStudioTaskTabs", () => {
     unmount();
   });
 
+  test("renders the terminal toggle as an icon-only action", () => {
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: buildModel(),
+          terminalPanelToggleModel: {
+            isVisible: true,
+            disabled: false,
+            onToggle: () => {},
+          },
+        }),
+      ),
+    );
+
+    const terminalToggle = screen.getByRole("button", { name: "Hide terminals" });
+    expect(terminalToggle.textContent).toBe("");
+    expect(screen.queryByRole("status", { name: "3 running terminals" })).toBeNull();
+  });
+
+  test("uses the execution panel hover treatment for the terminal toggle", () => {
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: buildModel(),
+          terminalPanelToggleModel: {
+            isVisible: false,
+            disabled: false,
+            onToggle: () => {},
+          },
+          rightPanelToggleModel: {
+            kind: "task_execution",
+            isOpen: false,
+            onToggle: () => {},
+          },
+        }),
+      ),
+    );
+
+    const terminalToggle = screen.getByRole("button", { name: "Show terminals" });
+    const executionToggle = screen.getByRole("button", { name: "Show task execution panel" });
+    for (const className of [
+      "border-transparent",
+      "hover:border-studio-chrome-foreground/30",
+      "hover:bg-studio-chrome-foreground/10",
+    ]) {
+      expect(terminalToggle.className).toContain(className);
+      expect(executionToggle.className).toContain(className);
+    }
+  });
+
   test("keeps new-tab button enabled while tab tasks are loading", () => {
     const html = renderToStaticMarkup(
       createElement(

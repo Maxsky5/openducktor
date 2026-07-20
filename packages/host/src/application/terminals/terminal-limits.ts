@@ -1,0 +1,15 @@
+export const TERMINAL_LIMITS = {
+  livePerHost: 32,
+  livePerTask: 8,
+  liveUnassociated: 8,
+  inputBytes: 64 * 1024,
+  columns: 500,
+  rows: 300,
+  replayBytes: 2 * 1024 * 1024,
+  pendingOutputBytes: 512 * 1024,
+  resumeOutputBytes: 256 * 1024,
+  webSocketMessageBytes: 1024 * 1024,
+  browserOutboundQueueBytes: 2 * 1024 * 1024,
+  retainedExited: 64,
+  exitedRetentionMs: 24 * 60 * 60 * 1000,
+} as const;

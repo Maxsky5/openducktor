@@ -1,22 +1,108 @@
 import { Effect } from "effect";
 import {
   type KillProcess,
+  processTreeHasChildren,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
+  waitForChildProcessClose,
 } from "./process-tree";
 
 const noopKill: KillProcess = () => true;
-const noopSpawnSync = () => ({
-  status: 0,
-  signal: null,
-  output: [],
-  pid: 0,
-  stdout: Buffer.alloc(0),
-  stderr: Buffer.alloc(0),
-});
+const noopProcessCommand = () =>
+  Effect.succeed({
+    status: 0,
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.alloc(0),
+  });
 const processIsAlive = () => true;
 
 describe("process-tree", () => {
+  test("detects a Unix child process from the parent-process table", async () => {
+    const hasChildren = await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "darwin",
+        runCommand: () =>
+          Effect.succeed({
+            status: 0,
+            stderr: Buffer.alloc(0),
+            stdout: Buffer.from("   1\n1234\n  77\n"),
+          }),
+      }),
+    );
+
+    expect(hasChildren).toBe(true);
+  });
+
+  test("reports an idle Unix process when no child uses its pid", async () => {
+    const hasChildren = await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "linux",
+        runCommand: () =>
+          Effect.succeed({
+            status: 0,
+            stderr: Buffer.alloc(0),
+            stdout: Buffer.from("   1\n  42\n  77\n"),
+          }),
+      }),
+    );
+
+    expect(hasChildren).toBe(false);
+  });
+
+  test("does not block the event loop while child processes are inspected", async () => {
+    let eventLoopProgressed = false;
+    const progress = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        eventLoopProgressed = true;
+        resolve();
+      }, 0);
+    });
+
+    await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "darwin",
+        runCommand: () =>
+          Effect.promise(async () => {
+            await Bun.sleep(25);
+            return { status: 0, stderr: Buffer.alloc(0), stdout: Buffer.from("1234\n") };
+          }),
+      }),
+    );
+
+    expect(eventLoopProgressed).toBe(true);
+    await progress;
+  });
+
+  test("uses one direct Windows process query", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const hasChildren = await Effect.runPromise(
+      processTreeHasChildren(1234, {
+        platform: "win32",
+        runCommand: (command, args) => {
+          calls.push({ command, args });
+          return Effect.succeed({
+            status: 0,
+            stderr: Buffer.alloc(0),
+            stdout: Buffer.from("4321\r\n"),
+          });
+        },
+      }),
+    );
+
+    expect(hasChildren).toBe(true);
+    expect(calls).toEqual([
+      {
+        command: "powershell.exe",
+        args: [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "(Get-CimInstance Win32_Process -Filter 'ParentProcessId = 1234' | Select-Object -First 1 -ExpandProperty ProcessId)",
+        ],
+      },
+    ]);
+  });
+
   test("selects taskkill for Windows process trees without negative pids", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
 
@@ -30,11 +116,11 @@ describe("process-tree", () => {
         signalDependencies: {
           platform: "win32",
           kill: noopKill,
-          spawnSync: (command, args) => {
+          runCommand: (command, args) => {
             calls.push({ command, args });
-            return noopSpawnSync();
+            return noopProcessCommand();
           },
-          isAlive: processIsAlive,
+          isAlive: () => calls.length === 0,
         },
       }),
     );
@@ -48,7 +134,7 @@ describe("process-tree", () => {
     expect(calls.at(0)?.args).not.toContain("-1234");
   });
 
-  test("selects detached startup and negative process group signals on Unix-like platforms", async () => {
+  test("signals every Unix descendant process group before the root group", async () => {
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
 
     expect(shouldStartDetachedProcessGroup("linux")).toBe(true);
@@ -60,7 +146,7 @@ describe("process-tree", () => {
         pid: 1234,
         label: "test runtime",
         isClosed: () => false,
-        waitForExit: () => Effect.succeed(signals.length >= 2),
+        waitForExit: () => Effect.succeed(signals.length >= 4),
         stopTimeoutMs: 10,
         signalDependencies: {
           platform: "linux",
@@ -71,14 +157,21 @@ describe("process-tree", () => {
             signals.push({ pid, signal });
             return true;
           },
-          spawnSync: noopSpawnSync,
-          isAlive: processIsAlive,
+          runCommand: () =>
+            Effect.succeed({
+              status: 0,
+              stderr: Buffer.alloc(0),
+              stdout: Buffer.from(["1234 1 1234", "2345 1234 2345", "3456 2345 2345"].join("\n")),
+            }),
+          isAlive: () => signals.length < 4,
         },
       }),
     );
 
     expect(signals).toEqual([
+      { pid: -2345, signal: "SIGTERM" },
       { pid: -1234, signal: "SIGTERM" },
+      { pid: -2345, signal: "SIGKILL" },
       { pid: -1234, signal: "SIGKILL" },
     ]);
   });
@@ -99,7 +192,7 @@ describe("process-tree", () => {
             signals.push({ pid, signal });
             return true;
           },
-          spawnSync: noopSpawnSync,
+          runCommand: noopProcessCommand,
           isAlive: processIsAlive,
         },
       }),
@@ -120,7 +213,7 @@ describe("process-tree", () => {
           signalDependencies: {
             platform: "linux",
             kill: noopKill,
-            spawnSync: noopSpawnSync,
+            runCommand: noopProcessCommand,
             isAlive: processIsAlive,
           },
         }),
@@ -146,11 +239,37 @@ describe("process-tree", () => {
             kill: () => {
               throw error;
             },
-            spawnSync: noopSpawnSync,
+            runCommand: noopProcessCommand,
             isAlive: () => false,
           },
         }),
       ),
     ).resolves.toBeUndefined();
+  });
+
+  test("observes child close and removes its listener", async () => {
+    const closeListeners: Array<() => void> = [];
+    const removed: Array<() => void> = [];
+    const child = {
+      once: (_event: "close", listener: () => void) => {
+        closeListeners.push(listener);
+        return child;
+      },
+      off: (_event: "close", listener: () => void) => {
+        removed.push(listener);
+        return child;
+      },
+    } as unknown as Parameters<typeof waitForChildProcessClose>[0];
+    let closed = false;
+    const waiting = Effect.runPromise(waitForChildProcessClose(child, () => closed, 100));
+
+    await Promise.resolve();
+    const closeListener = closeListeners[0];
+    if (!closeListener) throw new Error("Expected a child close listener.");
+    closed = true;
+    closeListener();
+
+    await expect(waiting).resolves.toBe(true);
+    expect(removed).toEqual([closeListener]);
   });
 });

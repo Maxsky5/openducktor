@@ -18,6 +18,7 @@ import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
+import type { TaskTerminalCleanupPort } from "../task-service";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
 export const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
@@ -338,6 +339,33 @@ const requireTaskCleanupWorktreeFiles = (
   return Effect.succeed(worktreeFiles);
 };
 
+export const runTaskRuntimeCleanup = ({
+  devServerService,
+  progress,
+  repoPath,
+  taskIds,
+  terminalService,
+}: {
+  devServerService: DevServerService;
+  progress: TaskCleanupProgressState;
+  repoPath: string;
+  taskIds: string[];
+  terminalService: TaskTerminalCleanupPort;
+}) =>
+  Effect.gen(function* () {
+    const terminalResult = yield* terminalService.acquireTaskCleanup({ repoPath, taskIds });
+    progress.completedSteps.push(
+      terminalResult.closedTerminalIds.length > 0
+        ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`
+        : "checked task terminals",
+    );
+
+    for (const taskId of taskIds) {
+      yield* devServerService.stop({ repoPath, taskId });
+    }
+    progress.completedSteps.push("stopped task dev servers");
+  });
+
 export const runTaskLocalCleanup = ({
   branchNames,
   devServerService,
@@ -347,6 +375,7 @@ export const runTaskLocalCleanup = ({
   repoPath,
   settingsConfig,
   taskIds,
+  terminalService,
   worktreeCleanupOperation,
   worktreeFiles,
   worktreePaths,
@@ -359,20 +388,33 @@ export const runTaskLocalCleanup = ({
   repoPath: string;
   settingsConfig: SettingsConfigPort;
   taskIds: string[];
+  terminalService: TaskTerminalCleanupPort | undefined;
   worktreeCleanupOperation: TaskWorktreeCleanupOperation;
   worktreeFiles: WorktreeFilePort | undefined;
   worktreePaths: string[];
 }) =>
   Effect.gen(function* () {
+    if (!terminalService) {
+      return yield* Effect.fail(
+        new HostDependencyError({
+          dependency: "TerminalService",
+          operation: worktreeCleanupOperation,
+          message: `Terminal service is required for ${worktreeCleanupOperation}.`,
+        }),
+      );
+    }
     const cleanupFiles =
       worktreePaths.length > 0
         ? yield* requireTaskCleanupWorktreeFiles(worktreeFiles, worktreeCleanupOperation)
         : null;
 
-    for (const taskId of taskIds) {
-      yield* devServerService.stop({ repoPath, taskId });
-    }
-    progress.completedSteps.push("stopped task dev servers");
+    yield* runTaskRuntimeCleanup({
+      devServerService,
+      progress,
+      repoPath,
+      taskIds,
+      terminalService,
+    });
 
     if (cleanupFiles) {
       for (const worktreePath of worktreePaths) {

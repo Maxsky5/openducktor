@@ -13,6 +13,7 @@ import {
   requireDirectMergeDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
+import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -22,7 +23,9 @@ export const createTaskDirectMergeUseCase = ({
   githubDependencies,
   taskStore,
   settingsConfig,
+  taskSessionBootstrapCoordinator,
   taskWorktreeService,
+  terminalService,
   workspaceSettingsService,
 }: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "directMerge"> => ({
   directMerge(input) {
@@ -35,6 +38,7 @@ export const createTaskDirectMergeUseCase = ({
           githubDependencies,
           settingsConfig,
           taskWorktreeService,
+          terminalService,
           workspaceSettingsService,
         }),
       );
@@ -144,18 +148,21 @@ export const createTaskDirectMergeUseCase = ({
       }
 
       yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-      const task = yield* taskStore.transitionTask({
+      const task = yield* completeTaskClosure({
+        cleanup: cleanupDirectMergeBuilderState(
+          dependencies,
+          taskStore,
+          effectiveRepoPath,
+          taskId,
+          directMerge,
+        ),
+        gitPort: dependencies.gitPort,
+        operation: "direct merge",
         repoPath: effectiveRepoPath,
         taskId,
-        status: "closed",
-      });
-      yield* cleanupDirectMergeBuilderState(
-        dependencies,
+        taskSessionBootstrapCoordinator,
         taskStore,
-        effectiveRepoPath,
-        taskId,
-        directMerge,
-      );
+      });
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
       return {

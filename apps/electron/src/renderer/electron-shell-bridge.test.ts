@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { HostTerminalClientError } from "@openducktor/host-client";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import {
   createElectronShellBridge,
@@ -23,7 +24,7 @@ const createElectronApi = (): {
   const unsubscribeAppUpdates = mock(() => {});
   return {
     electronApi: {
-      invoke: mock(async () => ({})),
+      invoke: mock(async () => ({ ok: true as const, value: {} })),
       subscribe: mock(() => unsubscribe),
       appUpdates: {
         getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
@@ -214,5 +215,37 @@ describe("electron shell bridge", () => {
 
     expect(electronApi.openExternalUrl).toHaveBeenCalledWith("https://openducktor.local/docs");
     expect(electronApi.resolveLocalAttachmentPreviewSrc).toHaveBeenCalledWith("brief.md");
+  });
+
+  test("reconstructs structured host failures in the renderer realm", async () => {
+    const { electronApi } = createElectronApi();
+    electronApi.invoke = mock(async () => ({
+      ok: false,
+      error: {
+        message: "Terminal creation is unavailable.",
+        failure: {
+          kind: "terminal",
+          terminalFailure: {
+            code: "unsupported_runtime",
+            message: "Interactive terminals are unavailable in this runtime.",
+          },
+        },
+      },
+    }));
+    setElectronApi(electronApi);
+
+    const bridge = createElectronShellBridge();
+    const result = await bridge.client.terminalCreate({ workingDir: "/repo", context: {} }).then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected terminalCreate to reject.");
+    expect(result.error).toBeInstanceOf(HostTerminalClientError);
+    expect(result.error).toMatchObject({
+      code: "unsupported_runtime",
+      message: "Interactive terminals are unavailable in this runtime.",
+    });
   });
 });

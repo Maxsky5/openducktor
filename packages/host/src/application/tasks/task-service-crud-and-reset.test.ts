@@ -2446,4 +2446,22 @@ describe("createTaskService task mutations and reset", () => {
       ),
     ).rejects.toThrow("Transition not allowed for feature-1 (feature): open -> in_progress");
   });
+
+  test("rejects generic transitions to closed", async () => {
+    const taskStore: TaskStorePort = {
+      listTasks() {
+        return Effect.dieMessage("should not list tasks");
+      },
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({ taskStore }).transitionTask({
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "closed",
+        }),
+      ),
+    ).rejects.toThrow("task_transition cannot close tasks");
+  });
 });
