@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type {
   DevServerScriptState,
   PullRequest,
+  PullRequestReviewComment,
   PullRequestReviewContext,
   WorkspaceFileTree,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -563,6 +564,64 @@ describe("TaskExecutionPanel", () => {
 
     expect(htmlWithoutOpenThreads).not.toContain("task-execution-tab-ci-open-threads");
     expect(htmlWithoutOpenThreads).toContain('aria-label="CI Checks, passing checks"');
+  });
+
+  test("pre-renders cached CI comments and reuses them when the tab becomes active", async () => {
+    const comments = Array.from(
+      { length: 100 },
+      (_, index): PullRequestReviewComment => ({
+        id: `comment-${index}`,
+        author: "reviewer",
+        body: `Comment body ${index}`,
+        patch: null,
+        suggestionPatches: [],
+        url: null,
+        createdAt: "2026-07-10T10:00:00Z",
+        updatedAt: null,
+        path: "src/index.ts",
+        line: index + 1,
+        threadId: `thread-${index}`,
+        isResolved: false,
+        source: "review_thread",
+      }),
+    );
+    const context = {
+      ...createLoadedCiContext({ checks: [], openThreadCount: comments.length }),
+      comments,
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(pullRequestReviewQueryKeys.context(ciQueryInput), context);
+
+    const panel = (activeTabId: TaskExecutionPanelModel["activeTabId"]) => (
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <TaskExecutionPanel
+            model={{
+              ...basePanelModel,
+              activeTabId,
+              ciChecksModel: {
+                isActive: activeTabId === "ci_checks",
+                queryInput: ciQueryInput,
+              },
+            }}
+          />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    const view = render(panel("git"));
+
+    await waitFor(() => expect(screen.getByText("Comment body 99")).toBeTruthy(), {
+      timeout: 1_500,
+    });
+    const lastComment = screen.getByText("Comment body 99");
+    const ciContent = lastComment.closest('[data-slot="tabs-content"]');
+    expect(ciContent?.getAttribute("data-state")).toBe("inactive");
+
+    view.rerender(panel("ci_checks"));
+
+    await waitFor(() => expect(ciContent?.getAttribute("data-state")).toBe("active"));
+    expect(screen.getByText("Comment body 99")).toBe(lastComment);
   });
 
   test("renders Git content as a tab without Dev Server content", () => {
