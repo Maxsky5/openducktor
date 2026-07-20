@@ -588,6 +588,16 @@ const renderPage = async (
   });
 };
 
+const unmountPageIfRendered = async (renderer: KanbanPageHarness | null): Promise<void> => {
+  if (!renderer) {
+    return;
+  }
+
+  await act(async () => {
+    renderer.unmount();
+  });
+};
+
 const waitForMockCall = async (
   fn: { mock: { calls: unknown[][] } },
   minCalls = 1,
@@ -834,12 +844,7 @@ describe("KanbanPage session start modal flow", () => {
         });
       } finally {
         hostClient.workspaceGetSettingsSnapshot = originalLoadSettingsSnapshot;
-        if (renderer) {
-          const mountedRenderer = renderer;
-          await act(async () => {
-            mountedRenderer.unmount();
-          });
-        }
+        await unmountPageIfRendered(renderer);
       }
     },
   );
@@ -884,12 +889,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(systemGetPlatform).toHaveBeenCalledTimes(0);
     } finally {
       hostClient.systemGetPlatform = originalSystemGetPlatform;
-      if (renderer) {
-        const mountedRenderer = renderer;
-        await act(async () => {
-          mountedRenderer.unmount();
-        });
-      }
+      await unmountPageIfRendered(renderer);
     }
   });
 
@@ -916,12 +916,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getShowHorizontalScrollbars()).toBeNull();
     } finally {
       hostClient.systemGetPlatform = originalSystemGetPlatform;
-      if (renderer) {
-        const mountedRenderer = renderer;
-        await act(async () => {
-          mountedRenderer.unmount();
-        });
-      }
+      await unmountPageIfRendered(renderer);
     }
   });
 
@@ -1763,12 +1758,7 @@ describe("KanbanPage session start modal flow", () => {
         hostClient.taskDirectMerge = originalTaskDirectMerge;
         hostClient.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
         hostClient.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-        if (renderer) {
-          const mountedRenderer = renderer;
-          await act(async () => {
-            mountedRenderer.unmount();
-          });
-        }
+        await unmountPageIfRendered(renderer);
       }
     },
   );
