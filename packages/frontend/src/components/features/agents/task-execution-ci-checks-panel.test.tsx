@@ -10,6 +10,7 @@ import * as externalUrl from "@/lib/open-external-url";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { withAnimationFrameTestDriver } from "./agent-chat/test-support/animation-frame-test-driver";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
 import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
@@ -92,13 +93,6 @@ const renderPanel = (queryClient = createQueryClient()): string => {
       </ThemeProvider>
     </QueryClientProvider>,
   );
-};
-
-const renderLoadedPanel = (): string => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), loadedContext);
-
-  return renderPanel(queryClient);
 };
 
 const renderPendingPanel = (): string => {
@@ -203,49 +197,70 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("disabled");
   });
 
-  test("renders provider-neutral PR, check, and review-thread metadata", () => {
-    const html = renderLoadedPanel();
+  test("renders provider-neutral PR, check, and review-thread metadata", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const view = render(
+        <QueryProvider useIsolatedClient>
+          <ThemeProvider defaultTheme="light">
+            <TooltipProvider>
+              <TaskExecutionCiLoaded
+                context={loadedContext}
+                refreshState="idle"
+                onRefresh={() => {}}
+              />
+            </TooltipProvider>
+          </ThemeProvider>
+        </QueryProvider>,
+      );
 
-    expect(html).toContain("Rework task execution panel");
-    expect(html).toContain("1 failing");
-    expect(html).toContain("Unit tests");
-    expect(html).toContain("CI");
-    expect(html).toContain("1 suite failed");
-    expect(html).toContain("Started");
-    expect(html).toContain("2026-07-08T10:00:00Z");
-    expect(html).toContain("Completed");
-    expect(html).toContain("2026-07-08T10:05:00Z");
-    expect(html).not.toContain("Review thread");
-    expect(html).toContain("All");
-    expect(html).toContain("Humans");
-    expect(html).toContain("Bots");
-    expect(html).toContain("codex");
-    expect(html).toContain("Bot");
-    expect(html).toContain("Needs review");
-    expect(html).toContain("Unresolved");
-    expect(html).toContain("This thread still needs work.");
-    expect(html).toContain("isAnyLoading");
-    expect(html).not.toContain('Updated <time dateTime="2026-07-08T10:06:00Z"');
-    expect(html).not.toContain('Created <time dateTime="2026-07-08T10:06:00Z"');
-    expect(html).toContain("ago");
-    expect(html).toContain("2026-07-08T10:06:00Z");
-    expect(html).toContain('data-testid="ci-review-comment-diff"');
-    expect(html).toContain('data-testid="ci-review-comment-suggestion-diff"');
-    expect(html.indexOf('data-testid="ci-review-comment-diff"')).toBeLessThan(
-      html.indexOf("This thread still needs work."),
-    );
-    expect(html.indexOf("This thread still needs work.")).toBeLessThan(
-      html.indexOf('data-testid="ci-review-comment-suggestion-diff"'),
-    );
-    expect(html).not.toContain("language-ts");
-    expect(html).toContain('aria-label="Open comment from codex"');
-    expect(html).toContain("prose-pre:whitespace-pre-wrap");
-    expect(html).toContain("prose-pre:break-words");
-    expect(html).not.toContain("<footer");
-    expect(html).not.toContain("Thread thread-1");
-    expect(html).not.toContain("PR #42");
-    expect(html).not.toContain(">GitHub<");
-    expect(html).not.toContain("Open pull request #42");
+      expect(view.container.innerHTML).toContain("Rendering 0 of 1 comment");
+      await frameDriver.flushFrame();
+      const html = view.container.innerHTML;
+
+      expect(html).toContain("Rework task execution panel");
+      expect(html).toContain("1 failing");
+      expect(html).toContain("Unit tests");
+      expect(html).toContain("CI");
+      expect(html).toContain("1 suite failed");
+      expect(html).toContain("Started");
+      expect(html).toContain("2026-07-08T10:00:00Z");
+      expect(html).toContain("Completed");
+      expect(html).toContain("2026-07-08T10:05:00Z");
+      expect(html).not.toContain("Review thread");
+      expect(html).toContain("All");
+      expect(html).toContain("Humans");
+      expect(html).toContain("Bots");
+      expect(html).toContain("codex");
+      expect(html).toContain("Bot");
+      expect(html).toContain("Needs review");
+      expect(html).toContain("Unresolved");
+      expect(html).toContain("This thread still needs work.");
+      expect(html).toContain("isAnyLoading");
+      expect(html).not.toContain('Updated <time dateTime="2026-07-08T10:06:00Z"');
+      expect(html).not.toContain('Created <time dateTime="2026-07-08T10:06:00Z"');
+      expect(html).toContain("ago");
+      expect(html).toContain("2026-07-08T10:06:00Z");
+      expect(html).toContain('data-testid="ci-review-comment-diff"');
+      expect(html).toContain('data-testid="ci-review-comment-suggestion-diff"');
+      expect(html.indexOf('data-testid="ci-review-comment-diff"')).toBeLessThan(
+        html.indexOf("This thread still needs work."),
+      );
+      expect(html.indexOf("This thread still needs work.")).toBeLessThan(
+        html.indexOf('data-testid="ci-review-comment-suggestion-diff"'),
+      );
+      expect(html).not.toContain("language-ts");
+      expect(html).toContain('aria-label="Open comment from codex"');
+      expect(html).toContain("prose-pre:whitespace-pre-wrap");
+      expect(html).toContain("prose-pre:break-words");
+      expect(html).not.toContain("<footer");
+      expect(html).not.toContain("Thread thread-1");
+      expect(html).not.toContain("PR #42");
+      expect(html).not.toContain(">GitHub<");
+      expect(html).not.toContain("Open pull request #42");
+
+      view.unmount();
+      await frameDriver.flushMicrotasks();
+    });
   });
 
   test("renders pending check icons and labels as informational blue", () => {

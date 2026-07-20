@@ -1,7 +1,7 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { ChevronRight, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
-import { useMemo, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,12 @@ type CommentGroup = {
   id: "conversation" | "needs-review" | "resolved";
   comments: PullRequestReviewComment[];
   title: string;
+};
+
+type CommentRenderProgress = {
+  comments: readonly PullRequestReviewComment[];
+  filter: CommentFilter;
+  count: number;
 };
 
 const COMMENT_FILTERS: Array<{ id: CommentFilter; label: string }> = [
@@ -56,12 +62,23 @@ const groupComments = (comments: readonly PullRequestReviewComment[]): CommentGr
   return groups.filter((group) => group.comments.length > 0);
 };
 
+const limitCommentGroups = (groups: CommentGroup[], limit: number): CommentGroup[] => {
+  let remaining = limit;
+  return groups.map((group) => {
+    const comments = group.comments.slice(0, remaining);
+    remaining -= comments.length;
+    return { ...group, comments };
+  });
+};
+
 export function TaskExecutionCiCommentsList({
   comments,
 }: {
   comments: PullRequestReviewComment[];
 }): ReactElement {
   const [filter, setFilter] = useState<CommentFilter>("all");
+  const deferredComments = useDeferredValue(comments);
+  const deferredFilter = useDeferredValue(filter);
   const counts = useMemo(
     () => ({
       all: comments.length,
@@ -70,8 +87,52 @@ export function TaskExecutionCiCommentsList({
     }),
     [comments],
   );
-  const visibleComments = useMemo(() => filterComments(comments, filter), [comments, filter]);
+  const visibleComments = useMemo(
+    () => filterComments(deferredComments, deferredFilter),
+    [deferredComments, deferredFilter],
+  );
   const groups = useMemo(() => groupComments(visibleComments), [visibleComments]);
+  const [renderProgress, setRenderProgress] = useState<CommentRenderProgress>(() => ({
+    comments: deferredComments,
+    filter: deferredFilter,
+    count: 0,
+  }));
+  const progressMatchesVisibleComments =
+    renderProgress.comments === deferredComments && renderProgress.filter === deferredFilter;
+  const renderedCommentCount = progressMatchesVisibleComments
+    ? Math.min(renderProgress.count, visibleComments.length)
+    : 0;
+  const renderedGroups = useMemo(
+    () => limitCommentGroups(groups, renderedCommentCount),
+    [groups, renderedCommentCount],
+  );
+  const isRenderingComments = renderedCommentCount < visibleComments.length;
+
+  useEffect(() => {
+    if (!isRenderingComments) {
+      return;
+    }
+
+    const frameId = globalThis.requestAnimationFrame(() => {
+      startTransition(() => {
+        setRenderProgress((current) => {
+          let currentCount = 0;
+          if (current.comments === deferredComments && current.filter === deferredFilter) {
+            currentCount = current.count;
+          }
+          return {
+            comments: deferredComments,
+            filter: deferredFilter,
+            count: Math.min(currentCount + 1, visibleComments.length),
+          };
+        });
+      });
+    });
+
+    return () => {
+      globalThis.cancelAnimationFrame(frameId);
+    };
+  }, [deferredComments, deferredFilter, isRenderingComments, visibleComments.length]);
 
   return (
     <details className="group/comments" open>
@@ -119,7 +180,13 @@ export function TaskExecutionCiCommentsList({
               </div>
             ) : (
               <div className="space-y-4">
-                {groups.map((group) => (
+                {isRenderingComments ? (
+                  <p className="text-xs text-muted-foreground">
+                    Rendering {renderedCommentCount} of {visibleComments.length}{" "}
+                    {visibleComments.length === 1 ? "comment" : "comments"}…
+                  </p>
+                ) : null}
+                {renderedGroups.map((group) => (
                   <section key={group.id} className="space-y-2">
                     <h4 className="text-xs font-semibold text-muted-foreground">{group.title}</h4>
                     <div className="space-y-2">
