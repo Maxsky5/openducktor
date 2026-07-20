@@ -50,6 +50,7 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   toolMessageIdsByCallId: new Map(),
   toolNamesByCallId: new Map(),
   toolStartedAtMsByCallId: new Map(),
+  todosById: new Map(),
 });
 
 const createServiceInput = (events?: {
@@ -327,21 +328,8 @@ describe("buildClaudeAgentSdkOptions", () => {
           permissionDecisionReason: "Tool odt_set_plan is not allowed for spec sessions.",
         },
       });
-      expect(
-        await preToolUseHook(options, {
-          permissionMode: "bypassPermissions",
-          toolName: "Bash",
-          toolInput: { command: "touch forbidden" },
-        }),
-      ).toMatchObject({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason:
-            "Tool Bash is disabled for read-only OpenDucktor workflow roles.",
-        },
-      });
       for (const tool of [
+        { toolName: "Bash", toolInput: { command: "bun run lint" } },
         { toolName: "mcp__semble__search", toolInput: { query: "authentication flow" } },
         { toolName: "mcp__serena__initial_instructions", toolInput: {} },
         {
@@ -409,11 +397,10 @@ describe("buildClaudeAgentSdkOptions", () => {
     }
   });
 
-  test("blocks Bash and mutating tools for read-only workflow roles", async () => {
+  test("leaves Bash to Claude while blocking native mutating tools for read-only roles", async () => {
     const options = await buildOptions(createSession("spec"));
 
     expect(options.disallowedTools).toEqual([
-      "Bash",
       "Edit",
       "MultiEdit",
       "NotebookEdit",

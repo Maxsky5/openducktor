@@ -42,6 +42,7 @@ const createSession = (): ClaudeSessionContext => ({
   toolMessageIdsByCallId: new Map(),
   toolNamesByCallId: new Map(),
   toolStartedAtMsByCallId: new Map(),
+  todosById: new Map(),
 });
 
 const questionPayload = {

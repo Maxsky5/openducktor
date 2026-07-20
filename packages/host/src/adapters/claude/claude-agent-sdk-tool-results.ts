@@ -1,9 +1,10 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
+import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
+import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
-import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import { isRecord } from "./claude-agent-sdk-utils";
 
 type ClaudeToolResultSession = {
@@ -16,6 +17,7 @@ type ClaudeToolResultSession = {
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
+  todosById: ClaudeTodoState;
 };
 
 type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
@@ -25,7 +27,7 @@ const mergeTopLevelToolUseResult = (
   message: Extract<SDKMessage, { type: "user" }>,
 ): ClaudeDecodedToolResult => {
   const rawMessage = message as unknown as Record<string, unknown>;
-  const toolUseResult = rawMessage.toolUseResult;
+  const toolUseResult = rawMessage.tool_use_result;
   if (!isRecord(toolUseResult)) {
     return result;
   }
@@ -56,11 +58,7 @@ const readToolUseResult = (message: Extract<SDKMessage, { type: "user" }>) => {
       }
     }
   }
-
-  const rawMessage = message as unknown as Record<string, unknown>;
-  return decodeClaudeToolResultValue(rawMessage.toolUseResult, message.parent_tool_use_id, {
-    allowNonToolResultType: true,
-  });
+  return null;
 };
 
 export const handleClaudeUserToolResultMessage = ({
@@ -89,16 +87,17 @@ export const handleClaudeUserToolResultMessage = ({
   const messageId =
     session.toolMessageIdsByCallId.get(result.toolUseId) ?? message.uuid ?? result.toolUseId;
   const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
-  const part = createClaudeCompletedToolPart({
+  const { part, todos } = projectClaudeCompletedToolResult({
     callId: result.toolUseId,
     endedAtMs: timestampMs(timestamp),
+    ...(input ? { input } : {}),
     isError: result.isError,
     messageId,
     raw: result.raw,
-    text: result.text,
-    tool,
-    ...(input ? { input } : {}),
+    resultText: result.text,
     ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+    state: session.todosById,
+    tool,
   });
   emit({
     type: "assistant_part",
@@ -106,6 +105,14 @@ export const handleClaudeUserToolResultMessage = ({
     timestamp,
     part,
   });
+  if (todos) {
+    emit({
+      type: "session_todos_updated",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      todos,
+    });
+  }
   if (tool === "Agent") {
     emitClaudeAgentToolResultSubagentPart({
       emit,

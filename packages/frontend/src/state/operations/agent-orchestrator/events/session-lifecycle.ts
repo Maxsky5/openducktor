@@ -92,18 +92,12 @@ const resolveFinalAssistantSnapshot = ({
 
 export const handleSessionStarted = (
   context: Pick<SessionLifecycleEventContext, "session" | "store">,
-  event: Extract<SessionEvent, { type: "session_started" }>,
+  _event: Extract<SessionEvent, { type: "session_started" }>,
 ): void => {
   context.store.updateSession(context.session.identity, (current) => ({
     ...current,
     status: "running",
     runtimeStatusMessage: null,
-    messages: appendSessionMessage(current, {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: event.message,
-      timestamp: event.timestamp,
-    }),
   }));
 };
 

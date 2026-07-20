@@ -1,6 +1,6 @@
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
-import { previewInput, toolPartType } from "./claude-agent-sdk-utils";
+import { previewInput, toolPartPresentation } from "./claude-agent-sdk-utils";
 
 type ClaudeTextPart = Extract<AgentStreamPart, { kind: "text" }>;
 type ClaudeReasoningPart = Extract<AgentStreamPart, { kind: "reasoning" }>;
@@ -85,7 +85,7 @@ export const createClaudeCompletedToolPart = ({
     partId: callId,
     callId,
     tool,
-    toolType: toolPartType(tool),
+    ...toolPartPresentation(tool),
     status: isError ? "error" : "completed",
     ...(input ? { input } : {}),
     ...(resolvedPreview ? { preview: resolvedPreview } : {}),

@@ -207,6 +207,7 @@ describe("runtime schemas", () => {
     expect(parsed.capabilities.optionalSurfaces).toMatchObject({
       supportsProfiles: false,
       supportsVariants: true,
+      supportsTodos: true,
       supportsSubagents: true,
       supportedSubagentExecutionModes: ["foreground", "background"],
     });

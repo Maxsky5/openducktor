@@ -581,7 +581,7 @@ describe("Claude live and hydrated transcript parity", () => {
       type: "user",
       uuid: "result-agent",
       session_id: "session-1",
-      parent_tool_use_id: "tool-agent-1",
+      parent_tool_use_id: null,
       timestamp: resultTimestamp,
       message: {
         role: "user",
@@ -593,7 +593,7 @@ describe("Claude live and hydrated transcript parity", () => {
           },
         ],
       },
-      toolUseResult: {
+      tool_use_result: {
         status: "completed",
         prompt: "Inspect the authentication flow",
         agentId: "agent-session-1",

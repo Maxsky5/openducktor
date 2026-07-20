@@ -119,14 +119,12 @@ export const permissionRequestTypeForTool = (
   return "permission_grant";
 };
 
-const isClaudeShellTool = (toolName: string): boolean => /bash|shell/iu.test(toolName);
-
 export const mutationForTool = (
   toolName: string,
   _input?: Record<string, unknown>,
 ): NonNullable<AgentPendingApprovalRequest["mutation"]> => {
-  if (isClaudeShellTool(toolName)) {
-    return "mutating";
+  if (/bash|shell/iu.test(toolName)) {
+    return "unknown";
   }
   if (/^(Read|LS|Glob|Grep|NotebookRead|TodoRead|Skill)$/iu.test(toolName)) {
     return "read_only";
@@ -193,6 +191,9 @@ export const toolPartType = (
   if (canonicalOdtToolName(toolName)) {
     return "workflow";
   }
+  if (/^Task(?:Create|Update|Get|List)$/u.test(toolName)) {
+    return "todo";
+  }
   if (/bash|shell/i.test(toolName)) {
     return "bash";
   }
@@ -216,6 +217,17 @@ export const toolPartType = (
     return "question";
   }
   return "generic";
+};
+
+export const toolPartPresentation = (
+  toolName: string,
+): Pick<Extract<AgentStreamPart, { kind: "tool" }>, "toolType"> &
+  Partial<Pick<Extract<AgentStreamPart, { kind: "tool" }>, "displayLabel">> => {
+  const toolType = toolPartType(toolName);
+  return {
+    toolType,
+    ...(toolType === "todo" ? { displayLabel: "todo" } : {}),
+  };
 };
 
 export const textFromContentBlocks = (content: unknown): string => {

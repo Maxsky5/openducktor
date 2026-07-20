@@ -55,6 +55,7 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   toolMessageIdsByCallId: new Map(),
   toolNamesByCallId: new Map(),
   toolStartedAtMsByCallId: new Map(),
+  todosById: new Map(),
   ...overrides,
 });
 
@@ -99,6 +100,33 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
 };
 
 describe("createClaudeAgentSdkService", () => {
+  test("returns the live Claude TODO snapshot", async () => {
+    const todo = {
+      id: "1",
+      content: "Implement Facebook auth",
+      status: "in_progress" as const,
+      priority: "medium" as const,
+    };
+    const service = createService(
+      createSession({
+        todosById: new Map([[todo.id, todo]]),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        service.loadSessionTodos({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ),
+    ).resolves.toEqual([todo]);
+  });
+
   test("emits nested transcript events for host-owned projection", () => {
     const session = createSession();
     const emitted: Array<{ session: ClaudeSession; event: unknown }> = [];

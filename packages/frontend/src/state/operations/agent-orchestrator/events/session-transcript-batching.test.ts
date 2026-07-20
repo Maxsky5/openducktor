@@ -85,9 +85,7 @@ describe("agent-orchestrator session transcript events", () => {
     expect(updateSessionCalls).toBe(1);
     expect(updateSessionOptions).toEqual([undefined]);
     expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
-    expect(getSessionMessages(sessionsRef)).toEqual([
-      expect.objectContaining({ role: "system", content: "Started" }),
-    ]);
+    expect(getSessionMessages(sessionsRef)).toEqual([]);
     expect(todosRecorder.getTodos()).toEqual([
       {
         id: "todo-1",
@@ -159,10 +157,7 @@ describe("agent-orchestrator session transcript events", () => {
     });
 
     expect(updateSessionCalls).toBe(2);
-    expect(getSessionMessages(sessionsRef).map((message) => message.role)).toEqual([
-      "system",
-      "user",
-    ]);
+    expect(getSessionMessages(sessionsRef).map((message) => message.role)).toEqual(["user"]);
   });
 
   test("collapses assistant stream chunks across a queued flush", async () => {

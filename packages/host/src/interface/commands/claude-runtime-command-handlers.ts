@@ -93,6 +93,7 @@ export const createClaudeRuntimeCommandHandlers = (
             externalSessionId: input.externalSessionId,
             runtimePolicy: input.runtimePolicy,
             ...(input.sessionScope ? { sessionScope: input.sessionScope } : {}),
+            ...(input.model ? { model: input.model } : {}),
             ...(input.systemPromptContext
               ? { systemPromptContext: input.systemPromptContext }
               : {}),
@@ -104,7 +105,19 @@ export const createClaudeRuntimeCommandHandlers = (
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos.command]: createClaudeCommandHandler(
     service,
     CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos,
-    (runtimeService, input) => runtimeService.loadSessionTodos(input),
+    (runtimeService, input) => {
+      const todosInput = {
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+        workingDirectory: input.workingDirectory,
+        externalSessionId: input.externalSessionId,
+        runtimePolicy: input.runtimePolicy,
+        ...(input.model ? { model: input.model } : {}),
+      };
+      return runtimeService.loadSessionTodos(
+        input.sessionScope ? { ...todosInput, sessionScope: input.sessionScope } : todosInput,
+      );
+    },
   ),
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff.command]: createClaudeCommandHandler(
     service,

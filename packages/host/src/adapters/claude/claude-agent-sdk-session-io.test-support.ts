@@ -42,6 +42,7 @@ export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): Cla
   toolMessageIdsByCallId: new Map(),
   toolNamesByCallId: new Map(),
   toolStartedAtMsByCallId: new Map(),
+  todosById: new Map(),
   ...overrides,
 });
 

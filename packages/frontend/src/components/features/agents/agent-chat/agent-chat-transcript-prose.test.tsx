@@ -12,7 +12,7 @@ describe("AgentChatTranscriptProse", () => {
     );
 
     expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
-    expect(html).toContain("whitespace-pre-wrap break-words");
+    expect(html).toContain("whitespace-pre-wrap break-words line-clamp-2");
   });
 
   test("merges caller classes after the transcript wrapping contract", () => {
@@ -22,6 +22,8 @@ describe("AgentChatTranscriptProse", () => {
       </AgentChatTranscriptProse>,
     );
 
-    expect(html).toContain("whitespace-pre-wrap break-words text-sm text-muted-foreground");
+    expect(html).toContain(
+      "whitespace-pre-wrap break-words line-clamp-2 text-sm text-muted-foreground",
+    );
   });
 });

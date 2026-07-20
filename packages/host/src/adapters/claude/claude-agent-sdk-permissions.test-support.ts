@@ -51,4 +51,5 @@ export const createClaudePermissionTestSession = (
   toolMessageIdsByCallId: new Map(),
   toolNamesByCallId: new Map(),
   toolStartedAtMsByCallId: new Map(),
+  todosById: new Map(),
 });
