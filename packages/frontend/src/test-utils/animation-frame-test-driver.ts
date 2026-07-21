@@ -30,7 +30,7 @@ const restoreGlobal =
     value: AnimationFrameGlobals[Key],
   ) =>
   (): void => {
-    if (existed && value) {
+    if (existed) {
       target[key] = value;
       return;
     }
@@ -40,29 +40,36 @@ const restoreGlobal =
 
 export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
   const callbacks = new Map<number, FrameRequestCallback>();
+  const autoFlushFrameIds = new Set<number>();
   let nextFrameId = 1;
   let nextFrameTime = 16;
+  let isInstalled = false;
   let restoreRequestAnimationFrame: (() => void) | null = null;
   let restoreCancelAnimationFrame: (() => void) | null = null;
 
   const rememberCurrentGlobals = (): void => {
+    if (isInstalled) {
+      throw new Error("Animation frame test driver is already installed.");
+    }
     const target = globalThis as AnimationFrameGlobals;
+    isInstalled = true;
     restoreRequestAnimationFrame = restoreGlobal(
       target,
       "requestAnimationFrame",
-      "requestAnimationFrame" in target,
+      Object.hasOwn(target, "requestAnimationFrame"),
       target.requestAnimationFrame,
     );
     restoreCancelAnimationFrame = restoreGlobal(
       target,
       "cancelAnimationFrame",
-      "cancelAnimationFrame" in target,
+      Object.hasOwn(target, "cancelAnimationFrame"),
       target.cancelAnimationFrame,
     );
   };
 
   const clear = (): void => {
     callbacks.clear();
+    autoFlushFrameIds.clear();
     nextFrameId = 1;
     nextFrameTime = 16;
   };
@@ -94,12 +101,18 @@ export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
       const frameTime = nextFrameTime;
       nextFrameId += 1;
       nextFrameTime += 16;
+      autoFlushFrameIds.add(frameId);
       queueMicrotask(() => {
+        if (!autoFlushFrameIds.delete(frameId)) {
+          return;
+        }
         callback(frameTime);
       });
       return frameId;
     }) as typeof requestAnimationFrame;
-    target.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+    target.cancelAnimationFrame = ((frameId: number): void => {
+      autoFlushFrameIds.delete(frameId);
+    }) as typeof cancelAnimationFrame;
   };
 
   const restore = (): void => {
@@ -108,6 +121,7 @@ export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
     restoreCancelAnimationFrame?.();
     restoreRequestAnimationFrame = null;
     restoreCancelAnimationFrame = null;
+    isInstalled = false;
   };
 
   const flushMicrotasks = async (): Promise<void> => {
@@ -125,10 +139,11 @@ export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
     callbacks.clear();
 
     await act(async () => {
+      const frameTime = nextFrameTime;
       for (const callback of queuedCallbacks) {
-        callback(nextFrameTime);
-        nextFrameTime += 16;
+        callback(frameTime);
       }
+      nextFrameTime += 16;
       await flushPromises();
     });
   };
@@ -156,7 +171,7 @@ export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
     flushTimers,
     install,
     installAutoFlush,
-    pendingFrameCount: () => callbacks.size,
+    pendingFrameCount: () => callbacks.size + autoFlushFrameIds.size,
     restore,
   };
 };

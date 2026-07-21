@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, createRef } from "react";
+import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
@@ -7,7 +8,6 @@ import {
 } from "./agent-chat-row-windows";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { buildAgentChatTurnAnchors } from "./agent-chat-transcript-model";
-import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
 const actEnvironment = globalThis as typeof globalThis & {

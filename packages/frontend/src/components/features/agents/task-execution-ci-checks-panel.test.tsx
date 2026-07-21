@@ -1,7 +1,7 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { PullRequestReviewCheck, PullRequestReviewContext } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -9,18 +9,25 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import * as externalUrl from "@/lib/open-external-url";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
-import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { host } from "@/state/operations/host";
+import {
+  type PullRequestReviewContextQueryInput,
+  pullRequestReviewQueryKeys,
+} from "@/state/queries/pull-request-review";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
-import { TaskExecutionCiChecksPanel } from "./task-execution-ci-checks-panel";
+import {
+  TaskExecutionCiChecksPanel,
+  type TaskExecutionCiChecksPanelModel,
+} from "./task-execution-ci-checks-panel";
 import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 import { isBotCommentAuthor } from "./task-execution-ci-presentation";
 
 const queryInput = {
   repoPath: "/repo",
   taskId: "task-12",
-  workingDirectory: "/repo/worktree",
-};
+} satisfies PullRequestReviewContextQueryInput;
 
 const loadedCheck = {
   name: "Unit tests",
@@ -49,6 +56,7 @@ const loadedContext = {
     {
       id: "thread-comment-1",
       author: "codex",
+      authorAvatarUrl: null,
       body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
       patch:
         "@@ -10,3 +10,3 @@\n-const isAnyLoading = isLoading;\n+const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n",
@@ -92,13 +100,6 @@ const renderPanel = (queryClient = createQueryClient()): string => {
       </ThemeProvider>
     </QueryClientProvider>,
   );
-};
-
-const renderLoadedPanel = (): string => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), loadedContext);
-
-  return renderPanel(queryClient);
 };
 
 const renderPendingPanel = (): string => {
@@ -147,12 +148,51 @@ const renderCheckCard = (
   );
 
 describe("TaskExecutionCiChecksPanel", () => {
+  test("skips stable model inputs and renders changed query input", () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), noPullRequestContext);
+    let queryInputReadCount = 0;
+    const stableModel: TaskExecutionCiChecksPanelModel = {
+      isActive: false,
+      get queryInput() {
+        queryInputReadCount += 1;
+        return null;
+      },
+    };
+    const panel = (model: TaskExecutionCiChecksPanelModel) => (
+      <QueryClientProvider client={queryClient}>
+        <TaskExecutionCiChecksPanel model={model} />
+      </QueryClientProvider>
+    );
+    const view = render(panel(stableModel));
+    const initialQueryInputReadCount = queryInputReadCount;
+
+    view.rerender(panel(stableModel));
+
+    expect(queryInputReadCount).toBe(initialQueryInputReadCount);
+
+    view.rerender(panel({ isActive: false, queryInput }));
+
+    expect(view.getByText("No pull request found")).toBeTruthy();
+  });
+
   test("renders a useful loading state while review data is pending", () => {
     const html = renderPanel();
 
     expect(html).toContain("Loading CI checks");
     expect(html).toContain("Reading the current pull request");
     expect(html).not.toContain("h-8 rounded-md bg-muted");
+  });
+
+  test("renders the cold inactive state before the first enabled fetch", () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={createQueryClient()}>
+        <TaskExecutionCiChecksPanel model={{ isActive: false, queryInput }} />
+      </QueryClientProvider>,
+    );
+
+    expect(html).toContain("No CI data loaded");
+    expect(html).toContain("has not received a pull request review snapshot yet");
   });
 
   test("renders an actionable unavailable state with the provider reason", () => {
@@ -185,6 +225,34 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("Retry");
   });
 
+  test("retries a failed review query through the panel", async () => {
+    const originalReviewContextGet = host.pullRequestReviewContextGet;
+    const reviewContextGet = mock()
+      .mockRejectedValueOnce(new Error("Failed to fetch"))
+      .mockResolvedValueOnce(noPullRequestContext);
+    host.pullRequestReviewContextGet = reviewContextGet;
+
+    try {
+      const view = render(
+        <QueryProvider useIsolatedClient>
+          <TaskExecutionCiChecksPanel model={{ isActive: true, queryInput }} />
+        </QueryProvider>,
+      );
+
+      await waitFor(() => expect(view.getByText("Could not load CI checks")).toBeTruthy(), {
+        timeout: 1_000,
+      });
+      fireEvent.click(view.getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), { timeout: 1_000 });
+      await waitFor(() => expect(view.getByText("No pull request found")).toBeTruthy(), {
+        timeout: 1_000,
+      });
+    } finally {
+      host.pullRequestReviewContextGet = originalReviewContextGet;
+    }
+  });
+
   test("renders visible feedback while a state action is pending", () => {
     const html = renderToStaticMarkup(
       createElement(TaskExecutionCiPanelState, {
@@ -203,49 +271,76 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("disabled");
   });
 
-  test("renders provider-neutral PR, check, and review-thread metadata", () => {
-    const html = renderLoadedPanel();
+  test("renders provider-neutral PR, check, and review-thread metadata", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const view = render(
+        <QueryProvider useIsolatedClient>
+          <ThemeProvider defaultTheme="light">
+            <TooltipProvider>
+              <TaskExecutionCiLoaded
+                context={loadedContext}
+                refreshState="idle"
+                onRefresh={() => {}}
+              />
+            </TooltipProvider>
+          </ThemeProvider>
+        </QueryProvider>,
+      );
 
-    expect(html).toContain("Rework task execution panel");
-    expect(html).toContain("1 failing");
-    expect(html).toContain("Unit tests");
-    expect(html).toContain("CI");
-    expect(html).toContain("1 suite failed");
-    expect(html).toContain("Started");
-    expect(html).toContain("2026-07-08T10:00:00Z");
-    expect(html).toContain("Completed");
-    expect(html).toContain("2026-07-08T10:05:00Z");
-    expect(html).not.toContain("Review thread");
-    expect(html).toContain("All");
-    expect(html).toContain("Humans");
-    expect(html).toContain("Bots");
-    expect(html).toContain("codex");
-    expect(html).toContain("Bot");
-    expect(html).toContain("Needs review");
-    expect(html).toContain("Unresolved");
-    expect(html).toContain("This thread still needs work.");
-    expect(html).toContain("isAnyLoading");
-    expect(html).not.toContain('Updated <time dateTime="2026-07-08T10:06:00Z"');
-    expect(html).not.toContain('Created <time dateTime="2026-07-08T10:06:00Z"');
-    expect(html).toContain("ago");
-    expect(html).toContain("2026-07-08T10:06:00Z");
-    expect(html).toContain('data-testid="ci-review-comment-diff"');
-    expect(html).toContain('data-testid="ci-review-comment-suggestion-diff"');
-    expect(html.indexOf('data-testid="ci-review-comment-diff"')).toBeLessThan(
-      html.indexOf("This thread still needs work."),
-    );
-    expect(html.indexOf("This thread still needs work.")).toBeLessThan(
-      html.indexOf('data-testid="ci-review-comment-suggestion-diff"'),
-    );
-    expect(html).not.toContain("language-ts");
-    expect(html).toContain('aria-label="Open comment from codex"');
-    expect(html).toContain("prose-pre:whitespace-pre-wrap");
-    expect(html).toContain("prose-pre:break-words");
-    expect(html).not.toContain("<footer");
-    expect(html).not.toContain("Thread thread-1");
-    expect(html).not.toContain("PR #42");
-    expect(html).not.toContain(">GitHub<");
-    expect(html).not.toContain("Open pull request #42");
+      expect(view.container.innerHTML).not.toContain("This thread still needs work.");
+      expect(
+        view.container
+          .querySelector(".overflow-y-auto")
+          ?.classList.contains("[scrollbar-gutter:stable]"),
+      ).toBe(true);
+      await frameDriver.flushFrame();
+      const html = view.container.innerHTML;
+
+      expect(html).toContain("Rework task execution panel");
+      expect(html).toContain("1 failing");
+      expect(html).toContain("Unit tests");
+      expect(html).toContain("CI");
+      expect(html).toContain("1 suite failed");
+      expect(html).toContain("Started");
+      expect(html).toContain("2026-07-08T10:00:00Z");
+      expect(html).toContain("Completed");
+      expect(html).toContain("2026-07-08T10:05:00Z");
+      expect(html).not.toContain("Review thread");
+      expect(html).toContain("All");
+      expect(html).toContain("Humans");
+      expect(html).toContain("Bots");
+      expect(html).toContain("codex");
+      expect(html).toContain("Bot");
+      expect(html).not.toContain("Needs review ·");
+      expect(html).toContain("Filter comments");
+      expect(html).toContain("Unresolved");
+      expect(html).toContain("This thread still needs work.");
+      expect(html).toContain("isAnyLoading");
+      expect(html).not.toContain('Updated <time dateTime="2026-07-08T10:06:00Z"');
+      expect(html).not.toContain('Created <time dateTime="2026-07-08T10:06:00Z"');
+      expect(html).toContain("ago");
+      expect(html).toContain("2026-07-08T10:06:00Z");
+      expect(html).toContain('data-testid="ci-review-comment-diff"');
+      expect(html).toContain('data-testid="ci-review-comment-suggestion-diff"');
+      expect(html.indexOf('data-testid="ci-review-comment-diff"')).toBeLessThan(
+        html.indexOf("This thread still needs work."),
+      );
+      expect(html.indexOf("This thread still needs work.")).toBeLessThan(
+        html.indexOf('data-testid="ci-review-comment-suggestion-diff"'),
+      );
+      expect(html).not.toContain("language-ts");
+      expect(html).toContain('aria-label="Open comment from codex"');
+      expect(html).toContain("prose-pre:whitespace-pre-wrap");
+      expect(html).toContain("prose-pre:break-words");
+      expect(html).not.toContain("<footer");
+      expect(html).not.toContain("Thread thread-1");
+      expect(html).not.toContain("PR #42");
+      expect(html).not.toContain(">GitHub<");
+      expect(html).not.toContain("Open pull request #42");
+
+      view.unmount();
+      await frameDriver.flushMicrotasks();
+    });
   });
 
   test("renders pending check icons and labels as informational blue", () => {

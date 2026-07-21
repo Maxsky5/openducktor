@@ -42,6 +42,7 @@ const completeFileHighlight = (file: { cacheKey?: string }): void => {
 };
 
 const previewWorkerPool = {
+  isWorkingPool: () => false,
   getFileResultCache: (file: { cacheKey?: string }) =>
     file.cacheKey && highlightedFileCacheKeys.has(file.cacheKey) ? {} : undefined,
   primeFileHighlightCache: (file: { cacheKey?: string; name?: string }) => {

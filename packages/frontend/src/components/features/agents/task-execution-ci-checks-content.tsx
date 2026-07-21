@@ -69,7 +69,7 @@ export function TaskExecutionCiLoaded({
           </Button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         <section className="border-b border-border">
           <TaskExecutionCiChecksList
             aggregateStatus={context.aggregateStatus}

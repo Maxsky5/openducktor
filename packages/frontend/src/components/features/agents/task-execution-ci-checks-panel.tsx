@@ -1,6 +1,7 @@
 import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import { memo } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
   type PullRequestReviewContextQueryInput,
@@ -18,6 +19,11 @@ export type TaskExecutionCiChecksPanelModel = {
 };
 
 type NonLoadedPullRequestReviewContext = Exclude<PullRequestReviewContext, { status: "loaded" }>;
+
+const INACTIVE_QUERY_INPUT: PullRequestReviewContextQueryInput = {
+  repoPath: "__inactive_pr_review__",
+  taskId: "__inactive__",
+};
 
 const pullRequestStateProps = (
   context: NonLoadedPullRequestReviewContext,
@@ -50,14 +56,14 @@ const pullRequestStateProps = (
   };
 };
 
-export function TaskExecutionCiChecksPanel({
+export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPanel({
   model,
 }: {
   model: TaskExecutionCiChecksPanelModel;
 }): ReactElement {
   const queryInput = model.queryInput;
   const reviewQuery = useQuery({
-    ...pullRequestReviewContextQueryOptions(queryInput ?? { repoPath: "__inactive_pr_review__" }),
+    ...pullRequestReviewContextQueryOptions(queryInput ?? INACTIVE_QUERY_INPUT),
     enabled: model.isActive && queryInput !== null,
   });
 
@@ -135,4 +141,4 @@ export function TaskExecutionCiChecksPanel({
       }}
     />
   );
-}
+});

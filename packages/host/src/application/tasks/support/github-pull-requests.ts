@@ -23,7 +23,6 @@ import {
   type ResolvedPullRequest,
   repositoryKey,
 } from "./github-pull-request-model";
-import { runGithubRepositoryCommandAllowFailure } from "./github-repository-command";
 
 export {
   GITHUB_PROVIDER_ID,
@@ -196,30 +195,6 @@ export const runGithubCommand = (
         field: "gh",
         message: combinedCommandOutput(result.stdout, result.stderr) || "gh command failed.",
         details: { repoPath },
-      }),
-    );
-  });
-export const runGithubRepositoryCommand = (
-  dependencies: GithubCommandDependencies,
-  repoPath: string,
-  repository: GitProviderRepository,
-  args: string[],
-) =>
-  Effect.gen(function* () {
-    const result = yield* runGithubRepositoryCommandAllowFailure(
-      dependencies,
-      repoPath,
-      repository,
-      args,
-    );
-    if (result.ok) {
-      return result.stdout;
-    }
-    return yield* Effect.fail(
-      new HostValidationError({
-        field: "gh",
-        message: combinedCommandOutput(result.stdout, result.stderr) || "gh command failed.",
-        details: { repoPath, repository: repositoryKey(repository) },
       }),
     );
   });

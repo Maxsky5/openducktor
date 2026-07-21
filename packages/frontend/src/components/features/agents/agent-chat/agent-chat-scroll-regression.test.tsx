@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useRef, useState } from "react";
+import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
-import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { COMPOSER_EDITOR_MIN_HEIGHT_PX, useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
