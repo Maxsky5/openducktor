@@ -16,15 +16,15 @@ import {
   type ClaudeHistoryResultMessage,
   isClaudeHistorySubagentSystemMessage,
 } from "./claude-agent-sdk-history-import";
+import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
 import {
   type ClaudeLiveUserMessage,
   createHistoryToolPart,
-  createLiveUserMessageIdResolver,
   hasFinalStopStep,
-  readClaudeHistoryDisplayParts,
   readHistoryToolResults,
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
+import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import {
   finishReasonForClaudeResult,
   finishReasonForClaudeStopReason,
@@ -143,7 +143,10 @@ export const toClaudeHistoryMessages = (
     toolMessageIdsByCallId,
     toolNamesByCallId,
   };
-  const resolveLiveUserMessageId = createLiveUserMessageIdResolver(liveUserMessages);
+  const projectHistoryInput = createClaudeHistoryInputProjector({
+    liveUserMessages,
+    ...(options.skills ? { skills: options.skills } : {}),
+  });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantText: string | undefined;
@@ -192,7 +195,6 @@ export const toClaudeHistoryMessages = (
       rebuildLastAssistantTracking();
     }
   };
-
   for (let entryIndex = 0; entryIndex < messages.length; entryIndex += 1) {
     const entry = messages[entryIndex];
     if (!entry) {
@@ -203,6 +205,24 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     const timestamp = readHistoryTimestamp(entry, now);
+    const projectedInput = projectHistoryInput(entry, timestamp);
+    if (projectedInput.handled) {
+      const projectedMessage = projectedInput.message;
+      if (!projectedMessage) {
+        continue;
+      }
+      history.push(projectedMessage);
+      if (projectedMessage.role === "user") {
+        resetCurrentUserTurnAssistantTracking();
+        continue;
+      }
+      lastAssistantMessage = projectedMessage;
+      lastAssistantTextMessage = projectedMessage;
+      lastAssistantText = projectedMessage.text;
+      lastFinalAssistantMessage = projectedMessage;
+      lastFinalAssistantText = projectedMessage.text;
+      continue;
+    }
     if (isClaudeHistorySubagentSystemMessage(entry)) {
       const events: AgentEvent[] = [];
       handleClaudeSubagentSystemMessage({
@@ -333,32 +353,12 @@ export const toClaudeHistoryMessages = (
         }
         continue;
       }
-      if (entry.parent_tool_use_id) {
-        continue;
-      }
-      const text = historyMessageText(entry.message);
-      const fallbackMessageId = entry.uuid ?? `claude-user:${history.length}`;
-      const displayParts = readClaudeHistoryDisplayParts(
-        fallbackMessageId,
-        entry.message,
-        options.skills,
-      );
-      if (text.trim().length === 0 && displayParts.length === 0) {
-        continue;
-      }
-      history.push({
-        messageId: resolveLiveUserMessageId(fallbackMessageId, text),
-        role: "user",
-        timestamp,
-        text,
-        displayParts,
-        state: "read",
-        parts: [],
-      });
-      resetCurrentUserTurnAssistantTracking();
       continue;
     }
     if (entry.type === "assistant") {
+      if (isClaudeSyntheticAssistantMessage(entry)) {
+        continue;
+      }
       const text = historyMessageText(entry.message);
       const parts: AgentStreamPart[] = [];
       const content = isRecord(entry.message) ? entry.message.content : undefined;

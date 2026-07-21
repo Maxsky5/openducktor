@@ -14,6 +14,7 @@ import {
   resolveForwardedClaudeSubagentMessage,
 } from "./claude-agent-sdk-forwarded-subagent-events";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
+import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import {
   emitClaudePermissionDeniedToolPart,
   handleClaudeResultMessage,
@@ -77,6 +78,9 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "assistant") {
+    if (isClaudeSyntheticAssistantMessage(message)) {
+      return;
+    }
     handleAssistantMessage({
       emit,
       message,
@@ -103,6 +107,19 @@ export const handleClaudeSdkMessage = ({
   }
   if (message.type === "system" && message.subtype === "session_state_changed") {
     handleSessionStateChanged({ emit, message, session, timestamp });
+    return;
+  }
+  if (message.type === "system" && message.subtype === "local_command_output") {
+    const content = message.content.trim();
+    if (content.length > 0) {
+      emit({
+        type: "assistant_message",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+        messageId: message.uuid,
+        message: content,
+      });
+    }
     return;
   }
   if (message.type === "system" && message.subtype === "model_refusal_fallback") {

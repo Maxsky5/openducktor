@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../effect/host-errors";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
@@ -100,6 +101,100 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
 };
 
 describe("createClaudeAgentSdkService", () => {
+  test("loads context usage through the detached SDK path when the session is not live", async () => {
+    const loadDetachedSessionContextUsage = mock(
+      async (_input: {
+        claudeExecutablePath: string;
+        externalSessionId: string;
+        processEnv?: NodeJS.ProcessEnv;
+        workingDirectory: string;
+      }) => ({
+        totalTokens: 176_005,
+        contextWindow: 272_000,
+      }),
+    );
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const service = createClaudeAgentSdkService(
+      {
+        now: () => "2026-06-25T20:00:00.000Z",
+        processEnv: { HOME: "/home/user" },
+        resolveMcpBridgeConnection: () => {
+          throw new Error("unused");
+        },
+        runtimeDistribution: createArtifactRuntimeDistribution({
+          mcpLauncher: {
+            kind: "executable",
+            executablePath: process.execPath,
+          },
+        }),
+        sessionStore,
+        toolDiscovery: {
+          resolveTool: () => {
+            throw new Error("unused");
+          },
+          resolveToolPath: () => Effect.succeed("/usr/local/bin/claude"),
+        },
+      },
+      { loadDetachedSessionContextUsage },
+    );
+
+    await expect(
+      Effect.runPromise(
+        service.loadSessionContextUsage({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1::claude-subagent::task-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ),
+    ).resolves.toEqual({ totalTokens: 176_005, contextWindow: 272_000 });
+
+    expect(loadDetachedSessionContextUsage).toHaveBeenCalledTimes(1);
+    expect(loadDetachedSessionContextUsage.mock.calls[0]?.[0]).toEqual({
+      claudeExecutablePath: "/usr/local/bin/claude",
+      externalSessionId: "session-1",
+      processEnv: { HOME: "/home/user" },
+      workingDirectory: "/repo/worktree/",
+    });
+  });
+
+  test("reads context usage from an idle live Claude session without resuming it", async () => {
+    const getContextUsage = mock(
+      async () =>
+        ({
+          totalTokens: 176_005,
+          maxTokens: 272_000,
+        }) as Awaited<ReturnType<Query["getContextUsage"]>>,
+    );
+    const service = createService(
+      createSession({
+        query: {
+          close: mock(() => {}),
+          getContextUsage,
+        } as unknown as ClaudeSession["query"],
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        service.loadSessionContextUsage({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ),
+    ).resolves.toEqual({ totalTokens: 176_005, contextWindow: 272_000 });
+
+    expect(getContextUsage).toHaveBeenCalledTimes(1);
+  });
+
   test("returns the live Claude TODO snapshot", async () => {
     const todo = {
       id: "1",

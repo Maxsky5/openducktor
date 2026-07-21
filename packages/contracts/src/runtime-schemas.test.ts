@@ -1629,19 +1629,41 @@ describe("runtime schemas", () => {
     ]);
   });
 
-  test("slash command catalog rejects malformed triggers", () => {
-    expect(() =>
+  test("slash command catalog accepts runtime command names with whitespace", () => {
+    expect(
       slashCommandCatalogSchema.parse({
         commands: [
           {
-            id: "review",
-            trigger: "/review now",
-            title: "review",
-            hints: [],
+            id: "gitnexus:detect_impact (MCP)",
+            trigger: "gitnexus:detect_impact (MCP)",
+            title: "gitnexus:detect_impact (MCP)",
+            source: "command",
+            hints: ["scope", "base_ref"],
           },
         ],
-      }),
-    ).toThrow("Trigger must be a single token without a leading slash");
+      }).commands[0]?.trigger,
+    ).toBe("gitnexus:detect_impact (MCP)");
+  });
+
+  test("slash command catalog rejects malformed triggers", () => {
+    const result = slashCommandCatalogSchema.safeParse({
+      commands: [
+        {
+          id: "review",
+          trigger: "review/now",
+          title: "review",
+          hints: [],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("Expected malformed slash command trigger to be rejected");
+    }
+    expect(result.error.issues[0]?.message).toBe(
+      'Invalid slash command trigger "review/now": must contain no slashes',
+    );
   });
 
   test("slash command catalog rejects duplicate ids and triggers", () => {

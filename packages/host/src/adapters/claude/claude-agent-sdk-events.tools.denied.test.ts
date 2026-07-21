@@ -203,7 +203,12 @@ describe("handleClaudeSdkMessage denied tool events", () => {
       }),
     });
 
-    expect(events).toEqual([]);
-    expect(session.activity).toBe("running");
+    expect(events.some((event) => event.type === "assistant_part")).toBe(false);
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "session_idle",
+      }),
+    ]);
+    expect(session.activity).toBe("idle");
   });
 });

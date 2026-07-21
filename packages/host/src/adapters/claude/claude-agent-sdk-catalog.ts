@@ -99,7 +99,16 @@ const readClaudeSlashCommands = async (
   processEnv: NodeJS.ProcessEnv | undefined,
   claudeExecutablePath: string,
 ): Promise<SlashCommand[]> => {
-  const session = await openClaudeCatalogSession(cwd, processEnv, claudeExecutablePath);
+  const session = await openClaudeCatalogSession(
+    cwd,
+    {
+      ...processEnv,
+      // The SDK otherwise completes initialization while inherited MCP servers are
+      // still pending, which leaves their prompts out of supportedCommands().
+      MCP_CONNECTION_NONBLOCKING: "0",
+    },
+    claudeExecutablePath,
+  );
   try {
     return await session.sdkQuery.supportedCommands();
   } finally {
