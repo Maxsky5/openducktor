@@ -25,6 +25,7 @@ import { Deferred, TestClock, TestContext } from "effect";
 import {
   createElectronEffectHostCommandRouter,
   createElectronHostCommandRouter as createProductionElectronHostCommandRouter,
+  resolveElectronMcpBridgeDiscoveryMode,
 } from "./electron-host";
 import { createElectronMainLogger } from "./electron-main-logger";
 
@@ -42,6 +43,7 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
 
 const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) =>
   createProductionElectronHostCommandRouter({
+    isPackaged: false,
     onBackgroundFailure: () => Effect.void,
     processEnv: { PATH: "/usr/bin:/bin" },
     runtimeDistribution: testRuntimeDistribution,
@@ -512,6 +514,14 @@ const createEventBus = () => {
 };
 
 describe("createElectronHostCommandRouter", () => {
+  test("derives production discovery ownership from packaged launch context", () => {
+    expect(resolveElectronMcpBridgeDiscoveryMode(true)).toBe("production");
+  });
+
+  test("derives development discovery ownership from source launch context", () => {
+    expect(resolveElectronMcpBridgeDiscoveryMode(false)).toBe("development");
+  });
+
   test("owns a scheduled task-sync disk-write failure through the Electron host lifecycle", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-task-sync-"));
     const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
@@ -540,6 +550,7 @@ describe("createElectronHostCommandRouter", () => {
             filesystem: createFilesystem(),
             git: createGit(),
             lifecycleLogger: logger,
+            isPackaged: false,
             mcpHostBridge: {
               ensureConnection: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
               ensureExternalDiscoveryReady: () =>

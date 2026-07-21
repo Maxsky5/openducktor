@@ -205,6 +205,7 @@ const createElectronHostCommandRouter = (
   createElectronEffectHostCommandRouter({
     clientVersion: app.getVersion(),
     eventBus: hostEventBus,
+    isPackaged: app.isPackaged,
     lifecycleLogger: electronLifecycleLogger,
     onBackgroundFailure: (failure) =>
       Effect.sync(() => {

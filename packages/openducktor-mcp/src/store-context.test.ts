@@ -47,6 +47,7 @@ const clearStoreContextEnv = (): void => {
   delete process.env.ODT_HOST_URL;
   delete process.env.ODT_HOST_TOKEN;
   delete process.env.ODT_FORBID_WORKSPACE_ID_INPUT;
+  delete process.env.OPENDUCKTOR_CHANNEL;
   delete process.env.OPENDUCKTOR_CONFIG_DIR;
 };
 
@@ -94,6 +95,7 @@ describe("resolveStoreContext", () => {
 
     process.env.ODT_WORKSPACE_ID = "repo";
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
+    process.env.OPENDUCKTOR_CHANNEL = "preview";
 
     await expect(resolveStoreContext({})).resolves.toEqual({
       workspaceId: "repo",
@@ -273,6 +275,71 @@ describe("resolveStoreContext", () => {
       hostToken: "discovery-token",
     });
     expect(observedHostTokens).toEqual(["discovery-token", "discovery-token"]);
+  });
+
+  test("discovers the development host only from the dev channel descriptor", async () => {
+    const configDir = await createDiscoveryFile({
+      hostToken: "production-token",
+      hostUrl: "http://127.0.0.1:14327",
+    });
+    await writeFile(
+      join(configDir, "runtime", "mcp-bridge-dev.json"),
+      JSON.stringify(
+        {
+          hostToken: "development-token",
+          hostUrl: "http://127.0.0.1:24327",
+          pid: 23456,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+    process.env.OPENDUCKTOR_CHANNEL = "dev";
+
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url === "http://127.0.0.1:24327/health") {
+        return jsonResponse({ ok: true });
+      }
+      if (url === "http://127.0.0.1:24327/invoke/odt_mcp_ready") {
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    await expect(resolveStoreContext({})).resolves.toEqual({
+      hostToken: "development-token",
+      hostUrl: "http://127.0.0.1:24327",
+    });
+  });
+
+  test("does not fall back from development discovery to production", async () => {
+    const configDir = await createDiscoveryFile();
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+    process.env.OPENDUCKTOR_CHANNEL = "dev";
+
+    await expect(resolveStoreContext({})).rejects.toThrow("mcp-bridge-dev.json");
+  });
+
+  test("does not fall back from production discovery to development", async () => {
+    const configDir = await createEmptyConfigDir();
+    await writeFile(
+      join(configDir, "runtime", "mcp-bridge-dev.json"),
+      JSON.stringify({
+        hostToken: "development-token",
+        hostUrl: "http://127.0.0.1:24327",
+        pid: 23456,
+      }),
+      "utf8",
+    );
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+
+    await expect(resolveStoreContext({})).rejects.toThrow("mcp-bridge.json");
   });
 
   test("fails clearly when discovery cannot find any running host", async () => {

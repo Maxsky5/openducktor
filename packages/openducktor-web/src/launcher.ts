@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
 import type { ViteDevServer } from "vite";
 import {
@@ -40,6 +41,9 @@ export type LauncherOptions = {
   backendPort: number;
   readinessTimeoutMs?: number;
 };
+
+export const resolveWebMcpBridgeDiscoveryMode = (workspaceMode: boolean): McpBridgeDiscoveryMode =>
+  workspaceMode ? "development" : "production";
 
 const logFrontendAvailability = (port: number, logger: WebLogger): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
@@ -436,6 +440,7 @@ export const runLauncherEffect = (
         providedToolPaths,
         runtimeDistribution,
         logger,
+        mcpBridgeDiscoveryMode: resolveWebMcpBridgeDiscoveryMode(options.workspaceMode),
       }),
       (hostBackend) =>
         Effect.gen(function* () {

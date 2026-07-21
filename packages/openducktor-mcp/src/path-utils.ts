@@ -3,9 +3,11 @@ import { join, resolve } from "node:path";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 
 const EMPTY_ENV_SENTINELS = new Set(["undefined", "null"]);
+const OPENDUCKTOR_CHANNEL_ENV = "OPENDUCKTOR_CHANNEL";
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME = ".openducktor";
-const MCP_BRIDGE_DISCOVERY_RELATIVE_PATH = "runtime/mcp-bridge.json";
+const DEVELOPMENT_MCP_BRIDGE_DISCOVERY_RELATIVE_PATH = "runtime/mcp-bridge-dev.json";
+const PRODUCTION_MCP_BRIDGE_DISCOVERY_RELATIVE_PATH = "runtime/mcp-bridge.json";
 
 export const normalizeOptionalInput = (value: string | undefined): string | undefined => {
   if (typeof value !== "string") {
@@ -52,8 +54,21 @@ const resolveOpenducktorBaseDir = (): string => {
   return join(resolveHomeDirectory(), DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME);
 };
 
+const resolveMcpBridgeDiscoveryRelativePath = (): string => {
+  if (!Object.hasOwn(process.env, OPENDUCKTOR_CHANNEL_ENV)) {
+    return PRODUCTION_MCP_BRIDGE_DISCOVERY_RELATIVE_PATH;
+  }
+  const channel = process.env[OPENDUCKTOR_CHANNEL_ENV];
+  if (channel === "dev") {
+    return DEVELOPMENT_MCP_BRIDGE_DISCOVERY_RELATIVE_PATH;
+  }
+  throw new Error(
+    `OPENDUCKTOR_CHANNEL must be unset for production discovery or set to dev. Received ${JSON.stringify(channel)}.`,
+  );
+};
+
 export const resolveMcpBridgeDiscoveryPath = (): string =>
-  join(resolveOpenducktorBaseDir(), MCP_BRIDGE_DISCOVERY_RELATIVE_PATH);
+  join(resolveOpenducktorBaseDir(), resolveMcpBridgeDiscoveryRelativePath());
 
 export const normalizeBaseUrl = (value: string): string =>
   value.endsWith("/") ? value.slice(0, -1) : value;

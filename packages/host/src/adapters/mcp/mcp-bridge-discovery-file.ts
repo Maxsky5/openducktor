@@ -5,7 +5,12 @@ import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { HostValidationError } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 
-const DISCOVERY_RELATIVE_PATH = "runtime/mcp-bridge.json";
+const DISCOVERY_RELATIVE_PATHS = {
+  development: "runtime/mcp-bridge-dev.json",
+  production: "runtime/mcp-bridge.json",
+} as const;
+
+export type McpBridgeDiscoveryMode = keyof typeof DISCOVERY_RELATIVE_PATHS;
 
 export type McpBridgeDiscoveryFile = {
   hostToken: string;
@@ -16,9 +21,10 @@ export type McpBridgeDiscoveryFile = {
 const isFsErrorCode = (error: unknown, code: string): boolean =>
   typeof error === "object" && error !== null && "code" in error && error.code === code;
 
-export const resolveMcpBridgeDiscoveryPath = (env: NodeJS.ProcessEnv = process.env): string => {
-  return path.resolve(resolveOpenDucktorBaseDir(env), DISCOVERY_RELATIVE_PATH);
-};
+export const resolveMcpBridgeDiscoveryPath = (
+  mode: McpBridgeDiscoveryMode,
+  env: NodeJS.ProcessEnv = process.env,
+): string => path.resolve(resolveOpenDucktorBaseDir(env), DISCOVERY_RELATIVE_PATHS[mode]);
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDiscoveryFile => {
   const parsed = parseJson(payload);
