@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
@@ -323,10 +324,14 @@ export function useAgentOrchestratorOperations({
           if (!workspaceRepoPath) {
             throw new Error("Cannot load agent session context without an active workspace.");
           }
-          const contextUsage = await liveSessionHostPort.agentSessionLiveLoadContext({
-            repoPath: workspaceRepoPath,
-            ...session,
-          });
+          const contextUsage = await loadAgentSessionContextFromQuery(
+            queryClient,
+            {
+              repoPath: workspaceRepoPath,
+              ...session,
+            },
+            liveSessionHostPort.agentSessionLiveLoadContext,
+          );
           if (contextUsage) {
             sessionStore.updateSession(session, (current) => ({
               ...current,
@@ -338,6 +343,7 @@ export function useAgentOrchestratorOperations({
     [
       agentEngine,
       liveSessionHostPort,
+      queryClient,
       sessionHistoryLoaders,
       sessionActions,
       sessionStore,

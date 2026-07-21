@@ -128,6 +128,42 @@ describe("toClaudeSlashCommandCatalog", () => {
     });
   });
 
+  test("preserves Claude command names containing whitespace", () => {
+    expect(
+      toClaudeSlashCommandCatalog([
+        {
+          name: "gitnexus:generate_map (MCP)",
+          description: "Generate architecture documentation",
+          argumentHint: "repo",
+        },
+        {
+          name: "gitnexus:detect_impact (MCP)",
+          description: "Analyze current changes",
+          argumentHint: "scope, base_ref",
+        },
+      ]),
+    ).toEqual({
+      commands: [
+        {
+          id: "gitnexus:detect_impact (MCP)",
+          trigger: "gitnexus:detect_impact (MCP)",
+          title: "gitnexus:detect_impact (MCP)",
+          description: "Analyze current changes",
+          source: "command",
+          hints: ["scope, base_ref"],
+        },
+        {
+          id: "gitnexus:generate_map (MCP)",
+          trigger: "gitnexus:generate_map (MCP)",
+          title: "gitnexus:generate_map (MCP)",
+          description: "Generate architecture documentation",
+          source: "command",
+          hints: ["repo"],
+        },
+      ],
+    });
+  });
+
   test("keeps the first SDK definition when inherited scopes expose the same command", () => {
     expect(
       toClaudeSlashCommandCatalog([

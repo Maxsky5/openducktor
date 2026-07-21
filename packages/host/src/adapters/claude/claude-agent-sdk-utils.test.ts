@@ -32,6 +32,23 @@ describe("encodeClaudePromptText", () => {
     ).toBe("/review @src/index.ts please");
   });
 
+  test("preserves whitespace in SDK-native slash command names", () => {
+    expect(
+      encodeClaudePromptText([
+        {
+          kind: "slash_command",
+          command: {
+            id: "gitnexus:generate_map (MCP)",
+            trigger: "gitnexus:generate_map (MCP)",
+            title: "gitnexus:generate_map (MCP)",
+            source: "command",
+            hints: ["repo"],
+          },
+        },
+      ]),
+    ).toBe("/gitnexus:generate_map (MCP)");
+  });
+
   test("rejects slash-command parts without a native Claude trigger", () => {
     expect(() =>
       encodeClaudePromptText([

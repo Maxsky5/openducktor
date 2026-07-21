@@ -3,6 +3,7 @@ import type {
   ClaudeHistoryEntryMetadata,
   ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-import";
+import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
@@ -19,6 +20,9 @@ export const readHistorySessionId = (entry: ClaudeHistoryMessage): string =>
 export const readHistoryAssistantModel = (
   entry: ClaudeHistoryMessage,
 ): AgentModelSelection | undefined => {
+  if (isClaudeSyntheticAssistantMessage(entry)) {
+    return undefined;
+  }
   const model = isRecord(entry) ? readStringProp(entry.message, "model") : undefined;
   return model
     ? {

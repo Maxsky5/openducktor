@@ -31,11 +31,26 @@ export type ClaudeHistorySubagentSystemMessage = SessionStoreEntry & {
   subtype: "task_started" | "task_progress" | "task_updated" | "task_notification";
 };
 
+export type ClaudeHistoryLocalCommandMessage = SessionStoreEntry & {
+  type: "system";
+  subtype: "local_command" | "local_command_output";
+  content: unknown;
+  uuid: string;
+};
+
+export type ClaudeHistoryQueueOperationMessage = SessionStoreEntry & {
+  type: "queue-operation";
+  operation: "enqueue";
+  content: unknown;
+};
+
 export type ClaudeHistoryMessage =
   | SessionMessage
   | ClaudeHistoryResultMessage
   | ClaudeHistoryRetractionMessage
-  | ClaudeHistorySubagentSystemMessage;
+  | ClaudeHistorySubagentSystemMessage
+  | ClaudeHistoryLocalCommandMessage
+  | ClaudeHistoryQueueOperationMessage;
 
 export type ClaudeHistoryEntryMetadata = {
   isSidechain?: unknown;
@@ -44,6 +59,9 @@ export type ClaudeHistoryEntryMetadata = {
 };
 
 const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHistoryMessage => {
+  if (entry.type === "queue-operation") {
+    return readStringProp(entry, "operation") === "enqueue" && typeof entry.content === "string";
+  }
   if (entry.type === "assistant" || entry.type === "user" || entry.type === "system") {
     const subtype = isRecord(entry) ? readStringProp(entry, "subtype") : undefined;
     if (entry.type === "system" && subtype === "model_refusal_fallback") {
@@ -57,6 +75,12 @@ const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHi
         subtype === "task_notification")
     ) {
       return typeof entry.uuid === "string";
+    }
+    if (
+      entry.type === "system" &&
+      (subtype === "local_command" || subtype === "local_command_output")
+    ) {
+      return typeof entry.uuid === "string" && typeof entry.content === "string";
     }
     return typeof entry.uuid === "string" && "message" in entry;
   }

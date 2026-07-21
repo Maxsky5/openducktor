@@ -56,7 +56,7 @@ describe("claude-agent-sdk-history", () => {
     });
   });
 
-  test("marks completed Claude result history final even when stop_reason is absent", () => {
+  test("marks the current Claude success result shape final", () => {
     const history = toClaudeHistoryMessages(
       [
         {
@@ -67,7 +67,6 @@ describe("claude-agent-sdk-history", () => {
           timestamp: "2026-06-26T11:03:16.287Z",
           is_error: false,
           result: "Done",
-          terminal_reason: "completed",
           usage: { input_tokens: 1, output_tokens: 1 },
         },
       ] as Parameters<typeof toClaudeHistoryMessages>[0],

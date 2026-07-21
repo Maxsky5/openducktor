@@ -54,18 +54,13 @@ export const lifecycleOutcomeForClaudeResult = (
     return "failed";
   }
   const terminalReason = readClaudeResultTerminalReason(message);
-  const stopReason = readClaudeResultStopReason(message);
   if (terminalReason === "tool_deferred" || terminalReason === "background_requested") {
     return "awaiting_sdk_idle";
   }
-  if (
-    terminalReason === "completed" ||
-    stopReason === "end_turn" ||
-    stopReason === "stop_sequence"
-  ) {
-    return "completed";
+  if (readClaudeResultStopReason(message) === "tool_use") {
+    return "continuing";
   }
-  return "continuing";
+  return "completed";
 };
 
 export const lifecycleOutcomeForClaudeAssistantMessage = (
@@ -96,5 +91,5 @@ export const finishReasonForClaudeResult = (message: ClaudeResultLike): string |
   if (stopFinishReason) {
     return stopFinishReason;
   }
-  return readClaudeResultTerminalReason(message) === "completed" ? "stop" : null;
+  return lifecycleOutcomeForClaudeResult(message) === "completed" ? "stop" : null;
 };
