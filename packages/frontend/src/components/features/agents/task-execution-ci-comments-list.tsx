@@ -33,6 +33,10 @@ const COMMENT_FILTERS: Array<{ id: CommentFilter; label: string }> = [
 
 const COMMENT_BODY_BATCH_SIZE = 4;
 
+type TaskExecutionCiCommentsListProps = {
+  comments: PullRequestReviewComment[];
+};
+
 const commentTimestamp = (comment: PullRequestReviewComment): number => {
   const timestamp = Date.parse(comment.createdAt ?? comment.updatedAt ?? "");
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
@@ -61,11 +65,26 @@ const filterComments = (
   );
 };
 
+const selectNextBodyBatchIds = (
+  comments: readonly PullRequestReviewComment[],
+  readyBodyIds: ReadonlySet<string>,
+): string[] => {
+  const batchIds: string[] = [];
+  for (const comment of comments) {
+    if (comment.isResolved === true || readyBodyIds.has(comment.id)) {
+      continue;
+    }
+    batchIds.push(comment.id);
+    if (batchIds.length === COMMENT_BODY_BATCH_SIZE) {
+      break;
+    }
+  }
+  return batchIds;
+};
+
 export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiCommentsList({
   comments,
-}: {
-  comments: PullRequestReviewComment[];
-}): ReactElement {
+}: TaskExecutionCiCommentsListProps): ReactElement {
   const [filter, setFilter] = useState<CommentFilter>("all");
   const [commentFilters, setCommentFilters] = useState(readTaskExecutionCiCommentFilters);
   const hideResolvedId = useId();
@@ -92,19 +111,10 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
     [deferredComments, deferredFilter, deferredHideResolved],
   );
   const [readyBodyIds, setReadyBodyIds] = useState<ReadonlySet<string>>(() => new Set());
-  const nextBodyBatchIds = useMemo(() => {
-    const batchIds: string[] = [];
-    for (const comment of visibleComments) {
-      if (comment.isResolved === true || readyBodyIds.has(comment.id)) {
-        continue;
-      }
-      batchIds.push(comment.id);
-      if (batchIds.length === COMMENT_BODY_BATCH_SIZE) {
-        break;
-      }
-    }
-    return batchIds;
-  }, [readyBodyIds, visibleComments]);
+  const nextBodyBatchIds = useMemo(
+    () => selectNextBodyBatchIds(visibleComments, readyBodyIds),
+    [readyBodyIds, visibleComments],
+  );
 
   useEffect(() => {
     const currentCommentIds = new Set(comments.map((comment) => comment.id));

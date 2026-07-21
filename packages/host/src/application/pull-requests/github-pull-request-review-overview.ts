@@ -61,8 +61,18 @@ type GithubPullRequestReviewOverviewReadInput = {
   pullRequestNumber: number;
 };
 
-type ParsedConnection = {
+type GithubGraphqlVariable = {
+  name: string;
+  value: string | number | boolean;
+};
+
+type GithubPullRequestReviewOverview = {
+  pullRequest: PullRequestReviewPullRequest;
   comments: PullRequestReviewComment[];
+};
+
+type ParsedConnection = {
+  items: PullRequestReviewComment[];
   nextCursor: string | null;
 };
 
@@ -215,7 +225,7 @@ const parseConnection = (
   included: boolean,
 ): ParsedConnection => {
   if (!included) {
-    return { comments: [], nextCursor: null };
+    return { items: [], nextCursor: null };
   }
   if (!connection || !Array.isArray(connection.nodes)) {
     throw new HostValidationError({
@@ -223,7 +233,7 @@ const parseConnection = (
       message: `GitHub pull request review field '${field}.nodes' is missing or invalid.`,
     });
   }
-  const comments: PullRequestReviewComment[] = [];
+  const items: PullRequestReviewComment[] = [];
   for (const [index, entry] of connection.nodes.entries()) {
     const comment = parseComment(
       entry as GithubReviewItemPayload,
@@ -231,11 +241,11 @@ const parseConnection = (
       `${field}.nodes.${index}`,
     );
     if (comment) {
-      comments.push(comment);
+      items.push(comment);
     }
   }
   return {
-    comments,
+    items,
     nextCursor: parseNextCursor(connection.pageInfo, `${field}.pageInfo`),
   };
 };
@@ -283,8 +293,8 @@ const parseOverviewPage = (
 
 const runOverviewGraphql = (
   input: GithubPullRequestReviewOverviewReadInput,
-  variables: readonly { name: string; value: string | number | boolean }[],
-) =>
+  variables: readonly GithubGraphqlVariable[],
+): Effect.Effect<string, HostValidationError> =>
   runGithubCommand(input.dependencies, input.repoPath, input.repository.host, [
     "api",
     "graphql",
@@ -305,7 +315,7 @@ const runOverviewGraphql = (
 
 export const loadGithubPullRequestReviewOverview = (
   input: GithubPullRequestReviewOverviewReadInput,
-) =>
+): Effect.Effect<GithubPullRequestReviewOverview, HostValidationError> =>
   Effect.gen(function* () {
     const comments: PullRequestReviewComment[] = [];
     const reviews: PullRequestReviewComment[] = [];
@@ -316,7 +326,7 @@ export const loadGithubPullRequestReviewOverview = (
     let includeReviews = true;
 
     do {
-      const variables: Array<{ name: string; value: string | number | boolean }> = [
+      const variables: GithubGraphqlVariable[] = [
         { name: "owner", value: input.repository.owner },
         { name: "name", value: input.repository.name },
         { name: "number", value: input.pullRequestNumber },
@@ -340,8 +350,8 @@ export const loadGithubPullRequestReviewOverview = (
           }),
       });
       pullRequest = page.pullRequest;
-      comments.push(...page.comments.comments);
-      reviews.push(...page.reviews.comments);
+      comments.push(...page.comments.items);
+      reviews.push(...page.reviews.items);
       commentsCursor = page.comments.nextCursor;
       reviewsCursor = page.reviews.nextCursor;
       includeComments = commentsCursor !== null;

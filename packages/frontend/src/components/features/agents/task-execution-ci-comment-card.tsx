@@ -63,17 +63,19 @@ const CI_COMMENT_MARKDOWN_COMPONENTS: Components = {
   a: TaskExecutionCiMarkdownLink,
 };
 
+type TaskExecutionCiSuggestedChangeProps = {
+  patch: string;
+  filePath: string;
+  position: number;
+  total: number;
+};
+
 const TaskExecutionCiSuggestedChange = memo(function TaskExecutionCiSuggestedChange({
   patch,
   filePath,
   position,
   total,
-}: {
-  patch: string;
-  filePath: string;
-  position: number;
-  total: number;
-}): ReactElement {
+}: TaskExecutionCiSuggestedChangeProps): ReactElement {
   return (
     <section
       aria-label="Suggested change"
@@ -107,11 +109,13 @@ const TaskExecutionCiSuggestedChange = memo(function TaskExecutionCiSuggestedCha
   );
 });
 
+type TaskExecutionCiCommentBodyProps = {
+  comment: PullRequestReviewComment;
+};
+
 const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
   comment,
-}: {
-  comment: PullRequestReviewComment;
-}): ReactElement {
+}: TaskExecutionCiCommentBodyProps): ReactElement {
   const filePath = comment.path;
   const hasBody = comment.body.trim().length > 0;
   const hasPatch = Boolean(comment.patch?.trim() && filePath);
@@ -164,21 +168,23 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
   );
 });
 
+type TaskExecutionCiCommentCardProps = {
+  comment: PullRequestReviewComment;
+  isBot: boolean;
+  isBodyReady?: boolean;
+};
+
 export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCard({
   comment,
   isBot,
   isBodyReady = true,
-}: {
-  comment: PullRequestReviewComment;
-  isBot: boolean;
-  isBodyReady?: boolean;
-}): ReactElement {
+}: TaskExecutionCiCommentCardProps): ReactElement {
   const showThreadBadge = comment.isResolved !== null;
   const location = commentLocationLabel(comment);
   const author = comment.author ?? "Unknown author";
   const activityTimestamp = comment.createdAt ?? comment.updatedAt;
   const [isOpen, setIsOpen] = useState(comment.isResolved !== true);
-  const [renderBodyOnNextOpen, setRenderBodyOnNextOpen] = useState(false);
+  const [hasRequestedBody, setHasRequestedBody] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const avatarUrl = comment.authorAvatarUrl;
   const showAvatar = avatarUrl !== null && avatarUrl !== failedAvatarUrl;
@@ -190,6 +196,13 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
     openReviewUrl(comment.url, "Failed to open comment");
   };
 
+  const toggleComment = (): void => {
+    if (!isOpen) {
+      setHasRequestedBody(true);
+    }
+    setIsOpen(!isOpen);
+  };
+
   return (
     <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card [--diffs-gap-block:0px] [contain-intrinsic-size:auto_80px] [content-visibility:auto]">
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
@@ -199,12 +212,7 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
           aria-expanded={isOpen}
           aria-label={`${isOpen ? "Collapse" : "Expand"} comment from ${author}`}
           data-state={isOpen ? "open" : "closed"}
-          onClick={() => {
-            if (!isOpen) {
-              setRenderBodyOnNextOpen(true);
-            }
-            setIsOpen(!isOpen);
-          }}
+          onClick={toggleComment}
         >
           <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
             {showAvatar ? (
@@ -284,7 +292,7 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
           </div>
         ) : null}
       </header>
-      {isOpen && (isBodyReady || renderBodyOnNextOpen) ? (
+      {isOpen && (isBodyReady || hasRequestedBody) ? (
         <TaskExecutionCiCommentBody comment={comment} />
       ) : null}
     </article>
