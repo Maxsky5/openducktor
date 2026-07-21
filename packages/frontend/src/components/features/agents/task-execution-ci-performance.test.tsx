@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { PullRequestReviewComment, PullRequestReviewContext } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { type ReactElement, useEffect, useState } from "react";
+import { type PropsWithChildren, type ReactElement, useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
@@ -17,7 +17,6 @@ import {
 const ciQueryInput = {
   repoPath: "/repo",
   taskId: "task-12",
-  workingDirectory: "/tmp/worktree/task-12",
 };
 
 const createPerformanceComment = (index: number): PullRequestReviewComment => ({
@@ -151,27 +150,14 @@ const basePanelModel = {
 } satisfies TaskExecutionPanelModel;
 
 function CiPerformanceHarness({
-  context,
   initiallyOpen,
   initialTabId,
 }: {
-  context: PullRequestReviewContext;
   initiallyOpen: boolean;
   initialTabId: TaskExecutionPanelModel["activeTabId"];
-}): ReactElement | null {
-  const queryClient = useQueryClient();
-  const [seededContext, setSeededContext] = useState<PullRequestReviewContext | null>(null);
+}): ReactElement {
   const [isOpen, setIsOpen] = useState(initiallyOpen);
   const [activeTabId, setActiveTabId] = useState(initialTabId);
-
-  useEffect(() => {
-    queryClient.setQueryData(pullRequestReviewQueryKeys.context(ciQueryInput), context);
-    setSeededContext(context);
-  }, [context, queryClient]);
-
-  if (seededContext !== context) {
-    return null;
-  }
 
   return (
     <>
@@ -201,6 +187,18 @@ function CiPerformanceHarness({
   );
 }
 
+function SeedCiPerformanceContext({
+  children,
+  context,
+}: PropsWithChildren<{ context: PullRequestReviewContext }>): ReactElement {
+  const queryClient = useQueryClient();
+  useState(() => {
+    queryClient.setQueryData(pullRequestReviewQueryKeys.context(ciQueryInput), context);
+    return context;
+  });
+  return <>{children}</>;
+}
+
 const renderCiPerformanceHarness = ({
   comments,
   initiallyOpen,
@@ -213,11 +211,9 @@ const renderCiPerformanceHarness = ({
   render(
     <QueryProvider useIsolatedClient>
       <ThemeProvider defaultTheme="light">
-        <CiPerformanceHarness
-          context={createLoadedCiContext(comments)}
-          initiallyOpen={initiallyOpen}
-          initialTabId={initialTabId}
-        />
+        <SeedCiPerformanceContext context={createLoadedCiContext(comments)}>
+          <CiPerformanceHarness initiallyOpen={initiallyOpen} initialTabId={initialTabId} />
+        </SeedCiPerformanceContext>
       </ThemeProvider>
     </QueryProvider>,
   );

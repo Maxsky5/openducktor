@@ -20,6 +20,11 @@ export type TaskExecutionCiChecksPanelModel = {
 
 type NonLoadedPullRequestReviewContext = Exclude<PullRequestReviewContext, { status: "loaded" }>;
 
+const INACTIVE_QUERY_INPUT: PullRequestReviewContextQueryInput = {
+  repoPath: "__inactive_pr_review__",
+  taskId: "__inactive__",
+};
+
 const pullRequestStateProps = (
   context: NonLoadedPullRequestReviewContext,
 ): TaskExecutionCiPanelStateProps => {
@@ -58,7 +63,7 @@ export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPan
 }): ReactElement {
   const queryInput = model.queryInput;
   const reviewQuery = useQuery({
-    ...pullRequestReviewContextQueryOptions(queryInput ?? { repoPath: "__inactive_pr_review__" }),
+    ...pullRequestReviewContextQueryOptions(queryInput ?? INACTIVE_QUERY_INPUT),
     enabled: model.isActive && queryInput !== null,
   });
 

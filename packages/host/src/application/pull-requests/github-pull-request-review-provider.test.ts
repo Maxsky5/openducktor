@@ -621,6 +621,54 @@ describe("createGithubPullRequestReviewProvider", () => {
     ]);
   });
 
+  test("preserves suggestion markdown when an outdated comment has no line metadata", async () => {
+    const suggestionBody = ["```suggestion", "const enabled = true;", "```"].join("\n");
+    const provider = createGithubPullRequestReviewProvider();
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          pullRequestViewResponse: fairnestPullRequestViewResponse,
+          reviewThreadNodes: [
+            {
+              id: "thread-outdated-suggestion",
+              isResolved: false,
+              comments: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    id: "thread-comment-outdated-suggestion",
+                    author: { login: "reviewer" },
+                    body: suggestionBody,
+                    diffHunk: "@@ -1,1 +1,1 @@\n const enabled = false;",
+                    url: "https://github.com/Maxsky5/fairnest/pull/128#discussion-outdated",
+                    createdAt: "2026-07-08T20:19:39Z",
+                    updatedAt: "2026-07-08T20:19:39Z",
+                    path: "apps/web/src/example.ts",
+                    line: null,
+                    originalLine: null,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "Maxsky5", name: "fairnest" },
+        pullRequestNumber: 128,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    const suggestionComment = context.comments.find(
+      (comment) => comment.id === "thread-comment-outdated-suggestion",
+    );
+    expect(suggestionComment?.body).toBe(suggestionBody);
+    expect(suggestionComment?.suggestionPatches).toEqual([]);
+  });
+
   test("loads every review thread and comment page", async () => {
     const commands: string[][] = [];
     const provider = createGithubPullRequestReviewProvider();

@@ -174,6 +174,13 @@ type TaskExecutionCiCommentCardProps = {
   isBodyReady?: boolean;
 };
 
+type CommentDisclosureState = {
+  commentId: string;
+  hasRequestedBody: boolean;
+  isOpen: boolean;
+  isResolved: boolean | null;
+};
+
 export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCard({
   comment,
   isBot,
@@ -183,8 +190,18 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
   const location = commentLocationLabel(comment);
   const author = comment.author ?? "Unknown author";
   const activityTimestamp = comment.createdAt ?? comment.updatedAt;
-  const [isOpen, setIsOpen] = useState(comment.isResolved !== true);
-  const [hasRequestedBody, setHasRequestedBody] = useState(false);
+  const [disclosure, setDisclosure] = useState<CommentDisclosureState>(() => ({
+    commentId: comment.id,
+    hasRequestedBody: false,
+    isOpen: comment.isResolved !== true,
+    isResolved: comment.isResolved,
+  }));
+  const disclosureIsCurrent =
+    disclosure.commentId === comment.id && disclosure.isResolved === comment.isResolved;
+  const isOpen = disclosureIsCurrent ? disclosure.isOpen : comment.isResolved !== true;
+  const hasRequestedBody = disclosureIsCurrent
+    ? disclosure.hasRequestedBody
+    : disclosure.commentId === comment.id && comment.isResolved !== true;
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const avatarUrl = comment.authorAvatarUrl;
   const showAvatar = avatarUrl !== null && avatarUrl !== failedAvatarUrl;
@@ -197,10 +214,12 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
   };
 
   const toggleComment = (): void => {
-    if (!isOpen) {
-      setHasRequestedBody(true);
-    }
-    setIsOpen(!isOpen);
+    setDisclosure({
+      commentId: comment.id,
+      hasRequestedBody: hasRequestedBody || !isOpen,
+      isOpen: !isOpen,
+      isResolved: comment.isResolved,
+    });
   };
 
   return (

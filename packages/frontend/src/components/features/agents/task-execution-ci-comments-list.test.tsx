@@ -3,6 +3,10 @@ import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import {
+  persistTaskExecutionCiCommentFilters,
+  readTaskExecutionCiCommentFilters,
+} from "./task-execution-ci-comment-filters";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 
 const comment = (id: string, author = "reviewer"): PullRequestReviewComment => ({
@@ -300,6 +304,49 @@ describe("TaskExecutionCiCommentsList", () => {
         restoredView.unmount();
         await frameDriver.flushMicrotasks();
       });
+    });
+  });
+
+  test("reads current persisted filters and rejects malformed storage", async () => {
+    const storage = createMemoryStorage();
+    await withLocalStorage(storage, async () => {
+      persistTaskExecutionCiCommentFilters({ hideResolved: true });
+      expect(readTaskExecutionCiCommentFilters()).toEqual({ hideResolved: true });
+
+      storage.clear();
+      expect(readTaskExecutionCiCommentFilters()).toEqual({ hideResolved: false });
+
+      persistTaskExecutionCiCommentFilters({ hideResolved: true });
+      const storageKey = storage.key(0);
+      expect(storageKey).not.toBeNull();
+      if (storageKey) {
+        storage.setItem(storageKey, "not-json");
+      }
+
+      expect(() => readTaskExecutionCiCommentFilters()).toThrow(
+        "Failed to read persisted CI comment filters",
+      );
+    });
+  });
+
+  test("propagates filter storage access failures", async () => {
+    const readFailure = new Error("storage read failed");
+    const writeFailure = new Error("storage write failed");
+    const storage = createMemoryStorage();
+    storage.getItem = () => {
+      throw readFailure;
+    };
+    storage.setItem = () => {
+      throw writeFailure;
+    };
+
+    await withLocalStorage(storage, async () => {
+      expect(() => readTaskExecutionCiCommentFilters()).toThrow(
+        "Failed to read persisted CI comment filters",
+      );
+      expect(() => persistTaskExecutionCiCommentFilters({ hideResolved: true })).toThrow(
+        "Failed to persist CI comment filters",
+      );
     });
   });
 });

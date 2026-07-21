@@ -146,6 +146,25 @@ test("collapses resolved comments by default and toggles comment bodies", () => 
   expect(unresolvedView.getByText(comment.body)).toBeTruthy();
 });
 
+test("resets the disclosure default when the thread resolution changes", () => {
+  const card = (isResolved: boolean) => (
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={{ ...comment, isResolved }} isBot={false} />
+    </TooltipProvider>
+  );
+  const view = render(card(true));
+
+  expect(view.queryByText(comment.body)).toBeNull();
+
+  view.rerender(card(false));
+
+  expect(view.getByText(comment.body)).toBeTruthy();
+
+  view.rerender(card(true));
+
+  expect(view.queryByText(comment.body)).toBeNull();
+});
+
 test("renders a deferred body immediately when the user expands the comment", () => {
   const deferredComment = {
     ...comment,

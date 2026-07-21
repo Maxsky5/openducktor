@@ -300,7 +300,10 @@ const runOverviewGraphql = (
     "graphql",
     "-f",
     `query=${PULL_REQUEST_REVIEW_OVERVIEW_QUERY}`,
-    ...variables.flatMap(({ name, value }) => ["-F", `${name}=${value}`]),
+    ...variables.flatMap(({ name, value }) => [
+      typeof value === "string" ? "-f" : "-F",
+      `${name}=${value}`,
+    ]),
   ]).pipe(
     Effect.mapError(
       (cause) =>
@@ -342,12 +345,16 @@ export const loadGithubPullRequestReviewOverview = (
       const payload = yield* runOverviewGraphql(input, variables);
       const page = yield* Effect.try({
         try: () => parseOverviewPage(payload, includeComments, includeReviews),
-        catch: (cause) =>
-          new HostValidationError({
+        catch: (cause) => {
+          if (cause instanceof HostValidationError) {
+            return cause;
+          }
+          return new HostValidationError({
             field: "github.pull_request",
             message: errorMessage(cause),
             cause,
-          }),
+          });
+        },
       });
       pullRequest = page.pullRequest;
       comments.push(...page.comments.items);

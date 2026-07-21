@@ -1,7 +1,7 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { PullRequestReviewCheck, PullRequestReviewContext } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -9,7 +9,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import * as externalUrl from "@/lib/open-external-url";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
-import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { host } from "@/state/operations/host";
+import {
+  type PullRequestReviewContextQueryInput,
+  pullRequestReviewQueryKeys,
+} from "@/state/queries/pull-request-review";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
@@ -23,8 +27,7 @@ import { isBotCommentAuthor } from "./task-execution-ci-presentation";
 const queryInput = {
   repoPath: "/repo",
   taskId: "task-12",
-  workingDirectory: "/repo/worktree",
-};
+} satisfies PullRequestReviewContextQueryInput;
 
 const loadedCheck = {
   name: "Unit tests",
@@ -181,6 +184,17 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).not.toContain("h-8 rounded-md bg-muted");
   });
 
+  test("renders the cold inactive state before the first enabled fetch", () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={createQueryClient()}>
+        <TaskExecutionCiChecksPanel model={{ isActive: false, queryInput }} />
+      </QueryClientProvider>,
+    );
+
+    expect(html).toContain("No CI data loaded");
+    expect(html).toContain("has not received a pull request review snapshot yet");
+  });
+
   test("renders an actionable unavailable state with the provider reason", () => {
     const queryClient = createQueryClient();
     queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), noPullRequestContext);
@@ -209,6 +223,34 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("OpenDucktor could not read pull request review data from GitHub.");
     expect(html).toContain("Failed to fetch");
     expect(html).toContain("Retry");
+  });
+
+  test("retries a failed review query through the panel", async () => {
+    const originalReviewContextGet = host.pullRequestReviewContextGet;
+    const reviewContextGet = mock()
+      .mockRejectedValueOnce(new Error("Failed to fetch"))
+      .mockResolvedValueOnce(noPullRequestContext);
+    host.pullRequestReviewContextGet = reviewContextGet;
+
+    try {
+      const view = render(
+        <QueryProvider useIsolatedClient>
+          <TaskExecutionCiChecksPanel model={{ isActive: true, queryInput }} />
+        </QueryProvider>,
+      );
+
+      await waitFor(() => expect(view.getByText("Could not load CI checks")).toBeTruthy(), {
+        timeout: 1_000,
+      });
+      fireEvent.click(view.getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), { timeout: 1_000 });
+      await waitFor(() => expect(view.getByText("No pull request found")).toBeTruthy(), {
+        timeout: 1_000,
+      });
+    } finally {
+      host.pullRequestReviewContextGet = originalReviewContextGet;
+    }
   });
 
   test("renders visible feedback while a state action is pending", () => {

@@ -7,25 +7,21 @@ const DEFAULT_CI_COMMENT_FILTERS: TaskExecutionCiCommentFilters = {
   hideResolved: false,
 };
 
-let cachedFilters:
-  | {
-      filters: TaskExecutionCiCommentFilters;
-      storage: Storage;
-    }
-  | undefined;
-
 const parseFilters = (raw: string | null): TaskExecutionCiCommentFilters => {
-  if (!raw) {
+  if (raw === null) {
     return DEFAULT_CI_COMMENT_FILTERS;
   }
 
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== "object") {
-    return DEFAULT_CI_COMMENT_FILTERS;
+    throw new Error("Persisted CI comment filters are invalid.");
   }
 
   const hideResolved = (parsed as { hideResolved?: unknown }).hideResolved;
-  return typeof hideResolved === "boolean" ? { hideResolved } : DEFAULT_CI_COMMENT_FILTERS;
+  if (typeof hideResolved !== "boolean") {
+    throw new Error("Persisted CI comment filters are invalid.");
+  }
+  return { hideResolved };
 };
 
 export const readTaskExecutionCiCommentFilters = (): TaskExecutionCiCommentFilters => {
@@ -33,19 +29,10 @@ export const readTaskExecutionCiCommentFilters = (): TaskExecutionCiCommentFilte
     return DEFAULT_CI_COMMENT_FILTERS;
   }
 
-  const storage = globalThis.localStorage;
-  if (cachedFilters?.storage === storage) {
-    return cachedFilters.filters;
-  }
-
   try {
-    const filters = parseFilters(storage.getItem(CI_COMMENT_FILTERS_STORAGE_KEY));
-    cachedFilters = { filters, storage };
-    return filters;
-  } catch (error) {
-    console.error("[agent-studio-ci-comments] Failed to read persisted filters.", { error });
-    cachedFilters = { filters: DEFAULT_CI_COMMENT_FILTERS, storage };
-    return DEFAULT_CI_COMMENT_FILTERS;
+    return parseFilters(globalThis.localStorage.getItem(CI_COMMENT_FILTERS_STORAGE_KEY));
+  } catch (cause) {
+    throw new Error("Failed to read persisted CI comment filters.", { cause });
   }
 };
 
@@ -56,11 +43,9 @@ export const persistTaskExecutionCiCommentFilters = (
     return;
   }
 
-  const storage = globalThis.localStorage;
   try {
-    storage.setItem(CI_COMMENT_FILTERS_STORAGE_KEY, JSON.stringify(filters));
-    cachedFilters = { filters, storage };
-  } catch (error) {
-    console.error("[agent-studio-ci-comments] Failed to persist filters.", { error });
+    globalThis.localStorage.setItem(CI_COMMENT_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+  } catch (cause) {
+    throw new Error("Failed to persist CI comment filters.", { cause });
   }
 };

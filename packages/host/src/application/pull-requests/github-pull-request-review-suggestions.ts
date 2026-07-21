@@ -91,10 +91,7 @@ export const parseGithubReviewCommentContent = ({
     return { body: markdownBody, suggestionPatches: [] };
   }
   if (!diffHunk || startLine === null || endLine === null) {
-    throw new HostValidationError({
-      field: "suggestion",
-      message: "GitHub suggestion metadata is missing its diff hunk or line range.",
-    });
+    return { body: body.trim(), suggestionPatches: [] };
   }
 
   return {

@@ -159,6 +159,16 @@ describe("loadGithubPullRequestReviewOverview", () => {
     ]);
     expect(commands).toHaveLength(1);
     expect(commands[0]?.join(" ")).toContain("avatarUrl(size: 64)");
+    const command = commands[0] ?? [];
+    const flagFor = (argument: string): string | undefined => {
+      const index = command.indexOf(argument);
+      return index > 0 ? command[index - 1] : undefined;
+    };
+    expect(flagFor("owner=openai")).toBe("-f");
+    expect(flagFor("name=openducktor")).toBe("-f");
+    expect(flagFor("number=42")).toBe("-F");
+    expect(flagFor("includeComments=true")).toBe("-F");
+    expect(flagFor("includeReviews=true")).toBe("-F");
   });
 
   test("paginates comments and reviews independently without refetching completed connections", async () => {
@@ -250,7 +260,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("github.pull_request");
+      expect(result.left.field).toBe("pullRequest.comments.pageInfo");
     }
   });
 });
