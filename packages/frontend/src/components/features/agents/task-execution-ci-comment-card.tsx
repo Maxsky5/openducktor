@@ -1,6 +1,6 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { ChevronRight, ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
-import type { ComponentProps, MouseEvent, ReactElement, SyntheticEvent } from "react";
+import type { ComponentProps, MouseEvent, ReactElement } from "react";
 import { memo, useState } from "react";
 import type { Components, ExtraProps } from "react-markdown";
 import { toast } from "sonner";
@@ -63,10 +63,6 @@ const CI_COMMENT_MARKDOWN_COMPONENTS: Components = {
   a: TaskExecutionCiMarkdownLink,
 };
 
-const hideFailedAvatar = (event: SyntheticEvent<HTMLImageElement>): void => {
-  event.currentTarget.hidden = true;
-};
-
 function TaskExecutionCiSuggestedChange({
   patch,
   filePath,
@@ -127,6 +123,9 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
   const hasPatch = Boolean(comment.patch?.trim() && filePath);
   const hasSuggestionPatches = comment.suggestionPatches.length > 0 && filePath !== null;
   const [isOpen, setIsOpen] = useState(comment.isResolved !== true);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const avatarUrl = comment.authorAvatarUrl;
+  const showAvatar = avatarUrl !== null && avatarUrl !== failedAvatarUrl;
 
   const openComment = (): void => {
     if (!comment.url) {
@@ -149,23 +148,26 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
           }}
         >
           <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
-            <MessageSquare
-              className="size-3.5"
-              aria-hidden="true"
-              data-testid="ci-comment-avatar-fallback"
-            />
-            {comment.authorAvatarUrl ? (
+            {showAvatar ? (
               <img
-                src={comment.authorAvatarUrl}
+                src={avatarUrl}
                 alt={`${author} avatar`}
                 width={28}
                 height={28}
                 loading="lazy"
                 decoding="async"
-                className="absolute inset-0 size-full object-cover"
-                onError={hideFailedAvatar}
+                className="size-full object-cover"
+                onError={() => {
+                  setFailedAvatarUrl(avatarUrl);
+                }}
               />
-            ) : null}
+            ) : (
+              <MessageSquare
+                className="size-3.5"
+                aria-hidden="true"
+                data-testid="ci-comment-avatar-fallback"
+              />
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -193,10 +195,11 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
                 ) : null}
                 {location ? (
                   <span
-                    className="min-w-0 truncate font-mono text-[11px] text-muted-foreground"
+                    dir="rtl"
+                    className="min-w-0 truncate text-left font-mono text-[11px] text-muted-foreground"
                     title={location}
                   >
-                    {location}
+                    <span dir="ltr">{location}</span>
                   </span>
                 ) : null}
               </div>
