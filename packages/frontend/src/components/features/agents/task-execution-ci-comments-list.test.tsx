@@ -8,6 +8,7 @@ import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 const comment = (id: string, author = "reviewer"): PullRequestReviewComment => ({
   id,
   author,
+  authorAvatarUrl: null,
   body: `Comment ${id}`,
   patch: null,
   suggestionPatches: [],

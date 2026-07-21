@@ -59,6 +59,7 @@ describe("pullRequestReviewContextSchema", () => {
         {
           id: "comment-1",
           author: "reviewer",
+          authorAvatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
           body: "Please adjust this.",
           patch: null,
           suggestionPatches: [],
@@ -82,6 +83,7 @@ describe("pullRequestReviewContextSchema", () => {
   test.each([
     ["pull request URL", ["pullRequest", "url"], "not a URL"],
     ["check URL", ["checks", 0, "url"], "not a URL"],
+    ["comment author avatar URL", ["comments", 0, "authorAvatarUrl"], "not a URL"],
     ["comment timestamp", ["comments", 0, "createdAt"], "yesterday"],
     ["refresh timestamp", ["refreshedAt"], "soon"],
   ])("rejects an invalid %s", (_label, path, value) => {
@@ -112,6 +114,7 @@ describe("pullRequestReviewContextSchema", () => {
         {
           id: "comment-1",
           author: null,
+          authorAvatarUrl: null,
           body: "Done",
           patch: null,
           suggestionPatches: [],

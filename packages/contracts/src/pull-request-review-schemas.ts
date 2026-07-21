@@ -69,6 +69,7 @@ export type PullRequestReviewCheck = z.infer<typeof pullRequestReviewCheckSchema
 export const pullRequestReviewCommentSchema = z.object({
   id: z.string().min(1),
   author: z.string().nullable(),
+  authorAvatarUrl: nullableUrlSchema,
   body: z.string(),
   patch: z.string().nullable(),
   suggestionPatches: z.array(z.string().min(1)),

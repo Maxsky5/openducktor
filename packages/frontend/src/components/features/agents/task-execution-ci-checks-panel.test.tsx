@@ -53,6 +53,7 @@ const loadedContext = {
     {
       id: "thread-comment-1",
       author: "codex",
+      authorAvatarUrl: null,
       body: "**This thread still needs work.** Use `isAnyLoading` before redirecting.",
       patch:
         "@@ -10,3 +10,3 @@\n-const isAnyLoading = isLoading;\n+const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n",

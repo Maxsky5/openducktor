@@ -199,6 +199,7 @@ const CI_INTERACTION_BUDGET_MS = 50;
 const createPerformanceComment = (index: number): PullRequestReviewComment => ({
   id: `performance-comment-${index}`,
   author: index % 2 === 0 ? "reviewer" : "review-bot[bot]",
+  authorAvatarUrl: null,
   body: [
     `## Review comment ${index}`,
     `Performance marker ${index}`,

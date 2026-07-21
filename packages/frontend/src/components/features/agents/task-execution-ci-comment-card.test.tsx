@@ -13,6 +13,7 @@ import {
 const comment: PullRequestReviewComment = {
   id: "comment-1",
   author: "reviewer",
+  authorAvatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
   body: "Please update this.",
   patch: null,
   suggestionPatches: [],
@@ -159,4 +160,26 @@ test("shows the comment header as clickable and vertically centers its actions",
   expect(collapseButton.classList.contains("items-start")).toBe(false);
   expect(externalButton.parentElement?.classList.contains("items-center")).toBe(true);
   expect(externalButton.parentElement?.classList.contains("pt-2")).toBe(false);
+});
+
+test("shows a lazy author avatar and keeps thread status with the file location", () => {
+  const view = render(
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={comment} isBot={false} />
+    </TooltipProvider>,
+  );
+
+  const avatar = view.getByAltText("reviewer avatar") as HTMLImageElement;
+  const status = view.getByText("Unresolved");
+  const location = view.getByText("src/index.ts:1");
+
+  expect(avatar.src).toBe("https://avatars.githubusercontent.com/u/1?v=4");
+  expect(avatar.loading).toBe("lazy");
+  expect(avatar.decoding).toBe("async");
+  expect(status.parentElement === location.parentElement).toBe(true);
+
+  fireEvent.error(avatar);
+
+  expect(avatar.hidden).toBe(true);
+  expect(view.getByTestId("ci-comment-avatar-fallback")).toBeTruthy();
 });

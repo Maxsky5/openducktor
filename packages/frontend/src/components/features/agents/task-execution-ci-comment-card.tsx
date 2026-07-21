@@ -1,6 +1,6 @@
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { ChevronRight, ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
-import type { ComponentProps, MouseEvent, ReactElement } from "react";
+import type { ComponentProps, MouseEvent, ReactElement, SyntheticEvent } from "react";
 import { memo, useState } from "react";
 import type { Components, ExtraProps } from "react-markdown";
 import { toast } from "sonner";
@@ -61,6 +61,10 @@ export function TaskExecutionCiMarkdownLink({
 
 const CI_COMMENT_MARKDOWN_COMPONENTS: Components = {
   a: TaskExecutionCiMarkdownLink,
+};
+
+const hideFailedAvatar = (event: SyntheticEvent<HTMLImageElement>): void => {
+  event.currentTarget.hidden = true;
 };
 
 function TaskExecutionCiSuggestedChange({
@@ -144,11 +148,27 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
             setIsOpen((current) => !current);
           }}
         >
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <MessageSquare className="size-3.5" />
+          <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
+            <MessageSquare
+              className="size-3.5"
+              aria-hidden="true"
+              data-testid="ci-comment-avatar-fallback"
+            />
+            {comment.authorAvatarUrl ? (
+              <img
+                src={comment.authorAvatarUrl}
+                alt={`${author} avatar`}
+                width={28}
+                height={28}
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 size-full object-cover"
+                onError={hideFailedAvatar}
+              />
+            ) : null}
           </div>
           <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-semibold text-foreground">{author}</span>
               {isBot ? (
                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
@@ -156,25 +176,29 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
                 </Badge>
               ) : null}
               {activityTimestamp ? (
-                <span className="text-[11px] text-muted-foreground">
+                <span className="shrink-0 text-[11px] text-muted-foreground">
                   <TaskExecutionCiRelativeTime timestamp={activityTimestamp} />
                 </span>
               ) : null}
-              {showThreadBadge ? (
-                <Badge
-                  variant={comment.isResolved === true ? "success" : "warning"}
-                  className="px-2 py-0 text-[10px]"
-                >
-                  {comment.isResolved === true ? "Resolved" : "Unresolved"}
-                </Badge>
-              ) : null}
             </div>
-            {location ? (
-              <div
-                className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground"
-                title={location}
-              >
-                {location}
+            {showThreadBadge || location ? (
+              <div className="mt-1 flex min-w-0 items-center gap-2">
+                {showThreadBadge ? (
+                  <Badge
+                    variant={comment.isResolved === true ? "success" : "warning"}
+                    className="shrink-0 px-2 py-0 text-[10px]"
+                  >
+                    {comment.isResolved === true ? "Resolved" : "Unresolved"}
+                  </Badge>
+                ) : null}
+                {location ? (
+                  <span
+                    className="min-w-0 truncate font-mono text-[11px] text-muted-foreground"
+                    title={location}
+                  >
+                    {location}
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </div>

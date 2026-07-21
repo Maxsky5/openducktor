@@ -16,6 +16,7 @@ import { combinedCommandOutput } from "../tasks/support/github-pull-request-mode
 import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
 import { runGithubRepositoryCommand } from "../tasks/support/github-pull-requests";
 import { runGithubRepositoryCommandAllowFailure } from "../tasks/support/github-repository-command";
+import { loadGithubReviewAuthorAvatars } from "./github-pull-request-review-author-avatars";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 
 type GithubCheckPayload = {
@@ -256,6 +257,7 @@ const toComment = (
   return {
     id: toNullableString(payload.id) ?? fallbackId,
     author: toNullableString(payload.author?.login),
+    authorAvatarUrl: null,
     body,
     patch: null,
     suggestionPatches: [],
@@ -338,7 +340,7 @@ const parsePullView = (
 export const createGithubPullRequestReviewProvider = (): GithubPullRequestReviewProvider => ({
   read(input) {
     return Effect.gen(function* () {
-      const [pullViewPayload, checksPayload, reviewThreads] = yield* Effect.all(
+      const [pullViewPayload, checksPayload, reviewThreads, authorAvatarUrls] = yield* Effect.all(
         [
           runGithubRepositoryCommand(input.dependencies, input.repoPath, input.repository, [
             "pr",
@@ -397,6 +399,7 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             ),
           ),
           loadGithubReviewThreads(input),
+          loadGithubReviewAuthorAvatars(input),
         ],
         { concurrency: "unbounded" },
       );
@@ -426,7 +429,13 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             pullRequest: view.pullRequest,
             aggregateStatus: aggregateChecks(checks),
             checks,
-            comments: [...view.comments, ...reviewThreads.comments],
+            comments: [
+              ...view.comments.map((comment) => ({
+                ...comment,
+                authorAvatarUrl: authorAvatarUrls.get(comment.id) ?? null,
+              })),
+              ...reviewThreads.comments,
+            ],
             reviewThreads: reviewThreads.summary,
             refreshedAt: new Date().toISOString(),
           }),

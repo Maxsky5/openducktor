@@ -14,7 +14,7 @@ type GithubGraphqlPageInfoPayload = {
 
 type GithubGraphqlReviewThreadCommentPayload = {
   id?: unknown;
-  author?: { login?: unknown } | null;
+  author?: { login?: unknown; avatarUrl?: unknown } | null;
   body?: unknown;
   diffHunk?: unknown;
   createdAt?: unknown;
@@ -77,6 +77,7 @@ const REVIEW_THREAD_COMMENT_FIELDS = `
   id
   author {
     login
+    avatarUrl(size: 64)
   }
   body
   diffHunk
@@ -218,6 +219,7 @@ const toReviewThreadComment = (
   return {
     id: requireString(payload.id, "id"),
     author: toNullableString(payload.author?.login),
+    authorAvatarUrl: toNullableString(payload.author?.avatarUrl),
     body: content.body,
     patch,
     suggestionPatches: content.suggestionPatches,
