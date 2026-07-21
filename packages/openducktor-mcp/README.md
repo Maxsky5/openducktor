@@ -60,9 +60,9 @@ Automatic discovery:
 
 - With `OPENDUCKTOR_CHANNEL` unset, the MCP reads `runtime/mcp-bridge.json` for the production host.
 - With `OPENDUCKTOR_CHANNEL=dev`, the MCP reads `runtime/mcp-bridge-dev.json` for a development host.
-- When automatic discovery is used, empty or unknown channel values fail. The MCP never tries the other channel's descriptor.
+- The MCP rejects empty or unknown channel values during automatic discovery. It never tries the other channel's descriptor.
 - The default config directory is `~/.openducktor`.
-- `OPENDUCKTOR_CONFIG_DIR`, when set, changes the config root for the selected descriptor.
+- Set `OPENDUCKTOR_CONFIG_DIR` to change the config root for the selected descriptor.
 
 Connect to a source development host with:
 
