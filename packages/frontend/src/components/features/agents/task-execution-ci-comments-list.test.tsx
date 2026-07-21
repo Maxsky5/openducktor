@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { PullRequestReviewComment } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { withAnimationFrameTestDriver } from "./agent-chat/test-support/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 
 const comment = (id: string, author = "reviewer"): PullRequestReviewComment => ({
@@ -168,36 +168,26 @@ describe("TaskExecutionCiCommentsList", () => {
     });
   });
 
-  test("renders one comment per frame and restarts staging when the filter changes", async () => {
+  test("renders every header immediately and stages comment bodies in bounded batches", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
-      render(
-        commentsList([
-          comment("human-one"),
-          comment("bot", "review-bot[bot]"),
-          comment("human-two"),
-        ]),
-      );
+      const comments = Array.from({ length: 10 }, (_, index) => comment(String(index)));
+      render(commentsList(comments));
 
-      expect(screen.queryByText("Comment human-one")).toBeNull();
+      expect(screen.getAllByRole("article")).toHaveLength(10);
+      expect(screen.queryByText("Comment 0")).toBeNull();
       expect(screen.queryByText(/Rendering \d+ of/) === null).toBe(true);
       expect(frameDriver.pendingFrameCount()).toBe(1);
 
       await frameDriver.flushFrame();
 
-      expect(screen.getByText("Comment human-one")).toBeTruthy();
-      expect(screen.queryByText("Comment bot")).toBeNull();
+      expect(screen.getByText("Comment 0")).toBeTruthy();
+      expect(screen.getByText("Comment 3")).toBeTruthy();
+      expect(screen.queryByText("Comment 4")).toBeNull();
       expect(frameDriver.pendingFrameCount()).toBe(1);
 
-      fireEvent.click(screen.getByRole("button", { name: /Bots/ }));
+      await frameDriver.flushFrames();
 
-      expect(screen.queryByText("Comment bot")).toBeNull();
-      expect(screen.queryByText(/Rendering \d+ of/) === null).toBe(true);
-      expect(frameDriver.pendingFrameCount()).toBe(1);
-
-      await frameDriver.flushFrame();
-
-      expect(screen.getByText("Comment bot")).toBeTruthy();
-      expect(screen.queryByText(/Rendering \d+ of/)).toBeNull();
+      expect(screen.getByText("Comment 9")).toBeTruthy();
       expect(frameDriver.pendingFrameCount()).toBe(0);
     });
   });
@@ -219,7 +209,9 @@ describe("TaskExecutionCiCommentsList", () => {
 
   test("cancels the next staged frame when the list unmounts", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
-      const view = render(commentsList([comment("one"), comment("two")]));
+      const view = render(
+        commentsList(Array.from({ length: 8 }, (_, index) => comment(String(index)))),
+      );
 
       await frameDriver.flushFrame();
       expect(frameDriver.pendingFrameCount()).toBe(1);

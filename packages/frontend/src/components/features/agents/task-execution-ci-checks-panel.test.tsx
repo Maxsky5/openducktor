@@ -10,7 +10,7 @@ import * as externalUrl from "@/lib/open-external-url";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
-import { withAnimationFrameTestDriver } from "./agent-chat/test-support/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
 import {

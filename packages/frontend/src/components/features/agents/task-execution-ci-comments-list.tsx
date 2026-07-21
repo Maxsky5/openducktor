@@ -31,6 +31,8 @@ const COMMENT_FILTERS: Array<{ id: CommentFilter; label: string }> = [
   { id: "bots", label: "Bots" },
 ];
 
+const COMMENT_BODY_BATCH_SIZE = 4;
+
 const commentTimestamp = (comment: PullRequestReviewComment): number => {
   const timestamp = Date.parse(comment.createdAt ?? comment.updatedAt ?? "");
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
@@ -89,30 +91,49 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
     () => filterComments(deferredComments, deferredFilter, deferredHideResolved),
     [deferredComments, deferredFilter, deferredHideResolved],
   );
-  const [renderedCommentIds, setRenderedCommentIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  const renderedComments = useMemo(
-    () => visibleComments.filter((comment) => renderedCommentIds.has(comment.id)),
-    [renderedCommentIds, visibleComments],
-  );
-  const nextUnrenderedCommentId = visibleComments.find(
-    (comment) => !renderedCommentIds.has(comment.id),
-  )?.id;
+  const [readyBodyIds, setReadyBodyIds] = useState<ReadonlySet<string>>(() => new Set());
+  const nextBodyBatchIds = useMemo(() => {
+    const batchIds: string[] = [];
+    for (const comment of visibleComments) {
+      if (comment.isResolved === true || readyBodyIds.has(comment.id)) {
+        continue;
+      }
+      batchIds.push(comment.id);
+      if (batchIds.length === COMMENT_BODY_BATCH_SIZE) {
+        break;
+      }
+    }
+    return batchIds;
+  }, [readyBodyIds, visibleComments]);
 
   useEffect(() => {
-    if (!nextUnrenderedCommentId) {
+    const currentCommentIds = new Set(comments.map((comment) => comment.id));
+    setReadyBodyIds((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+      const retainedIds = new Set<string>();
+      for (const id of current) {
+        if (currentCommentIds.has(id)) {
+          retainedIds.add(id);
+        }
+      }
+      return retainedIds.size === current.size ? current : retainedIds;
+    });
+  }, [comments]);
+
+  useEffect(() => {
+    if (nextBodyBatchIds.length === 0) {
       return;
     }
 
     const frameId = globalThis.requestAnimationFrame(() => {
       startTransition(() => {
-        setRenderedCommentIds((current) => {
-          if (current.has(nextUnrenderedCommentId)) {
-            return current;
-          }
+        setReadyBodyIds((current) => {
           const next = new Set(current);
-          next.add(nextUnrenderedCommentId);
+          for (const id of nextBodyBatchIds) {
+            next.add(id);
+          }
           return next;
         });
       });
@@ -121,7 +142,7 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
     return () => {
       globalThis.cancelAnimationFrame(frameId);
     };
-  }, [nextUnrenderedCommentId]);
+  }, [nextBodyBatchIds]);
 
   const updateHideResolved = (hideResolved: boolean): void => {
     const nextFilters = { hideResolved };
@@ -209,11 +230,12 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                {renderedComments.map((comment) => (
+                {visibleComments.map((comment) => (
                   <TaskExecutionCiCommentCard
                     key={comment.id}
                     comment={comment}
                     isBot={isBotCommentAuthor(comment.author)}
+                    isBodyReady={readyBodyIds.has(comment.id)}
                   />
                 ))}
               </div>

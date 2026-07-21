@@ -4,19 +4,15 @@ import {
   type PullRequestReviewCheck,
   type PullRequestReviewCheckConclusion,
   type PullRequestReviewCheckStatus,
-  type PullRequestReviewComment,
   type PullRequestReviewContext,
-  type PullRequestReviewPullRequest,
-  type PullRequestReviewState,
   pullRequestReviewContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import { combinedCommandOutput } from "../tasks/support/github-pull-request-model";
 import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
-import { runGithubRepositoryCommand } from "../tasks/support/github-pull-requests";
 import { runGithubRepositoryCommandAllowFailure } from "../tasks/support/github-repository-command";
-import { loadGithubReviewAuthorAvatars } from "./github-pull-request-review-author-avatars";
+import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 
 type GithubCheckPayload = {
@@ -29,35 +25,6 @@ type GithubCheckPayload = {
   startedAt?: unknown;
   state?: unknown;
   workflow?: unknown;
-};
-
-type GithubCommentPayload = {
-  id?: unknown;
-  author?: { login?: unknown } | null;
-  body?: unknown;
-  createdAt?: unknown;
-  submittedAt?: unknown;
-  updatedAt?: unknown;
-  url?: unknown;
-  path?: unknown;
-  line?: unknown;
-};
-
-type GithubReviewPayload = GithubCommentPayload & {
-  submittedAt?: unknown;
-  state?: unknown;
-  comments?: unknown;
-};
-
-type GithubPullViewPayload = {
-  number?: unknown;
-  title?: unknown;
-  url?: unknown;
-  state?: unknown;
-  isDraft?: unknown;
-  comments?: unknown;
-  reviews?: unknown;
-  latestReviews?: unknown;
 };
 
 type GithubPullRequestReviewReadInput = {
@@ -85,9 +52,6 @@ const isNoChecksReported = (result: {
 const toNullableString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value : null;
 
-const toNullableNumber = (value: unknown): number | null =>
-  typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
-
 const requireString = (value: unknown, field: string): string => {
   const parsed = toNullableString(value);
   if (!parsed) {
@@ -97,22 +61,6 @@ const requireString = (value: unknown, field: string): string => {
     });
   }
   return parsed;
-};
-
-const requirePositiveNumber = (value: unknown, field: string): number => {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number.parseInt(value, 10);
-    if (Number.isInteger(parsed) && parsed > 0) {
-      return parsed;
-    }
-  }
-  throw new HostValidationError({
-    field,
-    message: `GitHub pull request review field '${field}' is missing or invalid.`,
-  });
 };
 
 const parseJson = (payload: string, label: string): unknown => {
@@ -125,20 +73,6 @@ const parseJson = (payload: string, label: string): unknown => {
       cause,
     });
   }
-};
-
-const normalizeReviewState = (state: unknown, isDraft: unknown): PullRequestReviewState => {
-  const normalized = typeof state === "string" ? state.trim().toLowerCase() : "";
-  if (isDraft === true && normalized === "open") {
-    return "draft";
-  }
-  if (normalized === "merged") {
-    return "merged";
-  }
-  if (normalized === "closed") {
-    return "closed";
-  }
-  return "open";
 };
 
 const normalizeCheckStatus = (state: unknown): PullRequestReviewCheckStatus => {
@@ -245,120 +179,12 @@ const aggregateChecks = (
   return "neutral";
 };
 
-const toComment = (
-  payload: GithubCommentPayload,
-  source: PullRequestReviewComment["source"],
-  fallbackId: string,
-): PullRequestReviewComment | null => {
-  const body = typeof payload.body === "string" ? payload.body : "";
-  if (!body.trim()) {
-    return null;
-  }
-  return {
-    id: toNullableString(payload.id) ?? fallbackId,
-    author: toNullableString(payload.author?.login),
-    authorAvatarUrl: null,
-    body,
-    patch: null,
-    suggestionPatches: [],
-    url: toNullableString(payload.url),
-    createdAt: toNullableString(payload.createdAt) ?? toNullableString(payload.submittedAt),
-    updatedAt: toNullableString(payload.updatedAt),
-    path: toNullableString(payload.path),
-    line: toNullableNumber(payload.line),
-    threadId: null,
-    isResolved: null,
-    source,
-  };
-};
-
-const parsePullView = (
-  payload: string,
-): {
-  pullRequest: PullRequestReviewPullRequest;
-  comments: PullRequestReviewComment[];
-} => {
-  const parsed = parseJson(payload, "pull request view");
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new HostValidationError({
-      field: "payload",
-      message: "Failed to parse GitHub pull request view response: expected an object.",
-    });
-  }
-  const view = parsed as GithubPullViewPayload;
-  const comments: PullRequestReviewComment[] = [];
-  const issueComments = Array.isArray(view.comments) ? view.comments : [];
-  for (const [commentIndex, comment] of issueComments.entries()) {
-    const normalized = toComment(
-      comment as GithubCommentPayload,
-      "comment",
-      `github-comment:${commentIndex}`,
-    );
-    if (normalized) {
-      comments.push(normalized);
-    }
-  }
-  const reviews = Array.isArray(view.reviews)
-    ? view.reviews
-    : Array.isArray(view.latestReviews)
-      ? view.latestReviews
-      : [];
-  for (const [reviewIndex, review] of reviews.entries()) {
-    const normalized = toComment(
-      review as GithubReviewPayload,
-      "review",
-      `github-review:${reviewIndex}`,
-    );
-    if (normalized) {
-      comments.push(normalized);
-    }
-    const reviewComments = (review as GithubReviewPayload).comments;
-    const reviewCommentList = Array.isArray(reviewComments) ? reviewComments : [];
-    for (const [reviewCommentIndex, reviewComment] of reviewCommentList.entries()) {
-      const normalizedReviewComment = toComment(
-        reviewComment as GithubCommentPayload,
-        "review",
-        `github-review:${reviewIndex}:comment:${reviewCommentIndex}`,
-      );
-      if (normalizedReviewComment) {
-        comments.push(normalizedReviewComment);
-      }
-    }
-  }
-  return {
-    pullRequest: {
-      providerId: "github",
-      number: requirePositiveNumber(view.number, "number"),
-      title: requireString(view.title, "title"),
-      url: requireString(view.url, "url"),
-      state: normalizeReviewState(view.state, view.isDraft),
-    },
-    comments,
-  };
-};
-
 export const createGithubPullRequestReviewProvider = (): GithubPullRequestReviewProvider => ({
   read(input) {
     return Effect.gen(function* () {
-      const [pullViewPayload, checksPayload, reviewThreads, authorAvatarUrls] = yield* Effect.all(
+      const [overview, checksPayload, reviewThreads] = yield* Effect.all(
         [
-          runGithubRepositoryCommand(input.dependencies, input.repoPath, input.repository, [
-            "pr",
-            "view",
-            String(input.pullRequestNumber),
-            "--json",
-            "number,title,url,state,isDraft,comments,reviews,latestReviews",
-          ]).pipe(
-            Effect.mapError(
-              (cause) =>
-                new HostValidationError({
-                  field: "github.pull_request",
-                  message: errorMessage(cause),
-                  cause,
-                  details: { pullRequestNumber: input.pullRequestNumber },
-                }),
-            ),
-          ),
+          loadGithubPullRequestReviewOverview(input),
           runGithubRepositoryCommandAllowFailure(
             input.dependencies,
             input.repoPath,
@@ -399,19 +225,9 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
             ),
           ),
           loadGithubReviewThreads(input),
-          loadGithubReviewAuthorAvatars(input),
         ],
         { concurrency: "unbounded" },
       );
-      const view = yield* Effect.try({
-        try: () => parsePullView(pullViewPayload),
-        catch: (cause) =>
-          new HostValidationError({
-            field: "github.pull_request",
-            message: errorMessage(cause),
-            cause,
-          }),
-      });
       const checks = yield* Effect.try({
         try: () => parseChecks(checksPayload),
         catch: (cause) =>
@@ -426,16 +242,10 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
           pullRequestReviewContextSchema.parse({
             status: "loaded",
             providerId: "github",
-            pullRequest: view.pullRequest,
+            pullRequest: overview.pullRequest,
             aggregateStatus: aggregateChecks(checks),
             checks,
-            comments: [
-              ...view.comments.map((comment) => ({
-                ...comment,
-                authorAvatarUrl: authorAvatarUrls.get(comment.id) ?? null,
-              })),
-              ...reviewThreads.comments,
-            ],
+            comments: [...overview.comments, ...reviewThreads.comments],
             reviewThreads: reviewThreads.summary,
             refreshedAt: new Date().toISOString(),
           }),

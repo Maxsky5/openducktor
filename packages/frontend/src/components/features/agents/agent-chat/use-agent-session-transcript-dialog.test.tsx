@@ -23,6 +23,7 @@ import {
   createSessionMessagesState,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import {
   createAgentSessionFixture,
   createChatSettingsFixture,
@@ -40,7 +41,6 @@ import {
   useAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
-import { withAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript-dialog";
 
 const transcriptTarget: AgentSessionTranscriptTarget = {

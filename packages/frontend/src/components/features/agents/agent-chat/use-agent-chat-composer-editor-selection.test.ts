@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { RefObject } from "react";
+import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createFileReferenceSegment, createTextSegment } from "./agent-chat-composer-draft";
-import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import {
   type ActiveTextSelection,
   deriveTextSelectionTargetAfterInput,

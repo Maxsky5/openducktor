@@ -146,6 +146,26 @@ test("collapses resolved comments by default and toggles comment bodies", () => 
   expect(unresolvedView.getByText(comment.body)).toBeTruthy();
 });
 
+test("renders a deferred body immediately when the user expands the comment", () => {
+  const deferredComment = {
+    ...comment,
+    body: "Deferred review guidance.",
+  };
+  const view = render(
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard comment={deferredComment} isBot={false} isBodyReady={false} />
+    </TooltipProvider>,
+  );
+
+  expect(view.queryByText(deferredComment.body)).toBeNull();
+
+  fireEvent.click(view.getByRole("button", { name: "Collapse comment from reviewer" }));
+
+  fireEvent.click(view.getByRole("button", { name: "Expand comment from reviewer" }));
+
+  expect(view.getByText(deferredComment.body)).toBeTruthy();
+});
+
 test("shows the comment header as clickable and vertically centers its actions", () => {
   const view = render(
     <TooltipProvider>

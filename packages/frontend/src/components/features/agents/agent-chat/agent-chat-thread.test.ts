@@ -4,6 +4,10 @@ import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  createAnimationFrameTestDriver,
+  withAnimationFrameTestDriver,
+} from "@/test-utils/animation-frame-test-driver";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
@@ -19,10 +23,6 @@ import {
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
-import {
-  createAnimationFrameTestDriver,
-  withAnimationFrameTestDriver,
-} from "./test-support/animation-frame-test-driver";
 
 (
   globalThis as typeof globalThis & {

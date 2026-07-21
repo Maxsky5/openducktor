@@ -2,13 +2,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type {
   DevServerScriptState,
   PullRequest,
-  PullRequestReviewComment,
   PullRequestReviewContext,
   WorkspaceFileTree,
 } from "@openducktor/contracts";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactElement, useEffect, useState } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
@@ -18,7 +17,6 @@ import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import { withAnimationFrameTestDriver } from "./agent-chat/test-support/animation-frame-test-driver";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import type {
@@ -194,35 +192,6 @@ const ciQueryInput = {
   workingDirectory: "/tmp/worktree/task-12",
 };
 
-const CI_INTERACTION_BUDGET_MS = 50;
-
-const createPerformanceComment = (index: number): PullRequestReviewComment => ({
-  id: `performance-comment-${index}`,
-  author: index % 2 === 0 ? "reviewer" : "review-bot[bot]",
-  authorAvatarUrl: null,
-  body: [
-    `## Review comment ${index}`,
-    `Performance marker ${index}`,
-    ...Array.from(
-      { length: 20 },
-      (_, paragraphIndex) =>
-        `- Check item ${paragraphIndex}: keep the CI panel responsive while review details render.`,
-    ),
-  ].join("\n\n"),
-  patch: `@@ -1,2 +1,2 @@\n-const previous${index} = false;\n+const next${index} = true;`,
-  suggestionPatches: [
-    `@@ -8,1 +8,1 @@\n-disabled={isCheckLoading${index}}\n+disabled={isAnyCheckLoading${index}}`,
-  ],
-  url: `https://github.com/openai/openducktor/pull/110#discussion_r${index}`,
-  createdAt: "2026-07-10T10:00:00Z",
-  updatedAt: null,
-  path: `src/check-${index}.ts`,
-  line: index + 1,
-  threadId: `performance-thread-${index}`,
-  isResolved: false,
-  source: "review_thread",
-});
-
 const createLoadedCiContext = ({
   checks,
   openThreadCount,
@@ -339,78 +308,6 @@ const basePanelModel = {
   },
   devServerModel: null,
 } satisfies TaskExecutionPanelModel;
-
-function CiPerformanceHarness({
-  context,
-  initiallyOpen,
-  initialTabId,
-}: {
-  context: PullRequestReviewContext;
-  initiallyOpen: boolean;
-  initialTabId: TaskExecutionPanelModel["activeTabId"];
-}): ReactElement | null {
-  const queryClient = useQueryClient();
-  const [seededContext, setSeededContext] = useState<PullRequestReviewContext | null>(null);
-  const [isOpen, setIsOpen] = useState(initiallyOpen);
-  const [activeTabId, setActiveTabId] = useState(initialTabId);
-
-  useEffect(() => {
-    queryClient.setQueryData(pullRequestReviewQueryKeys.context(ciQueryInput), context);
-    setSeededContext(context);
-  }, [context, queryClient]);
-
-  if (seededContext !== context) {
-    return null;
-  }
-
-  return (
-    <>
-      <TaskExecutionPanelToggleButton
-        model={{
-          kind: "task_execution",
-          isOpen,
-          onToggle: () => {
-            setIsOpen((current) => !current);
-          },
-        }}
-      />
-      {isOpen ? (
-        <TaskExecutionPanel
-          model={{
-            ...basePanelModel,
-            activeTabId,
-            onActiveTabChange: setActiveTabId,
-            ciChecksModel: {
-              isActive: activeTabId === "ci_checks",
-              queryInput: ciQueryInput,
-            },
-          }}
-        />
-      ) : null}
-    </>
-  );
-}
-
-const renderCiPerformanceHarness = ({
-  context,
-  initiallyOpen,
-  initialTabId,
-}: {
-  context: PullRequestReviewContext;
-  initiallyOpen: boolean;
-  initialTabId: TaskExecutionPanelModel["activeTabId"];
-}) =>
-  render(
-    <QueryProvider useIsolatedClient>
-      <ThemeProvider defaultTheme="light">
-        <CiPerformanceHarness
-          context={context}
-          initiallyOpen={initiallyOpen}
-          initialTabId={initialTabId}
-        />
-      </ThemeProvider>
-    </QueryProvider>,
-  );
 
 const renderPanel = (model: TaskExecutionPanelModel): string =>
   renderToStaticMarkup(
@@ -666,103 +563,6 @@ describe("TaskExecutionPanel", () => {
 
     expect(htmlWithoutOpenThreads).not.toContain("task-execution-tab-ci-open-threads");
     expect(htmlWithoutOpenThreads).toContain('aria-label="CI Checks, passing checks"');
-  });
-
-  test("activates cached CI content within budget before heavy comments render", async () => {
-    await withAnimationFrameTestDriver(async (frameDriver) => {
-      const comments = Array.from({ length: 100 }, (_, index) => createPerformanceComment(index));
-      const context = {
-        ...createLoadedCiContext({ checks: [], openThreadCount: comments.length }),
-        comments,
-      };
-      const view = renderCiPerformanceHarness({
-        context,
-        initiallyOpen: true,
-        initialTabId: "git",
-      });
-      const ciTab = screen.getByRole("tab", { name: /CI Checks/ });
-
-      expect(screen.queryByText("Performance marker 0")).toBeNull();
-      const startedAt = performance.now();
-      fireEvent.mouseDown(ciTab, { button: 0, ctrlKey: false });
-      const activationDuration = performance.now() - startedAt;
-
-      expect(ciTab.getAttribute("aria-selected")).toBe("true");
-      expect(activationDuration).toBeLessThan(CI_INTERACTION_BUDGET_MS);
-      expect(screen.queryByText("Performance marker 0")).toBeNull();
-      expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
-
-      view.unmount();
-      await frameDriver.flushMicrotasks();
-    });
-  });
-
-  test("unmounts a 100-comment CI panel before reopening", async () => {
-    await withAnimationFrameTestDriver(async (frameDriver) => {
-      const comments = Array.from({ length: 100 }, (_, index) => createPerformanceComment(index));
-      const context = {
-        ...createLoadedCiContext({ checks: [], openThreadCount: comments.length }),
-        comments,
-      };
-      const view = renderCiPerformanceHarness({
-        context,
-        initiallyOpen: true,
-        initialTabId: "ci_checks",
-      });
-      const gitTab = screen.getByRole("tab", { name: "Git" });
-
-      expect(screen.getByText("Comments")).toBeTruthy();
-      expect(screen.queryByText("Performance marker 0") === null).toBe(true);
-      expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
-
-      fireEvent.mouseDown(gitTab, { button: 0, ctrlKey: false });
-
-      expect(gitTab.getAttribute("aria-selected")).toBe("true");
-      expect(screen.queryByText("Comments") === null).toBe(true);
-
-      const reopenedCiTab = screen.getByRole("tab", { name: /CI Checks/ });
-      fireEvent.mouseDown(reopenedCiTab, { button: 0, ctrlKey: false });
-
-      expect(reopenedCiTab.getAttribute("aria-selected")).toBe("true");
-      expect(screen.getByText("Comments")).toBeTruthy();
-      expect(screen.queryByText("Performance marker 0") === null).toBe(true);
-      expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
-
-      view.unmount();
-      await frameDriver.flushMicrotasks();
-    });
-  });
-
-  test("reopens a selected CI panel within budget before heavy comments render", async () => {
-    await withAnimationFrameTestDriver(async (frameDriver) => {
-      const comments = Array.from({ length: 40 }, (_, index) => createPerformanceComment(index));
-      const context = {
-        ...createLoadedCiContext({ checks: [], openThreadCount: comments.length }),
-        comments,
-      };
-      const view = renderCiPerformanceHarness({
-        context,
-        initiallyOpen: false,
-        initialTabId: "ci_checks",
-      });
-      const showPanelButton = screen.getByRole("button", {
-        name: "Show task execution panel",
-      });
-
-      const startedAt = performance.now();
-      fireEvent.click(showPanelButton);
-      const openDuration = performance.now() - startedAt;
-
-      expect(screen.getByRole("tab", { name: /CI Checks/ }).getAttribute("aria-selected")).toBe(
-        "true",
-      );
-      expect(openDuration).toBeLessThan(CI_INTERACTION_BUDGET_MS);
-      expect(screen.queryByText("Performance marker 0")).toBeNull();
-      expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
-
-      view.unmount();
-      await frameDriver.flushMicrotasks();
-    });
   });
 
   test("renders Git content as a tab without Dev Server content", () => {

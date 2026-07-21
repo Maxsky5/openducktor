@@ -63,7 +63,7 @@ const CI_COMMENT_MARKDOWN_COMPONENTS: Components = {
   a: TaskExecutionCiMarkdownLink,
 };
 
-function TaskExecutionCiSuggestedChange({
+const TaskExecutionCiSuggestedChange = memo(function TaskExecutionCiSuggestedChange({
   patch,
   filePath,
   position,
@@ -105,24 +105,80 @@ function TaskExecutionCiSuggestedChange({
       </div>
     </section>
   );
-}
+});
+
+const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
+  comment,
+}: {
+  comment: PullRequestReviewComment;
+}): ReactElement {
+  const filePath = comment.path;
+  const hasBody = comment.body.trim().length > 0;
+  const hasPatch = Boolean(comment.patch?.trim() && filePath);
+  const hasSuggestionPatches = comment.suggestionPatches.length > 0 && filePath !== null;
+
+  return (
+    <div>
+      {hasPatch && filePath && comment.patch ? (
+        <div
+          className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
+          data-testid="ci-review-comment-diff"
+        >
+          <PierrePreloadedDiffViewer
+            patch={comment.patch}
+            filePath={filePath}
+            diffStyle="unified"
+            diffIndicators="bars"
+            lineOverflow="wrap"
+            hunkSeparators="simple"
+          />
+        </div>
+      ) : null}
+      {hasBody ? (
+        <div className="min-w-0 overflow-hidden border-t border-border px-3 py-1">
+          <MarkdownRenderer
+            markdown={comment.body}
+            variant="compact"
+            components={CI_COMMENT_MARKDOWN_COMPONENTS}
+            className="min-w-0 break-words prose-p:break-words prose-li:break-words prose-code:break-words prose-pre:max-w-full prose-pre:whitespace-pre-wrap prose-pre:break-words prose-blockquote:break-words [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words"
+          />
+        </div>
+      ) : null}
+      {hasSuggestionPatches && filePath
+        ? comment.suggestionPatches.map((suggestionPatch, index) => (
+            <TaskExecutionCiSuggestedChange
+              key={suggestionPatch}
+              patch={suggestionPatch}
+              filePath={filePath}
+              position={index + 1}
+              total={comment.suggestionPatches.length}
+            />
+          ))
+        : null}
+      {!hasBody && !hasPatch && !hasSuggestionPatches ? (
+        <p className="border-t border-border px-3 py-3 text-sm text-muted-foreground">
+          No comment body.
+        </p>
+      ) : null}
+    </div>
+  );
+});
 
 export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCard({
   comment,
   isBot,
+  isBodyReady = true,
 }: {
   comment: PullRequestReviewComment;
   isBot: boolean;
+  isBodyReady?: boolean;
 }): ReactElement {
   const showThreadBadge = comment.isResolved !== null;
   const location = commentLocationLabel(comment);
   const author = comment.author ?? "Unknown author";
   const activityTimestamp = comment.createdAt ?? comment.updatedAt;
-  const filePath = comment.path;
-  const hasBody = comment.body.trim().length > 0;
-  const hasPatch = Boolean(comment.patch?.trim() && filePath);
-  const hasSuggestionPatches = comment.suggestionPatches.length > 0 && filePath !== null;
   const [isOpen, setIsOpen] = useState(comment.isResolved !== true);
+  const [renderBodyOnNextOpen, setRenderBodyOnNextOpen] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const avatarUrl = comment.authorAvatarUrl;
   const showAvatar = avatarUrl !== null && avatarUrl !== failedAvatarUrl;
@@ -135,7 +191,7 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
   };
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card [--diffs-gap-block:0px]">
+    <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card [--diffs-gap-block:0px] [contain-intrinsic-size:auto_80px] [content-visibility:auto]">
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
         <button
           type="button"
@@ -144,7 +200,10 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
           aria-label={`${isOpen ? "Collapse" : "Expand"} comment from ${author}`}
           data-state={isOpen ? "open" : "closed"}
           onClick={() => {
-            setIsOpen((current) => !current);
+            if (!isOpen) {
+              setRenderBodyOnNextOpen(true);
+            }
+            setIsOpen(!isOpen);
           }}
         >
           <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
@@ -225,50 +284,8 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
           </div>
         ) : null}
       </header>
-      {isOpen ? (
-        <div>
-          {hasPatch && filePath && comment.patch ? (
-            <div
-              className="min-w-0 overflow-hidden border-t border-border bg-muted/20"
-              data-testid="ci-review-comment-diff"
-            >
-              <PierrePreloadedDiffViewer
-                patch={comment.patch}
-                filePath={filePath}
-                diffStyle="unified"
-                diffIndicators="bars"
-                lineOverflow="wrap"
-                hunkSeparators="simple"
-              />
-            </div>
-          ) : null}
-          {hasBody ? (
-            <div className="min-w-0 overflow-hidden border-t border-border px-3 py-1">
-              <MarkdownRenderer
-                markdown={comment.body}
-                variant="compact"
-                components={CI_COMMENT_MARKDOWN_COMPONENTS}
-                className="min-w-0 break-words prose-p:break-words prose-li:break-words prose-code:break-words prose-pre:max-w-full prose-pre:whitespace-pre-wrap prose-pre:break-words prose-blockquote:break-words [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words"
-              />
-            </div>
-          ) : null}
-          {hasSuggestionPatches && filePath
-            ? comment.suggestionPatches.map((suggestionPatch, index) => (
-                <TaskExecutionCiSuggestedChange
-                  key={suggestionPatch}
-                  patch={suggestionPatch}
-                  filePath={filePath}
-                  position={index + 1}
-                  total={comment.suggestionPatches.length}
-                />
-              ))
-            : null}
-          {!hasBody && !hasPatch && !hasSuggestionPatches ? (
-            <p className="border-t border-border px-3 py-3 text-sm text-muted-foreground">
-              No comment body.
-            </p>
-          ) : null}
-        </div>
+      {isOpen && (isBodyReady || renderBodyOnNextOpen) ? (
+        <TaskExecutionCiCommentBody comment={comment} />
       ) : null}
     </article>
   );

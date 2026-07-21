@@ -9,9 +9,7 @@ const createDependencies = ({
   commandActivity,
   commandDelayMs = 0,
   commands = [],
-  includeReviewId = true,
-  pullRequestViewResponse = defaultPullRequestViewResponse(includeReviewId),
-  authorAvatarResponse = defaultAuthorAvatarResponse,
+  pullRequestViewResponse = defaultPullRequestViewResponse(),
   reviewThreadNodes = defaultReviewThreadNodes,
   reviewThreadResponse,
   checksResponse,
@@ -19,9 +17,7 @@ const createDependencies = ({
   commandActivity?: { active: number; maxActive: number };
   commandDelayMs?: number;
   commands?: string[][];
-  includeReviewId?: boolean;
   pullRequestViewResponse?: unknown;
-  authorAvatarResponse?: unknown | ((args: string[]) => unknown);
   reviewThreadNodes?: unknown[];
   reviewThreadResponse?: (args: string[]) => unknown;
   checksResponse?: {
@@ -54,9 +50,6 @@ const createDependencies = ({
     runCommandAllowFailure: (_command, args) => {
       commands.push(args);
       const command = args.join(" ");
-      if (command.includes("pr view")) {
-        return succeed(pullRequestViewResponse);
-      }
       if (command.includes("pr checks")) {
         if (checksResponse) {
           return Effect.succeed({
@@ -84,12 +77,29 @@ const createDependencies = ({
         ]);
       }
       if (command.includes("api graphql")) {
-        if (command.includes("PullRequestReviewAuthorAvatars")) {
-          const response =
-            typeof authorAvatarResponse === "function"
-              ? authorAvatarResponse(args)
-              : authorAvatarResponse;
-          return succeed(response);
+        if (command.includes("PullRequestReviewOverview")) {
+          const view = pullRequestViewResponse as {
+            comments?: unknown[];
+            reviews?: unknown[];
+            [key: string]: unknown;
+          };
+          return succeed({
+            data: {
+              repository: {
+                pullRequest: {
+                  ...view,
+                  comments: {
+                    nodes: view.comments ?? [],
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                  },
+                  reviews: {
+                    nodes: view.reviews ?? [],
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                  },
+                },
+              },
+            },
+          });
         }
         return succeed(
           reviewThreadResponse?.(args) ?? {
@@ -128,24 +138,7 @@ const createDependencies = ({
 
 const reviewerAvatarUrl = "https://avatars.githubusercontent.com/u/1?v=4";
 
-const defaultAuthorAvatarResponse = {
-  data: {
-    repository: {
-      pullRequest: {
-        comments: {
-          nodes: [{ id: "comment-1", author: { avatarUrl: reviewerAvatarUrl } }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        },
-        reviews: {
-          nodes: [{ id: "review-1", author: { avatarUrl: reviewerAvatarUrl } }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        },
-      },
-    },
-  },
-};
-
-const defaultPullRequestViewResponse = (includeReviewId: boolean): unknown => ({
+const defaultPullRequestViewResponse = (): unknown => ({
   number: 42,
   title: "Rework panel",
   url: "https://github.com/openai/openducktor/pull/42",
@@ -154,7 +147,7 @@ const defaultPullRequestViewResponse = (includeReviewId: boolean): unknown => ({
   comments: [
     {
       id: "comment-1",
-      author: { login: "reviewer" },
+      author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
       body: "Please check spacing.",
       url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
       createdAt: "2026-07-08T10:00:00Z",
@@ -163,11 +156,14 @@ const defaultPullRequestViewResponse = (includeReviewId: boolean): unknown => ({
   ],
   reviews: [
     {
-      ...(includeReviewId ? { id: "review-1" } : {}),
-      author: { login: "reviewer" },
+      id: "review-1",
+      author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
       body: "Changes requested.",
       state: "CHANGES_REQUESTED",
+      url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
+      createdAt: "2026-07-08T10:02:00Z",
       submittedAt: "2026-07-08T10:02:00Z",
+      updatedAt: "2026-07-08T10:02:00Z",
     },
   ],
 });
@@ -410,10 +406,10 @@ describe("createGithubPullRequestReviewProvider", () => {
       reviewerAvatarUrl,
       reviewerAvatarUrl,
     ]);
-    const authorAvatarCommand = commands.find((args) =>
-      args.join(" ").includes("PullRequestReviewAuthorAvatars"),
+    const overviewCommand = commands.find((args) =>
+      args.join(" ").includes("PullRequestReviewOverview"),
     );
-    expect(authorAvatarCommand?.join(" ")).toContain("avatarUrl(size: 64)");
+    expect(overviewCommand?.join(" ")).toContain("avatarUrl(size: 64)");
     expect(context.reviewThreads).toEqual({
       openCount: 1,
     });
@@ -448,16 +444,7 @@ describe("createGithubPullRequestReviewProvider", () => {
     );
 
     const pullRequestCommands = commands.filter((args) => args[0] === "pr");
-    expect(pullRequestCommands).toHaveLength(2);
-    expect(pullRequestCommands).toContainEqual([
-      "pr",
-      "view",
-      "42",
-      "--json",
-      "number,title,url,state,isDraft,comments,reviews,latestReviews",
-      "--repo",
-      "github.com/openai/openducktor",
-    ]);
+    expect(pullRequestCommands).toHaveLength(1);
     expect(pullRequestCommands).toContainEqual([
       "pr",
       "checks",
@@ -470,33 +457,10 @@ describe("createGithubPullRequestReviewProvider", () => {
     expect(pullRequestCommands.flat()).not.toContain("--hostname");
   });
 
-  test("loads review rows when gh omits review ids", async () => {
+  test("uses the full review history", async () => {
     const provider = createGithubPullRequestReviewProvider();
-
-    const context = await Effect.runPromise(
-      provider.read({
-        dependencies: createDependencies({ includeReviewId: false }),
-        repoPath: "/repo",
-        repository: { host: "github.com", owner: "openai", name: "openducktor" },
-        pullRequestNumber: 42,
-      }),
-    );
-
-    expect(context.status).toBe("loaded");
-    if (context.status !== "loaded") {
-      return;
-    }
-    expect(context.comments.map((comment) => [comment.id, comment.source])).toContainEqual([
-      "github-review:0",
-      "review",
-    ]);
-  });
-
-  test("uses the full review history when gh also returns latest reviews", async () => {
-    const provider = createGithubPullRequestReviewProvider();
-    const pullRequestViewResponse = defaultPullRequestViewResponse(true) as {
+    const pullRequestViewResponse = defaultPullRequestViewResponse() as {
       reviews: unknown[];
-      latestReviews?: unknown[];
     };
     pullRequestViewResponse.reviews.push({
       id: "review-2",
@@ -505,7 +469,6 @@ describe("createGithubPullRequestReviewProvider", () => {
       state: "COMMENTED",
       submittedAt: "2026-07-08T10:03:00Z",
     });
-    pullRequestViewResponse.latestReviews = [pullRequestViewResponse.reviews[1]];
 
     const context = await Effect.runPromise(
       provider.read({
@@ -780,88 +743,6 @@ describe("createGithubPullRequestReviewProvider", () => {
     expect(commands.filter((args) => args.includes("api"))).toHaveLength(4);
   });
 
-  test("loads every author avatar page without refetching completed connections", async () => {
-    const provider = createGithubPullRequestReviewProvider();
-    const commands: string[][] = [];
-    const pullRequestViewResponse = defaultPullRequestViewResponse(true) as {
-      comments: unknown[];
-    };
-    pullRequestViewResponse.comments.push({
-      id: "comment-2",
-      author: { login: "second-reviewer" },
-      body: "Second issue comment.",
-      url: "https://github.com/openai/openducktor/pull/42#issuecomment-2",
-      createdAt: "2026-07-08T10:08:00Z",
-      updatedAt: "2026-07-08T10:09:00Z",
-    });
-    const secondAvatarUrl = "https://avatars.githubusercontent.com/u/2?v=4";
-    const authorAvatarResponse = (args: string[]): unknown => {
-      const command = args.join(" ");
-      if (command.includes("commentsCursor=comments-page-2")) {
-        expect(command).toContain("includeComments=true");
-        expect(command).toContain("includeReviews=false");
-        return {
-          data: {
-            repository: {
-              pullRequest: {
-                comments: {
-                  nodes: [{ id: "comment-2", author: { avatarUrl: secondAvatarUrl } }],
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                },
-              },
-            },
-          },
-        };
-      }
-      return {
-        data: {
-          repository: {
-            pullRequest: {
-              comments: {
-                nodes: [{ id: "comment-1", author: { avatarUrl: reviewerAvatarUrl } }],
-                pageInfo: { hasNextPage: true, endCursor: "comments-page-2" },
-              },
-              reviews: {
-                nodes: [{ id: "review-1", author: { avatarUrl: reviewerAvatarUrl } }],
-                pageInfo: { hasNextPage: false, endCursor: null },
-              },
-            },
-          },
-        },
-      };
-    };
-
-    const context = await Effect.runPromise(
-      provider.read({
-        dependencies: createDependencies({
-          authorAvatarResponse,
-          commands,
-          pullRequestViewResponse,
-        }),
-        repoPath: "/repo",
-        repository: { host: "github.com", owner: "openai", name: "openducktor" },
-        pullRequestNumber: 42,
-      }),
-    );
-
-    expect(context.status).toBe("loaded");
-    if (context.status !== "loaded") {
-      return;
-    }
-    expect(
-      context.comments
-        .filter((comment) => comment.source !== "review_thread")
-        .map((comment) => [comment.id, comment.authorAvatarUrl]),
-    ).toEqual([
-      ["comment-1", reviewerAvatarUrl],
-      ["comment-2", secondAvatarUrl],
-      ["review-1", reviewerAvatarUrl],
-    ]);
-    expect(
-      commands.filter((args) => args.join(" ").includes("PullRequestReviewAuthorAvatars")),
-    ).toHaveLength(2);
-  });
-
   test("loads independent pull request resources concurrently", async () => {
     const commandActivity = { active: 0, maxActive: 0 };
     const provider = createGithubPullRequestReviewProvider();
@@ -875,7 +756,7 @@ describe("createGithubPullRequestReviewProvider", () => {
       }),
     );
 
-    expect(commandActivity.maxActive).toBe(4);
+    expect(commandActivity.maxActive).toBe(3);
   });
 
   test("loads pending checks from gh exit code 8", async () => {
@@ -945,7 +826,7 @@ describe("createGithubPullRequestReviewProvider", () => {
   test("returns malformed review contexts through the typed error channel", async () => {
     const provider = createGithubPullRequestReviewProvider();
     const malformedView = {
-      ...(defaultPullRequestViewResponse(true) as Record<string, unknown>),
+      ...(defaultPullRequestViewResponse() as Record<string, unknown>),
       url: "not-a-url",
     };
 

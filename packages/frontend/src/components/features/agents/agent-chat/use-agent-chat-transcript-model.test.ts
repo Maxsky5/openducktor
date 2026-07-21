@@ -3,10 +3,10 @@ import { render } from "@testing-library/react";
 import { createElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
-import { createAnimationFrameTestDriver } from "./test-support/animation-frame-test-driver";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 
 const actEnvironment = globalThis as typeof globalThis & {
