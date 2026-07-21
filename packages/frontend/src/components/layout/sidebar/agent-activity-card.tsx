@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 import { formatAgentSessionActivityStateLabel } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";
 import type { AgentActivitySessionItem } from "@/state/read-models/agent-activity-read-model";
 
 type AgentActivityCardProps = {
@@ -10,15 +11,6 @@ type AgentActivityCardProps = {
   waitingForInputCount: number;
   activeSessions: AgentActivitySessionItem[];
   waitingForInputSessions: AgentActivitySessionItem[];
-};
-
-const toSessionHref = (session: AgentActivitySessionItem): string => {
-  const params = new URLSearchParams({
-    task: session.taskId,
-    session: agentSessionIdentityKey(session),
-    agent: session.role,
-  });
-  return `/agents?${params.toString()}`;
 };
 
 function SessionList({
@@ -33,7 +25,11 @@ function SessionList({
       {sessions.map((session) => (
         <li key={agentSessionIdentityKey(session)}>
           <Link
-            to={toSessionHref(session)}
+            to={buildAgentStudioHref({
+              taskId: session.taskId,
+              sessionExternalId: session.externalSessionId,
+              role: session.role,
+            })}
             className="block rounded-md border border-border bg-card px-2 py-1.5 hover:border-input hover:bg-accent"
           >
             <p className="truncate text-xs font-medium text-foreground">{session.taskTitle}</p>

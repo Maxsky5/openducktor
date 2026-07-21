@@ -12,7 +12,6 @@ import {
   createSessionStartWorkflowRunner,
   resolveBuildContinuationLaunchAction,
 } from "@/features/session-start";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import {
   ChecksOperationsContext,
@@ -61,11 +60,11 @@ const createRunSessionStartWorkflow = (
 const agentStudioSessionUrl = (
   taskId: string,
   role: string,
-  session: Parameters<typeof agentSessionIdentityKey>[0],
+  session: { externalSessionId: string },
 ): string => {
   const search = new URLSearchParams({
     task: taskId,
-    session: agentSessionIdentityKey(session),
+    session: session.externalSessionId,
     agent: role,
   });
   return `/agents?${search.toString()}`;

@@ -8,7 +8,6 @@ import {
   createSessionStartWorkflowRunner,
   type SessionStartWorkflowResult,
 } from "@/features/session-start";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
@@ -417,7 +416,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     expect(updateCalls).toContainEqual({
       task: "task-1",
-      session: agentSessionIdentityKey(sessionIdentity("session-new")),
+      session: "session-new",
       agent: "spec",
     });
 
@@ -511,7 +510,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
-      session: agentSessionIdentityKey(sessionIdentity("session-new")),
+      session: "session-new",
       agent: "planner",
     });
     expect(harness.getLatest().isStarting).toBe(false);
@@ -617,7 +616,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
-      session: agentSessionIdentityKey(sessionIdentity("session-plan")),
+      session: "session-plan",
       agent: "planner",
     });
 
@@ -828,7 +827,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
-      session: agentSessionIdentityKey(sessionIdentity("session-build-rework")),
+      session: "session-build-rework",
       agent: "build",
     });
 
@@ -920,7 +919,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     );
     expect(updateCalls).toContainEqual({
       task: "task-1",
-      session: agentSessionIdentityKey(sessionIdentity("session-existing")),
+      session: "session-existing",
       agent: "build",
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);

@@ -18,7 +18,7 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioQuerySync>[0];
 type SearchParamsCall = Parameters<SetURLSearchParams>;
 
-const sessionKeyParam = (sessionKey: string) => sessionKey;
+const sessionExternalIdParam = (sessionExternalId: string) => sessionExternalId;
 
 type StatefulQuerySyncArgs = {
   activeWorkspaceId: string | null;
@@ -152,7 +152,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const latest = harness.getLatest();
     expect(latest.taskIdParam).toBe("task-2");
-    expect(latest.sessionKeyParam).toEqual(sessionKeyParam("session-2"));
+    expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-2"));
     expect(latest.roleFromQuery).toBe("planner");
 
     expect(calls).toHaveLength(0);
@@ -179,7 +179,7 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
-          sessionKey: "session-from-context",
+          sessionExternalId: "session-from-context",
         }),
       );
 
@@ -197,7 +197,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-from-context");
-      expect(latest.sessionKeyParam).toEqual(sessionKeyParam("session-from-context"));
+      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-from-context"));
       expect(latest.roleFromQuery).toBe("planner");
 
       await harness.unmount();
@@ -244,7 +244,7 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
-          sessionKey: "session-from-context",
+          sessionExternalId: "session-from-context",
         }),
       );
 
@@ -277,7 +277,7 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "build",
-          sessionKey: "session-from-context",
+          sessionExternalId: "session-from-context",
         }),
       );
 
@@ -295,7 +295,7 @@ describe("useAgentStudioQuerySync", () => {
       await harness.mount();
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-from-url");
-      expect(latest.sessionKeyParam).toEqual(sessionKeyParam("session-from-url"));
+      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-from-url"));
       expect(latest.roleFromQuery).toBe("spec");
       expect(latest.hasExplicitRoleParam).toBe(true);
       await harness.unmount();
@@ -315,7 +315,7 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-repo-b",
           role: "planner",
-          sessionKey: "session-from-repo-b",
+          sessionExternalId: "session-from-repo-b",
         }),
       );
 
@@ -336,7 +336,7 @@ describe("useAgentStudioQuerySync", () => {
       const latest = harness.getLatest();
       expect(latest.isRepoNavigationBoundaryPending).toBeFalse();
       expect(latest.taskIdParam).toBe("task-from-repo-b");
-      expect(latest.sessionKeyParam).toEqual(sessionKeyParam("session-from-repo-b"));
+      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-from-repo-b"));
       expect(latest.roleFromQuery).toBe("planner");
 
       await harness.unmount();
@@ -347,8 +347,8 @@ describe("useAgentStudioQuerySync", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionKey: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionKey: "session-b" },
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionExternalId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionExternalId: "session-b" },
       });
 
       const harness = createStatefulQuerySyncHarness({
@@ -373,7 +373,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-a");
-      expect(latest.sessionKeyParam).toEqual(sessionKeyParam("session-a"));
+      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-a"));
       expect(latest.roleFromQuery).toBe("spec");
 
       await harness.unmount();
@@ -384,8 +384,8 @@ describe("useAgentStudioQuerySync", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionKey: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionKey: "session-b" },
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionExternalId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionExternalId: "session-b" },
       });
 
       const harness = createStatefulQuerySyncHarness({
@@ -408,7 +408,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-a");
-      expect(latest.sessionKeyParam).toEqual(sessionKeyParam("session-a"));
+      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-a"));
       expect(latest.roleFromQuery).toBe("spec");
 
       await harness.unmount();
@@ -447,12 +447,12 @@ describe("useAgentStudioQuerySync", () => {
 
       const parsed = JSON.parse(stored) as {
         taskId?: string;
-        sessionKey?: string;
+        sessionExternalId?: string;
         role?: string;
       };
 
       expect(parsed.taskId).toBe("task-from-cleanup");
-      expect(parsed.sessionKey).toBe("session-from-cleanup");
+      expect(parsed.sessionExternalId).toBe("session-from-cleanup");
       expect(parsed.role).toBe("spec");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {

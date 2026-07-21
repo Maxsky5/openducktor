@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "./agent-studio-test-utils";
 import {
+  buildAgentStudioHref,
   buildAgentStudioSelectionQueryUpdate,
+  buildSearchParamsFromNavigationState,
+  parseNavigationStateFromSearchParams,
+  parsePersistedContext,
   restoreNavigationFromPersistedContext,
+  serializePersistedContext,
 } from "./query-sync/agent-studio-navigation";
 
 describe("agent-studio-navigation", () => {
@@ -17,14 +21,80 @@ describe("agent-studio-navigation", () => {
     expect(
       buildAgentStudioSelectionQueryUpdate({
         taskId: "task-1",
-        session,
+        sessionExternalId: session.externalSessionId,
         role: "spec",
       }),
     ).toEqual({
       task: "task-1",
-      session: agentSessionIdentityKey(session),
+      session: "session-1",
       agent: "spec",
     });
+  });
+
+  test("buildAgentStudioHref builds session and sessionless destinations", () => {
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-1",
+    });
+
+    expect(
+      buildAgentStudioHref({
+        taskId: "task-1",
+        sessionExternalId: session.externalSessionId,
+        role: "build",
+      }),
+    ).toBe("/agents?task=task-1&session=session-1&agent=build");
+    expect(
+      buildAgentStudioHref({
+        taskId: "task-1",
+        sessionExternalId: null,
+        role: "qa",
+      }),
+    ).toBe("/agents?task=task-1&agent=qa");
+  });
+
+  test("round trips a plain external session id through the Agent Studio URL", () => {
+    const navigation = parseNavigationStateFromSearchParams(
+      new URLSearchParams("task=task-1&session=session-1&agent=build"),
+    );
+
+    expect(navigation).toEqual({
+      taskId: "task-1",
+      sessionExternalId: "session-1",
+      role: "build",
+    });
+    expect(buildSearchParamsFromNavigationState(new URLSearchParams(), navigation).toString()).toBe(
+      "task=task-1&session=session-1&agent=build",
+    );
+  });
+
+  test("persists only the external session id for workspace navigation", () => {
+    const serialized = serializePersistedContext({
+      taskId: "task-1",
+      sessionExternalId: "session-1",
+      role: "build",
+    });
+
+    expect(JSON.parse(serialized)).toEqual({
+      taskId: "task-1",
+      sessionExternalId: "session-1",
+      role: "build",
+    });
+    expect(serialized).not.toContain("opencode");
+    expect(serialized).not.toContain("/repo/worktrees/session-1");
+  });
+
+  test("discards legacy composite session navigation state", () => {
+    expect(
+      parsePersistedContext(
+        JSON.stringify({
+          taskId: "task-1",
+          role: "build",
+          sessionKey: "session-1|opencode|%2Frepo%2Fworktrees%2Fsession-1",
+        }),
+      ),
+    ).toEqual({ taskId: "task-1", role: "build" });
   });
 
   test("does not restore a stale persisted session over an explicit task", () => {
@@ -32,18 +102,18 @@ describe("agent-studio-navigation", () => {
       restoreNavigationFromPersistedContext(
         {
           taskId: "task-current",
-          sessionKey: null,
+          sessionExternalId: null,
           role: null,
         },
         {
           taskId: "task-persisted",
-          sessionKey: "session-persisted",
+          sessionExternalId: "session-persisted",
           role: "planner",
         },
       ),
     ).toEqual({
       taskId: "task-current",
-      sessionKey: null,
+      sessionExternalId: null,
       role: "planner",
     });
   });
@@ -53,18 +123,18 @@ describe("agent-studio-navigation", () => {
       restoreNavigationFromPersistedContext(
         {
           taskId: "task-current",
-          sessionKey: null,
+          sessionExternalId: null,
           role: null,
         },
         {
           taskId: "task-current",
-          sessionKey: "session-persisted",
+          sessionExternalId: "session-persisted",
           role: "planner",
         },
       ),
     ).toEqual({
       taskId: "task-current",
-      sessionKey: "session-persisted",
+      sessionExternalId: "session-persisted",
       role: "planner",
     });
   });

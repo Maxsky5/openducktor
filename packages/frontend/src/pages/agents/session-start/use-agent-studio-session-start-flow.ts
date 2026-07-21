@@ -195,7 +195,7 @@ export function useAgentStudioSessionStartFlow({
           scheduleQueryUpdate(
             buildAgentStudioSelectionQueryUpdate({
               taskId: request.taskId,
-              session: workflow,
+              sessionExternalId: workflow.externalSessionId,
               role: request.role,
             }),
           );

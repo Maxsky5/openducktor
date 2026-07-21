@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -26,7 +25,7 @@ const session = {
 const baseProps = (overrides: Partial<HookProps> = {}): HookProps => ({
   isRepoNavigationBoundaryPending: false,
   taskIdParam: "task-1",
-  sessionKeyParam: null,
+  sessionExternalIdParam: null,
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
   scheduleQueryUpdate: () => {},
@@ -49,7 +48,7 @@ describe("useAgentStudioSelectionState", () => {
     expect(harness.getLatest().selection).toEqual(toAgentStudioSessionSelection(session));
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
       task: "task-1",
-      session: agentSessionIdentityKey(session),
+      session: "session-1",
       agent: "build",
     });
 
@@ -95,6 +94,7 @@ describe("useAgentStudioSelectionState", () => {
 
     expect(harness.getLatest().selection).toEqual({
       taskId: "task-3",
+      sessionExternalId: null,
       sessionIdentity: null,
       role: "qa",
       hasExplicitRoleSelection: true,

@@ -30,7 +30,7 @@ type UseAgentStudioSelectionControllerArgs = {
   isLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
   taskIdParam: string;
-  sessionKeyParam: string | null;
+  sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectionState: AgentStudioSelectionState;
@@ -78,7 +78,7 @@ export function useAgentStudioSelectionController({
   isLoadingTasks,
   sessions,
   taskIdParam,
-  sessionKeyParam,
+  sessionExternalIdParam,
   hasExplicitRoleParam,
   roleFromQuery,
   selectionState,
@@ -99,7 +99,7 @@ export function useAgentStudioSelectionController({
         tasks,
         sessions,
         taskIdParam,
-        sessionKeyParam,
+        sessionExternalIdParam,
         hasExplicitRoleParam,
         roleFromQuery,
         selectionState,
@@ -111,7 +111,7 @@ export function useAgentStudioSelectionController({
       isRepoNavigationBoundaryPending,
       roleFromQuery,
       selectionState,
-      sessionKeyParam,
+      sessionExternalIdParam,
       sessionReadModelLoadState,
       sessions,
       taskIdParam,
@@ -178,7 +178,7 @@ export function useAgentStudioSelectionController({
       tasks,
       sessions,
       taskIdParam,
-      sessionKeyParam,
+      sessionExternalIdParam,
       hasExplicitRoleParam,
       roleFromQuery,
       selectionState,
@@ -192,7 +192,7 @@ export function useAgentStudioSelectionController({
     navigationBase,
     roleFromQuery,
     selectionState,
-    sessionKeyParam,
+    sessionExternalIdParam,
     sessionReadModelLoadState,
     sessions,
     taskIdParam,
@@ -203,7 +203,8 @@ export function useAgentStudioSelectionController({
     workspaceRepoPath,
     selectedTask: navigationState.view.selectedTask,
     sessionSummaries: navigationState.view.sessionsForTask,
-    sessionKey: navigationState.view.sessionKey,
+    sessionExternalId: navigationState.view.sessionExternalId,
+    routeSessionResolution: navigationState.routeSessionResolution,
     hasExplicitRoleSelection: navigationState.view.hasExplicitRoleSelection,
     roleSelection: navigationState.view.role,
     sessionlessRole: navigationState.view.role,

@@ -63,16 +63,6 @@ export const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | 
   qa: null,
 });
 
-export const resolveAgentStudioTaskId = ({
-  taskIdParam,
-  selectedSessionFromRoute,
-}: {
-  taskIdParam: string;
-  selectedSessionFromRoute: AgentSessionSummary | null;
-}): string => {
-  return taskIdParam || selectedSessionFromRoute?.taskId || "";
-};
-
 export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): AgentRole | null => {
   if (!task) {
     return null;
@@ -112,7 +102,7 @@ export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): Age
 
 type AgentStudioSessionSelectionInput = {
   sessionsForTask: AgentSessionSummary[];
-  sessionKey: string | null;
+  sessionExternalId: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
@@ -125,7 +115,7 @@ const isActiveSessionSelectionCandidate = (session: AgentSessionSummary): boolea
 
 export const resolveAgentStudioSessionSelection = ({
   sessionsForTask,
-  sessionKey,
+  sessionExternalId,
   hasExplicitRoleParam,
   roleFromQuery,
   selectedTask,
@@ -165,8 +155,9 @@ export const resolveAgentStudioSessionSelection = ({
     };
   };
 
-  if (sessionKey) {
-    const explicitSession = findAgentStudioSessionSummaryByKey(sessionsForTask, sessionKey);
+  if (sessionExternalId) {
+    const explicitSession =
+      sessionsForTask.find((session) => session.externalSessionId === sessionExternalId) ?? null;
     if (explicitSession) {
       return toSelection(explicitSession.role, explicitSession);
     }
@@ -222,50 +213,62 @@ export const resolveAgentStudioSessionSelection = ({
   }
 };
 
-export const findAgentStudioSessionSummaryByKey = (
+export const findAgentStudioTaskSessionSummary = (
   sessions: AgentSessionSummary[],
-  sessionKey: string | null,
+  taskId: string,
+  sessionExternalId: string | null,
 ): AgentSessionSummary | null => {
-  if (!sessionKey) {
+  if (!taskId || !sessionExternalId) {
     return null;
   }
 
-  return sessions.find((entry) => agentSessionIdentityKey(entry) === sessionKey) ?? null;
+  return (
+    sessions.find(
+      (entry) => entry.taskId === taskId && entry.externalSessionId === sessionExternalId,
+    ) ?? null
+  );
 };
 
 export type AgentStudioRouteSessionResolution =
   | { kind: "none" }
-  | { kind: "pending"; sessionKey: string }
+  | { kind: "pending"; sessionExternalId: string }
   | { kind: "found"; session: AgentSessionSummary }
-  | { kind: "missing"; sessionKey: string };
+  | { kind: "missing"; sessionExternalId: string }
+  | { kind: "failed"; sessionExternalId: string; message: string };
 
 export const resolveAgentStudioRouteSession = ({
   isRepoNavigationBoundaryPending,
   isLoadingTasks,
   sessionReadModelLoadState,
   sessions,
-  sessionKey,
+  taskId,
+  sessionExternalId,
 }: {
   isRepoNavigationBoundaryPending: boolean;
   isLoadingTasks: boolean;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   sessions: AgentSessionSummary[];
-  sessionKey: string | null;
+  taskId: string;
+  sessionExternalId: string | null;
 }): AgentStudioRouteSessionResolution => {
-  if (isRepoNavigationBoundaryPending || !sessionKey) {
+  if (isRepoNavigationBoundaryPending || !sessionExternalId) {
     return { kind: "none" };
   }
 
-  const session = findAgentStudioSessionSummaryByKey(sessions, sessionKey);
-  if (session) {
-    return { kind: "found", session };
+  if (sessionReadModelLoadState.kind === "failed") {
+    return {
+      kind: "failed",
+      sessionExternalId,
+      message: sessionReadModelLoadState.message,
+    };
   }
 
-  if (!isLoadingTasks && sessionReadModelLoadState.kind === "ready") {
-    return { kind: "missing", sessionKey };
+  if (isLoadingTasks || sessionReadModelLoadState.kind !== "ready") {
+    return { kind: "pending", sessionExternalId };
   }
 
-  return { kind: "pending", sessionKey };
+  const session = findAgentStudioTaskSessionSummary(sessions, taskId, sessionExternalId);
+  return session ? { kind: "found", session } : { kind: "missing", sessionExternalId };
 };
 
 export const groupSessionsByTaskId = (
@@ -297,23 +300,25 @@ const findViewSessionCandidateByIdentity = (
   );
 };
 
-const resolveViewSessionKey = ({
-  sessionKey,
+const resolveViewSessionExternalId = ({
+  sessionExternalId,
   candidates,
 }: {
-  sessionKey: string | null;
+  sessionExternalId: string | null;
   candidates: AgentSessionSummary[];
 }): string | null => {
-  if (!sessionKey) {
+  if (!sessionExternalId) {
     return null;
   }
-  const belongsToVisibleSession = findAgentStudioSessionSummaryByKey(candidates, sessionKey);
-  return belongsToVisibleSession ? sessionKey : null;
+  const belongsToVisibleSession = candidates.some(
+    (candidate) => candidate.externalSessionId === sessionExternalId,
+  );
+  return belongsToVisibleSession ? sessionExternalId : null;
 };
 
 export const resolveAgentStudioViewSessionSelection = ({
   sessionSummaries,
-  sessionKey,
+  sessionExternalId,
   sessionIdentity,
   hasExplicitRoleParam,
   roleFromQuery,
@@ -322,7 +327,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   keepExplicitRoleSessionless = false,
 }: {
   sessionSummaries: AgentSessionSummary[];
-  sessionKey: string | null;
+  sessionExternalId: string | null;
   sessionIdentity: AgentSessionIdentity | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
@@ -343,18 +348,25 @@ export const resolveAgentStudioViewSessionSelection = ({
     };
   }
 
-  const resolvedSessionKey = resolveViewSessionKey({
-    sessionKey,
+  const resolvedSessionExternalId = resolveViewSessionExternalId({
+    sessionExternalId,
     candidates: sessionSummaries,
   });
+  if (sessionExternalId && !resolvedSessionExternalId) {
+    return {
+      role: roleFromQuery,
+      sessionIdentity: null,
+      sessionSummary: null,
+    };
+  }
   const selection = resolveAgentStudioSessionSelection({
     sessionsForTask: sessionSummaries,
-    sessionKey: resolvedSessionKey,
+    sessionExternalId: resolvedSessionExternalId,
     hasExplicitRoleParam,
     roleFromQuery,
     selectedTask,
     sessionlessRole,
-    keepExplicitRoleSessionless: keepExplicitRoleSessionless && resolvedSessionKey === null,
+    keepExplicitRoleSessionless: keepExplicitRoleSessionless && resolvedSessionExternalId === null,
   });
   return {
     role: selection.role,
