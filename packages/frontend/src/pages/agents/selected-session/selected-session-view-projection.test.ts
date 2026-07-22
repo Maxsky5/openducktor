@@ -242,6 +242,7 @@ describe("selected-session-view-projection", () => {
       kind: "failed",
       message: "Session history failed",
     });
+    expect(projection.sessionAuxiliaryError).toBe("Session history failed");
   });
 
   test("projects an exact transient fault only for an unloaded selected session", () => {
@@ -261,6 +262,26 @@ describe("selected-session-view-projection", () => {
       kind: "failed",
       message: "This exact session failed.",
     });
+    expect(projection.sessionAuxiliaryError).toBe("This exact session failed.");
     expect(sessionlessProjection.transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
+  });
+
+  test("keeps an exact session fault as the transcript failure and exposes both failures", () => {
+    const summary = createAgentSessionSummaryFixture({ externalSessionId: "session-both-faults" });
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(summary),
+      sessionSummary: summary,
+      sessionFault: { message: "This exact session failed." },
+      selectedTask: createTaskCardFixture(),
+      readModelLoadState: failedAgentSessionReadModelLoadState(repoPath, "Session history failed."),
+    });
+
+    expect(projection.transcriptState).toEqual({
+      kind: "failed",
+      message: "This exact session failed.",
+    });
+    expect(projection.sessionAuxiliaryError).toBe(
+      "This exact session failed. Session history failed.",
+    );
   });
 });

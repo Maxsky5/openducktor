@@ -611,6 +611,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       operation: "test.live-session-lifecycle",
       message: "live session mutation delivery failed",
     });
+    const backgroundFailures: HostOperationError[] = [];
     let resolveBackgroundFailure: (failure: HostOperationError) => void = () => undefined;
     const backgroundFailure = new Promise<HostOperationError>((resolve) => {
       resolveBackgroundFailure = resolve;
@@ -636,6 +637,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         codexAppServer,
         onBackgroundFailure: (failure) =>
           Effect.sync(() => {
+            backgroundFailures.push(failure);
             resolveBackgroundFailure(failure);
           }),
         resolveRuntimePolicy,
@@ -655,6 +657,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     const failure = await backgroundFailure;
 
+    expect(backgroundFailures).toEqual([failure]);
     expect(failure).toMatchObject({
       _tag: "HostOperationError",
       operation: "codex-live-session.forward-mutation",

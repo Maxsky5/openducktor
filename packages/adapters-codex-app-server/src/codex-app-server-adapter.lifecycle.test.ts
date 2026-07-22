@@ -808,7 +808,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         },
       },
       transportFactory: () => new RecordingTransport("runtime-live", false),
-      onRuntimeEventQueueFailure: () => {},
       respondServerRequest: async () => {},
     });
 
@@ -827,7 +826,9 @@ describe("CodexAppServerAdapter lifecycle", () => {
         }),
       },
       transportFactory: () => transport,
-      onRuntimeEventQueueFailure: () => {},
+      onRuntimeEventQueueFailure: () => {
+        return undefined;
+      },
       subscribeEvents: () => () => {},
       respondServerRequest: async () => {},
     });

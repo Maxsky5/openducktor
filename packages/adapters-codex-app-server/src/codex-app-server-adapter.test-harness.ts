@@ -490,7 +490,9 @@ export const createAdapterWithTransport = (
       requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
     },
     transportFactory: () => withDefaultThreadResume(transport),
-    onRuntimeEventQueueFailure: () => {},
+    onRuntimeEventQueueFailure: () => {
+      return undefined;
+    },
     subscribeEvents: () => () => {},
     respondServerRequest: async () => {},
     ...overrides,
@@ -523,7 +525,9 @@ export const createHarness = (
       requireRepoRuntime,
     },
     transportFactory,
-    onRuntimeEventQueueFailure: () => {},
+    onRuntimeEventQueueFailure: () => {
+      return undefined;
+    },
     subscribeEvents: () => () => {},
     respondServerRequest,
     ...overrides,

@@ -359,7 +359,7 @@ export type CodexAppServerEventSubscriber = (
 export type CodexRuntimeEventQueueFailureHandler = (input: {
   runtimeId: string;
   error: unknown;
-}) => void | Promise<void>;
+}) => undefined;
 
 type CodexAppServerStreamingOptions = {
   subscribeEvents: CodexAppServerEventSubscriber;
