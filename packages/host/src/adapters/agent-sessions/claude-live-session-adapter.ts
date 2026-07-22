@@ -196,6 +196,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         options: {
           readonly forceRunning?: boolean;
           readonly parentExternalSessionId?: string;
+          readonly preserveRetainedActivity?: boolean;
         } = {},
       ): Effect.Effect<AgentSessionControlSummary, HostError> =>
         eventCoordinator.runControlMutation(
@@ -223,21 +224,27 @@ export const createClaudeLiveSessionAdapterPreparer =
         readRetainedSnapshot: (ref) => Effect.succeed(state.readRetainedSnapshot(ref)),
         loadContext: (input) =>
           requireClaudePolicy(input.runtimeKind, "load-context").pipe(
-            Effect.flatMap(() => service.loadSessionContextUsage(toClaudeLoadContextInput(input))),
-            Effect.flatMap((value) =>
+            Effect.zipRight(eventCoordinator.flush()),
+            Effect.zipRight(Effect.sync(() => state.contextRevision(input))),
+            Effect.flatMap((contextRevision) =>
+              service
+                .loadSessionContextUsage(toClaudeLoadContextInput(input))
+                .pipe(Effect.map((value) => ({ contextRevision, value }))),
+            ),
+            Effect.flatMap(({ contextRevision, value }) =>
               parseOutput(
                 agentSessionContextUsageSchema.nullable(),
                 value,
                 "claude-live-session.normalize-context",
-              ),
+              ).pipe(Effect.map((contextUsage) => ({ contextRevision, contextUsage }))),
             ),
-            Effect.flatMap((contextUsage) =>
+            Effect.flatMap(({ contextRevision, contextUsage }) =>
               eventCoordinator
                 .flush()
                 .pipe(
                   Effect.flatMap(() =>
                     commit("claude-live-session.retain-context", () =>
-                      state.applyLoadedContext(input, contextUsage),
+                      state.applyLoadedContext(input, contextUsage, contextRevision),
                     ),
                   ),
                 ),
@@ -311,8 +318,10 @@ export const createClaudeLiveSessionAdapterPreparer =
         resumeSession: (input) =>
           requireClaudePolicy(input.runtimeKind, "resume-session").pipe(
             Effect.flatMap(() =>
-              runSummary("claude-live-session.resume-session", () =>
-                service.resumeSession(toClaudeResumeInput(input), runtime.runtimeId),
+              runSummary(
+                "claude-live-session.resume-session",
+                () => service.resumeSession(toClaudeResumeInput(input), runtime.runtimeId),
+                { preserveRetainedActivity: true },
               ),
             ),
           ),

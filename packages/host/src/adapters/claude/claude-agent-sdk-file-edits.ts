@@ -1,5 +1,6 @@
 import type { FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
+import { createTwoFilesPatch } from "diff";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeFileEditPayload = {
@@ -9,7 +10,7 @@ type ClaudeFileEditPayload = {
 const normalizeToolName = (tool: string): string => tool.trim().toLowerCase();
 
 export const isClaudeFileEditTool = (tool: string): boolean =>
-  new Set(["edit", "multiedit", "write"]).has(normalizeToolName(tool));
+  new Set(["edit", "multiedit", "notebookedit", "write"]).has(normalizeToolName(tool));
 
 const readRecordProp = (
   record: Record<string, unknown>,
@@ -80,6 +81,7 @@ const readInputFilePath = (input: Record<string, unknown> | undefined): string |
   }
   return (
     readStringProp(input, "file_path") ??
+    readStringProp(input, "notebook_path") ??
     readStringProp(input, "filePath") ??
     readStringProp(input, "path") ??
     readStringProp(input, "file")
@@ -104,6 +106,11 @@ const readPatchFromRecord = (
   const directPatch = readStringProp(record, "patch") ?? readStringProp(record, "diff");
   if (directPatch) {
     return directPatch;
+  }
+  const originalFile = readStringProp(record, "original_file");
+  const updatedFile = readStringProp(record, "updated_file");
+  if (file && originalFile !== undefined && updatedFile !== undefined) {
+    return createTwoFilesPatch(file, file, originalFile, updatedFile, "", "", { context: 3 });
   }
 
   for (const key of ["gitDiff", "structuredPatch", "fileDiff", "filediff"] as const) {

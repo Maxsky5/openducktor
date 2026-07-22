@@ -34,6 +34,7 @@ export type ClaudeMcpBridgeConnectionResolver = (
 
 export type CreateClaudeAgentSdkServiceInput = {
   emit?: (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent) => void;
+  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;

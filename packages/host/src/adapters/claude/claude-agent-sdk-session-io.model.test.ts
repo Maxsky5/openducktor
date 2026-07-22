@@ -6,6 +6,32 @@ import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support"
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 describe("Claude session I/O model changes", () => {
+  test("does not change the query creation system prompt on later sends", async () => {
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    const session = createClaudeSession({ queue });
+    const originalInput = session.input;
+
+    await sendClaudeUserMessage({
+      session,
+      now: () => "2026-06-25T20:00:00.000Z",
+      randomId: () => "message-1",
+      emit: () => {},
+      messageInput: {
+        externalSessionId: "session-1",
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        systemPrompt: "Replacement prompt",
+        parts: [{ kind: "text", text: "hello" }],
+      },
+    });
+
+    expect(session.input).toBe(originalInput);
+    expect(session.input.systemPrompt).toBe("Build");
+  });
+
   test("applies per-message model changes through the Claude SDK query", async () => {
     const setModel = mock(async (_model?: string) => {});
     const pushed: SDKUserMessage[] = [];

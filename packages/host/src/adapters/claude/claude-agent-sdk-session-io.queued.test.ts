@@ -388,6 +388,96 @@ describe("Claude session I/O queued messages", () => {
     ]);
   });
 
+  test("keeps a queued message ahead of sends accepted during its model update", async () => {
+    let resolveModelUpdate: (() => void) | undefined;
+    const modelUpdate = new Promise<void>((resolve) => {
+      resolveModelUpdate = resolve;
+    });
+    const pushed: SDKUserMessage[] = [];
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    queue.push = (message) => {
+      pushed.push(message);
+    };
+    const firstMessage: SDKUserMessage = {
+      type: "user",
+      uuid: "00000000-0000-4000-8000-000000000002",
+      session_id: "session-1",
+      timestamp: "2026-06-25T20:00:01.000Z",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "first queued" }],
+      },
+    };
+    const session = createClaudeSession({
+      acceptedUserMessages: [
+        {
+          messageId: "00000000-0000-4000-8000-000000000002",
+          model: {
+            providerId: "claude",
+            modelId: "claude-opus-4-6",
+            runtimeKind: "claude",
+          },
+          parts: [{ kind: "text", text: "first queued" }],
+          text: "first queued",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+      activity: "running",
+      pendingUserTurnCount: 1,
+      query: {
+        setModel: mock(async () => modelUpdate),
+      } as unknown as ClaudeSession["query"],
+      queue,
+      queuedSdkMessages: [firstMessage],
+      sdkState: "idle",
+    });
+
+    const flushPromise = flushQueuedClaudeUserMessage({
+      emit: () => {},
+      now: () => "2026-06-25T20:00:02.000Z",
+      session,
+    });
+    await Promise.resolve();
+
+    await sendClaudeUserMessage({
+      session,
+      now: () => "2026-06-25T20:00:03.000Z",
+      randomId: () => "00000000-0000-4000-8000-000000000003",
+      emit: () => {},
+      messageInput: {
+        externalSessionId: "session-1",
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        parts: [{ kind: "text", text: "second queued" }],
+      },
+    });
+
+    expect(pushed).toEqual([]);
+    expect(session.queuedSdkMessages.map((message) => message.uuid)).toEqual([
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003",
+    ]);
+
+    resolveModelUpdate?.();
+    await flushPromise;
+    session.activeSdkUserTurnCount = 0;
+    session.sdkState = "idle";
+    await flushQueuedClaudeUserMessage({
+      emit: () => {},
+      now: () => "2026-06-25T20:00:04.000Z",
+      session,
+    });
+
+    expect(pushed.map((message) => message.uuid)).toEqual([
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003",
+    ]);
+  });
+
   test("does not mark user messages accepted when the Claude input queue is closed", async () => {
     const events: AgentEvent[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();

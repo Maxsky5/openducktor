@@ -81,7 +81,7 @@ describe("Claude permission questions", () => {
     });
   });
 
-  test("maps namespaced Claude AskUserQuestion tool calls to pending questions", async () => {
+  test("does not classify a namespaced external tool as Claude AskUserQuestion", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
@@ -117,28 +117,22 @@ describe("Claude permission questions", () => {
 
     expect(events).toEqual([
       expect.objectContaining({
-        type: "question_required",
+        type: "approval_required",
         requestId: "request-1",
-        questions: [
-          expect.objectContaining({
-            question: "Proceed?",
-            header: "Decision",
-          }),
-        ],
+        tool: {
+          name: "mcp__openducktor_ui__AskUserQuestion",
+          input,
+        },
       }),
     ]);
-    expect(session.pendingQuestions.has("request-1")).toBe(true);
+    expect(session.pendingQuestions.size).toBe(0);
+    expect(session.pendingApprovals.has("request-1")).toBe(true);
 
-    session.pendingQuestions.get("request-1")?.resolve([["Yes"]]);
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
 
     await expect(resultPromise).resolves.toEqual({
       behavior: "allow",
-      updatedInput: {
-        ...input,
-        answers: {
-          "Proceed?": "Yes",
-        },
-      },
+      updatedInput: input,
     });
   });
 

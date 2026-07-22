@@ -1,6 +1,6 @@
 import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionSummary, AgentSessionTodoItem } from "@openducktor/core";
-import { errorMessage } from "../../effect/host-errors";
+import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
   type ClaudeAgentSdkOptionsDependencies,
@@ -128,8 +128,20 @@ export const createClaudeAgentSdkSession = async ({
       );
     }
   } catch (error) {
-    sessionStore.close(session);
+    if (sessionStore.get(session.externalSessionId) === session) {
+      sessionStore.close(session);
+    }
     throw error;
+  }
+  if (sessionStore.get(session.externalSessionId) !== session) {
+    throw new HostOperationError({
+      operation: "claudeRuntime.createSession",
+      message: `Claude session '${session.externalSessionId}' stopped before startup completed.`,
+      details: {
+        externalSessionId: session.externalSessionId,
+        runtimeId,
+      },
+    });
   }
   summary.status = "idle";
   emit(session, {

@@ -9,7 +9,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
-import { HostValidationError } from "../../effect/host-errors";
+import { Effect } from "effect";
+import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   buildOpenDucktorMcpBridgeEnvironment,
   type OpenDucktorMcpBridgeConnection,
@@ -95,6 +96,7 @@ export const buildClaudeAgentSdkOptions = async ({
   const [mcpServers, resolvedSettings] = await Promise.all([
     buildClaudeMcpServers({
       resolvedDependencies,
+      serviceInput,
       session,
       workflowRole,
     }),
@@ -178,10 +180,12 @@ export const applyClaudeCodeExecutablePath = (options: Options, executablePath: 
 
 const buildClaudeMcpServers = async ({
   resolvedDependencies,
+  serviceInput,
   session,
   workflowRole,
 }: {
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
+  serviceInput: CreateClaudeAgentSdkServiceInput;
   session: ClaudeSessionContext;
   workflowRole: ReturnType<typeof claudeWorkflowRole>;
 }): Promise<Record<string, McpServerConfig>> => {
@@ -199,6 +203,8 @@ const buildClaudeMcpServers = async ({
   const { ODT_HOST_TOKEN: hostToken, ...publicBridgeEnvironment } = bridgeEnvironment;
   const hostTokenFile = await createSessionScopedClaudeMcpTokenFile({
     hostToken,
+    onBackgroundFailure: serviceInput.onBackgroundFailure,
+    externalSessionId: session.externalSessionId,
     signal: session.abortController.signal,
   });
   return {
@@ -216,10 +222,14 @@ const buildClaudeMcpServers = async ({
 };
 
 const createSessionScopedClaudeMcpTokenFile = async ({
+  externalSessionId,
   hostToken,
+  onBackgroundFailure,
   signal,
 }: {
+  externalSessionId: string;
   hostToken: string;
+  onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   signal: AbortSignal;
 }): Promise<string> => {
   const directory = await mkdtemp(join(tmpdir(), "openducktor-claude-mcp-"));
@@ -228,7 +238,18 @@ const createSessionScopedClaudeMcpTokenFile = async ({
     await writeFile(tokenPath, hostToken, { encoding: "utf8", mode: 0o600 });
 
     const cleanup = (): void => {
-      void rm(directory, { recursive: true, force: true });
+      void rm(directory, { recursive: true, force: true }).catch((cause) => {
+        Effect.runFork(
+          onBackgroundFailure(
+            new HostOperationError({
+              operation: "claudeRuntime.cleanupMcpTokenDirectory",
+              message: `Failed to remove Claude MCP token directory for session '${externalSessionId}': ${errorMessage(cause)}`,
+              cause,
+              details: { directory, externalSessionId },
+            }),
+          ),
+        );
+      });
     };
     if (signal.aborted) {
       cleanup();

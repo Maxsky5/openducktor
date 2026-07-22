@@ -440,4 +440,71 @@ describe("claude-agent-sdk-history tool projection", () => {
       ],
     });
   });
+
+  test("hydrates Claude NotebookEdit results with the same canonical file diff", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:16.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "tool-notebook-1",
+                name: "NotebookEdit",
+                input: {
+                  notebook_path: "analysis.ipynb",
+                  cell_id: "cell-1",
+                  new_source: "print('new')",
+                },
+              },
+            ],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "tool-result-1",
+          session_id: "session-1",
+          parent_tool_use_id: "tool-notebook-1",
+          timestamp: "2026-06-26T11:03:20.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tool-notebook-1",
+                content: "Notebook cell updated",
+              },
+            ],
+          },
+          toolUseResult: {
+            original_file: '{\n  "cells": [{"source": ["print(\'old\')"]}]\n}\n',
+            updated_file: '{\n  "cells": [{"source": ["print(\'new\')"]}]\n}\n',
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    expect(history[0]?.parts[0]).toMatchObject({
+      kind: "tool",
+      callId: "tool-notebook-1",
+      tool: "NotebookEdit",
+      toolType: "file_edit",
+      status: "completed",
+      fileDiffs: [
+        expect.objectContaining({
+          file: "analysis.ipynb",
+          additions: 1,
+          deletions: 1,
+          diff: expect.stringContaining("print('new')"),
+        }),
+      ],
+    });
+  });
 });

@@ -86,6 +86,7 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
   return createClaudeAgentSdkService({
     ...(emit ? { emit } : {}),
     now: () => "2026-06-25T20:00:00.000Z",
+    onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
       throw new Error("unused");
     },
@@ -119,6 +120,7 @@ describe("createClaudeAgentSdkService", () => {
     const service = createClaudeAgentSdkService(
       {
         now: () => "2026-06-25T20:00:00.000Z",
+        onBackgroundFailure: () => Effect.void,
         processEnv: { HOME: "/home/user" },
         resolveMcpBridgeConnection: () => {
           throw new Error("unused");
@@ -264,6 +266,7 @@ describe("createClaudeAgentSdkService", () => {
     });
     const service = createClaudeAgentSdkService({
       now: () => "2026-06-25T20:00:00.000Z",
+      onBackgroundFailure: () => Effect.void,
       randomId: () => "session-1",
       resolveMcpBridgeConnection: () =>
         Effect.succeed({

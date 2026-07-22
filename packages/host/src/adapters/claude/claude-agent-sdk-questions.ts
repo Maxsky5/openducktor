@@ -39,8 +39,7 @@ export type ClaudeAskUserQuestionPayload = {
 };
 
 export const isClaudeAskUserQuestionTool = (toolName: string): boolean =>
-  toolName.trim().toLowerCase().split("__").at(-1) ===
-  CLAUDE_ASK_USER_QUESTION_TOOL_NAME.toLowerCase();
+  toolName.trim().toLowerCase() === CLAUDE_ASK_USER_QUESTION_TOOL_NAME.toLowerCase();
 
 export const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
   CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS.some(
