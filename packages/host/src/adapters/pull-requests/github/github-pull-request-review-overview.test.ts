@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
+import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
+import { HostOperationError } from "../../../effect/host-errors";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
 
 const createDependencies = ({
@@ -104,6 +104,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
                   id: "review-1",
                   author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
                   body: "Changes requested.",
+                  state: "CHANGES_REQUESTED",
                   url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
                   createdAt: "2026-07-08T10:02:00Z",
                   submittedAt: "2026-07-08T10:03:00Z",
@@ -155,10 +156,12 @@ describe("loadGithubPullRequestReviewOverview", () => {
         threadId: null,
         isResolved: null,
         source: "review",
+        reviewOutcome: "changes_requested",
       },
     ]);
     expect(commands).toHaveLength(1);
     expect(commands[0]?.join(" ")).toContain("avatarUrl(size: 64)");
+    expect(commands[0]?.join(" ")).toContain("state");
     const command = commands[0] ?? [];
     const flagFor = (argument: string): string | undefined => {
       const index = command.indexOf(argument);
@@ -209,6 +212,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
             id: "review-1",
             author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
             body: "Only review page.",
+            state: "APPROVED",
             url: "https://example.com/review-1",
             createdAt: "2026-07-08T10:02:00Z",
             submittedAt: null,
@@ -229,6 +233,141 @@ describe("loadGithubPullRequestReviewOverview", () => {
     ]);
     expect(overview.comments[1]).toMatchObject({ author: null, authorAvatarUrl: null });
     expect(commands).toHaveLength(2);
+  });
+
+  test("continues review history after comments finish and keeps repeated reviewers", async () => {
+    const commands: string[][] = [];
+    const response = (args: string[]): unknown => {
+      const command = args.join(" ");
+      if (command.includes("reviewsCursor=reviews-page-2")) {
+        expect(command).toContain("includeComments=false");
+        expect(command).toContain("includeReviews=true");
+        return responsePage({
+          comments: [],
+          reviews: [
+            {
+              id: "review-2",
+              author: { login: "same-reviewer" },
+              body: "Second review",
+              state: "COMMENTED",
+              url: "https://example.com/review-2",
+              submittedAt: "2026-07-08T10:04:00Z",
+            },
+          ],
+        });
+      }
+      return responsePage({
+        comments: [],
+        reviews: [
+          {
+            id: "review-1",
+            author: { login: "same-reviewer" },
+            body: "First review",
+            state: "APPROVED",
+            url: "https://example.com/review-1",
+            submittedAt: "2026-07-08T10:02:00Z",
+          },
+        ],
+        reviewsPageInfo: { hasNextPage: true, endCursor: "reviews-page-2" },
+      });
+    };
+
+    const overview = await Effect.runPromise(
+      loadGithubPullRequestReviewOverview(input(createDependencies({ commands, response }))),
+    );
+
+    expect(
+      overview.comments.map((comment) => [
+        comment.id,
+        comment.author,
+        comment.url,
+        comment.createdAt,
+      ]),
+    ).toEqual([
+      ["review-1", "same-reviewer", "https://example.com/review-1", "2026-07-08T10:02:00Z"],
+      ["review-2", "same-reviewer", "https://example.com/review-2", "2026-07-08T10:04:00Z"],
+    ]);
+    expect(commands).toHaveLength(2);
+  });
+
+  test("maps every submitted review outcome and keeps bodyless reviews", async () => {
+    const overview = await Effect.runPromise(
+      loadGithubPullRequestReviewOverview(
+        input(
+          createDependencies({
+            response: responsePage({
+              comments: [],
+              reviews: [
+                { id: "approved", body: "", state: "APPROVED" },
+                { id: "changes", body: "   ", state: "CHANGES_REQUESTED" },
+                { id: "commented", body: "", state: "COMMENTED" },
+                { id: "dismissed", body: "", state: "DISMISSED" },
+              ],
+            }),
+          }),
+        ),
+      ),
+    );
+
+    expect(
+      overview.comments.map(({ id, body, source, reviewOutcome }) => ({
+        id,
+        body,
+        source,
+        reviewOutcome,
+      })),
+    ).toEqual([
+      { id: "approved", body: "", source: "review", reviewOutcome: "approved" },
+      { id: "changes", body: "   ", source: "review", reviewOutcome: "changes_requested" },
+      { id: "commented", body: "", source: "review", reviewOutcome: "commented" },
+      { id: "dismissed", body: "", source: "review", reviewOutcome: "dismissed" },
+    ]);
+  });
+
+  test("omits pending reviews with and without a body", async () => {
+    const overview = await Effect.runPromise(
+      loadGithubPullRequestReviewOverview(
+        input(
+          createDependencies({
+            response: responsePage({
+              comments: [],
+              reviews: [
+                { id: "pending-empty", body: "", state: "PENDING" },
+                { id: "pending-draft", body: "Draft guidance", state: "PENDING" },
+              ],
+            }),
+          }),
+        ),
+      ),
+    );
+
+    expect(overview.comments).toEqual([]);
+  });
+
+  test.each([
+    ["missing", undefined],
+    ["non-string", 42],
+    ["unsupported", "STALE"],
+  ])("rejects a %s review state through the typed error channel", async (_label, state) => {
+    const result = await Effect.runPromise(
+      loadGithubPullRequestReviewOverview(
+        input(
+          createDependencies({
+            response: responsePage({
+              comments: [],
+              reviews: [{ id: "review-invalid", body: "Review", state }],
+            }),
+          }),
+        ),
+      ).pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left._tag).toBe("HostValidationError");
+      expect(result.left.field).toBe("pullRequest.reviews.nodes.0.state");
+      expect(result.left.message).toContain("review state");
+    }
   });
 
   test("rejects malformed GraphQL connections through the typed error channel", async () => {

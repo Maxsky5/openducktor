@@ -66,7 +66,7 @@ export const pullRequestReviewCheckSchema = z.object({
 });
 export type PullRequestReviewCheck = z.infer<typeof pullRequestReviewCheckSchema>;
 
-export const pullRequestReviewCommentSchema = z.object({
+const pullRequestReviewActivityFields = {
   id: z.string().min(1),
   author: z.string().nullable(),
   authorAvatarUrl: nullableUrlSchema,
@@ -80,9 +80,40 @@ export const pullRequestReviewCommentSchema = z.object({
   line: z.number().int().positive().nullable(),
   threadId: z.string().nullable(),
   isResolved: z.boolean().nullable(),
-  source: z.enum(["comment", "review", "review_thread"]),
+};
+
+export const pullRequestReviewOutcomeSchema = z.enum([
+  "approved",
+  "changes_requested",
+  "commented",
+  "dismissed",
+]);
+export type PullRequestReviewOutcome = z.infer<typeof pullRequestReviewOutcomeSchema>;
+
+const pullRequestReviewCommentActivitySchema = z.object({
+  ...pullRequestReviewActivityFields,
+  source: z.literal("comment"),
+  reviewOutcome: z.never().optional(),
 });
-export type PullRequestReviewComment = z.infer<typeof pullRequestReviewCommentSchema>;
+
+const pullRequestReviewSummaryActivitySchema = z.object({
+  ...pullRequestReviewActivityFields,
+  source: z.literal("review"),
+  reviewOutcome: pullRequestReviewOutcomeSchema,
+});
+
+const pullRequestReviewThreadActivitySchema = z.object({
+  ...pullRequestReviewActivityFields,
+  source: z.literal("review_thread"),
+  reviewOutcome: z.never().optional(),
+});
+
+export const pullRequestReviewActivitySchema = z.discriminatedUnion("source", [
+  pullRequestReviewCommentActivitySchema,
+  pullRequestReviewSummaryActivitySchema,
+  pullRequestReviewThreadActivitySchema,
+]);
+export type PullRequestReviewActivity = z.infer<typeof pullRequestReviewActivitySchema>;
 
 export const pullRequestReviewThreadsSummarySchema = z.object({
   openCount: z.number().int().nonnegative(),
@@ -111,7 +142,7 @@ export const pullRequestReviewContextSchema = z.discriminatedUnion("status", [
     pullRequest: pullRequestReviewPullRequestSchema,
     aggregateStatus: pullRequestReviewAggregateStatusSchema,
     checks: z.array(pullRequestReviewCheckSchema),
-    comments: z.array(pullRequestReviewCommentSchema),
+    comments: z.array(pullRequestReviewActivitySchema),
     reviewThreads: pullRequestReviewThreadsSummarySchema,
     refreshedAt: dateTimeSchema,
   }),

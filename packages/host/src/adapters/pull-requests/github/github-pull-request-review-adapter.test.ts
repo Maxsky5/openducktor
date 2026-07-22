@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { type PullRequestReviewContext, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { GithubPullRequestReviewProvider } from "../../application/pull-requests/github-pull-request-review-provider";
-import type { GithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
-import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewAdapter } from "./github-pull-request-review-adapter";
+import type { GithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
 
 const loadedContext: PullRequestReviewContext = {
   status: "loaded",

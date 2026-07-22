@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
+import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
+import { HostOperationError } from "../../../effect/host-errors";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
 
 const createDependencies = ({
@@ -486,8 +486,11 @@ describe("createGithubPullRequestReviewProvider", () => {
     expect(
       context.comments
         .filter((comment) => comment.source === "review")
-        .map((comment) => comment.body),
-    ).toEqual(["Changes requested.", "Follow-up review."]);
+        .map((comment) => [comment.body, comment.reviewOutcome]),
+    ).toEqual([
+      ["Changes requested.", "changes_requested"],
+      ["Follow-up review.", "commented"],
+    ]);
   });
 
   test("includes unresolved code review threads alongside review summaries", async () => {

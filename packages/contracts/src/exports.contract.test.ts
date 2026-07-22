@@ -119,12 +119,13 @@ import type {
   PlanSubtaskInput,
   PlanSubtaskIssueType,
   PlanSubtaskPriority,
+  PullRequestReviewActivity,
   PullRequestReviewAggregateStatus,
   PullRequestReviewCheck,
   PullRequestReviewCheckConclusion,
   PullRequestReviewCheckStatus,
-  PullRequestReviewComment,
   PullRequestReviewContext,
+  PullRequestReviewOutcome,
   PullRequestReviewProviderId,
   PullRequestReviewPullRequest,
   PullRequestReviewState,
@@ -485,8 +486,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "pullRequestReviewCheckConclusionSchema",
   "pullRequestReviewCheckSchema",
   "pullRequestReviewCheckStatusSchema",
-  "pullRequestReviewCommentSchema",
+  "pullRequestReviewActivitySchema",
   "pullRequestReviewContextSchema",
+  "pullRequestReviewOutcomeSchema",
   "pullRequestReviewProviderIdSchema",
   "pullRequestReviewPullRequestSchema",
   "pullRequestReviewStateSchema",
@@ -801,8 +803,9 @@ type ExportedTypeContract = {
   PullRequestReviewCheck: PullRequestReviewCheck;
   PullRequestReviewCheckConclusion: PullRequestReviewCheckConclusion;
   PullRequestReviewCheckStatus: PullRequestReviewCheckStatus;
-  PullRequestReviewComment: PullRequestReviewComment;
+  PullRequestReviewActivity: PullRequestReviewActivity;
   PullRequestReviewContext: PullRequestReviewContext;
+  PullRequestReviewOutcome: PullRequestReviewOutcome;
   PullRequestReviewProviderId: PullRequestReviewProviderId;
   PullRequestReviewPullRequest: PullRequestReviewPullRequest;
   PullRequestReviewState: PullRequestReviewState;

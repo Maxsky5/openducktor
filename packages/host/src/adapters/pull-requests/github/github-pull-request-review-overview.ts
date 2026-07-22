@@ -1,15 +1,16 @@
 import type {
   GitProviderRepository,
-  PullRequestReviewComment,
+  PullRequestReviewActivity,
+  PullRequestReviewOutcome,
   PullRequestReviewPullRequest,
   PullRequestReviewState,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import {
   type GithubCommandDependencies,
   runGithubCommand,
-} from "../tasks/support/github-pull-requests";
+} from "../../../application/tasks/support/github-pull-requests";
+import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 
 type GithubGraphqlPageInfoPayload = {
   hasNextPage?: unknown;
@@ -27,6 +28,7 @@ type GithubReviewItemPayload = {
   createdAt?: unknown;
   id?: unknown;
   submittedAt?: unknown;
+  state?: unknown;
   updatedAt?: unknown;
   url?: unknown;
 };
@@ -68,11 +70,11 @@ type GithubGraphqlVariable = {
 
 type GithubPullRequestReviewOverview = {
   pullRequest: PullRequestReviewPullRequest;
-  comments: PullRequestReviewComment[];
+  comments: PullRequestReviewActivity[];
 };
 
 type ParsedConnection = {
-  items: PullRequestReviewComment[];
+  items: PullRequestReviewActivity[];
   nextCursor: string | null;
 };
 
@@ -107,6 +109,7 @@ query PullRequestReviewOverview(
             avatarUrl(size: 64)
           }
           body
+          state
           url
           createdAt
           updatedAt
@@ -192,14 +195,12 @@ const parseNextCursor = (
 
 const parseComment = (
   payload: GithubReviewItemPayload,
-  source: "comment" | "review",
   field: string,
-): PullRequestReviewComment | null => {
+): PullRequestReviewActivity | null => {
   const body = typeof payload.body === "string" ? payload.body : "";
   if (!body.trim()) {
     return null;
   }
-  const submittedAt = source === "review" ? toNullableString(payload.submittedAt) : null;
   return {
     id: requireString(payload.id, `${field}.id`),
     author: toNullableString(payload.author?.login),
@@ -208,20 +209,75 @@ const parseComment = (
     patch: null,
     suggestionPatches: [],
     url: toNullableString(payload.url),
-    createdAt: submittedAt ?? toNullableString(payload.createdAt),
+    createdAt: toNullableString(payload.createdAt),
     updatedAt: toNullableString(payload.updatedAt),
     path: null,
     line: null,
     threadId: null,
     isResolved: null,
-    source,
+    source: "comment",
+  };
+};
+
+const parseReviewOutcome = (state: unknown, field: string): PullRequestReviewOutcome | null => {
+  if (typeof state !== "string") {
+    throw new HostValidationError({
+      field,
+      message: `GitHub pull request review state '${field}' is missing or invalid.`,
+      details: { receivedType: typeof state },
+    });
+  }
+  switch (state) {
+    case "APPROVED":
+      return "approved";
+    case "CHANGES_REQUESTED":
+      return "changes_requested";
+    case "COMMENTED":
+      return "commented";
+    case "DISMISSED":
+      return "dismissed";
+    case "PENDING":
+      return null;
+    default:
+      throw new HostValidationError({
+        field,
+        message: `GitHub pull request review state '${field}' has unsupported value '${state}'.`,
+        details: { state },
+      });
+  }
+};
+
+const parseReview = (
+  payload: GithubReviewItemPayload,
+  field: string,
+): PullRequestReviewActivity | null => {
+  const reviewOutcome = parseReviewOutcome(payload.state, `${field}.state`);
+  if (!reviewOutcome) {
+    return null;
+  }
+  return {
+    id: requireString(payload.id, `${field}.id`),
+    author: toNullableString(payload.author?.login),
+    authorAvatarUrl: toNullableString(payload.author?.avatarUrl),
+    body: typeof payload.body === "string" ? payload.body : "",
+    patch: null,
+    suggestionPatches: [],
+    url: toNullableString(payload.url),
+    createdAt: toNullableString(payload.submittedAt) ?? toNullableString(payload.createdAt),
+    updatedAt: toNullableString(payload.updatedAt),
+    path: null,
+    line: null,
+    threadId: null,
+    isResolved: null,
+    source: "review",
+    reviewOutcome,
   };
 };
 
 const parseConnection = (
   connection: GithubReviewConnectionPayload | null | undefined,
   field: string,
-  source: "comment" | "review",
+  parseItem: (payload: GithubReviewItemPayload, field: string) => PullRequestReviewActivity | null,
   included: boolean,
 ): ParsedConnection => {
   if (!included) {
@@ -233,15 +289,11 @@ const parseConnection = (
       message: `GitHub pull request review field '${field}.nodes' is missing or invalid.`,
     });
   }
-  const items: PullRequestReviewComment[] = [];
+  const items: PullRequestReviewActivity[] = [];
   for (const [index, entry] of connection.nodes.entries()) {
-    const comment = parseComment(
-      entry as GithubReviewItemPayload,
-      source,
-      `${field}.nodes.${index}`,
-    );
-    if (comment) {
-      items.push(comment);
+    const item = parseItem(entry as GithubReviewItemPayload, `${field}.nodes.${index}`);
+    if (item) {
+      items.push(item);
     }
   }
   return {
@@ -284,10 +336,15 @@ const parseOverviewPage = (
     comments: parseConnection(
       pullRequest.comments,
       "pullRequest.comments",
-      "comment",
+      parseComment,
       includeComments,
     ),
-    reviews: parseConnection(pullRequest.reviews, "pullRequest.reviews", "review", includeReviews),
+    reviews: parseConnection(
+      pullRequest.reviews,
+      "pullRequest.reviews",
+      parseReview,
+      includeReviews,
+    ),
   };
 };
 
@@ -320,8 +377,8 @@ export const loadGithubPullRequestReviewOverview = (
   input: GithubPullRequestReviewOverviewReadInput,
 ): Effect.Effect<GithubPullRequestReviewOverview, HostValidationError> =>
   Effect.gen(function* () {
-    const comments: PullRequestReviewComment[] = [];
-    const reviews: PullRequestReviewComment[] = [];
+    const comments: PullRequestReviewActivity[] = [];
+    const reviews: PullRequestReviewActivity[] = [];
     let pullRequest: PullRequestReviewPullRequest | null = null;
     let commentsCursor: string | null = null;
     let reviewsCursor: string | null = null;

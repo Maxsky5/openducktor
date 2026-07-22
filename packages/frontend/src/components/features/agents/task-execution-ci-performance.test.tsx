@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PullRequestReviewComment, PullRequestReviewContext } from "@openducktor/contracts";
+import type { PullRequestReviewActivity, PullRequestReviewContext } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { type PropsWithChildren, type ReactElement, useState } from "react";
@@ -19,7 +19,7 @@ const ciQueryInput = {
   taskId: "task-12",
 };
 
-const createPerformanceComment = (index: number): PullRequestReviewComment => ({
+const createPerformanceComment = (index: number): PullRequestReviewActivity => ({
   id: `performance-comment-${index}`,
   author: index % 2 === 0 ? "reviewer" : "review-bot[bot]",
   authorAvatarUrl: null,
@@ -46,7 +46,9 @@ const createPerformanceComment = (index: number): PullRequestReviewComment => ({
   source: "review_thread",
 });
 
-const createLoadedCiContext = (comments: PullRequestReviewComment[]): PullRequestReviewContext => ({
+const createLoadedCiContext = (
+  comments: PullRequestReviewActivity[],
+): PullRequestReviewContext => ({
   status: "loaded",
   providerId: "github",
   pullRequest: {
@@ -204,7 +206,7 @@ const renderCiPerformanceHarness = ({
   initiallyOpen,
   initialTabId,
 }: {
-  comments: PullRequestReviewComment[];
+  comments: PullRequestReviewActivity[];
   initiallyOpen: boolean;
   initialTabId: TaskExecutionPanelModel["activeTabId"];
 }) =>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PullRequestReviewComment } from "@openducktor/contracts";
+import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
@@ -9,7 +9,7 @@ import {
 } from "./task-execution-ci-comment-filters";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 
-const comment = (id: string, author = "reviewer"): PullRequestReviewComment => ({
+const comment = (id: string, author = "reviewer"): PullRequestReviewActivity => ({
   id,
   author,
   authorAvatarUrl: null,
@@ -53,7 +53,7 @@ const withLocalStorage = async (storage: Storage, run: () => Promise<void>): Pro
   }
 };
 
-const commentsList = (comments: PullRequestReviewComment[]) => (
+const commentsList = (comments: PullRequestReviewActivity[]) => (
   <TooltipProvider>
     <TaskExecutionCiCommentsList comments={comments} />
   </TooltipProvider>
@@ -63,7 +63,7 @@ describe("TaskExecutionCiCommentsList", () => {
   test("skips stable comment inputs and renders changed comments", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
       let authorReadCount = 0;
-      const trackedComment: PullRequestReviewComment = {
+      const trackedComment: PullRequestReviewActivity = {
         ...comment("one"),
         get author() {
           authorReadCount += 1;

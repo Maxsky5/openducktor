@@ -1,4 +1,4 @@
-import type { PullRequestReviewComment } from "@openducktor/contracts";
+import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { ChevronRight, ListFilter, MessageSquare } from "lucide-react";
 import type { ReactElement } from "react";
 import {
@@ -36,19 +36,19 @@ const COMMENT_FILTERS: Array<{ id: CommentFilter; label: string }> = [
 const COMMENT_BODY_BATCH_SIZE = 4;
 
 type TaskExecutionCiCommentsListProps = {
-  comments: PullRequestReviewComment[];
+  comments: PullRequestReviewActivity[];
 };
 
-const commentTimestamp = (comment: PullRequestReviewComment): number => {
+const commentTimestamp = (comment: PullRequestReviewActivity): number => {
   const timestamp = Date.parse(comment.createdAt ?? comment.updatedAt ?? "");
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 };
 
 const filterComments = (
-  comments: readonly PullRequestReviewComment[],
+  comments: readonly PullRequestReviewActivity[],
   filter: CommentFilter,
   hideResolved: boolean,
-): PullRequestReviewComment[] => {
+): PullRequestReviewActivity[] => {
   const commentsByResolution = hideResolved
     ? comments.filter((comment) => comment.isResolved !== true)
     : comments;
@@ -68,7 +68,7 @@ const filterComments = (
 };
 
 const selectNextBodyBatchIds = (
-  comments: readonly PullRequestReviewComment[],
+  comments: readonly PullRequestReviewActivity[],
   readyBodyIds: ReadonlySet<string>,
 ): string[] => {
   const batchIds: string[] = [];

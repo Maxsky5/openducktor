@@ -8,10 +8,10 @@ import {
   pullRequestReviewContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
-import { combinedCommandOutput } from "../tasks/support/github-pull-request-model";
-import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
-import { runGithubRepositoryCommandAllowFailure } from "../tasks/support/github-repository-command";
+import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
+import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
+import { runGithubRepositoryCommandAllowFailure } from "../../../application/tasks/support/github-repository-command";
+import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 

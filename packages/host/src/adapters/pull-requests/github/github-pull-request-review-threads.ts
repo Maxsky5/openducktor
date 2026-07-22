@@ -1,10 +1,10 @@
-import type { GitProviderRepository, PullRequestReviewComment } from "@openducktor/contracts";
+import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import {
   type GithubCommandDependencies,
   runGithubCommand,
-} from "../tasks/support/github-pull-requests";
+} from "../../../application/tasks/support/github-pull-requests";
+import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { parseGithubReviewCommentContent } from "./github-pull-request-review-suggestions";
 
 type GithubGraphqlPageInfoPayload = {
@@ -61,14 +61,14 @@ export type ReviewThreadCommentsCursor = {
 };
 
 export type ParsedReviewThreadsPage = {
-  comments: PullRequestReviewComment[];
+  comments: PullRequestReviewActivity[];
   openThreadIds: string[];
   nextThreadsCursor: string | null;
   commentPageCursors: ReviewThreadCommentsCursor[];
 };
 
 export type ParsedReviewThreadCommentsPage = {
-  comments: PullRequestReviewComment[];
+  comments: PullRequestReviewActivity[];
   nextCommentsCursor: string | null;
   threadId: string;
 };
@@ -201,7 +201,7 @@ const toReviewThreadComment = (
   payload: GithubGraphqlReviewThreadCommentPayload,
   threadId: string,
   isResolved: boolean,
-): PullRequestReviewComment | null => {
+): PullRequestReviewActivity | null => {
   const body = typeof payload.body === "string" ? payload.body : "";
   const patch = toNullableString(payload.diffHunk);
   const line = toNullableNumber(payload.line) ?? toNullableNumber(payload.originalLine);
@@ -243,7 +243,7 @@ const parseThread = (thread: GithubGraphqlReviewThreadPayload) => {
       message: "GitHub pull request review field 'thread.comments.nodes' is missing or invalid.",
     });
   }
-  const comments: PullRequestReviewComment[] = [];
+  const comments: PullRequestReviewActivity[] = [];
   for (const comment of thread.comments.nodes) {
     const normalized = toReviewThreadComment(
       comment as GithubGraphqlReviewThreadCommentPayload,
@@ -283,7 +283,7 @@ const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
         "Failed to parse GitHub pull request review threads response: expected data.repository.pullRequest.reviewThreads.nodes.",
     });
   }
-  const comments: PullRequestReviewComment[] = [];
+  const comments: PullRequestReviewActivity[] = [];
   const openThreadIds: string[] = [];
   const commentPageCursors: ReviewThreadCommentsCursor[] = [];
   for (const thread of reviewThreads.nodes) {
@@ -356,7 +356,7 @@ const runReviewGraphql = (
 
 export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
   Effect.gen(function* () {
-    const comments: PullRequestReviewComment[] = [];
+    const comments: PullRequestReviewActivity[] = [];
     const openThreadIds = new Set<string>();
     let threadsCursor: string | null = null;
 
