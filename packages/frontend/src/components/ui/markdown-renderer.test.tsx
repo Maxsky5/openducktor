@@ -10,6 +10,7 @@ import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { MarkdownMermaid } from "./markdown-mermaid";
+import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
 
@@ -406,6 +407,13 @@ describe("rich task description rendering", () => {
     expect(view.queryByText(/graph TD/)).toBeNull();
     expect(view.container.querySelector("script")).toBeNull();
   }, 4000);
+
+  test("uses sanitizer-safe SVG text for Mermaid labels", () => {
+    expect(MERMAID_RENDER_CONFIG).toMatchObject({
+      securityLevel: "strict",
+      htmlLabels: false,
+    });
+  });
 
   test("keeps the current Mermaid preview visible while an editor update settles", async () => {
     const renderModule = await import("./markdown-mermaid-render");

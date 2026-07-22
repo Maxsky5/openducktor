@@ -1,4 +1,13 @@
+import type { MermaidConfig } from "mermaid";
+
 let initialized = false;
+
+export const MERMAID_RENDER_CONFIG = {
+  startOnLoad: false,
+  securityLevel: "strict",
+  suppressErrorRendering: true,
+  htmlLabels: false,
+} satisfies MermaidConfig;
 
 export async function renderMermaidSvg(renderId: string, source: string): Promise<string> {
   const [mermaidModule, sanitizeModule] = await Promise.all([
@@ -7,11 +16,7 @@ export async function renderMermaidSvg(renderId: string, source: string): Promis
   ]);
   const mermaid = mermaidModule.default;
   if (!initialized) {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      suppressErrorRendering: true,
-    });
+    mermaid.initialize(MERMAID_RENDER_CONFIG);
     initialized = true;
   }
   const rendered = await mermaid.render(renderId, source);
