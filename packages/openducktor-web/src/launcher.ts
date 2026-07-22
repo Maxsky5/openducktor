@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
 import type { ViteDevServer } from "vite";
 import {
@@ -28,7 +29,10 @@ import {
 } from "./launcher-support";
 import { type WebLogger, writeWebLogEffect } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
-import { startTypescriptHostBackendEffect } from "./typescript-host-backend";
+import {
+  startTypescriptHostBackendEffect,
+  type TypescriptHostBackendOptions,
+} from "./typescript-host-backend";
 import { resolveWebRuntimeDistributionEffect } from "./web-runtime-distribution";
 import { resolveWebProvidedToolPathsEffect } from "./web-tool-discovery";
 
@@ -40,6 +44,25 @@ export type LauncherOptions = {
   backendPort: number;
   readinessTimeoutMs?: number;
 };
+
+export const resolveWebMcpBridgeDiscoveryMode = (workspaceMode: boolean): McpBridgeDiscoveryMode =>
+  workspaceMode ? "development" : "production";
+
+export type WebLauncherHostBackendOptions = Omit<
+  TypescriptHostBackendOptions,
+  "mcpBridgeDiscoveryMode"
+> & {
+  workspaceMode: boolean;
+};
+
+export const startWebLauncherHostBackendEffect = ({
+  workspaceMode,
+  ...options
+}: WebLauncherHostBackendOptions) =>
+  startTypescriptHostBackendEffect({
+    ...options,
+    mcpBridgeDiscoveryMode: resolveWebMcpBridgeDiscoveryMode(workspaceMode),
+  });
 
 const logFrontendAvailability = (port: number, logger: WebLogger): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
@@ -427,7 +450,7 @@ export const runLauncherEffect = (
     let lifecycle: WebLauncherLifecycle | null = null;
 
     return yield* Effect.acquireUseRelease(
-      startTypescriptHostBackendEffect({
+      startWebLauncherHostBackendEffect({
         port: options.backendPort,
         frontendOrigin: frontendUrl,
         controlToken,
@@ -436,6 +459,7 @@ export const runLauncherEffect = (
         providedToolPaths,
         runtimeDistribution,
         logger,
+        workspaceMode: options.workspaceMode,
       }),
       (hostBackend) =>
         Effect.gen(function* () {

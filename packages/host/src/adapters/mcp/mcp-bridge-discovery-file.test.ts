@@ -26,21 +26,73 @@ const discovery = (input: Partial<McpBridgeDiscoveryFile> = {}): McpBridgeDiscov
 
 describe("MCP bridge discovery file", () => {
   test("defaults discovery to the home OpenDucktor config root", () => {
-    expect(resolveMcpBridgeDiscoveryPath({})).toBe(
+    expect(resolveMcpBridgeDiscoveryPath("production", {})).toBe(
       path.join(homedir(), ".openducktor", "runtime", "mcp-bridge.json"),
+    );
+  });
+
+  test("resolves development discovery under the same default config root", () => {
+    expect(resolveMcpBridgeDiscoveryPath("development", {})).toBe(
+      path.join(homedir(), ".openducktor", "runtime", "mcp-bridge-dev.json"),
     );
   });
 
   test("resolves discovery under the same configured OpenDucktor config root", () => {
     expect(
-      resolveMcpBridgeDiscoveryPath({ OPENDUCKTOR_CONFIG_DIR: ` "~/.openducktor-local" ` }),
+      resolveMcpBridgeDiscoveryPath("production", {
+        OPENDUCKTOR_CONFIG_DIR: ` "~/.openducktor-local" `,
+      }),
     ).toBe(path.join(homedir(), ".openducktor-local", "runtime", "mcp-bridge.json"));
   });
 
   test("resolves relative configured roots to absolute discovery paths", () => {
-    expect(resolveMcpBridgeDiscoveryPath({ OPENDUCKTOR_CONFIG_DIR: "./.openducktor-local" })).toBe(
-      path.resolve("./.openducktor-local", "runtime/mcp-bridge.json"),
-    );
+    expect(
+      resolveMcpBridgeDiscoveryPath("production", {
+        OPENDUCKTOR_CONFIG_DIR: "./.openducktor-local",
+      }),
+    ).toBe(path.resolve("./.openducktor-local", "runtime/mcp-bridge.json"));
+  });
+
+  test("publishing and removing development discovery preserves production discovery", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-modes-"));
+    const env = { OPENDUCKTOR_CONFIG_DIR: tempDir };
+    const productionPath = resolveMcpBridgeDiscoveryPath("production", env);
+    const developmentPath = resolveMcpBridgeDiscoveryPath("development", env);
+    const production = discovery({ hostToken: "production-token", pid: 123 });
+    const development = discovery({ hostToken: "development-token", pid: 456 });
+    const productionPayload = `${JSON.stringify(production, null, 2)}\n`;
+
+    try {
+      await Effect.runPromise(writeMcpBridgeDiscoveryFile(productionPath, production));
+      await Effect.runPromise(writeMcpBridgeDiscoveryFile(developmentPath, development));
+      await expect(readFile(productionPath, "utf8")).resolves.toBe(productionPayload);
+
+      await Effect.runPromise(removeMcpBridgeDiscoveryFile(developmentPath, development));
+      await expect(readFile(productionPath, "utf8")).resolves.toBe(productionPayload);
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("publishing and removing production discovery preserves development discovery", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-modes-"));
+    const env = { OPENDUCKTOR_CONFIG_DIR: tempDir };
+    const productionPath = resolveMcpBridgeDiscoveryPath("production", env);
+    const developmentPath = resolveMcpBridgeDiscoveryPath("development", env);
+    const production = discovery({ hostToken: "production-token", pid: 123 });
+    const development = discovery({ hostToken: "development-token", pid: 456 });
+    const developmentPayload = `${JSON.stringify(development, null, 2)}\n`;
+
+    try {
+      await Effect.runPromise(writeMcpBridgeDiscoveryFile(developmentPath, development));
+      await Effect.runPromise(writeMcpBridgeDiscoveryFile(productionPath, production));
+      await expect(readFile(developmentPath, "utf8")).resolves.toBe(developmentPayload);
+
+      await Effect.runPromise(removeMcpBridgeDiscoveryFile(productionPath, production));
+      await expect(readFile(developmentPath, "utf8")).resolves.toBe(developmentPayload);
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
   });
 
   test("removes the discovery file only when it still belongs to the current bridge", async () => {

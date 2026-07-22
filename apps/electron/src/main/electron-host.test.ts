@@ -42,6 +42,7 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
 
 const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) =>
   createProductionElectronHostCommandRouter({
+    isPackaged: false,
     onBackgroundFailure: () => Effect.void,
     processEnv: { PATH: "/usr/bin:/bin" },
     runtimeDistribution: testRuntimeDistribution,
@@ -540,6 +541,7 @@ describe("createElectronHostCommandRouter", () => {
             filesystem: createFilesystem(),
             git: createGit(),
             lifecycleLogger: logger,
+            isPackaged: false,
             mcpHostBridge: {
               ensureConnection: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
               ensureExternalDiscoveryReady: () =>

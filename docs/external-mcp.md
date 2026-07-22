@@ -63,12 +63,21 @@ Equivalent environment variables:
 
 - `ODT_WORKSPACE_ID` optional default workspace
 - `ODT_HOST_URL` optional override
+- `OPENDUCKTOR_CHANNEL=dev` selects development host discovery; leave it unset for production
 
 Automatic discovery:
 
-- The MCP reads the current host bridge from `runtime/mcp-bridge.json` under the OpenDucktor config directory.
+- With `OPENDUCKTOR_CHANNEL` unset, the MCP reads the production host bridge from `runtime/mcp-bridge.json`.
+- With `OPENDUCKTOR_CHANNEL=dev`, the MCP reads the development host bridge from `runtime/mcp-bridge-dev.json`.
+- The MCP rejects empty or unknown channel values during automatic discovery. It does not try the other channel's file.
 - The default config directory is `~/.openducktor`.
-- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge.json` instead.
+- Set `OPENDUCKTOR_CONFIG_DIR` to change the config root for the selected discovery file.
+
+To connect an external MCP client to `bun run electron:dev` or `bun run browser:dev`:
+
+```sh
+OPENDUCKTOR_CHANNEL=dev bunx @openducktor/mcp@latest
+```
 
 Startup contract:
 
@@ -82,6 +91,8 @@ Startup contract:
 8. Do not implicitly choose a workspace. Workspace-scoped tool calls must resolve a workspace from tool input `workspaceId` first, then the startup default.
 
 Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it. Workspace resolution is request-scoped for workspace-bound tools: tool-input `workspaceId` wins over any startup default, and missing both sources is an error.
+
+OpenDucktor-managed OpenCode and Codex sessions receive explicit `ODT_HOST_URL` and `ODT_HOST_TOKEN` values. They do not depend on discovery files or `OPENDUCKTOR_CHANNEL`.
 
 ## Public Tools
 

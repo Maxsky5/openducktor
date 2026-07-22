@@ -26,13 +26,7 @@ bun install
 
 That install also activates the repository's shared local Git hooks through the root `prepare` script.
 
-3. Use a dedicated development config directory so your local contributor data stays separate from your regular app data:
-
-```sh
-export OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"
-```
-
-4. Start the Electron desktop app:
+3. Start the Electron desktop app:
 
 ```sh
 bun run electron:dev
@@ -59,7 +53,7 @@ Notes:
 
 ## Main Development Commands
 
-Recommended for local development: keep contributor data isolated with `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` in your shell session.
+The development commands need no channel or config-directory environment variable. Electron and browser workspace development publish `runtime/mcp-bridge-dev.json`; packaged and installed production hosts publish `runtime/mcp-bridge.json`.
 
 Electron desktop:
 
@@ -74,6 +68,12 @@ bun run browser:dev
 ```
 
 The browser command starts the TypeScript host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must use the shell bridge instead of importing shell internals directly; run `bun run frontend:boundary-guard` after shell-boundary changes.
+
+To connect a standalone external MCP client to either development command, select the development descriptor:
+
+```sh
+OPENDUCKTOR_CHANNEL=dev bunx @openducktor/mcp@latest
+```
 
 ## Verification Commands
 
@@ -128,7 +128,7 @@ Example commit messages:
 
 OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with `OPENDUCKTOR_CONFIG_DIR`.
 
-For local development, it is recommended to use a separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` so contributor state, task-store databases, and runtime caches stay isolated from your normal app usage.
+A separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` remains useful when you want to keep contributor settings, task-store databases, and runtime caches apart from your normal app data. It is not required solely to protect production MCP discovery because development hosts use `runtime/mcp-bridge-dev.json`.
 
 Important paths:
 

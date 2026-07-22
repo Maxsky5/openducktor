@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -131,9 +131,14 @@ describe("TypeScript web host backend", () => {
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
     const consoleLines: string[] = [];
+    const productionDiscoveryPath = path.join(tempConfigDir, "runtime", "mcp-bridge.json");
+    const developmentDiscoveryPath = path.join(tempConfigDir, "runtime", "mcp-bridge-dev.json");
+    const productionDiscovery = '{"hostUrl":"http://127.0.0.1:1","hostToken":"prod","pid":1}\n';
 
     try {
       process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
+      await mkdir(path.dirname(productionDiscoveryPath), { recursive: true });
+      await writeFile(productionDiscoveryPath, productionDiscovery, "utf8");
       const logger = await Effect.runPromise(
         createWebLogger({
           console: {
@@ -150,10 +155,17 @@ describe("TypeScript web host backend", () => {
         controlToken: CONTROL_TOKEN,
         appToken: APP_TOKEN,
         logger,
+        mcpBridgeDiscoveryMode: "development",
         onBackgroundFailure: () => {},
         runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
       });
       const backendUrl = `http://127.0.0.1:${backend.port}`;
+      await expect(readFile(productionDiscoveryPath, "utf8")).resolves.toBe(productionDiscovery);
+      expect(JSON.parse(await readFile(developmentDiscoveryPath, "utf8"))).toEqual({
+        hostToken: expect.any(String),
+        hostUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+        pid: process.pid,
+      });
 
       const health = await Bun.fetch(`${backendUrl}/health`);
       expect(health.status).toBe(200);
@@ -325,6 +337,10 @@ describe("TypeScript web host backend", () => {
       });
       expect(shutdown.status).toBe(202);
       await expect(backend.exited).resolves.toBe(0);
+      await expect(readFile(productionDiscoveryPath, "utf8")).resolves.toBe(productionDiscovery);
+      await expect(readFile(developmentDiscoveryPath, "utf8")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
       const persisted = await readFile(
         path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log"),
         "utf8",
@@ -354,9 +370,9 @@ describe("TypeScript web host backend", () => {
     const configPath = path.join(tempConfigDir, "config.json");
     const logFilePath = path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log");
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
-    process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
 
     try {
+      process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
       const logger = await Effect.runPromise(
         createWebLogger({
           console: { error: () => {}, log: () => {} },
@@ -373,6 +389,7 @@ describe("TypeScript web host backend", () => {
             controlToken: CONTROL_TOKEN,
             appToken: APP_TOKEN,
             logger,
+            mcpBridgeDiscoveryMode: "development",
             onBackgroundFailure: (failure) => {
               Effect.runSync(Deferred.succeed(failureReported, failure));
             },

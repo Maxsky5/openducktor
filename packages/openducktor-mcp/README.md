@@ -54,12 +54,21 @@ Equivalent environment variables:
 
 - `ODT_WORKSPACE_ID` optional default workspace
 - `ODT_HOST_URL` optional override
+- `OPENDUCKTOR_CHANNEL=dev` selects development host discovery; leave it unset for production
 
 Automatic discovery:
 
-- The MCP reads the current host bridge from `runtime/mcp-bridge.json` under the OpenDucktor config directory.
+- With `OPENDUCKTOR_CHANNEL` unset, the MCP reads `runtime/mcp-bridge.json` for the production host.
+- With `OPENDUCKTOR_CHANNEL=dev`, the MCP reads `runtime/mcp-bridge-dev.json` for a development host.
+- The MCP rejects empty or unknown channel values during automatic discovery. It never tries the other channel's descriptor.
 - The default config directory is `~/.openducktor`.
-- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge.json` instead.
+- Set `OPENDUCKTOR_CONFIG_DIR` to change the config root for the selected descriptor.
+
+Connect to a source development host with:
+
+```sh
+OPENDUCKTOR_CHANNEL=dev bunx @openducktor/mcp@latest
+```
 
 Startup behavior:
 
@@ -71,6 +80,8 @@ Startup behavior:
 - Startup no longer requires `--workspace-id` or `ODT_WORKSPACE_ID`.
 - When both a startup default and a tool-input `workspaceId` are present, the tool input wins.
 - Workspace-scoped tools fail fast with an explicit error when neither a startup default nor a tool-input `workspaceId` is available.
+
+OpenDucktor-managed OpenCode and Codex sessions receive explicit host URL and token values. Their routing does not use `OPENDUCKTOR_CHANNEL`.
 
 The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
 

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
@@ -62,6 +64,7 @@ const createRouter = (input: {
   createNodeEffectHostCommandRouter({
     ...(input.eventBus ? { eventBus: input.eventBus } : {}),
     lifecycleLogger: input.logger,
+    mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     runtimeDistribution,
@@ -71,6 +74,43 @@ const createRouter = (input: {
   });
 
 describe("createNodeEffectHostCommandRouter", () => {
+  test("publishes development discovery from composition mode despite ambient channel", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-node-host-discovery-"));
+    const { logger } = createLogger();
+    const router = createNodeEffectHostCommandRouter({
+      lifecycleLogger: logger,
+      mcpBridgeDiscoveryMode: "development",
+      onBackgroundFailure: () => Effect.void,
+      processEnv: {
+        OPENDUCKTOR_CHANNEL: "production",
+        OPENDUCKTOR_CONFIG_DIR: configDir,
+      },
+      runtimeDistribution,
+      runtimeRegistry: createRuntimeRegistry(),
+      taskStore: {} as TaskStorePort,
+      terminalPty,
+    });
+
+    try {
+      await Effect.runPromise(router.initialize());
+
+      const payload = JSON.parse(
+        await readFile(path.join(configDir, "runtime", "mcp-bridge-dev.json"), "utf8"),
+      ) as Record<string, unknown>;
+      expect(payload).toEqual({
+        hostToken: expect.any(String),
+        hostUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+        pid: process.pid,
+      });
+      await expect(
+        readFile(path.join(configDir, "runtime", "mcp-bridge.json"), "utf8"),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await Effect.runPromise(router.dispose());
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("stops managed dev servers during normal host disposal", async () => {
     const { infos, logger } = createLogger();
 

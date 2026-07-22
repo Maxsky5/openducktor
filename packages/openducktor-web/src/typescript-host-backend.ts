@@ -13,6 +13,7 @@ import {
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
+  type McpBridgeDiscoveryMode,
   TerminalServiceError,
   type ToolDiscoveryId,
   terminalServiceErrorToFailure,
@@ -47,6 +48,7 @@ export type TypescriptHostBackendOptions = {
   controlToken: string;
   appToken: string;
   logger: WebLogger;
+  mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   onBackgroundFailure(failure: unknown): void;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
@@ -723,6 +725,7 @@ export const startTypescriptHostBackendEffect = ({
   controlToken,
   appToken,
   logger,
+  mcpBridgeDiscoveryMode,
   onBackgroundFailure,
   providedToolPaths,
   runtimeDistribution,
@@ -753,6 +756,7 @@ export const startTypescriptHostBackendEffect = ({
         info: logger.info,
       },
       localAttachments,
+      mcpBridgeDiscoveryMode,
       onBackgroundFailure: (failure) =>
         Effect.sync(() => {
           rejectExited(failure);

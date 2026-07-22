@@ -4,6 +4,7 @@ import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sess
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
+import type { McpBridgeDiscoveryMode } from "../../adapters/mcp/mcp-bridge-discovery-file";
 import {
   createMcpHostBridgeServer,
   type McpHostBridgeServer,
@@ -94,6 +95,7 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   clientVersion?: string;
   eventBus?: HostEventBusPort;
   lifecycleLogger?: HostLifecycleLogger;
+  mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   mcpHostBridge?: McpHostBridgeServer;
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   runtimeRegistry?: RuntimeRegistryPort;
@@ -322,7 +324,7 @@ export const createNodeEffectHostCommandRouter = (
   });
   resolvedMcpHostBridge ??= createMcpHostBridgeServer({
     bridgeService: odtMcpBridgeService,
-    discoveryPath: resolveMcpBridgeDiscoveryPath(processEnv),
+    discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, processEnv),
     workspaceSettingsService,
   });
   const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({

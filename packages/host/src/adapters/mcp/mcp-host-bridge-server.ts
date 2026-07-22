@@ -14,7 +14,6 @@ import type { OpenCodeMcpBridgeConnection } from "../opencode/opencode-workspace
 import {
   type McpBridgeDiscoveryFile,
   removeMcpBridgeDiscoveryFile,
-  resolveMcpBridgeDiscoveryPath,
   writeMcpBridgeDiscoveryFile,
 } from "./mcp-bridge-discovery-file";
 import { bridgeErrorPayload, bridgeMessagePayload } from "./mcp-host-bridge-errors";
@@ -40,7 +39,7 @@ export type McpHostBridgeCloseResult = {
 
 export type CreateMcpHostBridgeServerInput = {
   bridgeService: OdtMcpBridgeService;
-  discoveryPath?: string;
+  discoveryPath: string;
   workspaceSettingsService: WorkspaceSettingsService;
   token?: string;
 };
@@ -330,7 +329,7 @@ const createBridgeRequestHandler =
 
 export const createMcpHostBridgeServer = ({
   bridgeService,
-  discoveryPath = resolveMcpBridgeDiscoveryPath(),
+  discoveryPath,
   workspaceSettingsService,
   token = randomUUID(),
 }: CreateMcpHostBridgeServerInput): McpHostBridgeServer => {

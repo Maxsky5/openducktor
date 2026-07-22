@@ -7,6 +7,7 @@ import { WebOperationError } from "./effect/web-errors";
 import {
   logDuplicateWebTerminationNotice,
   preserveLauncherFailureAfterStop,
+  resolveWebMcpBridgeDiscoveryMode,
   runWebSignalShutdown,
 } from "./launcher";
 import {
@@ -33,6 +34,14 @@ const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
 };
 
 describe("launcher internals", () => {
+  test("uses development discovery for workspace source launches", () => {
+    expect(resolveWebMcpBridgeDiscoveryMode(true)).toBe("development");
+  });
+
+  test("uses production discovery for installed static launches", () => {
+    expect(resolveWebMcpBridgeDiscoveryMode(false)).toBe("production");
+  });
+
   test("waits for the fake host health and token-authenticated session endpoints", async () => {
     const requests: Array<{ url: string; method: string | undefined; token: string | null }> = [];
     let healthAttempts = 0;

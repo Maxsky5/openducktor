@@ -18,6 +18,8 @@ bun run browser:dev
 
 That workspace mode runs the TypeScript host in-process and serves the frontend with Vite. Published installs use bundled static frontend assets plus the TypeScript host bundled into `dist/cli.js`.
 
+Workspace mode publishes external MCP discovery to `runtime/mcp-bridge-dev.json`. Published installs use the production `runtime/mcp-bridge.json` descriptor. External MCP clients must set `OPENDUCKTOR_CHANNEL=dev` to connect to workspace mode.
+
 ## Options
 
 ```sh
