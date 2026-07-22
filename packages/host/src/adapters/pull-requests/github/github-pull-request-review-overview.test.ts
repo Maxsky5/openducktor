@@ -402,6 +402,24 @@ describe("loadGithubPullRequestReviewOverview", () => {
     }
   });
 
+  test("rejects a malformed review node with its provider field path", async () => {
+    const result = await Effect.runPromise(
+      loadGithubPullRequestReviewOverview(
+        input(
+          createDependencies({
+            response: responsePage({ comments: [], reviews: [null] }),
+          }),
+        ),
+      ).pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left._tag).toBe("HostValidationError");
+      expect(result.left.field).toBe("pullRequest.reviews.nodes.0");
+    }
+  });
+
   test("rejects malformed GraphQL connections through the typed error channel", async () => {
     const malformed = {
       data: {

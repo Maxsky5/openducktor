@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewAdapter } from "./github-pull-request-review-adapter";
-import type { GithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
+import type { GithubPullRequestReviewReader } from "./github-pull-request-review-reader";
 
 const loadedContext: PullRequestReviewContext = {
   status: "loaded",
@@ -43,10 +43,10 @@ describe("createGithubPullRequestReviewAdapter", () => {
       toolDiscovery: {} as GithubCommandDependencies["toolDiscovery"],
     };
     const read = mock(() => Effect.succeed(loadedContext));
-    const reviewProvider: GithubPullRequestReviewProvider = { read };
+    const reviewReader: GithubPullRequestReviewReader = { read };
     const adapter = createGithubPullRequestReviewAdapter({
       githubDependencies,
-      reviewProvider,
+      reviewReader,
     });
     const repoConfig = repoConfigSchema.parse({
       workspaceId: "repo",

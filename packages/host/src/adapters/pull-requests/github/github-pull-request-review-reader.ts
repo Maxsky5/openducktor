@@ -13,19 +13,13 @@ import type { GithubCommandDependencies } from "../../../application/tasks/suppo
 import { runGithubRepositoryCommandAllowFailure } from "../../../application/tasks/support/github-repository-command";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
+import {
+  parseGithubJson,
+  requireGithubObject,
+  requireGithubString,
+  toNullableGithubString,
+} from "./github-pull-request-review-payload";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
-
-type GithubCheckPayload = {
-  bucket?: unknown;
-  completedAt?: unknown;
-  description?: unknown;
-  event?: unknown;
-  link?: unknown;
-  name?: unknown;
-  startedAt?: unknown;
-  state?: unknown;
-  workflow?: unknown;
-};
 
 type GithubPullRequestReviewReadInput = {
   dependencies: GithubCommandDependencies;
@@ -34,7 +28,7 @@ type GithubPullRequestReviewReadInput = {
   pullRequestNumber: number;
 };
 
-export type GithubPullRequestReviewProvider = {
+export type GithubPullRequestReviewReader = {
   read(
     input: GithubPullRequestReviewReadInput,
   ): Effect.Effect<PullRequestReviewContext, HostValidationError>;
@@ -48,32 +42,6 @@ const isNoChecksReported = (result: {
   result.exitCode === 1 &&
   result.stdout.trim().length === 0 &&
   result.stderr.toLowerCase().includes("no checks reported");
-
-const toNullableString = (value: unknown): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value : null;
-
-const requireString = (value: unknown, field: string): string => {
-  const parsed = toNullableString(value);
-  if (!parsed) {
-    throw new HostValidationError({
-      field,
-      message: `GitHub pull request review field '${field}' is missing or invalid.`,
-    });
-  }
-  return parsed;
-};
-
-const parseJson = (payload: string, label: string): unknown => {
-  try {
-    return JSON.parse(payload);
-  } catch (cause) {
-    throw new HostValidationError({
-      field: "payload",
-      message: `Failed to parse GitHub ${label} response: ${errorMessage(cause)}`,
-      cause,
-    });
-  }
-};
 
 const normalizeCheckStatus = (state: unknown): PullRequestReviewCheckStatus => {
   const normalized = typeof state === "string" ? state.trim().toLowerCase() : "";
@@ -131,24 +99,24 @@ const normalizeCheckConclusion = (
 };
 
 const parseChecks = (payload: string): PullRequestReviewCheck[] => {
-  const parsed = parseJson(payload, "pull request checks");
+  const parsed = parseGithubJson(payload, "pull request checks");
   if (!Array.isArray(parsed)) {
     throw new HostValidationError({
       field: "payload",
       message: "Failed to parse GitHub pull request checks response: expected an array.",
     });
   }
-  return parsed.map((entry) => {
-    const check = entry as GithubCheckPayload;
+  return parsed.map((entry, index) => {
+    const check = requireGithubObject(entry, `checks.${index}`);
     return {
-      name: requireString(check.name, "name"),
-      workflow: toNullableString(check.workflow),
+      name: requireGithubString(check.name, `checks.${index}.name`),
+      workflow: toNullableGithubString(check.workflow),
       status: normalizeCheckStatus(check.state),
       conclusion: normalizeCheckConclusion(check.bucket, check.state),
-      url: toNullableString(check.link),
-      details: toNullableString(check.description) ?? toNullableString(check.event),
-      startedAt: toNullableString(check.startedAt),
-      completedAt: toNullableString(check.completedAt),
+      url: toNullableGithubString(check.link),
+      details: toNullableGithubString(check.description) ?? toNullableGithubString(check.event),
+      startedAt: toNullableGithubString(check.startedAt),
+      completedAt: toNullableGithubString(check.completedAt),
     };
   });
 };
@@ -179,7 +147,7 @@ const aggregateChecks = (
   return "neutral";
 };
 
-export const createGithubPullRequestReviewProvider = (): GithubPullRequestReviewProvider => ({
+export const createGithubPullRequestReviewReader = (): GithubPullRequestReviewReader => ({
   read(input) {
     return Effect.gen(function* () {
       const [overview, checksPayload, reviewThreads] = yield* Effect.all(
@@ -230,12 +198,16 @@ export const createGithubPullRequestReviewProvider = (): GithubPullRequestReview
       );
       const checks = yield* Effect.try({
         try: () => parseChecks(checksPayload),
-        catch: (cause) =>
-          new HostValidationError({
+        catch: (cause) => {
+          if (cause instanceof HostValidationError) {
+            return cause;
+          }
+          return new HostValidationError({
             field: "github.checks",
             message: errorMessage(cause),
             cause,
-          }),
+          });
+        },
       });
       return yield* Effect.try({
         try: () =>

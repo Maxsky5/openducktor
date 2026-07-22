@@ -8,9 +8,9 @@ import {
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
 import {
-  createGithubPullRequestReviewProvider,
-  type GithubPullRequestReviewProvider,
-} from "./github-pull-request-review-provider";
+  createGithubPullRequestReviewReader,
+  type GithubPullRequestReviewReader,
+} from "./github-pull-request-review-reader";
 
 const unavailable = (reason: string) =>
   pullRequestReviewContextSchema.parse({
@@ -21,10 +21,10 @@ const unavailable = (reason: string) =>
 
 export const createGithubPullRequestReviewAdapter = ({
   githubDependencies,
-  reviewProvider = createGithubPullRequestReviewProvider(),
+  reviewReader = createGithubPullRequestReviewReader(),
 }: {
   githubDependencies: GithubCommandDependencies;
-  reviewProvider?: GithubPullRequestReviewProvider;
+  reviewReader?: GithubPullRequestReviewReader;
 }): PullRequestReviewProviderPort => {
   return {
     providerId: GITHUB_PROVIDER_ID,
@@ -47,7 +47,7 @@ export const createGithubPullRequestReviewAdapter = ({
           return unavailable(errorMessage(repositoryResult.left));
         }
 
-        return yield* reviewProvider.read({
+        return yield* reviewReader.read({
           dependencies: githubDependencies,
           repoPath,
           repository: repositoryResult.right,
