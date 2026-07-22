@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import {
   assessVisualMarkdownCompatibility,
   canonicalizeTaskDescriptionMarkdown,
@@ -165,6 +166,18 @@ describe("task description Markdown dialect", () => {
     ["adjacent inline math", "Values $x$ and $y$ are valid."],
   ])("keeps valid %s available in Visual mode", (_name, markdown) => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+  });
+
+  test.each([
+    ["spaces before LF and a following paragraph", "$$\nx\n$$   \n\nAfter"],
+    ["a tab before CRLF and a following paragraph", "$$\r\nx\r\n$$\t\r\n\r\nAfter"],
+    ["spaces at EOF", "$$\nx\n$$   "],
+  ])("keeps renderer semantics stable for block math with %s", (_name, markdown) => {
+    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+
+    expect(hasMarkdownMath(markdown)).toBe(true);
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+    expect(hasMarkdownMath(canonical)).toBe(true);
   });
 
   test.each([

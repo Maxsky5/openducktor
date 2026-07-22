@@ -134,6 +134,22 @@ describe("rich task description rendering", () => {
     expect(view.queryByText("title: Hidden", { exact: false })).toBeNull();
   }, 4000);
 
+  test.each([
+    ["spaces before LF and a following paragraph", "$$\nx\n$$   \n\nAfter"],
+    ["a tab before CRLF and a following paragraph", "$$\r\nx\r\n$$\t\r\n\r\nAfter"],
+    ["spaces at EOF", "$$\nx\n$$   "],
+  ])(
+    "renders block math with %s through KaTeX",
+    async (_name, markdown) => {
+      const view = render(<MarkdownRenderer markdown={markdown} />);
+
+      await waitFor(() => expect(view.container.querySelector(".katex-display")).not.toBeNull(), {
+        timeout: 3000,
+      });
+    },
+    4000,
+  );
+
   test("omits valid front matter consistently with and without math or task context", async () => {
     const plain = render(
       <MarkdownRenderer markdown={"---\ntitle: Hidden plain\n---\nVisible plain"} />,

@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { useState } from "react";
+import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import TaskDescriptionEditor from "./task-description-editor";
 
 const props = {
@@ -340,11 +341,13 @@ describe("TaskDescriptionEditor", () => {
     );
   });
 
-  test("preserves multiline block math after the first unrelated Visual edit", async () => {
+  test("preserves renderer meaning for whitespace-closed block math after an unrelated Visual edit", async () => {
     const onChange = mock((_value: string) => {});
+    const markdown = "$$\r\nx^2\r\n$$\t\r\n\r\nBody";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={"$$\nx^2\n$$\n\nBody"} onChange={onChange} />,
+      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
     );
+    expect(hasMarkdownMath(markdown)).toBe(true);
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
@@ -355,8 +358,12 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() =>
       expect(
         onChange.mock.calls.some(([value]) => {
-          const markdown = String(value);
-          return markdown.includes("$$\nx^2\n$$") && markdown.includes("$y$");
+          const emittedMarkdown = String(value);
+          return (
+            hasMarkdownMath(emittedMarkdown) &&
+            emittedMarkdown.includes("$$\nx^2\n$$") &&
+            emittedMarkdown.includes("$y$")
+          );
         }),
       ).toBe(true),
     );
