@@ -19,12 +19,14 @@ import {
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export type SelectedSessionViewProjection = {
   activityState: AgentSessionActivityState | null;
   selectedModel: AgentSessionState["selectedModel"];
   transcriptState: AgentSessionTranscriptState;
+  sessionAuxiliaryError: string | null;
 };
 
 export const deriveSelectedSessionRuntimeTarget = ({
@@ -58,6 +60,7 @@ export const deriveSelectedSessionViewProjection = ({
   session,
   sessionSummary,
   selectedTask,
+  sessionFault,
   readModelLoadState,
   repoReadinessState,
 }: {
@@ -65,9 +68,14 @@ export const deriveSelectedSessionViewProjection = ({
   session: AgentSessionState | null;
   sessionSummary: AgentSessionSummary | null;
   selectedTask: TaskCard | null;
+  sessionFault: AgentSessionTransientFault | null;
   readModelLoadState: AgentSessionReadModelLoadState;
   repoReadinessState: RepoRuntimeReadinessState;
 }): SelectedSessionViewProjection => {
+  const readModelFailureMessage =
+    readModelLoadState.kind === "failed" ? readModelLoadState.message : null;
+  const sessionAuxiliaryError = sessionFault?.message ?? readModelFailureMessage;
+
   if (selectedSessionIdentity && session) {
     return {
       activityState: getAgentSessionActivityStateFromSession(session),
@@ -76,6 +84,7 @@ export const deriveSelectedSessionViewProjection = ({
         session,
         repoReadinessState,
       }),
+      sessionAuxiliaryError,
     };
   }
 
@@ -83,10 +92,13 @@ export const deriveSelectedSessionViewProjection = ({
     return {
       activityState: sessionSummary?.activityState ?? null,
       selectedModel: sessionSummary?.selectedModel ?? null,
-      transcriptState: derivePendingSelectedSessionTranscriptState({
-        readModelLoadState,
-        repoReadinessState,
-      }),
+      transcriptState: sessionFault
+        ? { kind: "failed", message: sessionFault.message }
+        : derivePendingSelectedSessionTranscriptState({
+            readModelLoadState,
+            repoReadinessState,
+          }),
+      sessionAuxiliaryError,
     };
   }
 
@@ -98,6 +110,7 @@ export const deriveSelectedSessionViewProjection = ({
         readModelLoadState,
         repoReadinessState,
       }),
+      sessionAuxiliaryError: null,
     };
   }
 
@@ -105,5 +118,6 @@ export const deriveSelectedSessionViewProjection = ({
     activityState: null,
     selectedModel: null,
     transcriptState: { kind: "empty", reason: "inactive" },
+    sessionAuxiliaryError: null,
   };
 };

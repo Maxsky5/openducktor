@@ -53,6 +53,7 @@ const project = (overrides: ProjectOverrides = {}) => {
   return deriveSelectedSessionViewProjection({
     session: null,
     sessionSummary: null,
+    sessionFault: null,
     readModelLoadState,
     repoReadinessState: "ready",
     ...projectionOverrides,
@@ -85,6 +86,22 @@ describe("selected-session-view-projection", () => {
     expect(projection.activityState).toBe("running");
     expect(projection.selectedModel).toBe(session.selectedModel);
     expect(projection.transcriptState).toEqual({ kind: "visible" });
+  });
+
+  test("keeps a loaded transcript visible while exposing its exact fault as an auxiliary error", () => {
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-loaded-fault",
+      historyLoadState: "loaded",
+    });
+
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(session),
+      session,
+      sessionFault: { message: "This session stopped streaming." },
+    });
+
+    expect(projection.transcriptState).toEqual({ kind: "visible" });
+    expect(projection.sessionAuxiliaryError).toBe("This session stopped streaming.");
   });
 
   test("uses the selected-session summary while the full session is not loaded", () => {
@@ -225,5 +242,25 @@ describe("selected-session-view-projection", () => {
       kind: "failed",
       message: "Session history failed",
     });
+  });
+
+  test("projects an exact transient fault only for an unloaded selected session", () => {
+    const summary = createAgentSessionSummaryFixture({ externalSessionId: "session-fault" });
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(summary),
+      sessionSummary: summary,
+      sessionFault: { message: "This exact session failed." },
+      selectedTask: createTaskCardFixture(),
+    });
+    const sessionlessProjection = project({
+      selectedTask: createTaskCardFixture(),
+      sessionFault: { message: "This exact session failed." },
+    });
+
+    expect(projection.transcriptState).toEqual({
+      kind: "failed",
+      message: "This exact session failed.",
+    });
+    expect(sessionlessProjection.transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
   });
 });

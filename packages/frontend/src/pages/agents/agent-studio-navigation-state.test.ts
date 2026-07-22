@@ -99,7 +99,7 @@ describe("resolveAgentStudioNavigationState", () => {
     expect(state.queryUpdate).toBeNull();
   });
 
-  test("keeps a matching session pending until task session metadata is ready", () => {
+  test("preserves a matching session while task session metadata refreshes", () => {
     const session = createSession("task-1", "session-1");
     const state = createNavigationState({
       sessions: [session],
@@ -108,10 +108,14 @@ describe("resolveAgentStudioNavigationState", () => {
     });
 
     expect(state.routeSessionResolution).toEqual({
-      kind: "pending",
-      sessionExternalId: session.externalSessionId,
+      kind: "found",
+      session,
     });
-    expect(state.view.sessionIdentity).toBeNull();
+    expect(state.view.sessionIdentity).toEqual({
+      externalSessionId: session.externalSessionId,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
+    });
   });
 
   test("keeps a missing explicit session selected without default fallback", () => {
@@ -193,7 +197,7 @@ describe("resolveAgentStudioNavigationState", () => {
     });
   });
 
-  test("surfaces session read-model failure for an explicit session", () => {
+  test("keeps an unresolved explicit session actionable after repository read-model failure", () => {
     const state = createNavigationState({
       taskIdParam: "task-1",
       sessionExternalIdParam: "session-1",

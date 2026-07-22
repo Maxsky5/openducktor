@@ -310,6 +310,7 @@ export function useAgentOrchestratorOperations({
     () => ({
       sessionReadModelLoadState: currentSessionReadModel.sessionReadModelLoadState,
       reloadSessionReadModel: currentSessionReadModel.reloadSessionReadModel,
+      getSessionFault: currentSessionReadModel.getSessionFault,
     }),
     [currentSessionReadModel],
   );

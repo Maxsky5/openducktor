@@ -25,6 +25,7 @@ import {
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
+import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 import type {
   AgentOperationsContextValue,
   AgentSessionHistoryLoadContextValue,
@@ -71,6 +72,11 @@ const loadAgentSessionContextRef: {
 } = {
   current: async () => undefined,
 };
+const getSessionFaultRef: {
+  current: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
+} = {
+  current: () => null,
+};
 const createdSessionStateByKey = new Map<string, AgentSessionState>();
 let sessionStore = createAgentSessionsStore(null);
 
@@ -80,6 +86,7 @@ type TestContextOverrides = {
   loadSelectedSessionBaselineHistory?: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
   loadAgentSessionContext?: AgentOperationsContextValue["loadAgentSessionContext"];
+  getSessionFault?: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
   runtimeDefinitionsContext?: Partial<ReturnType<typeof createRuntimeDefinitionsContextValue>>;
   checksStateContext?: Partial<ReturnType<typeof createChecksStateContextValue>>;
   repoRuntimeHealthContext?: Partial<ReturnType<typeof createRepoRuntimeHealthContextValue>>;
@@ -158,6 +165,7 @@ const applyTestContextOverrides = (
   readSessionTodosRef.current = contextOverrides.readSessionTodos ?? (async () => []);
   loadAgentSessionContextRef.current =
     contextOverrides.loadAgentSessionContext ?? (async () => undefined);
+  getSessionFaultRef.current = contextOverrides.getSessionFault ?? (() => null);
 };
 
 const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContextOverrides = {}) => {
@@ -199,6 +207,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
             value={{
               sessionReadModelLoadState: sessionReadModelLoadStateRef.current,
               reloadSessionReadModel: () => undefined,
+              getSessionFault: getSessionFaultRef.current,
             }}
           >
             {children}
@@ -780,7 +789,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("marks selected task failed when startup read model fails", async () => {
+  test("keeps an unresolved explicit session actionable when the read model fails", async () => {
     const task = createTaskCardFixture({
       id: "task-1",
       title: "task-1",
@@ -819,6 +828,74 @@ describe("useAgentStudioSelectionController", () => {
         message: "Failed to load agent session read model",
       });
       expect(latest.view.selectedSession.loadedSession).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a known session visible and exposes an unscoped read-model failure as auxiliary error", async () => {
+    const session = createSession("task-1", "session-known", { historyLoadState: "loaded" });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [session],
+        taskIdParam: "task-1",
+        sessionExternalIdParam: sessionExternalIdParam(session),
+      }),
+      {
+        sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
+          workspaceRepoPath,
+          "The session catalog is unavailable.",
+        ),
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.routeSessionResolution).toEqual({ kind: "found", session });
+      expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-known");
+      expect(latest.view.selectedSession.transcriptState).toEqual({ kind: "visible" });
+      expect(latest.view.selectedSession.sessionAuxiliaryError).toBe(
+        "The session catalog is unavailable.",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps task one selected when only task two has an exact session fault", async () => {
+    const taskOneSession = createSession("task-1", "session-task-one", {
+      historyLoadState: "loaded",
+    });
+    const taskTwoSession = createSession("task-2", "session-task-two", {
+      historyLoadState: "loaded",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [taskOneSession, taskTwoSession],
+        taskIdParam: "task-1",
+        sessionExternalIdParam: sessionExternalIdParam(taskOneSession),
+      }),
+      {
+        getSessionFault: (identity) =>
+          identity && agentSessionIdentityKey(identity) === agentSessionIdentityKey(taskTwoSession)
+            ? { message: "Task two runtime disconnected." }
+            : null,
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      const selectedSession = harness.getLatest().view.selectedSession;
+      expect(selectedSession.loadedSession?.externalSessionId).toBe("session-task-one");
+      expect(selectedSession.transcriptState).toEqual({ kind: "visible" });
+      expect(selectedSession.sessionAuxiliaryError).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -967,10 +1044,10 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.view.launchActionId).toBe("planner_initial");
       expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("session-planner");
       expect(latest.routeSessionResolution).toEqual({
-        kind: "pending",
-        sessionExternalId: "session-spec",
+        kind: "found",
+        session: specSession,
       });
-      expect(latest.resolvedRouteSession).toBeNull();
+      expect(latest.resolvedRouteSession).toEqual(specSession);
     } finally {
       await harness.unmount();
     }

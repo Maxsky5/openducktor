@@ -154,6 +154,7 @@ const createSelectedSessionState = (
     refreshChecks: async () => {},
   },
   transcriptState: { kind: "visible" },
+  sessionAuxiliaryError: null,
   ...overrides,
 });
 

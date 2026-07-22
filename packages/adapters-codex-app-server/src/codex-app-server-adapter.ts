@@ -196,8 +196,14 @@ export class CodexAppServerAdapter
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
+    const runtimeEventSubscription = options.subscribeEvents
+      ? {
+          subscribeEvents: options.subscribeEvents,
+          onRuntimeEventQueueFailure: options.onRuntimeEventQueueFailure,
+        }
+      : {};
     this.runtimeEvents = new CodexRuntimeSessionEvents({
-      subscribeEvents: options.subscribeEvents,
+      ...runtimeEventSubscription,
       respondServerRequest: options.respondServerRequest,
       ...(options.onLiveSessionMutation
         ? {

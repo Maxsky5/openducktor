@@ -113,6 +113,7 @@ const baseArgs: BuildArgs = {
       runtimeData: baseActiveSessionRuntimeData,
       runtimeReadiness: baseRuntimeReadiness,
       transcriptState: createSelectedSessionTranscriptStateFixture(),
+      sessionAuxiliaryError: null,
     },
     hasActiveGitConflict: false,
     documents: baseDocuments,

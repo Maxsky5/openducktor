@@ -1,4 +1,5 @@
 import type {
+  AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
   CodexAppServerApprovalsReviewer,
   CodexAppServerAskForApproval,
@@ -341,18 +342,37 @@ export type CodexAppServerClient = {
   turnDiff(params: { threadId: string; turnId?: string }): Promise<unknown>;
 };
 
-export type CodexAppServerAdapterOptions = {
+type CodexAppServerAdapterBaseOptions = {
   repoRuntimeResolver: CodexRepoRuntimeResolverPort;
   transportFactory: CodexJsonRpcTransportFactory;
-  subscribeEvents?: (
-    runtimeId: string,
-    listener: (event: CodexAppServerStreamEvent) => void,
-  ) => Promise<() => void> | (() => void);
   respondServerRequest?: CodexServerRequestResponder;
   onLiveSessionMutation?: (mutation: CodexLiveSessionMutation) => void | Promise<void>;
-  onCatalogInvalidated?: (event: CodexCatalogInvalidation) => void;
+  onCatalogInvalidated?: (event: CodexCatalogInvalidation) => void | Promise<void>;
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
+
+export type CodexAppServerEventSubscriber = (
+  runtimeId: string,
+  listener: (event: CodexAppServerStreamEvent) => void,
+) => Promise<() => void> | (() => void);
+
+export type CodexRuntimeEventQueueFailureHandler = (input: {
+  runtimeId: string;
+  error: unknown;
+}) => void | Promise<void>;
+
+type CodexAppServerStreamingOptions = {
+  subscribeEvents: CodexAppServerEventSubscriber;
+  onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler;
+};
+
+type CodexAppServerRequestOnlyOptions = {
+  subscribeEvents?: undefined;
+  onRuntimeEventQueueFailure?: never;
+};
+
+export type CodexAppServerAdapterOptions = CodexAppServerAdapterBaseOptions &
+  (CodexAppServerStreamingOptions | CodexAppServerRequestOnlyOptions);
 
 export type CodexLiveSessionMutation = {
   runtimeId: string;
@@ -360,6 +380,7 @@ export type CodexLiveSessionMutation = {
   transcriptEvents: AgentEvent[];
   catalogInvalidated: boolean;
   fault?: string;
+  faultRef?: AgentSessionLiveRef;
 };
 
 export type {

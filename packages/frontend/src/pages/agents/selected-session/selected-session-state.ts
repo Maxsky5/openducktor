@@ -12,4 +12,5 @@ export type AgentStudioSelectedSessionState = {
   runtimeData: SelectedSessionRuntimeData;
   runtimeReadiness: RepoRuntimeReadiness;
   transcriptState: AgentSessionTranscriptState;
+  sessionAuxiliaryError: string | null;
 };
