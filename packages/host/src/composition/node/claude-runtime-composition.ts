@@ -1,3 +1,4 @@
+import type { Effect } from "effect";
 import {
   createClaudeAgentSdkEventHub,
   createClaudeLiveSessionAdapterPreparer,
@@ -9,6 +10,7 @@ import { createClaudeWorkspaceRuntimeStarter } from "../../adapters/claude/claud
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import type { ClaudeRuntimeSessionOperationsPort } from "../../adapters/runtimes/runtime-session-operations";
 import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
+import type { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -24,6 +26,7 @@ export type ClaudeRuntimeComposition = {
 
 export type CreateClaudeRuntimeCompositionInput = {
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
+  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
@@ -33,6 +36,7 @@ export type CreateClaudeRuntimeCompositionInput = {
 
 export const createClaudeRuntimeComposition = ({
   liveSessionLifecycle,
+  onBackgroundFailure,
   processEnv,
   resolveMcpBridgeConnection,
   runtimeDistribution,
@@ -43,6 +47,7 @@ export const createClaudeRuntimeComposition = ({
   const sessionStore = createClaudeAgentSdkSessionStore({ emit: eventHub.emit });
   const agentSdkService = createClaudeAgentSdkService({
     emit: eventHub.emit,
+    onBackgroundFailure,
     ...(processEnv ? { processEnv } : {}),
     resolveMcpBridgeConnection,
     runtimeDistribution,

@@ -247,12 +247,6 @@ export const sendClaudeUserMessage = async (input: {
       },
     });
   }
-  if (messageInput.systemPrompt !== undefined) {
-    session.input = {
-      ...session.input,
-      systemPrompt: messageInput.systemPrompt,
-    };
-  }
   const timestamp = now();
   const messageId = randomId();
   const message = encodeClaudePromptText(
@@ -335,7 +329,7 @@ export const flushQueuedClaudeUserMessage = (input: {
   if (session.sdkState === "running") {
     return Promise.resolve();
   }
-  const nextMessage = session.queuedSdkMessages.shift();
+  const nextMessage = session.queuedSdkMessages[0];
   if (!nextMessage) {
     return Promise.resolve();
   }
@@ -347,11 +341,21 @@ export const flushQueuedClaudeUserMessage = (input: {
     (message) => message.messageId === nextMessage.uuid,
   );
   const previousModel = session.model;
+  let removedFromQueue = false;
   return Promise.resolve()
     .then(async () => {
       if (acceptedMessage?.model) {
         await applyClaudeSessionModel(session, acceptedMessage.model);
       }
+      if (session.queuedSdkMessages[0] !== nextMessage) {
+        throw new HostOperationError({
+          operation: "claudeRuntime.flushQueuedUserMessage",
+          message: `Claude session '${session.externalSessionId}' user-message queue changed while preparing its next message.`,
+          details: { externalSessionId: session.externalSessionId },
+        });
+      }
+      session.queuedSdkMessages.shift();
+      removedFromQueue = true;
       pushClaudeSdkUserMessage(session, nextMessage);
     })
     .then(() => {
@@ -375,7 +379,9 @@ export const flushQueuedClaudeUserMessage = (input: {
       });
     })
     .catch((error) => {
-      session.queuedSdkMessages.unshift(nextMessage);
+      if (removedFromQueue) {
+        session.queuedSdkMessages.unshift(nextMessage);
+      }
       session.model = previousModel;
       session.activity = previousActivity;
       if (previousSdkState === undefined) {

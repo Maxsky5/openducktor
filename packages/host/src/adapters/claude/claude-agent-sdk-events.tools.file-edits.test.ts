@@ -748,4 +748,85 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       }),
     );
   });
+
+  test("maps live Claude NotebookEdit results to canonical file diffs", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "assistant-1",
+        session_id: "session-1",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "tool-notebook-1",
+              name: "NotebookEdit",
+              input: {
+                notebook_path: "analysis.ipynb",
+                cell_id: "cell-1",
+                new_source: "print('new')",
+              },
+            },
+          ],
+        },
+      }),
+    });
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "user-1",
+        session_id: "session-1",
+        parent_tool_use_id: "tool-notebook-1",
+        tool_use_result: {
+          type: "tool_result",
+          tool_use_id: "tool-notebook-1",
+          content: [{ type: "text", text: "Notebook cell updated" }],
+          original_file: '{\n  "cells": [{"source": ["print(\'old\')"]}]\n}\n',
+          updated_file: '{\n  "cells": [{"source": ["print(\'new\')"]}]\n}\n',
+        },
+        message: { role: "user", content: [] },
+      }),
+    });
+
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          callId: "tool-notebook-1",
+          status: "completed",
+          tool: "NotebookEdit",
+          toolType: "file_edit",
+          fileDiffs: [
+            expect.objectContaining({
+              file: "analysis.ipynb",
+              additions: 1,
+              deletions: 1,
+              diff: expect.stringContaining("print('new')"),
+            }),
+          ],
+        }),
+      }),
+    );
+  });
 });

@@ -18,6 +18,7 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
+    "diff": "9.0.0",
     "drizzle-orm": "0.45.2",
     "effect": "^3.22.0"
   },

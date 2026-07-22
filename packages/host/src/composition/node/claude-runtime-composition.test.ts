@@ -54,6 +54,7 @@ describe("createClaudeRuntimeComposition", () => {
     };
     const composition = createClaudeRuntimeComposition({
       liveSessionLifecycle,
+      onBackgroundFailure: () => Effect.void,
       resolveMcpBridgeConnection: () =>
         Effect.succeed({
           workspaceId: "workspace-1",

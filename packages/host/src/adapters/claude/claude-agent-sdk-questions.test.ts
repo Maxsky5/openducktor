@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
-import { createClaudeUserDialogHandler } from "./claude-agent-sdk-questions";
+import {
+  createClaudeUserDialogHandler,
+  isClaudeAskUserQuestionTool,
+} from "./claude-agent-sdk-questions";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 
@@ -45,7 +48,7 @@ const createSession = (): ClaudeSessionContext => ({
   todosById: new Map(),
 });
 
-const questionPayload = {
+const createQuestionPayload = () => ({
   questions: [
     {
       question: "How should X sign-in handle missing email?",
@@ -63,9 +66,15 @@ const questionPayload = {
       ],
     },
   ],
-};
+});
 
 describe("createClaudeUserDialogHandler", () => {
+  test("matches only the complete built-in question tool name without case sensitivity", () => {
+    expect(isClaudeAskUserQuestionTool(" askuserquestion ")).toBe(true);
+    expect(isClaudeAskUserQuestionTool("ASKUSERQUESTION")).toBe(true);
+    expect(isClaudeAskUserQuestionTool("mcp__example__AskUserQuestion")).toBe(false);
+  });
+
   test("maps Claude AskUserQuestion dialogs to pending questions and returns answers", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();
@@ -75,6 +84,7 @@ describe("createClaudeUserDialogHandler", () => {
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
     });
+    const questionPayload = createQuestionPayload();
 
     const resultPromise = handler(
       {
@@ -136,6 +146,7 @@ describe("createClaudeUserDialogHandler", () => {
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
     });
+    const questionPayload = createQuestionPayload();
 
     const resultPromise = handler(
       {

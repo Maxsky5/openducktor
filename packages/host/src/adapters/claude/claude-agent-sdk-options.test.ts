@@ -1,9 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRole } from "@openducktor/core";
 import { Effect } from "effect";
+import type { HostOperationError } from "../../effect/host-errors";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { buildClaudeAgentSdkOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -53,9 +55,24 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   todosById: new Map(),
 });
 
+const deferred = <Value>() => {
+  let resolve!: (value: Value) => void;
+  const promise = new Promise<Value>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
+
 const createServiceInput = (events?: {
+  backgroundFailures?: HostOperationError[];
+  onBackgroundFailure?: () => void;
   resolvedBridgeRepoPaths?: string[];
 }): CreateClaudeAgentSdkServiceInput => ({
+  onBackgroundFailure: (failure) =>
+    Effect.sync(() => {
+      events?.backgroundFailures?.push(failure);
+      events?.onBackgroundFailure?.();
+    }),
   resolveMcpBridgeConnection: (repoPath) => {
     events?.resolvedBridgeRepoPaths?.push(repoPath);
     return Effect.succeed({
@@ -423,5 +440,129 @@ describe("buildClaudeAgentSdkOptions", () => {
 
     expect(options.model).toBe("claude-sonnet-4-6-20260601");
     expect(options.effort).toBe("xhigh");
+  });
+
+  test("removes the session-scoped MCP token directory when the session is aborted", async () => {
+    const cleanupCompleted = deferred<void>();
+    const backgroundFailures: HostOperationError[] = [];
+    const removeDirectory = rm;
+    const removeSpy = spyOn(fsPromises, "rm").mockImplementation(async (path, options) => {
+      await removeDirectory(path, options);
+      if (String(path).includes("openducktor-claude-mcp-")) {
+        cleanupCompleted.resolve();
+      }
+    });
+    const session = createSession();
+    let tokenDirectory: string | undefined;
+
+    try {
+      const options = await buildClaudeAgentSdkOptions({
+        input: session.input,
+        session,
+        resolvedDependencies: {
+          claudeExecutablePath: process.execPath,
+          mcpBridgeConnection: {
+            workspaceId: "workspace-1",
+            hostUrl: "http://127.0.0.1:1",
+            hostToken: "bridge-secret-value",
+          },
+          mcpCommand: [process.execPath],
+        },
+        serviceInput: createServiceInput({ backgroundFailures }),
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => "id",
+        emit: () => {},
+        sessionOptions: {},
+      });
+      const server = options.mcpServers?.openducktor;
+      if (!server || !("env" in server)) {
+        throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
+      }
+      const tokenPath = server.env?.ODT_HOST_TOKEN_FILE;
+      if (!tokenPath) {
+        throw new Error("Expected a session-scoped Claude MCP token file.");
+      }
+      tokenDirectory = join(tokenPath, "..");
+      expect(await readFile(tokenPath, "utf8")).toBe("bridge-secret-value");
+
+      session.abortController.abort();
+      await cleanupCompleted.promise;
+
+      await expect(fsPromises.access(tokenDirectory)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(backgroundFailures).toEqual([]);
+    } finally {
+      removeSpy.mockRestore();
+      if (tokenDirectory) {
+        await removeDirectory(tokenDirectory, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("reports abort cleanup failures through the host background failure boundary", async () => {
+    const cleanupError = new Error("cleanup denied");
+    const backgroundFailures: HostOperationError[] = [];
+    const backgroundFailureReported = deferred<void>();
+    const removeDirectory = rm;
+    const removeSpy = spyOn(fsPromises, "rm").mockImplementation(async (path, options) => {
+      if (String(path).includes("openducktor-claude-mcp-")) {
+        throw cleanupError;
+      }
+      await removeDirectory(path, options);
+    });
+    const session = createSession();
+    let tokenDirectory: string | undefined;
+
+    try {
+      const options = await buildClaudeAgentSdkOptions({
+        input: session.input,
+        session,
+        resolvedDependencies: {
+          claudeExecutablePath: process.execPath,
+          mcpBridgeConnection: {
+            workspaceId: "workspace-1",
+            hostUrl: "http://127.0.0.1:1",
+            hostToken: "bridge-secret-value",
+          },
+          mcpCommand: [process.execPath],
+        },
+        serviceInput: createServiceInput({
+          backgroundFailures,
+          onBackgroundFailure: () => backgroundFailureReported.resolve(),
+        }),
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => "id",
+        emit: () => {},
+        sessionOptions: {},
+      });
+      const server = options.mcpServers?.openducktor;
+      if (!server || !("env" in server)) {
+        throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
+      }
+      const tokenPath = server.env?.ODT_HOST_TOKEN_FILE;
+      if (!tokenPath) {
+        throw new Error("Expected a session-scoped Claude MCP token file.");
+      }
+      tokenDirectory = join(tokenPath, "..");
+
+      session.abortController.abort();
+      await backgroundFailureReported.promise;
+
+      expect(backgroundFailures).toEqual([
+        expect.objectContaining({
+          operation: "claudeRuntime.cleanupMcpTokenDirectory",
+          message: expect.stringContaining("session 'session-1'"),
+          details: expect.objectContaining({
+            directory: tokenDirectory,
+            externalSessionId: "session-1",
+          }),
+        }),
+      ]);
+      expect(JSON.stringify(backgroundFailures)).not.toContain("bridge-secret-value");
+    } finally {
+      removeSpy.mockRestore();
+      if (tokenDirectory) {
+        await removeDirectory(tokenDirectory, { recursive: true, force: true });
+      }
+    }
   });
 });

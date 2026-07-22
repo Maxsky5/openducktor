@@ -200,6 +200,7 @@ export const createNodeEffectHostCommandRouter = (
   let resolvedMcpHostBridge = mcpHostBridge;
   const claudeRuntime = createClaudeRuntimeComposition({
     liveSessionLifecycle: agentSessionLiveStateService,
+    onBackgroundFailure,
     processEnv,
     runtimeDistribution,
     systemCommands,

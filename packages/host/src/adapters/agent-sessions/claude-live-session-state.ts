@@ -116,6 +116,7 @@ export const createClaudeLiveSessionState = ({
   readonly runtime: ClaudeRuntimeInstance;
 }) => {
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
+  const contextRevisionsByRef = new Map<string, number>();
   const retiredSessionKeys = new Set<string>();
   const startupLeases = new Set<string>();
 
@@ -158,6 +159,7 @@ export const createClaudeLiveSessionState = ({
     const key = refKey(ref);
     retiredSessionKeys.add(key);
     startupLeases.delete(key);
+    contextRevisionsByRef.delete(key);
     if (!snapshotsByRef.delete(key)) {
       return [];
     }
@@ -299,6 +301,7 @@ export const createClaudeLiveSessionState = ({
     const snapshot = ensureSnapshot(session, ref, event.timestamp);
     const changes: AgentSessionLiveAdapterChange[] = [];
     if (event.type === "session_context_updated") {
+      contextRevisionsByRef.set(key, (contextRevisionsByRef.get(key) ?? 0) + 1);
       return commitSnapshot({
         ...snapshot,
         contextUsage: {
@@ -342,22 +345,31 @@ export const createClaudeLiveSessionState = ({
     applyLoadedContext: (
       ref: AgentSessionLiveRef,
       contextUsage: AgentSessionContextUsage | null,
+      expectedRevision: number,
     ): {
       value: AgentSessionContextUsage | null;
       changes: AgentSessionLiveAdapterChange[];
     } => {
       const snapshot = readSnapshot(ref);
-      if (snapshot?.contextUsage) {
-        return { value: snapshot.contextUsage, changes: [] };
+      if ((contextRevisionsByRef.get(refKey(ref)) ?? 0) !== expectedRevision) {
+        return { value: snapshot?.contextUsage ?? contextUsage, changes: [] };
       }
-      if (!snapshot || !contextUsage) {
+      if (!contextUsage) {
+        return { value: snapshot?.contextUsage ?? null, changes: [] };
+      }
+      if (!snapshot) {
         return { value: contextUsage, changes: [] };
+      }
+      if (JSON.stringify(snapshot.contextUsage) === JSON.stringify(contextUsage)) {
+        return { value: snapshot.contextUsage, changes: [] };
       }
       return {
         value: contextUsage,
         changes: commitSnapshot({ ...snapshot, contextUsage }),
       };
     },
+    contextRevision: (ref: AgentSessionLiveRef): number =>
+      contextRevisionsByRef.get(refKey(ref)) ?? 0,
     hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
     listRetainedSnapshots: (repoPath: string): AgentSessionLiveSnapshot[] =>
       repoPath === runtime.repoPath ? [...snapshotsByRef.values()].map(cloneSnapshot) : [],
@@ -371,6 +383,7 @@ export const createClaudeLiveSessionState = ({
     release: (): AgentSessionLiveRef[] => {
       const refs = [...snapshotsByRef.values()].map((snapshot) => snapshot.ref);
       snapshotsByRef.clear();
+      contextRevisionsByRef.clear();
       retiredSessionKeys.clear();
       startupLeases.clear();
       return refs;
@@ -378,7 +391,11 @@ export const createClaudeLiveSessionState = ({
     removeSession: removeSessionTree,
     retainControlSummary: (
       summary: AgentSessionControlSummary,
-      options: { readonly forceRunning?: boolean; readonly parentExternalSessionId?: string } = {},
+      options: {
+        readonly forceRunning?: boolean;
+        readonly parentExternalSessionId?: string;
+        readonly preserveRetainedActivity?: boolean;
+      } = {},
     ): AgentSessionLiveAdapterChange[] => {
       const ref: AgentSessionLiveRef = {
         repoPath: runtime.repoPath,
@@ -392,9 +409,15 @@ export const createClaudeLiveSessionState = ({
       if (options.forceRunning) {
         startupLeases.add(key);
       }
+      let activity = activityForSummary(summary.status);
+      if (options.forceRunning) {
+        activity = "running";
+      } else if (options.preserveRetainedActivity && current) {
+        activity = current.activity;
+      }
       return commitSnapshot({
         ref,
-        activity: options.forceRunning ? "running" : activityForSummary(summary.status),
+        activity,
         title: summary.title ?? current?.title ?? "Claude session",
         startedAt: summary.startedAt,
         ...(options.parentExternalSessionId

@@ -18,7 +18,7 @@ Thanks for contributing. This project is public, but it is still early and the c
 
 ## Quick Start
 
-1. Install the core tooling: Bun `1.3.14`, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode`, `codex`, or `claude`).
+1. Install the core tooling: Bun `1.3.11`, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode`, `codex`, or `claude`).
 2. Install workspace dependencies from the repository root:
 
 ```sh

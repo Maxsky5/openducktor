@@ -9,12 +9,12 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter";
 import { createClaudeWorkspaceRuntimeStarter } from "./claude-workspace-runtime-starter";
 
-const startInput = {
+const createStartInput = () => ({
   runtimeKind: "claude",
   repoPath: "/repo",
   workingDirectory: "/repo",
-  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
-};
+  descriptor: structuredClone(RUNTIME_DESCRIPTORS_BY_KIND.claude),
+});
 
 const createSystemCommands = (version: string | null = "0.3.191"): SystemCommandPort => ({
   resolveCommandPath() {
@@ -102,7 +102,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       toolDiscovery: createToolDiscovery(),
     });
 
-    const handle = await Effect.runPromise(starter.startWorkspaceRuntime(startInput));
+    const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
 
     expect(handle.runtime).toMatchObject({
       kind: "claude",
@@ -128,7 +128,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       toolDiscovery: createToolDiscovery({ claudePath: null }),
     });
 
-    const failure = await firstFailure(starter.startWorkspaceRuntime(startInput));
+    const failure = await firstFailure(starter.startWorkspaceRuntime(createStartInput()));
 
     expect(failure).toMatchObject({
       dependency: "claude",

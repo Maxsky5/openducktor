@@ -192,6 +192,7 @@ describe("Claude host live-session state", () => {
   test("does not overwrite newer streamed context with an explicit load", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary(summary);
+    const revision = state.contextRevision(ref);
     state.applyEvent(session, {
       type: "session_context_updated",
       externalSessionId: "session-1",
@@ -200,9 +201,83 @@ describe("Claude host live-session state", () => {
       contextWindow: 200,
     });
 
-    expect(state.applyLoadedContext(ref, { totalTokens: 12 })).toEqual({
+    expect(state.applyLoadedContext(ref, { totalTokens: 12 }, revision)).toEqual({
       value: { totalTokens: 99, contextWindow: 200 },
       changes: [],
+    });
+  });
+
+  test("advances context revisions only for streamed context events", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    const revision = state.contextRevision(ref);
+
+    state.applyLoadedContext(ref, { totalTokens: 100, contextWindow: 200 }, revision);
+    state.applyEvent(session, {
+      type: "session_status",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:03:00.000Z",
+      status: { type: "busy", message: null },
+    });
+    expect(state.contextRevision(ref)).toBe(revision);
+
+    state.applyEvent(session, {
+      type: "session_context_updated",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:03:01.000Z",
+      totalTokens: 100,
+      contextWindow: 200,
+    });
+    expect(state.contextRevision(ref)).toBe(revision + 1);
+  });
+
+  test("replaces stale retained context when no newer context update arrives", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    const firstRevision = state.contextRevision(ref);
+    state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
+    const refreshRevision = state.contextRevision(ref);
+
+    expect(
+      state.applyLoadedContext(ref, { totalTokens: 120, contextWindow: 200 }, refreshRevision),
+    ).toMatchObject({
+      value: { totalTokens: 120, contextWindow: 200 },
+      changes: [{ type: "session_upsert" }],
+    });
+  });
+
+  test("keeps retained context when a direct context read returns null", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    const firstRevision = state.contextRevision(ref);
+    state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
+
+    expect(state.applyLoadedContext(ref, null, state.contextRevision(ref))).toEqual({
+      value: { totalTokens: 99, contextWindow: 200 },
+      changes: [],
+    });
+  });
+
+  test("preserves retained activity when an already-live session is resumed", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary({ ...summary, status: "running" });
+    state.applyEvent(session, {
+      type: "approval_required",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:02:00.000Z",
+      requestId: "approval-1",
+      requestType: "command_execution",
+      title: "Approve Bash",
+    });
+
+    state.retainControlSummary(summary, { preserveRetainedActivity: true });
+
+    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: {
+        activity: "waiting_for_permission",
+        pendingApprovals: [{ requestId: "approval-1" }],
+      },
     });
   });
 
