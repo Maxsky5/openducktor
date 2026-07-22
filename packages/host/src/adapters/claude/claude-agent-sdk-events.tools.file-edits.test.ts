@@ -531,7 +531,6 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
             new_string: "providers: [facebook]",
           },
           output: "The file apps/api/src/lib/auth.ts has been updated successfully.",
-          startedAtMs: Date.parse("2026-06-25T20:00:00.000Z"),
           endedAtMs: Date.parse("2026-06-25T20:00:02.000Z"),
           status: "completed",
           tool: "Edit",

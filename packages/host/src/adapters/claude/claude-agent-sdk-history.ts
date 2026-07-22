@@ -5,6 +5,7 @@ import type {
   AgentStreamPart,
 } from "@openducktor/core";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
+import { isSupersededTextOnlyToolUseDraft } from "./claude-agent-sdk-history-drafts";
 import {
   isNestedHistoryEntry,
   readHistoryAssistantModel,
@@ -19,7 +20,6 @@ import {
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
 import {
   type ClaudeLiveUserMessage,
-  createHistoryToolPart,
   hasFinalStopStep,
   readHistoryToolResults,
   retractedHistoryMessageIds,
@@ -36,7 +36,12 @@ import {
   handleClaudeSubagentSystemMessage,
 } from "./claude-agent-sdk-subagents";
 import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
-import { isClaudeToolUseBlockType, timestampMs } from "./claude-agent-sdk-tool-shapes";
+import {
+  createClaudePendingToolPart,
+  decodeClaudeToolUseBlock,
+  isClaudeToolUseBlockType,
+  timestampMs,
+} from "./claude-agent-sdk-tool-shapes";
 import {
   isClaudeToolUseRetracted,
   retractClaudeTranscriptCorrelations,
@@ -59,49 +64,6 @@ const successfulResultText = (entry: ClaudeHistoryResultMessage): string | null 
 };
 const isLiveFinalAssistantStopReason = (stopReason: string | undefined): boolean =>
   stopReason === "end_turn" || stopReason === "stop_sequence";
-const messageContent = (message: unknown): unknown =>
-  isRecord(message) ? message.content : undefined;
-
-const assistantMessageStopReason = (entry: ClaudeHistoryMessage): string | undefined =>
-  isRecord(entry) ? readStringProp(entry.message, "stop_reason") : undefined;
-
-const hasToolUseContentBlock = (content: unknown): boolean =>
-  Array.isArray(content) &&
-  content.some(
-    (block) => isRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
-  );
-
-const isSupersededTextOnlyToolUseDraft = (
-  messages: ClaudeHistoryMessage[],
-  entryIndex: number,
-  text: string,
-  options: { includeNestedEntries?: boolean },
-): boolean => {
-  for (let index = entryIndex + 1; index < messages.length; index += 1) {
-    const candidate = messages[index];
-    if (!candidate) {
-      continue;
-    }
-    if (!options.includeNestedEntries && isNestedHistoryEntry(candidate)) {
-      continue;
-    }
-    if (candidate.type === "user" || candidate.type === "result") {
-      return false;
-    }
-    if (candidate.type !== "assistant") {
-      continue;
-    }
-    if (assistantMessageStopReason(candidate) !== "tool_use") {
-      return false;
-    }
-    if (historyMessageText(candidate.message).trim() !== text) {
-      return false;
-    }
-    return hasToolUseContentBlock(messageContent(candidate.message));
-  }
-  return false;
-};
-
 const addFinishStep = (message: MutableAssistantHistoryMessage, reason: string | null): void => {
   if (!reason) {
     return;
@@ -128,6 +90,7 @@ export const toClaudeHistoryMessages = (
   const assistantMessagesByToolCallId = new Map<string, MutableAssistantHistoryMessage>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
+  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
   const hiddenSubagentTaskIds = new Set<string>();
   const subagentMessageIdsByTaskId = new Map<string, string>();
   const subagentTaskIdsByToolUseId = new Map<string, string>();
@@ -272,7 +235,7 @@ export const toClaudeHistoryMessages = (
           if (!tool) {
             continue;
           }
-          const toolInput = existingPart?.input;
+          const toolInput = toolInputsByCallId.get(toolResult.toolUseId);
           const { part: completedPart } = projectClaudeCompletedToolResult({
             callId: toolResult.toolUseId,
             endedAtMs: timestampMs(timestamp),
@@ -283,9 +246,6 @@ export const toClaudeHistoryMessages = (
             ...(existingPart?.preview ? { preview: existingPart.preview } : {}),
             raw: toolResult.raw,
             resultText: toolResult.text,
-            ...(typeof existingPart?.startedAtMs === "number"
-              ? { startedAtMs: existingPart.startedAtMs }
-              : {}),
             state: todosById,
             tool,
           });
@@ -389,11 +349,19 @@ export const toClaudeHistoryMessages = (
             continue;
           }
           if (isClaudeToolUseBlockType(type)) {
-            const part = createHistoryToolPart(entry.uuid, block, index, timestamp);
-            if (part) {
+            const toolUse = decodeClaudeToolUseBlock({
+              block,
+              fallbackMessageId: entry.uuid,
+              index,
+            });
+            if (toolUse) {
+              const part = createClaudePendingToolPart({ messageId: entry.uuid, toolUse });
               parts.push(part);
-              toolMessageIdsByCallId.set(part.callId, entry.uuid);
-              toolNamesByCallId.set(part.callId, part.tool);
+              toolMessageIdsByCallId.set(toolUse.callId, entry.uuid);
+              toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
+              if (toolUse.input) {
+                toolInputsByCallId.set(toolUse.callId, toolUse.input);
+              }
             }
             continue;
           }

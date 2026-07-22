@@ -76,6 +76,7 @@ export const createClaudeAgentSdkSession = async ({
     streamAssistantMessageIdsByBlockIndex: new Map(),
     subagentMessageIdsByTaskId: new Map(),
     subagentTaskIdsByToolUseId: new Map(),
+    toolEndedAtMsByCallId: new Map(),
     toolInputsByCallId: new Map(),
     toolMessageIdsByCallId: new Map(),
     toolNamesByCallId: new Map(),

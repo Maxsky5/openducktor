@@ -187,9 +187,9 @@ describe("Claude task tools", () => {
         ];
       }),
     ).toEqual([
-      { displayLabel: "todo", status: "running", tool: "TaskCreate" },
+      { displayLabel: "todo", status: "pending", tool: "TaskCreate" },
       { displayLabel: "todo", status: "completed", tool: "TaskCreate" },
-      { displayLabel: "todo", status: "running", tool: "TaskUpdate" },
+      { displayLabel: "todo", status: "pending", tool: "TaskUpdate" },
       { displayLabel: "todo", status: "completed", tool: "TaskUpdate" },
     ]);
 

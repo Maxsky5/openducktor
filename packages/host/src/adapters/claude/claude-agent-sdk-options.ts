@@ -112,6 +112,11 @@ export const buildClaudeAgentSdkOptions = async ({
   ]
     .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
     .join("\n\n");
+  const postToolUseHook = createClaudePostToolUseHook({
+    session,
+    now,
+    emit: (event) => emit(session, event),
+  });
   const options: Options = {
     ...buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: resolvedDependencies.claudeExecutablePath,
@@ -132,13 +137,12 @@ export const buildClaudeAgentSdkOptions = async ({
       ],
       PostToolUse: [
         {
-          hooks: [
-            createClaudePostToolUseHook({
-              session,
-              now,
-              emit: (event) => emit(session, event),
-            }),
-          ],
+          hooks: [postToolUseHook],
+        },
+      ],
+      PostToolUseFailure: [
+        {
+          hooks: [postToolUseHook],
         },
       ],
     },

@@ -149,7 +149,6 @@ describe("Claude live and hydrated transcript parity", () => {
       liveSession.toolInputsByCallId.set(toolUseId, input);
       liveSession.toolMessageIdsByCallId.set(toolUseId, `assistant-${index}`);
       liveSession.toolNamesByCallId.set(toolUseId, testCase.tool);
-      liveSession.toolStartedAtMsByCallId.set(toolUseId, Date.parse(timestamp));
 
       handleClaudeUserToolResultMessage({
         emit: (event) => liveEvents.push(event),

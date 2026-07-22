@@ -4,15 +4,9 @@ import type {
   AgentFileReference,
   AgentSessionHistoryMessage,
   AgentSkillReference,
-  AgentStreamPart,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
-import {
-  createClaudeRunningToolPart,
-  decodeClaudeToolResultValue,
-  decodeClaudeToolUseBlock,
-  timestampMs,
-} from "./claude-agent-sdk-tool-shapes";
+import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeLiveUserMessage = {
@@ -206,27 +200,6 @@ export const createLiveUserMessageIdResolver = (
     }
     return fallbackMessageId;
   };
-};
-
-export const createHistoryToolPart = (
-  messageId: string,
-  block: Record<string, unknown>,
-  index: number,
-  timestamp: string,
-): Extract<AgentStreamPart, { kind: "tool" }> | null => {
-  const toolUse = decodeClaudeToolUseBlock({
-    block,
-    fallbackMessageId: messageId,
-    index,
-  });
-  if (!toolUse) {
-    return null;
-  }
-  return createClaudeRunningToolPart({
-    messageId,
-    startedAtMs: timestampMs(timestamp),
-    toolUse,
-  });
 };
 
 export const readHistoryToolResults = (message: SessionMessage) => {

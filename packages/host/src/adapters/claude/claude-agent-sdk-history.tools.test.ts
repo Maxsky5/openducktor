@@ -3,7 +3,7 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history tool projection", () => {
-  test("hydrates MCP tool blocks with input and timing", () => {
+  test("hydrates MCP tool blocks with input and result timestamps", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -56,10 +56,10 @@ describe("claude-agent-sdk-history tool projection", () => {
         serverName: "openducktor",
       },
       output: "task details",
-      startedAtMs: Date.parse("2026-06-26T11:03:16.000Z"),
       endedAtMs: Date.parse("2026-06-26T11:03:19.000Z"),
       status: "completed",
     });
+    expect(tool).not.toHaveProperty("startedAtMs");
   });
 
   test("hydrates SDK tool_use_id and tool_name fields without generic tool fallbacks", () => {
@@ -113,10 +113,10 @@ describe("claude-agent-sdk-history tool projection", () => {
       toolType: "read",
       input: { file_path: "apps/api/src/lib/auth.ts" },
       output: "file contents",
-      startedAtMs: Date.parse("2026-06-26T11:03:16.000Z"),
       endedAtMs: Date.parse("2026-06-26T11:03:20.000Z"),
       status: "completed",
     });
+    expect(tool).not.toHaveProperty("startedAtMs");
   });
 
   test("hydrates ordinary Claude Read and Bash tool calls with their results", () => {
@@ -344,7 +344,6 @@ describe("claude-agent-sdk-history tool projection", () => {
         new_string: "providers: [facebook]",
       },
       output: "The file apps/api/src/lib/auth.ts has been updated successfully.",
-      startedAtMs: Date.parse("2026-06-26T11:03:16.000Z"),
       endedAtMs: Date.parse("2026-06-26T11:03:20.000Z"),
       status: "completed",
       fileDiffs: [
@@ -427,7 +426,6 @@ describe("claude-agent-sdk-history tool projection", () => {
         content: "# Updated\n",
       },
       output: "The file README.md has been updated successfully.",
-      startedAtMs: Date.parse("2026-06-26T11:03:16.000Z"),
       endedAtMs: Date.parse("2026-06-26T11:03:20.000Z"),
       status: "completed",
       fileDiffs: [
