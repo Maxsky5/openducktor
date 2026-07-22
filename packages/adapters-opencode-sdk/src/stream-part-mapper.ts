@@ -15,6 +15,7 @@ import {
 } from "./guards";
 import { toTokenTotal } from "./message-normalizers";
 import { deriveToolPreview, deriveToolType } from "./tool-preview";
+import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 
 const toDisplayText = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -421,13 +422,6 @@ type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ToolStatus = ToolStreamPart["status"];
 
-const SUBAGENT_TOOL_NAMES = new Set(["task", "delegate"]);
-
-const normalizeToolName = (value: string): string => {
-  const trimmed = value.trim().toLowerCase();
-  return trimmed.startsWith("functions.") ? trimmed.slice("functions.".length) : trimmed;
-};
-
 const readTrimmedString = (source: unknown, keys: string[]): string | undefined => {
   const value = readStringProp(source, keys);
   if (!value) {
@@ -814,7 +808,7 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
       const toolState = asUnknownRecord(part.state) ?? {};
       const timing = extractPartTiming(part);
       const metadata = normalizeMetadata(readUnknownProp(toolState, "metadata"));
-      if (SUBAGENT_TOOL_NAMES.has(normalizeToolName(part.tool))) {
+      if (resolveOpencodeToolStrategy(part.tool).streamPartKind === "subagent") {
         const rawOutput = readUnknownProp(toolState, "output");
         const structuredError =
           readStructuredToolError(rawOutput) ?? readStructuredToolError(metadata);

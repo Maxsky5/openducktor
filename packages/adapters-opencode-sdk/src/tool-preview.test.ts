@@ -2,6 +2,46 @@ import { describe, expect, test } from "bun:test";
 import { deriveToolPreview } from "./tool-preview";
 
 describe("deriveToolPreview", () => {
+  test("uses generic input when a specialized preview has no matching field", () => {
+    const cases = [
+      {
+        tool: "bash",
+        rawInput: { description: "shell fallback" },
+        expectedPreview: "shell fallback",
+      },
+      {
+        tool: "question",
+        rawInput: { name: "question fallback" },
+        expectedPreview: "question fallback",
+      },
+      {
+        tool: "odt_set_spec",
+        rawInput: { description: "workflow fallback" },
+        expectedPreview: "workflow fallback",
+      },
+      {
+        tool: "webfetch",
+        rawInput: { description: "web fallback" },
+        expectedPreview: "web fallback",
+      },
+      {
+        tool: "session_read",
+        rawInput: { description: "session fallback" },
+        expectedPreview: "session fallback",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      expect(
+        deriveToolPreview({
+          tool: testCase.tool,
+          rawInput: testCase.rawInput,
+          rawOutput: undefined,
+        }),
+      ).toBe(testCase.expectedPreview);
+    }
+  });
+
   test("derives previews for namespaced ODT tool ids", () => {
     expect(
       deriveToolPreview({
