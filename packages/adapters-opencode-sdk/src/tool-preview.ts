@@ -1,65 +1,10 @@
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { asUnknownRecord } from "./guards";
-
-const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
-const READ_TOOL_NAMES = new Set(["read", "cat", "view"]);
-const LIST_TOOL_NAMES = new Set(["list", "ls"]);
-const SEARCH_TOOL_NAMES = new Set(["glob", "grep", "find", "search", "ast_grep_search"]);
-const TODO_TOOL_NAMES = new Set(["todowrite", "todoread"]);
-const TASK_TOOL_NAMES = new Set(["task", "delegate"]);
-const SESSION_TOOL_NAMES = new Set([
-  "session_info",
-  "session_list",
-  "session_read",
-  "session_search",
-]);
-const LSP_TOOL_NAMES = new Set([
-  "lsp_diagnostic",
-  "lsp_diagnostics",
-  "lsp_find_references",
-  "lsp_goto_definition",
-  "lsp_prepare_rename",
-  "lsp_symbols",
-]);
-const FILE_EDIT_TOOL_NAMES = new Set([
-  "edit",
-  "multiedit",
-  "write",
-  "create",
-  "file_write",
-  "apply_patch",
-  "str_replace",
-  "str_replace_based_edit_tool",
-  "patch",
-  "insert",
-  "replace",
-]);
-
-const normalizeToolName = (value: string): string => {
-  const trimmed = value.trim().toLowerCase();
-  const withoutFunctionsNamespace = trimmed.startsWith("functions.")
-    ? trimmed.slice("functions.".length)
-    : trimmed;
-  return withoutFunctionsNamespace.startsWith("openducktor_odt_")
-    ? withoutFunctionsNamespace.slice("openducktor_".length)
-    : withoutFunctionsNamespace;
-};
+import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 
 export const deriveToolType = (toolName: string): AgentToolType => {
-  const tool = normalizeToolName(toolName);
-  if (SHELL_TOOL_NAMES.has(tool)) return "bash";
-  if (READ_TOOL_NAMES.has(tool)) return "read";
-  if (LIST_TOOL_NAMES.has(tool)) return "list";
-  if (SEARCH_TOOL_NAMES.has(tool)) return "search";
-  if (TODO_TOOL_NAMES.has(tool) || tool.endsWith("_todowrite") || tool.endsWith("_todoread")) {
-    return "todo";
-  }
-  if (FILE_EDIT_TOOL_NAMES.has(tool)) return "file_edit";
-  if (tool === "question" || tool.endsWith("_question")) return "question";
-  if (tool.startsWith("odt_")) return "workflow";
-  if (tool.startsWith("webfetch") || tool.startsWith("websearch")) return "web";
-  return "generic";
+  return resolveOpencodeToolStrategy(toolName).toolType;
 };
 
 const compactText = (value: string, maxLength = 160): string => {
@@ -328,36 +273,61 @@ export const deriveToolPreview = (input: {
   rawOutput: unknown;
   metadata?: Record<string, unknown>;
 }): string | undefined => {
-  const tool = normalizeToolName(input.tool);
+  const strategy = resolveOpencodeToolStrategy(input.tool);
+  const tool = strategy.canonicalName;
   const rawInput = asUnknownRecord(input.rawInput);
 
-  const preview =
-    (SHELL_TOOL_NAMES.has(tool) ? readTrimmedString(rawInput, ["command"]) : null) ??
-    (READ_TOOL_NAMES.has(tool) ? extractPathFromInput(rawInput) : null) ??
-    (LIST_TOOL_NAMES.has(tool)
-      ? (readTrimmedString(rawInput, ["path", "cwd", "directory"]) ?? null)
-      : null) ??
-    (SEARCH_TOOL_NAMES.has(tool) ? summarizeSearchInput(tool, rawInput) : null) ??
-    ((tool === "skill" && summarizeSkillTool(rawInput)) || null) ??
-    (TODO_TOOL_NAMES.has(tool) || tool.endsWith("_todowrite") || tool.endsWith("_todoread")
-      ? summarizeTodoTool(rawInput, input.rawOutput)
-      : null) ??
-    (tool === "question" || tool.endsWith("_question")
-      ? summarizeQuestionTool(rawInput, input.metadata, input.rawOutput)
-      : null) ??
-    (TASK_TOOL_NAMES.has(tool)
-      ? summarizeTaskTool(rawInput, input.metadata, input.rawOutput)
-      : null) ??
-    (tool === "odt_read_task" ? summarizeOdtReadTask(rawInput, input.rawOutput) : null) ??
-    (tool.startsWith("odt_") ? summarizeOdtMutation(tool, rawInput) : null) ??
-    (tool === "webfetch" || tool.startsWith("websearch")
-      ? summarizeWebTool(tool, rawInput)
-      : null) ??
-    (tool.startsWith("context7_") ? summarizeContextTool(tool, rawInput) : null) ??
-    (tool === "grep_app_searchgithub" ? summarizeGithubSearchTool(rawInput) : null) ??
-    (LSP_TOOL_NAMES.has(tool) ? summarizeLspTool(rawInput) : null) ??
-    (SESSION_TOOL_NAMES.has(tool) ? summarizeSessionTool(rawInput) : null) ??
-    summarizeGenericInput(rawInput);
+  let preview: string | null;
+  switch (strategy.previewStrategy) {
+    case "shell":
+      preview = readTrimmedString(rawInput, ["command"]);
+      break;
+    case "read":
+      preview = extractPathFromInput(rawInput);
+      break;
+    case "list":
+      preview = readTrimmedString(rawInput, ["path", "cwd", "directory"]);
+      break;
+    case "search":
+      preview = summarizeSearchInput(tool, rawInput);
+      break;
+    case "skill":
+      preview = summarizeSkillTool(rawInput);
+      break;
+    case "todo":
+      preview = summarizeTodoTool(rawInput, input.rawOutput);
+      break;
+    case "question":
+      preview = summarizeQuestionTool(rawInput, input.metadata, input.rawOutput);
+      break;
+    case "task":
+      preview = summarizeTaskTool(rawInput, input.metadata, input.rawOutput);
+      break;
+    case "workflow":
+      preview =
+        tool === "odt_read_task"
+          ? summarizeOdtReadTask(rawInput, input.rawOutput)
+          : summarizeOdtMutation(tool, rawInput);
+      break;
+    case "web":
+      preview = summarizeWebTool(tool, rawInput);
+      break;
+    case "context":
+      preview = summarizeContextTool(tool, rawInput);
+      break;
+    case "github_search":
+      preview = summarizeGithubSearchTool(rawInput);
+      break;
+    case "lsp":
+      preview = summarizeLspTool(rawInput);
+      break;
+    case "session":
+      preview = summarizeSessionTool(rawInput);
+      break;
+    case "generic":
+      preview = summarizeGenericInput(rawInput);
+      break;
+  }
 
   if (!preview) {
     return undefined;
