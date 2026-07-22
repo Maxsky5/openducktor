@@ -370,9 +370,9 @@ describe("TypeScript web host backend", () => {
     const configPath = path.join(tempConfigDir, "config.json");
     const logFilePath = path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log");
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
-    process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
 
     try {
+      process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
       const logger = await Effect.runPromise(
         createWebLogger({
           console: { error: () => {}, log: () => {} },

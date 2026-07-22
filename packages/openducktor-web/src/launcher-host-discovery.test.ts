@@ -2,28 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-
-type DiscoveryProcessResult = {
-  descriptor: {
-    hostTokenPresent: boolean;
-    hostUrl: string;
-    pidMatchesProcess: boolean;
-  };
-  oppositeAfterStop: string;
-  oppositeDuringRun: string;
-  selectedMissingAfterStop: boolean;
-};
+import type { DiscoveryScenarioResult } from "./launcher-host-discovery-fixture";
 
 const fixturePath = path.join(import.meta.dir, "launcher-host-discovery-fixture.ts");
 
 describe("web launcher MCP discovery composition", () => {
   for (const scenario of [
     {
+      ambientChannel: "production",
       launchMode: "workspace",
       oppositeDescriptor: '{"hostUrl":"http://127.0.0.1:1","hostToken":"prod","pid":1}\n',
       title: "workspace launches own only development discovery",
     },
     {
+      ambientChannel: "dev",
       launchMode: "installed",
       oppositeDescriptor: '{"hostUrl":"http://127.0.0.1:2","hostToken":"dev","pid":2}\n',
       title: "installed launches own only production discovery",
@@ -38,6 +30,7 @@ describe("web launcher MCP discovery composition", () => {
           {
             env: {
               ...process.env,
+              OPENDUCKTOR_CHANNEL: scenario.ambientChannel,
               OPENDUCKTOR_CONFIG_DIR: configDirectory,
             },
             stderr: "pipe",
@@ -52,7 +45,7 @@ describe("web launcher MCP discovery composition", () => {
 
         expect(stderr).toBe("");
         expect(exitCode).toBe(0);
-        const result = JSON.parse(stdout) as DiscoveryProcessResult;
+        const result = JSON.parse(stdout) as DiscoveryScenarioResult;
         expect(result).toEqual({
           descriptor: {
             hostTokenPresent: true,

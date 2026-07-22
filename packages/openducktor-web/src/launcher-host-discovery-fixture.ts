@@ -21,10 +21,10 @@ const launchModes = {
 
 type LaunchMode = keyof typeof launchModes;
 
-type DiscoveryScenarioResult = {
+export type DiscoveryScenarioResult = {
   descriptor: {
     hostTokenPresent: boolean;
-    hostUrl: unknown;
+    hostUrl: string;
     pidMatchesProcess: boolean;
   };
   oppositeAfterStop: string;
@@ -49,9 +49,6 @@ const isFileMissing = (filePath: string): Promise<boolean> =>
     },
   );
 
-const sourceRuntimeDistribution = createSourceRuntimeDistribution(
-  path.resolve(import.meta.dir, "../../.."),
-);
 const testLogger: WebLogger = {
   error: () => Effect.void,
   info: () => Effect.void,
@@ -78,6 +75,9 @@ const runDiscoveryScenario = async (): Promise<DiscoveryScenarioResult> => {
   const runtimeDirectory = path.join(configDirectory, "runtime");
   const descriptorPath = path.join(runtimeDirectory, scenario.descriptorName);
   const oppositeDescriptorPath = path.join(runtimeDirectory, scenario.oppositeDescriptorName);
+  const runtimeDistribution = createSourceRuntimeDistribution(
+    path.resolve(import.meta.dir, "../../.."),
+  );
   let backend: TypescriptHostBackend | null = null;
 
   try {
@@ -91,7 +91,7 @@ const runDiscoveryScenario = async (): Promise<DiscoveryScenarioResult> => {
         logger: testLogger,
         onBackgroundFailure: () => {},
         port: 0,
-        runtimeDistribution: sourceRuntimeDistribution,
+        runtimeDistribution,
         workspaceMode: scenario.workspaceMode,
       }),
     );
@@ -101,6 +101,9 @@ const runDiscoveryScenario = async (): Promise<DiscoveryScenarioResult> => {
       hostUrl?: unknown;
       pid?: unknown;
     };
+    if (typeof descriptor.hostUrl !== "string") {
+      throw new Error("Expected launcher discovery descriptor hostUrl to be a string.");
+    }
     const oppositeDuringRun = await readFile(oppositeDescriptorPath, "utf8");
 
     await backend.stop();
@@ -125,4 +128,6 @@ const runDiscoveryScenario = async (): Promise<DiscoveryScenarioResult> => {
   }
 };
 
-process.stdout.write(JSON.stringify(await runDiscoveryScenario()));
+if (import.meta.main) {
+  process.stdout.write(JSON.stringify(await runDiscoveryScenario()));
+}

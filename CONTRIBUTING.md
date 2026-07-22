@@ -128,7 +128,7 @@ Example commit messages:
 
 OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with `OPENDUCKTOR_CONFIG_DIR`.
 
-You may use a separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` when you want to keep all contributor settings, task-store databases, and runtime caches apart from your normal app data. You can skip this setting because OpenDucktor already keeps development MCP discovery from overwriting production discovery.
+A separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` remains useful when you want to keep contributor settings, task-store databases, and runtime caches apart from your normal app data. It is not required solely to protect production MCP discovery because development hosts use `runtime/mcp-bridge-dev.json`.
 
 Important paths:
 
