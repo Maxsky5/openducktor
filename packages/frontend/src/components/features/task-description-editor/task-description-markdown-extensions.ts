@@ -1,9 +1,11 @@
 import type {
   AnyExtension,
   JSONContent,
+  MarkdownLexerConfiguration,
   MarkdownParseHelpers,
   MarkdownRendererHelpers,
   MarkdownToken,
+  MarkdownTokenizer,
   RenderContext,
 } from "@tiptap/core";
 import { CodeBlock } from "@tiptap/extension-code-block";
@@ -45,6 +47,12 @@ const defaultOrderedListParseMarkdown = requireMarkdownHook(
   "parseMarkdown",
   OrderedList.config.parseMarkdown,
 );
+const defaultOrderedListMarkdownTokenizer = OrderedList.config.markdownTokenizer;
+if (!defaultOrderedListMarkdownTokenizer?.tokenize) {
+  throw new Error(
+    "TipTap 3.28.0 OrderedList.markdownTokenizer is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.",
+  );
+}
 const defaultTaskItemParseMarkdown = requireMarkdownHook(
   "TaskItem",
   "parseMarkdown",
@@ -124,6 +132,61 @@ const parseLeadingBlockMathSequence = (source: string): BlockMathSequence | unde
 
 const tokenSource = (token: MarkdownToken): string => token.raw ?? token.text ?? "";
 
+const listItemSource = (token: MarkdownToken): string | undefined => {
+  const lines = tokenSource(token).replaceAll("\r\n", "\n").split("\n");
+  const opening = lines[0]?.match(/^([ \t]*(?:[-+*]|\d+[.)])[ \t]+)(.*)$/);
+  if (!opening) {
+    return undefined;
+  }
+
+  const continuationWidth = opening[1]?.length ?? 0;
+  return [
+    opening[2] ?? "",
+    ...lines.slice(1).map((line) => {
+      const leadingWhitespace = line.length - line.trimStart().length;
+      return line.slice(Math.min(leadingWhitespace, continuationWidth));
+    }),
+  ].join("\n");
+};
+
+// TipTap 3.28 only block-lexes ordered item content after an initial paragraph.
+// Re-lex each item's own source, then restore nested ordered lists that its tokenizer stores outside
+// that source segment.
+const reparseOrderedListItems = (
+  token: MarkdownToken,
+  lexer: MarkdownLexerConfiguration,
+): MarkdownToken => {
+  if (token.type !== "list" || !token.ordered || !Array.isArray(token.items)) {
+    return token;
+  }
+
+  return {
+    ...token,
+    items: token.items.map((item: MarkdownToken) => {
+      const source = listItemSource(item);
+      if (source === undefined) {
+        return item;
+      }
+
+      const nestedOrderedLists = (item.tokens ?? [])
+        .filter((child) => child.type === "list" && child.ordered)
+        .map((child) => reparseOrderedListItems(child, lexer));
+      return {
+        ...item,
+        tokens: [...lexer.blockTokens(source), ...nestedOrderedLists],
+      };
+    }),
+  };
+};
+
+const taskDescriptionOrderedListTokenizer: MarkdownTokenizer = {
+  ...defaultOrderedListMarkdownTokenizer,
+  tokenize(src, tokens, lexer) {
+    const token = defaultOrderedListMarkdownTokenizer.tokenize(src, tokens, lexer);
+    return token ? reparseOrderedListItems(token, lexer) : token;
+  },
+};
+
 // TipTap leaves one list-indent space on prose after a second block-math token.
 // Remove only that paragraph-start artifact before parsing the trailing tokens.
 const trimParagraphTokenStart = (token: MarkdownToken): MarkdownToken => {
@@ -172,17 +235,10 @@ const findTrailingTokens = (
 };
 
 const withLeadingListItemMathTokens = (token: MarkdownToken): MarkdownToken => {
-  const lines = tokenSource(token).replaceAll("\r\n", "\n").split("\n");
-  const opening = lines[0]?.match(/^([ \t]*(?:[-+*]|\d+[.)])[ \t]+)(.*)$/);
-  if (!opening) {
+  const itemSource = listItemSource(token);
+  if (itemSource === undefined) {
     return token;
   }
-
-  const continuationWidth = opening[1]?.length ?? 0;
-  const itemSource = [
-    opening[2] ?? "",
-    ...lines.slice(1).map((line) => line.slice(continuationWidth)),
-  ].join("\n");
   const sequence = parseLeadingBlockMathSequence(itemSource);
   if (!sequence) {
     return token;
@@ -258,7 +314,9 @@ const renderListItem = (
       continue;
     }
     const renderedChild = helpers.renderChildren([child]);
-    const separator = child.type === "paragraph" || child.type === "blockMath" ? "\n\n" : "\n";
+    const nestedList =
+      child.type === "bulletList" || child.type === "orderedList" || child.type === "taskList";
+    const separator = nestedList ? "\n" : "\n\n";
     output += `${separator}${renderedChild
       .split("\n")
       .map((line) => `${continuation}${line}`)
@@ -286,9 +344,9 @@ export const TaskDescriptionListItem = ListItem.extend({
 
   renderMarkdown(node, helpers, context) {
     const content = node.content ?? [];
-    const needsDialectRenderer = content.some(
-      (child) => child.type === "blockMath" || child.type === "codeBlock",
-    );
+    const needsDialectRenderer =
+      context.parentType === "orderedList" ||
+      content.some((child) => child.type === "blockMath" || child.type === "codeBlock");
     return needsDialectRenderer
       ? renderListItem(node, helpers, listItemPrefix(context))
       : defaultListItemRenderMarkdown(node, helpers, context);
@@ -296,11 +354,10 @@ export const TaskDescriptionListItem = ListItem.extend({
 });
 
 export const TaskDescriptionOrderedList = OrderedList.extend({
+  markdownTokenizer: taskDescriptionOrderedListTokenizer,
+
   parseMarkdown(token, helpers) {
-    const items = token.items?.map((item: MarkdownToken) => withLeadingListItemMathTokens(item));
-    return ensureOrderedListMathParagraphs(
-      defaultOrderedListParseMarkdown(items ? { ...token, items } : token, helpers),
-    );
+    return ensureOrderedListMathParagraphs(defaultOrderedListParseMarkdown(token, helpers));
   },
 });
 

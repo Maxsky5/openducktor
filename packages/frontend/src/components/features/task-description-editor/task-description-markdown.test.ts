@@ -231,6 +231,36 @@ describe("task description Markdown dialect", () => {
   });
 
   test.each([
+    ["a 1. blockquote", "1. > quote"],
+    ["a 10. blockquote", "10. > quote"],
+    ["a leading fenced code block", "1. ```ts\n   const value = 1\n   ```"],
+    ["a leading Mermaid block", "1. ```mermaid\n   graph TD\n     A --> B\n   ```"],
+    ["a blockquote followed by prose", "1. > quote\n\n   After"],
+    ["a nested ordered blockquote", "1. Parent\n   1. > nested quote"],
+    ["a leading heading", "1. # Heading"],
+    ["a leading nested ordered list", "1. 1. nested"],
+    [
+      "block math followed by fenced code",
+      "1. $$\n   x\n   $$\n\n   ```ts\n   const value = 1\n   ```",
+    ],
+    [
+      "block math followed by Mermaid",
+      "1. $$\n   x\n   $$\n\n   ```mermaid\n   graph TD\n     A --> B\n   ```",
+    ],
+    [
+      "block math followed by an image",
+      "1. $$\n   x\n   $$\n\n   ![Diagram](https://example.com/diagram.png)",
+    ],
+    ["block math followed by a thematic rule", "1. $$\n   x\n   $$\n\n   ---"],
+  ])("semantically round-trips ordered list items with %s", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+
+    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+
+    expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
+  });
+
+  test.each([
     ["spaces before LF and a following paragraph", "$$\nx\n$$   \n\nAfter"],
     ["a tab before CRLF and a following paragraph", "$$\r\nx\r\n$$\t\r\n\r\nAfter"],
     ["spaces at EOF", "$$\nx\n$$   "],

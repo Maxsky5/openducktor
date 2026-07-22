@@ -4,7 +4,7 @@ import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import TaskDescriptionEditor from "./task-description-editor";
 
-const props = {
+const createProps = () => ({
   workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
   taskId: "task-1",
   onUpload: async () => ({
@@ -16,14 +16,14 @@ const props = {
   }),
   uploads: [],
   previews: new Map<string, string>(),
-};
+});
 
 describe("TaskDescriptionEditor", () => {
   test("switching modes without edits preserves the original source", async () => {
     const onChange = mock((_value: string) => {});
     const markdown = "-   unusual marker\r\n";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
     await waitFor(() =>
@@ -44,6 +44,25 @@ describe("TaskDescriptionEditor", () => {
     ["99. ordered math with trailing prose", "99. $$\n    x\n    $$\n\n    After"],
     ["repeated ordered math", "1. $$\n   x\n   $$\n\n   $$\n   y\n   $$\n\n   After"],
     ["ordered math before nested content", "1. $$\n   x\n   $$\n\n   - nested"],
+    ["an ordered blockquote", "1. > quote"],
+    ["a multi-digit ordered blockquote", "10. > quote"],
+    ["an ordered fenced code block", "1. ```ts\n   const value = 1\n   ```"],
+    ["an ordered Mermaid block", "1. ```mermaid\n   graph TD\n     A --> B\n   ```"],
+    ["an ordered blockquote followed by prose", "1. > quote\n\n   After"],
+    ["a nested ordered blockquote", "1. Parent\n   1. > nested quote"],
+    [
+      "ordered math followed by fenced code",
+      "1. $$\n   x\n   $$\n\n   ```ts\n   const value = 1\n   ```",
+    ],
+    [
+      "ordered math followed by Mermaid",
+      "1. $$\n   x\n   $$\n\n   ```mermaid\n   graph TD\n     A --> B\n   ```",
+    ],
+    [
+      "ordered math followed by an image",
+      "1. $$\n   x\n   $$\n\n   ![Diagram](https://example.com/diagram.png)",
+    ],
+    ["ordered math followed by a thematic rule", "1. $$\n   x\n   $$\n\n   ---"],
     ["a leading blockquote", "- > quote"],
     ["a leading fenced code block", "- ```ts\n  const value = 1\n  ```"],
     ["a leading Mermaid block", "- ```mermaid\n  graph TD\n    A --> B\n  ```"],
@@ -55,7 +74,7 @@ describe("TaskDescriptionEditor", () => {
     async (_name, markdown) => {
       const onChange = mock((_value: string) => {});
       const view = render(
-        <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+        <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
       );
 
       await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
@@ -71,7 +90,7 @@ describe("TaskDescriptionEditor", () => {
   test("keeps unsupported syntax in Markdown mode with an actionable reason", async () => {
     const view = render(
       <TaskDescriptionEditor
-        {...props}
+        {...createProps()}
         markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
         onChange={() => {}}
       />,
@@ -87,7 +106,7 @@ describe("TaskDescriptionEditor", () => {
     const onChange = mock((_value: string) => {});
     const markdown = "| Value | Meaning |\n| :---- | ------: |\n| a\\|b | literal pipe |";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
@@ -100,7 +119,7 @@ describe("TaskDescriptionEditor", () => {
     const onChange = mock((_value: string) => {});
     const markdown = "[a](<https://x.test/a b>)";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
@@ -117,7 +136,7 @@ describe("TaskDescriptionEditor", () => {
     const onChange = mock((_value: string) => {});
     const markdown = "Before $$x$$ after";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
@@ -130,7 +149,7 @@ describe("TaskDescriptionEditor", () => {
   test("keeps malformed block math in Markdown mode with an actionable reason", async () => {
     const markdown = "$$\nx\n\nThen $y$";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={() => {}} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={() => {}} />,
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
@@ -142,7 +161,7 @@ describe("TaskDescriptionEditor", () => {
   test("preserves front matter outside Visual mode and keeps it source-editable", async () => {
     const markdown = "---\ntitle: Keep comments # exact\n---\nBody";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={() => {}} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={() => {}} />,
     );
 
     expect(view.getByText(/Front matter preserved/)).toBeTruthy();
@@ -157,10 +176,14 @@ describe("TaskDescriptionEditor", () => {
 
   test("external replacements hydrate Visual mode without emitting updates", async () => {
     const onChange = mock((_value: string) => {});
-    const view = render(<TaskDescriptionEditor {...props} markdown="First" onChange={onChange} />);
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="First" onChange={onChange} />,
+    );
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
-    view.rerender(<TaskDescriptionEditor {...props} markdown="Second" onChange={onChange} />);
+    view.rerender(
+      <TaskDescriptionEditor {...createProps()} markdown="Second" onChange={onChange} />,
+    );
 
     await waitFor(() => expect(view.container.textContent).toContain("Second"));
     expect(onChange).not.toHaveBeenCalled();
@@ -172,7 +195,7 @@ describe("TaskDescriptionEditor", () => {
       const [markdown, setMarkdown] = useState("Formula");
       return (
         <TaskDescriptionEditor
-          {...props}
+          {...createProps()}
           markdown={markdown}
           onChange={(nextMarkdown) => {
             onChange(nextMarkdown);
@@ -200,7 +223,7 @@ describe("TaskDescriptionEditor", () => {
     const onChange = mock((_value: string) => {});
     const view = render(
       <TaskDescriptionEditor
-        {...props}
+        {...createProps()}
         taskId="task-incompatible"
         markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
         onChange={onChange}
@@ -213,7 +236,7 @@ describe("TaskDescriptionEditor", () => {
 
     view.rerender(
       <TaskDescriptionEditor
-        {...props}
+        {...createProps()}
         taskId="task-compatible"
         markdown="Compatible body"
         onChange={onChange}
@@ -229,7 +252,7 @@ describe("TaskDescriptionEditor", () => {
     const onChange = mock((_value: string) => {});
     const view = render(
       <TaskDescriptionEditor
-        {...props}
+        {...createProps()}
         taskId="task-compatible"
         markdown="Compatible body"
         onChange={onChange}
@@ -239,7 +262,7 @@ describe("TaskDescriptionEditor", () => {
 
     view.rerender(
       <TaskDescriptionEditor
-        {...props}
+        {...createProps()}
         taskId="task-incompatible"
         markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
         onChange={onChange}
@@ -270,7 +293,7 @@ describe("TaskDescriptionEditor", () => {
     try {
       const view = render(
         <TaskDescriptionEditor
-          {...props}
+          {...createProps()}
           markdown="Body"
           onChange={onChange}
           onUpload={onUpload}
@@ -310,7 +333,12 @@ describe("TaskDescriptionEditor", () => {
     }));
     const file = new File([new Uint8Array([1])], "pasted.png", { type: "image/png" });
     const view = render(
-      <TaskDescriptionEditor {...props} markdown="Body" onChange={onChange} onUpload={onUpload} />,
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Body"
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
     );
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
@@ -346,7 +374,12 @@ describe("TaskDescriptionEditor", () => {
       };
     });
     const view = render(
-      <TaskDescriptionEditor {...props} markdown="Body" onChange={onChange} onUpload={onUpload} />,
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Body"
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
     );
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
@@ -365,7 +398,7 @@ describe("TaskDescriptionEditor", () => {
   test("inserts an arbitrary inline formula from the accessible math editor", async () => {
     const onChange = mock((_value: string) => {});
     const view = render(
-      <TaskDescriptionEditor {...props} markdown="Formula" onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown="Formula" onChange={onChange} />,
     );
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
@@ -387,7 +420,7 @@ describe("TaskDescriptionEditor", () => {
     const onChange = mock((_value: string) => {});
     const markdown = "$$\r\nx^2\r\n$$\t\r\n\r\nBody";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
     expect(hasMarkdownMath(markdown)).toBe(true);
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
@@ -415,7 +448,7 @@ describe("TaskDescriptionEditor", () => {
     const onChange = mock((_value: string) => {});
     const markdown = "> $$\n> x\n> $$";
     const view = render(
-      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
     expect(hasMarkdownMath(markdown)).toBe(true);
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
@@ -438,7 +471,7 @@ describe("TaskDescriptionEditor", () => {
   test("edits a selected formula and validates or cancels without changing Markdown", async () => {
     const onChange = mock((_value: string) => {});
     const view = render(
-      <TaskDescriptionEditor {...props} markdown="Formula $x$" onChange={onChange} />,
+      <TaskDescriptionEditor {...createProps()} markdown="Formula $x$" onChange={onChange} />,
     );
     const mathNode = await waitFor(() => {
       const node = view.container.querySelector('[data-type="inline-math"]');
@@ -473,7 +506,9 @@ describe("TaskDescriptionEditor", () => {
 
   test("inserts arbitrary block math with the documented keyboard shortcut", async () => {
     const onChange = mock((_value: string) => {});
-    const view = render(<TaskDescriptionEditor {...props} markdown="Body" onChange={onChange} />);
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={onChange} />,
+    );
     await waitFor(() => expect(view.getByRole("button", { name: "Block math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Block math" }));
