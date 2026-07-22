@@ -18,7 +18,7 @@ export function TaskDescriptionMermaidNode({ node }: ReactNodeViewProps) {
         </div>
         <NodeViewContent className="m-0 min-h-20 overflow-x-auto whitespace-pre p-3 font-mono text-xs" />
       </div>
-      <MarkdownMermaid source={node.textContent} showSource={false} />
+      <MarkdownMermaid source={node.textContent} />
     </NodeViewWrapper>
   );
 }

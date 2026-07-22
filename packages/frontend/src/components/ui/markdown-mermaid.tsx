@@ -8,13 +8,7 @@ type MermaidState =
 
 let initialized = false;
 
-export function MarkdownMermaid({
-  source,
-  showSource = true,
-}: {
-  source: string;
-  showSource?: boolean;
-}) {
+export function MarkdownMermaid({ source }: { source: string }) {
   const reactId = useId();
   const [state, setState] = useState<MermaidState>({ status: "loading" });
 
@@ -60,17 +54,7 @@ export function MarkdownMermaid({
 
   return (
     <section className="my-3 overflow-hidden rounded-md border border-border bg-card">
-      {showSource ? (
-        <>
-          <div className="border-b border-border bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            Mermaid source
-          </div>
-          <pre className="m-0 overflow-x-auto rounded-none bg-transparent p-3 text-xs">
-            <code>{source}</code>
-          </pre>
-        </>
-      ) : null}
-      <div className={showSource ? "border-t border-border p-3" : "p-3"}>
+      <div className="p-3">
         {state.status === "loading" ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />

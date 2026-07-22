@@ -386,7 +386,7 @@ describe("rich task description rendering", () => {
     expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
   });
 
-  test("keeps Mermaid source visible and suppresses raw HTML", async () => {
+  test("renders a Mermaid diagram without exposing its source and suppresses raw HTML", async () => {
     const view = render(
       <MarkdownRenderer
         markdown={"```mermaid\ngraph TD\n A --> B\n```\n<script>alert(1)</script>"}
@@ -398,14 +398,15 @@ describe("rich task description rendering", () => {
       />,
     );
 
-    await waitFor(() => expect(view.getByText("Mermaid source")).toBeTruthy(), {
+    await waitFor(() => expect(view.container.querySelector("svg")).toBeTruthy(), {
       timeout: 3000,
     });
-    expect(view.getByText(/graph TD/)).toBeTruthy();
+    expect(view.queryByText("Mermaid source")).toBeNull();
+    expect(view.queryByText(/graph TD/)).toBeNull();
     expect(view.container.querySelector("script")).toBeNull();
   }, 4000);
 
-  test("shows Mermaid source with an actionable parse error", async () => {
+  test("shows an actionable Mermaid parse error without exposing its source", async () => {
     const view = render(
       <MarkdownRenderer
         markdown={"```mermaid\nthis is not a diagram\n```"}
@@ -418,7 +419,8 @@ describe("rich task description rendering", () => {
     );
 
     expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
-    expect(view.getByText("this is not a diagram")).toBeTruthy();
+    expect(view.queryByText("Mermaid source")).toBeNull();
+    expect(view.queryByText("this is not a diagram")).toBeNull();
     expect(view.getByText(/Edit the Mermaid source/)).toBeTruthy();
   }, 4000);
 
@@ -432,8 +434,11 @@ describe("rich task description rendering", () => {
     async (_name, markdown) => {
       const view = render(<MarkdownRenderer markdown={markdown} />);
 
-      expect(await view.findByText("Mermaid source", {}, { timeout: 3000 })).toBeTruthy();
-      expect(view.getByText(/graph TD/)).toBeTruthy();
+      await waitFor(() => expect(view.container.querySelector("svg")).toBeTruthy(), {
+        timeout: 3000,
+      });
+      expect(view.queryByText("Mermaid source")).toBeNull();
+      expect(view.queryByText(/graph TD/)).toBeNull();
     },
     4000,
   );
@@ -442,7 +447,8 @@ describe("rich task description rendering", () => {
     const view = render(<MarkdownRenderer markdown={"````mermaid\nthis is not a diagram\n````"} />);
 
     expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
-    expect(view.getByText("this is not a diagram")).toBeTruthy();
+    expect(view.queryByText("Mermaid source")).toBeNull();
+    expect(view.queryByText("this is not a diagram")).toBeNull();
   }, 4000);
 
   test.each([
@@ -453,8 +459,11 @@ describe("rich task description rendering", () => {
     async (_name, markdown) => {
       const view = render(<MarkdownRenderer markdown={markdown} />);
 
-      expect(await view.findByText("Mermaid source", {}, { timeout: 3000 })).toBeTruthy();
-      expect(view.getByText(/graph TD/)).toBeTruthy();
+      await waitFor(() => expect(view.container.querySelector("svg")).toBeTruthy(), {
+        timeout: 3000,
+      });
+      expect(view.queryByText("Mermaid source")).toBeNull();
+      expect(view.queryByText(/graph TD/)).toBeNull();
     },
     4000,
   );
@@ -465,7 +474,8 @@ describe("rich task description rendering", () => {
     );
 
     expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
-    expect(view.getByText("this is not a diagram")).toBeTruthy();
+    expect(view.queryByText("Mermaid source")).toBeNull();
+    expect(view.queryByText("this is not a diagram")).toBeNull();
     expect(view.getByText(/Edit the Mermaid source/)).toBeTruthy();
   }, 4000);
 });
