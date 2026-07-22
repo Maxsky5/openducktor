@@ -64,6 +64,7 @@ export type CodexServerRequestHandlerContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
+  emitRoutedRequestEvent?(targetSession: CodexSessionState, event: AgentEvent): void;
 };
 
 type RequestRouteContext = {
@@ -117,7 +118,16 @@ const emitPendingEvent = (
   context: CodexServerRequestHandlerContext,
   routeContext: RequestRouteContext,
   event: AgentEvent,
+  targetSession?: CodexSessionState,
 ): void => {
+  if (targetSession && context.emitRoutedRequestEvent) {
+    context.emitRoutedRequestEvent(targetSession, {
+      ...event,
+      externalSessionId: routeContext.ownerThreadId,
+      ...codexSubagentRouteEventFields(routeContext.route),
+    });
+    return;
+  }
   if (routeContext.ownerSession) {
     context.emitSessionEvent(routeContext.ownerThreadId, {
       ...event,
@@ -143,6 +153,7 @@ export const handleCodexServerRequest = async (
   rawRequest: CodexServerRequestRecord,
   handledRequestKeys: Set<string>,
   requestReceivedAtMs?: number,
+  targetSession?: CodexSessionState,
 ): Promise<boolean> => {
   const requestId = rawRequest.id;
   const requestKey = requestId !== undefined ? codexServerRequestKey(requestId) : undefined;
@@ -250,12 +261,17 @@ export const handleCodexServerRequest = async (
           return;
         }
         registeredRequestId = registration.entry.request.requestId;
-        emitPendingEvent(context, routeContext, {
-          ...registration.entry.request,
-          type: "approval_required",
-          externalSessionId: routeContext.ownerThreadId,
-          timestamp: new Date().toISOString(),
-        });
+        emitPendingEvent(
+          context,
+          routeContext,
+          {
+            ...registration.entry.request,
+            type: "approval_required",
+            externalSessionId: routeContext.ownerThreadId,
+            timestamp: new Date().toISOString(),
+          },
+          targetSession,
+        );
       },
       () => {
         if (registeredRequestId) {
@@ -301,29 +317,39 @@ export const handleCodexServerRequest = async (
         registeredRequestId = registration.entry.request.requestId;
         const question = registration.entry.request;
         const questionToolCallId = question.requestId;
-        emitPendingEvent(context, routeContext, {
-          ...question,
-          type: "question_required",
-          externalSessionId: routeContext.ownerThreadId,
-          timestamp: new Date().toISOString(),
-        });
-        emitPendingEvent(context, routeContext, {
-          type: "assistant_part",
-          externalSessionId: routeContext.ownerThreadId,
-          timestamp: new Date().toISOString(),
-          part: requireNormalizedCodexToolInvocation({
-            messageId: `codex-question-${questionToolCallId}`,
-            partId: `codex-question-${questionToolCallId}`,
-            callId: questionToolCallId,
-            rawToolName: "request_user_input",
-            status: "running",
-            input: questionInput,
-            metadata: {
-              codexServerRequest: true,
-              questions: parsed.request.questions,
-            },
-          }),
-        });
+        emitPendingEvent(
+          context,
+          routeContext,
+          {
+            ...question,
+            type: "question_required",
+            externalSessionId: routeContext.ownerThreadId,
+            timestamp: new Date().toISOString(),
+          },
+          targetSession,
+        );
+        emitPendingEvent(
+          context,
+          routeContext,
+          {
+            type: "assistant_part",
+            externalSessionId: routeContext.ownerThreadId,
+            timestamp: new Date().toISOString(),
+            part: requireNormalizedCodexToolInvocation({
+              messageId: `codex-question-${questionToolCallId}`,
+              partId: `codex-question-${questionToolCallId}`,
+              callId: questionToolCallId,
+              rawToolName: "request_user_input",
+              status: "running",
+              input: questionInput,
+              metadata: {
+                codexServerRequest: true,
+                questions: parsed.request.questions,
+              },
+            }),
+          },
+          targetSession,
+        );
       },
       () => {
         if (registeredRequestId) {
@@ -378,12 +404,17 @@ export const handleCodexServerRequest = async (
           return;
         }
         registeredRequestId = registration.entry.request.requestId;
-        emitPendingEvent(context, routeContext, {
-          ...registration.entry.request,
-          type: "approval_required",
-          externalSessionId: routeContext.ownerThreadId,
-          timestamp: new Date().toISOString(),
-        });
+        emitPendingEvent(
+          context,
+          routeContext,
+          {
+            ...registration.entry.request,
+            type: "approval_required",
+            externalSessionId: routeContext.ownerThreadId,
+            timestamp: new Date().toISOString(),
+          },
+          targetSession,
+        );
       },
       () => {
         if (registeredRequestId) {

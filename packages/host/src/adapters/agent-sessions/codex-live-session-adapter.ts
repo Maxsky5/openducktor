@@ -206,14 +206,16 @@ export const createCodexLiveSessionAdapterPreparer =
                   ...(error !== undefined ? { error } : {}),
                 } as CodexAppServerRespondInput),
               ),
-            onRuntimeEventQueueFailure: ({ runtimeId, error }) =>
-              Effect.runPromise(
+            onRuntimeEventQueueFailure: ({ runtimeId, error }) => {
+              Effect.runFork(
                 onBackgroundFailure(
                   toHostOperationError(error, "codex-live-session.forward-mutation", {
                     runtimeId,
                   }),
                 ),
-              ),
+              );
+              return undefined;
+            },
             onLiveSessionMutation: projection.enqueueMutation,
           }),
         catch: (cause) =>

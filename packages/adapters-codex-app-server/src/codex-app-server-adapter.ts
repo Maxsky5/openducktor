@@ -554,13 +554,22 @@ export class CodexAppServerAdapter
     );
     const localSessionIds = new Set(sessions.map((session) => session.threadId));
     const snapshots = sessions.map((session) => this.toLiveSessionSnapshot(session));
-    for (const parentSession of sessions) {
-      for (const route of this.subagents.routesForParent(parentSession.threadId, runtimeId)) {
-        if (localSessionIds.has(route.childExternalSessionId)) {
+    const visited = new Set(localSessionIds);
+    const appendRoutedDescendants = (
+      retainedAncestor: CodexSessionState,
+      parentExternalSessionId: string,
+    ): void => {
+      for (const route of this.subagents.routesForParent(parentExternalSessionId, runtimeId)) {
+        if (visited.has(route.childExternalSessionId)) {
           continue;
         }
-        snapshots.push(this.toRoutedChildLiveSessionSnapshot(parentSession, route));
+        visited.add(route.childExternalSessionId);
+        snapshots.push(this.toRoutedChildLiveSessionSnapshot(retainedAncestor, route));
+        appendRoutedDescendants(retainedAncestor, route.childExternalSessionId);
       }
+    };
+    for (const session of sessions) {
+      appendRoutedDescendants(session, session.threadId);
     }
     return snapshots;
   }

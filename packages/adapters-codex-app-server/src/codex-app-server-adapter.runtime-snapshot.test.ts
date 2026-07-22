@@ -794,7 +794,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     ]);
   });
 
-  test("retains a completed routed child in the live projection until runtime release", async () => {
+  test("retains completed routed descendants in the live projection until runtime release", async () => {
     const { adapter } = createHarness();
     await adapter.resumeSession({
       repoPath: "/repo",
@@ -816,6 +816,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
           status: "completed";
         }): unknown;
       };
+      pendingInput: CodexPendingInputState;
     };
     adapterState.subagents.upsertLink({
       runtimeId: "runtime-live",
@@ -824,14 +825,50 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       itemId: "spawn-1",
       status: "completed",
     });
+    const pendingQuestion = adapterState.pendingInput.addQuestion({
+      runtimeId: "runtime-live",
+      threadId: "grandchild-thread",
+      nativeRequest: { id: "grandchild-question", method: "item/tool/requestUserInput" },
+      request: {
+        questions: [{ id: "question-1", header: "Proceed", question: "Continue?", options: [] }],
+      },
+      questionIds: ["question-1"],
+      input: { requestId: "grandchild-question" },
+      route: {
+        runtimeId: "runtime-live",
+        parentExternalSessionId: "child-thread",
+        childExternalSessionId: "grandchild-thread",
+        subagentCorrelationKey: "codex-subagent:child-thread:grandchild-thread",
+      },
+    });
+    adapterState.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId: "child-thread",
+      childThreadId: "grandchild-thread",
+      itemId: "spawn-2",
+      status: "completed",
+    });
 
-    expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
+    const snapshots = adapter.listLiveSessionSnapshots("runtime-live");
+    expect(snapshots).toContainEqual(
       expect.objectContaining({
         activity: "idle",
         parentExternalSessionId: "parent-thread",
         ref: expect.objectContaining({ externalSessionId: "child-thread" }),
       }),
     );
+    expect(snapshots).toContainEqual(
+      expect.objectContaining({
+        activity: "waiting_for_question",
+        parentExternalSessionId: "child-thread",
+        ref: expect.objectContaining({ externalSessionId: "grandchild-thread" }),
+        pendingQuestions: [
+          expect.objectContaining({ requestId: pendingQuestion.entry.request.requestId }),
+        ],
+      }),
+    );
+    expect(localSessions(adapter).has("child-thread")).toBe(false);
+    expect(localSessions(adapter).has("grandchild-thread")).toBe(false);
   });
 
   test("replays mirrored pending input when subscribing an idle parent without a local session", async () => {

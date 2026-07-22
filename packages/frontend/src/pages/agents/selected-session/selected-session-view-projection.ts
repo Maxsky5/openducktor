@@ -74,7 +74,13 @@ export const deriveSelectedSessionViewProjection = ({
 }): SelectedSessionViewProjection => {
   const readModelFailureMessage =
     readModelLoadState.kind === "failed" ? readModelLoadState.message : null;
-  const sessionAuxiliaryError = sessionFault?.message ?? readModelFailureMessage;
+  let sessionAuxiliaryError = readModelFailureMessage;
+
+  if (sessionFault) {
+    sessionAuxiliaryError = readModelFailureMessage
+      ? `${sessionFault.message} ${readModelFailureMessage}`
+      : sessionFault.message;
+  }
 
   if (selectedSessionIdentity && session) {
     return {

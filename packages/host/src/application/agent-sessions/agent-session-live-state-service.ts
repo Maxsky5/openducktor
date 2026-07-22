@@ -183,7 +183,7 @@ export const createAgentSessionLiveStateService = ({
       catch: (cause) => toEnvelopePublishError(cause, envelope.type),
     });
 
-  const publishEnvelope = (envelope: AgentSessionLiveEnvelope) =>
+  const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
     Effect.gen(function* () {
       const validatedEnvelope = yield* validateEnvelope(envelope);
       if (validatedEnvelope.type === "fault") {
@@ -212,23 +212,38 @@ export const createAgentSessionLiveStateService = ({
           );
         }
         if (faultLogResult._tag === "Left") {
-          return yield* Effect.fail(faultLogResult.left);
+          return faultLogResult.left;
         }
         if (publishResult._tag === "Left") {
           return yield* Effect.fail(publishResult.left);
         }
-        return;
+        return null;
       }
       yield* Effect.try({
         try: () => publish(validatedEnvelope),
         catch: (cause) => toEnvelopePublishError(cause, validatedEnvelope.type),
       });
+      return null;
     });
+
+  const publishEnvelope = (envelope: AgentSessionLiveEnvelope) =>
+    publishEnvelopeResult(envelope).pipe(
+      Effect.flatMap((faultLogFailure) =>
+        faultLogFailure ? Effect.fail(faultLogFailure) : Effect.void,
+      ),
+    );
 
   const publishChanges = (changes: ReadonlyArray<AgentSessionLiveAdapterChange>) =>
     Effect.gen(function* () {
+      let faultLogFailure: HostError | null = null;
       for (const change of changes) {
-        yield* publishEnvelope(toEnvelope(change));
+        const result = yield* publishEnvelopeResult(toEnvelope(change));
+        if (faultLogFailure === null && result) {
+          faultLogFailure = result;
+        }
+      }
+      if (faultLogFailure) {
+        return yield* Effect.fail(faultLogFailure);
       }
     });
 
