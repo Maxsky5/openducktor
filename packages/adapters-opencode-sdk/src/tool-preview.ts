@@ -329,8 +329,9 @@ export const deriveToolPreview = (input: {
       break;
   }
 
-  if (!preview) {
+  const resolvedPreview = preview ?? summarizeGenericInput(rawInput);
+  if (!resolvedPreview) {
     return undefined;
   }
-  return compactText(preview, tool === "bash" ? 120 : 160);
+  return compactText(resolvedPreview, tool === "bash" ? 120 : 160);
 };
