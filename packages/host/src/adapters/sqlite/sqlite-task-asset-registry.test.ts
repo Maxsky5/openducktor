@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import { createSqliteTaskAssetRegistry } from "./sqlite-task-asset-registry";
 import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
@@ -65,6 +66,8 @@ describe("SQLite task asset registry", () => {
       registry.updateTaskWithDescriptionAssets({
         repoPath: harness.repoPath,
         taskId: task.id,
+        expectedDescription: "",
+        expectedAssetIds: [firstId],
         patch: { description: `![two](odt-asset:${secondId})` },
         insertAssets: [
           {
@@ -86,5 +89,71 @@ describe("SQLite task asset registry", () => {
         registry.listAssets({ repoPath: harness.repoPath, taskId: task.id, scope: "description" }),
       ),
     ).toEqual([expect.objectContaining({ id: secondId, taskId: task.id })]);
+  });
+
+  test("rejects an update when its task and asset snapshot is stale", async () => {
+    const harness = await createSqliteTaskStoreHarness();
+    cleanups.add(harness.cleanup);
+    const registry = createSqliteTaskAssetRegistry({
+      resolveDatabasePath: ({ workspaceId }) =>
+        resolveSqliteTaskStoreDatabasePath({ configDir: harness.configDir, workspaceId }),
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+    const task = await Effect.runPromise(
+      harness.store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Concurrent assets",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: "Original",
+        },
+      }),
+    );
+
+    await Effect.runPromise(
+      registry.updateTaskWithDescriptionAssets({
+        repoPath: harness.repoPath,
+        taskId: task.id,
+        expectedDescription: "Original",
+        expectedAssetIds: [],
+        patch: { description: "First save" },
+        insertAssets: [],
+        removeAssetIds: [],
+      }),
+    );
+
+    const exit = await Effect.runPromiseExit(
+      registry.updateTaskWithDescriptionAssets({
+        repoPath: harness.repoPath,
+        taskId: task.id,
+        expectedDescription: "Original",
+        expectedAssetIds: [],
+        patch: { description: "Stale save" },
+        insertAssets: [],
+        removeAssetIds: [],
+      }),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      throw new Error("Expected a stale update to fail.");
+    }
+    const failure = Array.from(Cause.failures(exit.cause))[0];
+    expect(failure).toBeInstanceOf(TaskAssetError);
+    expect(failure).toMatchObject({
+      _tag: "TaskAssetError",
+      code: "validation",
+      failedPhase: "verify_update_snapshot",
+      durableState: "unchanged",
+      retryAllowed: true,
+    });
+    expect(
+      (
+        await Effect.runPromise(
+          harness.store.getTask({ repoPath: harness.repoPath, taskId: task.id }),
+        )
+      ).description,
+    ).toBe("First save");
   });
 });

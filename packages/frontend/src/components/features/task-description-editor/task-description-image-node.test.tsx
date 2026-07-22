@@ -1,0 +1,50 @@
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { act, render, waitFor } from "@testing-library/react";
+import type { ReactNodeViewProps } from "@tiptap/react";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { TaskDescriptionImageContext } from "./task-description-image-context";
+import { TaskDescriptionImageNode } from "./task-description-image-node";
+
+afterEach(() => {
+  configureShellBridge(createUnavailableShellBridge());
+});
+
+describe("TaskDescriptionImageNode", () => {
+  test("does not resolve the same durable image again when its context object is recreated", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const props = {
+      node: { attrs: { src: `odt-asset:${assetId}`, alt: "Architecture", title: null } },
+      selected: false,
+      updateAttributes: () => {},
+    } as unknown as ReactNodeViewProps;
+    const context = {
+      workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+      taskId: "task-1",
+      scope: "description" as const,
+    };
+    const view = render(
+      <TaskDescriptionImageContext.Provider value={{ previews: new Map(), renderContext: context }}>
+        <TaskDescriptionImageNode {...props} />
+      </TaskDescriptionImageContext.Provider>,
+    );
+
+    await waitFor(() => expect(resolveTaskAssetSrc).toHaveBeenCalledTimes(1));
+    view.rerender(
+      <TaskDescriptionImageContext.Provider
+        value={{ previews: new Map(), renderContext: { ...context } }}
+      >
+        <TaskDescriptionImageNode {...props} />
+      </TaskDescriptionImageContext.Provider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(resolveTaskAssetSrc).toHaveBeenCalledTimes(1);
+  });
+});

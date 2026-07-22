@@ -1,6 +1,6 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { AlertCircle, Code2, Eye, Info } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, type ReactElement, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
@@ -40,6 +40,10 @@ function TaskDescriptionEditorSession({
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);
   const compatibilityIsCurrent =
     compatibilityState.markdown === markdown && compatibilityState.result !== null;
+  const renderContext = useMemo(
+    () => (workspaceId && taskId ? { workspaceId, taskId, scope: "description" as const } : null),
+    [taskId, workspaceId],
+  );
 
   useEffect(() => {
     if (lastVisualChange.current === markdown) {
@@ -143,9 +147,7 @@ function TaskDescriptionEditorSession({
           onUpload={stageImage}
           uploads={uploads}
           previews={previews}
-          renderContext={
-            workspaceId && taskId ? { workspaceId, taskId, scope: "description" } : null
-          }
+          renderContext={renderContext}
         />
       </Suspense>
     );

@@ -8,6 +8,10 @@ import {
   type TaskAssetReadService,
 } from "../../application/task-assets/task-asset-read-service";
 import {
+  createTaskAssetRecoveryService,
+  type TaskAssetRecoveryService,
+} from "../../application/task-assets/task-asset-recovery-service";
+import {
   createTaskAssetStagingService,
   type TaskAssetStagingService,
 } from "../../application/task-assets/task-asset-staging-service";
@@ -16,6 +20,7 @@ import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 
 export type NodeTaskAssetServices = {
+  taskAssetRecoveryService: TaskAssetRecoveryService;
   taskAssetReadService: TaskAssetReadService;
   taskAssetStagingService: TaskAssetStagingService;
   taskStore: TaskStorePort;
@@ -42,6 +47,12 @@ export const createNodeTaskAssetServices = ({
     processEnv,
     resolveWorkspaceIdForRepoPath,
   });
+  const inner =
+    configuredTaskStore ??
+    createSqliteTaskRepository({
+      processEnv,
+      resolveWorkspaceIdForRepoPath,
+    });
   const taskAssetReadService = createTaskAssetReadService({
     filePort,
     registry,
@@ -50,20 +61,18 @@ export const createNodeTaskAssetServices = ({
         .getRepoConfig(workspaceId)
         .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
   });
-
-  if (configuredTaskStore) {
-    return {
-      taskAssetReadService,
-      taskAssetStagingService,
-      taskStore: configuredTaskStore,
-    };
-  }
-
-  const inner = createSqliteTaskRepository({
-    processEnv,
-    resolveWorkspaceIdForRepoPath,
+  const taskAssetRecoveryService = createTaskAssetRecoveryService({
+    filePort,
+    registry,
+    resolveRepoPath: (workspaceId) =>
+      workspaceSettingsService
+        .getRepoConfig(workspaceId)
+        .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
+    taskStore: inner,
   });
+
   return {
+    taskAssetRecoveryService,
     taskAssetReadService,
     taskAssetStagingService,
     taskStore: createTaskAssetAwareTaskStore({
@@ -71,6 +80,7 @@ export const createNodeTaskAssetServices = ({
       registry,
       filePort,
       staging: taskAssetStagingService,
+      persistence: configuredTaskStore ? null : registry,
       resolveWorkspaceIdForRepoPath,
     }),
   };

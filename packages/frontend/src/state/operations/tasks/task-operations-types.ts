@@ -54,4 +54,5 @@ export type UseTaskOperationsResult = {
 export type TaskMutationRefreshStrategy =
   | { kind: "repo" }
   | { kind: "task"; taskId: string }
+  | { kind: "invalidate-task"; taskId: string }
   | { kind: "remove-task"; taskIds: string[] };

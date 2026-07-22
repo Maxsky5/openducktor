@@ -6,6 +6,7 @@ import {
   TASK_ASSET_MAX_FILE_BYTES,
   TASK_ASSET_URI_PREFIX,
   taskAssetDescriptionMutationSchema,
+  taskAssetDiscardStagedInputSchema,
   taskAssetIdSchema,
   taskAssetMediaTypeSchema,
   taskAssetRenderContextSchema,
@@ -55,6 +56,32 @@ describe("task asset contracts", () => {
         ),
       }).success,
     ).toBe(false);
+  });
+
+  test("allows cleanup and failure envelopes to report more than 50 unique asset IDs", () => {
+    const assetIds = Array.from(
+      { length: 51 },
+      (_, index) => `550e8400-e29b-41d4-a716-${String(index).padStart(12, "0")}`,
+    );
+
+    expect(
+      taskAssetDiscardStagedInputSchema.parse({ workspaceId: "workspace-1", assetIds }).assetIds,
+    ).toEqual(assetIds);
+    expect(
+      hostInvokeFailureSchema.parse({
+        kind: "task_asset",
+        taskAssetFailure: {
+          operation: "delete",
+          code: "partial_state",
+          taskId: "task-1",
+          assetIds,
+          failedPhase: "purge_deleted_task_assets",
+          durableState: "committed_cleanup_pending",
+          retryAllowed: false,
+          message: "The task was deleted, but asset cleanup is pending.",
+        },
+      }),
+    ).toMatchObject({ kind: "task_asset", taskAssetFailure: { assetIds } });
   });
 
   test("keeps filesystem paths and runtime URLs out of staging results", () => {

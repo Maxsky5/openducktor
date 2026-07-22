@@ -16,15 +16,12 @@ import { taskAssetRenderContextSchema, workspaceIdSchema } from "@openducktor/co
 import { Effect, Exit } from "effect";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
+import {
+  createTaskAssetQuarantineFiles,
+  type QuarantineManifest,
+} from "./filesystem-task-asset-quarantine";
 
 type QuarantineMove = { from: string; to: string };
-type QuarantineEntry = {
-  assetIds: string[];
-  operation: "update" | "delete";
-  root: string;
-  taskId?: string;
-  moves: QuarantineMove[];
-};
 
 const isMissing = (cause: unknown): boolean =>
   typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
@@ -120,11 +117,27 @@ export const createNodeTaskAssetFilePort = ({
   const durableRoot = path.resolve(configDir, "task-assets");
   const stagingRoot = path.resolve(configDir, "task-asset-staging");
   const quarantineRoot = path.resolve(configDir, "task-asset-quarantine");
-  const quarantines = new Map<string, QuarantineEntry>();
   const stagedPath = (workspaceId: string, assetId: string) =>
     path.join(stagingRoot, workspaceId, assetId);
   const durablePath = (workspaceId: string, taskId: string, assetId: string) =>
     path.join(durableRoot, workspaceId, taskId, assetId);
+  const quarantineFiles = createTaskAssetQuarantineFiles({ durableRoot, quarantineRoot });
+  const readQuarantineManifest = (quarantineId: string) =>
+    tryPromise(() => quarantineFiles.read(quarantineId), {
+      operation: "startup_sweep",
+      code: "restore",
+      phase: "read_quarantine_manifest",
+      message: "Failed to read task asset quarantine recovery data.",
+    });
+  const writeQuarantineManifest = (manifest: QuarantineManifest) =>
+    tryPromise(() => quarantineFiles.write(manifest), {
+      operation: manifest.operation,
+      code: "quarantine",
+      phase: "write_quarantine_manifest",
+      message: "Failed to write task asset quarantine recovery data.",
+      assetIds: manifest.assetIds,
+      taskId: manifest.taskId,
+    });
 
   return {
     stage(input) {
@@ -235,13 +248,24 @@ export const createNodeTaskAssetFilePort = ({
       });
     },
     quarantineAssets(input) {
-      if (input.assetIds.length === 0) {
+      const promotedAssetIds = input.promotedAssetIds ?? [];
+      if (input.assetIds.length === 0 && promotedAssetIds.length === 0) {
         return Effect.succeed(null);
       }
       return Effect.gen(function* () {
         const quarantineId = randomUUID();
-        const root = path.join(quarantineRoot, quarantineId);
+        const root = quarantineFiles.root(quarantineId);
         const moves: QuarantineMove[] = [];
+        const manifest: QuarantineManifest = {
+          version: 1,
+          id: quarantineId,
+          workspaceId: input.workspaceId,
+          taskId: input.taskId,
+          operation: input.operation ?? "update",
+          assetIds: input.assetIds,
+          promotedAssetIds,
+        };
+        yield* writeQuarantineManifest(manifest);
         for (const assetId of input.assetIds) {
           yield* validateContext(input.workspaceId, input.taskId, assetId);
           const from = durablePath(input.workspaceId, input.taskId, assetId);
@@ -299,13 +323,6 @@ export const createNodeTaskAssetFilePort = ({
             ),
           );
         }
-        quarantines.set(quarantineId, {
-          root,
-          moves,
-          assetIds: input.assetIds,
-          operation: "update",
-          taskId: input.taskId,
-        });
         return quarantineId;
       });
     },
@@ -325,11 +342,20 @@ export const createNodeTaskAssetFilePort = ({
         const placeholderAssetId = "00000000-0000-4000-8000-000000000000";
         yield* validateContext(input.workspaceId, input.taskId, placeholderAssetId);
         const quarantineId = randomUUID();
-        const root = path.join(quarantineRoot, quarantineId);
+        const root = quarantineFiles.root(quarantineId);
         const to = path.join(root, input.taskId);
+        const manifest: QuarantineManifest = {
+          version: 1,
+          id: quarantineId,
+          workspaceId: input.workspaceId,
+          taskId: input.taskId,
+          operation: "delete",
+          assetIds: [],
+          promotedAssetIds: [],
+        };
+        yield* writeQuarantineManifest(manifest);
         yield* tryPromise(
           async () => {
-            await mkdir(root, { recursive: true });
             await rename(taskRoot, to);
           },
           {
@@ -340,73 +366,42 @@ export const createNodeTaskAssetFilePort = ({
             taskId: input.taskId,
           },
         );
-        quarantines.set(quarantineId, {
-          root,
-          moves: [{ from: taskRoot, to }],
-          assetIds: [],
-          operation: "delete",
-          taskId: input.taskId,
-        });
         return quarantineId;
       });
     },
+    listQuarantines() {
+      return tryPromise(() => quarantineFiles.list(), {
+        operation: "startup_sweep",
+        code: "restore",
+        phase: "list_quarantines",
+        message: "Failed to list task asset quarantine recovery data.",
+      });
+    },
     restoreQuarantine(quarantineId) {
-      const entry = quarantines.get(quarantineId);
-      if (!entry) {
-        return Effect.fail(
-          createFileError({
-            operation: "update",
-            code: "restore",
-            phase: "find_quarantine",
-            message: "Task asset quarantine handle is no longer valid.",
-          }),
-        );
-      }
-      return tryPromise(
-        async () => {
-          for (const move of entry.moves.toReversed()) {
-            await mkdir(path.dirname(move.from), { recursive: true });
-            await rename(move.to, move.from);
-          }
-          await rm(entry.root, { force: true, recursive: true });
-          quarantines.delete(quarantineId);
-        },
-        {
+      return Effect.gen(function* () {
+        const entry = yield* readQuarantineManifest(quarantineId);
+        yield* tryPromise(() => quarantineFiles.restore(entry), {
           operation: entry.operation,
           code: "restore",
           phase: "restore_quarantine",
           message: "Failed to restore quarantined task assets.",
           assetIds: entry.assetIds,
-          ...(entry.taskId ? { taskId: entry.taskId } : {}),
-        },
-      );
+          taskId: entry.taskId,
+        });
+      });
     },
     purgeQuarantine(quarantineId) {
-      const entry = quarantines.get(quarantineId);
-      if (!entry) {
-        return Effect.fail(
-          createFileError({
-            operation: "update",
-            code: "purge",
-            phase: "find_quarantine",
-            message: "Task asset quarantine handle is no longer valid.",
-          }),
-        );
-      }
-      return tryPromise(
-        async () => {
-          await rm(entry.root, { force: true, recursive: true });
-          quarantines.delete(quarantineId);
-        },
-        {
+      return Effect.gen(function* () {
+        const entry = yield* readQuarantineManifest(quarantineId);
+        yield* tryPromise(() => quarantineFiles.purge(quarantineId), {
           operation: entry.operation,
           code: "purge",
           phase: "purge_quarantine",
           message: "Failed to purge quarantined task assets.",
           assetIds: entry.assetIds,
-          ...(entry.taskId ? { taskId: entry.taskId } : {}),
-        },
-      );
+          taskId: entry.taskId,
+        });
+      });
     },
     readDurable(input) {
       return Effect.gen(function* () {

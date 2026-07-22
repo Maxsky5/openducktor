@@ -1,9 +1,4 @@
-import type {
-  TaskAssetMediaType,
-  TaskAssetScope,
-  TaskCard,
-  TaskUpdatePatch,
-} from "@openducktor/contracts";
+import type { TaskAssetMediaType, TaskAssetScope } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { TaskStoreError } from "./task-repository-ports";
 
@@ -22,6 +17,7 @@ export type NewTaskAssetRecord = Omit<TaskAssetRecord, "taskId" | "mediaType"> &
 };
 
 export type TaskAssetRegistryPort = {
+  taskExists(input: { repoPath: string; taskId: string }): Effect.Effect<boolean, TaskStoreError>;
   assetIdExists(input: {
     repoPath: string;
     assetId: string;
@@ -42,11 +38,4 @@ export type TaskAssetRegistryPort = {
     taskId: string;
     assets: NewTaskAssetRecord[];
   }): Effect.Effect<void, TaskStoreError>;
-  updateTaskWithDescriptionAssets(input: {
-    repoPath: string;
-    taskId: string;
-    patch: TaskUpdatePatch;
-    insertAssets: NewTaskAssetRecord[];
-    removeAssetIds: string[];
-  }): Effect.Effect<TaskCard, TaskStoreError>;
 };

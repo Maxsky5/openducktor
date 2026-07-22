@@ -11,6 +11,8 @@ export function TaskDescriptionImageNode({ node, selected, updateAttributes }: R
   const source = typeof node.attrs.src === "string" ? node.attrs.src : "";
   const assetId = parseTaskAssetUri(source);
   const preview = assetId ? previews.get(assetId) : undefined;
+  const workspaceId = renderContext?.workspaceId ?? null;
+  const taskId = renderContext?.taskId ?? null;
   const [resolvedSource, setResolvedSource] = useState<string | null>(preview ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -29,7 +31,7 @@ export function TaskDescriptionImageNode({ node, selected, updateAttributes }: R
         active = false;
       };
     }
-    if (!renderContext) {
+    if (!workspaceId || !taskId) {
       setResolvedSource(null);
       setLoadError("This image will be available after the task is saved.");
       return () => {
@@ -38,7 +40,7 @@ export function TaskDescriptionImageNode({ node, selected, updateAttributes }: R
     }
     setResolvedSource(null);
     void getShellBridge()
-      .resolveTaskAssetSrc({ ...renderContext, assetId })
+      .resolveTaskAssetSrc({ workspaceId, taskId, scope: "description", assetId })
       .then((nextSource) => {
         if (active) setResolvedSource(nextSource);
       })
@@ -48,7 +50,7 @@ export function TaskDescriptionImageNode({ node, selected, updateAttributes }: R
     return () => {
       active = false;
     };
-  }, [assetId, preview, renderContext, source]);
+  }, [assetId, preview, source, taskId, workspaceId]);
 
   return (
     <NodeViewWrapper className="my-3" data-drag-handle>

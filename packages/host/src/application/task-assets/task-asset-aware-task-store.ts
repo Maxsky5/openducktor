@@ -2,12 +2,13 @@ import { Effect, Exit } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
 import type { TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
+import type { TaskDescriptionAssetPersistencePort } from "../../ports/task-description-asset-persistence-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import { createTaskAssetAwareDelete } from "./task-asset-aware-delete";
 import {
   asTaskAssetError,
   sameTaskAssetIds,
   taskAssetPartialStateError,
-  taskIdsForDelete,
   toNewTaskAssetRecords,
 } from "./task-asset-aware-task-store-support";
 import { collectTaskDescriptionAssetIds } from "./task-asset-markdown";
@@ -20,6 +21,7 @@ type CreateTaskAssetAwareTaskStoreInput = {
   registry: TaskAssetRegistryPort;
   filePort: TaskAssetFilePort;
   staging: TaskAssetStagingService;
+  persistence: TaskDescriptionAssetPersistencePort | null;
   resolveWorkspaceIdForRepoPath: ResolveWorkspaceIdForRepoPath;
 };
 
@@ -28,6 +30,7 @@ export const createTaskAssetAwareTaskStore = ({
   registry,
   filePort,
   staging,
+  persistence,
   resolveWorkspaceIdForRepoPath,
 }: CreateTaskAssetAwareTaskStoreInput): TaskStorePort => ({
   ...inner,
@@ -35,6 +38,7 @@ export const createTaskAssetAwareTaskStore = ({
     let createdTaskId: string | undefined;
     let workspaceId: string | undefined;
     let committed = false;
+    let recoveryId: string | null = null;
     const promotedAssetIds: string[] = [];
     let referencedAssetIds = new Set<string>();
     const suppliedAssetIds = new Set(input.descriptionAssets?.stagedAssetIds ?? []);
@@ -62,6 +66,21 @@ export const createTaskAssetAwareTaskStore = ({
             "Every new task asset reference must have one supplied staged asset, and every supplied staged asset must be referenced.",
         });
       }
+      if (referencedAssetIds.size === 0) {
+        return yield* inner.createTask({ repoPath: input.repoPath, task: input.task });
+      }
+      if (!persistence && referencedAssetIds.size > 0) {
+        return yield* new TaskAssetError({
+          operation: "create",
+          code: "validation",
+          assetIds: Array.from(referencedAssetIds),
+          failedPhase: "validate_asset_persistence",
+          durableState: "unchanged",
+          retryAllowed: false,
+          message:
+            "Task description assets require a task store composed with shared asset persistence.",
+        });
+      }
       workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
       const stagedAssets = yield* staging.getStagedAssets({
         workspaceId,
@@ -82,6 +101,13 @@ export const createTaskAssetAwareTaskStore = ({
       }
       const created = yield* inner.createTask({ repoPath: input.repoPath, task: input.task });
       createdTaskId = created.id;
+      recoveryId = yield* filePort.quarantineAssets({
+        workspaceId,
+        taskId: created.id,
+        assetIds: [],
+        promotedAssetIds: stagedAssets.map((asset) => asset.assetId),
+        operation: "create",
+      });
 
       for (const asset of stagedAssets) {
         if (
@@ -111,6 +137,10 @@ export const createTaskAssetAwareTaskStore = ({
         assets: toNewTaskAssetRecords(stagedAssets),
       });
       committed = true;
+      if (recoveryId) {
+        yield* filePort.purgeQuarantine(recoveryId);
+        recoveryId = null;
+      }
       if (stagedAssets.length > 0) {
         yield* staging.discard({
           workspaceId,
@@ -174,7 +204,14 @@ export const createTaskAssetAwareTaskStore = ({
                 })
               : Effect.void,
           );
-          if (Exit.isFailure(deleteExit) || Exit.isFailure(removeExit)) {
+          const recoveryExit = yield* Effect.exit(
+            recoveryId ? filePort.purgeQuarantine(recoveryId) : Effect.void,
+          );
+          if (
+            Exit.isFailure(deleteExit) ||
+            Exit.isFailure(removeExit) ||
+            Exit.isFailure(recoveryExit)
+          ) {
             return yield* taskAssetPartialStateError({
               operation: "create",
               phase: "compensate_create",
@@ -229,11 +266,31 @@ export const createTaskAssetAwareTaskStore = ({
             taskId: input.taskId,
           }),
       });
+      if (!persistence) {
+        if (referencedAssetIds.size > 0 || suppliedAssetIds.size > 0) {
+          return yield* new TaskAssetError({
+            operation: "update",
+            code: "validation",
+            taskId: input.taskId,
+            assetIds: Array.from(new Set([...referencedAssetIds, ...suppliedAssetIds])),
+            failedPhase: "validate_asset_persistence",
+            durableState: "unchanged",
+            retryAllowed: false,
+            message:
+              "Task description assets require a task store composed with shared asset persistence.",
+          });
+        }
+        return yield* inner.updateTask(input);
+      }
       workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
       const existing = yield* registry.listAssets({
         repoPath: input.repoPath,
         taskId: input.taskId,
         scope: "description",
+      });
+      const currentTask = yield* inner.getTask({
+        repoPath: input.repoPath,
+        taskId: input.taskId,
       });
       const existingIds = new Set(existing.map((asset) => asset.id));
       for (const assetId of referencedAssetIds) {
@@ -300,12 +357,6 @@ export const createTaskAssetAwareTaskStore = ({
             message: `Task asset destination ${asset.assetId} already exists.`,
           });
         }
-        yield* filePort.promote({
-          workspaceId,
-          taskId: input.taskId,
-          assetId: asset.assetId,
-        });
-        promotedAssetIds.push(asset.assetId);
       }
       obsoleteAssetIds = existing
         .filter((asset) => !referencedAssetIds.has(asset.id))
@@ -314,10 +365,22 @@ export const createTaskAssetAwareTaskStore = ({
         workspaceId,
         taskId: input.taskId,
         assetIds: obsoleteAssetIds,
+        promotedAssetIds: stagedAssets.map((asset) => asset.assetId),
+        operation: "update",
       });
-      const updated = yield* registry.updateTaskWithDescriptionAssets({
+      for (const asset of stagedAssets) {
+        yield* filePort.promote({
+          workspaceId,
+          taskId: input.taskId,
+          assetId: asset.assetId,
+        });
+        promotedAssetIds.push(asset.assetId);
+      }
+      const updated = yield* persistence.updateTaskWithDescriptionAssets({
         repoPath: input.repoPath,
         taskId: input.taskId,
+        expectedDescription: currentTask.description,
+        expectedAssetIds: existing.map((asset) => asset.id),
         patch: input.patch,
         insertAssets: toNewTaskAssetRecords(stagedAssets),
         removeAssetIds: obsoleteAssetIds,
@@ -393,84 +456,11 @@ export const createTaskAssetAwareTaskStore = ({
       }),
     );
   },
-  deleteTask(input) {
-    const quarantineIds: string[] = [];
-    const affectedAssetIds: string[] = [];
-    let committed = false;
-    const remove = Effect.gen(function* () {
-      const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
-      const tasks = yield* inner.listTasks({ repoPath: input.repoPath });
-      const targetIds = taskIdsForDelete(tasks, input.taskId, input.deleteSubtasks);
-      for (const taskId of targetIds) {
-        const registered = yield* registry.listAssets({
-          repoPath: input.repoPath,
-          taskId,
-          scope: "description",
-        });
-        affectedAssetIds.push(...registered.map((asset) => asset.id));
-        const quarantineId = yield* filePort.quarantineTaskDirectory({ workspaceId, taskId });
-        if (!quarantineId && registered.length > 0) {
-          return yield* new TaskAssetError({
-            operation: "delete",
-            code: "partial_state",
-            taskId,
-            assetIds: registered.map((asset) => asset.id),
-            failedPhase: "quarantine_task_directory",
-            durableState: "unknown",
-            retryAllowed: false,
-            message: "Registered task assets are missing from durable storage.",
-          });
-        }
-        if (quarantineId) {
-          quarantineIds.push(quarantineId);
-        }
-      }
-      const deleted = yield* inner.deleteTask(input);
-      committed = true;
-      for (const quarantineId of quarantineIds) {
-        yield* filePort.purgeQuarantine(quarantineId);
-      }
-      return deleted;
-    });
-
-    return remove.pipe(
-      Effect.catchAll((cause) => {
-        const error = asTaskAssetError({
-          cause,
-          operation: "delete",
-          phase: "delete_task_assets",
-          message: "Failed to delete the task and its assets.",
-          taskId: input.taskId,
-        });
-        if (committed) {
-          return Effect.fail(
-            taskAssetPartialStateError({
-              operation: "delete",
-              phase: "purge_deleted_task_assets",
-              taskId: input.taskId,
-              assetIds: Array.from(new Set(affectedAssetIds)),
-              durableState: "committed_cleanup_pending",
-              message: "The task was deleted, but quarantined asset cleanup is pending.",
-            }),
-          );
-        }
-        return Effect.gen(function* () {
-          const exits = yield* Effect.forEach(quarantineIds.toReversed(), (quarantineId) =>
-            Effect.exit(filePort.restoreQuarantine(quarantineId)),
-          );
-          if (exits.some(Exit.isFailure)) {
-            return yield* taskAssetPartialStateError({
-              operation: "delete",
-              phase: "restore_deleted_task_assets",
-              taskId: input.taskId,
-              assetIds: Array.from(new Set(affectedAssetIds)),
-              durableState: "unknown",
-              message: "Task deletion failed and asset restoration was incomplete.",
-            });
-          }
-          return yield* error;
-        });
-      }),
-    );
-  },
+  deleteTask: createTaskAssetAwareDelete({
+    assetPersistenceEnabled: persistence !== null,
+    filePort,
+    inner,
+    registry,
+    resolveWorkspaceIdForRepoPath,
+  }),
 });

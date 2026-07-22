@@ -1,5 +1,6 @@
 import type { TaskAssetFailure } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
+import type { TaskMutationRefreshStrategy } from "./task-operations-types";
 
 export const taskAssetFailureFromError = (error: unknown): TaskAssetFailure | null => {
   if (error instanceof HostInvokeError && error.failure?.kind === "task_asset") {
@@ -18,6 +19,22 @@ export const taskAssetFailureFromError = (error: unknown): TaskAssetFailure | nu
 
 export const taskAssetFailureRequiresLock = (failure: TaskAssetFailure | null): boolean =>
   failure !== null && (!failure.retryAllowed || failure.durableState !== "unchanged");
+
+export const taskAssetRecoveryRefreshStrategy = (
+  failure: TaskAssetFailure | null,
+  normalStrategy: TaskMutationRefreshStrategy,
+): TaskMutationRefreshStrategy | null => {
+  if (!failure || failure.durableState === "unchanged") {
+    return null;
+  }
+  if (failure.operation === "delete" && failure.durableState === "committed_cleanup_pending") {
+    return normalStrategy;
+  }
+  if (failure.taskId) {
+    return { kind: "invalidate-task", taskId: failure.taskId };
+  }
+  return { kind: "repo" };
+};
 
 export const formatTaskAssetFailure = (failure: TaskAssetFailure | null): string => {
   if (!failure) {

@@ -173,11 +173,12 @@ export const createNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  const { taskAssetReadService, taskAssetStagingService, taskStore } = createNodeTaskAssetServices({
-    ...(configuredTaskStore ? { configuredTaskStore } : {}),
-    processEnv,
-    workspaceSettingsService,
-  });
+  const { taskAssetReadService, taskAssetRecoveryService, taskAssetStagingService, taskStore } =
+    createNodeTaskAssetServices({
+      ...(configuredTaskStore ? { configuredTaskStore } : {}),
+      processEnv,
+      workspaceSettingsService,
+    });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
     runtimeHealth,
@@ -382,6 +383,7 @@ export const createNodeEffectHostCommandRouter = (
     initialize: () =>
       Effect.gen(function* () {
         if (!taskAssetStagingSwept) {
+          yield* taskAssetRecoveryService.startupSweep();
           yield* taskAssetStagingService.startupSweep();
           taskAssetStagingSwept = true;
         }

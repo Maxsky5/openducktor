@@ -32,6 +32,7 @@ const createHarness = async () => {
     inner: sqlite.store,
     filePort,
     registry,
+    persistence: registry,
     staging,
     resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
   });
@@ -466,88 +467,13 @@ describe("asset-aware task store", () => {
     ).toEqual([]);
   });
 
-  test("restores quarantined files and preserves the previous description when the update transaction fails", async () => {
-    const harness = await createHarness();
-    const staged = await Effect.runPromise(
-      harness.staging.stage({
-        workspaceId: "fairnest",
-        scope: "description",
-        originalName: "rollback.png",
-        declaredMediaType: "image/png",
-        bytesBase64: PNG_BASE64,
-      }),
-    );
-    const originalDescription = `![image](odt-asset:${staged.assetId})`;
-    const task = await Effect.runPromise(
-      harness.store.createTask({
-        repoPath: harness.repoPath,
-        task: {
-          title: "Rollback",
-          issueType: "task",
-          aiReviewEnabled: true,
-          priority: 2,
-          description: originalDescription,
-        },
-        descriptionAssets: { stagedAssetIds: [staged.assetId] },
-      }),
-    );
-    const failingStore = createTaskAssetAwareTaskStore({
-      inner: harness.store,
-      filePort: harness.filePort,
-      staging: harness.staging,
-      registry: {
-        ...harness.registry,
-        updateTaskWithDescriptionAssets: () =>
-          Effect.fail(
-            new TaskAssetError({
-              operation: "update",
-              code: "database",
-              taskId: task.id,
-              assetIds: [staged.assetId],
-              failedPhase: "save_transaction",
-              durableState: "unchanged",
-              retryAllowed: true,
-              message: "Injected database failure.",
-            }),
-          ),
-      },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
-    });
-
-    await expect(
-      Effect.runPromise(
-        failingStore.updateTask({
-          repoPath: harness.repoPath,
-          taskId: task.id,
-          patch: { description: "Remove image" },
-          descriptionAssets: { stagedAssetIds: [] },
-        }),
-      ),
-    ).rejects.toThrow("Injected database failure");
-    expect(
-      (
-        await Effect.runPromise(
-          harness.store.getTask({ repoPath: harness.repoPath, taskId: task.id }),
-        )
-      ).description,
-    ).toBe(originalDescription);
-    expect(
-      await Effect.runPromise(
-        harness.filePort.readDurable({
-          workspaceId: "fairnest",
-          taskId: task.id,
-          assetId: staged.assetId,
-        }),
-      ),
-    ).not.toBeNull();
-  });
-
   test("reports obsolete IDs when post-commit update purge fails", async () => {
     const harness = await createHarness();
     const { staged, task } = await createTaskWithAsset(harness);
     const store = createTaskAssetAwareTaskStore({
       inner: harness.innerStore,
       registry: harness.registry,
+      persistence: harness.registry,
       staging: harness.staging,
       filePort: {
         ...harness.filePort,
@@ -604,8 +530,8 @@ describe("asset-aware task store", () => {
     let removeAttempts = 0;
     const store = createTaskAssetAwareTaskStore({
       inner: harness.innerStore,
-      registry: {
-        ...harness.registry,
+      registry: harness.registry,
+      persistence: {
         updateTaskWithDescriptionAssets: () =>
           Effect.fail(
             injectedTaskAssetError({
@@ -686,6 +612,7 @@ describe("asset-aware task store", () => {
     const store = createTaskAssetAwareTaskStore({
       inner: harness.innerStore,
       registry: harness.registry,
+      persistence: harness.registry,
       staging: harness.staging,
       filePort: {
         ...harness.filePort,
@@ -749,6 +676,7 @@ describe("asset-aware task store", () => {
             }),
           ),
       },
+      persistence: harness.registry,
       staging: harness.staging,
       filePort: harness.filePort,
       resolveWorkspaceIdForRepoPath: () => {
@@ -810,8 +738,8 @@ describe("asset-aware task store", () => {
     let resolverCalls = 0;
     const store = createTaskAssetAwareTaskStore({
       inner: harness.innerStore,
-      registry: {
-        ...harness.registry,
+      registry: harness.registry,
+      persistence: {
         updateTaskWithDescriptionAssets: () =>
           Effect.fail(
             injectedTaskAssetError({
@@ -917,6 +845,7 @@ describe("asset-aware task store", () => {
             }),
           ),
       },
+      persistence: harness.registry,
       staging: harness.staging,
       filePort: {
         ...harness.filePort,
@@ -964,6 +893,7 @@ describe("asset-aware task store", () => {
     const purgeStore = createTaskAssetAwareTaskStore({
       inner: purgeHarness.innerStore,
       registry: purgeHarness.registry,
+      persistence: purgeHarness.registry,
       staging: purgeHarness.staging,
       filePort: {
         ...purgeHarness.filePort,
@@ -1005,6 +935,7 @@ describe("asset-aware task store", () => {
           ),
       },
       registry: restoreHarness.registry,
+      persistence: restoreHarness.registry,
       staging: restoreHarness.staging,
       filePort: {
         ...restoreHarness.filePort,

@@ -50,6 +50,36 @@ describe("node task asset file port", () => {
     expect(await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId }))).toBeNull();
   });
 
+  test("restores a quarantine after the file port is recreated", async () => {
+    const { configDir, port } = await createHarness();
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1, 2, 3]) }));
+    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId }));
+    const quarantineId = await Effect.runPromise(
+      port.quarantineAssets({ workspaceId, taskId, assetIds: [assetId] }),
+    );
+    if (!quarantineId) {
+      throw new Error("Expected an asset quarantine.");
+    }
+
+    const restartedPort = createNodeTaskAssetFilePort({ configDir });
+    expect(await Effect.runPromise(restartedPort.listQuarantines())).toEqual([
+      {
+        id: quarantineId,
+        workspaceId,
+        taskId,
+        operation: "update",
+        assetIds: [assetId],
+        promotedAssetIds: [],
+      },
+    ]);
+    await Effect.runPromise(restartedPort.restoreQuarantine(quarantineId));
+
+    expect(
+      await Effect.runPromise(restartedPort.readDurable({ workspaceId, taskId, assetId })),
+    ).toEqual(new Uint8Array([1, 2, 3]));
+    expect(await Effect.runPromise(restartedPort.listQuarantines())).toEqual([]);
+  });
+
   test("rejects traversal identifiers and never follows a durable symlink", async () => {
     const { configDir, port } = await createHarness();
     await expect(

@@ -35,14 +35,15 @@ const safeTaskIdSchema = z
   .max(128)
   .regex(/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/);
 
-const distinctAssetIdsSchema = z
+const uniqueAssetIdsSchema = z
   .array(taskAssetIdSchema)
-  .max(TASK_ASSET_MAX_DESCRIPTION_ASSETS)
   .refine((ids) => new Set(ids).size === ids.length, "Asset IDs must be distinct.");
+
+const descriptionAssetIdsSchema = uniqueAssetIdsSchema.max(TASK_ASSET_MAX_DESCRIPTION_ASSETS);
 
 export const taskAssetDescriptionMutationSchema = z
   .object({
-    stagedAssetIds: distinctAssetIdsSchema,
+    stagedAssetIds: descriptionAssetIdsSchema,
   })
   .strict();
 export type TaskAssetDescriptionMutation = z.infer<typeof taskAssetDescriptionMutationSchema>;
@@ -75,7 +76,7 @@ export type TaskAssetStageResult = z.infer<typeof taskAssetStageResultSchema>;
 export const taskAssetDiscardStagedInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    assetIds: distinctAssetIdsSchema.min(1),
+    assetIds: uniqueAssetIdsSchema.min(1),
   })
   .strict();
 export type TaskAssetDiscardStagedInput = z.infer<typeof taskAssetDiscardStagedInputSchema>;
@@ -125,7 +126,7 @@ export const taskAssetFailureSchema = z
     operation: taskAssetOperationSchema,
     code: taskAssetFailureCodeSchema,
     taskId: safeTaskIdSchema.optional(),
-    assetIds: distinctAssetIdsSchema,
+    assetIds: uniqueAssetIdsSchema,
     failedPhase: z
       .string()
       .min(1)

@@ -9,6 +9,7 @@ import {
   HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 
 type SqliteTaskStoreErrorDetails = Readonly<Record<string, unknown>>;
@@ -25,6 +26,7 @@ export class SqliteTaskStoreDataError extends Data.TaggedError("SqliteTaskStoreD
 }> {}
 
 const isTaskStoreError = (cause: unknown): cause is TaskStoreError =>
+  cause instanceof TaskAssetError ||
   cause instanceof HostDependencyError ||
   cause instanceof HostInvariantError ||
   cause instanceof HostOperationError ||
