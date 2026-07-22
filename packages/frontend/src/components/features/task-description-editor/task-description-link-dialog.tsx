@@ -71,12 +71,6 @@ export function TaskDescriptionLinkDialog({
             event.preventDefault();
             save();
           }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              save();
-            }
-          }}
         >
           <DialogHeader>
             <DialogTitle>{editing ? "Edit link" : "Insert link"}</DialogTitle>

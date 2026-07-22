@@ -86,14 +86,6 @@ export function TaskDescriptionMathDialog({
             event.preventDefault();
             save();
           }}
-          onKeyDown={(event) => {
-            const submitsInline = edit.kind === "inline" && event.key === "Enter";
-            const submitsBlock = event.key === "Enter" && (event.metaKey || event.ctrlKey);
-            if (submitsInline || submitsBlock) {
-              event.preventDefault();
-              save();
-            }
-          }}
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -106,7 +98,18 @@ export function TaskDescriptionMathDialog({
             {edit.kind === "inline" ? (
               <Input {...fieldProps} autoFocus placeholder="e^{i\\pi} + 1 = 0" />
             ) : (
-              <Textarea {...fieldProps} autoFocus rows={5} placeholder="\\int_0^1 x^2 \\, dx" />
+              <Textarea
+                {...fieldProps}
+                autoFocus
+                rows={5}
+                placeholder="\\int_0^1 x^2 \\, dx"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                    event.preventDefault();
+                    save();
+                  }
+                }}
+              />
             )}
             {error ? (
               <p

@@ -82,6 +82,20 @@ describe("TaskDescriptionEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  test("keeps renderer-lossy same-line double-dollar math unchanged in Markdown mode", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "Before $$x$$ after";
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+    );
+
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect((await view.findByRole("alert")).textContent).toContain("canonical renderer");
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   test("preserves front matter outside Visual mode and keeps it source-editable", async () => {
     const markdown = "---\ntitle: Keep comments # exact\n---\nBody";
     const view = render(
@@ -130,7 +144,7 @@ describe("TaskDescriptionEditor", () => {
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
     const input = await view.findByRole("textbox", { name: "LaTeX formula" });
     fireEvent.change(input, { target: { value: "x" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
 
     expect(onChange).toHaveBeenCalled();
     expect(view.container.querySelector(".tiptap")).not.toBeNull();
@@ -326,6 +340,28 @@ describe("TaskDescriptionEditor", () => {
     );
   });
 
+  test("preserves multiline block math after the first unrelated Visual edit", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown={"$$\nx^2\n$$\n\nBody"} onChange={onChange} />,
+    );
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const input = await view.findByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(input, { target: { value: "y" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => {
+          const markdown = String(value);
+          return markdown.includes("$$\nx^2\n$$") && markdown.includes("$y$");
+        }),
+      ).toBe(true),
+    );
+  });
+
   test("edits a selected formula and validates or cancels without changing Markdown", async () => {
     const onChange = mock((_value: string) => {});
     const view = render(
@@ -356,7 +392,7 @@ describe("TaskDescriptionEditor", () => {
     expect(await view.findByRole("dialog", { name: "Edit inline formula" })).toBeTruthy();
     const replacement = view.getByRole("textbox", { name: "LaTeX formula" });
     fireEvent.change(replacement, { target: { value: "y^2" } });
-    fireEvent.keyDown(replacement, { key: "Enter" });
+    fireEvent.submit(replacement.closest("form") as HTMLFormElement);
     await waitFor(() =>
       expect(onChange.mock.calls.some(([value]) => String(value).includes("$y^2$"))).toBe(true),
     );

@@ -56,8 +56,28 @@ const sourceForNode = (
   return start === undefined || end === undefined ? "" : body.slice(start, end);
 };
 
+const parseCanonicalRendererMarkdown = (body: string) =>
+  unified().use(remarkParse).use(remarkGfm).use(remarkMath).parse(body);
+
+const canonicalRendererSemanticTree = (body: string): unknown =>
+  JSON.parse(
+    JSON.stringify(parseCanonicalRendererMarkdown(body), (key, nestedValue) => {
+      if (key === "position" || key === "spread") {
+        return undefined;
+      }
+      return nestedValue;
+    }),
+  );
+
+export const hasEquivalentCanonicalRendererSemantics = (
+  originalBody: string,
+  canonicalBody: string,
+): boolean =>
+  JSON.stringify(canonicalRendererSemanticTree(originalBody)) ===
+  JSON.stringify(canonicalRendererSemanticTree(canonicalBody));
+
 const findUnsupportedSyntax = (body: string): string | undefined => {
-  const tree = unified().use(remarkParse).use(remarkGfm).use(remarkMath).parse(body);
+  const tree = parseCanonicalRendererMarkdown(body);
   let reason: string | undefined;
 
   visit(tree, (node) => {

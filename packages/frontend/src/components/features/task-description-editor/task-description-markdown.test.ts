@@ -167,6 +167,22 @@ describe("task description Markdown dialect", () => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
   });
 
+  test.each([
+    ["one formula", "$$x$$"],
+    ["surrounding text", "Before $$x$$ after"],
+    ["adjacent formulas", "$$x$$ and $$y$$"],
+  ])(
+    "keeps same-line double-dollar math in Markdown mode for %s when Visual serialization changes renderer meaning",
+    (_name, markdown) => {
+      const result = assessVisualMarkdownCompatibility(markdown);
+
+      expect(result.compatible).toBe(false);
+      if (!result.compatible) {
+        expect(result.reason).toContain("canonical renderer");
+      }
+    },
+  );
+
   test("no-edit compatibility checks do not rewrite CRLF or unusual markers", () => {
     const markdown = "# Heading\r\n\r\n+ first\r\n+ second\r\n";
     const original = markdown;

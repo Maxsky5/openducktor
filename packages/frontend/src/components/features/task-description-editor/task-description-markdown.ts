@@ -2,6 +2,7 @@ import { Editor, type JSONContent } from "@tiptap/core";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 import {
   assessVisualMarkdownSyntaxCompatibility,
+  hasEquivalentCanonicalRendererSemantics,
   type VisualMarkdownCompatibility,
 } from "./task-description-markdown-compatibility";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
@@ -73,6 +74,13 @@ export const assessVisualMarkdownCompatibility = (
         compatible: false,
         reason:
           "This Markdown cannot be preserved by Visual mode. Keep it in Markdown mode or simplify the source form.",
+      };
+    }
+    if (!hasEquivalentCanonicalRendererSemantics(frontMatter.body, canonicalBody)) {
+      return {
+        compatible: false,
+        reason:
+          "This Markdown changes meaning in the canonical renderer after Visual editing. Keep it in Markdown mode or use multiline double-dollar syntax for block math.",
       };
     }
   } catch {
