@@ -1,8 +1,10 @@
-import { expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { toast } from "sonner";
 import * as externalUrl from "@/lib/open-external-url";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { MarkdownRenderer } from "./markdown-renderer";
 import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
 
 const renderMarkdownLink = (href: string, label: string) => {
@@ -87,4 +89,80 @@ test("shows an actionable error without falling back when the shell rejects a li
     toastErrorSpy.mockRestore();
     openExternalUrlSpy.mockRestore();
   }
+});
+
+describe("rich task description rendering", () => {
+  afterEach(() => {
+    configureShellBridge(createUnavailableShellBridge());
+  });
+
+  test("omits preserved front matter and renders math through KaTeX", async () => {
+    const view = render(
+      <MarkdownRenderer
+        markdown={"---\ntitle: Hidden\n---\nVisible $x^2$"}
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 3000,
+    });
+    expect(view.queryByText("title: Hidden", { exact: false })).toBeNull();
+  }, 4000);
+
+  test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const view = render(
+      <MarkdownRenderer
+        markdown={`![Architecture](odt-asset:${assetId} "Diagram")`}
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+
+    await waitFor(
+      () =>
+        expect(view.getByRole("img", { name: "Architecture" }).getAttribute("src")).toBe(
+          "openducktor-task-asset://asset/resolved",
+        ),
+      { timeout: 3000 },
+    );
+    expect(resolveTaskAssetSrc).toHaveBeenCalledWith({
+      workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+      taskId: "task-1",
+      scope: "description",
+      assetId,
+    });
+  }, 4000);
+
+  test("keeps Mermaid source visible and suppresses raw HTML", async () => {
+    const view = render(
+      <MarkdownRenderer
+        markdown={"```mermaid\ngraph TD\n A --> B\n```\n<script>alert(1)</script>"}
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(view.getByText("Mermaid source")).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(view.getByText(/graph TD/)).toBeTruthy();
+    expect(view.container.querySelector("script")).toBeNull();
+  }, 4000);
 });

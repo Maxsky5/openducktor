@@ -13,6 +13,7 @@ import {
   HostInvokeError,
 } from "@openducktor/host-client";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
+import { createElectronTaskAssetUrl } from "../shared/electron-task-asset-url";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
@@ -98,6 +99,7 @@ export const createElectronShellBridge = (): ShellBridge => {
     },
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
+    resolveTaskAssetSrc: async (context) => createElectronTaskAssetUrl(context),
     terminals: {
       connect: async (onFrame, onStateChange) => {
         const clientId = globalThis.crypto.randomUUID();

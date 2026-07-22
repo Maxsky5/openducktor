@@ -1,3 +1,4 @@
+import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import {
   Dialog,
@@ -17,6 +18,7 @@ export type MarkdownPreviewModalProps = {
   onOpenChange: (open: boolean) => void;
   /** Display title shown in the modal header. Enrichted with task context by callers. */
   title?: string;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
 export function MarkdownPreviewModal({
@@ -24,6 +26,7 @@ export function MarkdownPreviewModal({
   open,
   onOpenChange,
   title,
+  taskAssetContext,
 }: MarkdownPreviewModalProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -42,6 +45,7 @@ export function MarkdownPreviewModal({
               markdown={markdown}
               variant="document"
               premiumCodeBlocks={hasLabeledCodeFence(markdown)}
+              {...(taskAssetContext ? { taskAssetContext } : {})}
             />
             <DocumentCopyButton
               markdown={markdown}

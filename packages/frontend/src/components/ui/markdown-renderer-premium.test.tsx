@@ -15,7 +15,6 @@ describe("PremiumMarkdownRenderer", () => {
         fallback={<span>Loading alpha</span>}
       />,
     );
-
     try {
       expect(rendered.container.querySelector("strong")?.textContent).toBe("alpha");
 

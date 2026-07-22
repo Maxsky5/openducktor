@@ -13,6 +13,7 @@ const QA_ICON = <ShieldCheck className="size-3.5" />;
 
 type TaskDetailsSheetBodyProps = {
   task: TaskCard;
+  workspaceId?: string;
   shouldRenderSubtasks: boolean;
   subtasks: TaskCard[];
   specDoc: TaskDocumentState;
@@ -33,6 +34,7 @@ type TaskDetailsSheetBodyProps = {
 
 export function TaskDetailsSheetBody({
   task,
+  workspaceId,
   shouldRenderSubtasks,
   subtasks,
   specDoc,
@@ -54,6 +56,15 @@ export function TaskDetailsSheetBody({
         empty="No description yet."
         defaultExpanded
         taskId={task.id}
+        {...(workspaceId
+          ? {
+              taskAssetContext: {
+                workspaceId,
+                taskId: task.id,
+                scope: "description" as const,
+              },
+            }
+          : {})}
       />
       <TaskDetailsAsyncDocumentSection
         key={`${task.id}:spec`}

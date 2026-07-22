@@ -1,5 +1,6 @@
 import type { IssueType, TaskCard } from "@openducktor/contracts";
 import { useEffect, useMemo, useReducer, useRef } from "react";
+import { toast } from "sonner";
 import type { TaskDocumentSection } from "@/components/features/task-composer";
 import {
   collectKnownLabels,
@@ -8,7 +9,10 @@ import {
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
+import { collectTaskDescriptionAssetIds } from "@/components/features/task-description-editor/task-description-assets";
+import { stageTaskDescriptionImage } from "@/components/features/task-description-editor/task-description-upload";
 import { errorMessage } from "@/lib/errors";
+import { hostClient } from "@/lib/host-client";
 import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
 import type {
   ComposerMode,
@@ -137,6 +141,7 @@ export function useTaskCreateModalController({
 }: UseTaskCreateModalControllerOptions) {
   const { activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const workspaceId = activeWorkspace?.workspaceId ?? null;
   const { createTask, updateTask } = useTasksState();
   const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
 
@@ -161,6 +166,8 @@ export function useTaskCreateModalController({
   } = modalState;
 
   const previousModalContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
+  const stagedDescriptionAssetIds = useRef(new Set<string>());
+  const stagedWorkspaceId = useRef<string | null>(null);
   const activeDocumentSection =
     mode === "edit" && isDocumentSection(editSection) ? editSection : null;
 
@@ -188,13 +195,66 @@ export function useTaskCreateModalController({
       return;
     }
 
+    const previousContext = previousModalContext.current;
     previousModalContext.current = { open, taskId };
+    if (
+      previousContext?.open &&
+      (!open || previousContext.taskId !== taskId) &&
+      stagedDescriptionAssetIds.current.size > 0 &&
+      stagedWorkspaceId.current
+    ) {
+      const assetIds = Array.from(stagedDescriptionAssetIds.current);
+      const assetWorkspaceId = stagedWorkspaceId.current;
+      stagedDescriptionAssetIds.current.clear();
+      stagedWorkspaceId.current = null;
+      void hostClient
+        .taskAssetDiscardStaged({ workspaceId: assetWorkspaceId, assetIds })
+        .catch((reason: unknown) => {
+          toast.error("Temporary image cleanup failed", {
+            description: errorMessage(reason),
+          });
+        });
+    }
     if (!open) {
       return;
     }
 
     dispatch({ type: "resetForOpenTask", task });
   }, [open, task, taskId]);
+
+  const registerDescriptionAsset = (assetId: string): void => {
+    if (!workspaceId) {
+      return;
+    }
+    stagedWorkspaceId.current = workspaceId;
+    stagedDescriptionAssetIds.current.add(assetId);
+  };
+
+  const stageDescriptionImage = async (file: File) => {
+    if (!workspaceId) {
+      throw new Error("Select a workspace before adding task images.");
+    }
+    const staged = await stageTaskDescriptionImage(hostClient, workspaceId, file);
+    registerDescriptionAsset(staged.assetId);
+    return staged;
+  };
+
+  const discardDescriptionAssets = async (assetIds: string[]): Promise<void> => {
+    if (assetIds.length === 0) {
+      return;
+    }
+    const assetWorkspaceId = stagedWorkspaceId.current ?? workspaceId;
+    if (!assetWorkspaceId) {
+      throw new Error("The staged image workspace is no longer available.");
+    }
+    await hostClient.taskAssetDiscardStaged({ workspaceId: assetWorkspaceId, assetIds });
+    for (const assetId of assetIds) {
+      stagedDescriptionAssetIds.current.delete(assetId);
+    }
+    if (stagedDescriptionAssetIds.current.size === 0) {
+      stagedWorkspaceId.current = null;
+    }
+  };
 
   const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
   const priorityComboboxOptions = useMemo(() => toPriorityComboboxOptions(), []);
@@ -237,7 +297,7 @@ export function useTaskCreateModalController({
     dispatch({ type: "documentErrorCleared" });
   };
 
-  const close = (): void => {
+  const close = async (): Promise<void> => {
     if (isSubmitting || isSavingDocument) {
       return;
     }
@@ -245,7 +305,15 @@ export function useTaskCreateModalController({
       dispatch({ type: "discardIntentSet", intent: { type: "close-modal" } });
       return;
     }
-    onOpenChange(false);
+    try {
+      await discardDescriptionAssets(Array.from(stagedDescriptionAssetIds.current));
+      onOpenChange(false);
+    } catch (reason) {
+      dispatch({
+        type: "submitBlocked",
+        error: `Could not discard staged images: ${errorMessage(reason)}`,
+      });
+    }
   };
 
   const requestSectionChange = (next: EditTaskSection): void => {
@@ -275,10 +343,33 @@ export function useTaskCreateModalController({
 
     dispatch({ type: "submitStarted" });
     try {
+      const referencedAssetIds = collectTaskDescriptionAssetIds(composer.description);
+      const suppliedAssetIds = Array.from(stagedDescriptionAssetIds.current).filter((assetId) =>
+        referencedAssetIds.has(assetId),
+      );
+      const descriptionAssets =
+        suppliedAssetIds.length > 0 ? { stagedAssetIds: suppliedAssetIds } : undefined;
       if (mode === "create") {
-        await createTask(toTaskCreateInput(composer));
+        await createTask(toTaskCreateInput(composer), descriptionAssets);
       } else if (task) {
-        await updateTask(task.id, toTaskUpdatePatch(composer));
+        await updateTask(task.id, toTaskUpdatePatch(composer), descriptionAssets);
+      }
+      const unreferencedAssetIds = Array.from(stagedDescriptionAssetIds.current).filter(
+        (assetId) => !referencedAssetIds.has(assetId),
+      );
+      stagedDescriptionAssetIds.current.clear();
+      stagedWorkspaceId.current = null;
+      if (unreferencedAssetIds.length > 0 && workspaceId) {
+        try {
+          await hostClient.taskAssetDiscardStaged({
+            workspaceId,
+            assetIds: unreferencedAssetIds,
+          });
+        } catch (reason) {
+          toast.error("Task saved, but temporary image cleanup failed", {
+            description: `${errorMessage(reason)} Refresh before continuing.`,
+          });
+        }
       }
       onOpenChange(false);
     } catch (reason) {
@@ -308,14 +399,23 @@ export function useTaskCreateModalController({
     }
   };
 
-  const confirmDiscard = (): void => {
+  const confirmDiscard = async (): Promise<void> => {
     if (!pendingDiscardIntent) {
       return;
     }
 
     discardCurrentDocumentDraft();
     if (pendingDiscardIntent.type === "close-modal") {
-      onOpenChange(false);
+      try {
+        await discardDescriptionAssets(Array.from(stagedDescriptionAssetIds.current));
+        onOpenChange(false);
+      } catch (reason) {
+        dispatch({
+          type: "submitBlocked",
+          error: `Could not discard staged images: ${errorMessage(reason)}`,
+        });
+        return;
+      }
     } else {
       dispatch({ type: "sectionChanged", section: pendingDiscardIntent.next });
       if (isDocumentSection(pendingDiscardIntent.next)) {
@@ -328,7 +428,7 @@ export function useTaskCreateModalController({
 
   const onDialogOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
-      close();
+      void close();
       return;
     }
     onOpenChange(true);
@@ -345,6 +445,7 @@ export function useTaskCreateModalController({
   return {
     mode,
     taskId,
+    workspaceId,
     step,
     setStep,
     selectedCreateIssueType,
@@ -368,6 +469,7 @@ export function useTaskCreateModalController({
     footerError,
     isActiveDocumentDirty,
     updateState,
+    stageDescriptionImage,
     selectCreateIssueType,
     setDocumentView,
     updateDocumentDraft,

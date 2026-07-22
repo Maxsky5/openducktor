@@ -197,6 +197,18 @@ import type {
   SystemOpenInToolInfo,
   TaskAction,
   TaskAgentSessions,
+  TaskAssetDescriptionMutation,
+  TaskAssetDiscardStagedInput,
+  TaskAssetDurableState,
+  TaskAssetFailure,
+  TaskAssetFailureCode,
+  TaskAssetId,
+  TaskAssetMediaType,
+  TaskAssetOperation,
+  TaskAssetRenderContext,
+  TaskAssetScope,
+  TaskAssetStageInput,
+  TaskAssetStageResult,
   TaskCard,
   TaskChangeSet,
   TaskCreateInput,
@@ -678,6 +690,18 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "planSubtaskIssueTypeSchema",
   "planSubtaskPrioritySchema",
   "taskActionSchema",
+  "taskAssetDescriptionMutationSchema",
+  "taskAssetDiscardStagedInputSchema",
+  "taskAssetDurableStateSchema",
+  "taskAssetFailureCodeSchema",
+  "taskAssetFailureSchema",
+  "taskAssetIdSchema",
+  "taskAssetMediaTypeSchema",
+  "taskAssetOperationSchema",
+  "taskAssetRenderContextSchema",
+  "taskAssetScopeSchema",
+  "taskAssetStageInputSchema",
+  "taskAssetStageResultSchema",
   "taskApprovalContextSchema",
   "taskApprovalContextLoadResultSchema",
   "taskCardSchema",
@@ -706,6 +730,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "TERMINAL_PROTOCOL_MAX_ROWS",
   "TERMINAL_PROTOCOL_SUBPROTOCOL",
   "TERMINAL_PROTOCOL_VERSION",
+  "TASK_ASSET_MAX_DESCRIPTION_ASSETS",
+  "TASK_ASSET_MAX_FILE_BYTES",
   "TERMINAL_ID_MAX_LENGTH",
   "decodeTerminalProtocolFrame",
   "encodeTerminalProtocolFrame",
@@ -950,6 +976,18 @@ type ExportedTypeContract = {
   SystemOpenInToolId: SystemOpenInToolId;
   SystemOpenInToolInfo: SystemOpenInToolInfo;
   TaskAction: TaskAction;
+  TaskAssetDescriptionMutation: TaskAssetDescriptionMutation;
+  TaskAssetDiscardStagedInput: TaskAssetDiscardStagedInput;
+  TaskAssetDurableState: TaskAssetDurableState;
+  TaskAssetFailure: TaskAssetFailure;
+  TaskAssetFailureCode: TaskAssetFailureCode;
+  TaskAssetId: TaskAssetId;
+  TaskAssetMediaType: TaskAssetMediaType;
+  TaskAssetOperation: TaskAssetOperation;
+  TaskAssetRenderContext: TaskAssetRenderContext;
+  TaskAssetScope: TaskAssetScope;
+  TaskAssetStageInput: TaskAssetStageInput;
+  TaskAssetStageResult: TaskAssetStageResult;
   TaskCard: TaskCard;
   TaskChangeSet: TaskChangeSet;
   TaskEventChangeFrame: TaskEventChangeFrame;

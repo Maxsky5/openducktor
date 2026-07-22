@@ -33,6 +33,10 @@ export {
   type LiveStateCoordinator,
 } from "./application/agent-sessions/live-state-coordinator";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
+export type {
+  TaskAssetReadResult,
+  TaskAssetReadService,
+} from "./application/task-assets/task-asset-read-service";
 export {
   createTerminalClientSession,
   type TerminalClientSession,
@@ -50,6 +54,7 @@ export {
   type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
 export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
+export { TaskAssetError, taskAssetErrorToFailure } from "./effect/task-asset-error";
 export {
   createHostEventBus,
   HOST_EVENT_CHANNELS,

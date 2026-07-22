@@ -34,6 +34,7 @@ import {
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
+import type { TaskAssetReadService } from "../../application/task-assets/task-asset-read-service";
 import { createEventPublishingTaskService } from "../../application/tasks/event-publishing-task-service";
 import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import {
@@ -67,6 +68,7 @@ import { createRuntimeDefinitionsCommandHandlers } from "../../interface/command
 import { createRuntimeOrchestratorCommandHandlers } from "../../interface/commands/runtime-orchestrator-command-handlers";
 import { createSystemDiagnosticsCommandHandlers } from "../../interface/commands/system-diagnostics-command-handlers";
 import { createSystemPlatformCommandHandlers } from "../../interface/commands/system-platform-command-handlers";
+import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
@@ -95,6 +97,7 @@ import {
   createNodeHostDefaultPorts,
 } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
+import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
 export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
@@ -110,6 +113,7 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
 };
 
 export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
+  readonly taskAssetReadService: TaskAssetReadService;
   readonly taskEventStream: TaskEventStreamPort;
   readonly terminalService: TerminalService;
 };
@@ -169,15 +173,11 @@ export const createNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  const taskStore: TaskStorePort =
-    configuredTaskStore ??
-    createSqliteTaskRepository({
-      processEnv,
-      resolveWorkspaceIdForRepoPath: (repoPath) =>
-        workspaceSettingsService
-          .getRepoConfigByRepoPath(repoPath)
-          .pipe(Effect.map((repoConfig) => repoConfig.workspaceId)),
-    });
+  const { taskAssetReadService, taskAssetStagingService, taskStore } = createNodeTaskAssetServices({
+    ...(configuredTaskStore ? { configuredTaskStore } : {}),
+    processEnv,
+    workspaceSettingsService,
+  });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
     runtimeHealth,
@@ -360,6 +360,7 @@ export const createNodeEffectHostCommandRouter = (
   });
 
   let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
+  let taskAssetStagingSwept = false;
 
   const stopPullRequestSyncLoop = () =>
     Effect.gen(function* () {
@@ -380,6 +381,10 @@ export const createNodeEffectHostCommandRouter = (
   const router = createEffectHostCommandRouter({
     initialize: () =>
       Effect.gen(function* () {
+        if (!taskAssetStagingSwept) {
+          yield* taskAssetStagingService.startupSweep();
+          taskAssetStagingSwept = true;
+        }
         if (resolvedMcpHostBridge) {
           yield* resolvedMcpHostBridge.ensureExternalDiscoveryReady().pipe(
             Effect.mapError(
@@ -484,13 +489,14 @@ export const createNodeEffectHostCommandRouter = (
       ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorWithEffectiveRegistry),
       ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
       ...createSystemPlatformCommandHandlers(),
+      ...createTaskAssetCommandHandlers(taskAssetStagingService),
       ...createTaskCommandHandlers(taskService),
       ...createTaskWorktreeCommandHandlers(taskWorktreeService),
       ...createTerminalCommandHandlers(terminalService),
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),
     },
   });
-  return Object.assign(router, { taskEventStream, terminalService });
+  return Object.assign(router, { taskAssetReadService, taskEventStream, terminalService });
 };
 
 export const createNodeHostCommandRouter = (

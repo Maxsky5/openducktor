@@ -63,6 +63,8 @@ const TASK_METHODS = [
   "tasksList",
   "taskCreate",
   "taskUpdate",
+  "taskAssetStage",
+  "taskAssetDiscardStaged",
   "taskDelete",
   "taskClose",
   "taskResetImplementation",

@@ -1,5 +1,6 @@
+import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { ListTodo } from "lucide-react";
-import type { ReactElement } from "react";
+import { lazy, type ReactElement, Suspense } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
 import { issueTypeGuidance } from "@/components/features/task-composer/utils";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TagSelector } from "@/components/ui/tag-selector";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { ComposerMode, ComposerState } from "@/types/task-composer";
 
@@ -19,7 +19,14 @@ type TaskDetailsFormProps = {
   knownLabels: string[];
   onStateChange: (patch: Partial<ComposerState>) => void;
   onRequestTypeChange: () => void;
+  workspaceId: string | null;
+  taskId: string | null;
+  onDescriptionImageUpload(file: File): Promise<TaskAssetStageResult>;
 };
+
+const TaskDescriptionEditor = lazy(
+  () => import("@/components/features/task-description-editor/task-description-editor"),
+);
 
 export function TaskDetailsForm({
   mode,
@@ -28,6 +35,9 @@ export function TaskDetailsForm({
   knownLabels,
   onStateChange,
   onRequestTypeChange,
+  workspaceId,
+  taskId,
+  onDescriptionImageUpload,
 }: TaskDetailsFormProps): ReactElement {
   const selectedType = ISSUE_TYPE_OPTIONS.find((option) => option.value === state.issueType);
   const SelectedIcon = selectedType?.icon ?? ListTodo;
@@ -110,13 +120,19 @@ export function TaskDetailsForm({
 
       <div className="grid gap-2">
         <Label htmlFor="task-description">Description</Label>
-        <Textarea
-          id="task-description"
-          rows={6}
-          value={state.description}
-          placeholder="Problem context, scope, and expected output."
-          onChange={(event) => onStateChange({ description: event.currentTarget.value })}
-        />
+        <Suspense
+          fallback={
+            <div className="min-h-64 animate-pulse rounded-md border border-input bg-muted/30" />
+          }
+        >
+          <TaskDescriptionEditor
+            markdown={state.description}
+            workspaceId={workspaceId}
+            taskId={taskId}
+            onUpload={onDescriptionImageUpload}
+            onChange={(description) => onStateChange({ description })}
+          />
+        </Suspense>
       </div>
 
       <div className="grid gap-2">

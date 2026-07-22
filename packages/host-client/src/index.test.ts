@@ -626,6 +626,100 @@ describe("HostClient", () => {
     });
   });
 
+  test("keeps task description asset intent outside durable task DTOs", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const { client, calls } = createClient((command) => {
+      if (command === "task_create" || command === "task_update") {
+        return makeTaskCardPayload();
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.taskCreate(
+      "/repo",
+      { title: "Task", issueType: "task", description: `![x](odt-asset:${assetId})` },
+      { stagedAssetIds: [assetId] },
+    );
+    await client.taskUpdate(
+      "/repo",
+      "task-1",
+      { description: `![x](odt-asset:${assetId})` },
+      { stagedAssetIds: [assetId] },
+    );
+
+    expect(calls.slice(-2)).toEqual([
+      {
+        command: "task_create",
+        args: {
+          repoPath: "/repo",
+          input: {
+            title: "Task",
+            issueType: "task",
+            aiReviewEnabled: true,
+            priority: 2,
+            description: `![x](odt-asset:${assetId})`,
+          },
+          descriptionAssets: { stagedAssetIds: [assetId] },
+        },
+      },
+      {
+        command: "task_update",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          patch: { description: `![x](odt-asset:${assetId})` },
+          descriptionAssets: { stagedAssetIds: [assetId] },
+        },
+      },
+    ]);
+  });
+
+  test("stages and discards task description assets through host-private commands", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const workspaceId = "9f66372b-e956-47f4-af2f-77e0df2ad4e1";
+    const { client, calls } = createClient((command) => {
+      if (command === "task_asset_stage") {
+        return {
+          assetId,
+          scope: "description",
+          originalName: "diagram.png",
+          verifiedMediaType: "image/png",
+          byteSize: 3,
+        };
+      }
+      if (command === "task_asset_discard_staged") {
+        return undefined;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.taskAssetStage({
+      workspaceId,
+      scope: "description",
+      originalName: "diagram.png",
+      declaredMediaType: "image/png",
+      bytesBase64: "YWJj",
+    });
+    await client.taskAssetDiscardStaged({ workspaceId, assetIds: [assetId] });
+
+    expect(calls.slice(-2)).toEqual([
+      {
+        command: "task_asset_stage",
+        args: {
+          workspaceId,
+          scope: "description",
+          originalName: "diagram.png",
+          declaredMediaType: "image/png",
+          bytesBase64: "YWJj",
+        },
+      },
+      {
+        command: "task_asset_discard_staged",
+        args: { workspaceId, assetIds: [assetId] },
+      },
+    ]);
+  });
+
   test("document mutation commands reject malformed updatedAt payloads", async () => {
     const { client } = createClient((command) => {
       switch (command) {

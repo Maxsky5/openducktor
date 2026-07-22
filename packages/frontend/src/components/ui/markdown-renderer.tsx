@@ -1,10 +1,13 @@
+import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
+const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
 
 export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 
@@ -21,6 +24,7 @@ type MarkdownRendererProps = {
   components?: Components;
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -78,6 +82,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   components: componentOverrides,
   premiumCodeBlocks = false,
   fallback,
+  taskAssetContext,
 }: MarkdownRendererProps): ReactElement | null {
   const content = markdown.trim();
   if (!content) {
@@ -89,7 +94,16 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     : MARKDOWN_COMPONENTS[variant];
   return (
     <div className={cn(MARKDOWN_CLASSES[variant], className)}>
-      {premiumCodeBlocks ? (
+      {taskAssetContext ? (
+        <Suspense fallback={fallback ?? null}>
+          <MarkdownRendererRich
+            markdown={markdown}
+            components={components}
+            taskAssetContext={taskAssetContext}
+            resolveTaskAssetSrc={getShellBridge().resolveTaskAssetSrc}
+          />
+        </Suspense>
+      ) : premiumCodeBlocks ? (
         <Suspense fallback={fallback ?? null}>
           <PremiumMarkdownRenderer markdown={content} components={components} fallback={fallback} />
         </Suspense>

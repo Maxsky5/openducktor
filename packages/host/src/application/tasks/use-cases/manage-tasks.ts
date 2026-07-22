@@ -13,7 +13,7 @@ export const createTaskCrudUseCases = ({
 }: CreateTaskServiceInput): Pick<TaskService, "createTask" | "updateTask" | "transitionTask"> => ({
   createTask(input) {
     return Effect.gen(function* () {
-      const { repoPath, task } = input;
+      const { repoPath, task, descriptionAssets } = input;
       const parentId = task.parentId?.trim() || undefined;
       const normalizedTask = { ...task, parentId };
       const needsParentValidation = Boolean(parentId);
@@ -21,7 +21,11 @@ export const createTaskCrudUseCases = ({
       if (needsParentValidation) {
         yield* validateParentRelationshipsForCreateEffect(currentTasks, normalizedTask);
       }
-      const created = yield* taskStore.createTask({ repoPath, task: normalizedTask });
+      const created = yield* taskStore.createTask({
+        repoPath,
+        task: normalizedTask,
+        ...(descriptionAssets ? { descriptionAssets } : {}),
+      });
 
       return enrichTask(created, [...currentTasks, created]);
     });
@@ -29,7 +33,7 @@ export const createTaskCrudUseCases = ({
 
   updateTask(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId, patch } = input;
+      const { repoPath, taskId, patch, descriptionAssets } = input;
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
@@ -42,7 +46,12 @@ export const createTaskCrudUseCases = ({
         );
       }
       yield* validateParentRelationshipsForUpdateEffect(currentTasks, current, patch);
-      const updated = yield* taskStore.updateTask({ repoPath, taskId, patch });
+      const updated = yield* taskStore.updateTask({
+        repoPath,
+        taskId,
+        patch,
+        ...(descriptionAssets ? { descriptionAssets } : {}),
+      });
       const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
 
       return enrichTask(updated, nextTasks);

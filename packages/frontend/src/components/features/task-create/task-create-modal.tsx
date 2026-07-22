@@ -175,6 +175,9 @@ export function TaskCreateModal({
                     knownLabels={controller.knownLabels}
                     onStateChange={controller.updateState}
                     onRequestTypeChange={() => controller.setStep("type")}
+                    workspaceId={controller.workspaceId}
+                    taskId={controller.taskId}
+                    onDescriptionImageUpload={controller.stageDescriptionImage}
                   />
                 )}
               </div>

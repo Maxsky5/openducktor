@@ -15,6 +15,7 @@ import {
   type HostRuntimeDistribution,
   hostInvokeFailureFromError,
   type McpBridgeDiscoveryMode,
+  type TaskAssetReadService,
   type ToolDiscoveryId,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
@@ -92,6 +93,7 @@ const LAST_EVENT_ID_HEADER = "last-event-id";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const HOST_EVENT_STREAM_PATH = "events";
+const TASK_ASSET_PATH_PATTERN = /^\/task-assets\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
 type TerminalUpgradeResult = { handled: false } | { handled: true; response: Response | undefined };
 
@@ -579,6 +581,7 @@ const routeCorsRequest = ({
   corsHeaders,
   eventBus,
   hostCommandRouter,
+  taskAssetReadService,
   taskEventLeaseManager,
   localAttachments,
   logger,
@@ -593,6 +596,7 @@ const routeCorsRequest = ({
   corsHeaders: HeadersInit;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
+  taskAssetReadService: TaskAssetReadService;
   taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
@@ -678,6 +682,32 @@ const routeCorsRequest = ({
       return yield* localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
     }
 
+    const taskAssetMatch = TASK_ASSET_PATH_PATTERN.exec(requestUrl.pathname);
+    if (taskAssetMatch && request.method === "GET") {
+      yield* validateAppSessionCookie(request, appToken);
+      const [, workspaceId, taskId, scope, assetId] = taskAssetMatch;
+      const asset = yield* taskAssetReadService.read({ workspaceId, taskId, scope, assetId }).pipe(
+        Effect.mapError(
+          (error) =>
+            new WebHostRequestError({
+              message: error.code === "validation" ? "Task asset was not found." : error.message,
+              status: error.code === "validation" ? 404 : 500,
+              cause: error,
+            }),
+        ),
+      );
+      if (!asset) {
+        return yield* rejectWebHostRequest("Task asset was not found.", 404);
+      }
+      const body = asset.bytes.buffer.slice(
+        asset.bytes.byteOffset,
+        asset.bytes.byteOffset + asset.bytes.byteLength,
+      ) as ArrayBuffer;
+      return new Response(body, {
+        headers: { ...corsHeaders, ...asset.headers },
+      });
+    }
+
     const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);
     if (invokeMatch && request.method === "POST") {
       yield* validateAppTokenHeader(request, appToken);
@@ -722,6 +752,7 @@ export const handleTypescriptHostBackendRequest = ({
   controlToken,
   eventBus,
   hostCommandRouter,
+  taskAssetReadService,
   taskEventLeaseManager,
   localAttachments,
   logger,
@@ -736,6 +767,7 @@ export const handleTypescriptHostBackendRequest = ({
   controlToken: string;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
+  taskAssetReadService: TaskAssetReadService;
   taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
@@ -762,6 +794,7 @@ export const handleTypescriptHostBackendRequest = ({
       eventBus,
       hostCommandRouter,
       ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
+      taskAssetReadService,
       localAttachments,
       logger,
       request,
@@ -915,6 +948,7 @@ export const startTypescriptHostBackendEffect = ({
                     eventBus,
                     hostCommandRouter,
                     taskEventLeaseManager,
+                    taskAssetReadService: hostCommandRouter.taskAssetReadService,
                     localAttachments,
                     logger,
                     request,

@@ -5,11 +5,19 @@ import {
   type ExternalTaskSyncEvent,
   type PlanSubtaskInput,
   type TaskAgentSessions,
+  type TaskAssetDescriptionMutation,
+  type TaskAssetDiscardStagedInput,
+  type TaskAssetStageInput,
+  type TaskAssetStageResult,
   type TaskCard,
   type TaskCreateInput,
   type TaskStatus,
   type TaskUpdatePatch,
   taskAgentSessionsSchema,
+  taskAssetDescriptionMutationSchema,
+  taskAssetDiscardStagedInputSchema,
+  taskAssetStageInputSchema,
+  taskAssetStageResultSchema,
   taskCardSchema,
   taskCreateInputSchema,
   taskStatusSchema,
@@ -132,24 +140,56 @@ export class HostTaskClient {
     return parseArray(taskCardSchema, payload, "tasks_list");
   }
 
-  async taskCreate(repoPath: string, input: TaskCreateInput): Promise<TaskCard> {
+  async taskCreate(
+    repoPath: string,
+    input: TaskCreateInput,
+    descriptionAssets?: TaskAssetDescriptionMutation,
+  ): Promise<TaskCard> {
     const createInput = taskCreateInputSchema.parse(input);
+    const assetIntent = descriptionAssets
+      ? taskAssetDescriptionMutationSchema.parse(descriptionAssets)
+      : undefined;
     const payload = await this.invokeFn("task_create", {
       repoPath,
       input: createInput,
+      ...(assetIntent ? { descriptionAssets: assetIntent } : {}),
     });
     return taskCardSchema.parse(payload);
   }
 
-  async taskUpdate(repoPath: string, taskId: string, patch: TaskUpdatePatch): Promise<TaskCard> {
+  async taskUpdate(
+    repoPath: string,
+    taskId: string,
+    patch: TaskUpdatePatch,
+    descriptionAssets?: TaskAssetDescriptionMutation,
+  ): Promise<TaskCard> {
     const updatePatch = taskUpdatePatchSchema.parse(patch);
+    const assetIntent = descriptionAssets
+      ? taskAssetDescriptionMutationSchema.parse(descriptionAssets)
+      : undefined;
+    if (assetIntent && !Object.hasOwn(updatePatch, "description")) {
+      throw new Error("descriptionAssets requires a description patch.");
+    }
     const payload = await this.invokeFn("task_update", {
       repoPath,
       taskId,
       patch: updatePatch,
+      ...(assetIntent ? { descriptionAssets: assetIntent } : {}),
     });
     this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
+  }
+
+  async taskAssetStage(input: TaskAssetStageInput): Promise<TaskAssetStageResult> {
+    const payload = await this.invokeFn("task_asset_stage", taskAssetStageInputSchema.parse(input));
+    return taskAssetStageResultSchema.parse(payload);
+  }
+
+  async taskAssetDiscardStaged(input: TaskAssetDiscardStagedInput): Promise<void> {
+    await this.invokeFn(
+      "task_asset_discard_staged",
+      taskAssetDiscardStagedInputSchema.parse(input),
+    );
   }
 
   async taskDelete(

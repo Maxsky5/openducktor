@@ -13,6 +13,8 @@ import {
   createLocalAttachmentAdapter,
   createSourceRuntimeDistribution,
   type EffectHostCommandRouter,
+  TaskAssetError,
+  type TaskAssetReadService,
   TerminalServiceError,
 } from "@openducktor/host";
 import { Deferred, Effect, TestClock, TestContext } from "effect";
@@ -95,11 +97,16 @@ const createTestHostCommandRouter = (
   invoke: (command, args) => invoke(command, args) as ReturnType<EffectHostCommandRouter["invoke"]>,
 });
 
+const missingTaskAssetReadService: TaskAssetReadService = {
+  read: () => Effect.succeed(null),
+};
+
 type TestRequestOptions = Partial<{
   appToken: string;
   controlToken: string;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
+  taskAssetReadService: TaskAssetReadService;
   beginShutdown: () => void;
   shutdownStarted: boolean;
   stop: () => Promise<void>;
@@ -121,6 +128,7 @@ const handleTestRequest = (
       ...(options.taskEventLeaseManager
         ? { taskEventLeaseManager: options.taskEventLeaseManager }
         : {}),
+      taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
       localAttachments: createLocalAttachmentAdapter(),
       logger: testLogger,
       request,
@@ -583,6 +591,49 @@ describe("TypeScript web host backend", () => {
     });
   });
 
+  test("preserves structured task asset failures in invoke error responses", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const hostCommandRouter = createTestHostCommandRouter(() =>
+      Effect.fail(
+        new TaskAssetError({
+          operation: "update",
+          code: "partial_state",
+          taskId: "task-1",
+          assetIds: [assetId],
+          failedPhase: "compensate_update",
+          durableState: "unknown",
+          retryAllowed: false,
+          message: "Refresh before continuing.",
+        }),
+      ),
+    );
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/task_update", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({}),
+      }),
+      { hostCommandRouter },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      failure: {
+        kind: "task_asset",
+        taskAssetFailure: {
+          code: "partial_state",
+          taskId: "task-1",
+          assetIds: [assetId],
+          retryAllowed: false,
+        },
+      },
+    });
+  });
+
   test("flushes an initial SSE frame for the shared host event stream", async () => {
     const response = await handleTestRequest(
       new Request("http://127.0.0.1/events", {
@@ -1014,6 +1065,64 @@ describe("TypeScript web host backend", () => {
     });
   });
 
+  test("serves task assets only through the authenticated exact-context route", async () => {
+    const context = {
+      workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+      taskId: "task-1",
+      scope: "description",
+      assetId: "550e8400-e29b-41d4-a716-446655440000",
+    };
+    let readInput: unknown;
+    const taskAssetReadService: TaskAssetReadService = {
+      read: (input) => {
+        readInput = input;
+        return Effect.succeed({
+          bytes: new Uint8Array([1, 2, 3]),
+          mediaType: "image/png",
+          headers: {
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": 'inline; filename="diagram.png"',
+            "Content-Type": "image/png",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      },
+    };
+    const url = `http://127.0.0.1/task-assets/${context.workspaceId}/${context.taskId}/${context.scope}/${context.assetId}`;
+
+    const unauthorized = await handleTestRequest(new Request(url), { taskAssetReadService });
+    expect(unauthorized.status).toBe(401);
+    expect(readInput).toBeUndefined();
+
+    const response = await handleTestRequest(
+      {
+        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+        method: "GET",
+        url,
+      } as Request,
+      { taskAssetReadService },
+    );
+
+    expect(response.status).toBe(200);
+    expect(readInput).toEqual(context);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  test("returns 404 when an authenticated task asset relation is missing", async () => {
+    const url =
+      "http://127.0.0.1/task-assets/9f66372b-e956-47f4-af2f-77e0df2ad4e1/task-1/description/550e8400-e29b-41d4-a716-446655440000";
+    const response = await handleTestRequest({
+      headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+      method: "GET",
+      url,
+    } as Request);
+
+    expect(response.status).toBe(404);
+  });
+
   test("marks shutdown as started before deferred host teardown runs", async () => {
     let shutdownStarted = false;
     let stopCalls = 0;
@@ -1153,6 +1262,7 @@ describe("TypeScript web host backend", () => {
             controlToken: CONTROL_TOKEN,
             eventBus,
             hostCommandRouter: createTestHostCommandRouter(),
+            taskAssetReadService: missingTaskAssetReadService,
             localAttachments: createLocalAttachmentAdapter(),
             logger: testLogger,
             request,

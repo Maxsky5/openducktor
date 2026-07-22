@@ -167,6 +167,7 @@ export function TaskDetailsSheet({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <TaskDetailsSheetBody
             task={task}
+            {...(activeWorkspace ? { workspaceId: activeWorkspace.workspaceId } : {})}
             shouldRenderSubtasks={viewModel.shouldRenderSubtasks}
             subtasks={viewModel.subtasks}
             specDoc={viewModel.specDoc}

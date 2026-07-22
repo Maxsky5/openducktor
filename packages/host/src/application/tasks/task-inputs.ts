@@ -4,6 +4,7 @@ import type {
   AgentSessionRecord,
   PlanSubtaskInput,
   PullRequest,
+  TaskAssetDescriptionMutation,
   TaskCreateInput,
   TaskDirectMergeInput,
   TaskStatus,
@@ -56,6 +57,7 @@ export type DirectMergeInput = TaskIdInput & {
 
 export type CreateTaskUseCaseInput = RepoPathInput & {
   task: TaskCreateInput;
+  descriptionAssets?: TaskAssetDescriptionMutation;
 };
 
 export type DeleteTaskInput = TaskIdInput & {
@@ -64,6 +66,7 @@ export type DeleteTaskInput = TaskIdInput & {
 
 export type UpdateTaskInput = TaskIdInput & {
   patch: TaskUpdatePatch;
+  descriptionAssets?: TaskAssetDescriptionMutation;
 };
 
 export type TransitionTaskInput = TaskIdInput & {

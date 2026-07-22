@@ -606,3 +606,14 @@ export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: 
   const query = new URLSearchParams({ path });
   return `${baseUrl}/local-attachment-preview?${query.toString()}`;
 };
+
+export const buildTaskAssetUrl = (
+  browserBackendUrl: string,
+  input: { workspaceId: string; taskId: string; scope: string; assetId: string },
+): string => {
+  const baseUrl = browserBackendUrl.replace(/\/$/, "");
+  const segments = [input.workspaceId, input.taskId, input.scope, input.assetId].map((segment) =>
+    encodeURIComponent(segment),
+  );
+  return `${baseUrl}/task-assets/${segments.join("/")}`;
+};

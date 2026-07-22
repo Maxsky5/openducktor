@@ -8,6 +8,7 @@ import {
   pullRequestSchema,
   type TaskCreateInput,
   type TaskUpdatePatch,
+  taskAssetDescriptionMutationSchema,
   taskCreateInputSchema,
   taskDirectMergeInputSchema,
   taskStatusSchema,
@@ -66,6 +67,17 @@ export const parseUpdatePatch = (value: unknown): TaskUpdatePatch => {
   }
 
   throw invalidInput(`task_update input.patch is invalid: ${parsed.error.message}`, "input.patch");
+};
+
+export const parseDescriptionAssets = (value: unknown) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = taskAssetDescriptionMutationSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  throw invalidInput(`descriptionAssets is invalid: ${parsed.error.message}`, "descriptionAssets");
 };
 
 export const parseTransitionStatus = (value: unknown) => {
