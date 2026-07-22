@@ -9,7 +9,8 @@ describe("rich Markdown lazy module boundaries", () => {
     const compatibility = await readSource("./task-description-markdown-compatibility.ts");
 
     expect(sourceShell).toContain('lazy(() => import("./task-description-visual-editor"))');
-    expect(sourceShell).not.toContain('task-description-markdown"');
+    expect(sourceShell).toContain('import("./task-description-markdown")');
+    expect(sourceShell).not.toContain('from "./task-description-markdown"');
     expect(sourceShell).not.toContain("@tiptap/");
     expect(compatibility).not.toContain("@tiptap/");
   });

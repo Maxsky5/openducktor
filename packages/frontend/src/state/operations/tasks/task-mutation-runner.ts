@@ -1,12 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import {
-  formatTaskAssetFailure,
-  taskAssetFailureFromError,
-} from "@/components/features/task-description-editor/task-asset-failure-recovery";
 import { errorMessage } from "@/lib/errors";
 import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
+import { formatTaskAssetFailure, taskAssetFailureFromError } from "./task-asset-failure-recovery";
 import { requireActiveRepo } from "./task-operations-model";
 import type { TaskMutationRefreshStrategy } from "./task-operations-types";
 

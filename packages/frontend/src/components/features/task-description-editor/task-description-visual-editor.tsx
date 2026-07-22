@@ -1,15 +1,9 @@
 import "katex/dist/katex.min.css";
 import type { TaskAssetRenderContext, TaskAssetStageResult } from "@openducktor/contracts";
+import type { Editor } from "@tiptap/core";
 import { CodeBlock } from "@tiptap/extension-code-block";
-import Image from "@tiptap/extension-image";
-import Link from "@tiptap/extension-link";
 import { Mathematics } from "@tiptap/extension-mathematics";
-import { TableKit } from "@tiptap/extension-table";
-import TaskItem from "@tiptap/extension-task-item";
-import TaskList from "@tiptap/extension-task-list";
-import { Markdown } from "@tiptap/markdown";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import { ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +11,11 @@ import { cn } from "@/lib/utils";
 import { TaskDescriptionFormattingToolbar } from "./task-description-formatting-toolbar";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
+import { TaskDescriptionLinkDialog } from "./task-description-link-dialog";
+import {
+  createTaskDescriptionMarkdownExtensions,
+  TaskDescriptionImage,
+} from "./task-description-markdown-extensions";
 import {
   TaskDescriptionMathDialog,
   type TaskDescriptionMathEdit,
@@ -30,13 +29,7 @@ const MermaidCodeBlock = CodeBlock.extend({
   },
 });
 
-const VisualImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      title: { default: null },
-    };
-  },
+const VisualImage = TaskDescriptionImage.extend({
   addNodeView() {
     return ReactNodeViewRenderer(TaskDescriptionImageNode);
   },
@@ -52,6 +45,20 @@ type TaskDescriptionVisualEditorProps = {
   previews: ReadonlyMap<string, string>;
 };
 
+const applyMathEdit = (editor: Editor, edit: TaskDescriptionMathEdit, latex: string): boolean => {
+  const chain = editor.chain().focus();
+  if (edit.kind === "inline") {
+    if (edit.position === undefined) {
+      return chain.insertInlineMath({ latex }).run();
+    }
+    return chain.updateInlineMath({ latex, pos: edit.position }).run();
+  }
+  if (edit.position === undefined) {
+    return chain.insertBlockMath({ latex }).run();
+  }
+  return chain.updateBlockMath({ latex, pos: edit.position }).run();
+};
+
 export default function TaskDescriptionVisualEditor({
   body,
   frontMatter,
@@ -64,21 +71,17 @@ export default function TaskDescriptionVisualEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadFilesRef = useRef<(files: File[]) => void>(() => {});
   const hydratedBody = useRef(body);
+  const [linkHref, setLinkHref] = useState<string | null>(null);
   const [mathEdit, setMathEdit] = useState<TaskDescriptionMathEdit | null>(null);
   const openMathEditor = useCallback((edit: TaskDescriptionMathEdit) => setMathEdit(edit), []);
   const uploading = uploads.some((upload) => upload.status === "uploading");
   const imageContext = useMemo(() => ({ previews, renderContext }), [previews, renderContext]);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ codeBlock: false, link: false }),
-      Link.configure({ openOnClick: false }),
-      MermaidCodeBlock,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      TableKit.configure({ table: { resizable: false } }),
-      VisualImage.configure({ allowBase64: false }),
-      Mathematics.configure({
+    extensions: createTaskDescriptionMarkdownExtensions({
+      codeBlock: MermaidCodeBlock,
+      image: VisualImage,
+      mathematics: Mathematics.configure({
         inlineOptions: {
           onClick: (node, position) =>
             openMathEditor({
@@ -96,8 +99,7 @@ export default function TaskDescriptionVisualEditor({
             }),
         },
       }),
-      Markdown.configure({ markedOptions: { gfm: true } }),
-    ],
+    }),
     content: body,
     contentType: "markdown",
     editorProps: {
@@ -155,6 +157,7 @@ export default function TaskDescriptionVisualEditor({
           italic: false,
           strike: false,
           code: false,
+          link: false,
           heading: false,
           bulletList: false,
           orderedList: false,
@@ -169,6 +172,7 @@ export default function TaskDescriptionVisualEditor({
         italic: current.isActive("italic"),
         strike: current.isActive("strike"),
         code: current.isActive("code"),
+        link: current.isActive("link"),
         heading: current.isActive("heading", { level: 2 }),
         bulletList: current.isActive("bulletList"),
         orderedList: current.isActive("orderedList"),
@@ -190,6 +194,10 @@ export default function TaskDescriptionVisualEditor({
         <TaskDescriptionFormattingToolbar
           editor={editor}
           state={toolbar}
+          onEditLink={() => {
+            const href = editor.getAttributes("link").href;
+            setLinkHref(typeof href === "string" ? href : "");
+          }}
           onEditMath={(kind) => setMathEdit({ kind, latex: "" })}
         />
         <Button
@@ -238,25 +246,31 @@ export default function TaskDescriptionVisualEditor({
           }}
         />
       </TaskDescriptionImageContext.Provider>
+      {linkHref !== null ? (
+        <TaskDescriptionLinkDialog
+          key={linkHref || "new"}
+          href={linkHref}
+          onCancel={() => setLinkHref(null)}
+          onRemove={() => {
+            editor.chain().focus().extendMarkRange("link").unsetLink().run();
+            setLinkHref(null);
+          }}
+          onSubmit={(href) => {
+            const applied = editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+            if (applied) {
+              setLinkHref(null);
+            }
+            return applied;
+          }}
+        />
+      ) : null}
       {mathEdit ? (
         <TaskDescriptionMathDialog
           key={`${mathEdit.kind}:${mathEdit.position ?? "new"}`}
           edit={mathEdit}
           onCancel={() => setMathEdit(null)}
           onSubmit={(latex) => {
-            const chain = editor.chain().focus();
-            let applied: boolean;
-            if (mathEdit.kind === "inline") {
-              applied =
-                mathEdit.position === undefined
-                  ? chain.insertInlineMath({ latex }).run()
-                  : chain.updateInlineMath({ latex, pos: mathEdit.position }).run();
-            } else {
-              applied =
-                mathEdit.position === undefined
-                  ? chain.insertBlockMath({ latex }).run()
-                  : chain.updateBlockMath({ latex, pos: mathEdit.position }).run();
-            }
+            const applied = applyMathEdit(editor, mathEdit, latex);
             if (applied) {
               setMathEdit(null);
             }

@@ -26,6 +26,7 @@ export type TaskDescriptionToolbarState = {
   italic: boolean;
   strike: boolean;
   code: boolean;
+  link: boolean;
   heading: boolean;
   bulletList: boolean;
   orderedList: boolean;
@@ -65,23 +66,14 @@ const ToolbarButton = ({
 export function TaskDescriptionFormattingToolbar({
   editor,
   state,
+  onEditLink,
   onEditMath,
 }: {
   editor: Editor;
   state: TaskDescriptionToolbarState;
+  onEditLink(): void;
   onEditMath(kind: "inline" | "block"): void;
 }): ReactElement {
-  const setLink = (): void => {
-    const previous = editor.getAttributes("link").href as string | undefined;
-    const href = window.prompt("Link URL", previous ?? "https://");
-    if (href === null) return;
-    if (!href.trim()) {
-      editor.chain().focus().unsetLink().run();
-      return;
-    }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run();
-  };
-
   return (
     <>
       <ToolbarButton
@@ -137,7 +129,7 @@ export function TaskDescriptionFormattingToolbar({
       >
         <Code className="size-4" />
       </ToolbarButton>
-      <ToolbarButton label="Link" onClick={setLink}>
+      <ToolbarButton label="Link" active={state.link} onClick={onEditLink}>
         <LinkIcon className="size-4" />
       </ToolbarButton>
       <span className="mx-1 w-px bg-border" />

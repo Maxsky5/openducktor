@@ -23,9 +23,9 @@ export function MarkdownMermaid({
     setState({ status: "loading" });
     const renderDiagram = async (): Promise<void> => {
       try {
-        const [mermaidModule, domPurifyModule] = await Promise.all([
+        const [mermaidModule, sanitizeModule] = await Promise.all([
           import("mermaid"),
-          import("dompurify"),
+          import("./markdown-mermaid-sanitize"),
         ]);
         const mermaid = mermaidModule.default;
         if (!initialized) {
@@ -38,9 +38,7 @@ export function MarkdownMermaid({
         }
         const renderId = `odt-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${crypto.randomUUID()}`;
         const rendered = await mermaid.render(renderId, source);
-        const svg = domPurifyModule.default.sanitize(rendered.svg, {
-          USE_PROFILES: { svg: true, svgFilters: true },
-        });
+        const svg = sanitizeModule.sanitizeMermaidSvg(rendered.svg);
         if (active) {
           setState({ status: "ready", svg });
         }

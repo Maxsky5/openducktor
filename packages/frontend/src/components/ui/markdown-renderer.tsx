@@ -1,4 +1,4 @@
-import type { TaskAssetRenderContext } from "@openducktor/contracts";
+import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
 import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -6,6 +6,7 @@ import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { hasMarkdownMath } from "./markdown-math-detection";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
+import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
@@ -86,7 +87,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   fallback,
   taskAssetContext,
 }: MarkdownRendererProps): ReactElement | null {
-  const content = markdown.trim();
+  const content = prepareMarkdownRenderContent(markdown);
   if (!content) {
     return null;
   }
@@ -94,42 +95,48 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const components = componentOverrides
     ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
     : MARKDOWN_COMPONENTS[variant];
-  const rendersMath = hasMarkdownMath(markdown);
-  return (
-    <div className={cn(MARKDOWN_CLASSES[variant], className)}>
-      {rendersMath ? (
-        <Suspense fallback={fallback ?? null}>
-          <MarkdownRendererMath
-            markdown={markdown}
-            components={components}
-            premiumCodeBlocks={premiumCodeBlocks}
-            fallback={fallback}
-            {...(taskAssetContext
-              ? {
-                  taskAssetContext,
-                  resolveTaskAssetSrc: getShellBridge().resolveTaskAssetSrc,
-                }
-              : {})}
-          />
-        </Suspense>
-      ) : taskAssetContext ? (
-        <Suspense fallback={fallback ?? null}>
-          <MarkdownRendererRich
-            markdown={markdown}
-            components={components}
-            premiumCodeBlocks={premiumCodeBlocks}
-            fallback={fallback}
-            taskAssetContext={taskAssetContext}
-            resolveTaskAssetSrc={getShellBridge().resolveTaskAssetSrc}
-          />
-        </Suspense>
-      ) : premiumCodeBlocks ? (
-        <Suspense fallback={fallback ?? null}>
-          <PremiumMarkdownRenderer markdown={content} components={components} fallback={fallback} />
-        </Suspense>
-      ) : (
-        <MarkdownSync markdown={content} components={components} />
-      )}
-    </div>
-  );
+  const rendersMath = hasMarkdownMath(content);
+  const rendersMermaid = /^[ \t]{0,3}(?:```|~~~)[ \t]*mermaid(?:[ \t]|$)/im.test(content);
+  const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
+  const needsRichRenderer = rendersMermaid || rendersTaskAsset || taskAssetContext !== undefined;
+  const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
+
+  let renderedContent: ReactElement;
+  if (rendersMath) {
+    renderedContent = (
+      <Suspense fallback={fallback ?? null}>
+        <MarkdownRendererMath
+          markdown={content}
+          components={components}
+          premiumCodeBlocks={premiumCodeBlocks}
+          fallback={fallback}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+        />
+      </Suspense>
+    );
+  } else if (needsRichRenderer) {
+    renderedContent = (
+      <Suspense fallback={fallback ?? null}>
+        <MarkdownRendererRich
+          markdown={content}
+          components={components}
+          premiumCodeBlocks={premiumCodeBlocks}
+          fallback={fallback}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+        />
+      </Suspense>
+    );
+  } else if (premiumCodeBlocks) {
+    renderedContent = (
+      <Suspense fallback={fallback ?? null}>
+        <PremiumMarkdownRenderer markdown={content} components={components} fallback={fallback} />
+      </Suspense>
+    );
+  } else {
+    renderedContent = <MarkdownSync markdown={content} components={components} />;
+  }
+
+  return <div className={cn(MARKDOWN_CLASSES[variant], className)}>{renderedContent}</div>;
 });

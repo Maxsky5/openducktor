@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as externalUrl from "@/lib/open-external-url";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
 
@@ -15,6 +18,21 @@ const renderMarkdownLink = (href: string, label: string) => {
     throw new Error("Expected the shared Markdown anchor to be a React component.");
   }
   return render(createElement(MarkdownLink, { href }, label));
+};
+
+const StaticThemeProvider = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture({ theme: "light" }),
+    );
+    setReady(true);
+  }, [queryClient]);
+
+  return ready ? <ThemeProvider>{children}</ThemeProvider> : null;
 };
 
 test("opens rendered links through the external URL shell bridge", () => {
@@ -116,6 +134,22 @@ describe("rich task description rendering", () => {
     expect(view.queryByText("title: Hidden", { exact: false })).toBeNull();
   }, 4000);
 
+  test("omits valid front matter consistently with and without math or task context", async () => {
+    const plain = render(
+      <MarkdownRenderer markdown={"---\ntitle: Hidden plain\n---\nVisible plain"} />,
+    );
+    const math = render(
+      <MarkdownRenderer markdown={"---\ntitle: Hidden math\n---\nVisible math $x$"} />,
+    );
+
+    expect(plain.getByText("Visible plain")).toBeTruthy();
+    expect(plain.queryByText("title: Hidden plain", { exact: false })).toBeNull();
+    await waitFor(() => expect(math.container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 3000,
+    });
+    expect(math.queryByText("title: Hidden math", { exact: false })).toBeNull();
+  }, 4000);
+
   test("renders a plain contextual description without KaTeX output", async () => {
     const view = render(
       <MarkdownRenderer
@@ -141,7 +175,7 @@ describe("rich task description rendering", () => {
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const view = render(
       <QueryProvider useIsolatedClient>
-        <ThemeProvider>
+        <StaticThemeProvider>
           <MarkdownRenderer
             markdown={`Formula $x^2$\n\n\`\`\`javascript\nconst answer = 42;\n\`\`\`\n\n![Diagram](odt-asset:${assetId})`}
             premiumCodeBlocks
@@ -151,7 +185,7 @@ describe("rich task description rendering", () => {
               scope: "description",
             }}
           />
-        </ThemeProvider>
+        </StaticThemeProvider>
       </QueryProvider>,
     );
 
@@ -173,12 +207,12 @@ describe("rich task description rendering", () => {
   test("keeps premium code rendering for task documents that also contain math", async () => {
     const view = render(
       <QueryProvider useIsolatedClient>
-        <ThemeProvider>
+        <StaticThemeProvider>
           <MarkdownRenderer
             markdown={"Formula $x$\n\n```javascript\nconst value = 1;\n```"}
             premiumCodeBlocks
           />
-        </ThemeProvider>
+        </StaticThemeProvider>
       </QueryProvider>,
     );
 
@@ -233,7 +267,8 @@ describe("rich task description rendering", () => {
       <MarkdownRenderer markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)" />,
     );
 
-    expect(view.getByRole("img", { name: "Architecture" }).getAttribute("src")).toBeNull();
+    expect(view.getByRole("alert").textContent).toContain("task context is unavailable");
+    expect(view.queryByRole("img", { name: "Architecture" })).toBeNull();
     expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
   });
 

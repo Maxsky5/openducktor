@@ -97,7 +97,7 @@ const findUnsupportedSyntax = (body: string): string | undefined => {
   return reason;
 };
 
-export const assessVisualMarkdownCompatibility = (
+export const assessVisualMarkdownSyntaxCompatibility = (
   markdown: string,
 ): VisualMarkdownCompatibility => {
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);

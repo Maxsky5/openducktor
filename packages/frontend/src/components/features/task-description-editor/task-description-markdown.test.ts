@@ -119,6 +119,25 @@ describe("task description Markdown dialect", () => {
     }
   });
 
+  test("blocks inline links that the Visual codec cannot preserve semantically", () => {
+    const markdown = "[a](<https://x.test/a b>)";
+
+    const result = assessVisualMarkdownCompatibility(markdown);
+
+    expect(result.compatible).toBe(false);
+    if (!result.compatible) {
+      expect(result.reason).toContain("cannot be preserved");
+    }
+  });
+
+  test.each([
+    ["absolute destinations", "[Docs](https://example.com/a?b=c&d=e)"],
+    ["relative destinations", "[Guide](../docs/guide.md#setup)"],
+    ["escaped link labels", String.raw`[A \[bracket\]](https://example.com)`],
+  ])("keeps supported %s in Visual mode", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+  });
+
   test("preserves supported escapes inside aligned GFM table cells", () => {
     const markdown = "| Value |\n| :---- |\n| \\*literal\\* |";
 

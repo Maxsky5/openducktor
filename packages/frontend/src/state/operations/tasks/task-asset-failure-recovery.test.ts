@@ -7,7 +7,7 @@ import {
 } from "./task-asset-failure-recovery";
 
 describe("task asset failure recovery", () => {
-  test("retains structured partial-state details for the editor", () => {
+  test("retains structured partial-state details for task mutation recovery", () => {
     const error = new HostInvokeError("Task creation failed", {
       kind: "task_asset",
       taskAssetFailure: {

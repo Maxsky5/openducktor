@@ -9,17 +9,17 @@ import {
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
-import {
-  formatTaskAssetFailure,
-  taskAssetFailureFromError,
-  taskAssetFailureRequiresLock,
-} from "@/components/features/task-description-editor/task-asset-failure-recovery";
 import { collectTaskDescriptionAssetIds } from "@/components/features/task-description-editor/task-description-assets";
 import { stageTaskDescriptionImage } from "@/components/features/task-description-editor/task-description-upload";
 import { useTaskDescriptionAssetDraft } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { errorMessage } from "@/lib/errors";
 import { hostClient } from "@/lib/host-client";
 import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
+import {
+  formatTaskAssetFailure,
+  taskAssetFailureFromError,
+  taskAssetFailureRequiresLock,
+} from "@/state/operations/tasks/task-asset-failure-recovery";
 import type {
   ComposerMode,
   ComposerState,

@@ -1,31 +1,19 @@
 import { Editor, type JSONContent } from "@tiptap/core";
-import Image from "@tiptap/extension-image";
-import { Mathematics } from "@tiptap/extension-mathematics";
-import { TableKit } from "@tiptap/extension-table";
-import TaskItem from "@tiptap/extension-task-item";
-import TaskList from "@tiptap/extension-task-list";
-import { Markdown } from "@tiptap/markdown";
-import StarterKit from "@tiptap/starter-kit";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
-import { assessVisualMarkdownCompatibility } from "./task-description-markdown-compatibility";
+import {
+  assessVisualMarkdownSyntaxCompatibility,
+  type VisualMarkdownCompatibility,
+} from "./task-description-markdown-compatibility";
+import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
 
 export {
   splitTaskDescriptionFrontMatter,
   type TaskDescriptionFrontMatter,
 } from "./task-description-front-matter";
-export { assessVisualMarkdownCompatibility } from "./task-description-markdown-compatibility";
 
 const createMarkdownEditor = (body: string): Editor =>
   new Editor({
-    extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      TableKit.configure({ table: { resizable: false } }),
-      Image.configure({ allowBase64: false }),
-      Mathematics,
-      Markdown.configure({ markedOptions: { gfm: true } }),
-    ],
+    extensions: createTaskDescriptionMarkdownExtensions(),
     content: body,
     contentType: "markdown",
   });
@@ -50,6 +38,54 @@ const canonicalizeBody = (body: string): string => {
   }
 };
 
+const semanticTree = (value: JSONContent): JSONContent =>
+  JSON.parse(
+    JSON.stringify(value, (key, nestedValue) => {
+      if (key === "position" || key === "spread") {
+        return undefined;
+      }
+      return nestedValue;
+    }),
+  ) as JSONContent;
+
+export const assessVisualMarkdownCompatibility = (
+  markdown: string,
+): VisualMarkdownCompatibility => {
+  const syntaxCompatibility = assessVisualMarkdownSyntaxCompatibility(markdown);
+  if (!syntaxCompatibility.compatible) {
+    return syntaxCompatibility;
+  }
+
+  const frontMatter = splitTaskDescriptionFrontMatter(markdown);
+  if (frontMatter.kind === "malformed") {
+    return {
+      compatible: false,
+      reason: "Malformed front matter cannot enter Visual mode.",
+    };
+  }
+
+  try {
+    const canonicalBody = canonicalizeBody(frontMatter.body);
+    const originalTree = semanticTree(parseBodyToJson(frontMatter.body));
+    const canonicalTree = semanticTree(parseBodyToJson(canonicalBody));
+    if (JSON.stringify(originalTree) !== JSON.stringify(canonicalTree)) {
+      return {
+        compatible: false,
+        reason:
+          "This Markdown cannot be preserved by Visual mode. Keep it in Markdown mode or simplify the source form.",
+      };
+    }
+  } catch {
+    return {
+      compatible: false,
+      reason:
+        "This Markdown cannot be parsed safely by Visual mode. Keep it in Markdown mode or fix the source.",
+    };
+  }
+
+  return { compatible: true };
+};
+
 export const canonicalizeTaskDescriptionMarkdown = (markdown: string): string => {
   const compatibility = assessVisualMarkdownCompatibility(markdown);
   if (!compatibility.compatible) {
@@ -61,12 +97,5 @@ export const canonicalizeTaskDescriptionMarkdown = (markdown: string): string =>
     throw new Error("Malformed front matter cannot be canonicalized.");
   }
 
-  const canonicalBody = canonicalizeBody(frontMatter.body);
-  const originalTree = parseBodyToJson(frontMatter.body);
-  const canonicalTree = parseBodyToJson(canonicalBody);
-  if (JSON.stringify(originalTree) !== JSON.stringify(canonicalTree)) {
-    throw new Error("This Markdown cannot be preserved by Visual mode.");
-  }
-
-  return `${frontMatter.raw}${canonicalBody}`;
+  return `${frontMatter.raw}${canonicalizeBody(frontMatter.body)}`;
 };

@@ -91,7 +91,7 @@ function TaskAssetImage({
   return <img src={state.src} alt={alt ?? ""} title={title} className={className} />;
 }
 
-export const taskDescriptionRenderContent = (markdown: string): string => {
+export const prepareMarkdownRenderContent = (markdown: string): string => {
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);
   return (frontMatter.kind === "valid" ? frontMatter.body : markdown).trim();
 };

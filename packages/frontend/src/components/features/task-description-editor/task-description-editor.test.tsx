@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import TaskDescriptionEditor from "./task-description-editor";
 
 const props = {
@@ -24,7 +25,11 @@ describe("TaskDescriptionEditor", () => {
       <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
     );
 
-    await waitFor(() => expect(view.getByRole("button", { name: "Markdown" })).toBeTruthy());
+    await waitFor(() =>
+      expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
@@ -60,6 +65,23 @@ describe("TaskDescriptionEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  test("keeps links that fail the live codec round trip in Markdown mode", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "[a](<https://x.test/a b>)";
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+    );
+
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect((await view.findByRole("alert")).textContent).toContain("cannot be preserved");
+    expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(view.getByRole("textbox")).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   test("preserves front matter outside Visual mode and keeps it source-editable", async () => {
     const markdown = "---\ntitle: Keep comments # exact\n---\nBody";
     const view = render(
@@ -67,6 +89,11 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect(view.getByText(/Front matter preserved/)).toBeTruthy();
+    await waitFor(() =>
+      expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
   });
@@ -80,6 +107,36 @@ describe("TaskDescriptionEditor", () => {
 
     await waitFor(() => expect(view.container.textContent).toContain("Second"));
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("keeps Visual mode mounted when a controlled parent accepts a user edit", async () => {
+    const onChange = mock((_value: string) => {});
+    const ControlledEditor = () => {
+      const [markdown, setMarkdown] = useState("Formula");
+      return (
+        <TaskDescriptionEditor
+          {...props}
+          markdown={markdown}
+          onChange={(nextMarkdown) => {
+            onChange(nextMarkdown);
+            setMarkdown(nextMarkdown);
+          }}
+        />
+      );
+    };
+    const view = render(<ControlledEditor />);
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const input = await view.findByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(input, { target: { value: "x" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalled();
+    expect(view.container.querySelector(".tiptap")).not.toBeNull();
+    expect(
+      view.queryByRole("textbox", { name: "Problem context, scope, and expected output." }),
+    ).toBeNull();
   });
 
   test("resets mode and gate when switching from an incompatible task to a compatible task", async () => {

@@ -9,7 +9,6 @@ import type { ShellBridge } from "@/lib/shell-bridge";
 import {
   createTaskDescriptionComponents,
   TASK_DESCRIPTION_URL_TRANSFORM,
-  taskDescriptionRenderContent,
 } from "./markdown-renderer-context";
 import { usePremiumCodeComponents } from "./markdown-renderer-premium-code";
 
@@ -33,7 +32,7 @@ export default function MarkdownRendererMath({
     enabled: premiumCodeBlocks,
     fallback,
   });
-  const content = taskDescriptionRenderContent(markdown);
+  const content = markdown.trim();
   if (!content) return null;
   return (
     <Markdown
