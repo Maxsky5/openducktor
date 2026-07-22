@@ -4,10 +4,12 @@ import Markdown, { type Components, defaultUrlTransform, type UrlTransform } fro
 import remarkGfm from "remark-gfm";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
+import { hasMarkdownMath } from "./markdown-math-detection";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
+const MarkdownRendererMath = lazy(() => import("./markdown-renderer-math"));
 
 export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 
@@ -92,9 +94,23 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const components = componentOverrides
     ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
     : MARKDOWN_COMPONENTS[variant];
+  const rendersMath = hasMarkdownMath(markdown);
   return (
     <div className={cn(MARKDOWN_CLASSES[variant], className)}>
-      {taskAssetContext ? (
+      {rendersMath ? (
+        <Suspense fallback={fallback ?? null}>
+          <MarkdownRendererMath
+            markdown={markdown}
+            components={components}
+            {...(taskAssetContext
+              ? {
+                  taskAssetContext,
+                  resolveTaskAssetSrc: getShellBridge().resolveTaskAssetSrc,
+                }
+              : {})}
+          />
+        </Suspense>
+      ) : taskAssetContext ? (
         <Suspense fallback={fallback ?? null}>
           <MarkdownRendererRich
             markdown={markdown}

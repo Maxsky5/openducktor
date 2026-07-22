@@ -83,7 +83,7 @@ export function TaskCreateModal({
   return (
     <>
       <Dialog open={open} onOpenChange={controller.onDialogOpenChange}>
-        <DialogContent className="grid max-h-[92vh] max-w-6xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-0">
+        <DialogContent className="grid max-h-[92vh] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-5 py-4">
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Sparkles className="size-5 text-primary" />
@@ -97,14 +97,15 @@ export function TaskCreateModal({
           </DialogHeader>
 
           <fieldset
-            disabled={controller.isBusy}
+            disabled={controller.isFormDisabled}
             className="flex min-h-0 flex-1 flex-col border-0 p-0"
           >
             <DialogBody>
               <div
                 className={cn(
                   "min-h-0 flex-1 overflow-y-auto space-y-4 px-5 py-4 transition-opacity",
-                  controller.isBusy ? "cursor-wait opacity-55" : "opacity-100",
+                  controller.isFormDisabled ? "opacity-55" : "opacity-100",
+                  controller.isBusy && "cursor-wait",
                 )}
               >
                 {controller.mode === "create" ? (
@@ -122,7 +123,7 @@ export function TaskCreateModal({
                     section={controller.editSection}
                     hasUnsavedSpec={controller.isSpecDirty}
                     hasUnsavedPlan={controller.isPlanDirty}
-                    disabled={controller.isBusy}
+                    disabled={controller.isFormDisabled}
                     onSectionChange={controller.requestSectionChange}
                   />
                 )}
@@ -178,107 +179,109 @@ export function TaskCreateModal({
                     workspaceId={controller.workspaceId}
                     taskId={controller.taskId}
                     onDescriptionImageUpload={controller.stageDescriptionImage}
+                    descriptionAssetUploads={controller.descriptionAssetUploads}
+                    descriptionAssetPreviews={controller.descriptionAssetPreviews}
                   />
                 )}
               </div>
             </DialogBody>
+          </fieldset>
 
-            <DialogFooter className="mt-0 justify-between border-t border-border px-5 py-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={controller.close}
-                disabled={controller.isBusy}
-              >
-                Close
-              </Button>
+          <DialogFooter className="mt-0 justify-between border-t border-border px-5 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="cursor-pointer"
+              onClick={controller.close}
+              disabled={controller.isBusy}
+            >
+              Close
+            </Button>
 
-              <div className="flex items-center gap-2">
-                {controller.footerError ? (
-                  <p className="text-sm text-destructive-muted">{controller.footerError}</p>
-                ) : null}
+            <div className="flex items-center gap-2">
+              {controller.footerError ? (
+                <p className="text-sm text-destructive-muted">{controller.footerError}</p>
+              ) : null}
 
-                {controller.mode === "create" && controller.step === "type" ? (
-                  <span />
-                ) : controller.isEditingDocument ? (
-                  <>
+              {controller.mode === "create" && controller.step === "type" ? (
+                <span />
+              ) : controller.isEditingDocument ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={controller.discardCurrentDocumentDraft}
+                    disabled={controller.isFormDisabled || !controller.isActiveDocumentDirty}
+                  >
+                    <RotateCcw className="size-4" />
+                    Revert
+                  </Button>
+                  <Button
+                    type="button"
+                    className="cursor-pointer"
+                    onClick={() => void controller.saveActiveDocument()}
+                    disabled={
+                      controller.isFormDisabled ||
+                      !controller.taskId ||
+                      !controller.activeDocument ||
+                      !controller.activeDocument.loaded ||
+                      controller.activeDocument.isLoading ||
+                      controller.activeDraft.trim().length === 0 ||
+                      !controller.isActiveDocumentDirty
+                    }
+                  >
+                    {controller.isSavingDocument === controller.activeDocumentSection ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <WandSparkles className="size-4" />
+                    )}
+                    {controller.isSavingDocument === controller.activeDocumentSection
+                      ? "Saving..."
+                      : controller.activeDocumentSection === "spec"
+                        ? "Save Spec"
+                        : "Save Plan"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {controller.mode === "create" && controller.step === "details" ? (
                     <Button
                       type="button"
                       variant="outline"
                       className="cursor-pointer"
-                      onClick={controller.discardCurrentDocumentDraft}
-                      disabled={controller.isBusy || !controller.isActiveDocumentDirty}
+                      onClick={() => controller.setStep("type")}
+                      disabled={controller.isFormDisabled}
                     >
-                      <RotateCcw className="size-4" />
-                      Revert
+                      <ArrowLeft className="size-4" />
+                      Back
                     </Button>
-                    <Button
-                      type="button"
-                      className="cursor-pointer"
-                      onClick={() => void controller.saveActiveDocument()}
-                      disabled={
-                        controller.isBusy ||
-                        !controller.taskId ||
-                        !controller.activeDocument ||
-                        !controller.activeDocument.loaded ||
-                        controller.activeDocument.isLoading ||
-                        controller.activeDraft.trim().length === 0 ||
-                        !controller.isActiveDocumentDirty
-                      }
-                    >
-                      {controller.isSavingDocument === controller.activeDocumentSection ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <WandSparkles className="size-4" />
-                      )}
-                      {controller.isSavingDocument === controller.activeDocumentSection
-                        ? "Saving..."
-                        : controller.activeDocumentSection === "spec"
-                          ? "Save Spec"
-                          : "Save Plan"}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    {controller.mode === "create" && controller.step === "details" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="cursor-pointer"
-                        onClick={() => controller.setStep("type")}
-                        disabled={controller.isBusy}
-                      >
-                        <ArrowLeft className="size-4" />
-                        Back
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      className="cursor-pointer"
-                      onClick={() => void controller.submit()}
-                      disabled={controller.isBusy || !controller.state.title.trim()}
-                    >
-                      {controller.isSubmitting ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : controller.mode === "create" ? (
-                        <Flag className="size-4" />
-                      ) : (
-                        <WandSparkles className="size-4" />
-                      )}
-                      {controller.isSubmitting
-                        ? controller.mode === "create"
-                          ? "Creating..."
-                          : "Saving..."
-                        : controller.mode === "create"
-                          ? "Create Task"
-                          : "Save Changes"}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </DialogFooter>
-          </fieldset>
+                  ) : null}
+                  <Button
+                    type="button"
+                    className="cursor-pointer"
+                    onClick={() => void controller.submit()}
+                    disabled={controller.isFormDisabled || !controller.state.title.trim()}
+                  >
+                    {controller.isSubmitting ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : controller.mode === "create" ? (
+                      <Flag className="size-4" />
+                    ) : (
+                      <WandSparkles className="size-4" />
+                    )}
+                    {controller.isSubmitting
+                      ? controller.mode === "create"
+                        ? "Creating..."
+                        : "Saving..."
+                      : controller.mode === "create"
+                        ? "Create Task"
+                        : "Save Changes"}
+                  </Button>
+                </>
+              )}
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

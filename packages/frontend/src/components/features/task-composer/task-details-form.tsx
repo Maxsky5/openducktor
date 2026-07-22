@@ -3,6 +3,7 @@ import { ListTodo } from "lucide-react";
 import { lazy, type ReactElement, Suspense } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
 import { issueTypeGuidance } from "@/components/features/task-composer/utils";
+import type { TaskDescriptionAssetUpload } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,8 @@ type TaskDetailsFormProps = {
   workspaceId: string | null;
   taskId: string | null;
   onDescriptionImageUpload(file: File): Promise<TaskAssetStageResult>;
+  descriptionAssetUploads: TaskDescriptionAssetUpload[];
+  descriptionAssetPreviews: ReadonlyMap<string, string>;
 };
 
 const TaskDescriptionEditor = lazy(
@@ -38,6 +41,8 @@ export function TaskDetailsForm({
   workspaceId,
   taskId,
   onDescriptionImageUpload,
+  descriptionAssetUploads,
+  descriptionAssetPreviews,
 }: TaskDetailsFormProps): ReactElement {
   const selectedType = ISSUE_TYPE_OPTIONS.find((option) => option.value === state.issueType);
   const SelectedIcon = selectedType?.icon ?? ListTodo;
@@ -126,10 +131,13 @@ export function TaskDetailsForm({
           }
         >
           <TaskDescriptionEditor
+            key={`${workspaceId ?? "no-workspace"}:${taskId ?? "new-task"}`}
             markdown={state.description}
             workspaceId={workspaceId}
             taskId={taskId}
             onUpload={onDescriptionImageUpload}
+            uploads={descriptionAssetUploads}
+            previews={descriptionAssetPreviews}
             onChange={(description) => onStateChange({ description })}
           />
         </Suspense>

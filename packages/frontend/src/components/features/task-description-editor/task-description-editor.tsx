@@ -1,11 +1,11 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { AlertCircle, Code2, Eye, Info, LoaderCircle } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, type ReactElement, Suspense, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { errorMessage } from "@/lib/errors";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
-import { assessVisualMarkdownCompatibility } from "./task-description-markdown";
+import { assessVisualMarkdownCompatibility } from "./task-description-markdown-compatibility";
+import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
 
 const TaskDescriptionVisualEditor = lazy(() => import("./task-description-visual-editor"));
 
@@ -15,14 +15,18 @@ type TaskDescriptionEditorProps = {
   taskId: string | null;
   onChange(markdown: string): void;
   onUpload(file: File): Promise<TaskAssetStageResult>;
+  uploads: TaskDescriptionAssetUpload[];
+  previews: ReadonlyMap<string, string>;
 };
 
-export default function TaskDescriptionEditor({
+function TaskDescriptionEditorSession({
   markdown,
   workspaceId,
   taskId,
   onChange,
   onUpload,
+  uploads,
+  previews,
 }: TaskDescriptionEditorProps): ReactElement {
   const compatibility = useMemo(() => assessVisualMarkdownCompatibility(markdown), [markdown]);
   const [mode, setMode] = useState<"visual" | "markdown">(
@@ -31,15 +35,9 @@ export default function TaskDescriptionEditor({
   const [gateMessage, setGateMessage] = useState<string | null>(
     compatibility.compatible ? null : compatibility.reason,
   );
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);
-
-  useEffect(() => {
-    if (mode === "visual" && !compatibility.compatible) {
-      setMode("markdown");
-      setGateMessage(compatibility.reason);
-    }
-  }, [compatibility, mode]);
+  const effectiveMode = mode === "visual" && !compatibility.compatible ? "markdown" : mode;
+  const effectiveGateMessage = compatibility.compatible ? gateMessage : compatibility.reason;
 
   const enterVisualMode = (): void => {
     const nextCompatibility = assessVisualMarkdownCompatibility(markdown);
@@ -56,13 +54,7 @@ export default function TaskDescriptionEditor({
     if (!workspaceId) {
       throw new Error("Select a workspace before adding task images.");
     }
-    setUploadError(null);
-    try {
-      return await onUpload(file);
-    } catch (cause) {
-      setUploadError(errorMessage(cause));
-      throw cause;
-    }
+    return onUpload(file);
   };
 
   const hasPreservedFrontMatter = frontMatter.kind === "valid";
@@ -76,7 +68,7 @@ export default function TaskDescriptionEditor({
           <Button
             type="button"
             size="sm"
-            variant={mode === "visual" ? "secondary" : "ghost"}
+            variant={effectiveMode === "visual" ? "secondary" : "ghost"}
             className="h-8 gap-1.5"
             onClick={enterVisualMode}
           >
@@ -85,7 +77,7 @@ export default function TaskDescriptionEditor({
           <Button
             type="button"
             size="sm"
-            variant={mode === "markdown" ? "secondary" : "ghost"}
+            variant={effectiveMode === "markdown" ? "secondary" : "ghost"}
             className="h-8 gap-1.5"
             onClick={() => setMode("markdown")}
           >
@@ -99,17 +91,17 @@ export default function TaskDescriptionEditor({
         ) : null}
       </div>
 
-      {gateMessage ? (
+      {effectiveGateMessage ? (
         <div
           className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
           role="alert"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          <span>{gateMessage}</span>
+          <span>{effectiveGateMessage}</span>
         </div>
       ) : null}
 
-      {mode === "visual" && compatibility.compatible ? (
+      {effectiveMode === "visual" ? (
         <Suspense
           fallback={
             <div className="flex min-h-64 items-center justify-center rounded-md border border-input bg-muted/20 text-sm text-muted-foreground">
@@ -122,6 +114,8 @@ export default function TaskDescriptionEditor({
             frontMatter={preservedPrefix}
             onChange={onChange}
             onUpload={stageImage}
+            uploads={uploads}
+            previews={previews}
             renderContext={
               workspaceId && taskId ? { workspaceId, taskId, scope: "description" } : null
             }
@@ -141,10 +135,20 @@ export default function TaskDescriptionEditor({
         />
       )}
 
-      {uploadError ? (
-        <p className="text-sm text-destructive" role="alert">
-          Image upload failed: {uploadError}
-        </p>
+      {uploads.length > 0 ? (
+        <ul className="space-y-1 text-xs" aria-label="Description image uploads">
+          {uploads.map((upload) => (
+            <li
+              key={upload.id}
+              className={upload.status === "error" ? "text-destructive" : "text-muted-foreground"}
+              role={upload.status === "error" ? "alert" : "status"}
+            >
+              {upload.status === "uploading"
+                ? `Uploading ${upload.fileName}…`
+                : `${upload.fileName}: ${upload.error ?? "Upload failed."}`}
+            </li>
+          ))}
+        </ul>
       ) : null}
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" />
@@ -153,4 +157,9 @@ export default function TaskDescriptionEditor({
       </p>
     </div>
   );
+}
+
+export default function TaskDescriptionEditor(props: TaskDescriptionEditorProps): ReactElement {
+  const identity = `${props.workspaceId ?? "no-workspace"}:${props.taskId ?? "new-task"}`;
+  return <TaskDescriptionEditorSession key={identity} {...props} />;
 }

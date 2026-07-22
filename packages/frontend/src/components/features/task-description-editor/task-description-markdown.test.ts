@@ -108,6 +108,28 @@ describe("task description Markdown dialect", () => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
   });
 
+  test.each([
+    ["currency with spaced dollars", "Cash $ 5 $"],
+    ["shell variables", "Use $HOME and $PATH"],
+    ["an escaped currency dollar", String.raw`Escaped \$5`],
+    ["an unmatched adjacent dollar", "Price: $5"],
+  ])("keeps literal dollar text in Markdown mode for %s", (_name, markdown) => {
+    const result = assessVisualMarkdownCompatibility(markdown);
+
+    expect(result.compatible).toBe(false);
+    if (!result.compatible) {
+      expect(result.reason.toLowerCase()).toContain("dollar");
+    }
+  });
+
+  test.each([
+    ["inline math", "Euler wrote $e^{i\\pi}+1=0$."],
+    ["block math", "$$\n\\int_0^1 x^2 dx\n$$"],
+    ["adjacent inline math", "Values $x$ and $y$ are valid."],
+  ])("keeps valid %s available in Visual mode", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+  });
+
   test("no-edit compatibility checks do not rewrite CRLF or unusual markers", () => {
     const markdown = "# Heading\r\n\r\n+ first\r\n+ second\r\n";
     const original = markdown;

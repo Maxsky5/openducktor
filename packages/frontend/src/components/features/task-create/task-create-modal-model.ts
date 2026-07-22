@@ -11,7 +11,7 @@ export const toTaskCreateInput = (state: ComposerState): TaskCreateInput => ({
   issueType: state.issueType,
   aiReviewEnabled: state.aiReviewEnabled,
   priority: state.priority,
-  description: state.description.length > 0 ? state.description : undefined,
+  description: state.description.trim() || undefined,
   labels: state.labels,
 });
 
@@ -19,7 +19,7 @@ export const toTaskUpdatePatch = (state: ComposerState): TaskUpdatePatch => ({
   title: state.title.trim(),
   aiReviewEnabled: state.aiReviewEnabled,
   priority: state.priority,
-  description: state.description,
+  description: state.description.trim(),
   labels: state.labels,
 });
 

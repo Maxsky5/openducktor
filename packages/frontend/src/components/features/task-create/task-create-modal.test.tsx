@@ -11,6 +11,8 @@ const controllerMock = {
   mode: "edit" as const,
   onDialogOpenChange: (_open: boolean) => {},
   isBusy: false,
+  isFormDisabled: false,
+  isRecoveryBlocked: false,
   step: "details" as const,
   setStep: (_step: "type" | "details") => {},
   editSection: "spec" as const,
@@ -43,7 +45,7 @@ const controllerMock = {
   priorityComboboxOptions: [],
   knownLabels: [],
   updateState: (_patch: unknown) => {},
-  footerError: null,
+  footerError: null as string | null,
   isEditingDocument: true,
   close: () => {},
   discardCurrentDocumentDraft: () => {},
@@ -108,5 +110,40 @@ describe("TaskCreateModal", () => {
     await act(async () => {
       rendered.unmount();
     });
+  });
+
+  test("locks mutation controls but keeps Close available after partial state", async () => {
+    controllerMock.isRecoveryBlocked = true;
+    controllerMock.isFormDisabled = true;
+    controllerMock.isEditingDocument = false;
+    controllerMock.footerError =
+      "Refresh before continuing. Task: created-task · Phase: compensate_create · Durable state: created_partial";
+    const task = { id: "TASK-123" } as TaskCard;
+
+    try {
+      const rendered = render(
+        createElement(TaskCreateModal, {
+          open: true,
+          onOpenChange: () => {},
+          tasks: [task],
+          task,
+        }),
+      );
+
+      expect(await screen.findByText(/created-task/)).toBeTruthy();
+      const closeButton = screen
+        .getAllByRole("button", { name: "Close" })
+        .find((button) => button.textContent === "Close") as HTMLButtonElement | undefined;
+      expect(closeButton?.disabled).toBe(false);
+      expect(
+        (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      await act(async () => rendered.unmount());
+    } finally {
+      controllerMock.isRecoveryBlocked = false;
+      controllerMock.isFormDisabled = false;
+      controllerMock.isEditingDocument = true;
+      controllerMock.footerError = null;
+    }
   });
 });

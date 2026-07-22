@@ -21,8 +21,12 @@ export function MarkdownMermaid({
   useEffect(() => {
     let active = true;
     setState({ status: "loading" });
-    void Promise.all([import("mermaid"), import("dompurify")])
-      .then(async ([mermaidModule, domPurifyModule]) => {
+    const renderDiagram = async (): Promise<void> => {
+      try {
+        const [mermaidModule, domPurifyModule] = await Promise.all([
+          import("mermaid"),
+          import("dompurify"),
+        ]);
         const mermaid = mermaidModule.default;
         if (!initialized) {
           mermaid.initialize({
@@ -40,8 +44,7 @@ export function MarkdownMermaid({
         if (active) {
           setState({ status: "ready", svg });
         }
-      })
-      .catch((cause: unknown) => {
+      } catch (cause) {
         if (active) {
           setState({
             status: "error",
@@ -49,7 +52,9 @@ export function MarkdownMermaid({
               cause instanceof Error ? cause.message : "Mermaid could not parse this diagram.",
           });
         }
-      });
+      }
+    };
+    void renderDiagram();
     return () => {
       active = false;
     };

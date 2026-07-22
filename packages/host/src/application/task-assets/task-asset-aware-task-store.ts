@@ -194,6 +194,7 @@ export const createTaskAssetAwareTaskStore = ({
     let referencedAssetIds = new Set<string>();
     const suppliedAssetIds = new Set(input.descriptionAssets?.stagedAssetIds ?? []);
     const promotedAssetIds: string[] = [];
+    let obsoleteAssetIds: string[] = [];
     let quarantineId: string | null = null;
     let committed = false;
 
@@ -287,20 +288,20 @@ export const createTaskAssetAwareTaskStore = ({
         });
         promotedAssetIds.push(asset.assetId);
       }
-      const obsoleteIds = existing
+      obsoleteAssetIds = existing
         .filter((asset) => !referencedAssetIds.has(asset.id))
         .map((asset) => asset.id);
       quarantineId = yield* filePort.quarantineAssets({
         workspaceId,
         taskId: input.taskId,
-        assetIds: obsoleteIds,
+        assetIds: obsoleteAssetIds,
       });
       const updated = yield* registry.updateTaskWithDescriptionAssets({
         repoPath: input.repoPath,
         taskId: input.taskId,
         patch: input.patch,
         insertAssets: toNewTaskAssetRecords(stagedAssets),
-        removeAssetIds: obsoleteIds,
+        removeAssetIds: obsoleteAssetIds,
       });
       committed = true;
       if (quarantineId) {
@@ -332,7 +333,7 @@ export const createTaskAssetAwareTaskStore = ({
               operation: "update",
               phase: "cleanup_after_commit",
               taskId: input.taskId,
-              assetIds: [...promotedAssetIds],
+              assetIds: Array.from(new Set([...promotedAssetIds, ...obsoleteAssetIds])),
               durableState: "committed_cleanup_pending",
               message:
                 "The description was saved, but asset cleanup is pending. Refresh before editing again.",
@@ -359,7 +360,7 @@ export const createTaskAssetAwareTaskStore = ({
               operation: "update",
               phase: "compensate_update",
               taskId: input.taskId,
-              assetIds: promotedAssetIds,
+              assetIds: Array.from(new Set([...promotedAssetIds, ...obsoleteAssetIds])),
               durableState: "unknown",
               message:
                 "The description save failed and asset restoration was incomplete. Refresh before continuing.",
@@ -372,6 +373,7 @@ export const createTaskAssetAwareTaskStore = ({
   },
   deleteTask(input) {
     const quarantineIds: string[] = [];
+    const affectedAssetIds: string[] = [];
     let committed = false;
     const remove = Effect.gen(function* () {
       const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
@@ -383,6 +385,7 @@ export const createTaskAssetAwareTaskStore = ({
           taskId,
           scope: "description",
         });
+        affectedAssetIds.push(...registered.map((asset) => asset.id));
         const quarantineId = yield* filePort.quarantineTaskDirectory({ workspaceId, taskId });
         if (!quarantineId && registered.length > 0) {
           return yield* new TaskAssetError({
@@ -423,7 +426,7 @@ export const createTaskAssetAwareTaskStore = ({
               operation: "delete",
               phase: "purge_deleted_task_assets",
               taskId: input.taskId,
-              assetIds: [],
+              assetIds: Array.from(new Set(affectedAssetIds)),
               durableState: "committed_cleanup_pending",
               message: "The task was deleted, but quarantined asset cleanup is pending.",
             }),
@@ -438,7 +441,7 @@ export const createTaskAssetAwareTaskStore = ({
               operation: "delete",
               phase: "restore_deleted_task_assets",
               taskId: input.taskId,
-              assetIds: [],
+              assetIds: Array.from(new Set(affectedAssetIds)),
               durableState: "unknown",
               message: "Task deletion failed and asset restoration was incomplete.",
             });

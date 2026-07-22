@@ -114,6 +114,22 @@ describe("rich task description rendering", () => {
     expect(view.queryByText("title: Hidden", { exact: false })).toBeNull();
   }, 4000);
 
+  test("renders a plain contextual description without KaTeX output", async () => {
+    const view = render(
+      <MarkdownRenderer
+        markdown="Plain task description"
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+
+    expect(await view.findByText("Plain task description")).toBeTruthy();
+    expect(view.container.querySelector(".katex")).toBeNull();
+  });
+
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
     configureShellBridge({
@@ -147,6 +163,20 @@ describe("rich task description rendering", () => {
     });
   }, 4000);
 
+  test("does not request a logical task asset without task context", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const view = render(
+      <MarkdownRenderer markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)" />,
+    );
+
+    expect(view.getByRole("img", { name: "Architecture" }).getAttribute("src")).toBeNull();
+    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+  });
+
   test("keeps Mermaid source visible and suppresses raw HTML", async () => {
     const view = render(
       <MarkdownRenderer
@@ -164,5 +194,22 @@ describe("rich task description rendering", () => {
     });
     expect(view.getByText(/graph TD/)).toBeTruthy();
     expect(view.container.querySelector("script")).toBeNull();
+  }, 4000);
+
+  test("shows Mermaid source with an actionable parse error", async () => {
+    const view = render(
+      <MarkdownRenderer
+        markdown={"```mermaid\nthis is not a diagram\n```"}
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+
+    expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
+    expect(view.getByText("this is not a diagram")).toBeTruthy();
+    expect(view.getByText(/Edit the Mermaid source/)).toBeTruthy();
   }, 4000);
 });

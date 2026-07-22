@@ -1,5 +1,5 @@
-import type { IssueType, TaskCard } from "@openducktor/contracts";
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import type { IssueType, TaskAssetFailure, TaskCard } from "@openducktor/contracts";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import type { TaskDocumentSection } from "@/components/features/task-composer";
 import {
@@ -9,8 +9,14 @@ import {
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
+import {
+  formatTaskAssetFailure,
+  taskAssetFailureFromError,
+  taskAssetFailureRequiresLock,
+} from "@/components/features/task-description-editor/task-asset-failure-recovery";
 import { collectTaskDescriptionAssetIds } from "@/components/features/task-description-editor/task-description-assets";
 import { stageTaskDescriptionImage } from "@/components/features/task-description-editor/task-description-upload";
+import { useTaskDescriptionAssetDraft } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { errorMessage } from "@/lib/errors";
 import { hostClient } from "@/lib/host-client";
 import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
@@ -50,6 +56,7 @@ type TaskCreateModalState = {
   isSubmitting: boolean;
   isSavingDocument: DocumentSection | null;
   pendingDiscardIntent: PendingDiscardIntent | null;
+  taskAssetFailure: TaskAssetFailure | null;
 };
 
 type TaskCreateModalAction =
@@ -62,7 +69,7 @@ type TaskCreateModalAction =
   | { type: "sectionChanged"; section: EditTaskSection }
   | { type: "submitBlocked"; error: string }
   | { type: "submitStarted" }
-  | { type: "submitFailed"; error: string }
+  | { type: "submitFailed"; error: string; taskAssetFailure: TaskAssetFailure | null }
   | { type: "submitFinished" }
   | { type: "documentSaveStarted"; section: DocumentSection }
   | { type: "documentSaveFailed"; error: string }
@@ -79,6 +86,7 @@ const initialTaskCreateModalState = (task: TaskCard | null): TaskCreateModalStat
   isSubmitting: false,
   isSavingDocument: null,
   pendingDiscardIntent: null,
+  taskAssetFailure: null,
 });
 
 const taskCreateModalReducer = (
@@ -112,9 +120,19 @@ const taskCreateModalReducer = (
     case "submitBlocked":
       return { ...state, error: action.error };
     case "submitStarted":
-      return { ...state, error: null, documentError: null, isSubmitting: true };
+      return {
+        ...state,
+        error: null,
+        documentError: null,
+        taskAssetFailure: null,
+        isSubmitting: true,
+      };
     case "submitFailed":
-      return { ...state, error: action.error };
+      return {
+        ...state,
+        error: action.error,
+        taskAssetFailure: action.taskAssetFailure,
+      };
     case "submitFinished":
       return { ...state, isSubmitting: false };
     case "documentSaveStarted":
@@ -163,11 +181,10 @@ export function useTaskCreateModalController({
     isSubmitting,
     isSavingDocument,
     pendingDiscardIntent,
+    taskAssetFailure,
   } = modalState;
 
   const previousModalContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
-  const stagedDescriptionAssetIds = useRef(new Set<string>());
-  const stagedWorkspaceId = useRef<string | null>(null);
   const activeDocumentSection =
     mode === "edit" && isDocumentSection(editSection) ? editSection : null;
 
@@ -195,26 +212,7 @@ export function useTaskCreateModalController({
       return;
     }
 
-    const previousContext = previousModalContext.current;
     previousModalContext.current = { open, taskId };
-    if (
-      previousContext?.open &&
-      (!open || previousContext.taskId !== taskId) &&
-      stagedDescriptionAssetIds.current.size > 0 &&
-      stagedWorkspaceId.current
-    ) {
-      const assetIds = Array.from(stagedDescriptionAssetIds.current);
-      const assetWorkspaceId = stagedWorkspaceId.current;
-      stagedDescriptionAssetIds.current.clear();
-      stagedWorkspaceId.current = null;
-      void hostClient
-        .taskAssetDiscardStaged({ workspaceId: assetWorkspaceId, assetIds })
-        .catch((reason: unknown) => {
-          toast.error("Temporary image cleanup failed", {
-            description: errorMessage(reason),
-          });
-        });
-    }
     if (!open) {
       return;
     }
@@ -222,39 +220,37 @@ export function useTaskCreateModalController({
     dispatch({ type: "resetForOpenTask", task });
   }, [open, task, taskId]);
 
-  const registerDescriptionAsset = (assetId: string): void => {
-    if (!workspaceId) {
-      return;
-    }
-    stagedWorkspaceId.current = workspaceId;
-    stagedDescriptionAssetIds.current.add(assetId);
-  };
+  const stageDescriptionImageForDraft = useCallback(
+    async (file: File) => {
+      if (!workspaceId) {
+        throw new Error("Select a workspace before adding task images.");
+      }
+      return stageTaskDescriptionImage(hostClient, workspaceId, file);
+    },
+    [workspaceId],
+  );
 
-  const stageDescriptionImage = async (file: File) => {
-    if (!workspaceId) {
-      throw new Error("Select a workspace before adding task images.");
-    }
-    const staged = await stageTaskDescriptionImage(hostClient, workspaceId, file);
-    registerDescriptionAsset(staged.assetId);
-    return staged;
-  };
+  const discardDescriptionAssets = useCallback(
+    async (assetWorkspaceId: string, assetIds: string[]): Promise<void> => {
+      await hostClient.taskAssetDiscardStaged({ workspaceId: assetWorkspaceId, assetIds });
+    },
+    [],
+  );
 
-  const discardDescriptionAssets = async (assetIds: string[]): Promise<void> => {
-    if (assetIds.length === 0) {
-      return;
-    }
-    const assetWorkspaceId = stagedWorkspaceId.current ?? workspaceId;
-    if (!assetWorkspaceId) {
-      throw new Error("The staged image workspace is no longer available.");
-    }
-    await hostClient.taskAssetDiscardStaged({ workspaceId: assetWorkspaceId, assetIds });
-    for (const assetId of assetIds) {
-      stagedDescriptionAssetIds.current.delete(assetId);
-    }
-    if (stagedDescriptionAssetIds.current.size === 0) {
-      stagedWorkspaceId.current = null;
-    }
-  };
+  const reportDescriptionAssetDiscardError = useCallback((cause: unknown): void => {
+    toast.error("Temporary image cleanup failed", {
+      description: `${errorMessage(cause)} Refresh before continuing.`,
+    });
+  }, []);
+
+  const descriptionAssetDraft = useTaskDescriptionAssetDraft({
+    active: open,
+    draftKey: taskId ?? "new-task",
+    workspaceId,
+    stageImage: stageDescriptionImageForDraft,
+    discardStaged: discardDescriptionAssets,
+    onDiscardError: reportDescriptionAssetDiscardError,
+  });
 
   const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
   const priorityComboboxOptions = useMemo(() => toPriorityComboboxOptions(), []);
@@ -270,7 +266,9 @@ export function useTaskCreateModalController({
     isPlanDirty,
   });
 
-  const isBusy = isSubmitting || isSavingDocument !== null;
+  const isBusy = isSubmitting || isSavingDocument !== null || descriptionAssetDraft.isUploading;
+  const isRecoveryBlocked = taskAssetFailureRequiresLock(taskAssetFailure);
+  const isFormDisabled = isBusy || isRecoveryBlocked;
   const isTypeStepVisible = mode === "create" && step === "type";
   const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
   const footerError = isEditingDocument ? documentError : error;
@@ -298,7 +296,7 @@ export function useTaskCreateModalController({
   };
 
   const close = async (): Promise<void> => {
-    if (isSubmitting || isSavingDocument) {
+    if (isBusy) {
       return;
     }
     if (hasUnsavedActiveDocument) {
@@ -306,7 +304,7 @@ export function useTaskCreateModalController({
       return;
     }
     try {
-      await discardDescriptionAssets(Array.from(stagedDescriptionAssetIds.current));
+      await descriptionAssetDraft.discardAll();
       onOpenChange(false);
     } catch (reason) {
       dispatch({
@@ -317,7 +315,7 @@ export function useTaskCreateModalController({
   };
 
   const requestSectionChange = (next: EditTaskSection): void => {
-    if (next === editSection || isSubmitting || isSavingDocument) {
+    if (next === editSection || isBusy) {
       return;
     }
     if (hasUnsavedActiveDocument) {
@@ -332,6 +330,16 @@ export function useTaskCreateModalController({
   };
 
   const submit = async (): Promise<void> => {
+    if (isRecoveryBlocked) {
+      return;
+    }
+    if (descriptionAssetDraft.isUploading) {
+      dispatch({
+        type: "submitBlocked",
+        error: "Wait for description image uploads to finish before saving.",
+      });
+      return;
+    }
     if (!workspaceRepoPath) {
       dispatch({ type: "submitBlocked", error: "Select a repository before creating tasks." });
       return;
@@ -344,9 +352,9 @@ export function useTaskCreateModalController({
     dispatch({ type: "submitStarted" });
     try {
       const referencedAssetIds = collectTaskDescriptionAssetIds(composer.description);
-      const suppliedAssetIds = Array.from(stagedDescriptionAssetIds.current).filter((assetId) =>
-        referencedAssetIds.has(assetId),
-      );
+      const suppliedAssetIds = descriptionAssetDraft
+        .stagedAssetIds()
+        .filter((assetId) => referencedAssetIds.has(assetId));
       const descriptionAssets =
         suppliedAssetIds.length > 0 ? { stagedAssetIds: suppliedAssetIds } : undefined;
       if (mode === "create") {
@@ -354,26 +362,21 @@ export function useTaskCreateModalController({
       } else if (task) {
         await updateTask(task.id, toTaskUpdatePatch(composer), descriptionAssets);
       }
-      const unreferencedAssetIds = Array.from(stagedDescriptionAssetIds.current).filter(
-        (assetId) => !referencedAssetIds.has(assetId),
-      );
-      stagedDescriptionAssetIds.current.clear();
-      stagedWorkspaceId.current = null;
-      if (unreferencedAssetIds.length > 0 && workspaceId) {
-        try {
-          await hostClient.taskAssetDiscardStaged({
-            workspaceId,
-            assetIds: unreferencedAssetIds,
-          });
-        } catch (reason) {
-          toast.error("Task saved, but temporary image cleanup failed", {
-            description: `${errorMessage(reason)} Refresh before continuing.`,
-          });
-        }
+      try {
+        await descriptionAssetDraft.reconcileSuccessfulSave(referencedAssetIds);
+      } catch (reason) {
+        toast.error("Task saved, but temporary image cleanup failed", {
+          description: `${errorMessage(reason)} Refresh before continuing.`,
+        });
       }
       onOpenChange(false);
     } catch (reason) {
-      dispatch({ type: "submitFailed", error: errorMessage(reason) });
+      const failure = taskAssetFailureFromError(reason);
+      dispatch({
+        type: "submitFailed",
+        error: failure ? formatTaskAssetFailure(failure) : errorMessage(reason),
+        taskAssetFailure: failure,
+      });
     } finally {
       dispatch({ type: "submitFinished" });
     }
@@ -407,7 +410,7 @@ export function useTaskCreateModalController({
     discardCurrentDocumentDraft();
     if (pendingDiscardIntent.type === "close-modal") {
       try {
-        await discardDescriptionAssets(Array.from(stagedDescriptionAssetIds.current));
+        await descriptionAssetDraft.discardAll();
         onOpenChange(false);
       } catch (reason) {
         dispatch({
@@ -464,12 +467,16 @@ export function useTaskCreateModalController({
     isSubmitting,
     isSavingDocument,
     isBusy,
+    isFormDisabled,
+    isRecoveryBlocked,
     isTypeStepVisible,
     isEditingDocument,
     footerError,
     isActiveDocumentDirty,
     updateState,
-    stageDescriptionImage,
+    stageDescriptionImage: descriptionAssetDraft.stage,
+    descriptionAssetUploads: descriptionAssetDraft.uploads,
+    descriptionAssetPreviews: descriptionAssetDraft.previews,
     selectCreateIssueType,
     setDocumentView,
     updateDocumentDraft,

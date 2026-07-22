@@ -1,16 +1,11 @@
-import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { createContext, useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
+import { TaskDescriptionImageContext } from "./task-description-image-context";
 
 const ASSET_URI_PATTERN = /^odt-asset:([0-9a-f-]{36})$/i;
-
-export const TaskDescriptionImageContext = createContext<{
-  previews: ReadonlyMap<string, string>;
-  renderContext: Omit<TaskAssetRenderContext, "assetId"> | null;
-}>({ previews: new Map(), renderContext: null });
 
 export function TaskDescriptionImageNode({ node, selected, updateAttributes }: ReactNodeViewProps) {
   const { previews, renderContext } = useContext(TaskDescriptionImageContext);

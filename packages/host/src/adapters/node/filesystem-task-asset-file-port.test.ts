@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
 
 const roots: string[] = [];
@@ -65,6 +65,25 @@ describe("node task asset file port", () => {
     await symlink(outsidePath, durablePath);
 
     expect(await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId }))).toBeNull();
+  });
+
+  test("reports invalid identifiers as typed failures without defects", async () => {
+    const { port } = await createHarness();
+    const exit = await Effect.runPromiseExit(
+      port.readDurable({ workspaceId, taskId: "../other", assetId }),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(Array.from(Cause.failures(exit.cause))).toEqual([
+        expect.objectContaining({
+          _tag: "TaskAssetError",
+          code: "validation",
+          failedPhase: "validate_identifiers",
+        }),
+      ]);
+      expect(Array.from(Cause.defects(exit.cause))).toEqual([]);
+    }
   });
 
   test("restores earlier files when a multi-file quarantine fails partway", async () => {

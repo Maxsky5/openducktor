@@ -50,7 +50,11 @@ const createFileError = (input: {
     ...(input.cause === undefined ? {} : { cause: input.cause }),
   });
 
-const validateContext = (workspaceId: string, taskId: string, assetId: string): void => {
+const validateContext = (
+  workspaceId: string,
+  taskId: string,
+  assetId: string,
+): Effect.Effect<void, TaskAssetError> => {
   const parsed = taskAssetRenderContextSchema.safeParse({
     workspaceId,
     taskId,
@@ -58,28 +62,37 @@ const validateContext = (workspaceId: string, taskId: string, assetId: string): 
     assetId,
   });
   if (!parsed.success) {
-    throw createFileError({
-      operation: "serve",
-      code: "validation",
-      phase: "validate_identifiers",
-      message: "Task asset identifiers are invalid.",
-      assetIds: [assetId],
-      taskId,
-      cause: parsed.error,
-    });
+    return Effect.fail(
+      createFileError({
+        operation: "serve",
+        code: "validation",
+        phase: "validate_identifiers",
+        message: "Task asset identifiers are invalid.",
+        assetIds: [assetId],
+        taskId,
+        cause: parsed.error,
+      }),
+    );
   }
+  return Effect.void;
 };
 
-const validateStageContext = (workspaceId: string, assetId: string): void => {
+const validateStageContext = (
+  workspaceId: string,
+  assetId: string,
+): Effect.Effect<void, TaskAssetError> => {
   if (!workspaceIdSchema.safeParse(workspaceId).success || !/^[0-9a-f-]{36}$/i.test(assetId)) {
-    throw createFileError({
-      operation: "stage",
-      code: "validation",
-      phase: "validate_identifiers",
-      message: "Task asset staging identifiers are invalid.",
-      assetIds: [assetId],
-    });
+    return Effect.fail(
+      createFileError({
+        operation: "stage",
+        code: "validation",
+        phase: "validate_identifiers",
+        message: "Task asset staging identifiers are invalid.",
+        assetIds: [assetId],
+      }),
+    );
   }
+  return Effect.void;
 };
 
 const tryPromise = <A>(
@@ -116,7 +129,7 @@ export const createNodeTaskAssetFilePort = ({
   return {
     stage(input) {
       return Effect.gen(function* () {
-        yield* Effect.sync(() => validateStageContext(input.workspaceId, input.assetId));
+        yield* validateStageContext(input.workspaceId, input.assetId);
         const destination = stagedPath(input.workspaceId, input.assetId);
         yield* tryPromise(
           async () => {
@@ -136,7 +149,7 @@ export const createNodeTaskAssetFilePort = ({
     removeStaged(input) {
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
-          yield* Effect.sync(() => validateStageContext(input.workspaceId, assetId));
+          yield* validateStageContext(input.workspaceId, assetId);
           yield* tryPromise(() => unlink(stagedPath(input.workspaceId, assetId)), {
             operation: "discard",
             code: "purge",
@@ -166,7 +179,7 @@ export const createNodeTaskAssetFilePort = ({
     },
     promote(input) {
       return Effect.gen(function* () {
-        yield* Effect.sync(() => validateContext(input.workspaceId, input.taskId, input.assetId));
+        yield* validateContext(input.workspaceId, input.taskId, input.assetId);
         const destination = durablePath(input.workspaceId, input.taskId, input.assetId);
         yield* tryPromise(
           async () => {
@@ -190,7 +203,7 @@ export const createNodeTaskAssetFilePort = ({
     },
     durableExists(input) {
       return Effect.gen(function* () {
-        yield* Effect.sync(() => validateContext(input.workspaceId, input.taskId, input.assetId));
+        yield* validateContext(input.workspaceId, input.taskId, input.assetId);
         return yield* tryPromise(
           async () =>
             (await existingStat(durablePath(input.workspaceId, input.taskId, input.assetId))) !==
@@ -209,7 +222,7 @@ export const createNodeTaskAssetFilePort = ({
     removeDurable(input) {
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
-          yield* Effect.sync(() => validateContext(input.workspaceId, input.taskId, assetId));
+          yield* validateContext(input.workspaceId, input.taskId, assetId);
           yield* tryPromise(() => unlink(durablePath(input.workspaceId, input.taskId, assetId)), {
             operation: "update",
             code: "purge",
@@ -230,7 +243,7 @@ export const createNodeTaskAssetFilePort = ({
         const root = path.join(quarantineRoot, quarantineId);
         const moves: QuarantineMove[] = [];
         for (const assetId of input.assetIds) {
-          yield* Effect.sync(() => validateContext(input.workspaceId, input.taskId, assetId));
+          yield* validateContext(input.workspaceId, input.taskId, assetId);
           const from = durablePath(input.workspaceId, input.taskId, assetId);
           const to = path.join(root, assetId);
           yield* tryPromise(
@@ -310,9 +323,7 @@ export const createNodeTaskAssetFilePort = ({
           return null;
         }
         const placeholderAssetId = "00000000-0000-4000-8000-000000000000";
-        yield* Effect.sync(() =>
-          validateContext(input.workspaceId, input.taskId, placeholderAssetId),
-        );
+        yield* validateContext(input.workspaceId, input.taskId, placeholderAssetId);
         const quarantineId = randomUUID();
         const root = path.join(quarantineRoot, quarantineId);
         const to = path.join(root, input.taskId);
@@ -399,7 +410,7 @@ export const createNodeTaskAssetFilePort = ({
     },
     readDurable(input) {
       return Effect.gen(function* () {
-        yield* Effect.sync(() => validateContext(input.workspaceId, input.taskId, input.assetId));
+        yield* validateContext(input.workspaceId, input.taskId, input.assetId);
         return yield* tryPromise(
           async () => {
             const taskRoot = path.join(durableRoot, input.workspaceId, input.taskId);

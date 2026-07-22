@@ -1,6 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import {
+  formatTaskAssetFailure,
+  taskAssetFailureFromError,
+} from "@/components/features/task-description-editor/task-asset-failure-recovery";
 import { errorMessage } from "@/lib/errors";
 import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
 import { requireActiveRepo } from "./task-operations-model";
@@ -58,8 +62,9 @@ export function useTaskMutationRunner({
   const runTaskMutation = useCallback(
     async (options: RunTaskMutationOptions): Promise<void> => {
       let mutationCompleted = false;
+      let repoPath: string | null = null;
       try {
-        const repoPath = requireActiveRepo(activeRepoPath);
+        repoPath = requireActiveRepo(activeRepoPath);
         await options.run(repoPath);
         mutationCompleted = true;
         await refreshTaskMutationViews(repoPath, options.refreshStrategy);
@@ -73,8 +78,39 @@ export function useTaskMutationRunner({
           });
           return;
         }
-        toast.error(options.failureTitle, { description: errorMessage(error) });
-        throw error;
+        const taskAssetFailure = taskAssetFailureFromError(error);
+        let errorToThrow = error;
+        if (repoPath && taskAssetFailure && taskAssetFailure.durableState !== "unchanged") {
+          try {
+            if (
+              taskAssetFailure.operation === "delete" &&
+              taskAssetFailure.durableState === "committed_cleanup_pending"
+            ) {
+              await refreshTaskMutationViews(repoPath, options.refreshStrategy);
+            } else if (taskAssetFailure.taskId) {
+              await refreshTaskMutationViews(repoPath, {
+                kind: "task",
+                taskId: taskAssetFailure.taskId,
+              });
+            } else {
+              await refreshTaskMutationViews(repoPath, { kind: "repo" });
+            }
+          } catch (refreshError) {
+            errorToThrow = new AggregateError(
+              [error, refreshError],
+              `${errorMessage(error)} Task state refresh also failed: ${errorMessage(refreshError)}`,
+            );
+          }
+        }
+        let failureDescription = taskAssetFailure
+          ? formatTaskAssetFailure(taskAssetFailure)
+          : errorMessage(errorToThrow);
+        if (taskAssetFailure && errorToThrow instanceof AggregateError) {
+          const refreshError = errorToThrow.errors[1];
+          failureDescription = `${failureDescription} Task state refresh also failed: ${errorMessage(refreshError)}`;
+        }
+        toast.error(options.failureTitle, { description: failureDescription });
+        throw errorToThrow;
       }
     },
     [activeRepoPath, refreshTaskMutationViews],
