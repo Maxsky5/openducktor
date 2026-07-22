@@ -1,13 +1,16 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
-import { AlertCircle, Code2, Eye, Info, LoaderCircle } from "lucide-react";
+import { AlertCircle, Code2, Eye, Info } from "lucide-react";
 import { lazy, type ReactElement, Suspense, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 import type { VisualMarkdownCompatibility } from "./task-description-markdown-compatibility";
 import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
 
-const TaskDescriptionVisualEditor = lazy(() => import("./task-description-visual-editor"));
+const loadTaskDescriptionMarkdown = () => import("./task-description-markdown");
+const loadTaskDescriptionVisualEditor = () => import("./task-description-visual-editor");
+const TaskDescriptionVisualEditor = lazy(loadTaskDescriptionVisualEditor);
 
 type TaskDescriptionEditorProps = {
   markdown: string;
@@ -35,6 +38,8 @@ function TaskDescriptionEditorSession({
   }>({ markdown, result: null });
   const lastVisualChange = useRef<string | null>(null);
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);
+  const compatibilityIsCurrent =
+    compatibilityState.markdown === markdown && compatibilityState.result !== null;
 
   useEffect(() => {
     if (lastVisualChange.current === markdown) {
@@ -42,16 +47,31 @@ function TaskDescriptionEditorSession({
       setCompatibilityState({ markdown, result: { compatible: true } });
       return;
     }
+    if (mode === "markdown" || compatibilityIsCurrent) {
+      return;
+    }
     let active = true;
     setCompatibilityState({ markdown, result: null });
-    void import("./task-description-markdown")
+    const visualEditorModule = loadTaskDescriptionVisualEditor();
+    void visualEditorModule.catch(() => undefined);
+    void loadTaskDescriptionMarkdown()
       .then(({ assessVisualMarkdownCompatibility }) => {
-        if (active) {
+        const result = assessVisualMarkdownCompatibility(markdown);
+        if (!result.compatible) {
+          if (active) {
+            setCompatibilityState({ markdown, result });
+          }
+          return;
+        }
+        return visualEditorModule.then(() => {
+          if (!active) {
+            return;
+          }
           setCompatibilityState({
             markdown,
-            result: assessVisualMarkdownCompatibility(markdown),
+            result,
           });
-        }
+        });
       })
       .catch(() => {
         if (active) {
@@ -68,7 +88,7 @@ function TaskDescriptionEditorSession({
     return () => {
       active = false;
     };
-  }, [markdown]);
+  }, [compatibilityIsCurrent, markdown, mode]);
 
   let compatibility: VisualMarkdownCompatibility | null = null;
   if (lastVisualChange.current === markdown) {
@@ -77,16 +97,24 @@ function TaskDescriptionEditorSession({
     compatibility = compatibilityState.result;
   }
   const visualAllowed = compatibility?.compatible === true;
-  const effectiveMode =
-    (mode === "visual" || mode === "auto") && visualAllowed ? "visual" : "markdown";
+  const checkingVisual = mode !== "markdown" && compatibility === null;
+  let effectiveMode: "loading" | "markdown" | "visual" = "markdown";
+  if (checkingVisual) {
+    effectiveMode = "loading";
+  } else if ((mode === "visual" || mode === "auto") && visualAllowed) {
+    effectiveMode = "visual";
+  }
   const effectiveGateMessage =
     compatibility && !compatibility.compatible ? compatibility.reason : null;
 
   const enterVisualMode = (): void => {
-    if (!visualAllowed) {
+    if (visualAllowed) {
+      setMode("visual");
       return;
     }
-    setMode("visual");
+    if (compatibilityState.markdown !== markdown) {
+      setMode("auto");
+    }
   };
 
   const stageImage = async (file: File): Promise<TaskAssetStageResult> => {
@@ -99,6 +127,43 @@ function TaskDescriptionEditorSession({
   const hasPreservedFrontMatter = frontMatter.kind === "valid";
   const visualBody = frontMatter.kind === "valid" ? frontMatter.body : markdown;
   const preservedPrefix = frontMatter.kind === "valid" ? frontMatter.raw : "";
+  let editorContent: ReactElement;
+  if (effectiveMode === "loading") {
+    editorContent = <TaskDescriptionEditorLoading />;
+  } else if (effectiveMode === "visual") {
+    editorContent = (
+      <Suspense fallback={<TaskDescriptionEditorLoading />}>
+        <TaskDescriptionVisualEditor
+          body={visualBody}
+          frontMatter={preservedPrefix}
+          onChange={(nextMarkdown) => {
+            lastVisualChange.current = nextMarkdown;
+            onChange(nextMarkdown);
+          }}
+          onUpload={stageImage}
+          uploads={uploads}
+          previews={previews}
+          renderContext={
+            workspaceId && taskId ? { workspaceId, taskId, scope: "description" } : null
+          }
+        />
+      </Suspense>
+    );
+  } else {
+    editorContent = (
+      <Textarea
+        id="task-description"
+        rows={12}
+        value={markdown}
+        placeholder="Problem context, scope, and expected output."
+        className="min-h-64 resize-y font-sans text-sm"
+        onChange={(event) => {
+          setMode("markdown");
+          onChange(event.currentTarget.value);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -107,10 +172,12 @@ function TaskDescriptionEditorSession({
           <Button
             type="button"
             size="sm"
-            variant={effectiveMode === "visual" ? "secondary" : "ghost"}
+            variant={
+              effectiveMode === "visual" || effectiveMode === "loading" ? "secondary" : "ghost"
+            }
             className="h-8 gap-1.5"
             onClick={enterVisualMode}
-            disabled={compatibility === null}
+            disabled={checkingVisual}
           >
             <Eye className="size-3.5" /> Visual
           </Button>
@@ -141,49 +208,7 @@ function TaskDescriptionEditorSession({
         </div>
       ) : null}
 
-      {effectiveMode === "visual" ? (
-        <Suspense
-          fallback={
-            <div className="flex min-h-64 items-center justify-center rounded-md border border-input bg-muted/20 text-sm text-muted-foreground">
-              <LoaderCircle className="mr-2 size-4 animate-spin" /> Loading Visual editor…
-            </div>
-          }
-        >
-          <TaskDescriptionVisualEditor
-            body={visualBody}
-            frontMatter={preservedPrefix}
-            onChange={(nextMarkdown) => {
-              lastVisualChange.current = nextMarkdown;
-              onChange(nextMarkdown);
-            }}
-            onUpload={stageImage}
-            uploads={uploads}
-            previews={previews}
-            renderContext={
-              workspaceId && taskId ? { workspaceId, taskId, scope: "description" } : null
-            }
-          />
-        </Suspense>
-      ) : (
-        <Textarea
-          id="task-description"
-          rows={12}
-          value={markdown}
-          placeholder="Problem context, scope, and expected output."
-          className="min-h-64 resize-y font-mono text-sm"
-          onChange={(event) => {
-            setMode("markdown");
-            onChange(event.currentTarget.value);
-          }}
-        />
-      )}
-
-      {compatibility === null ? (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-          <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-          Checking whether Visual mode can preserve this Markdown…
-        </p>
-      ) : null}
+      {editorContent}
 
       {uploads.length > 0 ? (
         <ul className="space-y-1 text-xs" aria-label="Description image uploads">

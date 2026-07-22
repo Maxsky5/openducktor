@@ -66,11 +66,25 @@ const readStaticModuleGraph = async (
 };
 
 describe("rich Markdown lazy module boundaries", () => {
+  test("loads the lightweight editor shell with the task form", async () => {
+    const taskForm = await readSource("../task-composer/task-details-form.tsx");
+
+    expect(taskForm).toContain(
+      'import TaskDescriptionEditor from "@/components/features/task-description-editor/task-description-editor"',
+    );
+    expect(taskForm).not.toContain(
+      'import("@/components/features/task-description-editor/task-description-editor")',
+    );
+  });
+
   test("keeps TipTap out of the source-mode editor module graph", async () => {
     const sourceShell = await readSource("./task-description-editor.tsx");
     const compatibility = await readSource("./task-description-markdown-compatibility.ts");
 
-    expect(sourceShell).toContain('lazy(() => import("./task-description-visual-editor"))');
+    expect(sourceShell).toContain(
+      'const loadTaskDescriptionVisualEditor = () => import("./task-description-visual-editor")',
+    );
+    expect(sourceShell).toContain("lazy(loadTaskDescriptionVisualEditor)");
     expect(sourceShell).toContain('import("./task-description-markdown")');
     expect(sourceShell).not.toContain('from "./task-description-markdown"');
     expect(sourceShell).not.toContain("@tiptap/");

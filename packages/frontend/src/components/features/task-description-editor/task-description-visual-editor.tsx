@@ -8,6 +8,7 @@ import { ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import { TaskDescriptionFormattingToolbar } from "./task-description-formatting-toolbar";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
@@ -185,11 +186,11 @@ export default function TaskDescriptionVisualEditor({
   });
 
   if (!editor) {
-    return <div className="min-h-64 animate-pulse rounded-md bg-muted" />;
+    return <TaskDescriptionEditorLoading />;
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring/40">
+    <div className="overflow-hidden rounded-md border border-input bg-card focus-within:ring-2 focus-within:ring-ring/40">
       <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/30 p-1.5">
         <TaskDescriptionFormattingToolbar
           editor={editor}

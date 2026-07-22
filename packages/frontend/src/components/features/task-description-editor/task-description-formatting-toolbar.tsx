@@ -10,6 +10,7 @@ import {
   ListChecks,
   ListOrdered,
   Minus,
+  Network,
   Pilcrow,
   Quote,
   Redo2,
@@ -198,7 +199,7 @@ export function TaskDescriptionFormattingToolbar({
             .run()
         }
       >
-        <Braces className="size-4" />
+        <Network className="size-4" />
       </ToolbarButton>
     </>
   );

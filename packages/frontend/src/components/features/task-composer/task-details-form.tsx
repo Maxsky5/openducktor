@@ -1,8 +1,9 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { ListTodo } from "lucide-react";
-import { lazy, type ReactElement, Suspense } from "react";
+import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
 import { issueTypeGuidance } from "@/components/features/task-composer/utils";
+import TaskDescriptionEditor from "@/components/features/task-description-editor/task-description-editor";
 import type { TaskDescriptionAssetUpload } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
@@ -26,10 +27,6 @@ type TaskDetailsFormProps = {
   descriptionAssetUploads: TaskDescriptionAssetUpload[];
   descriptionAssetPreviews: ReadonlyMap<string, string>;
 };
-
-const TaskDescriptionEditor = lazy(
-  () => import("@/components/features/task-description-editor/task-description-editor"),
-);
 
 export function TaskDetailsForm({
   mode,
@@ -125,22 +122,16 @@ export function TaskDetailsForm({
 
       <div className="grid gap-2">
         <Label htmlFor="task-description">Description</Label>
-        <Suspense
-          fallback={
-            <div className="min-h-64 animate-pulse rounded-md border border-input bg-muted/30" />
-          }
-        >
-          <TaskDescriptionEditor
-            key={`${workspaceId ?? "no-workspace"}:${taskId ?? "new-task"}`}
-            markdown={state.description}
-            workspaceId={workspaceId}
-            taskId={taskId}
-            onUpload={onDescriptionImageUpload}
-            uploads={descriptionAssetUploads}
-            previews={descriptionAssetPreviews}
-            onChange={(description) => onStateChange({ description })}
-          />
-        </Suspense>
+        <TaskDescriptionEditor
+          key={`${workspaceId ?? "no-workspace"}:${taskId ?? "new-task"}`}
+          markdown={state.description}
+          workspaceId={workspaceId}
+          taskId={taskId}
+          onUpload={onDescriptionImageUpload}
+          uploads={descriptionAssetUploads}
+          previews={descriptionAssetPreviews}
+          onChange={(description) => onStateChange({ description })}
+        />
       </div>
 
       <div className="grid gap-2">

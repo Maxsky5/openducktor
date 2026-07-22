@@ -23,6 +23,60 @@ const createProps = () => ({
 });
 
 describe("TaskDescriptionEditor", () => {
+  test("shows one stable Visual editor surface while the first rich bundle loads", () => {
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
+    );
+
+    const loadingSurface = view.getByRole("status", { name: "Loading Visual editor" });
+    expect(loadingSurface.className).toContain("bg-card");
+    expect(view.queryByRole("textbox")).toBeNull();
+    expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
+  });
+
+  test("keeps Markdown typing stable and uses the normal interface font", async () => {
+    const ControlledEditor = () => {
+      const [markdown, setMarkdown] = useState("Body");
+      return (
+        <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={setMarkdown} />
+      );
+    };
+    const view = render(<ControlledEditor />);
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+    const textarea = view.getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.className).toContain("font-sans");
+    expect(textarea.className).not.toContain("font-mono");
+
+    fireEvent.change(textarea, { target: { value: "Body!" } });
+
+    expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Body!");
+  });
+
+  test("uses the card surface for the Visual editor in both themes", async () => {
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    const visualSurface = view.container.querySelector(".tiptap")?.parentElement?.parentElement;
+    expect(visualSurface?.className).toContain("bg-card");
+    expect(visualSurface?.className).not.toContain("bg-background");
+  });
+
+  test("uses the Network icon for Mermaid diagrams", async () => {
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    const mermaidButton = view.getByRole("button", { name: "Mermaid diagram" });
+    expect(mermaidButton.querySelector(".lucide-network")).not.toBeNull();
+    expect(mermaidButton.querySelector(".lucide-braces")).toBeNull();
+  });
+
   test("switching modes without edits preserves the original source", async () => {
     const onChange = mock((_value: string) => {});
     const markdown = "-   unusual marker\r\n";
@@ -38,6 +92,7 @@ describe("TaskDescriptionEditor", () => {
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(view.queryByRole("status", { name: "Loading Visual editor" })).toBeNull();
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -139,8 +194,9 @@ describe("TaskDescriptionEditor", () => {
         <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
       );
 
-      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
-      expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("blank line");
+      const textarea = await waitFor(() => view.getByRole("textbox"));
+      expect((textarea as HTMLTextAreaElement).value).toBe(markdown);
+      expect(view.getByRole("alert").textContent).toContain("blank line");
       fireEvent.click(view.getByRole("button", { name: "Visual" }));
       expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
       expect(onChange).not.toHaveBeenCalled();
@@ -157,11 +213,11 @@ describe("TaskDescriptionEditor", () => {
       />,
     );
 
-    expect(view.getByRole("textbox")).toBeTruthy();
-    fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Reference-style links",
     );
+    expect(view.getByRole("textbox")).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.getByRole("textbox")).toBeTruthy();
   });
 
@@ -172,9 +228,9 @@ describe("TaskDescriptionEditor", () => {
       <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("escaped pipe");
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("escaped pipe");
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -185,10 +241,10 @@ describe("TaskDescriptionEditor", () => {
       <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "cannot be preserved",
     );
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
       false,
     );
@@ -204,10 +260,10 @@ describe("TaskDescriptionEditor", () => {
       <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Block math delimiters",
     );
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect(onChange).not.toHaveBeenCalled();
@@ -219,10 +275,10 @@ describe("TaskDescriptionEditor", () => {
       <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={() => {}} />,
     );
 
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Block math delimiters",
     );
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.getByRole("textbox")).toBeTruthy();
   });
@@ -299,11 +355,11 @@ describe("TaskDescriptionEditor", () => {
       />,
     );
 
-    expect(view.getByRole("textbox")).toBeTruthy();
-    fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Reference-style links",
     );
+    expect(view.getByRole("textbox")).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
 
     view.rerender(
       <TaskDescriptionEditor
