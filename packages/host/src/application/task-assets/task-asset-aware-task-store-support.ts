@@ -16,7 +16,22 @@ export const asTaskAssetError = (input: {
   assetIds?: string[];
 }): TaskAssetError => {
   if (input.cause instanceof TaskAssetError) {
-    return input.cause;
+    const operationMatches = input.cause.operation === input.operation;
+    const taskContextMatches = !input.taskId || input.cause.taskId === input.taskId;
+    if (operationMatches && taskContextMatches) {
+      return input.cause;
+    }
+    return new TaskAssetError({
+      operation: input.operation,
+      code: input.cause.code,
+      ...(input.taskId || input.cause.taskId ? { taskId: input.taskId ?? input.cause.taskId } : {}),
+      assetIds: input.cause.assetIds,
+      failedPhase: operationMatches ? input.cause.failedPhase : input.phase,
+      durableState: input.cause.durableState,
+      retryAllowed: input.cause.retryAllowed,
+      message: input.cause.message,
+      ...(input.cause.cause !== undefined ? { cause: input.cause.cause } : {}),
+    });
   }
   return new TaskAssetError({
     operation: input.operation,
