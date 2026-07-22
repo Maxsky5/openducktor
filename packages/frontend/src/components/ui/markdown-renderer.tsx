@@ -10,6 +10,9 @@ import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
 const MarkdownRendererMathCandidate = lazy(() => import("./markdown-renderer-math-candidate"));
+const MarkdownRendererMermaidCandidate = lazy(
+  () => import("./markdown-renderer-mermaid-candidate"),
+);
 
 export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 
@@ -95,9 +98,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
     : MARKDOWN_COMPONENTS[variant];
   const hasMathCandidate = content.includes("$");
-  const rendersMermaid = /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*mermaid(?:[ \t]|$)/im.test(content);
+  const hasMermaidCandidate = content.includes("mermaid");
   const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
-  const needsRichRenderer = rendersMermaid || rendersTaskAsset || taskAssetContext !== undefined;
+  const needsRichRenderer = rendersTaskAsset || taskAssetContext !== undefined;
   const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
 
   let renderedContent: ReactElement;
@@ -122,6 +125,22 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     );
   } else {
     renderedContent = <MarkdownSync markdown={content} components={components} />;
+  }
+
+  if (hasMermaidCandidate) {
+    renderedContent = (
+      <Suspense fallback={fallback ?? null}>
+        <MarkdownRendererMermaidCandidate
+          markdown={content}
+          components={components}
+          fallbackContent={renderedContent}
+          premiumCodeBlocks={premiumCodeBlocks}
+          fallback={fallback}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+        />
+      </Suspense>
+    );
   }
 
   if (hasMathCandidate) {

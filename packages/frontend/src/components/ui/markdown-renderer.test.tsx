@@ -186,6 +186,34 @@ describe("rich task description rendering", () => {
   );
 
   test.each([
+    ["ordered prose before math", "1. Before\n\n   $$\n   x\n   $$", 1],
+    ["task-item prose after math", "- [ ] $$\n  x\n  $$\n\n  After", 1],
+    ["repeated bullet math", "- $$\n  x\n  $$\n\n  $$\n  y\n  $$", 2],
+    [
+      "repeated task-item math before prose",
+      "- [ ] $$\n  x\n  $$\n\n  $$\n  y\n  $$\n\n  After **bold**",
+      2,
+    ],
+  ])(
+    "renders compound list math with %s",
+    async (_name, markdown, expectedMathBlocks) => {
+      const view = render(<MarkdownRenderer markdown={markdown} />);
+
+      await waitFor(
+        () =>
+          expect(view.container.querySelectorAll("li .katex-display")).toHaveLength(
+            expectedMathBlocks,
+          ),
+        { timeout: 3000 },
+      );
+      if (markdown.includes("After")) {
+        expect(view.getByText("After")).toBeTruthy();
+      }
+    },
+    4000,
+  );
+
+  test.each([
     ["four-tilde fences", "~~~~md\n$$\nx\n$$\n~~~~"],
     ["longer matching close fences", "~~~~md\n$$\nx\n$$\n~~~~~"],
     ["unmatched fences", "~~~~md\n$$\nx\n$$"],
@@ -415,5 +443,29 @@ describe("rich task description rendering", () => {
 
     expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
     expect(view.getByText("this is not a diagram")).toBeTruthy();
+  }, 4000);
+
+  test.each([
+    ["a blockquote", "> ```mermaid\n> graph TD\n>   A --> B\n> ```"],
+    ["a nested blockquote", "> > ```mermaid\n> > graph TD\n> >   A --> B\n> > ```"],
+  ])(
+    "renders Mermaid inside %s",
+    async (_name, markdown) => {
+      const view = render(<MarkdownRenderer markdown={markdown} />);
+
+      expect(await view.findByText("Mermaid source", {}, { timeout: 3000 })).toBeTruthy();
+      expect(view.getByText(/graph TD/)).toBeTruthy();
+    },
+    4000,
+  );
+
+  test("shows an actionable error for invalid Mermaid inside a nested blockquote", async () => {
+    const view = render(
+      <MarkdownRenderer markdown={"> > ```mermaid\n> > this is not a diagram\n> > ```"} />,
+    );
+
+    expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
+    expect(view.getByText("this is not a diagram")).toBeTruthy();
+    expect(view.getByText(/Edit the Mermaid source/)).toBeTruthy();
   }, 4000);
 });

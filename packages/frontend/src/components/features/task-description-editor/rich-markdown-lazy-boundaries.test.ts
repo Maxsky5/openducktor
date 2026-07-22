@@ -102,4 +102,30 @@ describe("rich Markdown lazy module boundaries", () => {
     expect(mathRenderer).toContain('from "remark-math"');
     expect(mathRenderer).toContain('from "rehype-katex"');
   });
+
+  test("keeps parser-backed Mermaid detection out of the base renderer graph", async () => {
+    const renderer = await readSource("../../ui/markdown-renderer.tsx");
+    const baseGraph = await readStaticModuleGraph("../../ui/markdown-renderer.tsx");
+    const candidateGraph = await readStaticModuleGraph(
+      "../../ui/markdown-renderer-mermaid-candidate.tsx",
+    );
+
+    expect(renderer).toContain('import("./markdown-renderer-mermaid-candidate")');
+    expect(baseGraph.packages).not.toContain("remark-parse");
+    expect(baseGraph.packages).not.toContain("unified");
+    expect(baseGraph.packages).not.toContain("unist-util-visit");
+    expect(candidateGraph.packages).toContain("remark-parse");
+    expect(candidateGraph.packages).toContain("unist-util-visit");
+  });
+
+  test("requires pinned TipTap Markdown list hooks without empty-output fallbacks", async () => {
+    const extensions = await readSource("./task-description-markdown-extensions.ts");
+
+    expect(extensions).toContain("requireMarkdownHook");
+    expect(extensions).not.toContain("defaultListItemParseMarkdown?.(");
+    expect(extensions).not.toContain("defaultListItemRenderMarkdown?.(");
+    expect(extensions).not.toContain("defaultOrderedListParseMarkdown?.(");
+    expect(extensions).not.toContain("defaultTaskItemParseMarkdown?.(");
+    expect(extensions).not.toContain("defaultTaskItemRenderMarkdown?.(");
+  });
 });

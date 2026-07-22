@@ -1,9 +1,12 @@
-import type { ListItem, Paragraph, Root, Text } from "mdast";
+import type { ListItem, Root } from "mdast";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import remarkParse from "remark-parse";
 import type { Plugin } from "unified";
+import { unified } from "unified";
 import { visit } from "unist-util-visit";
 
-const TASK_LIST_BLOCK_MATH =
-  /^[ \t]*[-+*][ \t]+\[[ xX]\][ \t]+\$\$[ \t]*\r?\n[\s\S]*\r?\n[ \t]*\$\$[ \t]*$/;
+const TASK_ITEM_PREFIX = /^([ \t]*[-+*][ \t]+\[[ xX]\][ \t]+)(.*)$/;
 
 const sourceForNode = (markdown: string, node: ListItem): string => {
   const start = node.position?.start.offset;
@@ -11,54 +14,50 @@ const sourceForNode = (markdown: string, node: ListItem): string => {
   return start === undefined || end === undefined ? "" : markdown.slice(start, end);
 };
 
-const createBlockMathNode = (
-  value: string,
-  position: ListItem["position"],
-): ListItem["children"][number] =>
-  ({
-    type: "math",
-    value,
-    data: {
-      hName: "pre",
-      hChildren: [
-        {
-          type: "element",
-          tagName: "code",
-          properties: { className: ["language-math", "math-display"] },
-          children: [{ type: "text", value }],
-        },
-      ],
-    },
-    ...(position ? { position } : {}),
-  }) as unknown as ListItem["children"][number];
+const taskItemBodySource = (source: string): string | undefined => {
+  const lines = source.replaceAll("\r\n", "\n").split("\n");
+  const opening = lines[0]?.match(TASK_ITEM_PREFIX);
+  if (opening?.[2]?.trim() !== "$$") {
+    return undefined;
+  }
+
+  const markerIndent = opening[1]?.match(/^[ \t]*/)?.[0].length ?? 0;
+  const continuationWidth = markerIndent + 2;
+  const body = [
+    opening[2],
+    ...lines.slice(1).map((line) => {
+      if (!line.trim()) {
+        return "";
+      }
+      return line.slice(0, continuationWidth).trim() ? line : line.slice(continuationWidth);
+    }),
+  ].join("\n");
+  return body;
+};
+
+const parseTaskItemBody = (source: string): Root => {
+  const body = unified().use(remarkParse).use(remarkGfm).use(remarkMath).parse(source);
+  visit(body, (node) => {
+    delete node.position;
+  });
+  return body;
+};
 
 export const normalizeTaskListBlockMath = (tree: Root, markdown: string): void => {
   visit(tree, "listItem", (node: ListItem) => {
-    if (node.checked === null || node.checked === undefined || node.children?.length !== 2) {
+    if (node.checked === null || node.checked === undefined) {
       return;
     }
 
-    const [opening, closing] = node.children;
-    const openingText = (opening as Paragraph | undefined)?.children;
-    if (
-      opening?.type !== "paragraph" ||
-      openingText?.length !== 1 ||
-      openingText[0]?.type !== "text" ||
-      closing?.type !== "math" ||
-      !("value" in closing) ||
-      closing.value !== "" ||
-      !TASK_LIST_BLOCK_MATH.test(sourceForNode(markdown, node))
-    ) {
+    const bodySource = taskItemBodySource(sourceForNode(markdown, node));
+    if (!bodySource) {
       return;
     }
-
-    const text = (openingText[0] as Text).value;
-    const value = text.match(/^\$\$\r?\n([\s\S]+)$/)?.[1];
-    if (value === undefined) {
+    const body = parseTaskItemBody(bodySource);
+    if (body.children[0]?.type !== "math") {
       return;
     }
-
-    node.children = [createBlockMathNode(value, node.position)];
+    node.children = body.children as ListItem["children"];
   });
 };
 

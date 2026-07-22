@@ -183,6 +183,24 @@ describe("task description Markdown dialect", () => {
   });
 
   test.each([
+    ["ordered prose before math", "1. Before\n\n   $$\n   x\n   $$"],
+    ["task-item prose after math", "- [ ] $$\n  x\n  $$\n\n  After"],
+    ["two math blocks in one bullet", "- $$\n  x\n  $$\n\n  $$\n  y\n  $$"],
+    [
+      "two task-item math blocks before prose",
+      "- [ ] $$\n  x\n  $$\n\n  $$\n  y\n  $$\n\n  After **bold**",
+    ],
+    ["math before a nested list", "- $$\n  x\n  $$\n\n  - nested"],
+  ])("semantically round-trips compound list math with %s", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+
+    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+
+    expect(hasMarkdownMath(canonical)).toBe(true);
+    expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
+  });
+
+  test.each([
     ["spaces before LF and a following paragraph", "$$\nx\n$$   \n\nAfter"],
     ["a tab before CRLF and a following paragraph", "$$\r\nx\r\n$$\t\r\n\r\nAfter"],
     ["spaces at EOF", "$$\nx\n$$   "],
