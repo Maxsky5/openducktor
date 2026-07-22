@@ -109,7 +109,6 @@ query PullRequestReviewOverview(
             avatarUrl(size: 64)
           }
           body
-          state
           url
           createdAt
           updatedAt
@@ -127,6 +126,7 @@ query PullRequestReviewOverview(
             avatarUrl(size: 64)
           }
           body
+          state
           url
           createdAt
           submittedAt
@@ -255,11 +255,18 @@ const parseReview = (
   if (!reviewOutcome) {
     return null;
   }
+  if (typeof payload.body !== "string") {
+    throw new HostValidationError({
+      field: `${field}.body`,
+      message: `GitHub pull request review body '${field}.body' is missing or invalid.`,
+      details: { receivedType: typeof payload.body },
+    });
+  }
   return {
     id: requireString(payload.id, `${field}.id`),
     author: toNullableString(payload.author?.login),
     authorAvatarUrl: toNullableString(payload.author?.avatarUrl),
-    body: typeof payload.body === "string" ? payload.body : "",
+    body: payload.body,
     patch: null,
     suggestionPatches: [],
     url: toNullableString(payload.url),

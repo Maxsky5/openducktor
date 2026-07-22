@@ -10,7 +10,7 @@ import {
   TaskExecutionCiMarkdownLink,
 } from "./task-execution-ci-comment-card";
 
-const comment: PullRequestReviewActivity = {
+const createComment = (): PullRequestReviewActivity => ({
   id: "comment-1",
   author: "reviewer",
   authorAvatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
@@ -25,10 +25,10 @@ const comment: PullRequestReviewActivity = {
   threadId: "thread-1",
   isResolved: false,
   source: "review_thread",
-};
+});
 
 const review = (reviewOutcome: PullRequestReviewOutcome, body = ""): PullRequestReviewActivity => ({
-  ...comment,
+  ...createComment(),
   id: `review-${reviewOutcome}`,
   body,
   path: null,
@@ -103,6 +103,7 @@ test.each(["light", "dark"] as const)("renders review outcome text in the %s the
 
 test("opens review comments through the external URL shell bridge", () => {
   const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+  const comment = createComment();
 
   try {
     const view = render(
@@ -122,7 +123,7 @@ test("opens review comments through the external URL shell bridge", () => {
 test("skips unchanged card inputs and renders updated comments", () => {
   let bodyReadCount = 0;
   const trackedComment: PullRequestReviewActivity = {
-    ...comment,
+    ...createComment(),
     get body() {
       bodyReadCount += 1;
       return "Please update this.";
@@ -140,7 +141,7 @@ test("skips unchanged card inputs and renders updated comments", () => {
 
   expect(bodyReadCount).toBe(initialBodyReadCount);
 
-  view.rerender(card({ ...comment, body: "Updated review guidance." }));
+  view.rerender(card({ ...createComment(), body: "Updated review guidance." }));
 
   expect(view.getByText("Updated review guidance.")).toBeTruthy();
 });
@@ -171,7 +172,7 @@ test("labels suggested changes as a distinct review section", () => {
         <TooltipProvider>
           <TaskExecutionCiCommentCard
             comment={{
-              ...comment,
+              ...createComment(),
               body: "Use the shared loading state.",
               suggestionPatches: [
                 "@@ -8,1 +8,1 @@\n-disabled={isGoogleLoading}\n+disabled={isAnyLoading}",
@@ -190,7 +191,7 @@ test("labels suggested changes as a distinct review section", () => {
 
 test("collapses resolved comments by default and toggles comment bodies", () => {
   const resolvedComment = {
-    ...comment,
+    ...createComment(),
     body: "Resolved review guidance.",
     isResolved: true,
   };
@@ -211,16 +212,18 @@ test("collapses resolved comments by default and toggles comment bodies", () => 
   expect(resolvedView.queryByText(resolvedComment.body)).toBeNull();
   resolvedView.unmount();
 
+  const unresolvedComment = createComment();
   const unresolvedView = render(
     <TooltipProvider>
-      <TaskExecutionCiCommentCard comment={comment} isBot={false} />
+      <TaskExecutionCiCommentCard comment={unresolvedComment} isBot={false} />
     </TooltipProvider>,
   );
 
-  expect(unresolvedView.getByText(comment.body)).toBeTruthy();
+  expect(unresolvedView.getByText(unresolvedComment.body)).toBeTruthy();
 });
 
 test("resets the disclosure default when the thread resolution changes", () => {
+  const comment = createComment();
   const card = (isResolved: boolean) => (
     <TooltipProvider>
       <TaskExecutionCiCommentCard comment={{ ...comment, isResolved }} isBot={false} />
@@ -241,7 +244,7 @@ test("resets the disclosure default when the thread resolution changes", () => {
 
 test("renders a deferred body immediately when the user expands the comment", () => {
   const deferredComment = {
-    ...comment,
+    ...createComment(),
     body: "Deferred review guidance.",
   };
   const view = render(
@@ -260,6 +263,7 @@ test("renders a deferred body immediately when the user expands the comment", ()
 });
 
 test("shows the comment header as clickable and vertically centers its actions", () => {
+  const comment = createComment();
   const view = render(
     <TooltipProvider>
       <TaskExecutionCiCommentCard comment={comment} isBot={false} />
@@ -276,6 +280,7 @@ test("shows the comment header as clickable and vertically centers its actions",
 });
 
 test("shows either a lazy author avatar or its fallback", () => {
+  const comment = createComment();
   const view = render(
     <TooltipProvider>
       <TaskExecutionCiCommentCard comment={comment} isBot={false} />
@@ -310,7 +315,7 @@ test("keeps the filename visible when a comment path is truncated", () => {
   const view = render(
     <TooltipProvider>
       <TaskExecutionCiCommentCard
-        comment={{ ...comment, path: longPath, line: 16 }}
+        comment={{ ...createComment(), path: longPath, line: 16 }}
         isBot={false}
       />
     </TooltipProvider>,

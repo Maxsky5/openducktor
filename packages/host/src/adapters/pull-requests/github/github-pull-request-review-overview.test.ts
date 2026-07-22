@@ -160,9 +160,17 @@ describe("loadGithubPullRequestReviewOverview", () => {
       },
     ]);
     expect(commands).toHaveLength(1);
-    expect(commands[0]?.join(" ")).toContain("avatarUrl(size: 64)");
-    expect(commands[0]?.join(" ")).toContain("state");
     const command = commands[0] ?? [];
+    expect(command.join(" ")).toContain("avatarUrl(size: 64)");
+    const queryArgument = command.find((argument) => argument.startsWith("query="));
+    expect(queryArgument).toBeDefined();
+    const query = queryArgument?.slice("query=".length) ?? "";
+    const commentsStart = query.indexOf("comments(");
+    const reviewsStart = query.indexOf("reviews(");
+    expect(commentsStart).toBeGreaterThan(-1);
+    expect(reviewsStart).toBeGreaterThan(commentsStart);
+    expect(query.slice(commentsStart, reviewsStart)).not.toContain("\n          state\n");
+    expect(query.slice(reviewsStart)).toContain("\n          state\n");
     const flagFor = (argument: string): string | undefined => {
       const index = command.indexOf(argument);
       return index > 0 ? command[index - 1] : undefined;
@@ -367,6 +375,28 @@ describe("loadGithubPullRequestReviewOverview", () => {
       expect(result.left._tag).toBe("HostValidationError");
       expect(result.left.field).toBe("pullRequest.reviews.nodes.0.state");
       expect(result.left.message).toContain("review state");
+    }
+  });
+
+  test("rejects a non-string review body through the typed error channel", async () => {
+    const result = await Effect.runPromise(
+      loadGithubPullRequestReviewOverview(
+        input(
+          createDependencies({
+            response: responsePage({
+              comments: [],
+              reviews: [{ id: "review-invalid", body: { text: "Review" }, state: "APPROVED" }],
+            }),
+          }),
+        ),
+      ).pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left._tag).toBe("HostValidationError");
+      expect(result.left.field).toBe("pullRequest.reviews.nodes.0.body");
+      expect(result.left.message).toContain("review body");
     }
   });
 

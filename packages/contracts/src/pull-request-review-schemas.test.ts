@@ -4,7 +4,7 @@ import {
   pullRequestReviewContextSchema,
 } from "./pull-request-review-schemas";
 
-const activityFields = {
+const createActivityFields = () => ({
   id: "activity-1",
   author: "reviewer",
   authorAvatarUrl: null,
@@ -18,7 +18,7 @@ const activityFields = {
   line: null,
   threadId: null,
   isResolved: null,
-};
+});
 
 describe("pullRequestReviewActivitySchema", () => {
   test.each(["approved", "changes_requested", "commented", "dismissed"] as const)(
@@ -26,12 +26,12 @@ describe("pullRequestReviewActivitySchema", () => {
     (reviewOutcome) => {
       expect(
         pullRequestReviewActivitySchema.parse({
-          ...activityFields,
+          ...createActivityFields(),
           source: "review",
           reviewOutcome,
         }),
       ).toEqual({
-        ...activityFields,
+        ...createActivityFields(),
         source: "review",
         reviewOutcome,
       });
@@ -41,8 +41,8 @@ describe("pullRequestReviewActivitySchema", () => {
   test.each(["comment", "review_thread"] as const)(
     "accepts a %s activity without a review outcome",
     (source) => {
-      expect(pullRequestReviewActivitySchema.parse({ ...activityFields, source })).toEqual({
-        ...activityFields,
+      expect(pullRequestReviewActivitySchema.parse({ ...createActivityFields(), source })).toEqual({
+        ...createActivityFields(),
         source,
       });
     },
@@ -50,7 +50,7 @@ describe("pullRequestReviewActivitySchema", () => {
 
   test("rejects a review without an outcome", () => {
     expect(() =>
-      pullRequestReviewActivitySchema.parse({ ...activityFields, source: "review" }),
+      pullRequestReviewActivitySchema.parse({ ...createActivityFields(), source: "review" }),
     ).toThrow();
   });
 
@@ -59,7 +59,7 @@ describe("pullRequestReviewActivitySchema", () => {
     (source) => {
       expect(() =>
         pullRequestReviewActivitySchema.parse({
-          ...activityFields,
+          ...createActivityFields(),
           source,
           reviewOutcome: "approved",
         }),
@@ -70,7 +70,7 @@ describe("pullRequestReviewActivitySchema", () => {
   test("rejects an unsupported review outcome", () => {
     expect(() =>
       pullRequestReviewActivitySchema.parse({
-        ...activityFields,
+        ...createActivityFields(),
         source: "review",
         reviewOutcome: "pending",
       }),
