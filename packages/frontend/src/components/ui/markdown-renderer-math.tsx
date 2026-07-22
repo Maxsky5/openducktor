@@ -11,6 +11,7 @@ import {
   TASK_DESCRIPTION_URL_TRANSFORM,
 } from "./markdown-renderer-context";
 import { usePremiumCodeComponents } from "./markdown-renderer-premium-code";
+import { remarkTaskListBlockMath } from "./markdown-task-list-math";
 
 export default function MarkdownRendererMath({
   markdown,
@@ -36,7 +37,7 @@ export default function MarkdownRendererMath({
   if (!content) return null;
   return (
     <Markdown
-      remarkPlugins={[remarkGfm, remarkMath]}
+      remarkPlugins={[remarkGfm, remarkMath, remarkTaskListBlockMath]}
       rehypePlugins={[rehypeKatex]}
       skipHtml
       urlTransform={TASK_DESCRIPTION_URL_TRANSFORM}

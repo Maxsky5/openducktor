@@ -167,6 +167,25 @@ describe("rich task description rendering", () => {
   );
 
   test.each([
+    ["a bullet item", "- $$\n  x\n  $$"],
+    ["an ordered item", "1. $$\n   x\n   $$"],
+    ["a task item", "- [ ] $$\n  x\n  $$"],
+  ])(
+    "renders block math inside %s through KaTeX",
+    async (_name, markdown) => {
+      const view = render(<MarkdownRenderer markdown={markdown} />);
+
+      await waitFor(
+        () => expect(view.container.querySelector("li .katex-display")).not.toBeNull(),
+        {
+          timeout: 3000,
+        },
+      );
+    },
+    4000,
+  );
+
+  test.each([
     ["four-tilde fences", "~~~~md\n$$\nx\n$$\n~~~~"],
     ["longer matching close fences", "~~~~md\n$$\nx\n$$\n~~~~~"],
     ["unmatched fences", "~~~~md\n$$\nx\n$$"],
@@ -373,5 +392,28 @@ describe("rich task description rendering", () => {
     expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
     expect(view.getByText("this is not a diagram")).toBeTruthy();
     expect(view.getByText(/Edit the Mermaid source/)).toBeTruthy();
+  }, 4000);
+
+  test.each([
+    ["four backticks", "````mermaid\ngraph TD\n  A --> B\n````"],
+    ["four tildes", "~~~~mermaid\ngraph TD\n  A --> B\n~~~~"],
+    ["a longer closing fence", "````mermaid\ngraph TD\n  A --> B\n`````"],
+    ["allowed indentation and whitespace", "   ````  mermaid  \ngraph TD\n  A --> B\n   ````"],
+  ])(
+    "renders Mermaid fenced with %s",
+    async (_name, markdown) => {
+      const view = render(<MarkdownRenderer markdown={markdown} />);
+
+      expect(await view.findByText("Mermaid source", {}, { timeout: 3000 })).toBeTruthy();
+      expect(view.getByText(/graph TD/)).toBeTruthy();
+    },
+    4000,
+  );
+
+  test("shows an actionable error for invalid Mermaid in a long fence", async () => {
+    const view = render(<MarkdownRenderer markdown={"````mermaid\nthis is not a diagram\n````"} />);
+
+    expect(await view.findByText("Diagram preview failed", {}, { timeout: 3000 })).toBeTruthy();
+    expect(view.getByText("this is not a diagram")).toBeTruthy();
   }, 4000);
 });

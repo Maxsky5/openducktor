@@ -169,6 +169,20 @@ describe("task description Markdown dialect", () => {
   });
 
   test.each([
+    ["a bullet item", "- $$\n  x\n  $$"],
+    ["an ordered item", "1. $$\n   x\n   $$"],
+    ["a task item", "- [ ] $$\n  x\n  $$"],
+  ])("semantically round-trips block math as the first child of %s", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+
+    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+
+    expect(canonical).toBe(markdown);
+    expect(hasMarkdownMath(canonical)).toBe(true);
+    expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
+  });
+
+  test.each([
     ["spaces before LF and a following paragraph", "$$\nx\n$$   \n\nAfter"],
     ["a tab before CRLF and a following paragraph", "$$\r\nx\r\n$$\t\r\n\r\nAfter"],
     ["spaces at EOF", "$$\nx\n$$   "],

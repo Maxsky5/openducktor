@@ -4,13 +4,12 @@ import Markdown, { type Components, defaultUrlTransform, type UrlTransform } fro
 import remarkGfm from "remark-gfm";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
-import { hasMarkdownMath } from "./markdown-math-detection";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
-const MarkdownRendererMath = lazy(() => import("./markdown-renderer-math"));
+const MarkdownRendererMathCandidate = lazy(() => import("./markdown-renderer-math-candidate"));
 
 export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 
@@ -95,27 +94,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const components = componentOverrides
     ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
     : MARKDOWN_COMPONENTS[variant];
-  const rendersMath = hasMarkdownMath(content);
-  const rendersMermaid = /^[ \t]{0,3}(?:```|~~~)[ \t]*mermaid(?:[ \t]|$)/im.test(content);
+  const hasMathCandidate = content.includes("$");
+  const rendersMermaid = /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*mermaid(?:[ \t]|$)/im.test(content);
   const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
   const needsRichRenderer = rendersMermaid || rendersTaskAsset || taskAssetContext !== undefined;
   const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
 
   let renderedContent: ReactElement;
-  if (rendersMath) {
-    renderedContent = (
-      <Suspense fallback={fallback ?? null}>
-        <MarkdownRendererMath
-          markdown={content}
-          components={components}
-          premiumCodeBlocks={premiumCodeBlocks}
-          fallback={fallback}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
-        />
-      </Suspense>
-    );
-  } else if (needsRichRenderer) {
+  if (needsRichRenderer) {
     renderedContent = (
       <Suspense fallback={fallback ?? null}>
         <MarkdownRendererRich
@@ -136,6 +122,22 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     );
   } else {
     renderedContent = <MarkdownSync markdown={content} components={components} />;
+  }
+
+  if (hasMathCandidate) {
+    renderedContent = (
+      <Suspense fallback={fallback ?? null}>
+        <MarkdownRendererMathCandidate
+          markdown={content}
+          components={components}
+          fallbackContent={renderedContent}
+          premiumCodeBlocks={premiumCodeBlocks}
+          fallback={fallback}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+        />
+      </Suspense>
+    );
   }
 
   return <div className={cn(MARKDOWN_CLASSES[variant], className)}>{renderedContent}</div>;

@@ -3,6 +3,7 @@ import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
+import { normalizeTaskListBlockMath } from "@/components/ui/markdown-task-list-math";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 
 export type VisualMarkdownCompatibility =
@@ -56,8 +57,12 @@ const sourceForNode = (
   return start === undefined || end === undefined ? "" : body.slice(start, end);
 };
 
-const parseCanonicalRendererMarkdown = (body: string) =>
-  unified().use(remarkParse).use(remarkGfm).use(remarkMath).parse(body);
+const parseCanonicalRendererMarkdown = (body: string) => {
+  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+  const tree = processor.parse(body);
+  normalizeTaskListBlockMath(tree, body);
+  return tree;
+};
 
 const canonicalRendererSemanticTree = (body: string): unknown =>
   JSON.parse(
