@@ -33,6 +33,7 @@ export const createTaskAssetAwareTaskStore = ({
   ...inner,
   createTask(input) {
     let createdTaskId: string | undefined;
+    let workspaceId: string | undefined;
     let committed = false;
     const promotedAssetIds: string[] = [];
     let referencedAssetIds = new Set<string>();
@@ -61,7 +62,7 @@ export const createTaskAssetAwareTaskStore = ({
             "Every new task asset reference must have one supplied staged asset, and every supplied staged asset must be referenced.",
         });
       }
-      const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
+      workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
       const stagedAssets = yield* staging.getStagedAssets({
         workspaceId,
         assetIds: Array.from(suppliedAssetIds),
@@ -146,14 +147,31 @@ export const createTaskAssetAwareTaskStore = ({
             }),
           );
         }
+        const cleanupWorkspaceId = workspaceId;
+        if (!cleanupWorkspaceId) {
+          return Effect.fail(
+            taskAssetPartialStateError({
+              operation: "create",
+              phase: "compensate_create",
+              taskId,
+              assetIds: promotedAssetIds,
+              durableState: "unknown",
+              message:
+                "Task creation failed after the task was created, but its workspace cleanup context is unavailable. Refresh before continuing.",
+            }),
+          );
+        }
         return Effect.gen(function* () {
           const deleteExit = yield* Effect.exit(
             inner.deleteTask({ repoPath: input.repoPath, taskId, deleteSubtasks: true }),
           );
-          const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
           const removeExit = yield* Effect.exit(
             promotedAssetIds.length > 0
-              ? filePort.removeDurable({ workspaceId, taskId, assetIds: promotedAssetIds })
+              ? filePort.removeDurable({
+                  workspaceId: cleanupWorkspaceId,
+                  taskId,
+                  assetIds: promotedAssetIds,
+                })
               : Effect.void,
           );
           if (Exit.isFailure(deleteExit) || Exit.isFailure(removeExit)) {
@@ -197,6 +215,7 @@ export const createTaskAssetAwareTaskStore = ({
     let obsoleteAssetIds: string[] = [];
     let quarantineId: string | null = null;
     let committed = false;
+    let workspaceId: string | undefined;
 
     const update = Effect.gen(function* () {
       referencedAssetIds = yield* Effect.try({
@@ -210,7 +229,7 @@ export const createTaskAssetAwareTaskStore = ({
             taskId: input.taskId,
           }),
       });
-      const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
+      workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
       const existing = yield* registry.listAssets({
         repoPath: input.repoPath,
         taskId: input.taskId,
@@ -340,8 +359,11 @@ export const createTaskAssetAwareTaskStore = ({
             }),
           );
         }
+        const cleanupWorkspaceId = workspaceId;
+        if (!cleanupWorkspaceId) {
+          return Effect.fail(error);
+        }
         return Effect.gen(function* () {
-          const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
           const restoreExit = quarantineId
             ? yield* Effect.exit(filePort.restoreQuarantine(quarantineId))
             : Exit.succeed(undefined);
@@ -349,7 +371,7 @@ export const createTaskAssetAwareTaskStore = ({
             promotedAssetIds.length > 0
               ? yield* Effect.exit(
                   filePort.removeDurable({
-                    workspaceId,
+                    workspaceId: cleanupWorkspaceId,
                     taskId: input.taskId,
                     assetIds: promotedAssetIds,
                   }),

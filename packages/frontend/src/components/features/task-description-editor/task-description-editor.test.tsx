@@ -47,6 +47,19 @@ describe("TaskDescriptionEditor", () => {
     expect(view.getByRole("textbox")).toBeTruthy();
   });
 
+  test("keeps escaped-pipe GFM tables in Markdown mode before TipTap can serialize them", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "| Value | Meaning |\n| :---- | ------: |\n| a\\|b | literal pipe |";
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+    );
+
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect((await view.findByRole("alert")).textContent).toContain("escaped pipe");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   test("preserves front matter outside Visual mode and keeps it source-editable", async () => {
     const markdown = "---\ntitle: Keep comments # exact\n---\nBody";
     const view = render(
@@ -231,6 +244,81 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() =>
       expect(
         onChange.mock.calls.some(([value]) => String(value).includes(`odt-asset:${assetId}`)),
+      ).toBe(true),
+    );
+  });
+
+  test("inserts an arbitrary inline formula from the accessible math editor", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown="Formula" onChange={onChange} />,
+    );
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const dialog = await view.findByRole("dialog", { name: "Insert inline formula" });
+    const input = view.getByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(input, { target: { value: "\\frac{a}{b}" } });
+    fireEvent.click(view.getByRole("button", { name: "Insert formula" }));
+
+    await waitFor(() => expect(dialog.isConnected).toBe(false));
+    await waitFor(() =>
+      expect(onChange.mock.calls.some(([value]) => String(value).includes("$\\frac{a}{b}$"))).toBe(
+        true,
+      ),
+    );
+  });
+
+  test("edits a selected formula and validates or cancels without changing Markdown", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown="Formula $x$" onChange={onChange} />,
+    );
+    const mathNode = await waitFor(() => {
+      const node = view.container.querySelector('[data-type="inline-math"]');
+      expect(node).not.toBeNull();
+      return node as Element;
+    });
+
+    fireEvent.click(mathNode);
+    expect(await view.findByRole("dialog", { name: "Edit inline formula" })).toBeTruthy();
+    const input = view.getByRole("textbox", { name: "LaTeX formula" });
+    expect((input as HTMLInputElement).value).toBe("x");
+    fireEvent.change(input, { target: { value: "\\frac{" } });
+    fireEvent.click(view.getByRole("button", { name: "Save formula" }));
+    expect((await view.findByRole("alert")).textContent).toContain("valid LaTeX");
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(view.queryByRole("dialog", { name: "Edit inline formula" })).toBeNull(),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(mathNode);
+    expect(await view.findByRole("dialog", { name: "Edit inline formula" })).toBeTruthy();
+    const replacement = view.getByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(replacement, { target: { value: "y^2" } });
+    fireEvent.keyDown(replacement, { key: "Enter" });
+    await waitFor(() =>
+      expect(onChange.mock.calls.some(([value]) => String(value).includes("$y^2$"))).toBe(true),
+    );
+  });
+
+  test("inserts arbitrary block math with the documented keyboard shortcut", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(<TaskDescriptionEditor {...props} markdown="Body" onChange={onChange} />);
+    await waitFor(() => expect(view.getByRole("button", { name: "Block math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Block math" }));
+    expect(await view.findByRole("dialog", { name: "Insert block formula" })).toBeTruthy();
+    const input = view.getByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(input, { target: { value: "\\sum_{i=1}^{n} i" } });
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => String(value).includes("$$\n\\sum_{i=1}^{n} i\n$$")),
       ).toBe(true),
     );
   });

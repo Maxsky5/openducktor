@@ -11,6 +11,16 @@ export type TaskAssetScope = z.infer<typeof taskAssetScopeSchema>;
 export const taskAssetIdSchema = z.uuid();
 export type TaskAssetId = z.infer<typeof taskAssetIdSchema>;
 
+export const TASK_ASSET_URI_PREFIX = "odt-asset:";
+
+export const parseTaskAssetUri = (value: string): TaskAssetId | null => {
+  if (!value.startsWith(TASK_ASSET_URI_PREFIX)) {
+    return null;
+  }
+  const parsed = taskAssetIdSchema.safeParse(value.slice(TASK_ASSET_URI_PREFIX.length));
+  return parsed.success ? parsed.data : null;
+};
+
 export const taskAssetMediaTypeSchema = z.enum([
   "image/png",
   "image/jpeg",

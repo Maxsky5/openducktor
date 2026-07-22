@@ -17,4 +17,12 @@ describe("task description asset references", () => {
 
     expect(Array.from(collectTaskDescriptionAssetIds(markdown))).toEqual([first, second]);
   });
+
+  test("ignores forged logical asset IDs that fail the shared UUID contract", () => {
+    expect(
+      Array.from(
+        collectTaskDescriptionAssetIds("![forged](odt-asset:550e8400e29b-41d4-a716-446655440000-)"),
+      ),
+    ).toEqual([]);
+  });
 });

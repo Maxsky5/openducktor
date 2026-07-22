@@ -1,3 +1,4 @@
+import { parseTaskAssetUri } from "@openducktor/contracts";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useContext, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -5,12 +6,10 @@ import { errorMessage } from "@/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 
-const ASSET_URI_PATTERN = /^odt-asset:([0-9a-f-]{36})$/i;
-
 export function TaskDescriptionImageNode({ node, selected, updateAttributes }: ReactNodeViewProps) {
   const { previews, renderContext } = useContext(TaskDescriptionImageContext);
   const source = typeof node.attrs.src === "string" ? node.attrs.src : "";
-  const assetId = ASSET_URI_PATTERN.exec(source)?.[1] ?? null;
+  const assetId = parseTaskAssetUri(source);
   const preview = assetId ? previews.get(assetId) : undefined;
   const [resolvedSource, setResolvedSource] = useState<string | null>(preview ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);

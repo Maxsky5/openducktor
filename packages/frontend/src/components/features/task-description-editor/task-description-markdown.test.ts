@@ -108,6 +108,24 @@ describe("task description Markdown dialect", () => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
   });
 
+  test("blocks escaped pipes inside GFM table cells before Visual mode can change their meaning", () => {
+    const markdown = "| Value | Meaning |\n| :---- | ------: |\n| a\\|b | literal pipe |";
+
+    const result = assessVisualMarkdownCompatibility(markdown);
+
+    expect(result.compatible).toBe(false);
+    if (!result.compatible) {
+      expect(result.reason).toContain("escaped pipe");
+    }
+  });
+
+  test("preserves supported escapes inside aligned GFM table cells", () => {
+    const markdown = "| Value |\n| :---- |\n| \\*literal\\* |";
+
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+    expect(canonicalizeTaskDescriptionMarkdown(markdown)).toContain("\\*literal\\*");
+  });
+
   test.each([
     ["currency with spaced dollars", "Cash $ 5 $"],
     ["shell variables", "Use $HOME and $PATH"],

@@ -102,6 +102,8 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           <MarkdownRendererMath
             markdown={markdown}
             components={components}
+            premiumCodeBlocks={premiumCodeBlocks}
+            fallback={fallback}
             {...(taskAssetContext
               ? {
                   taskAssetContext,
@@ -115,6 +117,8 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           <MarkdownRendererRich
             markdown={markdown}
             components={components}
+            premiumCodeBlocks={premiumCodeBlocks}
+            fallback={fallback}
             taskAssetContext={taskAssetContext}
             resolveTaskAssetSrc={getShellBridge().resolveTaskAssetSrc}
           />

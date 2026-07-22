@@ -2,7 +2,9 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { toast } from "sonner";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as externalUrl from "@/lib/open-external-url";
+import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
@@ -130,6 +132,64 @@ describe("rich task description rendering", () => {
     expect(view.container.querySelector(".katex")).toBeNull();
   });
 
+  test("composes math, premium code, and task assets in one description render", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <ThemeProvider>
+          <MarkdownRenderer
+            markdown={`Formula $x^2$\n\n\`\`\`javascript\nconst answer = 42;\n\`\`\`\n\n![Diagram](odt-asset:${assetId})`}
+            premiumCodeBlocks
+            taskAssetContext={{
+              workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+              taskId: "task-1",
+              scope: "description",
+            }}
+          />
+        </ThemeProvider>
+      </QueryProvider>,
+    );
+
+    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 3000,
+    });
+    await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
+      timeout: 3000,
+    });
+    await waitFor(
+      () =>
+        expect(view.getByRole("img", { name: "Diagram" }).getAttribute("src")).toBe(
+          "openducktor-task-asset://asset/resolved",
+        ),
+      { timeout: 3000 },
+    );
+  }, 5000);
+
+  test("keeps premium code rendering for task documents that also contain math", async () => {
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <ThemeProvider>
+          <MarkdownRenderer
+            markdown={"Formula $x$\n\n```javascript\nconst value = 1;\n```"}
+            premiumCodeBlocks
+          />
+        </ThemeProvider>
+      </QueryProvider>,
+    );
+
+    await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
+      timeout: 3000,
+    });
+    await waitFor(() => expect(view.container.querySelector(".token")).not.toBeNull(), {
+      timeout: 3000,
+    });
+  }, 5000);
+
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
     configureShellBridge({
@@ -174,6 +234,28 @@ describe("rich task description rendering", () => {
     );
 
     expect(view.getByRole("img", { name: "Architecture" }).getAttribute("src")).toBeNull();
+    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+  });
+
+  test("does not resolve a forged logical asset ID", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const view = render(
+      <MarkdownRenderer
+        markdown="![Forged](odt-asset:550e8400e29b-41d4-a716-446655440000-)"
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+
+    expect(view.getByRole("alert").textContent).toContain("task asset reference is invalid");
+    expect(view.queryByRole("img", { name: "Forged" })).toBeNull();
     expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
   });
 

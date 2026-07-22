@@ -65,9 +65,11 @@ const ToolbarButton = ({
 export function TaskDescriptionFormattingToolbar({
   editor,
   state,
+  onEditMath,
 }: {
   editor: Editor;
   state: TaskDescriptionToolbarState;
+  onEditMath(kind: "inline" | "block"): void;
 }): ReactElement {
   const setLink = (): void => {
     const previous = editor.getAttributes("link").href as string | undefined;
@@ -187,16 +189,10 @@ export function TaskDescriptionFormattingToolbar({
       >
         <Table2 className="size-4" />
       </ToolbarButton>
-      <ToolbarButton
-        label="Inline math"
-        onClick={() => editor.chain().focus().insertInlineMath({ latex: "x" }).run()}
-      >
+      <ToolbarButton label="Inline math" onClick={() => onEditMath("inline")}>
         <Sigma className="size-4" />
       </ToolbarButton>
-      <ToolbarButton
-        label="Block math"
-        onClick={() => editor.chain().focus().insertBlockMath({ latex: "x^2" }).run()}
-      >
+      <ToolbarButton label="Block math" onClick={() => onEditMath("block")}>
         <Sigma className="size-4 stroke-[2.5]" />
       </ToolbarButton>
       <ToolbarButton

@@ -3,6 +3,7 @@ import { Cause, Effect, Exit } from "effect";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { HostDependencyError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
@@ -406,6 +407,8 @@ describe("asset-aware task store", () => {
         bytesBase64: PNG_BASE64,
       }),
     );
+    let restoreAttempts = 0;
+    let removeAttempts = 0;
     const store = createTaskAssetAwareTaskStore({
       inner: harness.innerStore,
       registry: {
@@ -423,8 +426,9 @@ describe("asset-aware task store", () => {
       staging: harness.staging,
       filePort: {
         ...harness.filePort,
-        restoreQuarantine: () =>
-          Effect.fail(
+        restoreQuarantine: () => {
+          restoreAttempts += 1;
+          return Effect.fail(
             injectedTaskAssetError({
               operation: "update",
               code: "restore",
@@ -432,7 +436,20 @@ describe("asset-aware task store", () => {
               taskId: task.id,
               assetIds: [obsolete.assetId],
             }),
-          ),
+          );
+        },
+        removeDurable: () => {
+          removeAttempts += 1;
+          return Effect.fail(
+            injectedTaskAssetError({
+              operation: "update",
+              code: "restore",
+              failedPhase: "remove_promoted_files",
+              taskId: task.id,
+              assetIds: [added.assetId],
+            }),
+          );
+        },
       },
       resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
     });
@@ -448,6 +465,8 @@ describe("asset-aware task store", () => {
 
     expect(error.durableState).toBe("unknown");
     expect(new Set(error.assetIds)).toEqual(new Set([obsolete.assetId, added.assetId]));
+    expect(restoreAttempts).toBe(1);
+    expect(removeAttempts).toBe(1);
     expect(
       (
         await Effect.runPromise(
@@ -510,30 +529,20 @@ describe("asset-aware task store", () => {
     ).toEqual([]);
   });
 
-  test("returns created_partial with the created task and asset IDs when create compensation fails", async () => {
+  test("reuses the resolved workspace while compensating a failed create", async () => {
     const harness = await createHarness();
     const staged = await Effect.runPromise(
       harness.staging.stage({
         workspaceId: "fairnest",
         scope: "description",
-        originalName: "partial.png",
+        originalName: "resolver-create.png",
         declaredMediaType: "image/png",
         bytesBase64: PNG_BASE64,
       }),
     );
+    let resolverCalls = 0;
     const store = createTaskAssetAwareTaskStore({
-      inner: {
-        ...harness.innerStore,
-        deleteTask: (input) =>
-          Effect.fail(
-            injectedTaskAssetError({
-              operation: "delete",
-              code: "database",
-              failedPhase: "delete_created_task",
-              taskId: input.taskId,
-            }),
-          ),
-      },
+      inner: harness.innerStore,
       registry: {
         ...harness.registry,
         registerAssets: (input) =>
@@ -549,6 +558,188 @@ describe("asset-aware task store", () => {
       },
       staging: harness.staging,
       filePort: harness.filePort,
+      resolveWorkspaceIdForRepoPath: () => {
+        resolverCalls += 1;
+        return resolverCalls === 1
+          ? Effect.succeed("fairnest")
+          : Effect.fail(
+              new HostDependencyError({
+                dependency: "workspace-settings",
+                operation: "resolve",
+                message: "Injected resolver failure.",
+              }),
+            );
+      },
+    });
+
+    const error = await captureTaskAssetError(
+      store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Resolver create failure",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![image](odt-asset:${staged.assetId})`,
+        },
+        descriptionAssets: { stagedAssetIds: [staged.assetId] },
+      }),
+    );
+
+    expect(error.failedPhase).toBe("register_assets");
+    expect(resolverCalls).toBe(1);
+    expect(
+      await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
+    ).toEqual([]);
+    expect(
+      await Effect.runPromise(
+        harness.filePort.readDurable({
+          workspaceId: "fairnest",
+          taskId: error.taskId as string,
+          assetId: staged.assetId,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("reuses the resolved workspace while compensating a failed update", async () => {
+    const harness = await createHarness();
+    const { staged: obsolete, task, description } = await createTaskWithAsset(harness);
+    const added = await Effect.runPromise(
+      harness.staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "resolver-update.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    let resolverCalls = 0;
+    const store = createTaskAssetAwareTaskStore({
+      inner: harness.innerStore,
+      registry: {
+        ...harness.registry,
+        updateTaskWithDescriptionAssets: () =>
+          Effect.fail(
+            injectedTaskAssetError({
+              operation: "update",
+              code: "database",
+              failedPhase: "save_transaction",
+              taskId: task.id,
+            }),
+          ),
+      },
+      staging: harness.staging,
+      filePort: harness.filePort,
+      resolveWorkspaceIdForRepoPath: () => {
+        resolverCalls += 1;
+        return resolverCalls === 1
+          ? Effect.succeed("fairnest")
+          : Effect.fail(
+              new HostDependencyError({
+                dependency: "workspace-settings",
+                operation: "resolve",
+                message: "Injected resolver failure.",
+              }),
+            );
+      },
+    });
+
+    const error = await captureTaskAssetError(
+      store.updateTask({
+        repoPath: harness.repoPath,
+        taskId: task.id,
+        patch: { description: `![added](odt-asset:${added.assetId})` },
+        descriptionAssets: { stagedAssetIds: [added.assetId] },
+      }),
+    );
+
+    expect(error.failedPhase).toBe("save_transaction");
+    expect(resolverCalls).toBe(1);
+    expect(
+      (
+        await Effect.runPromise(
+          harness.innerStore.getTask({ repoPath: harness.repoPath, taskId: task.id }),
+        )
+      ).description,
+    ).toBe(description);
+    expect(
+      await Effect.runPromise(
+        harness.filePort.readDurable({
+          workspaceId: "fairnest",
+          taskId: task.id,
+          assetId: obsolete.assetId,
+        }),
+      ),
+    ).not.toBeNull();
+    expect(
+      await Effect.runPromise(
+        harness.filePort.readDurable({
+          workspaceId: "fairnest",
+          taskId: task.id,
+          assetId: added.assetId,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("returns created_partial with the created task and asset IDs when create compensation fails", async () => {
+    const harness = await createHarness();
+    const staged = await Effect.runPromise(
+      harness.staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "partial.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    let deleteAttempts = 0;
+    let removeAttempts = 0;
+    const store = createTaskAssetAwareTaskStore({
+      inner: {
+        ...harness.innerStore,
+        deleteTask: (input) => {
+          deleteAttempts += 1;
+          return Effect.fail(
+            injectedTaskAssetError({
+              operation: "delete",
+              code: "database",
+              failedPhase: "delete_created_task",
+              taskId: input.taskId,
+            }),
+          );
+        },
+      },
+      registry: {
+        ...harness.registry,
+        registerAssets: (input) =>
+          Effect.fail(
+            injectedTaskAssetError({
+              operation: "create",
+              code: "database",
+              failedPhase: "register_assets",
+              taskId: input.taskId,
+              assetIds: input.assets.map((asset) => asset.id),
+            }),
+          ),
+      },
+      staging: harness.staging,
+      filePort: {
+        ...harness.filePort,
+        removeDurable: (input) => {
+          removeAttempts += 1;
+          return Effect.fail(
+            injectedTaskAssetError({
+              operation: "create",
+              code: "restore",
+              failedPhase: "remove_promoted_files",
+              taskId: input.taskId,
+              assetIds: input.assetIds,
+            }),
+          );
+        },
+      },
       resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
     });
 
@@ -570,6 +761,8 @@ describe("asset-aware task store", () => {
     expect(error.retryAllowed).toBe(false);
     expect(error.taskId).toBeTruthy();
     expect(error.assetIds).toEqual([staged.assetId]);
+    expect(deleteAttempts).toBe(1);
+    expect(removeAttempts).toBe(1);
   });
 
   test("reports deleted asset IDs for purge and restoration failures", async () => {

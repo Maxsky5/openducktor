@@ -86,6 +86,11 @@ const findUnsupportedSyntax = (body: string): string | undefined => {
         reason =
           "Dollar-delimited math cannot start or end with whitespace. Keep this text in Markdown mode or remove the extra spaces.";
       }
+      return;
+    }
+    if (node.type === "tableCell" && source.includes("\\|")) {
+      reason =
+        "Table cells with an escaped pipe are available only in Markdown mode because Visual mode cannot preserve the escape.";
     }
   });
 

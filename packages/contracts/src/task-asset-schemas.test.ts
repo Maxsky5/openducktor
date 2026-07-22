@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   hostInvokeFailureSchema,
+  parseTaskAssetUri,
   TASK_ASSET_MAX_DESCRIPTION_ASSETS,
   TASK_ASSET_MAX_FILE_BYTES,
+  TASK_ASSET_URI_PREFIX,
   taskAssetDescriptionMutationSchema,
   taskAssetIdSchema,
   taskAssetMediaTypeSchema,
@@ -32,6 +34,13 @@ describe("task asset contracts", () => {
     expect(taskAssetIdSchema.parse(assetId)).toBe(assetId);
     expect(taskAssetIdSchema.safeParse("../foreign").success).toBe(false);
     expect(taskAssetIdSchema.safeParse("asset/child").success).toBe(false);
+  });
+
+  test("parses logical asset URIs with the same UUID contract", () => {
+    expect(TASK_ASSET_URI_PREFIX).toBe("odt-asset:");
+    expect(parseTaskAssetUri(`${TASK_ASSET_URI_PREFIX}${assetId}`)).toBe(assetId);
+    expect(parseTaskAssetUri("odt-asset:550e8400e29b-41d4-a716-446655440000-")).toBeNull();
+    expect(parseTaskAssetUri("https://example.com/image.png")).toBeNull();
   });
 
   test("rejects duplicate staged IDs and more than the description limit", () => {
