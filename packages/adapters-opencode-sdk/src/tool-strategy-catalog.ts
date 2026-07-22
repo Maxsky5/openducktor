@@ -21,7 +21,7 @@ export type OpenCodeToolPreviewStrategy =
 type OpenCodeToolStrategyDefinition = {
   toolType: AgentToolType;
   previewStrategy: OpenCodeToolPreviewStrategy;
-  match: (normalizedName: string) => string | null;
+  resolveCanonicalName: (normalizedName: string) => string | null;
 };
 
 export type ResolvedOpenCodeToolStrategy = {
@@ -95,32 +95,32 @@ export const OPENCODE_TOOL_STRATEGY_CATALOG = [
   {
     toolType: "bash",
     previewStrategy: "shell",
-    match: matchExact(SHELL_TOOL_NAMES),
+    resolveCanonicalName: matchExact(SHELL_TOOL_NAMES),
   },
   {
     toolType: "read",
     previewStrategy: "read",
-    match: matchExact(READ_TOOL_NAMES),
+    resolveCanonicalName: matchExact(READ_TOOL_NAMES),
   },
   {
     toolType: "list",
     previewStrategy: "list",
-    match: matchExact(LIST_TOOL_NAMES),
+    resolveCanonicalName: matchExact(LIST_TOOL_NAMES),
   },
   {
     toolType: "search",
     previewStrategy: "search",
-    match: matchExact(SEARCH_TOOL_NAMES),
+    resolveCanonicalName: matchExact(SEARCH_TOOL_NAMES),
   },
   {
     toolType: "generic",
     previewStrategy: "skill",
-    match: (normalizedName) => (normalizedName === "skill" ? normalizedName : null),
+    resolveCanonicalName: (normalizedName) => (normalizedName === "skill" ? normalizedName : null),
   },
   {
     toolType: "todo",
     previewStrategy: "todo",
-    match: (normalizedName) =>
+    resolveCanonicalName: (normalizedName) =>
       TODO_TOOL_NAMES.has(normalizedName) ||
       normalizedName.endsWith("_todowrite") ||
       normalizedName.endsWith("_todoread")
@@ -130,28 +130,29 @@ export const OPENCODE_TOOL_STRATEGY_CATALOG = [
   {
     toolType: "file_edit",
     previewStrategy: "generic",
-    match: matchExact(FILE_EDIT_TOOL_NAMES),
+    resolveCanonicalName: matchExact(FILE_EDIT_TOOL_NAMES),
   },
   {
     toolType: "question",
     previewStrategy: "question",
-    match: (normalizedName) =>
+    resolveCanonicalName: (normalizedName) =>
       normalizedName === "question" || normalizedName.endsWith("_question") ? normalizedName : null,
   },
   {
     toolType: "generic",
     previewStrategy: "task",
-    match: matchExact(TASK_TOOL_NAMES),
+    resolveCanonicalName: matchExact(TASK_TOOL_NAMES),
   },
   {
     toolType: "workflow",
     previewStrategy: "workflow",
-    match: (normalizedName) => WORKFLOW_CANONICAL_NAME_BY_ALIAS.get(normalizedName) ?? null,
+    resolveCanonicalName: (normalizedName) =>
+      WORKFLOW_CANONICAL_NAME_BY_ALIAS.get(normalizedName) ?? null,
   },
   {
     toolType: "web",
     previewStrategy: "web",
-    match: (normalizedName) =>
+    resolveCanonicalName: (normalizedName) =>
       normalizedName === "webfetch" || normalizedName.startsWith("websearch")
         ? normalizedName
         : null,
@@ -159,27 +160,30 @@ export const OPENCODE_TOOL_STRATEGY_CATALOG = [
   {
     toolType: "web",
     previewStrategy: "generic",
-    match: (normalizedName) => (normalizedName.startsWith("webfetch") ? normalizedName : null),
+    resolveCanonicalName: (normalizedName) =>
+      normalizedName.startsWith("webfetch") ? normalizedName : null,
   },
   {
     toolType: "generic",
     previewStrategy: "context",
-    match: (normalizedName) => (normalizedName.startsWith("context7_") ? normalizedName : null),
+    resolveCanonicalName: (normalizedName) =>
+      normalizedName.startsWith("context7_") ? normalizedName : null,
   },
   {
     toolType: "generic",
     previewStrategy: "github_search",
-    match: (normalizedName) => (normalizedName === "grep_app_searchgithub" ? normalizedName : null),
+    resolveCanonicalName: (normalizedName) =>
+      normalizedName === "grep_app_searchgithub" ? normalizedName : null,
   },
   {
     toolType: "generic",
     previewStrategy: "lsp",
-    match: matchExact(LSP_TOOL_NAMES),
+    resolveCanonicalName: matchExact(LSP_TOOL_NAMES),
   },
   {
     toolType: "generic",
     previewStrategy: "session",
-    match: matchExact(SESSION_TOOL_NAMES),
+    resolveCanonicalName: matchExact(SESSION_TOOL_NAMES),
   },
 ] as const satisfies readonly OpenCodeToolStrategyDefinition[];
 
@@ -187,7 +191,7 @@ export const resolveOpencodeToolStrategy = (toolName: string): ResolvedOpenCodeT
   const normalizedName = normalizeToolName(toolName);
 
   for (const strategy of OPENCODE_TOOL_STRATEGY_CATALOG) {
-    const canonicalName = strategy.match(normalizedName);
+    const canonicalName = strategy.resolveCanonicalName(normalizedName);
     if (canonicalName) {
       return {
         normalizedName,
