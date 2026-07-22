@@ -231,6 +231,17 @@ describe("task description Markdown dialect", () => {
   });
 
   test.each([
+    ["bold text", "1. **bold**"],
+    ["italic text", "1. *italic*"],
+    ["strikethrough text", "1. ~~strike~~"],
+    ["inline code", "1. `code`"],
+    ["a link", "1. [link](https://example.com)"],
+    ["an HTTP image", "1. ![HTTP image](https://example.com/image.png)"],
+    ["a task asset image", "1. ![Asset image](odt-asset:550e8400-e29b-41d4-a716-446655440000)"],
+    [
+      "mixed inline formatting followed by another block",
+      "1. **bold**, *italic*, ~~strike~~, `code`, and [link](https://example.com)\n\n   > quote",
+    ],
     ["a 1. blockquote", "1. > quote"],
     ["a 10. blockquote", "10. > quote"],
     ["a leading fenced code block", "1. ```ts\n   const value = 1\n   ```"],
@@ -276,6 +287,32 @@ describe("task description Markdown dialect", () => {
     const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
 
     expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
+  });
+
+  test.each([
+    ["zero", "1. Parent\n\n   0. Child"],
+    ["non-one", "1. Parent\n\n   2. Child"],
+    ["multi-digit", "1. Parent\n\n   20. Child"],
+  ])("preserves a blank line before a nested %s-start ordered list", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+
+    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+
+    expect(canonical).toContain("Parent\n\n   ");
+    expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
+  });
+
+  test.each([
+    ["zero", "1. Parent\n   0. Child"],
+    ["non-one", "1. Parent\n   2. Child"],
+    ["multi-digit", "1. Parent\n   20. Child"],
+  ])("keeps an ambiguous nested %s-start ordered list in Markdown mode", (_name, markdown) => {
+    const result = assessVisualMarkdownCompatibility(markdown);
+
+    expect(result.compatible).toBe(false);
+    if (!result.compatible) {
+      expect(result.reason).toContain("blank line");
+    }
   });
 
   test.each([

@@ -79,6 +79,37 @@ export type MarkdownMathSemantic = {
   value: string;
 };
 
+export type MarkdownOrderedListSemantic = {
+  start: number;
+  items: Array<{ lists: MarkdownOrderedListSemantic[] }>;
+};
+
+type MarkdownTreeNode = {
+  type?: string;
+  ordered?: boolean;
+  start?: number | null;
+  children?: MarkdownTreeNode[];
+};
+
+const orderedListsInMarkdownTree = (node: MarkdownTreeNode): MarkdownOrderedListSemantic[] => {
+  if (node.type === "list" && node.ordered) {
+    return [
+      {
+        start: node.start ?? 1,
+        items: (node.children ?? []).map((item) => ({
+          lists: (item.children ?? []).flatMap(orderedListsInMarkdownTree),
+        })),
+      },
+    ];
+  }
+  return (node.children ?? []).flatMap(orderedListsInMarkdownTree);
+};
+
+export const canonicalRendererOrderedListSemantics = (
+  body: string,
+): MarkdownOrderedListSemantic[] =>
+  orderedListsInMarkdownTree(parseCanonicalRendererMarkdown(body) as MarkdownTreeNode);
+
 export const canonicalRendererMathSemantics = (body: string): MarkdownMathSemantic[] => {
   const semantics: MarkdownMathSemantic[] = [];
 

@@ -245,6 +245,43 @@ const withLeadingListItemMathTokens = (token: MarkdownToken): MarkdownToken => {
   };
 };
 
+// TipTap's OrderedList parser reads item tokens directly and bypasses ListItem.parseMarkdown.
+// Convert Marked's first text token to a paragraph so TipTap uses its inline token stream.
+const withOrderedListItemParagraphTokens = (
+  token: MarkdownToken,
+  helpers: MarkdownParseHelpers,
+): MarkdownToken => {
+  if (!Array.isArray(token.items)) {
+    return token;
+  }
+
+  const tokenizeInline = requireMarkdownHook(
+    "MarkdownParseHelpers",
+    "tokenizeInline",
+    helpers.tokenizeInline,
+  );
+  return {
+    ...token,
+    items: token.items.map((item) => {
+      const firstToken = item.tokens?.[0];
+      if (firstToken?.type !== "text") {
+        return item;
+      }
+      return {
+        ...item,
+        tokens: [
+          {
+            ...firstToken,
+            type: "paragraph",
+            tokens: tokenizeInline(firstToken.text ?? firstToken.raw ?? ""),
+          },
+          ...(item.tokens?.slice(1) ?? []),
+        ],
+      };
+    }),
+  };
+};
+
 const parseLeadingTaskItemMath = (
   token: MarkdownToken,
   helpers: MarkdownParseHelpers,
@@ -298,7 +335,9 @@ const renderListItem = (
     const renderedChild = helpers.renderChildren([child]);
     const nestedList =
       child.type === "bulletList" || child.type === "orderedList" || child.type === "taskList";
-    const separator = nestedList ? "\n" : "\n\n";
+    const nestedOrderedListNeedsBlank =
+      child.type === "orderedList" && Number(child.attrs?.start ?? 1) !== 1;
+    const separator = nestedList && !nestedOrderedListNeedsBlank ? "\n" : "\n\n";
     output += `${separator}${renderedChild
       .split("\n")
       .map((line) => `${continuation}${line}`)
@@ -339,7 +378,9 @@ export const TaskDescriptionOrderedList = OrderedList.extend({
   markdownTokenizer: taskDescriptionOrderedListTokenizer,
 
   parseMarkdown(token, helpers) {
-    const parsed = ensureOrderedListMathParagraphs(defaultOrderedListParseMarkdown(token, helpers));
+    const parsed = ensureOrderedListMathParagraphs(
+      defaultOrderedListParseMarkdown(withOrderedListItemParagraphTokens(token, helpers), helpers),
+    );
     return preserveOrderedListStart(parsed, orderedListStart(token));
   },
 });

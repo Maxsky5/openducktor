@@ -3,8 +3,10 @@ import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter
 import {
   assessVisualMarkdownSyntaxCompatibility,
   canonicalRendererMathSemantics,
+  canonicalRendererOrderedListSemantics,
   hasEquivalentCanonicalRendererSemantics,
   type MarkdownMathSemantic,
+  type MarkdownOrderedListSemantic,
   type VisualMarkdownCompatibility,
 } from "./task-description-markdown-compatibility";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
@@ -67,6 +69,20 @@ const visualEditorMathSemantics = (tree: JSONContent): MarkdownMathSemantic[] =>
   return semantics;
 };
 
+const orderedListsInVisualTree = (node: JSONContent): MarkdownOrderedListSemantic[] => {
+  if (node.type === "orderedList") {
+    return [
+      {
+        start: Number(node.attrs?.start ?? 1),
+        items: (node.content ?? []).map((item) => ({
+          lists: (item.content ?? []).flatMap(orderedListsInVisualTree),
+        })),
+      },
+    ];
+  }
+  return (node.content ?? []).flatMap(orderedListsInVisualTree);
+};
+
 export const assessVisualMarkdownCompatibility = (
   markdown: string,
 ): VisualMarkdownCompatibility => {
@@ -94,6 +110,15 @@ export const assessVisualMarkdownCompatibility = (
         compatible: false,
         reason:
           "Block math delimiters do not have the same meaning in Visual mode and the canonical renderer. Keep this source in Markdown mode and pair each standalone $$ delimiter.",
+      };
+    }
+    const visualOrderedLists = orderedListsInVisualTree(originalTree);
+    const rendererOrderedLists = canonicalRendererOrderedListSemantics(frontMatter.body);
+    if (JSON.stringify(visualOrderedLists) !== JSON.stringify(rendererOrderedLists)) {
+      return {
+        compatible: false,
+        reason:
+          "Nested ordered lists that start with a number other than 1 need a blank line before the nested list to match the canonical renderer.",
       };
     }
     if (JSON.stringify(originalTree) !== JSON.stringify(canonicalTree)) {

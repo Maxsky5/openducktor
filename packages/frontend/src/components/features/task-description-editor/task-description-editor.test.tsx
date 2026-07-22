@@ -1,8 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor as testingLibraryWaitFor } from "@testing-library/react";
 import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import TaskDescriptionEditor from "./task-description-editor";
+
+const EDITOR_WAIT_TIMEOUT_MS = 2_000;
+const waitFor = <Result,>(callback: () => Result): Promise<Result> =>
+  testingLibraryWaitFor(callback, { timeout: EDITOR_WAIT_TIMEOUT_MS });
 
 const createProps = () => ({
   workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
@@ -39,6 +43,20 @@ describe("TaskDescriptionEditor", () => {
   });
 
   test.each([
+    ["ordered bold text", "1. **bold**"],
+    ["ordered italic text", "1. *italic*"],
+    ["ordered strikethrough text", "1. ~~strike~~"],
+    ["ordered inline code", "1. `code`"],
+    ["an ordered link", "1. [link](https://example.com)"],
+    ["an ordered HTTP image", "1. ![HTTP image](https://example.com/image.png)"],
+    [
+      "an ordered task asset image",
+      "1. ![Asset image](odt-asset:550e8400-e29b-41d4-a716-446655440000)",
+    ],
+    [
+      "ordered mixed inline formatting followed by another block",
+      "1. **bold**, *italic*, ~~strike~~, `code`, and [link](https://example.com)\n\n   > quote",
+    ],
     ["1. ordered math with trailing prose", "1. $$\n   x\n   $$\n\n   After"],
     ["10. ordered math with trailing prose", "10. $$\n    x\n    $$\n\n    After"],
     ["99. ordered math with trailing prose", "99. $$\n    x\n    $$\n\n    After"],
@@ -68,6 +86,9 @@ describe("TaskDescriptionEditor", () => {
     ],
     ["a zero-start dot marker", "0. > quote"],
     ["a zero-start parenthesis marker", "0) > quote"],
+    ["a blank-separated nested zero-start ordered list", "1. Parent\n\n   0. Child"],
+    ["a blank-separated nested non-one ordered list", "1. Parent\n\n   2. Child"],
+    ["a blank-separated nested multi-digit ordered list", "1. Parent\n\n   20. Child"],
     [
       "ordered math followed by fenced code",
       "1. $$\n   x\n   $$\n\n   ```ts\n   const value = 1\n   ```",
@@ -95,13 +116,32 @@ describe("TaskDescriptionEditor", () => {
         <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
       );
 
-      await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull(), {
-        timeout: 2_000,
-      });
+      await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
       expect(view.queryByRole("alert")).toBeNull();
 
       fireEvent.click(view.getByRole("button", { name: "Markdown" }));
 
+      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+      expect(onChange).not.toHaveBeenCalled();
+    },
+    5_000,
+  );
+
+  test.each([
+    ["zero", "1. Parent\n   0. Child"],
+    ["non-one", "1. Parent\n   2. Child"],
+    ["multi-digit", "1. Parent\n   20. Child"],
+  ])(
+    "keeps an ambiguous nested %s-start ordered list unchanged in Markdown mode",
+    async (_name, markdown) => {
+      const onChange = mock((_value: string) => {});
+      const view = render(
+        <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+      );
+
+      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+      expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("blank line");
+      fireEvent.click(view.getByRole("button", { name: "Visual" }));
       expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
       expect(onChange).not.toHaveBeenCalled();
     },
@@ -119,7 +159,9 @@ describe("TaskDescriptionEditor", () => {
 
     expect(view.getByRole("textbox")).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect((await view.findByRole("alert")).textContent).toContain("Reference-style links");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Reference-style links",
+    );
     expect(view.getByRole("textbox")).toBeTruthy();
   });
 
@@ -132,7 +174,7 @@ describe("TaskDescriptionEditor", () => {
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect((await view.findByRole("alert")).textContent).toContain("escaped pipe");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("escaped pipe");
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -144,7 +186,9 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
-    expect((await view.findByRole("alert")).textContent).toContain("cannot be preserved");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "cannot be preserved",
+    );
     expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
       false,
     );
@@ -161,7 +205,9 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
-    expect((await view.findByRole("alert")).textContent).toContain("Block math delimiters");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Block math delimiters",
+    );
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect(onChange).not.toHaveBeenCalled();
@@ -174,7 +220,9 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
-    expect((await view.findByRole("alert")).textContent).toContain("Block math delimiters");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Block math delimiters",
+    );
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.getByRole("textbox")).toBeTruthy();
   });
@@ -229,7 +277,7 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
-    const input = await view.findByRole("textbox", { name: "LaTeX formula" });
+    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
     fireEvent.change(input, { target: { value: "x" } });
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
@@ -253,7 +301,9 @@ describe("TaskDescriptionEditor", () => {
 
     expect(view.getByRole("textbox")).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect((await view.findByRole("alert")).textContent).toContain("Reference-style links");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Reference-style links",
+    );
 
     view.rerender(
       <TaskDescriptionEditor
@@ -290,9 +340,11 @@ describe("TaskDescriptionEditor", () => {
       />,
     );
 
-    expect(await view.findByRole("textbox")).toBeTruthy();
+    expect(await waitFor(() => view.getByRole("textbox"))).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect((await view.findByRole("alert")).textContent).toContain("Reference-style links");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Reference-style links",
+    );
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -424,7 +476,7 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
-    const dialog = await view.findByRole("dialog", { name: "Insert inline formula" });
+    const dialog = await waitFor(() => view.getByRole("dialog", { name: "Insert inline formula" }));
     const input = view.getByRole("textbox", { name: "LaTeX formula" });
     fireEvent.change(input, { target: { value: "\\frac{a}{b}" } });
     fireEvent.click(view.getByRole("button", { name: "Insert formula" }));
@@ -447,7 +499,7 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
-    const input = await view.findByRole("textbox", { name: "LaTeX formula" });
+    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
     fireEvent.change(input, { target: { value: "y" } });
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
@@ -475,7 +527,7 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
-    const input = await view.findByRole("textbox", { name: "LaTeX formula" });
+    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
     fireEvent.change(input, { target: { value: "y" } });
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
@@ -501,12 +553,14 @@ describe("TaskDescriptionEditor", () => {
     });
 
     fireEvent.click(mathNode);
-    expect(await view.findByRole("dialog", { name: "Edit inline formula" })).toBeTruthy();
+    expect(
+      await waitFor(() => view.getByRole("dialog", { name: "Edit inline formula" })),
+    ).toBeTruthy();
     const input = view.getByRole("textbox", { name: "LaTeX formula" });
     expect((input as HTMLInputElement).value).toBe("x");
     fireEvent.change(input, { target: { value: "\\frac{" } });
     fireEvent.click(view.getByRole("button", { name: "Save formula" }));
-    expect((await view.findByRole("alert")).textContent).toContain("valid LaTeX");
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("valid LaTeX");
     expect(onChange).not.toHaveBeenCalled();
 
     fireEvent.click(view.getByRole("button", { name: "Cancel" }));
@@ -516,7 +570,9 @@ describe("TaskDescriptionEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
 
     fireEvent.click(mathNode);
-    expect(await view.findByRole("dialog", { name: "Edit inline formula" })).toBeTruthy();
+    expect(
+      await waitFor(() => view.getByRole("dialog", { name: "Edit inline formula" })),
+    ).toBeTruthy();
     const replacement = view.getByRole("textbox", { name: "LaTeX formula" });
     fireEvent.change(replacement, { target: { value: "y^2" } });
     fireEvent.submit(replacement.closest("form") as HTMLFormElement);
@@ -533,7 +589,9 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Block math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Block math" }));
-    expect(await view.findByRole("dialog", { name: "Insert block formula" })).toBeTruthy();
+    expect(
+      await waitFor(() => view.getByRole("dialog", { name: "Insert block formula" })),
+    ).toBeTruthy();
     const input = view.getByRole("textbox", { name: "LaTeX formula" });
     fireEvent.change(input, { target: { value: "\\sum_{i=1}^{n} i" } });
     fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
