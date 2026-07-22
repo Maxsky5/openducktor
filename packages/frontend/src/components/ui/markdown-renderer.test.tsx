@@ -150,6 +150,35 @@ describe("rich task description rendering", () => {
     4000,
   );
 
+  test.each([
+    ["block math in a blockquote", "> $$\n> x\n> $$"],
+    ["block math in a nested blockquote", "> > $$\n> > x\n> > $$"],
+    ["inline math between unmatched backticks", "before `\n\n$x$\n\nafter `"],
+  ])(
+    "renders %s through KaTeX",
+    async (_name, markdown) => {
+      const view = render(<MarkdownRenderer markdown={markdown} />);
+
+      await waitFor(() => expect(view.container.querySelector(".katex")).not.toBeNull(), {
+        timeout: 3000,
+      });
+    },
+    4000,
+  );
+
+  test.each([
+    ["four-tilde fences", "~~~~md\n$$\nx\n$$\n~~~~"],
+    ["longer matching close fences", "~~~~md\n$$\nx\n$$\n~~~~~"],
+    ["unmatched fences", "~~~~md\n$$\nx\n$$"],
+  ])("keeps math lookalikes inside %s as code", async (_name, markdown) => {
+    const view = render(<MarkdownRenderer markdown={markdown} />);
+
+    await waitFor(() => {
+      expect(view.container.querySelector("code")?.textContent).toContain("$$\nx\n$$");
+    });
+    expect(view.container.querySelector(".katex")).toBeNull();
+  });
+
   test("omits valid front matter consistently with and without math or task context", async () => {
     const plain = render(
       <MarkdownRenderer markdown={"---\ntitle: Hidden plain\n---\nVisible plain"} />,

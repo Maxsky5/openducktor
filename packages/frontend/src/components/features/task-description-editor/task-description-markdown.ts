@@ -2,7 +2,9 @@ import { Editor, type JSONContent } from "@tiptap/core";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 import {
   assessVisualMarkdownSyntaxCompatibility,
+  canonicalRendererMathSemantics,
   hasEquivalentCanonicalRendererSemantics,
+  type MarkdownMathSemantic,
   type VisualMarkdownCompatibility,
 } from "./task-description-markdown-compatibility";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
@@ -49,6 +51,22 @@ const semanticTree = (value: JSONContent): JSONContent =>
     }),
   ) as JSONContent;
 
+const visualEditorMathSemantics = (tree: JSONContent): MarkdownMathSemantic[] => {
+  const semantics: MarkdownMathSemantic[] = [];
+
+  const collect = (node: JSONContent): void => {
+    if (node.type === "blockMath") {
+      semantics.push({ kind: "block", value: String(node.attrs?.latex ?? "") });
+    } else if (node.type === "inlineMath") {
+      semantics.push({ kind: "inline", value: String(node.attrs?.latex ?? "") });
+    }
+    node.content?.forEach(collect);
+  };
+
+  collect(tree);
+  return semantics;
+};
+
 export const assessVisualMarkdownCompatibility = (
   markdown: string,
 ): VisualMarkdownCompatibility => {
@@ -69,6 +87,15 @@ export const assessVisualMarkdownCompatibility = (
     const canonicalBody = canonicalizeBody(frontMatter.body);
     const originalTree = semanticTree(parseBodyToJson(frontMatter.body));
     const canonicalTree = semanticTree(parseBodyToJson(canonicalBody));
+    const visualMath = visualEditorMathSemantics(originalTree);
+    const rendererMath = canonicalRendererMathSemantics(frontMatter.body);
+    if (JSON.stringify(visualMath) !== JSON.stringify(rendererMath)) {
+      return {
+        compatible: false,
+        reason:
+          "Block math delimiters do not have the same meaning in Visual mode and the canonical renderer. Keep this source in Markdown mode and pair each standalone $$ delimiter.",
+      };
+    }
     if (JSON.stringify(originalTree) !== JSON.stringify(canonicalTree)) {
       return {
         compatible: false,

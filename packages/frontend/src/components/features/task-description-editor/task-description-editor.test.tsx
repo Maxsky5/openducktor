@@ -97,6 +97,18 @@ describe("TaskDescriptionEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  test("keeps malformed block math in Markdown mode with an actionable reason", async () => {
+    const markdown = "$$\nx\n\nThen $y$";
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown={markdown} onChange={() => {}} />,
+    );
+
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect((await view.findByRole("alert")).textContent).toContain("Block math delimiters");
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(view.getByRole("textbox")).toBeTruthy();
+  });
+
   test("preserves front matter outside Visual mode and keeps it source-editable", async () => {
     const markdown = "---\ntitle: Keep comments # exact\n---\nBody";
     const view = render(
@@ -364,6 +376,30 @@ describe("TaskDescriptionEditor", () => {
             emittedMarkdown.includes("$$\nx^2\n$$") &&
             emittedMarkdown.includes("$y$")
           );
+        }),
+      ).toBe(true),
+    );
+  });
+
+  test("preserves nested block math after an unrelated Visual edit", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "> $$\n> x\n> $$";
+    const view = render(
+      <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+    );
+    expect(hasMarkdownMath(markdown)).toBe(true);
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const input = await view.findByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(input, { target: { value: "y" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => {
+          const emittedMarkdown = String(value);
+          return hasMarkdownMath(emittedMarkdown) && emittedMarkdown.includes("> $$");
         }),
       ).toBe(true),
     );

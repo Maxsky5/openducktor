@@ -69,6 +69,25 @@ const canonicalRendererSemanticTree = (body: string): unknown =>
     }),
   );
 
+export type MarkdownMathSemantic = {
+  kind: "block" | "inline";
+  value: string;
+};
+
+export const canonicalRendererMathSemantics = (body: string): MarkdownMathSemantic[] => {
+  const semantics: MarkdownMathSemantic[] = [];
+
+  visit(parseCanonicalRendererMarkdown(body), (node) => {
+    if (node.type === "math") {
+      semantics.push({ kind: "block", value: node.value });
+    } else if (node.type === "inlineMath") {
+      semantics.push({ kind: "inline", value: node.value });
+    }
+  });
+
+  return semantics;
+};
+
 export const hasEquivalentCanonicalRendererSemantics = (
   originalBody: string,
   canonicalBody: string,

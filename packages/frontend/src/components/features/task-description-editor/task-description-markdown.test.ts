@@ -181,6 +181,36 @@ describe("task description Markdown dialect", () => {
   });
 
   test.each([
+    ["block math in a blockquote", "> $$\n> x\n> $$"],
+    ["block math in a nested blockquote", "> > $$\n> > x\n> > $$"],
+    ["inline math between unmatched backticks", "before `\n\n$x$\n\nafter `"],
+  ])("keeps parser-aligned %s available in Visual mode", (_name, markdown) => {
+    expect(hasMarkdownMath(markdown)).toBe(true);
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+  });
+
+  test.each([
+    ["open-only block", "$$\nx"],
+    ["open block that absorbs later inline math", "$$\nx\n\nThen $y$"],
+    ["close-only block after inline math", "Before $y$\n\nx\n$$"],
+    ["CRLF open-only block", "$$\r\nx\r\n\r\nAfter"],
+  ])("keeps malformed %s in Markdown mode", (_name, markdown) => {
+    const result = assessVisualMarkdownCompatibility(markdown);
+
+    expect(result.compatible).toBe(false);
+    if (!result.compatible) {
+      expect(result.reason).toContain("Block math delimiters");
+    }
+  });
+
+  test.each([["fenced code", "````md\n$$\nx\n$$\n````"]])(
+    "does not gate block-math lookalikes in %s",
+    (_name, markdown) => {
+      expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+    },
+  );
+
+  test.each([
     ["one formula", "$$x$$"],
     ["surrounding text", "Before $$x$$ after"],
     ["adjacent formulas", "$$x$$ and $$y$$"],
