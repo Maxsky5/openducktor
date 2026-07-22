@@ -1,4 +1,5 @@
 import {
+  type AgentSessionLiveRef,
   type AgentSessionTranscriptEvent,
   type CodexAppServerRequestId,
   isAgentSessionTranscriptEventType,
@@ -52,14 +53,15 @@ import {
 import { createCodexEventMappers } from "./event-mappers";
 import type {
   CodexAppServerAdapterOptions,
+  CodexAppServerEventSubscriber,
   CodexNotificationRecord,
+  CodexRuntimeEventQueueFailureHandler,
   CodexServerRequestRecord,
   CodexSessionContextUsage,
   CodexSessionState,
 } from "./types";
 
-type CodexRuntimeSessionEventsDeps = {
-  subscribeEvents: CodexAppServerAdapterOptions["subscribeEvents"];
+type CodexRuntimeSessionEventsDepsBase = {
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
   onLiveSessionMutation?: (mutation: CodexRuntimeLiveSessionMutation) => void | Promise<void>;
   onCatalogInvalidated?: CodexAppServerAdapterOptions["onCatalogInvalidated"];
@@ -72,9 +74,27 @@ type CodexRuntimeSessionEventsDeps = {
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
 };
 
+type CodexRuntimeSessionEventsStreamingDeps = CodexRuntimeSessionEventsDepsBase & {
+  subscribeEvents: CodexAppServerEventSubscriber;
+  onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler;
+};
+
+type CodexRuntimeSessionEventsRequestOnlyDeps = CodexRuntimeSessionEventsDepsBase & {
+  subscribeEvents?: undefined;
+  onRuntimeEventQueueFailure?: never;
+};
+
+type CodexRuntimeSessionEventsDeps =
+  | CodexRuntimeSessionEventsStreamingDeps
+  | CodexRuntimeSessionEventsRequestOnlyDeps;
+
 type CodexServerRequestEnvelope = {
   request: CodexServerRequestRecord;
   receivedAt: string;
+};
+
+type CodexRuntimeStreamEventSessionOwner = {
+  faultSession: CodexSessionState;
 };
 
 export type CodexRuntimeLiveSessionMutation = {
@@ -82,6 +102,7 @@ export type CodexRuntimeLiveSessionMutation = {
   transcriptEvents: AgentSessionTranscriptEvent[];
   catalogInvalidated: boolean;
   fault?: string;
+  faultRef?: AgentSessionLiveRef;
 };
 
 const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
@@ -150,8 +171,14 @@ export class CodexRuntimeSessionEvents {
   }
 
   ensureRuntimeEventSubscription(runtimeId: string): Promise<void> {
+    const { subscribeEvents, onRuntimeEventQueueFailure } = this.deps;
+    if (!subscribeEvents) {
+      throw new Error(
+        `Cannot observe Codex runtime '${runtimeId}' because live event subscription is unavailable.`,
+      );
+    }
     return this.runtimeEventSubscriptions.ensure(runtimeId, (event) => {
-      this.enqueueRuntimeStreamEvent(event);
+      this.enqueueRuntimeStreamEvent(event, onRuntimeEventQueueFailure);
     });
   }
 
@@ -201,12 +228,15 @@ export class CodexRuntimeSessionEvents {
     return this.contextUsage.load(runtimeId, threadId, resumeWithTurns);
   }
 
-  private enqueueRuntimeStreamEvent(event: CodexRuntimeStreamEvent): void {
+  private enqueueRuntimeStreamEvent(
+    event: CodexRuntimeStreamEvent,
+    onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler,
+  ): void {
     const previous =
       this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) ?? Promise.resolve();
     const processing = previous
       .then(() => this.processRuntimeStreamEventMutation(event))
-      .catch((error) => this.emitRuntimeStreamEventError(event, error));
+      .catch((error) => onRuntimeEventQueueFailure({ runtimeId: event.runtimeId, error }));
     this.runtimeEventProcessingByRuntimeId.set(event.runtimeId, processing);
     void processing.finally(() => {
       if (this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) === processing) {
@@ -226,11 +256,15 @@ export class CodexRuntimeSessionEvents {
       try {
         await this.handleRuntimeStreamEvent(event);
       } catch (error) {
-        mutation.fault = this.errorMessage(error);
+        const owner = this.runtimeStreamEventSessionOwner(event);
+        Object.assign(mutation, {
+          fault: this.errorMessage(error),
+          ...(owner ? { faultRef: codexSessionRef(owner.faultSession) } : {}),
+        });
         this.emitRuntimeStreamEventError(event, error);
       }
       if (mutation.catalogInvalidated) {
-        this.deps.onCatalogInvalidated?.({ runtimeId: event.runtimeId, catalog: "skills" });
+        await this.deps.onCatalogInvalidated?.({ runtimeId: event.runtimeId, catalog: "skills" });
       }
       await this.deps.onLiveSessionMutation?.(mutation);
     } finally {
@@ -542,17 +576,31 @@ export class CodexRuntimeSessionEvents {
       }
       return;
     }
+    const owner = this.runtimeStreamEventSessionOwner(event);
+    if (owner) {
+      this.emitSessionErrorForSession(owner.faultSession, error);
+    }
+  }
+
+  private runtimeStreamEventSessionOwner(
+    event: CodexRuntimeStreamEvent,
+  ): CodexRuntimeStreamEventSessionOwner | undefined {
+    const threadId = threadIdFromRuntimeStreamEvent(event);
+    if (!threadId) {
+      return undefined;
+    }
     const session = this.deps.sessions.get(threadId);
     if (session?.runtimeId === event.runtimeId) {
-      this.emitSessionError(threadId, error);
-      return;
+      return { faultSession: session };
     }
     const route = this.deps.subagents.routeForChild(threadId, event.runtimeId);
     const parentSession = route ? this.deps.sessions.get(route.parentExternalSessionId) : undefined;
-    if (parentSession?.runtimeId === event.runtimeId) {
-      this.emitSessionError(parentSession.threadId, error);
-      return;
+    if (!route || parentSession?.runtimeId !== event.runtimeId) {
+      return undefined;
     }
+    return {
+      faultSession: routedChildSession(parentSession, route),
+    };
   }
 
   private emitCrossRuntimeRouteError(
@@ -754,9 +802,13 @@ export class CodexRuntimeSessionEvents {
     if (!session) {
       return;
     }
+    this.emitSessionErrorForSession(session, error);
+  }
+
+  private emitSessionErrorForSession(session: CodexSessionState, error: unknown): void {
     this.emitSessionEventForSession(session, {
       type: "session_error",
-      externalSessionId,
+      externalSessionId: session.threadId,
       timestamp: new Date().toISOString(),
       message: this.errorMessage(error),
     });

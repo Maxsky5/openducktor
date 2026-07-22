@@ -255,6 +255,11 @@ export const resolveAgentStudioRouteSession = ({
     return { kind: "none" };
   }
 
+  const session = findAgentStudioTaskSessionSummary(sessions, taskId, sessionExternalId);
+  if (session) {
+    return { kind: "found", session };
+  }
+
   if (sessionReadModelLoadState.kind === "failed") {
     return {
       kind: "failed",
@@ -267,8 +272,7 @@ export const resolveAgentStudioRouteSession = ({
     return { kind: "pending", sessionExternalId };
   }
 
-  const session = findAgentStudioTaskSessionSummary(sessions, taskId, sessionExternalId);
-  return session ? { kind: "found", session } : { kind: "missing", sessionExternalId };
+  return { kind: "missing", sessionExternalId };
 };
 
 export const groupSessionsByTaskId = (

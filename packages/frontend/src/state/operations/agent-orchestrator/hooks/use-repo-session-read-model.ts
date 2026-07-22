@@ -1,5 +1,5 @@
-import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
-import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
+import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
+import { agentSessionRefKey, buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
@@ -9,6 +9,7 @@ import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { retryAgentSessionListQueries } from "@/state/queries/agent-sessions";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
@@ -17,6 +18,7 @@ import {
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
+import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import {
@@ -57,7 +59,11 @@ type UseRepoSessionReadModelArgs = {
 export type RepoSessionReadModelState = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   reloadSessionReadModel: () => void;
+  getSessionFault: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
 };
+
+const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
+  `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
 
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
@@ -74,6 +80,9 @@ export const useRepoSessionReadModel = ({
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
+  const [sessionFaults, setSessionFaults] = useState<
+    ReadonlyMap<string, AgentSessionTransientFault>
+  >(() => new Map());
   const [reloadGeneration, setReloadGeneration] = useState(0);
   const retryAttemptRef = useRef(0);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
@@ -93,6 +102,42 @@ export const useRepoSessionReadModel = ({
   );
   const recoverTranscriptHistory = useEffectEvent((message: string) =>
     recoverTranscriptGap(message),
+  );
+  const clearSessionFaults = useCallback(() => {
+    setSessionFaults((current) => (current.size === 0 ? current : new Map()));
+  }, []);
+  const recordSessionFault = useCallback((ref: AgentSessionLiveRef, message: string) => {
+    const key = agentSessionRefKey(ref);
+    setSessionFaults((current) => {
+      if (current.get(key)?.message === message) {
+        return current;
+      }
+      const next = new Map(current);
+      next.set(key, { message });
+      return next;
+    });
+  }, []);
+  const clearSessionFault = useCallback((ref: AgentSessionLiveRef) => {
+    const key = agentSessionRefKey(ref);
+    setSessionFaults((current) => {
+      if (!current.has(key)) {
+        return current;
+      }
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+  const getSessionFault = useCallback(
+    (session: AgentSessionIdentity | null): AgentSessionTransientFault | null => {
+      if (!workspaceRepoPath || !session) {
+        return null;
+      }
+      return (
+        sessionFaults.get(agentSessionRefKey({ repoPath: workspaceRepoPath, ...session })) ?? null
+      );
+    },
+    [sessionFaults, workspaceRepoPath],
   );
   const reloadSessionReadModel = useCallback(() => {
     const retryAttempt = retryAttemptRef.current + 1;
@@ -137,6 +182,12 @@ export const useRepoSessionReadModel = ({
     taskIds,
     workspaceRepoPath,
   ]);
+  // react-doctor-disable-next-line react-doctor/no-derived-state-effect
+  useEffect(() => {
+    if (!workspaceRepoPath) {
+      clearSessionFaults();
+    }
+  }, [clearSessionFaults, workspaceRepoPath]);
   const currentSessionReadModelLoadState = useMemo(
     () =>
       currentAgentSessionReadModelLoadState({
@@ -223,6 +274,7 @@ export const useRepoSessionReadModel = ({
     }
 
     const repoPath = workspaceRepoPath;
+    clearSessionFaults();
     const isRepoStale = createRepoStaleGuard({
       repoPath,
       repoEpochRef,
@@ -306,6 +358,15 @@ export const useRepoSessionReadModel = ({
         commitInitialSnapshot(envelope);
         return;
       }
+      if (envelope.type === "fault") {
+        const message = faultMessage(envelope);
+        if (envelope.ref) {
+          recordSessionFault(envelope.ref, message);
+        } else {
+          failObservation(message);
+        }
+        return;
+      }
       if (awaitingInitialSnapshot) {
         failObservation(
           `Live-session observation delivered '${envelope.type}' before its initial snapshot.`,
@@ -313,6 +374,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
+        clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
         const policyActions = commitSessionCollection((current) => {
           const collection = applyAgentSessionLiveDelta({
             current,
@@ -332,6 +394,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "transcript_event") {
+        clearSessionFault(envelope.event.sessionRef);
         handleTranscriptEvent(envelope.event);
         return;
       }
@@ -368,11 +431,6 @@ export const useRepoSessionReadModel = ({
           },
         );
         return;
-      }
-      if (envelope.type === "fault") {
-        failObservation(
-          `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`,
-        );
       }
     };
 
@@ -412,6 +470,9 @@ export const useRepoSessionReadModel = ({
     queryClient,
     reloadGeneration,
     repoEpochRef,
+    clearSessionFault,
+    clearSessionFaults,
+    recordSessionFault,
     workspaceRepoPath,
   ]);
 
@@ -419,7 +480,8 @@ export const useRepoSessionReadModel = ({
     () => ({
       sessionReadModelLoadState: currentSessionReadModelLoadState,
       reloadSessionReadModel,
+      getSessionFault,
     }),
-    [currentSessionReadModelLoadState, reloadSessionReadModel],
+    [currentSessionReadModelLoadState, getSessionFault, reloadSessionReadModel],
   );
 };

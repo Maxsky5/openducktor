@@ -35,6 +35,7 @@ import type {
 } from "./agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "./agent-session-start";
+import type { AgentSessionTransientFault } from "./agent-session-transient-fault";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -171,6 +172,7 @@ export type SpecStateContextValue = {
 export type AgentSessionReadModelStateContextValue = {
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   reloadSessionReadModel: () => void;
+  getSessionFault: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
 };
 
 export type AgentSessionHistoryLoadContextValue = {

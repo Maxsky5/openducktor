@@ -42,6 +42,8 @@ import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-st
 
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
 
+export type AgentSessionLiveFaultLogger = (message: string) => Effect.Effect<void, HostError>;
+
 export type AgentSessionLiveStateService = {
   readonly refresh: (input: AgentSessionLiveRefreshInput) => Effect.Effect<void, HostError>;
   readonly list: (
@@ -91,6 +93,7 @@ export type AgentSessionLiveStateService = {
 
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
+  readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
 };
@@ -136,27 +139,90 @@ const toEnvelope = (change: AgentSessionLiveAdapterChange): AgentSessionLiveEnve
         repoPath: change.repoPath,
         message: change.message,
         ...(change.operation ? { operation: change.operation } : {}),
+        ...(change.ref ? { ref: change.ref } : {}),
       };
   }
 };
 
+const formatFaultLog = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
+  `agent-session-live.fault ${JSON.stringify({
+    repoPath: envelope.repoPath,
+    message: envelope.message,
+    ...(envelope.operation ? { operation: envelope.operation } : {}),
+    ...(envelope.ref
+      ? {
+          runtimeKind: envelope.ref.runtimeKind,
+          workingDirectory: envelope.ref.workingDirectory,
+          externalSessionId: envelope.ref.externalSessionId,
+        }
+      : {}),
+  })}`;
+
+const toEnvelopePublishError = (
+  cause: unknown,
+  eventType: AgentSessionLiveEnvelope["type"],
+): HostOperationError | HostValidationError =>
+  cause instanceof HostOperationError || cause instanceof HostValidationError
+    ? cause
+    : new HostOperationError({
+        operation: "agent-session-live.publish",
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+        details: { eventType },
+      });
+
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
+  faultLog,
   publish,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
-  const publishEnvelope = (envelope: AgentSessionLiveEnvelope) =>
+  const validateEnvelope = (envelope: AgentSessionLiveEnvelope) =>
     Effect.try({
-      try: () => publish(agentSessionLiveEnvelopeSchema.parse(envelope)),
-      catch: (cause) =>
-        cause instanceof HostOperationError || cause instanceof HostValidationError
-          ? cause
-          : new HostOperationError({
-              operation: "agent-session-live.publish",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-              details: { eventType: envelope.type },
+      try: () => agentSessionLiveEnvelopeSchema.parse(envelope),
+      catch: (cause) => toEnvelopePublishError(cause, envelope.type),
+    });
+
+  const publishEnvelope = (envelope: AgentSessionLiveEnvelope) =>
+    Effect.gen(function* () {
+      const validatedEnvelope = yield* validateEnvelope(envelope);
+      if (validatedEnvelope.type === "fault") {
+        const faultLogResult = yield* Effect.either(faultLog(formatFaultLog(validatedEnvelope)));
+        const publishResult = yield* Effect.either(
+          Effect.try({
+            try: () => publish(validatedEnvelope),
+            catch: (cause) => toEnvelopePublishError(cause, validatedEnvelope.type),
+          }),
+        );
+        if (faultLogResult._tag === "Left" && publishResult._tag === "Left") {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "agent-session-live.publish-fault",
+              message: `Fault logging failed: ${faultLogResult.left.message}\nFault envelope publication failed: ${publishResult.left.message}`,
+              cause: {
+                faultLogFailure: faultLogResult.left,
+                publishFailure: publishResult.left,
+              },
+              details: {
+                eventType: validatedEnvelope.type,
+                faultLogFailure: faultLogResult.left,
+                publishFailure: publishResult.left,
+              },
             }),
+          );
+        }
+        if (faultLogResult._tag === "Left") {
+          return yield* Effect.fail(faultLogResult.left);
+        }
+        if (publishResult._tag === "Left") {
+          return yield* Effect.fail(publishResult.left);
+        }
+        return;
+      }
+      yield* Effect.try({
+        try: () => publish(validatedEnvelope),
+        catch: (cause) => toEnvelopePublishError(cause, validatedEnvelope.type),
+      });
     });
 
   const publishChanges = (changes: ReadonlyArray<AgentSessionLiveAdapterChange>) =>

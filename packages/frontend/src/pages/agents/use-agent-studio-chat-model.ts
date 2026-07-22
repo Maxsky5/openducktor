@@ -144,6 +144,7 @@ export function useAgentStudioChatModel({
     [modelSelection.selectedSessionContextUsage],
   );
   const selectedSessionTranscriptState = selectedSessionState.transcriptState;
+  const selectedSessionAuxiliaryError = selectedSessionState.sessionAuxiliaryError;
   const runtimeReadiness = selectedSessionState.runtimeReadiness;
   const pendingQuestions = selectedSession.pendingInput.pendingQuestions;
   const approvals = selectedSession.pendingInput.approvals;
@@ -193,7 +194,7 @@ export function useAgentStudioChatModel({
     if (
       selectedSessionTranscriptState.kind !== "failed" ||
       selectedSessionState.loadedSession !== null ||
-      sessionReadModelLoadState.kind !== "failed"
+      (sessionReadModelLoadState.kind !== "failed" && selectedSessionAuxiliaryError === null)
     ) {
       return null;
     }
@@ -205,6 +206,7 @@ export function useAgentStudioChatModel({
   }, [
     reloadSessionReadModel,
     selectedSessionState.loadedSession,
+    selectedSessionAuxiliaryError,
     selectedSessionTranscriptState.kind,
     sessionReadModelLoadState.kind,
   ]);
@@ -320,7 +322,7 @@ export function useAgentStudioChatModel({
     session: activeThreadSession,
     transcriptState: selectedSessionTranscriptState,
     chatSettings,
-    sessionAuxiliaryError: selectedSessionRuntimeData.error,
+    sessionAuxiliaryError: selectedSessionAuxiliaryError ?? selectedSessionRuntimeData.error,
     runtimeReadiness,
     emptyState: surfaceState.emptyState,
     pendingApprovalRequests,

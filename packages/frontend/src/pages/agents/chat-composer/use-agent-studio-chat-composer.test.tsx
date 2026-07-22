@@ -340,6 +340,7 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
         refreshChecks: async () => {},
       },
       transcriptState: { kind: "visible" },
+      sessionAuxiliaryError: null,
       ...selectedSessionOverride,
     },
     role,

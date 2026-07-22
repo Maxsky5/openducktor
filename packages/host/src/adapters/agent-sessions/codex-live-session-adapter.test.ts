@@ -13,7 +13,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
-import type { HostError } from "../../effect/host-errors";
+import { type HostError, HostOperationError } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
@@ -54,6 +54,8 @@ const codexPolicy: CodexEffectivePolicy = {
 };
 
 const resolveRuntimePolicy = (_scope: AgentSessionWorkflowScope) => Effect.succeed(codexPolicy);
+
+const noBackgroundFailure = () => Effect.void;
 
 const liveSnapshot = (): AgentSessionLiveSnapshot => ({
   ref,
@@ -286,6 +288,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer: interruptingCodexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -327,6 +330,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy: (scope) =>
           Effect.sync(() => {
             policyScopes.push(scope);
@@ -383,6 +387,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -403,6 +408,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const events: unknown[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });
     const harness = createControllerHarness();
@@ -410,6 +416,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: service,
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -443,6 +450,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -483,6 +491,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const events: unknown[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });
     const harness = createControllerHarness({ initialSnapshots: snapshots });
@@ -490,6 +499,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: service,
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -524,6 +534,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -573,6 +584,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -591,6 +603,124 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(
       Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
     ).resolves.toEqual([]);
+  });
+
+  test("reports a failed runtime event projection through the host background-failure boundary", async () => {
+    const deliveredChanges: AgentSessionLiveAdapterChange[] = [];
+    const deliveryFailure = new HostOperationError({
+      operation: "test.live-session-lifecycle",
+      message: "live session mutation delivery failed",
+    });
+    let resolveBackgroundFailure: (failure: HostOperationError) => void = () => undefined;
+    const backgroundFailure = new Promise<HostOperationError>((resolve) => {
+      resolveBackgroundFailure = resolve;
+    });
+    const lifecycle = {
+      registerRuntimeAdapter: () => Effect.void,
+      releaseRuntime: () => Effect.succeed([]),
+      runAdapterMutation: <Success>(
+        mutation: Effect.Effect<AgentSessionLiveAdapterMutation<Success>, HostError>,
+      ) =>
+        mutation.pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              deliveredChanges.push(...result.changes);
+            }),
+          ),
+          Effect.zipRight(Effect.fail(deliveryFailure)),
+        ),
+    } satisfies RuntimeLiveSessionLifecyclePort;
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: lifecycle,
+        codexAppServer,
+        onBackgroundFailure: (failure) =>
+          Effect.sync(() => {
+            resolveBackgroundFailure(failure);
+          }),
+        resolveRuntimePolicy,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    prepared.emitRuntimeEvent({
+      runtimeId: runtime.runtimeId,
+      kind: "notification",
+      receivedAt: "2026-07-16T10:01:30.000Z",
+      message: {
+        method: "thread/status/changed",
+        params: { threadId: ref.externalSessionId, status: { type: "idle" } },
+      },
+    });
+
+    const failure = await backgroundFailure;
+
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "codex-live-session.forward-mutation",
+      details: { runtimeId: runtime.runtimeId },
+    });
+    expect(
+      deliveredChanges.filter(
+        (change) => change.type === "transcript_event" && change.event.type === "session_error",
+      ),
+    ).toEqual([]);
+  });
+
+  test("rejects fault refs outside the owning Codex projection and preserves an exact ref", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const onLiveSessionMutation = harness.getOptions().onLiveSessionMutation;
+
+    await expect(
+      onLiveSessionMutation?.({
+        runtimeId: runtime.runtimeId,
+        snapshots: [liveSnapshot()],
+        transcriptEvents: [],
+        catalogInvalidated: false,
+        fault: "Codex event processing failed.",
+        faultRef: { ...ref, repoPath: "/other-repo" },
+      }),
+    ).rejects.toThrow("fault ref outside repo");
+    await expect(
+      onLiveSessionMutation?.({
+        runtimeId: runtime.runtimeId,
+        snapshots: [liveSnapshot()],
+        transcriptEvents: [],
+        catalogInvalidated: false,
+        fault: "Codex event processing failed.",
+        faultRef: { ...ref, runtimeKind: "opencode" },
+      }),
+    ).rejects.toThrow("fault ref outside Codex runtime");
+    expect(changes).toEqual([]);
+
+    await expect(
+      onLiveSessionMutation?.({
+        runtimeId: runtime.runtimeId,
+        snapshots: [liveSnapshot()],
+        transcriptEvents: [],
+        catalogInvalidated: false,
+        fault: "Codex event processing failed.",
+        faultRef: ref,
+      }),
+    ).resolves.toBeUndefined();
+    expect(changes).toContainEqual({
+      type: "fault",
+      repoPath: runtime.repoPath,
+      operation: "codex-live-session.process-event",
+      message: "Codex event processing failed.",
+      ref,
+    });
   });
 
   test("drops an in-flight projection after runtime release", async () => {
@@ -622,6 +752,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: lifecycle,
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -652,6 +783,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -706,6 +838,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -734,6 +867,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy: (scope) =>
           Effect.sync(() => {
             policyScopes.push(scope);
@@ -780,6 +914,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),
@@ -813,6 +948,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
         createController: harness.createController,
       })(runtime),

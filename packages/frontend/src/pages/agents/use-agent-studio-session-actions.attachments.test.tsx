@@ -164,6 +164,7 @@ const createBaseArgs = (): HookArgs => {
         refreshChecks: async () => {},
       },
       transcriptState: { kind: "visible" },
+      sessionAuxiliaryError: null,
     },
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     selectedModelDescriptor: {
