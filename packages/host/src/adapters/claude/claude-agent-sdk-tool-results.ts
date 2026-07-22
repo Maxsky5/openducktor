@@ -16,6 +16,7 @@ type ClaudeToolResultSession = {
   toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
+  toolEndedAtMsByCallId?: Map<string, number>;
   toolStartedAtMsByCallId: Map<string, number>;
   todosById: ClaudeTodoState;
 };
@@ -87,9 +88,10 @@ export const handleClaudeUserToolResultMessage = ({
   const messageId =
     session.toolMessageIdsByCallId.get(result.toolUseId) ?? message.uuid ?? result.toolUseId;
   const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
+  const endedAtMs = session.toolEndedAtMsByCallId?.get(result.toolUseId) ?? timestampMs(timestamp);
   const { part, todos } = projectClaudeCompletedToolResult({
     callId: result.toolUseId,
-    endedAtMs: timestampMs(timestamp),
+    endedAtMs,
     ...(input ? { input } : {}),
     isError: result.isError,
     messageId,

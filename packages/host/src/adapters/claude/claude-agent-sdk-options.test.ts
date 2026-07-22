@@ -48,6 +48,7 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   streamAssistantMessageIdsByBlockIndex: new Map(),
   subagentMessageIdsByTaskId: new Map(),
   subagentTaskIdsByToolUseId: new Map(),
+  toolEndedAtMsByCallId: new Map(),
   toolInputsByCallId: new Map(),
   toolMessageIdsByCallId: new Map(),
   toolNamesByCallId: new Map(),
@@ -284,6 +285,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options).not.toHaveProperty("sessionStore");
     expect(options).not.toHaveProperty("sessionStoreFlush");
     expect(options.hooks?.PostToolUse).toHaveLength(1);
+    expect(options.hooks?.PostToolUseFailure).toHaveLength(1);
   });
 
   test("inherits a trusted local default permission mode", async () => {

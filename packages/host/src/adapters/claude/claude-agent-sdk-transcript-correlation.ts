@@ -5,6 +5,7 @@ export type ClaudeTranscriptCorrelationState = {
   subagentEventSessionsByToolUseId?: Map<string, unknown>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
+  toolEndedAtMsByCallId?: Map<string, number>;
   toolInputsByCallId?: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
@@ -61,6 +62,7 @@ export const retractClaudeTranscriptCorrelations = (
   state.retractedToolUseIds ??= new Set();
   for (const toolUseId of toolUseIds) {
     state.retractedToolUseIds.add(toolUseId);
+    state.toolEndedAtMsByCallId?.delete(toolUseId);
     state.toolInputsByCallId?.delete(toolUseId);
     state.toolMessageIdsByCallId.delete(toolUseId);
     state.toolNamesByCallId.delete(toolUseId);

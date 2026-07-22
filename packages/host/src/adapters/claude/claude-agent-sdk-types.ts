@@ -102,6 +102,7 @@ export type ClaudeSession = {
   hiddenSubagentTaskIds?: Set<string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
+  toolEndedAtMsByCallId: Map<string, number>;
   toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;

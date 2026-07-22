@@ -134,7 +134,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         part: expect.objectContaining({
           kind: "tool",
           callId: "tool-1",
-          status: "running",
+          status: "pending",
         }),
       }),
     ]);
@@ -740,7 +740,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     ]);
   });
 
-  test("updates a running tool part from Claude streamed input JSON deltas", () => {
+  test("keeps a tool pending while Claude streams its input JSON", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     const baseInput = {
@@ -824,7 +824,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           partId: "tool-1",
           callId: "tool-1",
           tool: "Bash",
-          status: "running",
+          status: "pending",
         }),
       }),
       expect.objectContaining({
@@ -835,12 +835,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           partId: "tool-1",
           callId: "tool-1",
           tool: "Bash",
-          status: "running",
-          input: { command: "bun test" },
-          preview: "bun test",
+          status: "pending",
         }),
       }),
     ]);
+    expect(session.toolInputsByCallId.get("tool-1")).toEqual({ command: "bun test" });
   });
 
   test("ignores forwarded partial stream events before their subagent task is known", () => {

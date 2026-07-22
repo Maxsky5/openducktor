@@ -21,6 +21,7 @@ export type ClaudeEventSession = {
   streamAssistantMessageOrdinal: number;
   streamAssistantMessageIdsByBlockIndex: Map<number, string>;
   todosById: ClaudeTodoState;
+  toolEndedAtMsByCallId?: Map<string, number>;
   toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;

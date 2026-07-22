@@ -4,6 +4,78 @@ import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-ho
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 
 describe("createClaudePostToolUseHook", () => {
+  test("records authoritative execution timing for ordinary tools", async () => {
+    const session = createClaudeSession();
+    const timedSession = session as typeof session & {
+      toolEndedAtMsByCallId: Map<string, number>;
+    };
+    timedSession.toolEndedAtMsByCallId = new Map();
+    const hook = createClaudePostToolUseHook({
+      session: timedSession,
+      now: () => "2026-06-25T20:00:01.000Z",
+      emit: () => {},
+    });
+
+    await hook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "session-1",
+        transcript_path: "/home/test/.claude/projects/repo/session-1.jsonl",
+        cwd: "/repo",
+        tool_name: "Read",
+        tool_use_id: "tool-read-1",
+        tool_input: { file_path: "/repo/README.md" },
+        tool_response: { file: "/repo/README.md" },
+        duration_ms: 250,
+      },
+      "tool-read-1",
+      { signal: new AbortController().signal },
+    );
+
+    expect(session.toolStartedAtMsByCallId.get("tool-read-1")).toBe(
+      Date.parse("2026-06-25T20:00:00.750Z"),
+    );
+    expect(timedSession.toolEndedAtMsByCallId.get("tool-read-1")).toBe(
+      Date.parse("2026-06-25T20:00:01.000Z"),
+    );
+  });
+
+  test("records authoritative execution timing for failed tools", async () => {
+    const session = createClaudeSession();
+    const timedSession = session as typeof session & {
+      toolEndedAtMsByCallId: Map<string, number>;
+    };
+    timedSession.toolEndedAtMsByCallId = new Map();
+    const hook = createClaudePostToolUseHook({
+      session: timedSession,
+      now: () => "2026-06-25T20:00:02.000Z",
+      emit: () => {},
+    });
+
+    await hook(
+      {
+        hook_event_name: "PostToolUseFailure",
+        session_id: "session-1",
+        transcript_path: "/home/test/.claude/projects/repo/session-1.jsonl",
+        cwd: "/repo",
+        tool_name: "Bash",
+        tool_use_id: "tool-bash-1",
+        tool_input: { command: "false" },
+        error: "Command failed",
+        duration_ms: 400,
+      },
+      "tool-bash-1",
+      { signal: new AbortController().signal },
+    );
+
+    expect(session.toolStartedAtMsByCallId.get("tool-bash-1")).toBe(
+      Date.parse("2026-06-25T20:00:01.600Z"),
+    );
+    expect(timedSession.toolEndedAtMsByCallId.get("tool-bash-1")).toBe(
+      Date.parse("2026-06-25T20:00:02.000Z"),
+    );
+  });
+
   test("projects structured file edit results without taking over session persistence", async () => {
     const events: AgentEvent[] = [];
     const session = createClaudeSession();

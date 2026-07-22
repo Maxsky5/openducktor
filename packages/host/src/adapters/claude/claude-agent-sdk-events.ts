@@ -19,6 +19,7 @@ import {
   emitClaudePermissionDeniedToolPart,
   handleClaudeResultMessage,
 } from "./claude-agent-sdk-result-events";
+import { emitClaudeRunningToolPart } from "./claude-agent-sdk-running-tool";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
 import {
   appendClaudeStreamToolInputJson,
@@ -28,7 +29,7 @@ import {
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
 import {
   type ClaudeDecodedToolUse,
-  createClaudeRunningToolPart,
+  createClaudePendingToolPart,
   decodeClaudeToolUseBlock,
   isClaudeToolUseBlockType,
   timestampMs,
@@ -181,47 +182,27 @@ const rememberToolInput = (
   session.toolInputsByCallId.set(callId, input);
 };
 
-const emitClaudeRunningToolPart = ({
+const emitClaudePendingToolPart = ({
   emit,
   fallbackMessageId,
   session,
-  startedAtMs: explicitStartedAtMs,
   timestamp,
   toolUse,
 }: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
   fallbackMessageId: string;
-  startedAtMs?: number;
   toolUse: ClaudeDecodedToolUse;
 }): void => {
   const messageId = session.toolMessageIdsByCallId.get(toolUse.callId) ?? fallbackMessageId;
-  const startedAtMs =
-    explicitStartedAtMs ??
-    session.toolStartedAtMsByCallId.get(toolUse.callId) ??
-    timestampMs(timestamp);
   session.toolMessageIdsByCallId.set(toolUse.callId, messageId);
   session.toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
-  session.toolStartedAtMsByCallId.set(toolUse.callId, startedAtMs);
   if (toolUse.input) {
     rememberToolInput(session, toolUse.callId, toolUse.input);
   }
-  const cachedInput = session.toolInputsByCallId.get(toolUse.callId);
-  const effectiveToolUse =
-    !toolUse.input && cachedInput
-      ? {
-          ...toolUse,
-          input: cachedInput,
-        }
-      : toolUse;
-
   emit({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,
     timestamp,
-    part: createClaudeRunningToolPart({
-      messageId,
-      startedAtMs,
-      toolUse: effectiveToolUse,
-    }),
+    part: createClaudePendingToolPart({ messageId, toolUse }),
   });
 };
 
@@ -260,7 +241,7 @@ const handleStreamEvent = ({
     }
 
     rememberClaudeStreamToolStart(session, index, toolUse);
-    emitClaudeRunningToolPart({
+    emitClaudePendingToolPart({
       emit,
       fallbackMessageId: toolUse.callId,
       session,
@@ -306,7 +287,7 @@ const handleStreamEvent = ({
   if (!toolUse) {
     return;
   }
-  emitClaudeRunningToolPart({
+  emitClaudePendingToolPart({
     emit,
     fallbackMessageId: toolUse.callId,
     session,
@@ -396,7 +377,7 @@ const handleAssistantMessage = ({
           continue;
         }
 
-        emitClaudeRunningToolPart({
+        emitClaudePendingToolPart({
           emit,
           fallbackMessageId: message.uuid,
           session,
@@ -470,8 +451,7 @@ const handleToolProgressMessage = ({
 }): void => {
   const elapsedMs = Math.max(0, Math.round(message.elapsed_time_seconds * 1000));
   const eventMs = timestampMs(timestamp);
-  const startedAtMs =
-    session.toolStartedAtMsByCallId.get(message.tool_use_id) ?? eventMs - elapsedMs;
+  const startedAtMs = eventMs - elapsedMs;
 
   emitClaudeRunningToolPart({
     emit,

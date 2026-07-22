@@ -103,6 +103,23 @@ export const createClaudeRunningToolPart = ({
   return part;
 };
 
+export const createClaudePendingToolPart = ({
+  messageId,
+  toolUse,
+}: {
+  messageId: string;
+  toolUse: ClaudeDecodedToolUse;
+}): Extract<AgentStreamPart, { kind: "tool" }> => ({
+  kind: "tool",
+  messageId,
+  partId: toolUse.callId,
+  callId: toolUse.callId,
+  tool: toolUse.toolName,
+  ...toolPartPresentation(toolUse.toolName),
+  status: "pending",
+  ...(toolUse.metadata ? { metadata: toolUse.metadata } : {}),
+});
+
 export const timestampMs = (timestamp: string): number => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? Date.now() : parsed;
