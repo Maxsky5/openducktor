@@ -7,6 +7,7 @@ import {
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
   parseGithubJsonObject,
+  parseGithubNextPageCursor,
   requireGithubBoolean,
   requireGithubObject,
   requireGithubString,
@@ -107,12 +108,6 @@ query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
 const toNullableNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
 
-const parseNextCursor = (pageInfoValue: unknown, field: string): string | null => {
-  const pageInfo = requireGithubObject(pageInfoValue, field);
-  const hasNextPage = requireGithubBoolean(pageInfo.hasNextPage, `${field}.hasNextPage`);
-  return hasNextPage ? requireGithubString(pageInfo.endCursor, `${field}.endCursor`) : null;
-};
-
 const toReviewThreadComment = (
   payloadValue: unknown,
   field: string,
@@ -179,7 +174,10 @@ const parseThread = (threadValue: unknown, field: string) => {
   return {
     comments,
     isResolved,
-    nextCommentsCursor: parseNextCursor(commentsConnection.pageInfo, `${field}.comments.pageInfo`),
+    nextCommentsCursor: parseGithubNextPageCursor(
+      commentsConnection.pageInfo,
+      `${field}.comments.pageInfo`,
+    ),
     threadId,
   };
 };
@@ -216,7 +214,7 @@ const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
   return {
     comments,
     openThreadIds,
-    nextThreadsCursor: parseNextCursor(reviewThreads.pageInfo, "reviewThreads.pageInfo"),
+    nextThreadsCursor: parseGithubNextPageCursor(reviewThreads.pageInfo, "reviewThreads.pageInfo"),
     commentPageCursors,
   };
 };

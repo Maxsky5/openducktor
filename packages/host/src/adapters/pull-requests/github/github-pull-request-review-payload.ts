@@ -76,3 +76,10 @@ export const requireGithubBoolean = (value: unknown, field: string): boolean => 
   }
   return value;
 };
+
+export const parseGithubNextPageCursor = (pageInfoValue: unknown, field: string): string | null => {
+  const pageInfo = requireGithubObject(pageInfoValue, field);
+  return requireGithubBoolean(pageInfo.hasNextPage, `${field}.hasNextPage`)
+    ? requireGithubString(pageInfo.endCursor, `${field}.endCursor`)
+    : null;
+};

@@ -13,7 +13,7 @@ import {
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
   parseGithubJsonObject,
-  requireGithubBoolean,
+  parseGithubNextPageCursor,
   requireGithubObject,
   requireGithubString,
   toNullableGithubObject,
@@ -130,13 +130,6 @@ const normalizeReviewState = (state: unknown, isDraft: unknown): PullRequestRevi
   return "open";
 };
 
-const parseNextCursor = (pageInfoValue: unknown, field: string): string | null => {
-  const pageInfo = requireGithubObject(pageInfoValue, field);
-  return requireGithubBoolean(pageInfo.hasNextPage, `${field}.hasNextPage`)
-    ? requireGithubString(pageInfo.endCursor, `${field}.endCursor`)
-    : null;
-};
-
 const parseComment = (payloadValue: unknown, field: string): PullRequestReviewActivity | null => {
   const payload = requireGithubObject(payloadValue, field);
   const body = typeof payload.body === "string" ? payload.body : "";
@@ -249,7 +242,7 @@ const parseConnection = (
   }
   return {
     items,
-    nextCursor: parseNextCursor(connection.pageInfo, `${field}.pageInfo`),
+    nextCursor: parseGithubNextPageCursor(connection.pageInfo, `${field}.pageInfo`),
   };
 };
 
