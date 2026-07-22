@@ -163,14 +163,16 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const command = commands[0] ?? [];
     expect(command.join(" ")).toContain("avatarUrl(size: 64)");
     const queryArgument = command.find((argument) => argument.startsWith("query="));
-    expect(queryArgument).toBeDefined();
-    const query = queryArgument?.slice("query=".length) ?? "";
+    if (!queryArgument) {
+      throw new Error("Expected the GitHub GraphQL query argument.");
+    }
+    const query = queryArgument.slice("query=".length);
     const commentsStart = query.indexOf("comments(");
     const reviewsStart = query.indexOf("reviews(");
     expect(commentsStart).toBeGreaterThan(-1);
     expect(reviewsStart).toBeGreaterThan(commentsStart);
-    expect(query.slice(commentsStart, reviewsStart)).not.toContain("\n          state\n");
-    expect(query.slice(reviewsStart)).toContain("\n          state\n");
+    expect(query.slice(commentsStart, reviewsStart)).not.toMatch(/^\s*state\s*$/mu);
+    expect(query.slice(reviewsStart)).toMatch(/^\s*state\s*$/mu);
     const flagFor = (argument: string): string | undefined => {
       const index = command.indexOf(argument);
       return index > 0 ? command[index - 1] : undefined;

@@ -190,9 +190,9 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
   isBodyReady = true,
 }: TaskExecutionCiCommentCardProps): ReactElement {
   const showThreadBadge = comment.isResolved !== null;
-  const reviewPresentation =
-    comment.source === "review" ? REVIEW_OUTCOME_PRESENTATION[comment.reviewOutcome] : null;
-  const activityName = reviewPresentation ? "review" : "comment";
+  const isReview = comment.source === "review";
+  const reviewPresentation = isReview ? REVIEW_OUTCOME_PRESENTATION[comment.reviewOutcome] : null;
+  const activityName = isReview ? "review" : "comment";
   const location = commentLocationLabel(comment);
   const author = comment.author ?? "Unknown author";
   const activityTimestamp = comment.createdAt ?? comment.updatedAt;

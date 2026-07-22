@@ -27,7 +27,10 @@ const createComment = (): PullRequestReviewActivity => ({
   source: "review_thread",
 });
 
-const review = (reviewOutcome: PullRequestReviewOutcome, body = ""): PullRequestReviewActivity => ({
+const createReview = (
+  reviewOutcome: PullRequestReviewOutcome,
+  body = "",
+): PullRequestReviewActivity => ({
   ...createComment(),
   id: `review-${reviewOutcome}`,
   body,
@@ -47,7 +50,7 @@ test.each([
 ] as const)("renders the %s review outcome without an empty-body placeholder", (outcome, label) => {
   const view = render(
     <TooltipProvider>
-      <TaskExecutionCiCommentCard comment={review(outcome)} isBot={false} />
+      <TaskExecutionCiCommentCard comment={createReview(outcome)} isBot={false} />
     </TooltipProvider>,
   );
 
@@ -56,7 +59,7 @@ test.each([
 });
 
 test("renders a review outcome before deferred body work and shows its body once ready", () => {
-  const reviewWithBody = review("approved", "This is ready to merge.");
+  const reviewWithBody = createReview("approved", "This is ready to merge.");
   const view = render(
     <TooltipProvider>
       <TaskExecutionCiCommentCard comment={reviewWithBody} isBot={false} isBodyReady={false} />
@@ -79,7 +82,7 @@ test("renders a review outcome before deferred body work and shows its body once
 test("uses review-specific accessible action names and external link text", () => {
   const view = render(
     <TooltipProvider>
-      <TaskExecutionCiCommentCard comment={review("commented")} isBot={false} />
+      <TaskExecutionCiCommentCard comment={createReview("commented")} isBot={false} />
     </TooltipProvider>,
   );
 
@@ -92,7 +95,7 @@ test.each(["light", "dark"] as const)("renders review outcome text in the %s the
     <QueryProvider useIsolatedClient>
       <ThemeProvider defaultTheme={theme}>
         <TooltipProvider>
-          <TaskExecutionCiCommentCard comment={review("dismissed")} isBot={false} />
+          <TaskExecutionCiCommentCard comment={createReview("dismissed")} isBot={false} />
         </TooltipProvider>
       </ThemeProvider>
     </QueryProvider>,
