@@ -4,6 +4,14 @@ import { deriveToolPreview, deriveToolType } from "./tool-preview";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 
 describe("OpenCode tool strategy catalog", () => {
+  test("marks normalized task tools as subagent stream parts", () => {
+    for (const toolName of ["task", "delegate", "functions.task", " Functions.Delegate "]) {
+      expect(resolveOpencodeToolStrategy(toolName).streamPartKind, toolName).toBe("subagent");
+    }
+
+    expect(resolveOpencodeToolStrategy("custom_runtime_tool").streamPartKind).toBe("tool");
+  });
+
   test("classifies and previews each supported tool family from one strategy", () => {
     const cases = [
       {

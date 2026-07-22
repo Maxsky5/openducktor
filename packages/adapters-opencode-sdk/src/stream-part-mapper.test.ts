@@ -78,6 +78,21 @@ const createSyntheticTextPart = ({
   }) as unknown as Part;
 
 describe("stream-part-mapper", () => {
+  test("uses normalized task strategies for subagent mapping", () => {
+    for (const tool of ["task", "delegate", "functions.task", " Functions.Delegate "]) {
+      const mapped = mapPartToAgentStreamPart(
+        createToolPart({
+          id: `tool-subagent-${tool}`,
+          tool,
+          status: "running",
+          input: { agent: "build", prompt: "Inspect the adapter" },
+        }),
+      );
+
+      expect(mapped?.kind, tool).toBe("subagent");
+    }
+  });
+
   test("maps raw subtask parts to canonical subagent parts", () => {
     const part = {
       id: "subtask-1",
