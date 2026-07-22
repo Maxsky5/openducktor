@@ -9,7 +9,9 @@ describe("OpenCode tool strategy catalog", () => {
       expect(resolveOpencodeToolStrategy(toolName).streamPartKind, toolName).toBe("subagent");
     }
 
-    expect(resolveOpencodeToolStrategy("custom_runtime_tool").streamPartKind).toBe("tool");
+    for (const toolName of ["bash", "custom_runtime_tool"]) {
+      expect(resolveOpencodeToolStrategy(toolName).streamPartKind, toolName).toBe("tool");
+    }
   });
 
   test("classifies and previews each supported tool family from one strategy", () => {

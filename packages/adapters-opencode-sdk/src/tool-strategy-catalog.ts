@@ -18,12 +18,12 @@ export type OpenCodeToolPreviewStrategy =
   | "session"
   | "generic";
 
-export type OpenCodeToolStreamPartKind = "tool" | "subagent";
+type OpenCodeToolStreamPartKind = "tool" | "subagent";
 
 type OpenCodeToolStrategyDefinition = {
   toolType: AgentToolType;
   previewStrategy: OpenCodeToolPreviewStrategy;
-  streamPartKind: OpenCodeToolStreamPartKind;
+  streamPartKind?: OpenCodeToolStreamPartKind;
   resolveCanonicalName: (normalizedName: string) => string | null;
 };
 
@@ -95,41 +95,35 @@ const matchExact =
   (normalizedName: string): string | null =>
     toolNames.has(normalizedName) ? normalizedName : null;
 
-export const OPENCODE_TOOL_STRATEGY_CATALOG = [
+export const OPENCODE_TOOL_STRATEGY_CATALOG: readonly OpenCodeToolStrategyDefinition[] = [
   {
     toolType: "bash",
     previewStrategy: "shell",
-    streamPartKind: "tool",
     resolveCanonicalName: matchExact(SHELL_TOOL_NAMES),
   },
   {
     toolType: "read",
     previewStrategy: "read",
-    streamPartKind: "tool",
     resolveCanonicalName: matchExact(READ_TOOL_NAMES),
   },
   {
     toolType: "list",
     previewStrategy: "list",
-    streamPartKind: "tool",
     resolveCanonicalName: matchExact(LIST_TOOL_NAMES),
   },
   {
     toolType: "search",
     previewStrategy: "search",
-    streamPartKind: "tool",
     resolveCanonicalName: matchExact(SEARCH_TOOL_NAMES),
   },
   {
     toolType: "generic",
     previewStrategy: "skill",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) => (normalizedName === "skill" ? normalizedName : null),
   },
   {
     toolType: "todo",
     previewStrategy: "todo",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) =>
       TODO_TOOL_NAMES.has(normalizedName) ||
       normalizedName.endsWith("_todowrite") ||
@@ -140,13 +134,11 @@ export const OPENCODE_TOOL_STRATEGY_CATALOG = [
   {
     toolType: "file_edit",
     previewStrategy: "generic",
-    streamPartKind: "tool",
     resolveCanonicalName: matchExact(FILE_EDIT_TOOL_NAMES),
   },
   {
     toolType: "question",
     previewStrategy: "question",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) =>
       normalizedName === "question" || normalizedName.endsWith("_question") ? normalizedName : null,
   },
@@ -159,14 +151,12 @@ export const OPENCODE_TOOL_STRATEGY_CATALOG = [
   {
     toolType: "workflow",
     previewStrategy: "workflow",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) =>
       WORKFLOW_CANONICAL_NAME_BY_ALIAS.get(normalizedName) ?? null,
   },
   {
     toolType: "web",
     previewStrategy: "web",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) =>
       normalizedName === "webfetch" || normalizedName.startsWith("websearch")
         ? normalizedName
@@ -175,37 +165,32 @@ export const OPENCODE_TOOL_STRATEGY_CATALOG = [
   {
     toolType: "web",
     previewStrategy: "generic",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) =>
       normalizedName.startsWith("webfetch") ? normalizedName : null,
   },
   {
     toolType: "generic",
     previewStrategy: "context",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) =>
       normalizedName.startsWith("context7_") ? normalizedName : null,
   },
   {
     toolType: "generic",
     previewStrategy: "github_search",
-    streamPartKind: "tool",
     resolveCanonicalName: (normalizedName) =>
       normalizedName === "grep_app_searchgithub" ? normalizedName : null,
   },
   {
     toolType: "generic",
     previewStrategy: "lsp",
-    streamPartKind: "tool",
     resolveCanonicalName: matchExact(LSP_TOOL_NAMES),
   },
   {
     toolType: "generic",
     previewStrategy: "session",
-    streamPartKind: "tool",
     resolveCanonicalName: matchExact(SESSION_TOOL_NAMES),
   },
-] as const satisfies readonly OpenCodeToolStrategyDefinition[];
+];
 
 export const resolveOpencodeToolStrategy = (toolName: string): ResolvedOpenCodeToolStrategy => {
   const normalizedName = normalizeToolName(toolName);
@@ -218,7 +203,7 @@ export const resolveOpencodeToolStrategy = (toolName: string): ResolvedOpenCodeT
         canonicalName,
         toolType: strategy.toolType,
         previewStrategy: strategy.previewStrategy,
-        streamPartKind: strategy.streamPartKind,
+        streamPartKind: strategy.streamPartKind ?? "tool",
       };
     }
   }
