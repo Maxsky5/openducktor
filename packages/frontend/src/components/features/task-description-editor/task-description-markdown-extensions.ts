@@ -1,7 +1,6 @@
 import type {
   AnyExtension,
   JSONContent,
-  MarkdownLexerConfiguration,
   MarkdownParseHelpers,
   MarkdownRendererHelpers,
   MarkdownToken,
@@ -47,12 +46,6 @@ const defaultOrderedListParseMarkdown = requireMarkdownHook(
   "parseMarkdown",
   OrderedList.config.parseMarkdown,
 );
-const defaultOrderedListMarkdownTokenizer = OrderedList.config.markdownTokenizer;
-if (!defaultOrderedListMarkdownTokenizer?.tokenize) {
-  throw new Error(
-    "TipTap 3.28.0 OrderedList.markdownTokenizer is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.",
-  );
-}
 const defaultTaskItemParseMarkdown = requireMarkdownHook(
   "TaskItem",
   "parseMarkdown",
@@ -149,42 +142,31 @@ const listItemSource = (token: MarkdownToken): string | undefined => {
   ].join("\n");
 };
 
-// TipTap 3.28 only block-lexes ordered item content after an initial paragraph.
-// Re-lex each item's own source, then restore nested ordered lists that its tokenizer stores outside
-// that source segment.
-const reparseOrderedListItems = (
-  token: MarkdownToken,
-  lexer: MarkdownLexerConfiguration,
-): MarkdownToken => {
-  if (token.type !== "list" || !token.ordered || !Array.isArray(token.items)) {
-    return token;
-  }
-
-  return {
-    ...token,
-    items: token.items.map((item: MarkdownToken) => {
-      const source = listItemSource(item);
-      if (source === undefined) {
-        return item;
-      }
-
-      const nestedOrderedLists = (item.tokens ?? [])
-        .filter((child) => child.type === "list" && child.ordered)
-        .map((child) => reparseOrderedListItems(child, lexer));
-      return {
-        ...item,
-        tokens: [...lexer.blockTokens(source), ...nestedOrderedLists],
-      };
-    }),
-  };
+// TipTap's ordered-list tokenizer does not honor GFM fence and nested-item boundaries.
+// Let Marked's built-in GFM list tokenizer own numeric ordered lists instead.
+const taskDescriptionOrderedListTokenizer: MarkdownTokenizer = {
+  name: "orderedList",
+  level: "block",
+  start: () => -1,
+  tokenize: () => undefined,
 };
 
-const taskDescriptionOrderedListTokenizer: MarkdownTokenizer = {
-  ...defaultOrderedListMarkdownTokenizer,
-  tokenize(src, tokens, lexer) {
-    const token = defaultOrderedListMarkdownTokenizer.tokenize(src, tokens, lexer);
-    return token ? reparseOrderedListItems(token, lexer) : token;
-  },
+const orderedListStart = (token: MarkdownToken): number | undefined => {
+  const match = tokenSource(token).match(/^[ \t]*(\d{1,9})[.)][ \t]+/);
+  return match?.[1] === undefined ? undefined : Number(match[1]);
+};
+
+const preserveOrderedListStart = (
+  parsed: JSONContent | JSONContent[],
+  start: number | undefined,
+): JSONContent | JSONContent[] => {
+  if (start === undefined) {
+    return parsed;
+  }
+
+  const preserve = (node: JSONContent): JSONContent =>
+    node.type === "orderedList" ? { ...node, attrs: { ...node.attrs, start } } : node;
+  return Array.isArray(parsed) ? parsed.map(preserve) : preserve(parsed);
 };
 
 // TipTap leaves one list-indent space on prose after a second block-math token.
@@ -357,7 +339,8 @@ export const TaskDescriptionOrderedList = OrderedList.extend({
   markdownTokenizer: taskDescriptionOrderedListTokenizer,
 
   parseMarkdown(token, helpers) {
-    return ensureOrderedListMathParagraphs(defaultOrderedListParseMarkdown(token, helpers));
+    const parsed = ensureOrderedListMathParagraphs(defaultOrderedListParseMarkdown(token, helpers));
+    return preserveOrderedListStart(parsed, orderedListStart(token));
   },
 });
 

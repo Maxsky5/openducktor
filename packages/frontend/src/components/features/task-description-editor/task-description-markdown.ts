@@ -107,7 +107,7 @@ export const assessVisualMarkdownCompatibility = (
       return {
         compatible: false,
         reason:
-          "This Markdown changes meaning in the canonical renderer after Visual editing. Keep it in Markdown mode or use multiline double-dollar syntax for block math.",
+          "This Markdown changes meaning in the canonical renderer after Visual editing. Keep it in Markdown mode or simplify the source form.",
       };
     }
   } catch {

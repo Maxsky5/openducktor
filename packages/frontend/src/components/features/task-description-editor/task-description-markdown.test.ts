@@ -239,6 +239,24 @@ describe("task description Markdown dialect", () => {
     ["a nested ordered blockquote", "1. Parent\n   1. > nested quote"],
     ["a leading heading", "1. # Heading"],
     ["a leading nested ordered list", "1. 1. nested"],
+    ["a nested ordered list followed by parent prose", "1. Before\n   1. Nested\n\n   After"],
+    ["a nested ordered list followed by a parent quote", "1. Before\n   1. Nested\n\n   > quote"],
+    ["a nested ordered list followed by a parent bullet", "1. Before\n   1. Nested\n\n   - bullet"],
+    [
+      "a nested ordered list followed by parent block math",
+      "1. Before\n   1. Nested\n\n   $$\n   x\n   $$",
+    ],
+    [
+      "a nested ordered list followed by a parent fence",
+      "1. Before\n   1. Nested\n\n   ```ts\n   value\n   ```",
+    ],
+    ["an ordered fence containing a list lookalike", "1. ```md\n   1. fake\n   ```"],
+    [
+      "an ordered Mermaid fence containing a list lookalike",
+      "1. ```mermaid\n   1. invalid\n   ```",
+    ],
+    ["a zero-start dot marker", "0. > quote"],
+    ["a zero-start parenthesis marker", "0) > quote"],
     [
       "block math followed by fenced code",
       "1. $$\n   x\n   $$\n\n   ```ts\n   const value = 1\n   ```",
@@ -302,6 +320,14 @@ describe("task description Markdown dialect", () => {
     },
   );
 
+  test("uses neutral guidance for a non-math renderer mismatch", () => {
+    expect(assessVisualMarkdownCompatibility("a &copy; b")).toEqual({
+      compatible: false,
+      reason:
+        "This Markdown changes meaning in the canonical renderer after Visual editing. Keep it in Markdown mode or simplify the source form.",
+    });
+  });
+
   test.each([
     ["one formula", "$$x$$"],
     ["surrounding text", "Before $$x$$ after"],
@@ -313,7 +339,7 @@ describe("task description Markdown dialect", () => {
 
       expect(result.compatible).toBe(false);
       if (!result.compatible) {
-        expect(result.reason).toContain("canonical renderer");
+        expect(result.reason).toContain("Block math delimiters");
       }
     },
   );

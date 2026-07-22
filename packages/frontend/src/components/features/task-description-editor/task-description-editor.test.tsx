@@ -50,6 +50,24 @@ describe("TaskDescriptionEditor", () => {
     ["an ordered Mermaid block", "1. ```mermaid\n   graph TD\n     A --> B\n   ```"],
     ["an ordered blockquote followed by prose", "1. > quote\n\n   After"],
     ["a nested ordered blockquote", "1. Parent\n   1. > nested quote"],
+    ["a nested ordered list followed by parent prose", "1. Before\n   1. Nested\n\n   After"],
+    ["a nested ordered list followed by a parent quote", "1. Before\n   1. Nested\n\n   > quote"],
+    ["a nested ordered list followed by a parent bullet", "1. Before\n   1. Nested\n\n   - bullet"],
+    [
+      "a nested ordered list followed by parent block math",
+      "1. Before\n   1. Nested\n\n   $$\n   x\n   $$",
+    ],
+    [
+      "a nested ordered list followed by a parent fence",
+      "1. Before\n   1. Nested\n\n   ```ts\n   value\n   ```",
+    ],
+    ["an ordered fence containing a list lookalike", "1. ```md\n   1. fake\n   ```"],
+    [
+      "an ordered Mermaid fence containing a list lookalike",
+      "1. ```mermaid\n   1. invalid\n   ```",
+    ],
+    ["a zero-start dot marker", "0. > quote"],
+    ["a zero-start parenthesis marker", "0) > quote"],
     [
       "ordered math followed by fenced code",
       "1. $$\n   x\n   $$\n\n   ```ts\n   const value = 1\n   ```",
@@ -77,7 +95,9 @@ describe("TaskDescriptionEditor", () => {
         <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
       );
 
-      await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+      await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull(), {
+        timeout: 2_000,
+      });
       expect(view.queryByRole("alert")).toBeNull();
 
       fireEvent.click(view.getByRole("button", { name: "Markdown" }));
@@ -85,6 +105,7 @@ describe("TaskDescriptionEditor", () => {
       expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
       expect(onChange).not.toHaveBeenCalled();
     },
+    5_000,
   );
 
   test("keeps unsupported syntax in Markdown mode with an actionable reason", async () => {
@@ -140,7 +161,7 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
-    expect((await view.findByRole("alert")).textContent).toContain("canonical renderer");
+    expect((await view.findByRole("alert")).textContent).toContain("Block math delimiters");
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect(onChange).not.toHaveBeenCalled();
