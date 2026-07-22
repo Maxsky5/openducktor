@@ -95,7 +95,7 @@ const matchExact =
   (normalizedName: string): string | null =>
     toolNames.has(normalizedName) ? normalizedName : null;
 
-export const OPENCODE_TOOL_STRATEGY_CATALOG: readonly OpenCodeToolStrategyDefinition[] = [
+const OPENCODE_TOOL_STRATEGY_CATALOG: readonly OpenCodeToolStrategyDefinition[] = [
   {
     toolType: "bash",
     previewStrategy: "shell",
@@ -166,7 +166,9 @@ export const OPENCODE_TOOL_STRATEGY_CATALOG: readonly OpenCodeToolStrategyDefini
     toolType: "web",
     previewStrategy: "generic",
     resolveCanonicalName: (normalizedName) =>
-      normalizedName.startsWith("webfetch") ? normalizedName : null,
+      normalizedName !== "webfetch" && normalizedName.startsWith("webfetch")
+        ? normalizedName
+        : null,
   },
   {
     toolType: "generic",

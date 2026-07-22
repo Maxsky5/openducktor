@@ -325,7 +325,7 @@ export const deriveToolPreview = (input: {
       preview = summarizeSessionTool(rawInput);
       break;
     case "generic":
-      preview = summarizeGenericInput(rawInput);
+      preview = null;
       break;
   }
 

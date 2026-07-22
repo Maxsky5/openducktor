@@ -121,6 +121,38 @@ describe("OpenCode tool strategy catalog", () => {
     }
   });
 
+  test("preserves the shorter preview limit only for the literal bash tool", () => {
+    const command = "x".repeat(200);
+
+    expect(deriveToolPreview({ tool: "bash", rawInput: { command }, rawOutput: undefined })).toBe(
+      `${"x".repeat(120)}...`,
+    );
+
+    for (const tool of ["shell", "exec", "command"]) {
+      expect(deriveToolPreview({ tool, rawInput: { command }, rawOutput: undefined }), tool).toBe(
+        `${"x".repeat(160)}...`,
+      );
+    }
+  });
+
+  test("keeps exact webfetch parsing separate from prefixed webfetch tools", () => {
+    expect(
+      deriveToolPreview({
+        tool: "webfetch",
+        rawInput: { href: "https://openducktor.dev/docs" },
+        rawOutput: undefined,
+      }),
+    ).toBe("https://openducktor.dev/docs");
+
+    expect(
+      deriveToolPreview({
+        tool: "webfetch_custom",
+        rawInput: { href: "https://openducktor.dev/docs" },
+        rawOutput: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
   test("uses the runtime descriptor aliases for workflow classification", () => {
     for (const canonicalName of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
       const aliases = OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical[canonicalName];
@@ -140,14 +172,54 @@ describe("OpenCode tool strategy catalog", () => {
   test("previews canonical and prefixed workflow aliases with canonical parsing", () => {
     const cases = [
       {
+        canonicalName: "odt_read_task",
+        rawInput: { taskId: "task-42" },
+        expectedPreview: "task-42",
+      },
+      {
         canonicalName: "odt_read_task_documents",
         rawInput: { taskId: "task-42" },
         expectedPreview: "task-42",
       },
       {
+        canonicalName: "odt_set_spec",
+        rawInput: { taskId: "task-42" },
+        expectedPreview: "task-42",
+      },
+      {
+        canonicalName: "odt_set_plan",
+        rawInput: { taskId: "task-42", subtasks: [{ id: "1" }, { id: "2" }] },
+        expectedPreview: "task-42 · 2 subtasks",
+      },
+      {
+        canonicalName: "odt_build_blocked",
+        rawInput: { taskId: "task-42", reason: "Waiting for design input" },
+        expectedPreview: "Waiting for design input",
+      },
+      {
+        canonicalName: "odt_build_resumed",
+        rawInput: { taskId: "task-42" },
+        expectedPreview: "task-42",
+      },
+      {
+        canonicalName: "odt_build_completed",
+        rawInput: { taskId: "task-42", summary: "Catalog complete" },
+        expectedPreview: "Catalog complete",
+      },
+      {
         canonicalName: "odt_set_pull_request",
         rawInput: { taskId: "task-42", providerId: "github", number: 17 },
         expectedPreview: "task-42 · github · #17",
+      },
+      {
+        canonicalName: "odt_qa_approved",
+        rawInput: { taskId: "task-42" },
+        expectedPreview: "task-42",
+      },
+      {
+        canonicalName: "odt_qa_rejected",
+        rawInput: { taskId: "task-42" },
+        expectedPreview: "task-42",
       },
     ] as const;
 
