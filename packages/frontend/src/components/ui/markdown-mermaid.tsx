@@ -1,38 +1,28 @@
 import { AlertCircle, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import { renderMermaidSvg } from "./markdown-mermaid-render";
 
 type MermaidState =
   | { status: "loading" }
   | { status: "ready"; svg: string }
   | { status: "error"; message: string };
 
-let initialized = false;
-
-export function MarkdownMermaid({ source }: { source: string }) {
+export function MarkdownMermaid({
+  source,
+  renderDelayMs = 0,
+}: {
+  source: string;
+  renderDelayMs?: number;
+}) {
   const reactId = useId();
   const [state, setState] = useState<MermaidState>({ status: "loading" });
 
   useEffect(() => {
     let active = true;
-    setState({ status: "loading" });
     const renderDiagram = async (): Promise<void> => {
       try {
-        const [mermaidModule, sanitizeModule] = await Promise.all([
-          import("mermaid"),
-          import("./markdown-mermaid-sanitize"),
-        ]);
-        const mermaid = mermaidModule.default;
-        if (!initialized) {
-          mermaid.initialize({
-            startOnLoad: false,
-            securityLevel: "strict",
-            suppressErrorRendering: true,
-          });
-          initialized = true;
-        }
         const renderId = `odt-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${crypto.randomUUID()}`;
-        const rendered = await mermaid.render(renderId, source);
-        const svg = sanitizeModule.sanitizeMermaidSvg(rendered.svg);
+        const svg = await renderMermaidSvg(renderId, source);
         if (active) {
           setState({ status: "ready", svg });
         }
@@ -46,11 +36,19 @@ export function MarkdownMermaid({ source }: { source: string }) {
         }
       }
     };
-    void renderDiagram();
+    if (renderDelayMs <= 0) {
+      void renderDiagram();
+      return () => {
+        active = false;
+      };
+    }
+
+    const renderTimeout = setTimeout(() => void renderDiagram(), renderDelayMs);
     return () => {
       active = false;
+      clearTimeout(renderTimeout);
     };
-  }, [reactId, source]);
+  }, [reactId, renderDelayMs, source]);
 
   return (
     <section className="my-3 overflow-hidden rounded-md border border-border bg-card">

@@ -1,6 +1,8 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { MarkdownMermaid } from "@/components/ui/markdown-mermaid";
 
+const MERMAID_PREVIEW_RENDER_DELAY_MS = 250;
+
 export function TaskDescriptionMermaidNode({ node }: ReactNodeViewProps) {
   if (node.attrs.language !== "mermaid") {
     return (
@@ -18,7 +20,7 @@ export function TaskDescriptionMermaidNode({ node }: ReactNodeViewProps) {
         </div>
         <NodeViewContent className="m-0 min-h-20 overflow-x-auto whitespace-pre p-3 font-mono text-xs" />
       </div>
-      <MarkdownMermaid source={node.textContent} />
+      <MarkdownMermaid source={node.textContent} renderDelayMs={MERMAID_PREVIEW_RENDER_DELAY_MS} />
     </NodeViewWrapper>
   );
 }

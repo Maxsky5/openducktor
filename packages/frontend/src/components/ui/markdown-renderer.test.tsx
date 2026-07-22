@@ -9,6 +9,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { MarkdownMermaid } from "./markdown-mermaid";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
 
@@ -404,6 +405,33 @@ describe("rich task description rendering", () => {
     expect(view.queryByText("Mermaid source")).toBeNull();
     expect(view.queryByText(/graph TD/)).toBeNull();
     expect(view.container.querySelector("script")).toBeNull();
+  }, 4000);
+
+  test("keeps the current Mermaid preview visible while an editor update settles", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      async (_id, source) =>
+        `<svg xmlns="http://www.w3.org/2000/svg"><text>${source.endsWith("C") ? "C" : "B"}</text></svg>`,
+    );
+
+    try {
+      const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+
+      await waitFor(() => expect(view.queryByText("Rendering diagram…")).toBeNull(), {
+        timeout: 3000,
+      });
+      const currentPreview = view.container.innerHTML;
+
+      view.rerender(<MarkdownMermaid source={"graph TD\n  A --> C"} renderDelayMs={100} />);
+
+      expect(view.queryByText("Rendering diagram…")).toBeNull();
+      expect(view.container.innerHTML).toBe(currentPreview);
+      await waitFor(() => expect(view.container.innerHTML).not.toBe(currentPreview), {
+        timeout: 3000,
+      });
+    } finally {
+      renderSpy.mockRestore();
+    }
   }, 4000);
 
   test("shows an actionable Mermaid parse error without exposing its source", async () => {
