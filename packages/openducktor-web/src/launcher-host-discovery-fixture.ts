@@ -21,11 +21,33 @@ const launchModes = {
 
 type LaunchMode = keyof typeof launchModes;
 
+type DiscoveryScenarioResult = {
+  descriptor: {
+    hostTokenPresent: boolean;
+    hostUrl: unknown;
+    pidMatchesProcess: boolean;
+  };
+  oppositeAfterStop: string;
+  oppositeDuringRun: string;
+  selectedMissingAfterStop: boolean;
+};
+
 const isLaunchMode = (value: string | undefined): value is LaunchMode =>
   value !== undefined && Object.hasOwn(launchModes, value);
 
 const isMissingFileError = (error: unknown): boolean =>
   typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+
+const isFileMissing = (filePath: string): Promise<boolean> =>
+  readFile(filePath, "utf8").then(
+    () => false,
+    (error: unknown) => {
+      if (isMissingFileError(error)) {
+        return true;
+      }
+      throw error;
+    },
+  );
 
 const sourceRuntimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../.."),
@@ -36,7 +58,7 @@ const testLogger: WebLogger = {
   success: () => Effect.void,
 };
 
-const runDiscoveryScenario = async () => {
+const runDiscoveryScenario = async (): Promise<DiscoveryScenarioResult> => {
   const launchMode = process.argv[2];
   if (!isLaunchMode(launchMode)) {
     throw new Error(
@@ -57,7 +79,6 @@ const runDiscoveryScenario = async () => {
   const descriptorPath = path.join(runtimeDirectory, scenario.descriptorName);
   const oppositeDescriptorPath = path.join(runtimeDirectory, scenario.oppositeDescriptorName);
   let backend: TypescriptHostBackend | null = null;
-  let stopped = false;
 
   try {
     await mkdir(runtimeDirectory, { recursive: true });
@@ -83,17 +104,9 @@ const runDiscoveryScenario = async () => {
     const oppositeDuringRun = await readFile(oppositeDescriptorPath, "utf8");
 
     await backend.stop();
-    stopped = true;
+    backend = null;
 
-    const selectedMissingAfterStop = await readFile(descriptorPath, "utf8").then(
-      () => false,
-      (error: unknown) => {
-        if (isMissingFileError(error)) {
-          return true;
-        }
-        throw error;
-      },
-    );
+    const selectedMissingAfterStop = await isFileMissing(descriptorPath);
     const oppositeAfterStop = await readFile(oppositeDescriptorPath, "utf8");
 
     return {
@@ -108,9 +121,7 @@ const runDiscoveryScenario = async () => {
       selectedMissingAfterStop,
     };
   } finally {
-    if (!stopped) {
-      await backend?.stop().catch(() => {});
-    }
+    await backend?.stop().catch(() => {});
   }
 };
 
