@@ -2,7 +2,10 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
-import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
+import {
+  refreshRepoTaskViewsAfterMutation,
+  refreshRepoTaskViewsFromQuery,
+} from "@/state/queries/task-view-sync";
 import { useTaskQueryReadModel } from "./use-task-query-read-model";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 
@@ -37,7 +40,7 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
     async (repoPath: string, taskIdOrIds?: string | string[], options?: TaskDataRefreshOptions) => {
       const taskIds = toTaskIds(taskIdOrIds);
       if (options?.source === "external-sync") {
-        await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+        await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
           forceFreshTaskList: true,
           ancillaryFailureMode: "best-effort",
           ignorePrimaryCancellation: true,
@@ -49,16 +52,20 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
         return;
       }
 
-      await refreshRepoTaskViewsFromQuery(
-        queryClient,
-        repoPath,
-        taskIds
-          ? { taskDocumentStrategy: "refresh", taskIds }
-          : {
-              forceFreshTaskList: options?.forceFreshTaskList ?? true,
-              taskDocumentStrategy: "none",
-            },
-      );
+      if (taskIds) {
+        await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
+          forceFreshTaskList: true,
+          ignorePrimaryCancellation: true,
+          taskDocumentStrategy: "refresh",
+          taskIds,
+        });
+        return;
+      }
+
+      await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+        forceFreshTaskList: options?.forceFreshTaskList ?? true,
+        taskDocumentStrategy: "none",
+      });
     },
     [queryClient],
   );

@@ -20,7 +20,6 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { type HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { TaskSyncError, TaskSyncService } from "../tasks/sync/task-sync-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
   WorkspaceSettingsError,
@@ -58,7 +57,6 @@ export type OdtMcpBridgeError =
   | HostOperationError
   | HostValidationError
   | TaskServiceError
-  | TaskSyncError
   | WorkspaceSettingsError;
 
 export type WorkspaceScopedOdtToolResult =
@@ -85,12 +83,10 @@ export type OdtMcpBridgeService = {
 };
 export type CreateOdtMcpBridgeServiceInput = {
   taskService: TaskService;
-  taskSyncService?: Pick<TaskSyncService, "publishExternalTaskCreated">;
   workspaceSettingsService: WorkspaceSettingsService;
 };
 export const createOdtMcpBridgeService = ({
   taskService,
-  taskSyncService,
   workspaceSettingsService,
 }: CreateOdtMcpBridgeServiceInput): OdtMcpBridgeService => {
   const repoPathForWorkspace = (workspaceId: string) =>
@@ -147,9 +143,6 @@ export const createOdtMcpBridgeService = ({
                 aiReviewEnabled: parsed.aiReviewEnabled ?? true,
               },
             });
-            if (taskSyncService) {
-              yield* taskSyncService.publishExternalTaskCreated(repoPath, created.id);
-            }
             return yield* parseResponse(
               toolName,
               RESPONSE_SCHEMAS.odt_create_task,
@@ -250,13 +243,14 @@ export const createOdtMcpBridgeService = ({
                 }),
             });
             const previousSubtaskIds = directSubtaskIds(beforeTasks, task.id);
-            const document = yield* taskService.setPlan({
+            const plan = yield* taskService.setPlan({
               repoPath,
               taskId: task.id,
               markdown: parsed.markdown,
               subtasks: [],
               hasExplicitSubtasks: false,
             });
+            const document = plan.document;
             const afterTasks = yield* tasksForWorkspace(parsed.workspaceId ?? "");
             const updated = yield* Effect.try({
               try: () => resolveTaskReference(afterTasks, task.id),

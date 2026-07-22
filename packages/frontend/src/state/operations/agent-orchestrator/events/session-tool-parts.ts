@@ -1,7 +1,5 @@
-import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { toToolMessageId } from "../support/chat-message-ids";
 import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
 import {
@@ -32,15 +30,6 @@ type ToolTimingMeta = {
   inputReadyAtMs?: number;
 };
 
-type ToolRefreshDecision = {
-  shouldRefreshTaskData: boolean;
-};
-
-type ToolPartSessionUpdate = {
-  refreshDecision: ToolRefreshDecision;
-  nextState: AgentSessionState;
-};
-
 const resolveTodoUpdateFromTool = (
   part: ToolPart,
   input: Record<string, unknown> | undefined,
@@ -50,20 +39,6 @@ const resolveTodoUpdateFromTool = (
     return null;
   }
   return parseTodosFromToolOutput(output) ?? parseTodosFromToolInput(input);
-};
-
-export const resolveToolRefreshDecision = (
-  part: ToolPart,
-  status: ToolPartStatus,
-  previousStatus: ToolPartStatus | undefined,
-  workflowToolAliasesByCanonical?: Parameters<typeof isOdtWorkflowMutationToolName>[1],
-): ToolRefreshDecision => {
-  const transitionedToCompleted = status === "completed" && previousStatus !== "completed";
-  return {
-    shouldRefreshTaskData:
-      isOdtWorkflowMutationToolName(part.tool, workflowToolAliasesByCanonical) &&
-      transitionedToCompleted,
-  };
 };
 
 const composeToolTimingMeta = (
@@ -141,7 +116,6 @@ const composeToolPartSessionUpdate = ({
   output,
   error,
   timestamp,
-  workflowToolAliasesByCanonical,
 }: {
   current: AgentSessionState;
   prepareCurrent: PrepareCurrent;
@@ -152,8 +126,7 @@ const composeToolPartSessionUpdate = ({
   output: string | undefined;
   error: string | undefined;
   timestamp: string;
-  workflowToolAliasesByCanonical?: Parameters<typeof isOdtWorkflowMutationToolName>[1];
-}): ToolPartSessionUpdate => {
+}): AgentSessionState => {
   const prepared = prepareCurrent(current);
   const fallbackMessageId = toToolMessageId(part);
   const messageId = resolveToolMessageId(
@@ -167,14 +140,7 @@ const composeToolPartSessionUpdate = ({
     fallbackMessageId,
   );
   const existing = findSessionMessageById(prepared, messageId);
-  const previousStatus = existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
   const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
-  const refreshDecision = resolveToolRefreshDecision(
-    part,
-    status,
-    previousStatus,
-    workflowToolAliasesByCanonical,
-  );
   const timingMeta = composeToolTimingMeta(
     existingToolMeta,
     observedEventTimestampMs,
@@ -183,23 +149,20 @@ const composeToolPartSessionUpdate = ({
   );
 
   return {
-    refreshDecision,
-    nextState: {
-      ...prepared,
-      status: "running",
-      messages: upsertSessionMessage(prepared, {
-        id: messageId,
-        role: "tool",
-        content: formatToolContent({
-          ...part,
-          status,
-          ...(typeof error === "string" && error.length > 0 ? { error } : {}),
-          ...(typeof output === "string" && output.length > 0 ? { output } : {}),
-        }),
-        timestamp,
-        meta: composeToolMessageMeta(part, status, input, output, error, timingMeta),
+    ...prepared,
+    status: "running",
+    messages: upsertSessionMessage(prepared, {
+      id: messageId,
+      role: "tool",
+      content: formatToolContent({
+        ...part,
+        status,
+        ...(typeof error === "string" && error.length > 0 ? { error } : {}),
+        ...(typeof output === "string" && output.length > 0 ? { output } : {}),
       }),
-    },
+      timestamp,
+      meta: composeToolMessageMeta(part, status, input, output, error, timingMeta),
+    }),
   };
 };
 
@@ -215,10 +178,7 @@ export const handleToolPart = (
   const resolvedStatus = part.status;
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
-  let shouldRefreshTaskData = false;
   const activeSession = context.store.readSession(context.session.identity);
-  const taskId = activeSession?.taskId;
-  const workflowToolAliasesByCanonical = context.refresh.workflowToolAliasesByCanonical;
 
   if (todoUpdateFromTool && activeSession) {
     context.todos.updateSessionTodos(
@@ -228,7 +188,7 @@ export const handleToolPart = (
   }
 
   context.store.updateSession(context.session.identity, (current) => {
-    const { nextState, refreshDecision } = composeToolPartSessionUpdate({
+    return composeToolPartSessionUpdate({
       current,
       prepareCurrent,
       part,
@@ -238,25 +198,6 @@ export const handleToolPart = (
       output,
       error,
       timestamp: event.timestamp,
-      workflowToolAliasesByCanonical,
     });
-
-    shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
-
-    return nextState;
   });
-
-  if (shouldRefreshTaskData) {
-    runOrchestratorSideEffect(
-      "session-events-refresh-task-data",
-      context.refresh.refreshTaskData(context.session.repoPath, taskId),
-      {
-        tags: {
-          repoPath: context.session.repoPath,
-          externalSessionId: context.session.identity.externalSessionId,
-          tool: part.tool,
-        },
-      },
-    );
-  }
 };

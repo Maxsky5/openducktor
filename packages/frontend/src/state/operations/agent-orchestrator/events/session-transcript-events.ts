@@ -14,7 +14,6 @@ import type {
   SessionTranscriptEventContext,
   UpdateSession,
   UpdateSessionTodos,
-  WorkflowToolAliasesByCanonical,
 } from "./session-event-types";
 import {
   handleAssistantMessage,
@@ -38,12 +37,6 @@ type TranscriptEventDependencies = {
   updateSession: UpdateSession;
   updateSessionTodos: UpdateSessionTodos;
   sessionTurnState: SessionTurnState;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
-  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical;
 };
 
 type QueuedTranscriptEvent = QueuedSessionEventBatchItem<
@@ -74,10 +67,6 @@ const transcriptEventContext = (
         dependencies.sessionTurnState.timing.recordTurnUserMessageTimestamp,
       resolveTurnDurationMs: dependencies.sessionTurnState.timing.resolveTurnDurationMs,
       clearTurnDuration: dependencies.sessionTurnState.timing.clearTurnDuration,
-    },
-    refresh: {
-      refreshTaskData: dependencies.refreshTaskData,
-      workflowToolAliasesByCanonical: dependencies.workflowToolAliasesByCanonical,
     },
     todos: {
       updateSessionTodos: dependencies.updateSessionTodos,

@@ -154,9 +154,8 @@ export function useAgentOrchestratorOperations({
         updateSessionTodos: (session, updater) =>
           updateSessionTodosQueryData(queryClient, session, updater),
         sessionTurnState,
-        refreshTaskData,
       }),
-    [ensureSession, queryClient, refreshTaskData, sessionStore, sessionTurnState, updateSession],
+    [ensureSession, queryClient, sessionStore, sessionTurnState, updateSession],
   );
   const loadSourceSession = useMemo(
     () =>

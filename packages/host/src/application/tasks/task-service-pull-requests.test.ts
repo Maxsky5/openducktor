@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
+import { RepoPullRequestSyncPartialFailure } from "./repo-pull-request-sync-partial-failure";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -2482,6 +2483,169 @@ describe("createTaskService pull requests", () => {
         }),
       },
     });
+  });
+  test("reports deduplicated changed task ids when a later pull request write fails", async () => {
+    const mutationFailure = new HostOperationError({
+      operation: "task-store.set-pull-request",
+      message: "second write failed",
+    });
+    const linkedPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "open" as const,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    };
+    let writes = 0;
+    const taskStore: TaskStorePort = {
+      listPullRequestSyncCandidates: () =>
+        Effect.succeed([
+          { id: "task-1", status: "human_review", pullRequest: linkedPullRequest },
+          { id: "task-2", status: "human_review", pullRequest: linkedPullRequest },
+        ]),
+      setPullRequest: () => {
+        writes += 1;
+        return writes === 1 ? Effect.succeed(true) : Effect.fail(mutationFailure);
+      },
+    };
+    const service = createTaskService({
+      systemCommands: createPullRequestSyncSystemCommands({
+        calls: [],
+        payload: githubPullResponsePayload({
+          number: 42,
+          state: "open",
+          updatedAt: "2026-05-10T10:00:00.000Z",
+        }),
+      }),
+      taskStore,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        },
+      }),
+    });
+
+    const failure = await Effect.runPromise(
+      service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
+    );
+    expect(failure).toBeInstanceOf(RepoPullRequestSyncPartialFailure);
+    expect(failure).toMatchObject({ changedTaskIds: ["task-1"], failure: mutationFailure });
+  });
+  test("preserves a pre-write pull request sync failure without partial progress", async () => {
+    const mutationFailure = new HostOperationError({
+      operation: "task-store.set-pull-request",
+      message: "first write failed",
+    });
+    const linkedPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "open" as const,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    };
+    const taskStore: TaskStorePort = {
+      listPullRequestSyncCandidates: () =>
+        Effect.succeed([{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }]),
+      setPullRequest: () => Effect.fail(mutationFailure),
+    };
+    const service = createTaskService({
+      systemCommands: createPullRequestSyncSystemCommands({
+        calls: [],
+        payload: githubPullResponsePayload({
+          number: 42,
+          state: "open",
+          updatedAt: "2026-05-10T10:00:00.000Z",
+        }),
+      }),
+      taskStore,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        },
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
+      ),
+    ).resolves.toBe(mutationFailure);
+  });
+  test("retains merged pull request progress when task closure validation fails", async () => {
+    const mutationFailure = new HostOperationError({
+      operation: "task-store.list-tasks",
+      message: "closure validation failed",
+    });
+    const linkedPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "open" as const,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    };
+    const taskStore: TaskStorePort = {
+      listPullRequestSyncCandidates: () =>
+        Effect.succeed([{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }]),
+      setPullRequest: () => Effect.succeed(true),
+      listTasks: () => Effect.fail(mutationFailure),
+    };
+    const service = createTaskService({
+      devServerService: createDirectMergeDevServerService([]),
+      gitPort: createDirectMergeGitPort({ calls: [] }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      systemCommands: createPullRequestSyncSystemCommands({
+        calls: [],
+        payload: githubPullResponsePayload({
+          number: 42,
+          state: "closed",
+          mergedAt: "2026-05-10T11:00:00.000Z",
+          updatedAt: "2026-05-10T11:00:00.000Z",
+        }),
+      }),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        },
+      }),
+    });
+
+    const failure = await Effect.runPromise(
+      service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
+    );
+    expect(failure).toBeInstanceOf(RepoPullRequestSyncPartialFailure);
+    expect(failure).toMatchObject({ changedTaskIds: ["task-1"], failure: mutationFailure });
   });
   test("skips pull request sync before reading candidates when provider is unavailable", async () => {
     const calls: unknown[] = [];

@@ -4,9 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { documentQueryKeys } from "@/state/queries/documents";
+import { refreshRepoTaskViewsAfterMutation } from "@/state/queries/task-view-sync";
 import { taskQueryKeys } from "@/state/queries/tasks";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture as createSharedSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createDeferred,
+  createSettingsSnapshotFixture as createSharedSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { host } from "../shared/host";
 import { useSpecOperations } from "./use-spec-operations";
@@ -27,6 +31,17 @@ const createEmptyDocument = () => ({ markdown: "", updatedAt: null as string | n
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
 const createSettingsSnapshotFixture = () => createSharedSettingsSnapshotFixture();
+
+const waitForMockCall = async (hasCall: () => boolean, remainingAttempts = 10): Promise<void> => {
+  if (hasCall()) {
+    return;
+  }
+  if (remainingAttempts <= 0) {
+    throw new Error("Expected mock call did not happen.");
+  }
+  await Promise.resolve();
+  await waitForMockCall(hasCall, remainingAttempts - 1);
+};
 
 type TaskDocumentSection = "spec" | "plan" | "qa";
 
@@ -592,6 +607,170 @@ describe("use-spec-operations", () => {
       host.taskDocumentGet = original.taskDocumentGet;
       host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.setSpec = original.setSpec;
+      host.tasksList = original.tasksList;
+      queryClient.clear();
+    }
+  });
+
+  test("supersedes a document-save refresh without rejecting or leaving stale document data", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    let latest: HookResult | null = null;
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useSpecOperations(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(
+      Harness,
+      { args: normalizeHookArgs({ activeRepo: "/repo-a" }) },
+      { wrapper },
+    );
+
+    const localTaskRead = createDeferred<[]>();
+    let currentSpecMarkdown = "# Stale spec";
+    const specGet = mock(async () => ({
+      markdown: currentSpecMarkdown,
+      updatedAt: "2026-04-10T13:10:00.000Z",
+    }));
+    const saveSpecDocument = mock(async ({ markdown }: { markdown: string }) => {
+      currentSpecMarkdown = markdown;
+      return { updatedAt: "2026-04-10T13:10:00.000Z" };
+    });
+    const { taskDocumentGet, taskDocumentGetFresh } = createTaskDocumentHostReaders({
+      spec: specGet,
+    });
+    let taskReadCount = 0;
+    const tasksList = mock(async () => {
+      taskReadCount += 1;
+      return taskReadCount === 1 ? localTaskRead.promise : [];
+    });
+    const original = {
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
+      saveSpecDocument: host.saveSpecDocument,
+      tasksList: host.tasksList,
+    };
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
+    host.saveSpecDocument = saveSpecDocument;
+    host.tasksList = tasksList;
+
+    try {
+      queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
+        markdown: "# Stale spec",
+        updatedAt: null,
+      });
+      await harness.mount();
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      const operations = latest as HookResult;
+
+      const savePromise = operations.saveSpecDocument("task-1", "# Saved spec");
+      await waitForMockCall(() => tasksList.mock.calls.length === 1);
+
+      await refreshRepoTaskViewsAfterMutation(queryClient, "/repo-a", {
+        forceFreshTaskList: true,
+        ancillaryFailureMode: "best-effort",
+        ignorePrimaryCancellation: true,
+        refreshInactiveViews: false,
+        taskDocumentStrategy: "invalidate",
+        taskIds: ["task-1"],
+      });
+      await expect(savePromise).resolves.toEqual({ updatedAt: "2026-04-10T13:10:00.000Z" });
+
+      expect(tasksList).toHaveBeenCalledTimes(2);
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo-a", "task-1", "spec");
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+          documentQueryKeys.spec("/repo-a", "task-1"),
+        ),
+      ).toEqual({
+        markdown: "# Saved spec",
+        updatedAt: "2026-04-10T13:10:00.000Z",
+      });
+    } finally {
+      localTaskRead.resolve([]);
+      await harness.unmount();
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
+      host.saveSpecDocument = original.saveSpecDocument;
+      host.tasksList = original.tasksList;
+      queryClient.clear();
+    }
+  });
+
+  test("propagates real task-list and document refresh failures after document saves", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    let latest: HookResult | null = null;
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useSpecOperations(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(
+      Harness,
+      { args: normalizeHookArgs({ activeRepo: "/repo-a" }) },
+      { wrapper },
+    );
+
+    let taskListFailure: Error | null = null;
+    let documentFailure: Error | null = null;
+    const saveSpecDocument = mock(async () => ({ updatedAt: "2026-04-10T13:10:00.000Z" }));
+    const taskDocumentGet = mock(async () => ({
+      markdown: "# Spec",
+      updatedAt: "2026-04-10T13:10:00.000Z",
+    }));
+    const taskDocumentGetFresh = mock(async () => {
+      if (documentFailure) {
+        throw documentFailure;
+      }
+      return { markdown: "# Spec", updatedAt: "2026-04-10T13:10:00.000Z" };
+    });
+    const tasksList = mock(async () => {
+      if (taskListFailure) {
+        throw taskListFailure;
+      }
+      return [];
+    });
+    const original = {
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
+      saveSpecDocument: host.saveSpecDocument,
+      tasksList: host.tasksList,
+    };
+    host.taskDocumentGet = taskDocumentGet;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
+    host.saveSpecDocument = saveSpecDocument;
+    host.tasksList = tasksList;
+
+    try {
+      await harness.mount();
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      const operations = latest as HookResult;
+
+      taskListFailure = new Error("task list unavailable");
+      await expect(operations.saveSpecDocument("task-1", "# Saved spec")).rejects.toThrow(
+        "task list unavailable",
+      );
+
+      taskListFailure = null;
+      documentFailure = new Error("document unavailable");
+      await expect(operations.saveSpecDocument("task-1", "# Saved spec")).rejects.toThrow(
+        "document unavailable",
+      );
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo-a", "task-1", "spec");
+    } finally {
+      await harness.unmount();
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
+      host.saveSpecDocument = original.saveSpecDocument;
       host.tasksList = original.tasksList;
       queryClient.clear();
     }

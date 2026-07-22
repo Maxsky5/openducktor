@@ -41,6 +41,8 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
+import { RepoPullRequestSyncPartialFailure } from "./repo-pull-request-sync-partial-failure";
+import { SetPlanProgressFailure } from "./set-plan-progress-failure";
 import { createTaskGithubDependencies } from "./support/required-task-dependencies";
 import type {
   AgentSessionDeleteInput,
@@ -133,12 +135,7 @@ export type TaskService = {
   directMerge(input: DirectMergeInput): Effect.Effect<TaskDirectMergeResult, TaskServiceError>;
   completeDirectMerge(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   createTask(input: CreateTaskUseCaseInput): Effect.Effect<TaskCard, TaskServiceError>;
-  deleteTask(input: DeleteTaskInput): Effect.Effect<
-    {
-      ok: boolean;
-    },
-    TaskServiceError
-  >;
+  deleteTask(input: DeleteTaskInput): Effect.Effect<TaskDeleteResult, TaskServiceError>;
   closeTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   resetImplementation(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   resetTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -150,7 +147,7 @@ export type TaskService = {
     input: MarkdownDocumentInput,
   ): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
   planGet(input: TaskIdInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
-  setPlan(input: SetPlanInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
+  setPlan(input: SetPlanInput): Effect.Effect<TaskSetPlanResult, TaskServiceError>;
   savePlanDocument(
     input: MarkdownDocumentInput,
   ): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
@@ -189,12 +186,26 @@ export type TaskService = {
   >;
   repoPullRequestSyncDetailed(
     input: RepoPathInput,
-  ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
+  ): Effect.Effect<RepoPullRequestSyncResult, RepoPullRequestSyncDetailedError>;
+};
+export type TaskDeleteResult = {
+  ok: boolean;
+  affectedTaskIds: string[];
+};
+export type TaskSetPlanResult = {
+  document: TaskMetadataDocument;
+  affectedTaskIds: string[];
+};
+export type TaskServiceWithMutationProgress = Omit<TaskService, "setPlan"> & {
+  setPlan(
+    input: SetPlanInput,
+  ): Effect.Effect<TaskSetPlanResult, TaskServiceError | SetPlanProgressFailure>;
 };
 export type RepoPullRequestSyncResult = {
   ran: boolean;
   changedTaskIds: string[];
 };
+export type RepoPullRequestSyncDetailedError = TaskServiceError | RepoPullRequestSyncPartialFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
   devServerService?: DevServerService;
@@ -230,7 +241,44 @@ const mapTaskServiceErrors = <A, E>(
   effect: Effect.Effect<A, E>,
 ): Effect.Effect<A, TaskServiceError> => effect.pipe(Effect.mapError(toTaskServiceError));
 
-export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
+const mapRepoPullRequestSyncDetailedErrors = <A, E>(
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, RepoPullRequestSyncDetailedError> =>
+  effect.pipe(
+    Effect.mapError((cause) =>
+      cause instanceof RepoPullRequestSyncPartialFailure ? cause : toTaskServiceError(cause),
+    ),
+  );
+
+const mapSetPlanErrors = <A, E>(
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, TaskServiceError | SetPlanProgressFailure> =>
+  effect.pipe(
+    Effect.mapError((cause) =>
+      cause instanceof SetPlanProgressFailure ? cause : toTaskServiceError(cause),
+    ),
+  );
+
+export const createTaskServiceWithMutationProgress = (
+  input: CreateTaskServiceInput,
+): TaskServiceWithMutationProgress => {
+  const taskService = createTaskServiceImplementation(input);
+  return {
+    ...taskService,
+    setPlan: (setPlanInput) =>
+      taskService
+        .setPlan(setPlanInput)
+        .pipe(
+          Effect.mapError((cause) =>
+            cause instanceof SetPlanProgressFailure ? cause : toTaskServiceError(cause),
+          ),
+        ),
+  };
+};
+
+const createTaskServiceImplementation = (
+  input: CreateTaskServiceInput,
+): TaskServiceWithMutationProgress => {
   const githubDependencies = createTaskGithubDependencies(input);
   const taskSessionBootstrapCoordinator =
     input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
@@ -332,17 +380,37 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     qaRejected: (input) => mapTaskServiceErrors(service.qaRejected(input)),
     repoPullRequestSync: (input) => mapTaskServiceErrors(service.repoPullRequestSync(input)),
     repoPullRequestSyncDetailed: (input) =>
-      mapTaskServiceErrors(service.repoPullRequestSyncDetailed(input)),
+      mapRepoPullRequestSyncDetailedErrors(service.repoPullRequestSyncDetailed(input)),
     resetImplementation: (input) => mapTaskServiceErrors(service.resetImplementation(input)),
     resetTask: (input) => mapTaskServiceErrors(service.resetTask(input)),
     savePlanDocument: (input) => mapTaskServiceErrors(service.savePlanDocument(input)),
     saveSpecDocument: (input) => mapTaskServiceErrors(service.saveSpecDocument(input)),
-    setPlan: (input) => mapTaskServiceErrors(service.setPlan(input)),
+    setPlan: (input) => mapSetPlanErrors(service.setPlan(input)),
     setSpec: (input) => mapTaskServiceErrors(service.setSpec(input)),
     specGet: (input) => mapTaskServiceErrors(service.specGet(input)),
     transitionTask: (input) => mapTaskServiceErrors(service.transitionTask(input)),
     unlinkPullRequest: (input) => mapTaskServiceErrors(service.unlinkPullRequest(input)),
     updateTask: (input) => mapTaskServiceErrors(service.updateTask(input)),
     upsertPullRequest: (input) => mapTaskServiceErrors(service.upsertPullRequest(input)),
+  };
+};
+
+export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
+  return withoutTaskMutationProgress(createTaskServiceWithMutationProgress(input));
+};
+
+export const withoutTaskMutationProgress = (
+  taskService: TaskServiceWithMutationProgress,
+): TaskService => {
+  return {
+    ...taskService,
+    setPlan: (setPlanInput) =>
+      taskService
+        .setPlan(setPlanInput)
+        .pipe(
+          Effect.catchTag("SetPlanProgressFailure", (progressFailure) =>
+            Effect.fail(progressFailure.failure),
+          ),
+        ),
   };
 };

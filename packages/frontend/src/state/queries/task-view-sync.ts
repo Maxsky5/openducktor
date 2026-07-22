@@ -47,18 +47,53 @@ export type RepoTaskViewRefreshOptions = BaseRepoTaskViewRefreshOptions &
 const runAncillaryRefresh = async (
   promises: Promise<unknown>[],
   mode: "reject" | "best-effort",
+  ignoreCancellation = false,
 ): Promise<void> => {
   if (mode === "reject") {
-    await Promise.all(promises);
+    if (!ignoreCancellation) {
+      await Promise.all(promises);
+      return;
+    }
+
+    const results = await Promise.allSettled(promises);
+    const failure = results.find(
+      (result) => result.status === "rejected" && !isCancelledQueryError(result.reason),
+    );
+    if (failure?.status === "rejected") {
+      throw failure.reason;
+    }
     return;
   }
 
   const results = await Promise.allSettled(promises);
   for (const settled of results) {
-    if (settled.status === "rejected") {
+    if (
+      settled.status === "rejected" &&
+      !(ignoreCancellation && isCancelledQueryError(settled.reason))
+    ) {
       console.warn("Background task cache refresh failed", { error: settled.reason });
     }
   }
+};
+
+const runMutationAncillaryRefresh = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  doneVisibleDays: number,
+  taskDocumentRefresh: () => Promise<void>,
+  ancillaryFailureMode: "reject" | "best-effort",
+  ignorePrimaryCancellation: boolean,
+  refreshInactiveViews: boolean,
+): Promise<void> => {
+  const ancillaryRefreshes: Promise<unknown>[] = [taskDocumentRefresh()];
+  if (refreshInactiveViews) {
+    ancillaryRefreshes.push(
+      refreshCachedKanbanQueries(queryClient, repoPath, {
+        excludeDoneVisibleDays: doneVisibleDays,
+      }),
+    );
+  }
+  await runAncillaryRefresh(ancillaryRefreshes, ancillaryFailureMode, ignorePrimaryCancellation);
 };
 
 export const refreshRepoTaskViewsFromQuery = async (
@@ -143,22 +178,27 @@ const refreshRepoTaskViews = async (
     await loadRepoTaskDataFromQuery(queryClient, repoPath, doneVisibleDays);
   } catch (error) {
     if (ignorePrimaryCancellation && isCancelledQueryError(error)) {
-      if (options?.taskDocumentStrategy === "invalidate") {
-        await runAncillaryRefresh([taskDocumentRefresh()], ancillaryFailureMode);
-      }
+      await runMutationAncillaryRefresh(
+        queryClient,
+        repoPath,
+        doneVisibleDays,
+        taskDocumentRefresh,
+        ancillaryFailureMode,
+        ignorePrimaryCancellation,
+        refreshInactiveViews,
+      );
       return;
     }
     throw error;
   }
 
-  const ancillaryRefreshes: Promise<unknown>[] = [taskDocumentRefresh()];
-  if (refreshInactiveViews) {
-    ancillaryRefreshes.push(
-      refreshCachedKanbanQueries(queryClient, repoPath, {
-        excludeDoneVisibleDays: doneVisibleDays,
-      }),
-    );
-  }
-
-  await runAncillaryRefresh(ancillaryRefreshes, ancillaryFailureMode);
+  await runMutationAncillaryRefresh(
+    queryClient,
+    repoPath,
+    doneVisibleDays,
+    taskDocumentRefresh,
+    ancillaryFailureMode,
+    ignorePrimaryCancellation,
+    refreshInactiveViews,
+  );
 };

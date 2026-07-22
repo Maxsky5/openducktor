@@ -210,7 +210,7 @@ export const createEnsureRuntime = ({
           if (role === "build") {
             runOrchestratorSideEffect(
               "runtime-refresh-task-data-after-build-start",
-              refreshTaskData(repoPath),
+              refreshTaskData(repoPath, taskId),
               { tags: { repoPath, taskId, role } },
             );
           }

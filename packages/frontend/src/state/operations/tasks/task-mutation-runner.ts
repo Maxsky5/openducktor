@@ -36,6 +36,7 @@ export function useTaskMutationRunner({
       if (strategy.kind === "task") {
         await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
           forceFreshTaskList: true,
+          ignorePrimaryCancellation: true,
           taskDocumentStrategy: "refresh",
           taskIds: [strategy.taskId],
         });
@@ -45,6 +46,7 @@ export function useTaskMutationRunner({
       if (strategy.kind === "remove-task") {
         await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
           forceFreshTaskList: true,
+          ignorePrimaryCancellation: true,
           taskDocumentStrategy: "remove",
           taskIds: strategy.taskIds,
         });
@@ -53,6 +55,7 @@ export function useTaskMutationRunner({
 
       await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
         forceFreshTaskList: true,
+        ignorePrimaryCancellation: true,
       });
     },
     [queryClient],

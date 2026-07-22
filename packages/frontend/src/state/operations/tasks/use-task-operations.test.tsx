@@ -22,30 +22,19 @@ import { useTaskDocuments } from "@/components/features/task-details/use-task-do
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
-import { getAgentSession } from "@/state/agent-session-collection";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createSettingsSnapshotFixture as createSharedSettingsSnapshotFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
   type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { type AgentSessionReadPort, agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
 import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import { workspaceQueryKeys } from "../../queries/workspace";
-import {
-  listenToAgentSessionEvents,
-  type SessionEventAdapter,
-} from "../agent-orchestrator/events/session-events-test-harness";
 import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
-import { createSessionTurnMetadata } from "../agent-orchestrator/support/session-turn-metadata";
-import {
-  createAgentSessionCollectionRefFixture,
-  replaceAgentSessionFixture,
-  updateAgentSessionFixture,
-} from "../agent-orchestrator/test-utils";
 import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -707,6 +696,198 @@ describe("use-task-operations", () => {
       host.taskResetImplementation = original.taskResetImplementation;
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
+    }
+  });
+
+  test("external task-sync supersedes a targeted reset refresh without false failure", async () => {
+    const localTaskRead = createDeferred<TaskCard[]>();
+    let currentStatus: TaskCard["status"] = "in_progress";
+    let deferLocalTaskRead = false;
+    const taskResetImplementation = mock(async () => {
+      currentStatus = "ready_for_dev";
+      return makeTask("A", currentStatus);
+    });
+    const tasksList = mock(async () => {
+      if (deferLocalTaskRead) {
+        deferLocalTaskRead = false;
+        return localTaskRead.promise;
+      }
+      return [makeTask("A", currentStatus)];
+    });
+    const taskDocumentGetFresh = mock(async () => ({
+      markdown: "# Fresh spec",
+      updatedAt: "2026-04-10T13:10:00.000Z",
+    }));
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
+    const original = {
+      taskResetImplementation: host.taskResetImplementation,
+      tasksList: host.tasksList,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
+      toastError: toast.error,
+      toastSuccess: toast.success,
+    };
+    host.taskResetImplementation = taskResetImplementation;
+    host.tasksList = tasksList;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    (toast as { success: typeof toast.success }).success = toastSuccess as typeof toast.success;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+    const getLatest = () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      return latest;
+    };
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(normalizeHookArgs(args));
+      return null;
+    };
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeWorkspace: createActiveWorkspace("/repo"),
+          agentSessionReadPort: {
+            agentSessionsList: async () => [],
+            agentSessionsListForTasks: async (_repoPath, taskIds) =>
+              taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
+          },
+          refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      queryClient.setQueryData(documentQueryKeys.spec("/repo", "A"), {
+        markdown: "# Stale spec",
+        updatedAt: null,
+      });
+      await harness.mount();
+      await harness.waitFor(() => getLatest().tasks[0]?.status === "in_progress");
+      tasksList.mockClear();
+
+      deferLocalTaskRead = true;
+      let resetPromise: Promise<void> | null = null;
+      await harness.run(() => {
+        resetPromise = getLatest().resetTaskImplementation("A");
+      });
+      await harness.waitFor(() => tasksList.mock.calls.length === 1);
+
+      await harness.run(async () => {
+        await getLatest().refreshTaskData("/repo", "A", { source: "external-sync" });
+      });
+      if (!resetPromise) {
+        throw new Error("Expected reset to start");
+      }
+      await harness.run(async () => {
+        await resetPromise;
+      });
+
+      expect(toastError).not.toHaveBeenCalled();
+      expect(toastSuccess).toHaveBeenCalledWith("Implementation reset", { description: "A" });
+      expect(
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 1))
+          ?.tasks[0]?.status,
+      ).toBe("ready_for_dev");
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "A", "spec");
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+          documentQueryKeys.spec("/repo", "A"),
+        )?.markdown,
+      ).toBe("# Fresh spec");
+    } finally {
+      localTaskRead.resolve([makeTask("A", "in_progress")]);
+      await harness.unmount();
+      host.taskResetImplementation = original.taskResetImplementation;
+      host.tasksList = original.tasksList;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
+      toast.error = original.toastError;
+      toast.success = original.toastSuccess;
+    }
+  });
+
+  test("targeted task refresh propagates task-list and document failures", async () => {
+    let taskListFailure: Error | null = null;
+    let documentFailure: Error | null = null;
+    const tasksList = mock(async () => {
+      if (taskListFailure) {
+        throw taskListFailure;
+      }
+      return [makeTask("A", "open")];
+    });
+    const taskDocumentGetFresh = mock(async () => {
+      if (documentFailure) {
+        throw documentFailure;
+      }
+      return { markdown: "# Fresh spec", updatedAt: "2026-04-10T13:10:00.000Z" };
+    });
+    const original = {
+      tasksList: host.tasksList,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
+    };
+    host.tasksList = tasksList;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+    const getLatest = () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      return latest;
+    };
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(normalizeHookArgs(args));
+      return null;
+    };
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeWorkspace: createActiveWorkspace("/repo"),
+          refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => getLatest().tasks[0]?.status === "open");
+
+      taskListFailure = new Error("task list unavailable");
+      await expect(
+        harness.run(async () => {
+          await getLatest().refreshTaskData("/repo", "A");
+        }),
+      ).rejects.toThrow("task list unavailable");
+
+      taskListFailure = null;
+      documentFailure = new Error("document unavailable");
+      queryClient.setQueryData(documentQueryKeys.spec("/repo", "A"), {
+        markdown: "# Stale spec",
+        updatedAt: null,
+      });
+      await expect(
+        harness.run(async () => {
+          await getLatest().refreshTaskData("/repo", "A");
+        }),
+      ).rejects.toThrow("document unavailable");
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "A", "spec");
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
     }
   });
 
@@ -1831,6 +2012,110 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("external task-sync supersedes a local mutation refresh without failing the mutation", async () => {
+    const localTaskRead = createDeferred<TaskCard[]>();
+    let currentStatus: TaskCard["status"] = "open";
+    let deferLocalTaskRead = false;
+    const taskUpdate = mock(async () => {
+      currentStatus = "ready_for_dev";
+      return makeTask("A", currentStatus);
+    });
+    const tasksList = mock(async () => {
+      if (deferLocalTaskRead) {
+        deferLocalTaskRead = false;
+        return localTaskRead.promise;
+      }
+      return [makeTask("A", currentStatus)];
+    });
+    const taskDocumentGetFresh = mock(async () => ({
+      markdown: "# Fresh plan",
+      updatedAt: "2026-04-10T13:10:00.000Z",
+    }));
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    const original = {
+      taskUpdate: host.taskUpdate,
+      tasksList: host.tasksList,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
+      toastError: toast.error,
+    };
+    host.taskUpdate = taskUpdate;
+    host.tasksList = tasksList;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+    const getLatestOperations = () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      return latest;
+    };
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(normalizeHookArgs(args));
+      return null;
+    };
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeWorkspace: createActiveWorkspace("/repo"),
+          refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      queryClient.setQueryData(documentQueryKeys.plan("/repo", "A"), {
+        markdown: "# Stale plan",
+        updatedAt: null,
+      });
+      await harness.mount();
+      await harness.waitFor(() => latest?.tasks[0]?.status === "open");
+      tasksList.mockClear();
+
+      deferLocalTaskRead = true;
+      let mutationPromise: Promise<void> | null = null;
+      await harness.run(() => {
+        mutationPromise = getLatestOperations().updateTask("A", { title: "Updated" });
+      });
+      await harness.waitFor(() => tasksList.mock.calls.length === 1);
+
+      await harness.run(async () => {
+        await getLatestOperations().refreshTaskData("/repo", "A", { source: "external-sync" });
+      });
+      if (!mutationPromise) {
+        throw new Error("Expected mutation to start");
+      }
+      await harness.run(async () => {
+        await mutationPromise;
+      });
+
+      expect(toastError).not.toHaveBeenCalled();
+      expect(
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 1))
+          ?.tasks[0]?.status,
+      ).toBe("ready_for_dev");
+      expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "A", "plan");
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+          documentQueryKeys.plan("/repo", "A"),
+        )?.markdown,
+      ).toBe("# Fresh plan");
+    } finally {
+      localTaskRead.resolve([makeTask("A", "open")]);
+      await harness.unmount();
+      host.taskUpdate = original.taskUpdate;
+      host.tasksList = original.tasksList;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
+      toast.error = original.toastError;
+    }
+  });
+
   test("deleteTask removes cached task documents for deleted tasks and subtasks", async () => {
     let isDeleted = false;
     let deletePromise: Promise<void> | null = null;
@@ -2315,144 +2600,6 @@ describe("use-task-operations", () => {
     } finally {
       await harness.unmount();
       host.taskClose = original.taskClose;
-      host.tasksList = original.tasksList;
-      legacyHost.runsList = original.runsList;
-    }
-  });
-
-  test("completed ODT tool events refresh an active kanban query through the session listener", async () => {
-    let currentStatus: TaskCard["status"] = "human_review";
-    const tasksList = mock(async () => [makeTask("A", currentStatus)]);
-    const runsList = mock(async (): Promise<RunSummary[]> => []);
-    const adapterHandlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: async (_externalSessionId, handler) => {
-        adapterHandlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
-
-    const original = {
-      tasksList: host.tasksList,
-      runsList: legacyHost.runsList,
-    };
-    host.tasksList = tasksList;
-    legacyHost.runsList = runsList;
-
-    const harness = createTaskAndKanbanHarness({
-      activeRepo: "/repo",
-      refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
-    });
-
-    const sessionsRef = createAgentSessionCollectionRefFixture([
-      buildAgentSession({ externalSessionId: "session-1" }),
-    ]);
-    const updateSession = (
-      identity: AgentSessionIdentity,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      return updateAgentSessionFixture(sessionsRef, identity, updater);
-    };
-
-    try {
-      await harness.mount();
-      await harness.waitFor(
-        (value) =>
-          !value.isFetchingKanban &&
-          value.operations.tasks[0]?.status === "human_review" &&
-          value.kanbanTasks[0]?.status === "human_review",
-        1000,
-      );
-
-      const unsubscribe = await listenToAgentSessionEvents({
-        adapter,
-        sessionsRef,
-        sessionRef: {
-          externalSessionId: "session-1",
-          repoPath: "/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-          runtimePolicy: { kind: "opencode" },
-        },
-        turnMetadata: createSessionTurnMetadata(),
-        readSession: (identity) => getAgentSession(sessionsRef.current, identity),
-        ensureSession: (identity, createSession) => {
-          const current = getAgentSession(sessionsRef.current, identity);
-          if (current) {
-            return current;
-          }
-          const nextSession = createSession();
-          sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, nextSession);
-          return nextSession;
-        },
-        updateSession,
-        updateSessionTodos: () => {},
-        isSessionObserved: (identity) => identity.externalSessionId === "session-1",
-        buildReadOnlyApprovalRejectionMessage: async () => "Rejected by read-only policy.",
-        recordTurnActivityTimestamp: () => {},
-        recordTurnUserMessageTimestamp: () => {},
-        resolveTurnDurationMs: () => undefined,
-        clearTurnDuration: () => {},
-        refreshTaskData: harness.getLatest().operations.refreshTaskData,
-        readOnlyApprovalAutoRejectSafe: false,
-        workflowToolAliasesByCanonical: undefined,
-      });
-
-      try {
-        const handleEvent = adapterHandlers[0];
-        if (!handleEvent) {
-          throw new Error("Expected session event handler to be registered");
-        }
-
-        tasksList.mockClear();
-        runsList.mockClear();
-        currentStatus = "closed";
-
-        handleEvent({
-          type: "assistant_part",
-          externalSessionId: "session-1",
-          timestamp: "2026-02-22T08:00:05.000Z",
-          part: {
-            kind: "tool",
-            messageId: "tool-msg-1",
-            partId: "part-1",
-            callId: "call-1",
-            tool: "odt_build_completed",
-            toolType: "generic" as const,
-            status: "completed",
-            output: "done",
-            error: "",
-          },
-        });
-
-        await harness.waitFor(
-          (value) =>
-            !value.isFetchingKanban &&
-            value.operations.tasks[0]?.status === "closed" &&
-            value.kanbanTasks[0]?.status === "closed",
-          1000,
-        );
-
-        expect(
-          tasksList.mock.calls.some((call) => {
-            const args = call as unknown[];
-            return args[0] === "/repo" && args[1] === 1;
-          }),
-        ).toBe(true);
-        expect(
-          tasksList.mock.calls.some((call) => {
-            const args = call as unknown[];
-            return args[0] === "/repo" && args[1] === 1;
-          }),
-        ).toBe(true);
-      } finally {
-        unsubscribe();
-      }
-    } finally {
-      await harness.unmount();
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
     }

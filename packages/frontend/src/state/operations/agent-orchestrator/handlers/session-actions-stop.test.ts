@@ -275,9 +275,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       recordTurnUserMessageTimestamp: () => {},
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
       readOnlyApprovalAutoRejectSafe: false,
-      workflowToolAliasesByCanonical: undefined,
     });
 
     adapter.stopSession = async (sessionRef) => {

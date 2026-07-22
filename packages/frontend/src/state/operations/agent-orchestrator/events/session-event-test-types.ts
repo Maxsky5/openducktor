@@ -21,7 +21,6 @@ import type {
   SessionTurnContext,
   UpdateSession,
   UpdateSessionTodos,
-  WorkflowToolAliasesByCanonical,
 } from "./session-event-types";
 
 export type SessionEventAdapter = {
@@ -49,12 +48,6 @@ export type ObserveAgentSessionParams = {
   buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   readOnlyApprovalAutoRejectSafe: boolean;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
-  workflowToolAliasesByCanonical: WorkflowToolAliasesByCanonical | undefined;
 };
 
 type SessionEventContextParams = Omit<ObserveAgentSessionParams, "sessionRef"> & {
@@ -93,10 +86,6 @@ export const createSessionEventContext = (
     buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
     readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
     ...(context.loadSettingsSnapshot ? { loadSettingsSnapshot: context.loadSettingsSnapshot } : {}),
-  },
-  refresh: {
-    refreshTaskData: context.refreshTaskData,
-    workflowToolAliasesByCanonical: context.workflowToolAliasesByCanonical,
   },
   todos: {
     updateSessionTodos: context.updateSessionTodos,

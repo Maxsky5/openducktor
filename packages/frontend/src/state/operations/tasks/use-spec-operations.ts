@@ -10,7 +10,7 @@ import {
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "../../queries/documents";
-import { refreshRepoTaskViewsFromQuery } from "../../queries/task-view-sync";
+import { refreshRepoTaskViewsAfterMutation } from "../../queries/task-view-sync";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -94,7 +94,8 @@ export function useSpecOperations({
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+      await refreshRepoTaskViewsAfterMutation(queryClient, repo, {
+        ignorePrimaryCancellation: true,
         taskDocumentStrategy: "refresh",
         taskIds: [taskId],
       });
@@ -118,7 +119,8 @@ export function useSpecOperations({
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+      await refreshRepoTaskViewsAfterMutation(queryClient, repo, {
+        ignorePrimaryCancellation: true,
         taskDocumentStrategy: "refresh",
         taskIds: [taskId],
       });
@@ -142,7 +144,8 @@ export function useSpecOperations({
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.all,
       });
-      await refreshRepoTaskViewsFromQuery(queryClient, repo, {
+      await refreshRepoTaskViewsAfterMutation(queryClient, repo, {
+        ignorePrimaryCancellation: true,
         taskDocumentStrategy: "refresh",
         taskIds: [taskId],
       });

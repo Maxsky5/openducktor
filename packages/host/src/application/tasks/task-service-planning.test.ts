@@ -1,6 +1,12 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import { createTaskService, type TaskStorePort, task } from "./test-support/task-workflow-harness";
+import { createEventPublishingTaskService } from "./event-publishing-task-service";
+import {
+  createTaskService,
+  createTaskServiceWithMutationProgress,
+  type TaskStorePort,
+  task,
+} from "./test-support/task-workflow-harness";
 
 describe("createTaskService planning", () => {
   test("sets spec markdown and promotes open tasks to spec_ready", async () => {
@@ -267,9 +273,12 @@ describe("createTaskService planning", () => {
         }),
       ),
     ).resolves.toEqual({
-      markdown: "# Plan",
-      updatedAt: "2026-05-10T10:00:00.000Z",
-      revision: 2,
+      document: {
+        markdown: "# Plan",
+        updatedAt: "2026-05-10T10:00:00.000Z",
+        revision: 2,
+      },
+      affectedTaskIds: ["epic-1", "old-child"],
     });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
@@ -439,5 +448,51 @@ describe("createTaskService planning", () => {
       { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "setPlan", input: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" } },
     ]);
+  });
+  test("publishes removed epic children when later replacement deletion fails", async () => {
+    const mutationFailure = new HostOperationError({
+      operation: "task-store.delete-task",
+      message: "second child delete failed",
+    });
+    let deletionCount = 0;
+    const taskStore: TaskStorePort = {
+      listTasks: () =>
+        Effect.succeed([
+          task({ id: "epic-1", issueType: "epic", status: "spec_ready" }),
+          task({ id: "child-1", parentId: "epic-1" }),
+          task({ id: "child-2", parentId: "epic-1" }),
+        ]),
+      setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      deleteTask: () => {
+        deletionCount += 1;
+        return deletionCount === 1 ? Effect.succeed(true) : Effect.fail(mutationFailure);
+      },
+    };
+    const events: string[][] = [];
+    const service = createEventPublishingTaskService({
+      taskService: createTaskServiceWithMutationProgress({ taskStore }),
+      taskSyncService: {
+        publishExternalTaskCreated: () => Effect.void,
+        publishTasksUpdated: (_repoPath, taskIds) =>
+          Effect.sync(() => {
+            events.push(taskIds);
+          }),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .setPlan({
+            repoPath: "/repo",
+            taskId: "epic-1",
+            markdown: "# Plan",
+            hasExplicitSubtasks: true,
+            subtasks: [{ title: "Replacement", issueType: "task" }],
+          })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(mutationFailure);
+    expect(events).toEqual([["epic-1", "child-1"]]);
   });
 });

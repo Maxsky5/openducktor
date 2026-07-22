@@ -3,6 +3,7 @@ import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { HostEventBusPort } from "../../../events/host-event-bus";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
+import { RepoPullRequestSyncPartialFailure } from "../repo-pull-request-sync-partial-failure";
 import type { TaskService } from "../task-service";
 import { createTaskSyncService } from "./task-sync-service";
 
@@ -149,6 +150,154 @@ describe("createTaskSyncService", () => {
         taskIds: ["task-1", "task-2"],
       },
     });
+  });
+  test("publishes partial sync progress once and returns the original failure", async () => {
+    const { eventBus, events } = createEventBus();
+    const mutationFailure = new HostOperationError({
+      operation: "task.repo-pull-request-sync",
+      message: "second task failed",
+    });
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed() {
+          return Effect.fail(
+            new RepoPullRequestSyncPartialFailure({
+              changedTaskIds: ["task-1", "task-1", "task-2"],
+              failure: mutationFailure,
+            }),
+          );
+        },
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.succeed([
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ]);
+        },
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(service.syncActiveWorkspacePullRequests().pipe(Effect.flip)),
+    ).resolves.toBe(mutationFailure);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      payload: { kind: "tasks_updated", repoPath: "/repo", taskIds: ["task-1", "task-2"] },
+    });
+  });
+  test("combines partial sync and publication failures", async () => {
+    const mutationFailure = new HostOperationError({
+      operation: "task.repo-pull-request-sync",
+      message: "second task failed",
+    });
+    const publicationCause = new Error("event bus failed");
+    const service = createTaskSyncServiceForTest({
+      eventBus: {
+        publish() {
+          throw publicationCause;
+        },
+        subscribe() {
+          return () => {};
+        },
+      },
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed: () =>
+          Effect.fail(
+            new RepoPullRequestSyncPartialFailure({
+              changedTaskIds: ["task-1"],
+              failure: mutationFailure,
+            }),
+          ),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces: () =>
+          Effect.succeed([
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ]),
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(service.syncActiveWorkspacePullRequests().pipe(Effect.flip)),
+    ).resolves.toMatchObject({
+      operation: "task-sync.pull-request-sync",
+      cause: mutationFailure,
+      details: { mutationFailure },
+    });
+  });
+  test("logs a partial sync failure once after publishing one batch in the scheduler loop", async () => {
+    const { eventBus, events } = createEventBus();
+    const mutationFailure = new HostOperationError({
+      operation: "task.repo-pull-request-sync",
+      message: "second task failed",
+    });
+    const { logCalls } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const logged = yield* Deferred.make<void>();
+        let logCalls = 0;
+        const service = createTaskSyncServiceForTest({
+          eventBus,
+          intervalMs: 1,
+          logger: {
+            error: () =>
+              Effect.sync(() => {
+                logCalls += 1;
+              }).pipe(Effect.zipRight(Deferred.succeed(logged, undefined))),
+          },
+          taskService: createTaskServiceFake({
+            repoPullRequestSyncDetailed: () =>
+              Effect.fail(
+                new RepoPullRequestSyncPartialFailure({
+                  changedTaskIds: ["task-1"],
+                  failure: mutationFailure,
+                }),
+              ),
+          }),
+          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+            listWorkspaces: () =>
+              Effect.succeed([
+                {
+                  workspaceId: "repo",
+                  workspaceName: "Repo",
+                  repoPath: "/repo",
+                  isActive: true,
+                  hasConfig: true,
+                  configuredWorktreeBasePath: null,
+                  defaultWorktreeBasePath: null,
+                  effectiveWorktreeBasePath: null,
+                },
+              ]),
+          }),
+        });
+        const loop = yield* service.startPullRequestSyncLoop();
+        yield* TestClock.adjust(1);
+        yield* Deferred.await(logged);
+        yield* loop.stop();
+        return { logCalls };
+      }).pipe(Effect.provide(TestContext.TestContext)),
+    );
+
+    expect(logCalls).toBe(1);
+    expect(events).toHaveLength(1);
   });
   test("does not run pull request sync during loop startup", async () => {
     const { eventBus } = createEventBus();

@@ -141,7 +141,6 @@ const createRoutingHarness = async ({
     ...(eventBatchWindowMs !== undefined ? { eventBatchWindowMs } : {}),
     resolveTurnDurationMs: () => undefined,
     clearTurnDuration: () => {},
-    refreshTaskData: async () => {},
   });
 
   const handleEvent = handlers[0];
@@ -198,8 +197,6 @@ const createDirectRouterContext = ({
       clearTurnDuration: () => {},
       buildReadOnlyApprovalRejectionMessage: async () => "",
       readOnlyApprovalAutoRejectSafe: true,
-      refreshTaskData: async () => {},
-      workflowToolAliasesByCanonical: undefined,
     },
     sessionsRef,
     updateSession,
@@ -398,7 +395,6 @@ describe("agent-orchestrator session event routing", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];

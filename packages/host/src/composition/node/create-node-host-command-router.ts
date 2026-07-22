@@ -32,12 +32,16 @@ import {
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
+import { createEventPublishingTaskService } from "../../application/tasks/event-publishing-task-service";
 import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import {
   createTaskSyncService,
   type TaskSyncLoopHandle,
 } from "../../application/tasks/sync/task-sync-service";
-import { createTaskService } from "../../application/tasks/task-service";
+import {
+  createTaskServiceWithMutationProgress,
+  withoutTaskMutationProgress,
+} from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import {
   createTerminalService,
@@ -280,7 +284,7 @@ export const createNodeEffectHostCommandRouter = (
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,
   });
-  const taskService = createTaskService({
+  const baseTaskService = createTaskServiceWithMutationProgress({
     devServerService,
     terminalService,
     gitPort: git,
@@ -300,13 +304,15 @@ export const createNodeEffectHostCommandRouter = (
         eventBus,
         logger: lifecycleLogger,
         onBackgroundFailure,
-        taskService,
+        taskService: baseTaskService,
         workspaceSettingsService,
       })
     : null;
+  const taskService = taskSyncService
+    ? createEventPublishingTaskService({ taskService: baseTaskService, taskSyncService })
+    : withoutTaskMutationProgress(baseTaskService);
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskService,
-    ...(taskSyncService ? { taskSyncService } : {}),
     workspaceSettingsService,
   });
   const githubCommandDependencies = createGithubCommandDependencies({

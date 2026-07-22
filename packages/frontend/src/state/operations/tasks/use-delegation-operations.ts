@@ -29,7 +29,7 @@ export function useDelegationOperations({
         throw new Error("Active workspace is required.");
       }
       await startDelegatedBuild(repo, taskId, workspaceId);
-      await refreshTaskData(repo);
+      await refreshTaskData(repo, taskId);
     },
     [activeWorkspace, refreshTaskData],
   );

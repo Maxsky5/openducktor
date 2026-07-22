@@ -422,7 +422,7 @@ describe("tasks query cache helpers", () => {
     ).toBe("stale");
   });
 
-  test("mutation repo task view refresh cancels older in-flight task reads before reloading", async () => {
+  test("external task-sync refresh cancels an in-flight stale repo task read before reloading", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
     const staleTaskRead = createDeferred<TaskCard[]>();
@@ -444,7 +444,11 @@ describe("tasks query cache helpers", () => {
 
     const refresh = refreshRepoTaskViewsAfterMutation(queryClient, "/repo", {
       forceFreshTaskList: true,
-      taskDocumentStrategy: "none",
+      ancillaryFailureMode: "best-effort",
+      ignorePrimaryCancellation: true,
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "invalidate",
+      taskIds: ["task-1"],
     });
     await waitForMockCall(() => tasksList.mock.calls.length === 2);
     staleTaskRead.resolve([{ ...taskFixture, id: "stale" }]);
@@ -458,6 +462,74 @@ describe("tasks query cache helpers", () => {
         taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
       )?.tasks[0]?.id,
     ).toBe("fresh");
+  });
+
+  test("mutation refresh ignores superseded inactive-Kanban cancellation and keeps the fresh cache", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", 7), {
+      tasks: [{ ...taskFixture, id: "stale-7" }],
+    });
+    const staleInactiveRead = createDeferred<TaskCard[]>();
+    let inactiveReadCount = 0;
+    const tasksList = mock(
+      async (_repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+        if (doneVisibleDays === 7) {
+          inactiveReadCount += 1;
+          if (inactiveReadCount === 1) {
+            return staleInactiveRead.promise;
+          }
+          return [{ ...taskFixture, id: "fresh-7" }];
+        }
+        return [{ ...taskFixture, id: "fresh-1" }];
+      },
+    );
+    host.tasksList = tasksList;
+
+    const firstRefresh = refreshRepoTaskViewsAfterMutation(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ignorePrimaryCancellation: true,
+      taskDocumentStrategy: "none",
+    });
+    await waitForMockCall(() => tasksList.mock.calls.some((call) => (call as unknown[])[1] === 7));
+
+    const secondRefresh = refreshRepoTaskViewsAfterMutation(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ignorePrimaryCancellation: true,
+      taskDocumentStrategy: "none",
+    });
+    await expect(firstRefresh).resolves.toBeUndefined();
+    await expect(secondRefresh).resolves.toBeUndefined();
+
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 7))?.tasks[0]
+        ?.id,
+    ).toBe("fresh-7");
+    staleInactiveRead.resolve([{ ...taskFixture, id: "stale-7" }]);
+  });
+
+  test("mutation refresh rejects a real inactive-Kanban ancillary failure", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", 7), {
+      tasks: [{ ...taskFixture, id: "stale-7" }],
+    });
+    host.tasksList = mock(
+      async (_repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+        if (doneVisibleDays === 7) {
+          throw new Error("inactive Kanban unavailable");
+        }
+        return [{ ...taskFixture, id: "fresh-1" }];
+      },
+    );
+
+    await expect(
+      refreshRepoTaskViewsAfterMutation(queryClient, "/repo", {
+        forceFreshTaskList: true,
+        ignorePrimaryCancellation: true,
+        taskDocumentStrategy: "none",
+      }),
+    ).rejects.toThrow("inactive Kanban unavailable");
   });
 
   test("non-forced repo task view refresh joins an older in-flight task read", async () => {

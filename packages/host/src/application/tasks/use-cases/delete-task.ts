@@ -159,7 +159,7 @@ export const createTaskDeleteUseCase = ({
           deleteSubtasks,
         });
 
-        return { ok: true };
+        return { ok: true, affectedTaskIds: targetTaskIds };
       }).pipe(
         Effect.catchAll((error) =>
           Effect.fail(
