@@ -38,6 +38,36 @@ describe("TaskDescriptionEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ["1. ordered math with trailing prose", "1. $$\n   x\n   $$\n\n   After"],
+    ["10. ordered math with trailing prose", "10. $$\n    x\n    $$\n\n    After"],
+    ["99. ordered math with trailing prose", "99. $$\n    x\n    $$\n\n    After"],
+    ["repeated ordered math", "1. $$\n   x\n   $$\n\n   $$\n   y\n   $$\n\n   After"],
+    ["ordered math before nested content", "1. $$\n   x\n   $$\n\n   - nested"],
+    ["a leading blockquote", "- > quote"],
+    ["a leading fenced code block", "- ```ts\n  const value = 1\n  ```"],
+    ["a leading Mermaid block", "- ```mermaid\n  graph TD\n    A --> B\n  ```"],
+    ["a leading heading", "- # Heading"],
+    ["a leading nested list", "- - nested"],
+    ["a blockquote followed by prose", "- > quote\n\n  After"],
+  ])(
+    "opens supported list composition %s in Visual mode without rewriting source",
+    async (_name, markdown) => {
+      const onChange = mock((_value: string) => {});
+      const view = render(
+        <TaskDescriptionEditor {...props} markdown={markdown} onChange={onChange} />,
+      );
+
+      await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+      expect(view.queryByRole("alert")).toBeNull();
+
+      fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+
+      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
   test("keeps unsupported syntax in Markdown mode with an actionable reason", async () => {
     const view = render(
       <TaskDescriptionEditor

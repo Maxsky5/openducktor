@@ -201,6 +201,36 @@ describe("task description Markdown dialect", () => {
   });
 
   test.each([
+    ["1. with trailing prose", "1. $$\n   x\n   $$\n\n   After"],
+    ["10. with trailing prose", "10. $$\n    x\n    $$\n\n    After"],
+    ["99. with trailing prose", "99. $$\n    x\n    $$\n\n    After"],
+    ["repeated math before prose", "1. $$\n   x\n   $$\n\n   $$\n   y\n   $$\n\n   After"],
+    ["math before a nested list", "1. $$\n   x\n   $$\n\n   - nested"],
+  ])("semantically round-trips ordered-list block math for %s", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+
+    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+
+    expect(hasMarkdownMath(canonical)).toBe(true);
+    expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
+  });
+
+  test.each([
+    ["a leading blockquote", "- > quote"],
+    ["a leading fenced code block", "- ```ts\n  const value = 1\n  ```"],
+    ["a leading Mermaid block", "- ```mermaid\n  graph TD\n    A --> B\n  ```"],
+    ["a leading heading", "- # Heading"],
+    ["a leading nested list", "- - nested"],
+    ["a blockquote followed by prose", "- > quote\n\n  After"],
+  ])("semantically round-trips list items with %s", (_name, markdown) => {
+    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
+
+    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+
+    expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
+  });
+
+  test.each([
     ["spaces before LF and a following paragraph", "$$\nx\n$$   \n\nAfter"],
     ["a tab before CRLF and a following paragraph", "$$\r\nx\r\n$$\t\r\n\r\nAfter"],
     ["spaces at EOF", "$$\nx\n$$   "],

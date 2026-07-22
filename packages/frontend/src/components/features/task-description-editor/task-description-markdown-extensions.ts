@@ -35,6 +35,11 @@ const defaultListItemParseMarkdown = requireMarkdownHook(
   "parseMarkdown",
   ListItem.config.parseMarkdown,
 );
+const defaultListItemRenderMarkdown = requireMarkdownHook(
+  "ListItem",
+  "renderMarkdown",
+  ListItem.config.renderMarkdown,
+);
 const defaultOrderedListParseMarkdown = requireMarkdownHook(
   "OrderedList",
   "parseMarkdown",
@@ -58,8 +63,8 @@ export const TaskDescriptionImage = Image.extend({
 const isEmptyParagraph = (node: JSONContent | undefined): boolean =>
   node?.type === "paragraph" && (!node.content || node.content.length === 0);
 
-const ensureListItemParagraph = (node: JSONContent): JSONContent => {
-  if (node.type !== "listItem" || node.content?.[0]?.type === "paragraph") {
+const ensureLeadingMathParagraph = (node: JSONContent): JSONContent => {
+  if (node.type !== "listItem" || node.content?.[0]?.type !== "blockMath") {
     return node;
   }
   return {
@@ -68,19 +73,16 @@ const ensureListItemParagraph = (node: JSONContent): JSONContent => {
   };
 };
 
-const ensureOrderedListParagraphs = (
+const ensureOrderedListMathParagraphs = (
   parsed: JSONContent | JSONContent[],
 ): JSONContent | JSONContent[] => {
   const ensureNode = (node: JSONContent): JSONContent => {
-    if (node.type !== "orderedList") {
-      return node;
-    }
-    if (!node.content) {
+    if (node.type !== "orderedList" || !node.content) {
       return node;
     }
     return {
       ...node,
-      content: node.content.map(ensureListItemParagraph),
+      content: node.content.map(ensureLeadingMathParagraph),
     };
   };
   return Array.isArray(parsed) ? parsed.map(ensureNode) : ensureNode(parsed);
@@ -122,19 +124,87 @@ const parseLeadingBlockMathSequence = (source: string): BlockMathSequence | unde
 
 const tokenSource = (token: MarkdownToken): string => token.raw ?? token.text ?? "";
 
-const extractSoleLeadingListMath = (token: MarkdownToken): string | undefined => {
-  const lines = tokenSource(token).replaceAll("\r\n", "\n").split("\n");
-  const opening = lines[0]?.match(/^([ \t]*(?:[-+*]|\d+[.)])[ \t]+)\$\$[ \t]*$/);
-  if (!opening || lines.at(-1)?.trim() !== "$$" || lines.length < 3) {
-    return undefined;
+// TipTap leaves one list-indent space on prose after a second block-math token.
+// Remove only that paragraph-start artifact before parsing the trailing tokens.
+const trimParagraphTokenStart = (token: MarkdownToken): MarkdownToken => {
+  if (token.type !== "paragraph") {
+    return token;
   }
-  const bodyLines = lines.slice(1, -1);
-  if (bodyLines.some((line) => line.trim() === "$$")) {
-    return undefined;
+
+  const inlineTokens = Array.isArray(token.tokens) ? [...token.tokens] : undefined;
+  if (inlineTokens?.[0]) {
+    inlineTokens[0] = {
+      ...inlineTokens[0],
+      ...(inlineTokens[0].raw === undefined ? {} : { raw: inlineTokens[0].raw.trimStart() }),
+      ...(inlineTokens[0].text === undefined ? {} : { text: inlineTokens[0].text.trimStart() }),
+    };
+  }
+  return {
+    ...token,
+    ...(token.raw === undefined ? {} : { raw: token.raw.trimStart() }),
+    ...(token.text === undefined ? {} : { text: token.text.trimStart() }),
+    ...(inlineTokens === undefined ? {} : { tokens: inlineTokens }),
+  };
+};
+
+const findTrailingTokens = (
+  tokens: MarkdownToken[],
+  trailingSource: string | undefined,
+  tokenKind: string,
+): MarkdownToken[] => {
+  if (!trailingSource) {
+    return [];
+  }
+
+  let suffix = "";
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    suffix = `${tokenSource(tokens[index] as MarkdownToken)}${suffix}`;
+    if (suffix.trim() === trailingSource) {
+      const trailingTokens = tokens.slice(index);
+      const first = trailingTokens[0];
+      return first ? [trimParagraphTokenStart(first), ...trailingTokens.slice(1)] : trailingTokens;
+    }
+  }
+
+  throw new Error(
+    `TipTap 3.28.0 ${tokenKind} tokens do not expose the trailing Markdown after block math. Align all TipTap packages before starting the editor.`,
+  );
+};
+
+const withLeadingListItemMathTokens = (token: MarkdownToken): MarkdownToken => {
+  const lines = tokenSource(token).replaceAll("\r\n", "\n").split("\n");
+  const opening = lines[0]?.match(/^([ \t]*(?:[-+*]|\d+[.)])[ \t]+)(.*)$/);
+  if (!opening) {
+    return token;
   }
 
   const continuationWidth = opening[1]?.length ?? 0;
-  return bodyLines.map((line) => line.slice(continuationWidth)).join("\n");
+  const itemSource = [
+    opening[2] ?? "",
+    ...lines.slice(1).map((line) => line.slice(continuationWidth)),
+  ].join("\n");
+  const sequence = parseLeadingBlockMathSequence(itemSource);
+  if (!sequence) {
+    return token;
+  }
+
+  const trailingTokens = findTrailingTokens(
+    Array.isArray(token.tokens) ? token.tokens : [],
+    sequence.trailingSource,
+    "list-item",
+  );
+  return {
+    ...token,
+    tokens: [
+      ...sequence.values.map((latex) => ({
+        type: "blockMath",
+        raw: `$$\n${latex}\n$$`,
+        latex,
+        tokens: [],
+      })),
+      ...trailingTokens,
+    ],
+  };
 };
 
 const parseLeadingTaskItemMath = (
@@ -156,21 +226,11 @@ const parseLeadingTaskItemMath = (
     ...sequence.values.map((latex) => helpers.createNode("blockMath", { latex })),
   ];
   if (sequence.trailingSource) {
-    let trailingStart = -1;
-    let suffix = "";
-    for (let index = token.nestedTokens.length - 1; index >= 0; index -= 1) {
-      suffix = `${tokenSource(token.nestedTokens[index] as MarkdownToken)}${suffix}`;
-      if (suffix.trim() === sequence.trailingSource) {
-        trailingStart = index;
-        break;
-      }
-    }
-    if (trailingStart < 0) {
-      throw new Error(
-        "TipTap 3.28.0 task-item tokens do not expose the trailing Markdown after block math. Align all TipTap packages before starting the editor.",
-      );
-    }
-    content.push(...helpers.parseChildren(token.nestedTokens.slice(trailingStart)));
+    content.push(
+      ...helpers.parseChildren(
+        findTrailingTokens(token.nestedTokens, sequence.trailingSource, "task-item"),
+      ),
+    );
   }
 
   return helpers.createNode("taskItem", { checked: Boolean(token.checked) }, content);
@@ -218,29 +278,27 @@ const listItemPrefix = (context: RenderContext): string => {
 
 export const TaskDescriptionListItem = ListItem.extend({
   parseMarkdown(token, helpers) {
-    const parsed = defaultListItemParseMarkdown(token, helpers);
+    const parsed = defaultListItemParseMarkdown(withLeadingListItemMathTokens(token), helpers);
     return Array.isArray(parsed)
-      ? parsed.map(ensureListItemParagraph)
-      : ensureListItemParagraph(parsed);
+      ? parsed.map(ensureLeadingMathParagraph)
+      : ensureLeadingMathParagraph(parsed);
   },
 
   renderMarkdown(node, helpers, context) {
-    return renderListItem(node, helpers, listItemPrefix(context));
+    const content = node.content ?? [];
+    const needsDialectRenderer = content.some(
+      (child) => child.type === "blockMath" || child.type === "codeBlock",
+    );
+    return needsDialectRenderer
+      ? renderListItem(node, helpers, listItemPrefix(context))
+      : defaultListItemRenderMarkdown(node, helpers, context);
   },
 });
 
 export const TaskDescriptionOrderedList = OrderedList.extend({
   parseMarkdown(token, helpers) {
-    const items = token.items?.map((item: MarkdownToken) => {
-      const latex = extractSoleLeadingListMath(item);
-      return latex === undefined
-        ? item
-        : {
-            ...item,
-            tokens: [{ type: "blockMath", raw: `$$\n${latex}\n$$`, latex }],
-          };
-    });
-    return ensureOrderedListParagraphs(
+    const items = token.items?.map((item: MarkdownToken) => withLeadingListItemMathTokens(item));
+    return ensureOrderedListMathParagraphs(
       defaultOrderedListParseMarkdown(items ? { ...token, items } : token, helpers),
     );
   },
