@@ -181,6 +181,8 @@ export type AgentSessionState = {
   runtimeStatusMessage: string | null;
   startedAt: string;
   workingDirectory: string;
+  /** Live-only parent link used to project descendant pending input to active ancestors. */
+  liveParentExternalSessionId?: string | undefined;
   historyLoadState: AgentSessionHistoryLoadState;
   messages: AgentSessionMessages;
   contextUsage?: AgentSessionContextUsage | null;

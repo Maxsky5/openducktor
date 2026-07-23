@@ -6,7 +6,7 @@ import type {
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
 import { agentSessionStatusFromActivity } from "@openducktor/core";
-import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
@@ -133,6 +133,7 @@ const applyDirectSnapshot = (
   if (isTerminalSessionStatus(current.status)) {
     return {
       ...current,
+      liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
       pendingUserMessageStartedAt: undefined,
@@ -153,6 +154,7 @@ const applyDirectSnapshot = (
     title: snapshot.title,
     status: nextStatus,
     runtimeStatusMessage: nextStatus === "idle" ? null : current.runtimeStatusMessage,
+    liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
     contextUsage: toContextUsage(snapshot.contextUsage),
@@ -186,60 +188,6 @@ const createLiveOnlySession = (
   );
 };
 
-const responseSessionMatches = (
-  request: AgentApprovalRequest | AgentQuestionRequest,
-  child: AgentSessionIdentity,
-): boolean =>
-  request.responseSession !== undefined &&
-  matchesAgentSessionIdentity(request.responseSession, child);
-
-const replaceProjectedChildPendingInput = (
-  parent: AgentSessionState,
-  childSnapshot: AgentSessionLiveSnapshot,
-): AgentSessionState => {
-  const child = toSessionIdentity(childSnapshot.ref);
-  const source: AgentPendingInputSource = {
-    kind: "subagent",
-    parentExternalSessionId: parent.externalSessionId,
-    childExternalSessionId: child.externalSessionId,
-  };
-  const approvals = parent.pendingApprovals.filter(
-    (request) => !responseSessionMatches(request, child),
-  );
-  const questions = parent.pendingQuestions.filter(
-    (request) => !responseSessionMatches(request, child),
-  );
-
-  return {
-    ...parent,
-    pendingApprovals: [
-      ...approvals,
-      ...childSnapshot.pendingApprovals.map((request) =>
-        toApprovalRequest(request, { source, responseSession: child }),
-      ),
-    ],
-    pendingQuestions: [
-      ...questions,
-      ...childSnapshot.pendingQuestions.map((request) =>
-        toQuestionRequest(request, { source, responseSession: child }),
-      ),
-    ],
-  };
-};
-
-const clearProjectedChildPendingInput = (
-  parent: AgentSessionState,
-  child: AgentSessionIdentity,
-): AgentSessionState => ({
-  ...parent,
-  pendingApprovals: parent.pendingApprovals.filter(
-    (request) => !responseSessionMatches(request, child),
-  ),
-  pendingQuestions: parent.pendingQuestions.filter(
-    (request) => !responseSessionMatches(request, child),
-  ),
-});
-
 const findParentSession = (
   collection: AgentSessionCollection,
   ref: AgentSessionLiveRef,
@@ -251,18 +199,74 @@ const findParentSession = (
     workingDirectory: ref.workingDirectory,
   });
 
-const applyChildSnapshot = (
+const rebuildProjectedPendingInput = (
   collection: AgentSessionCollection,
-  snapshot: AgentSessionLiveSnapshot,
 ): AgentSessionCollection => {
-  const parentExternalSessionId = snapshot.parentExternalSessionId;
-  if (!parentExternalSessionId || parentExternalSessionId === snapshot.ref.externalSessionId) {
-    return collection;
+  let rebuilt = collection;
+  for (const session of listAgentSessions(rebuilt)) {
+    rebuilt = replaceAgentSession(rebuilt, {
+      ...session,
+      pendingApprovals: session.pendingApprovals.filter((request) => request.source === undefined),
+      pendingQuestions: session.pendingQuestions.filter((request) => request.source === undefined),
+    });
   }
-  const parent = findParentSession(collection, snapshot.ref, parentExternalSessionId);
-  return parent
-    ? replaceAgentSession(collection, replaceProjectedChildPendingInput(parent, snapshot))
-    : collection;
+
+  const mirroredApprovalKeys = new Set<string>();
+  const mirroredQuestionKeys = new Set<string>();
+  for (const owner of listAgentSessions(rebuilt)) {
+    const ownerIdentity: AgentSessionIdentity = {
+      externalSessionId: owner.externalSessionId,
+      runtimeKind: owner.runtimeKind,
+      workingDirectory: owner.workingDirectory,
+    };
+    const ownerKey = agentSessionIdentityKey(ownerIdentity);
+    const visited = new Set([ownerKey]);
+    let descendant = owner;
+
+    while (descendant.liveParentExternalSessionId) {
+      const parent = getAgentSession(rebuilt, {
+        externalSessionId: descendant.liveParentExternalSessionId,
+        runtimeKind: descendant.runtimeKind,
+        workingDirectory: descendant.workingDirectory,
+      });
+      if (!parent) {
+        break;
+      }
+      const parentKey = agentSessionIdentityKey(parent);
+      if (visited.has(parentKey)) {
+        break;
+      }
+      visited.add(parentKey);
+      const source: AgentPendingInputSource = {
+        kind: "subagent",
+        parentExternalSessionId: parent.externalSessionId,
+        childExternalSessionId: owner.externalSessionId,
+      };
+      const pendingApprovals = [...parent.pendingApprovals];
+      const pendingQuestions = [...parent.pendingQuestions];
+
+      for (const approval of owner.pendingApprovals) {
+        const key = `${parentKey}\u0000${ownerKey}\u0000${approval.requestId}`;
+        if (mirroredApprovalKeys.has(key)) {
+          continue;
+        }
+        mirroredApprovalKeys.add(key);
+        pendingApprovals.push({ ...approval, source, responseSession: ownerIdentity });
+      }
+      for (const question of owner.pendingQuestions) {
+        const key = `${parentKey}\u0000${ownerKey}\u0000${question.requestId}`;
+        if (mirroredQuestionKeys.has(key)) {
+          continue;
+        }
+        mirroredQuestionKeys.add(key);
+        pendingQuestions.push({ ...question, source, responseSession: ownerIdentity });
+      }
+      descendant = { ...parent, pendingApprovals, pendingQuestions };
+      rebuilt = replaceAgentSession(rebuilt, descendant);
+    }
+  }
+
+  return rebuilt;
 };
 
 const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionState => ({
@@ -272,6 +276,7 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
       ? session.status
       : "idle",
   runtimeStatusMessage: null,
+  liveParentExternalSessionId: undefined,
   pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
   pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
   contextUsage: null,
@@ -292,6 +297,7 @@ const resetSessionLiveStateForSnapshot = (session: AgentSessionState): AgentSess
       ? session.status
       : "idle",
   runtimeStatusMessage: null,
+  liveParentExternalSessionId: undefined,
   pendingApprovals: [],
   pendingQuestions: [],
   contextUsage: null,
@@ -369,11 +375,7 @@ export const buildAgentSessionLiveCollection = ({
       : null;
     collection = replaceAgentSession(collection, createLiveOnlySession(snapshot, parent));
   }
-  for (const snapshot of snapshots) {
-    collection = applyChildSnapshot(collection, snapshot);
-  }
-
-  return collection;
+  return rebuildProjectedPendingInput(collection);
 };
 
 export const applyTaskSessionRecords = ({
@@ -432,7 +434,7 @@ export const applyAgentSessionLiveDelta = ({
         ? applyDirectSnapshot(session, envelope.session, "preserve")
         : createLiveOnlySession(envelope.session, parent),
     );
-    return applyChildSnapshot(withDirectSnapshot, envelope.session);
+    return rebuildProjectedPendingInput(withDirectSnapshot);
   }
 
   const identity = toSessionIdentity(envelope.ref);
@@ -445,9 +447,5 @@ export const applyAgentSessionLiveDelta = ({
   } else if (!persistedRecordKeys(taskSessionRecords).has(agentSessionIdentityKey(identity))) {
     collection = removeAgentSession(collection, identity);
   }
-  for (const session of listAgentSessions(collection)) {
-    const next = clearProjectedChildPendingInput(session, identity);
-    collection = replaceAgentSession(collection, next);
-  }
-  return collection;
+  return rebuildProjectedPendingInput(collection);
 };
