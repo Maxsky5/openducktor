@@ -77,6 +77,7 @@ const createHarness = async () => {
   };
   const service = createAgentSessionLiveStateService({
     adapterRegistry: createLiveSessionAdapterRegistry(),
+    faultLog: () => Effect.void,
     publish: (envelope) => envelopes.push(envelope),
   });
   await Effect.runPromise(service.registerRuntimeAdapter(adapter));

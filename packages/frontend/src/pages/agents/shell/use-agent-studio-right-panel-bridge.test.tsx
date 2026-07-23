@@ -59,6 +59,7 @@ const createSelectionView = (
         refreshChecks: async () => {},
       },
       transcriptState: createSelectedSessionTranscriptStateFixture(),
+      sessionAuxiliaryError: null,
     },
     launchActionId: "build_implementation_start",
     isTaskReady: true,

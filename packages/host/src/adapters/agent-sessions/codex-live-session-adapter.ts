@@ -17,6 +17,7 @@ import {
 import { Effect } from "effect";
 import {
   type HostError,
+  type HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -69,6 +70,7 @@ export type CodexLiveSessionAdapterPreparer = (
 export type CreateCodexLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
   readonly codexAppServer: CodexAppServerPort;
+  readonly onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
   readonly resolveRuntimePolicy: (
     scope: AgentSessionWorkflowScope,
   ) => Effect.Effect<CodexEffectivePolicy, HostError>;
@@ -166,6 +168,7 @@ export const createCodexLiveSessionAdapterPreparer =
   ({
     liveSessionLifecycle,
     codexAppServer,
+    onBackgroundFailure,
     resolveRuntimePolicy,
     createController = defaultCreateController,
   }: CreateCodexLiveSessionAdapterPreparerInput): CodexLiveSessionAdapterPreparer =>
@@ -203,6 +206,16 @@ export const createCodexLiveSessionAdapterPreparer =
                   ...(error !== undefined ? { error } : {}),
                 } as CodexAppServerRespondInput),
               ),
+            onRuntimeEventQueueFailure: ({ runtimeId, error }) => {
+              Effect.runFork(
+                onBackgroundFailure(
+                  toHostOperationError(error, "codex-live-session.forward-mutation", {
+                    runtimeId,
+                  }),
+                ),
+              );
+              return undefined;
+            },
             onLiveSessionMutation: projection.enqueueMutation,
           }),
         catch: (cause) =>

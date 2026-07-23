@@ -313,6 +313,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
         runtimeData: selectedSessionCore.sessionRuntimeData,
         runtimeReadiness,
         transcriptState: selectedSessionCore.transcriptState,
+        sessionAuxiliaryError: null,
       },
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
       documents,
@@ -341,6 +342,7 @@ const createHookHarness = (initialProps: HookArgs) =>
           value: {
             sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo"),
             reloadSessionReadModel,
+            getSessionFault: () => null,
           },
         },
         children,

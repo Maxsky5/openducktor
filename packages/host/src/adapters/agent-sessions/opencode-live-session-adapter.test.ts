@@ -678,6 +678,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const envelopes: Array<{ type: string }> = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
       publish: (envelope) => envelopes.push(envelope),
     });
     const prepared = await Effect.runPromise(

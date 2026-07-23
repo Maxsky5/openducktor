@@ -85,6 +85,89 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
+  test("keeps inherited and child-owned subagent activity with their fork owners", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "child-thread",
+              cwd: "/repo",
+              createdAt: 10,
+              status: { type: "idle" },
+              forkedFromId: "root-thread",
+              parentThreadId: "root-thread",
+              turns: [
+                {
+                  id: "root-turn",
+                  startedAt: 5,
+                  status: "completed",
+                  items: [
+                    {
+                      id: "root-started-sibling",
+                      type: "subAgentActivity",
+                      agentThreadId: "sibling-thread",
+                      kind: "started",
+                    },
+                  ],
+                },
+                {
+                  id: "child-turn",
+                  startedAt: 11,
+                  status: "completed",
+                  items: [
+                    {
+                      id: "child-started-grandchild",
+                      type: "subAgentActivity",
+                      agentThreadId: "grandchild-thread",
+                      kind: "started",
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          const { threadId } = request.params as { threadId: string };
+          if (threadId === "root-thread") {
+            return { data: [{ id: "root-turn" }], nextCursor: null } as Response;
+          }
+          return { data: [], nextCursor: null } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "child-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+    const subagentParts = history.flatMap((message) =>
+      message.parts.filter((part) => part.kind === "subagent"),
+    );
+
+    expect(subagentParts).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:root-thread:sibling-thread",
+        externalSessionId: "sibling-thread",
+      }),
+      expect.objectContaining({
+        correlationKey: "codex-subagent:child-thread:grandchild-thread",
+        externalSessionId: "grandchild-thread",
+      }),
+    ]);
+    expect(subagentParts).not.toContainEqual(
+      expect.objectContaining({
+        correlationKey: "codex-subagent:child-thread:sibling-thread",
+      }),
+    );
+  });
+
   test("marks hydrated item timestamps approximate when Codex only reports a turn boundary", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {

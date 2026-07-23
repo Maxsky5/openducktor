@@ -13,6 +13,7 @@ import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import {
   type CreateNodeHostCommandRouterInput,
+  createLiveSessionFaultLogger,
   createNodeEffectHostCommandRouter,
 } from "./create-node-host-command-router";
 
@@ -109,6 +110,15 @@ describe("createNodeEffectHostCommandRouter", () => {
       await Effect.runPromise(router.dispose());
       await rm(configDir, { force: true, recursive: true });
     }
+  });
+
+  test("writes live-session faults through the error lifecycle logger", async () => {
+    const { errors, infos, logger } = createLogger();
+
+    await Effect.runPromise(createLiveSessionFaultLogger(logger)("agent-session-live.fault {...}"));
+
+    expect(errors).toEqual(["agent-session-live.fault {...}"]);
+    expect(infos).toEqual([]);
   });
 
   test("stops managed dev servers during normal host disposal", async () => {

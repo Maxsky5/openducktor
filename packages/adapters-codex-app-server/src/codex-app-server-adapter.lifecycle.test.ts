@@ -826,6 +826,9 @@ describe("CodexAppServerAdapter lifecycle", () => {
         }),
       },
       transportFactory: () => transport,
+      onRuntimeEventQueueFailure: () => {
+        return undefined;
+      },
       subscribeEvents: () => () => {},
       respondServerRequest: async () => {},
     });

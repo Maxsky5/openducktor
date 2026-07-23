@@ -99,22 +99,16 @@ export class CodexContextUsageLoader {
     if (retained) {
       return retained;
     }
-    const localSession = this.deps.localSessions.get(input.externalSessionId);
-    const route = localSession
-      ? null
-      : this.deps.subagents.routeForChild(input.externalSessionId, input.runtimeId);
-    const session =
-      localSession ?? this.deps.localSessions.get(route?.parentExternalSessionId ?? "");
-    if (!session || session.runtimeId !== input.runtimeId) {
-      throw new Error(
-        `Cannot load Codex session context usage because session '${input.externalSessionId}' is not retained by runtime '${input.runtimeId}'.`,
-      );
-    }
+    const session = this.retainedLiveSession(input);
     const targetRef = {
       ...codexSessionRef(session),
       externalSessionId: input.externalSessionId,
     };
-    const guard = this.begin(localSession ? [targetRef] : [targetRef, codexSessionRef(session)]);
+    const guard = this.begin(
+      session.threadId === input.externalSessionId
+        ? [targetRef]
+        : [targetRef, codexSessionRef(session)],
+    );
     this.bindRuntime(guard, input.runtimeId);
     try {
       await this.wait(guard, this.deps.prepareRuntime(input.runtimeId));
@@ -187,6 +181,33 @@ export class CodexContextUsageLoader {
     };
     this.inFlightLoads.add(guard);
     return guard;
+  }
+
+  private retainedLiveSession(input: CodexLiveSessionLocator) {
+    const visited = new Set<string>();
+    let currentThreadId = input.externalSessionId;
+    while (!visited.has(currentThreadId)) {
+      visited.add(currentThreadId);
+      const session = this.deps.localSessions.get(currentThreadId);
+      if (session) {
+        if (session.runtimeId !== input.runtimeId) {
+          throw new Error(
+            `Cannot load Codex session context usage because session '${input.externalSessionId}' belongs to runtime '${session.runtimeId}', not '${input.runtimeId}'.`,
+          );
+        }
+        return session;
+      }
+      const route = this.deps.subagents.routeForChild(currentThreadId, input.runtimeId);
+      if (!route || (route.runtimeId && route.runtimeId !== input.runtimeId)) {
+        throw new Error(
+          `Cannot load Codex session context usage because session '${input.externalSessionId}' is not retained by runtime '${input.runtimeId}'.`,
+        );
+      }
+      currentThreadId = route.parentExternalSessionId;
+    }
+    throw new Error(
+      `Cannot load Codex session context usage because session '${input.externalSessionId}' has a cyclic parent route in runtime '${input.runtimeId}'.`,
+    );
   }
 
   private bindRuntime(guard: ContextUsageLoadGuard, runtimeId: string): void {

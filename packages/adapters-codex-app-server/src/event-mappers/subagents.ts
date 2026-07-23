@@ -14,6 +14,9 @@ const subagentEvents = (
 ): CodexMappingResult => {
   const parts = codexSubagentPartsFromItem(item, ctx, linkState);
   if (parts.length === 0) {
+    if (codexItemTypeMatches(item, "subAgentActivity")) {
+      return { handled: true, events: [] };
+    }
     return emptyCodexMappingResult();
   }
   const eventTimestamp = ctx.timestamp ?? timestamp;

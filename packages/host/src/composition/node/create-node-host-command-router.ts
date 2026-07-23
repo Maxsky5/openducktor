@@ -15,7 +15,10 @@ import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-reques
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
-import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import {
+  type AgentSessionLiveFaultLogger,
+  createAgentSessionLiveStateService,
+} from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -107,6 +110,11 @@ const defaultLifecycleLogger: HostLifecycleLogger = {
   info: (message) => Effect.sync(() => console.info(message)),
 };
 
+export const createLiveSessionFaultLogger =
+  (lifecycleLogger: HostLifecycleLogger): AgentSessionLiveFaultLogger =>
+  (message) =>
+    writeHostLifecycleLog(lifecycleLogger, "error", message);
+
 export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
   readonly terminalService: TerminalService;
 };
@@ -145,6 +153,7 @@ export const createNodeEffectHostCommandRouter = (
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
+    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     publish: (envelope) => {
       if (!eventBus) {
         throw new HostResourceError({
@@ -192,6 +201,7 @@ export const createNodeEffectHostCommandRouter = (
           prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
             liveSessionLifecycle: agentSessionLiveStateService,
             codexAppServer: effectiveCodexAppServer,
+            onBackgroundFailure,
             resolveRuntimePolicy: (scope) =>
               loadGlobalConfig(settingsConfig).pipe(
                 Effect.map((config) =>

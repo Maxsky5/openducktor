@@ -90,6 +90,7 @@ const createInput = (
       },
       transcriptState:
         selectedSessionOverrides.transcriptState ?? createSelectedSessionTranscriptStateFixture(),
+      sessionAuxiliaryError: selectedSessionOverrides.sessionAuxiliaryError ?? null,
     },
     hasActiveGitConflict: false,
     documents: {

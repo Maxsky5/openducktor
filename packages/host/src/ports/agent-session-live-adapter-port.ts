@@ -46,6 +46,7 @@ export type AgentSessionLiveAdapterChange =
       readonly repoPath: string;
       readonly message: string;
       readonly operation?: string;
+      readonly ref?: AgentSessionLiveRef;
     };
 
 export type AgentSessionLiveAdapterMutation<Success> = {
