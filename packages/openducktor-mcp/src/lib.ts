@@ -12,6 +12,8 @@ export {
   type PublicTask,
   type QaApprovedInput,
   type QaRejectedInput,
+  type ReadTaskAssetsInput,
+  type ReadTaskAssetsResult,
   type ReadTaskDocumentsInput,
   type ReadTaskInput,
   type SearchTasksInput,

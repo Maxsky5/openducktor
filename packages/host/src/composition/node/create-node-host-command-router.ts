@@ -331,6 +331,7 @@ export const createNodeEffectHostCommandRouter = (
     taskSyncService,
   });
   const odtMcpBridgeService = createOdtMcpBridgeService({
+    taskAssetReadService,
     taskService,
     workspaceSettingsService,
   });

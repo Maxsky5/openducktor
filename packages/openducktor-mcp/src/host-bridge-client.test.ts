@@ -384,6 +384,55 @@ describe("OdtHostBridgeClient", () => {
     ]);
   });
 
+  test("call validates the private task asset bridge payload before MCP formatting", async () => {
+    const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      requests.push({
+        url,
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return jsonResponse({
+        assets: [
+          {
+            assetId,
+            mediaType: "image/png",
+            byteSize: 3,
+            dataBase64: "AQID",
+          },
+        ],
+      });
+    };
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    await expect(
+      client.call("odt_read_task_assets", "repo", {
+        taskId: "task-1",
+        assetIds: [assetId],
+      }),
+    ).resolves.toEqual({
+      assets: [
+        {
+          assetId,
+          mediaType: "image/png",
+          byteSize: 3,
+          dataBase64: "AQID",
+        },
+      ],
+    });
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:14327/invoke/odt_read_task_assets",
+        body: {
+          workspaceId: "repo",
+          taskId: "task-1",
+          assetIds: [assetId],
+        },
+      },
+    ]);
+  });
+
   test("odt_create_task and odt_search_tasks keep the flat public tool payload shape", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {

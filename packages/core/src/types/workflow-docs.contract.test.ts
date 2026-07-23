@@ -38,6 +38,9 @@ describe("workflow docs contract", () => {
     expect(transitionDoc).toContain(
       "Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.",
     );
+    expect(transitionDoc).toContain(
+      "collect the relevant IDs and call `odt_read_task_assets` once for the batch.",
+    );
 
     expect(transitionDoc).toMatch(
       /\| `odt_set_plan` \(feature\/epic\) \| `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` \|/,

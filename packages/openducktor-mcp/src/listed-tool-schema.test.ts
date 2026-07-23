@@ -31,4 +31,16 @@ describe("listed MCP tool input schema", () => {
 
     expect(properties).toHaveProperty("workspaceId");
   });
+
+  test("lists the task asset batch fields while hiding the bound workspace", () => {
+    const schema = getListedToolInputSchema("odt_read_task_assets", {
+      hideWorkspaceId: true,
+    });
+    const properties = propertiesOf(schema);
+
+    expect(properties).toHaveProperty("taskId");
+    expect(properties).toHaveProperty("assetIds");
+    expect(properties).not.toHaveProperty("workspaceId");
+    expect(requiredOf(schema)).toEqual(expect.arrayContaining(["taskId", "assetIds"]));
+  });
 });

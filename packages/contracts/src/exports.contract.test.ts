@@ -582,6 +582,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "QaRejectedInputSchema",
   "qaRejectedResultSchema",
   "qaWorkflowVerdictSchema",
+  "readTaskAssetsResultSchema",
+  "ReadTaskAssetsInputSchema",
   "ReadTaskDocumentsInputSchema",
   "ReadTaskInputSchema",
   "repoPromptOverridesSchema",

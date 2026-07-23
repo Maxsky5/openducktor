@@ -6,6 +6,7 @@ import {
   ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+  type ReadTaskAssetsResult,
 } from "./lib";
 import {
   getListedToolInputSchema,
@@ -14,7 +15,13 @@ import {
 } from "./listed-tool-schema";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
-import { OdtToolError, type ToolResult, toToolError, toToolResult } from "./tool-results";
+import {
+  OdtToolError,
+  type ToolResult,
+  toTaskAssetsToolResult,
+  toToolError,
+  toToolResult,
+} from "./tool-results";
 
 type ToolInputByName<Name extends RegisteredToolName> = ReturnType<
   (typeof ODT_TOOL_SCHEMAS)[Name]["parse"]
@@ -35,7 +42,7 @@ type RegisteredToolSpecs = {
 
 type RegisterContractTool = (
   name: string,
-  config: { description: string; inputSchema: unknown; outputSchema: unknown },
+  config: { description: string; inputSchema: unknown; outputSchema?: unknown },
   callback: (input: unknown) => Promise<ToolResult>,
 ) => void;
 
@@ -45,7 +52,7 @@ const ALLOWED_TOOLS_ENV = "ODT_ALLOWED_TOOLS";
 // Deliberately allow workflow-scoped calls with workspaceId through schema validation so
 // rejectForbiddenWorkspaceIdInput can return the canonical structured ODT error envelope.
 const SHARED_SERVER_INSTRUCTIONS =
-  "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools.";
+  "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, odt_read_task_assets, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans. Use odt_read_task_assets to read referenced description images in one batch, and odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools.";
 
 const createServerInstructions = (options: { forbidWorkspaceIdInput: boolean }): string => {
   const workspaceInstruction = options.forbidWorkspaceIdInput
@@ -121,14 +128,18 @@ const registerOdtTool = <Name extends RegisteredToolName>(
     {
       description: tool.description,
       inputSchema: schema,
-      outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[tool.name],
+      ...(tool.name === "odt_read_task_assets"
+        ? {}
+        : { outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[tool.name] }),
     },
     async (input: unknown) => {
       try {
         rejectForbiddenWorkspaceIdInput(tool.name, input, options);
         const parsedInput = schema.parse(input) as ToolInputByName<Name>;
         const result = await tool.execute(store, parsedInput);
-        return toToolResult(result);
+        return tool.name === "odt_read_task_assets"
+          ? toTaskAssetsToolResult(result as ReadTaskAssetsResult)
+          : toToolResult(result);
       } catch (error) {
         return toToolError(error);
       }
@@ -144,14 +155,18 @@ type ListedOdtTool = {
 const toListedToolDefinition = (
   tool: ListedOdtTool,
   options: { forbidWorkspaceIdInput: boolean },
-) => ({
-  name: tool.name,
-  description: tool.description,
-  inputSchema: getListedToolInputSchema(tool.name, {
-    hideWorkspaceId: options.forbidWorkspaceIdInput,
-  }),
-  outputSchema: getListedToolOutputSchema(tool.name),
-});
+) => {
+  const definition = {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: getListedToolInputSchema(tool.name, {
+      hideWorkspaceId: options.forbidWorkspaceIdInput,
+    }),
+  };
+  return tool.name === "odt_read_task_assets"
+    ? definition
+    : { ...definition, outputSchema: getListedToolOutputSchema(tool.name) };
+};
 
 const installVisibleToolListHandler = (
   server: McpServer,
@@ -173,6 +188,11 @@ const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
     description:
       "Read one OpenDucktor task as a single summary object containing current public task fields plus nested qaVerdict and document presence booleans for spec/plan/latest QA.",
     execute: (store, input) => store.readTask(input),
+  },
+  odt_read_task_assets: {
+    description:
+      "Read task description images by taskId and a non-empty assetIds batch. Returns one native MCP image content block per requested asset, in request order, and fails the whole call if any asset is unavailable.",
+    execute: (store, input) => store.readTaskAssets(input),
   },
   odt_read_task_documents: {
     description:

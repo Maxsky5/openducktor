@@ -12,6 +12,7 @@ including trigger tools/actions and guardrails.
 ## Tool Naming (Canonical)
 MCP workflow tools:
 - `odt_read_task(taskId)`
+- `odt_read_task_assets(taskId, assetIds)`
 - `odt_read_task_documents(taskId, includeSpec?, includePlan?, includeQaReport?)`
 - `odt_set_spec(taskId, markdown)`
 - `odt_set_plan(taskId, markdown, subtasks?)` (epic only for `subtasks`, one level max)
@@ -24,6 +25,7 @@ MCP workflow tools:
 
 Read flow:
 - Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
+- When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once for the batch.
 - Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.
 
 `subtasks` payload (optional):

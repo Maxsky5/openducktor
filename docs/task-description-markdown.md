@@ -21,3 +21,9 @@ Durable files live below `task-assets/<workspaceId>/<taskId>/<assetId>` in the O
 The shared host read service validates the full workspace, task, scope, and asset relation before reading a derived path. It rejects symlinks and non-files, checks containment and byte size, and serves only registry-approved image media types with private no-store caching and `nosniff`.
 
 The browser route requires the app-session cookie. Electron uses a privileged application protocol. Runtime URLs stay outside Markdown and SQLite.
+
+## Agent access
+
+Workflow agents read description images with `odt_read_task_assets({ taskId, assetIds })`. The caller collects the UUIDs from the description's `odt-asset:<assetId>` targets and sends one non-empty batch of up to 50 distinct IDs. The host resolves the canonical task, enforces the same workspace/task/description-scope ownership checks as UI rendering, and fails the whole call if any requested asset is missing or invalid.
+
+The MCP result keeps request order and returns a short text label followed by a native image content block for each asset. It does not return storage paths, browser URLs, `structuredContent`, or an MCP `outputSchema`. OpenCode, Codex, and Claude-compatible MCP clients can pass those image blocks to their model without a kickoff-message attachment.

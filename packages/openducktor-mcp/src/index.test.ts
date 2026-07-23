@@ -11,7 +11,7 @@ type RecordedRequest = {
 };
 
 type ContentToolResult = {
-  content: Array<{ type: string; text?: string }>;
+  content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
@@ -111,6 +111,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
           "odt_create_task",
           "odt_search_tasks",
           "odt_read_task",
+          "odt_read_task_assets",
           "odt_read_task_documents",
           "odt_set_spec",
           "odt_set_plan",
@@ -174,6 +175,28 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         return;
       }
       writeJson(response, taskSummaryPayload);
+      return;
+    }
+
+    if (url === "/invoke/odt_read_task_assets") {
+      const body = await readJsonBody(request);
+      requests.push({ url, body });
+      writeJson(response, {
+        assets: [
+          {
+            assetId: "28cb7c3d-5ec4-47e8-bffe-090223eae3b7",
+            mediaType: "image/png",
+            byteSize: 3,
+            dataBase64: "AQID",
+          },
+          {
+            assetId: "96d20c03-a470-47f6-9472-1a1d34cd23df",
+            mediaType: "image/webp",
+            byteSize: 2,
+            dataBase64: "BAU=",
+          },
+        ],
+      });
       return;
     }
 
@@ -598,6 +621,54 @@ describe("MCP server tool results", () => {
             workspaceId: "repo",
             taskId: "task-1",
           },
+        },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("odt_read_task_assets returns native image blocks without structured output", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+    const assetIds = [
+      "28cb7c3d-5ec4-47e8-bffe-090223eae3b7",
+      "96d20c03-a470-47f6-9472-1a1d34cd23df",
+    ];
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+      const assetTool = tools.tools.find((tool) => tool.name === "odt_read_task_assets");
+      expect(assetTool).toBeTruthy();
+      expect(assetTool).not.toHaveProperty("outputSchema");
+
+      const result = await client.callTool({
+        name: "odt_read_task_assets",
+        arguments: { taskId: "task-1", assetIds },
+      });
+      const contentResult = requireContentToolResult(result);
+
+      expect(contentResult.structuredContent).toBeUndefined();
+      expect(contentResult.content).toEqual([
+        {
+          type: "text",
+          text: "Task description asset 28cb7c3d-5ec4-47e8-bffe-090223eae3b7 (image/png, 3 bytes)",
+        },
+        { type: "image", data: "AQID", mimeType: "image/png" },
+        {
+          type: "text",
+          text: "Task description asset 96d20c03-a470-47f6-9472-1a1d34cd23df (image/webp, 2 bytes)",
+        },
+        { type: "image", data: "BAU=", mimeType: "image/webp" },
+      ]);
+      expect(bridge.requests).toEqual([
+        { url: "/invoke/odt_mcp_ready", body: {} },
+        { url: "/invoke/odt_get_workspaces", body: {} },
+        {
+          url: "/invoke/odt_read_task_assets",
+          body: { workspaceId: "repo", taskId: "task-1", assetIds },
         },
       ]);
     } finally {

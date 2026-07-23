@@ -105,6 +105,7 @@ Public external tools:
 - `odt_create_task`
 - `odt_search_tasks`
 - `odt_read_task`
+- `odt_read_task_assets`
 - `odt_read_task_documents`
 
 Internal workflow tools remain on the same MCP server:
@@ -177,7 +178,7 @@ If no workspace can be resolved, the MCP rejects the call with an actionable err
 }
 ```
 
-This is a discovery-only summary. Call `odt_read_task` first, then call `odt_read_task_documents` only for the document bodies you actually need.
+This is a discovery-only summary. Call `odt_read_task` first. Read referenced description images with one `odt_read_task_assets` batch, and call `odt_read_task_documents` only for the document bodies you actually need.
 
 `qaVerdict` is `"approved"`, `"rejected"`, or `"not_reviewed"`. `not_reviewed` means the task has no persisted QA report yet.
 
@@ -247,7 +248,7 @@ Output:
 }
 ```
 
-Call `odt_read_task` first to discover task state, `qaVerdict`, and document availability. Use `odt_read_task_documents` only when you need the actual persisted markdown bodies.
+Call `odt_read_task` first to discover task state, `qaVerdict`, and document availability. If the description contains `odt-asset:<assetId>` image targets needed for the work, collect the IDs and call `odt_read_task_assets` once. Use `odt_read_task_documents` only when you need the actual persisted markdown bodies.
 
 ## `odt_search_tasks`
 
@@ -310,6 +311,34 @@ Output:
 }
 ```
 
+## `odt_read_task_assets`
+
+Reads task-description images as native MCP image content.
+
+Input:
+
+- `workspaceId` optional per-call workspace override
+- `taskId` required
+- `assetIds` required array of 1 to 50 distinct asset UUIDs
+
+The caller should collect all description images needed for the current work and request them in one call. The host resolves aliases or titles to the canonical task ID, checks each asset against the exact workspace, task, and `description` scope, and keeps request order. The whole call fails if any ID is missing, belongs to another task or workspace, or cannot pass the stored media and byte-size checks.
+
+The MCP response contains, for each requested ID:
+
+1. a short text block that identifies the asset, media type, and byte size
+2. an `image` block with base64 data and its verified MIME type
+
+The tool has no MCP `outputSchema` and returns no `structuredContent`. This is deliberate: clients receive the image blocks directly instead of preferring a private bridge JSON object. Storage paths, runtime URLs, and registry records never leave the host.
+
+Supported media types:
+
+- `image/png`
+- `image/jpeg`
+- `image/webp`
+- `image/gif`
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` is required at call time.
+
 ## `odt_read_task_documents`
 
 Reads only the requested persisted document bodies.
@@ -363,4 +392,5 @@ Output:
 - `packages/openducktor-mcp` owns MCP transport, request validation, response validation, and packaging.
 - The OpenDucktor host owns SQLite task-store readiness, task reads and writes, workflow transitions, recovery, and canonical document writes.
 - The host bridge surface mirrors the MCP tool names so desktop-managed and standalone MCP clients use the same execution path.
+- The host bridge uses a validated base64 DTO for task assets; the MCP adapter alone turns it into native image content blocks.
 - The task store stays modeled as host-owned storage infrastructure. It is not part of the MCP runtime contract beyond the host-owned bridge being healthy.

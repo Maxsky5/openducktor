@@ -5,6 +5,10 @@
   "readOnlyRoleBlockedTools": ["edit", "write", "apply_patch", "ast_grep_replace", "lsp_rename"],
   "workflowToolAliasesByCanonical": {
     "odt_read_task": ["openducktor_odt_read_task", "functions.openducktor_odt_read_task"],
+    "odt_read_task_assets": [
+      "openducktor_odt_read_task_assets",
+      "functions.openducktor_odt_read_task_assets"
+    ],
     "odt_read_task_documents": [
       "openducktor_odt_read_task_documents",
       "functions.openducktor_odt_read_task_documents"

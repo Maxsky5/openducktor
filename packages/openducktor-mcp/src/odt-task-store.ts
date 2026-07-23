@@ -60,6 +60,10 @@ export class OdtTaskStore {
     return this.executeWorkspaceScoped("odt_read_task", rawInput);
   }
 
+  async readTaskAssets(rawInput: unknown) {
+    return this.executeWorkspaceScoped("odt_read_task_assets", rawInput);
+  }
+
   async readTaskDocuments(rawInput: unknown) {
     return this.executeWorkspaceScoped("odt_read_task_documents", rawInput);
   }

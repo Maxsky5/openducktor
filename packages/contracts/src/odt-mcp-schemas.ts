@@ -13,6 +13,12 @@ import {
   ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
 } from "./odt-tool-names";
 import {
+  TASK_ASSET_MAX_DESCRIPTION_ASSETS,
+  TASK_ASSET_MAX_FILE_BYTES,
+  taskAssetIdSchema,
+  taskAssetMediaTypeSchema,
+} from "./task-asset-schemas";
+import {
   issueTypeSchema,
   qaWorkflowVerdictSchema,
   taskPrioritySchema,
@@ -152,6 +158,19 @@ export const ReadTaskInputSchema = z
   })
   .strict();
 export type ReadTaskInput = z.infer<typeof ReadTaskInputSchema>;
+
+export const ReadTaskAssetsInputSchema = z
+  .object({
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    taskId: z.string().trim().min(1),
+    assetIds: z
+      .array(taskAssetIdSchema)
+      .min(1)
+      .max(TASK_ASSET_MAX_DESCRIPTION_ASSETS)
+      .refine((ids) => new Set(ids).size === ids.length, "Asset IDs must be distinct."),
+  })
+  .strict();
+export type ReadTaskAssetsInput = z.infer<typeof ReadTaskAssetsInputSchema>;
 
 export const ReadTaskDocumentsInputSchema = z
   .object({
@@ -328,6 +347,7 @@ export const ODT_TOOL_SCHEMAS = {
   odt_create_task: CreateTaskInputSchema,
   odt_search_tasks: SearchTasksInputSchema,
   odt_read_task: ReadTaskInputSchema,
+  odt_read_task_assets: ReadTaskAssetsInputSchema,
   odt_read_task_documents: ReadTaskDocumentsInputSchema,
   odt_set_spec: SetSpecInputSchema,
   odt_set_plan: SetPlanInputSchema,
@@ -390,6 +410,48 @@ export const searchTasksResultSchema = z
   })
   .strict();
 export type SearchTasksResult = z.infer<typeof searchTasksResultSchema>;
+
+const base64ByteSize = (value: string): number => {
+  let padding = 0;
+  if (value.endsWith("==")) {
+    padding = 2;
+  } else if (value.endsWith("=")) {
+    padding = 1;
+  }
+  return (value.length / 4) * 3 - padding;
+};
+
+const readTaskAssetResultItemSchema = z
+  .object({
+    assetId: taskAssetIdSchema,
+    mediaType: taskAssetMediaTypeSchema,
+    byteSize: z.number().int().nonnegative().max(TASK_ASSET_MAX_FILE_BYTES),
+    dataBase64: z.base64(),
+  })
+  .strict()
+  .superRefine((asset, ctx) => {
+    if (base64ByteSize(asset.dataBase64) !== asset.byteSize) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["byteSize"],
+        message: "Task asset byteSize must match the decoded base64 payload.",
+      });
+    }
+  });
+
+export const readTaskAssetsResultSchema = z
+  .object({
+    assets: z
+      .array(readTaskAssetResultItemSchema)
+      .min(1)
+      .max(TASK_ASSET_MAX_DESCRIPTION_ASSETS)
+      .refine(
+        (assets) => new Set(assets.map((asset) => asset.assetId)).size === assets.length,
+        "Asset IDs must be distinct.",
+      ),
+  })
+  .strict();
+export type ReadTaskAssetsResult = z.infer<typeof readTaskAssetsResultSchema>;
 
 export const getWorkspacesResultSchema = z
   .object({
@@ -473,6 +535,7 @@ export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
   odt_create_task: createTaskResultSchema,
   odt_search_tasks: searchTasksResultSchema,
   odt_read_task: taskSummarySchema,
+  odt_read_task_assets: readTaskAssetsResultSchema,
   odt_read_task_documents: taskDocumentsReadSchema,
   odt_set_spec: setSpecResultSchema,
   odt_set_plan: setPlanResultSchema,
