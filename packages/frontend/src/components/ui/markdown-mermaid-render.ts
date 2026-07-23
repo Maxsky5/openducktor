@@ -9,6 +9,20 @@ export const MERMAID_RENDER_CONFIG = {
   htmlLabels: false,
 } satisfies MermaidConfig;
 
+function createMermaidRenderContainer(): HTMLDivElement {
+  const container = document.createElement("div");
+  container.setAttribute("aria-hidden", "true");
+  Object.assign(container.style, {
+    position: "fixed",
+    inset: "0",
+    overflow: "hidden",
+    opacity: "0",
+    pointerEvents: "none",
+  });
+  document.body.append(container);
+  return container;
+}
+
 export async function renderMermaidSvg(renderId: string, source: string): Promise<string> {
   const [mermaidModule, sanitizeModule] = await Promise.all([
     import("mermaid"),
@@ -19,6 +33,11 @@ export async function renderMermaidSvg(renderId: string, source: string): Promis
     mermaid.initialize(MERMAID_RENDER_CONFIG);
     initialized = true;
   }
-  const rendered = await mermaid.render(renderId, source);
-  return sanitizeModule.sanitizeMermaidSvg(rendered.svg);
+  const renderContainer = createMermaidRenderContainer();
+  try {
+    const rendered = await mermaid.render(renderId, source, renderContainer);
+    return sanitizeModule.sanitizeMermaidSvg(rendered.svg);
+  } finally {
+    renderContainer.remove();
+  }
 }
