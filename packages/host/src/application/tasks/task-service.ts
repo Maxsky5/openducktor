@@ -196,7 +196,10 @@ export type TaskSetPlanResult = {
   document: TaskMetadataDocument;
   changes: TaskChangeSet;
 };
-export type TaskServiceWithMutationProgress = Omit<TaskService, "setPlan"> & {
+export type TaskServiceWithMutationProgress = Omit<TaskService, "setPlan" | "setSpec"> & {
+  setSpec(
+    input: MarkdownDocumentInput,
+  ): Effect.Effect<TaskMetadataDocument, TaskServiceError | TaskMutationProgressFailure>;
   setPlan(
     input: SetPlanInput,
   ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
@@ -250,7 +253,7 @@ const mapRepoPullRequestSyncDetailedErrors = <A, E>(
     ),
   );
 
-const mapSetPlanErrors = <A, E>(
+const mapTaskMutationProgressErrors = <A, E>(
   effect: Effect.Effect<A, E>,
 ): Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure> =>
   effect.pipe(
@@ -372,8 +375,8 @@ const createTaskServiceImplementation = (
     resetTask: (input) => mapTaskServiceErrors(service.resetTask(input)),
     savePlanDocument: (input) => mapTaskServiceErrors(service.savePlanDocument(input)),
     saveSpecDocument: (input) => mapTaskServiceErrors(service.saveSpecDocument(input)),
-    setPlan: (input) => mapSetPlanErrors(service.setPlan(input)),
-    setSpec: (input) => mapTaskServiceErrors(service.setSpec(input)),
+    setPlan: (input) => mapTaskMutationProgressErrors(service.setPlan(input)),
+    setSpec: (input) => mapTaskMutationProgressErrors(service.setSpec(input)),
     specGet: (input) => mapTaskServiceErrors(service.specGet(input)),
     transitionTask: (input) => mapTaskServiceErrors(service.transitionTask(input)),
     unlinkPullRequest: (input) => mapTaskServiceErrors(service.unlinkPullRequest(input)),
@@ -389,6 +392,14 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
 const withoutTaskMutationProgress = (taskService: TaskServiceWithMutationProgress): TaskService => {
   return {
     ...taskService,
+    setSpec: (setSpecInput) =>
+      taskService
+        .setSpec(setSpecInput)
+        .pipe(
+          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
+            Effect.fail(progressFailure.failure),
+          ),
+        ),
     setPlan: (setPlanInput) =>
       taskService
         .setPlan(setPlanInput)

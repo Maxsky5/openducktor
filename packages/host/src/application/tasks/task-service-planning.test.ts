@@ -143,6 +143,31 @@ describe("createTaskService planning", () => {
       },
     ]);
   });
+  test("reports spec transition failures after writing a document as partial progress", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.transition-task",
+      message: "transition failed",
+    });
+    const taskStore: TaskStorePort = {
+      listTasks: () =>
+        Effect.succeed([task({ id: "task-1", issueType: "feature", status: "open" })]),
+      setSpecDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      transitionTask: () => Effect.fail(failure),
+    };
+
+    const result = await Effect.runPromise(
+      createTaskServiceWithMutationProgress({ taskStore })
+        .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })
+        .pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(result.operation).toBe("set-spec");
+    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
+    expect(result.failure).toBe(failure);
+  });
   test("sets an epic plan, replaces direct subtasks, and promotes to ready_for_dev", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

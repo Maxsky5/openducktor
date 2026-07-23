@@ -78,6 +78,24 @@ export const createEventPublishingTaskService = ({
       return yield* Effect.fail(result.left);
     });
 
+  const publishSetSpec = (input: Parameters<TaskService["setSpec"]>[0]) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.either(taskService.setSpec(input));
+      if (result._tag === "Right") {
+        yield* taskSyncService.publishTasksUpdated(
+          input.repoPath,
+          changeForTask(input.taskId),
+          "set-spec",
+        );
+        return result.right;
+      }
+      if (result.left instanceof TaskMutationProgressFailure) {
+        yield* taskSyncService.publishTasksUpdated(input.repoPath, result.left.changes, "set-spec");
+        return yield* Effect.fail(result.left.failure);
+      }
+      return yield* Effect.fail(result.left);
+    });
+
   return {
     listTasks: (input) => taskService.listTasks(input),
     getTaskMetadata: (input) => taskService.getTaskMetadata(input),
@@ -187,13 +205,7 @@ export const createEventPublishingTaskService = ({
         taskService.transitionTask(input),
       ),
     specGet: (input) => taskService.specGet(input),
-    setSpec: (input) =>
-      publishAfterMutation(
-        "set-spec",
-        input.repoPath,
-        changeForTask(input.taskId),
-        taskService.setSpec(input),
-      ),
+    setSpec: publishSetSpec,
     saveSpecDocument: (input) =>
       publishAfterMutation(
         "save-spec-document",

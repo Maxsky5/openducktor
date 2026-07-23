@@ -124,6 +124,35 @@ describe("createEventPublishingTaskService", () => {
       { changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["child-1"] } },
     ]);
   });
+  test("publishes set-spec partial progress and preserves the original failure", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "set-spec",
+      message: "transition failed",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        setSpec: () =>
+          Effect.fail(
+            new TaskMutationProgressFailure({
+              operation: "set-spec",
+              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+              failure,
+            }),
+          ),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: [] } }]);
+  });
   test("does not publish an update when the task is missing", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({
@@ -209,6 +238,28 @@ describe("createEventPublishingTaskService", () => {
             subtasks: [],
             hasExplicitSubtasks: true,
           })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([]);
+  });
+  test("does not publish ordinary pre-write set-spec failures", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "set-spec",
+      message: "Document write failed",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        setSpec: () => Effect.fail(failure),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })
           .pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);

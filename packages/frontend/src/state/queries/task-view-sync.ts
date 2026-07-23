@@ -385,19 +385,22 @@ export const createTaskViewSync = ({
       );
       const inactiveRepos = [...repos].filter((repoPath) => repoPath !== activeRepoPath);
       const doneVisibleDays = activeRepoPath ? (await loadSettings()).kanban.doneVisibleDays : null;
-      await Promise.all([cancelAllDocuments(), ...inactiveRepos.map(cancelRepoTaskQueries)]);
-      await Promise.all([
-        ...inactiveRepos.map((repoPath) => invalidateRepoTaskQueries(queryClient, repoPath)),
-        queryClient.invalidateQueries({
-          queryKey: documentQueryKeys.all,
-          exact: false,
-          refetchType: "none",
-        }),
-      ]);
+      const prepareSnapshotCaches = async (): Promise<void> => {
+        await Promise.all([cancelAllDocuments(), ...inactiveRepos.map(cancelRepoTaskQueries)]);
+        await Promise.all([
+          ...inactiveRepos.map((repoPath) => invalidateRepoTaskQueries(queryClient, repoPath)),
+          queryClient.invalidateQueries({
+            queryKey: documentQueryKeys.all,
+            exact: false,
+            refetchType: "none",
+          }),
+        ]);
+      };
       if (activeRepoPath && doneVisibleDays !== null) {
         await refreshActive(activeRepoPath, {
           doneVisibleDays,
           impact: { kind: "task-list-only" },
+          prepare: prepareSnapshotCaches,
           refreshKanban: false,
         });
         const taskData = queryClient.getQueryData<{ tasks: TaskCard[] }>(
@@ -413,6 +416,8 @@ export const createTaskViewSync = ({
           activeRepoPath,
           activeDocumentEntries.filter((entry) => retainedTaskIds.has(entry.taskId)),
         );
+      } else {
+        await prepareSnapshotCaches();
       }
     },
   };

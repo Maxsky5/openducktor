@@ -1,7 +1,8 @@
+import type { TaskMetadataDocument } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { canSetSpecFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
   CreateTaskServiceInput,
   TaskService,
@@ -15,8 +16,11 @@ type TaskDocumentUseCases = Omit<
     TaskService,
     "specGet" | "setSpec" | "saveSpecDocument" | "planGet" | "savePlanDocument" | "qaGetReport"
   >,
-  "setPlan"
+  "setPlan" | "setSpec"
 > & {
+  setSpec(
+    input: Parameters<TaskService["setSpec"]>[0],
+  ): Effect.Effect<TaskMetadataDocument, TaskServiceError | TaskMutationProgressFailure>;
   setPlan(
     input: Parameters<TaskService["setPlan"]>[0],
   ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
@@ -60,7 +64,18 @@ export const createTaskDocumentUseCases = ({
 
       const document = yield* taskStore.setSpecDocument({ repoPath, taskId, markdown });
       if (current.status === "open") {
-        yield* taskStore.transitionTask({ repoPath, taskId, status: "spec_ready" });
+        const transition = yield* Effect.either(
+          taskStore.transitionTask({ repoPath, taskId, status: "spec_ready" }),
+        );
+        if (transition._tag === "Left") {
+          return yield* Effect.fail(
+            new TaskMutationProgressFailure({
+              operation: "set-spec",
+              changes: { taskIds: [taskId], removedTaskIds: [] },
+              failure: transition.left,
+            }),
+          );
+        }
       }
 
       return document;

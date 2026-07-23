@@ -451,6 +451,49 @@ describe("TaskViewSync races", () => {
     }
   });
 
+  test("lets a snapshot replace an in-flight same-task document refresh", async () => {
+    const staleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
+    const staleDocumentStarted = createDeferred<void>();
+    let documentReads = 0;
+    const { queryClient, sync } = createSync(
+      createPorts({
+        loadFreshDocument: async () => {
+          documentReads += 1;
+          if (documentReads === 1) {
+            staleDocumentStarted.resolve();
+            return staleDocument.promise;
+          }
+          return { markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" };
+        },
+      }),
+    );
+    const documentKey = documentQueryKeys.spec("/repo", "task-1");
+    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
+    const observer = new QueryObserver(queryClient, {
+      queryKey: documentKey,
+      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
+      staleTime: Infinity,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    try {
+      const refresh = sync.refreshAfterLocalMutation("/repo", {
+        kind: "refresh-documents",
+        taskIds: ["task-1"],
+      });
+      await staleDocumentStarted.promise;
+      const snapshot = sync.reconcileStreamSnapshot("/repo");
+
+      await expect(Promise.all([refresh, snapshot])).resolves.toEqual([undefined, undefined]);
+
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
+      ).toEqual({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("waits for a deleting successor without restarting the deleted snapshot document", async () => {
     const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const snapshotDocumentStarted = createDeferred<void>();
