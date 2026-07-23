@@ -15,6 +15,7 @@ import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
 } from "./agent-session-live-projection";
+import { collectPendingApprovalPolicyActions } from "./pending-approval-policy";
 import type { TaskSessionRecords } from "./task-session-records";
 
 const repoPath = "/repo";
@@ -235,6 +236,208 @@ describe("agent session live projection", () => {
         items: [expect.objectContaining({ content: "Still visible after reconnect" })],
       },
     });
+  });
+
+  test("mirrors a grandchild mutating approval to a read-only root with the grandchild response session", () => {
+    const tasks = taskSessionRecords({
+      taskId: "task-1",
+      record: record("root-thread", { role: "spec" }),
+    });
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: tasks,
+      snapshots: [
+        snapshot("root-thread"),
+        snapshot("child-thread", { parentExternalSessionId: "root-thread" }),
+        snapshot("grandchild-thread", {
+          parentExternalSessionId: "child-thread",
+          activity: "waiting_for_permission",
+          pendingApprovals: [
+            {
+              requestId: "grandchild-approval",
+              requestType: "command_execution",
+              title: "Write file",
+              mutation: "mutating",
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(getAgentSession(sessions, identity("root-thread"))?.pendingApprovals).toEqual([
+      expect.objectContaining({
+        requestId: "grandchild-approval",
+        source: {
+          kind: "subagent",
+          parentExternalSessionId: "root-thread",
+          childExternalSessionId: "grandchild-thread",
+        },
+        responseSession: identity("grandchild-thread"),
+      }),
+    ]);
+    expect(
+      collectPendingApprovalPolicyActions({
+        previous: emptyAgentSessionCollection(),
+        next: sessions,
+        repoPath,
+      }),
+    ).toEqual([
+      {
+        role: "spec",
+        input: {
+          repoPath,
+          runtimeKind: "codex",
+          workingDirectory,
+          externalSessionId: "grandchild-thread",
+          requestId: "grandchild-approval",
+          outcome: "reject",
+        },
+      },
+    ]);
+  });
+
+  test("mirrors a grandchild question to the root with the grandchild response session", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords({ taskId: "task-1", record: record("root-thread") }),
+      snapshots: [
+        snapshot("root-thread"),
+        snapshot("child-thread", { parentExternalSessionId: "root-thread" }),
+        snapshot("grandchild-thread", {
+          parentExternalSessionId: "child-thread",
+          activity: "waiting_for_question",
+          pendingQuestions: [
+            {
+              requestId: "grandchild-question",
+              questions: [
+                {
+                  header: "Continue?",
+                  question: "Should the grandchild continue?",
+                  options: [{ label: "Yes", description: "Continue." }],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(getAgentSession(sessions, identity("root-thread"))?.pendingQuestions).toEqual([
+      expect.objectContaining({
+        requestId: "grandchild-question",
+        responseSession: identity("grandchild-thread"),
+      }),
+    ]);
+  });
+
+  test("clears descendant mirrors from every ancestor after grandchild resolution and removal", () => {
+    const tasks = taskSessionRecords({ taskId: "task-1", record: record("root-thread") });
+    const initial = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: tasks,
+      snapshots: [
+        snapshot("root-thread"),
+        snapshot("child-thread", { parentExternalSessionId: "root-thread" }),
+        snapshot("grandchild-thread", {
+          parentExternalSessionId: "child-thread",
+          pendingApprovals: [
+            {
+              requestId: "grandchild-approval",
+              requestType: "command_execution",
+              title: "Write file",
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "grandchild-question",
+              questions: [
+                {
+                  header: "Continue?",
+                  question: "Should the grandchild continue?",
+                  options: [{ label: "Yes", description: "Continue." }],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+    const resolved = applyAgentSessionLiveDelta({
+      current: initial,
+      taskSessionRecords: tasks,
+      envelope: {
+        type: "session_upsert",
+        session: snapshot("grandchild-thread", {
+          parentExternalSessionId: "child-thread",
+        }),
+      },
+    });
+
+    expect(getAgentSession(resolved, identity("root-thread"))?.pendingApprovals).toEqual([]);
+    expect(getAgentSession(resolved, identity("child-thread"))?.pendingQuestions).toEqual([]);
+
+    const removed = applyAgentSessionLiveDelta({
+      current: initial,
+      taskSessionRecords: tasks,
+      envelope: { type: "session_removed", ref: snapshot("grandchild-thread").ref },
+    });
+    expect(getAgentSession(removed, identity("root-thread"))?.pendingApprovals).toEqual([]);
+    expect(getAgentSession(removed, identity("child-thread"))?.pendingQuestions).toEqual([]);
+  });
+
+  test("keeps sibling descendant pending requests isolated", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords({ taskId: "task-1", record: record("root-thread") }),
+      snapshots: [
+        snapshot("root-thread"),
+        snapshot("child-a", { parentExternalSessionId: "root-thread" }),
+        snapshot("child-b", { parentExternalSessionId: "root-thread" }),
+        snapshot("grandchild-a", {
+          parentExternalSessionId: "child-a",
+          pendingApprovals: [
+            {
+              requestId: "sibling-request",
+              requestType: "command_execution",
+              title: "Child A command",
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(getAgentSession(sessions, identity("child-a"))?.pendingApprovals).toHaveLength(1);
+    expect(getAgentSession(sessions, identity("child-b"))?.pendingApprovals).toEqual([]);
+    expect(getAgentSession(sessions, identity("root-thread"))?.pendingApprovals).toEqual([
+      expect.objectContaining({ responseSession: identity("grandchild-a") }),
+    ]);
+  });
+
+  test("retains one-hop pending input projection", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords({ taskId: "task-1", record: record("root-thread") }),
+      snapshots: [
+        snapshot("root-thread"),
+        snapshot("child-thread", {
+          parentExternalSessionId: "root-thread",
+          pendingApprovals: [
+            {
+              requestId: "child-approval",
+              requestType: "command_execution",
+              title: "Child command",
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(getAgentSession(sessions, identity("root-thread"))?.pendingApprovals).toEqual([
+      expect.objectContaining({
+        requestId: "child-approval",
+        responseSession: identity("child-thread"),
+      }),
+    ]);
   });
 
   test("keeps overlapping request ids isolated by normalized session identity", () => {

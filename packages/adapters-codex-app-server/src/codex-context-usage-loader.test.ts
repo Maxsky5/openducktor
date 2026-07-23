@@ -190,4 +190,88 @@ describe("CodexContextUsageLoader", () => {
       ).toBeUndefined();
     }
   });
+
+  test("loads uncached grandchild context through retained root ownership", async () => {
+    const { adapter, transports } = createHarness();
+    await adapter.startSession(codexStartSessionInput());
+    const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+    state.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId: "thread/start-runtime-live",
+      childThreadId: "child-thread",
+      itemId: "child-thread",
+      status: "running",
+    });
+    state.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId: "child-thread",
+      childThreadId: "grandchild-thread",
+      itemId: "grandchild-thread",
+      status: "running",
+    });
+
+    await expect(
+      adapter.loadLiveSessionContextUsage({
+        runtimeId: "runtime-live",
+        externalSessionId: "grandchild-thread",
+      }),
+    ).resolves.toBeNull();
+
+    expect(transports.get("runtime-live")?.calls).toContainEqual(
+      expect.objectContaining({
+        method: "thread/resume",
+        params: expect.objectContaining({
+          threadId: "grandchild-thread",
+          cwd: "/repo",
+          excludeTurns: false,
+        }),
+      }),
+    );
+  });
+
+  test("rejects cross-runtime and cyclic live context routes before resuming", async () => {
+    for (const kind of ["cross-runtime", "cycle"] as const) {
+      const { adapter, transports } = createHarness();
+      const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+      if (kind === "cross-runtime") {
+        state.subagents.upsertLink({
+          runtimeId: "runtime-other",
+          parentThreadId: "root-thread",
+          childThreadId: "child-thread",
+          itemId: "child-thread",
+          status: "running",
+        });
+        state.subagents.upsertLink({
+          runtimeId: "runtime-live",
+          parentThreadId: "child-thread",
+          childThreadId: "grandchild-thread",
+          itemId: "grandchild-thread",
+          status: "running",
+        });
+      } else {
+        state.subagents.upsertLink({
+          runtimeId: "runtime-live",
+          parentThreadId: "cycle-child",
+          childThreadId: "cycle-grandchild",
+          itemId: "cycle-grandchild",
+          status: "running",
+        });
+        state.subagents.upsertLink({
+          runtimeId: "runtime-live",
+          parentThreadId: "cycle-grandchild",
+          childThreadId: "cycle-child",
+          itemId: "cycle-child",
+          status: "running",
+        });
+      }
+      const externalSessionId = kind === "cross-runtime" ? "grandchild-thread" : "cycle-grandchild";
+
+      await expect(
+        adapter.loadLiveSessionContextUsage({ runtimeId: "runtime-live", externalSessionId }),
+      ).rejects.toThrow("Cannot load Codex session context usage");
+      expect(transports.get("runtime-live")?.calls ?? []).not.toContainEqual(
+        expect.objectContaining({ method: "thread/resume" }),
+      );
+    }
+  });
 });
