@@ -1,5 +1,82 @@
 import { describe, expect, test } from "bun:test";
-import { pullRequestReviewContextSchema } from "./pull-request-review-schemas";
+import {
+  pullRequestReviewActivitySchema,
+  pullRequestReviewContextSchema,
+} from "./pull-request-review-schemas";
+
+const createActivityFields = () => ({
+  id: "activity-1",
+  author: "reviewer",
+  authorAvatarUrl: null,
+  body: "",
+  patch: null,
+  suggestionPatches: [],
+  url: null,
+  createdAt: "2026-07-10T08:00:00Z",
+  updatedAt: null,
+  path: null,
+  line: null,
+  threadId: null,
+  isResolved: null,
+});
+
+describe("pullRequestReviewActivitySchema", () => {
+  test.each(["approved", "changes_requested", "commented", "dismissed"] as const)(
+    "accepts a bodyless review with the %s outcome",
+    (reviewOutcome) => {
+      expect(
+        pullRequestReviewActivitySchema.parse({
+          ...createActivityFields(),
+          source: "review",
+          reviewOutcome,
+        }),
+      ).toEqual({
+        ...createActivityFields(),
+        source: "review",
+        reviewOutcome,
+      });
+    },
+  );
+
+  test.each(["comment", "review_thread"] as const)(
+    "accepts a %s activity without a review outcome",
+    (source) => {
+      expect(pullRequestReviewActivitySchema.parse({ ...createActivityFields(), source })).toEqual({
+        ...createActivityFields(),
+        source,
+      });
+    },
+  );
+
+  test("rejects a review without an outcome", () => {
+    expect(() =>
+      pullRequestReviewActivitySchema.parse({ ...createActivityFields(), source: "review" }),
+    ).toThrow();
+  });
+
+  test.each(["comment", "review_thread"] as const)(
+    "rejects reviewOutcome on a %s activity",
+    (source) => {
+      expect(() =>
+        pullRequestReviewActivitySchema.parse({
+          ...createActivityFields(),
+          source,
+          reviewOutcome: "approved",
+        }),
+      ).toThrow();
+    },
+  );
+
+  test("rejects an unsupported review outcome", () => {
+    expect(() =>
+      pullRequestReviewActivitySchema.parse({
+        ...createActivityFields(),
+        source: "review",
+        reviewOutcome: "pending",
+      }),
+    ).toThrow();
+  });
+});
 
 describe("pullRequestReviewContextSchema", () => {
   test("accepts provider-neutral pull request review contexts", () => {

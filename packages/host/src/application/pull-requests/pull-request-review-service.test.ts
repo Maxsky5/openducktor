@@ -75,7 +75,25 @@ const makeLoadedContext = (providerId: GitProviderId): PullRequestReviewContext 
   },
   aggregateStatus: "success",
   checks: [],
-  comments: [],
+  comments: [
+    {
+      id: "review-1",
+      author: "reviewer",
+      authorAvatarUrl: null,
+      body: "",
+      patch: null,
+      suggestionPatches: [],
+      url: null,
+      createdAt: "2026-07-10T08:00:00.000Z",
+      updatedAt: null,
+      path: null,
+      line: null,
+      threadId: null,
+      isResolved: null,
+      source: "review",
+      reviewOutcome: "approved",
+    },
+  ],
   reviewThreads: { openCount: 0 },
   refreshedAt: "2026-07-10T08:00:00.000Z",
 });
@@ -109,12 +127,10 @@ describe("createPullRequestReviewService", () => {
       providers: [
         {
           providerId: "github",
-          isEnabled: () => true,
           readContext: githubReadContext,
         },
         {
           providerId: "gitlab",
-          isEnabled: () => true,
           readContext: gitlabReadContext,
         },
       ],
@@ -136,7 +152,6 @@ describe("createPullRequestReviewService", () => {
       providers: [
         {
           providerId: "github",
-          isEnabled: () => true,
           readContext: githubReadContext,
         },
       ],
@@ -160,7 +175,6 @@ describe("createPullRequestReviewService", () => {
       providers: [
         {
           providerId: "github",
-          isEnabled: () => true,
           readContext: githubReadContext,
         },
       ],

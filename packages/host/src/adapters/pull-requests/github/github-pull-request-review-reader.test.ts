@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { GithubCommandDependencies } from "../tasks/support/github-pull-requests";
-import { createGithubPullRequestReviewProvider } from "./github-pull-request-review-provider";
+import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
+import { HostOperationError } from "../../../effect/host-errors";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
+import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
 
 const createDependencies = ({
   commandActivity,
@@ -363,9 +363,9 @@ const fairnestPullRequestViewResponse = {
   ],
 };
 
-describe("createGithubPullRequestReviewProvider", () => {
+describe("createGithubPullRequestReviewReader", () => {
   test("loads checks and comments through the gh command boundary", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];
 
     const context = await Effect.runPromise(
@@ -431,7 +431,7 @@ describe("createGithubPullRequestReviewProvider", () => {
   });
 
   test("scopes pull request gh commands to the configured host and repository", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];
 
     await Effect.runPromise(
@@ -458,7 +458,7 @@ describe("createGithubPullRequestReviewProvider", () => {
   });
 
   test("uses the full review history", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const pullRequestViewResponse = defaultPullRequestViewResponse() as {
       reviews: unknown[];
     };
@@ -486,12 +486,110 @@ describe("createGithubPullRequestReviewProvider", () => {
     expect(
       context.comments
         .filter((comment) => comment.source === "review")
+        .map((comment) => [comment.body, comment.reviewOutcome]),
+    ).toEqual([
+      ["Changes requested.", "changes_requested"],
+      ["Follow-up review.", "commented"],
+    ]);
+  });
+
+  test("omits a bodyless commented review when its inline comments are loaded separately", async () => {
+    const provider = createGithubPullRequestReviewReader();
+    const commands: string[][] = [];
+    const pullRequestViewResponse = defaultPullRequestViewResponse() as {
+      reviews: unknown[];
+    };
+    pullRequestViewResponse.reviews.push(
+      {
+        id: "review-inline-only",
+        author: { login: "reviewer" },
+        body: "",
+        state: "COMMENTED",
+        submittedAt: "2026-07-08T10:03:00Z",
+      },
+      {
+        id: "review-standalone",
+        author: { login: "reviewer" },
+        body: "",
+        state: "COMMENTED",
+        submittedAt: "2026-07-08T10:04:00Z",
+      },
+      {
+        id: "review-with-summary",
+        author: { login: "reviewer" },
+        body: "Review summary.",
+        state: "COMMENTED",
+        submittedAt: "2026-07-08T10:05:00Z",
+      },
+    );
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          commands,
+          pullRequestViewResponse,
+          reviewThreadNodes: [
+            {
+              id: "thread-inline-replies",
+              isResolved: true,
+              comments: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    id: "thread-comment-inline-only",
+                    author: { login: "reviewer" },
+                    body: "Test",
+                    pullRequestReview: { id: "review-inline-only" },
+                    url: "https://github.com/openai/openducktor/pull/42#discussion-inline",
+                    createdAt: "2026-07-08T10:03:00Z",
+                    updatedAt: "2026-07-08T10:03:00Z",
+                    path: "packages/host/src/provider.ts",
+                    line: 33,
+                  },
+                  {
+                    id: "thread-comment-with-summary",
+                    author: { login: "reviewer" },
+                    body: "Inline detail.",
+                    pullRequestReview: { id: "review-with-summary" },
+                    url: "https://github.com/openai/openducktor/pull/42#discussion-summary",
+                    createdAt: "2026-07-08T10:05:00Z",
+                    updatedAt: "2026-07-08T10:05:00Z",
+                    path: "packages/host/src/provider.ts",
+                    line: 34,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(
+      context.comments
+        .filter((comment) => comment.source === "review")
+        .map((comment) => comment.id),
+    ).toEqual(["review-1", "review-standalone", "review-with-summary"]);
+    expect(
+      context.comments
+        .filter((comment) => comment.source === "review_thread")
         .map((comment) => comment.body),
-    ).toEqual(["Changes requested.", "Follow-up review."]);
+    ).toEqual(["Test", "Inline detail."]);
+    const reviewThreadCommand = commands.find((args) =>
+      args.join(" ").includes("PullRequestReviewThreads"),
+    );
+    expect(reviewThreadCommand?.join(" ")).toContain("pullRequestReview {");
   });
 
   test("includes unresolved code review threads alongside review summaries", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];
 
     const context = await Effect.runPromise(
@@ -574,7 +672,7 @@ describe("createGithubPullRequestReviewProvider", () => {
     const suggestionBody = ["```suggestion", "const enabled = isReady && isValid;", "```"].join(
       "\n",
     );
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
         dependencies: createDependencies({
@@ -623,7 +721,7 @@ describe("createGithubPullRequestReviewProvider", () => {
 
   test("preserves suggestion markdown when an outdated comment has no line metadata", async () => {
     const suggestionBody = ["```suggestion", "const enabled = true;", "```"].join("\n");
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
         dependencies: createDependencies({
@@ -671,7 +769,7 @@ describe("createGithubPullRequestReviewProvider", () => {
 
   test("loads every review thread and comment page", async () => {
     const commands: string[][] = [];
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const reviewThreadResponse = (args: string[]): unknown => {
       const command = args.join(" ");
       if (command.includes("PullRequestReviewThreadComments")) {
@@ -793,7 +891,7 @@ describe("createGithubPullRequestReviewProvider", () => {
 
   test("loads independent pull request resources concurrently", async () => {
     const commandActivity = { active: 0, maxActive: 0 };
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
 
     await Effect.runPromise(
       provider.read({
@@ -808,7 +906,7 @@ describe("createGithubPullRequestReviewProvider", () => {
   });
 
   test("loads pending checks from gh exit code 8", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
 
     const context = await Effect.runPromise(
       provider.read({
@@ -844,7 +942,7 @@ describe("createGithubPullRequestReviewProvider", () => {
   });
 
   test("loads an empty check list when gh reports no checks", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
 
     const context = await Effect.runPromise(
       provider.read({
@@ -872,7 +970,7 @@ describe("createGithubPullRequestReviewProvider", () => {
   });
 
   test("returns malformed review contexts through the typed error channel", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
     const malformedView = {
       ...(defaultPullRequestViewResponse() as Record<string, unknown>),
       url: "not-a-url",
@@ -896,8 +994,50 @@ describe("createGithubPullRequestReviewProvider", () => {
     }
   });
 
+  test("rejects a malformed review thread node with its provider field path", async () => {
+    const reader = createGithubPullRequestReviewReader();
+    const result = await Effect.runPromise(
+      reader
+        .read({
+          dependencies: createDependencies({ reviewThreadNodes: [null] }),
+          repoPath: "/repo",
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          pullRequestNumber: 42,
+        })
+        .pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left._tag).toBe("HostValidationError");
+      expect(result.left.field).toBe("reviewThreads.nodes.0");
+    }
+  });
+
+  test("rejects a malformed check node with its provider field path", async () => {
+    const reader = createGithubPullRequestReviewReader();
+    const result = await Effect.runPromise(
+      reader
+        .read({
+          dependencies: createDependencies({
+            checksResponse: { ok: true, stdout: [null] },
+          }),
+          repoPath: "/repo",
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          pullRequestNumber: 42,
+        })
+        .pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left._tag).toBe("HostValidationError");
+      expect(result.left.field).toBe("checks.0");
+    }
+  });
+
   test("maps the gh cancel bucket to a cancelled check", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
 
     const context = await Effect.runPromise(
       provider.read({
@@ -930,7 +1070,7 @@ describe("createGithubPullRequestReviewProvider", () => {
   });
 
   test("rejects non-pending gh checks failures", async () => {
-    const provider = createGithubPullRequestReviewProvider();
+    const provider = createGithubPullRequestReviewReader();
 
     await expect(
       Effect.runPromise(

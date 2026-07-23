@@ -1,4 +1,4 @@
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError } from "../../../effect/host-errors";
 
 type GithubReviewCommentContentInput = {
   body: string;

@@ -11,7 +11,7 @@ import {
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
-import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-requests/github-pull-request-review-adapter";
+import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-requests/github/github-pull-request-review-adapter";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";

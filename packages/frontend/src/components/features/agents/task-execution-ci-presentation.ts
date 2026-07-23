@@ -1,8 +1,24 @@
 import type {
+  PullRequestReviewActivity,
   PullRequestReviewAggregateStatus,
   PullRequestReviewCheck,
-  PullRequestReviewComment,
+  PullRequestReviewOutcome,
 } from "@openducktor/contracts";
+
+type ReviewOutcomePresentation = {
+  label: string;
+  variant: "success" | "danger" | "secondary" | "outline";
+};
+
+export const REVIEW_OUTCOME_PRESENTATION: Record<
+  PullRequestReviewOutcome,
+  ReviewOutcomePresentation
+> = {
+  approved: { label: "Approved", variant: "success" },
+  changes_requested: { label: "Changes requested", variant: "danger" },
+  commented: { label: "Commented", variant: "secondary" },
+  dismissed: { label: "Review dismissed", variant: "outline" },
+};
 
 export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string => {
   if (status === "success") {
@@ -146,7 +162,7 @@ export const isBotCommentAuthor = (author: string | null): boolean => {
   return AUTOMATION_LOGIN_PATTERNS.some((pattern) => pattern.test(trimmedAuthor));
 };
 
-export const commentLocationLabel = (comment: PullRequestReviewComment): string | null => {
+export const commentLocationLabel = (comment: PullRequestReviewActivity): string | null => {
   if (!comment.path) {
     return null;
   }

@@ -14,7 +14,6 @@ export type PullRequestReviewProviderInput = {
 
 export type PullRequestReviewProviderPort = {
   providerId: GitProviderId;
-  isEnabled(repoConfig: RepoConfig): boolean;
   readContext(
     input: PullRequestReviewProviderInput,
   ): Effect.Effect<PullRequestReviewContext, HostValidationError>;

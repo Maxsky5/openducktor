@@ -1,4 +1,4 @@
-import type { PullRequestReviewComment } from "@openducktor/contracts";
+import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { ChevronRight, ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
 import type { ComponentProps, MouseEvent, ReactElement } from "react";
 import { memo, useState } from "react";
@@ -11,7 +11,10 @@ import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
-import { commentLocationLabel } from "./task-execution-ci-presentation";
+import {
+  commentLocationLabel,
+  REVIEW_OUTCOME_PRESENTATION,
+} from "./task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
 
 const openReviewUrl = (url: string, failureMessage: string): void => {
@@ -110,7 +113,7 @@ const TaskExecutionCiSuggestedChange = memo(function TaskExecutionCiSuggestedCha
 });
 
 type TaskExecutionCiCommentBodyProps = {
-  comment: PullRequestReviewComment;
+  comment: PullRequestReviewActivity;
 };
 
 const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
@@ -139,7 +142,7 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
         </div>
       ) : null}
       {hasBody ? (
-        <div className="min-w-0 overflow-hidden border-t border-border px-3 py-1">
+        <div className="min-w-0 overflow-x-auto border-t border-border px-3 py-1">
           <MarkdownRenderer
             markdown={comment.body}
             variant="compact"
@@ -159,7 +162,7 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
             />
           ))
         : null}
-      {!hasBody && !hasPatch && !hasSuggestionPatches ? (
+      {!hasBody && !hasPatch && !hasSuggestionPatches && comment.source !== "review" ? (
         <p className="border-t border-border px-3 py-3 text-sm text-muted-foreground">
           No comment body.
         </p>
@@ -169,7 +172,7 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
 });
 
 type TaskExecutionCiCommentCardProps = {
-  comment: PullRequestReviewComment;
+  comment: PullRequestReviewActivity;
   isBot: boolean;
   isBodyReady?: boolean;
 };
@@ -187,6 +190,9 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
   isBodyReady = true,
 }: TaskExecutionCiCommentCardProps): ReactElement {
   const showThreadBadge = comment.isResolved !== null;
+  const isReview = comment.source === "review";
+  const reviewPresentation = isReview ? REVIEW_OUTCOME_PRESENTATION[comment.reviewOutcome] : null;
+  const activityName = isReview ? "review" : "comment";
   const location = commentLocationLabel(comment);
   const author = comment.author ?? "Unknown author";
   const activityTimestamp = comment.createdAt ?? comment.updatedAt;
@@ -210,7 +216,7 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
     if (!comment.url) {
       return;
     }
-    openReviewUrl(comment.url, "Failed to open comment");
+    openReviewUrl(comment.url, `Failed to open ${activityName}`);
   };
 
   const toggleComment = (): void => {
@@ -229,7 +235,7 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
           type="button"
           className="group/comment grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2 text-left outline-none transition hover:bg-accent/40 focus-visible:bg-accent/50"
           aria-expanded={isOpen}
-          aria-label={`${isOpen ? "Collapse" : "Expand"} comment from ${author}`}
+          aria-label={`${isOpen ? "Collapse" : "Expand"} ${activityName} from ${author}`}
           data-state={isOpen ? "open" : "closed"}
           onClick={toggleComment}
         >
@@ -261,6 +267,14 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
               {isBot ? (
                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                   Bot
+                </Badge>
+              ) : null}
+              {reviewPresentation ? (
+                <Badge
+                  variant={reviewPresentation.variant}
+                  className="shrink-0 px-2 py-0 text-[10px]"
+                >
+                  {reviewPresentation.label}
                 </Badge>
               ) : null}
               {activityTimestamp ? (
@@ -301,12 +315,12 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
                   type="button"
                   onClick={openComment}
                   className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-                  aria-label={`Open comment from ${author}`}
+                  aria-label={`Open ${activityName} from ${author}`}
                 >
                   <ExternalLink className="size-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Open comment</TooltipContent>
+              <TooltipContent side="bottom">Open {activityName}</TooltipContent>
             </Tooltip>
           </div>
         ) : null}

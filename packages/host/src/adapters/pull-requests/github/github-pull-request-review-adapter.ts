@@ -1,16 +1,16 @@
 import { pullRequestReviewContextSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
-  createGithubPullRequestReviewProvider,
-  type GithubPullRequestReviewProvider,
-} from "../../application/pull-requests/github-pull-request-review-provider";
-import {
   GITHUB_PROVIDER_ID,
   type GithubCommandDependencies,
   requireGithubPullRequestReadRepository,
-} from "../../application/tasks/support/github-pull-requests";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
-import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
+} from "../../../application/tasks/support/github-pull-requests";
+import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
+import {
+  createGithubPullRequestReviewReader,
+  type GithubPullRequestReviewReader,
+} from "./github-pull-request-review-reader";
 
 const unavailable = (reason: string) =>
   pullRequestReviewContextSchema.parse({
@@ -21,14 +21,13 @@ const unavailable = (reason: string) =>
 
 export const createGithubPullRequestReviewAdapter = ({
   githubDependencies,
-  reviewProvider = createGithubPullRequestReviewProvider(),
+  reviewReader = createGithubPullRequestReviewReader(),
 }: {
   githubDependencies: GithubCommandDependencies;
-  reviewProvider?: GithubPullRequestReviewProvider;
+  reviewReader?: GithubPullRequestReviewReader;
 }): PullRequestReviewProviderPort => {
   return {
     providerId: GITHUB_PROVIDER_ID,
-    isEnabled: (repoConfig) => repoConfig.git.providers[GITHUB_PROVIDER_ID]?.enabled === true,
     readContext(input) {
       return Effect.gen(function* () {
         if (input.linkedPullRequest.providerId !== GITHUB_PROVIDER_ID) {
@@ -48,7 +47,7 @@ export const createGithubPullRequestReviewAdapter = ({
           return unavailable(errorMessage(repositoryResult.left));
         }
 
-        return yield* reviewProvider.read({
+        return yield* reviewReader.read({
           dependencies: githubDependencies,
           repoPath,
           repository: repositoryResult.right,
