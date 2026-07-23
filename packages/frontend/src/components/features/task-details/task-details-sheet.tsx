@@ -164,7 +164,7 @@ export function TaskDetailsSheet({
           />
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
           <TaskDetailsSheetBody
             task={task}
             {...(activeWorkspace ? { workspaceId: activeWorkspace.workspaceId } : {})}
