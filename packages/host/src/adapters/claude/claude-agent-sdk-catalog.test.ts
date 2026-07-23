@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import {
   searchClaudeWorkspaceFiles,
   toClaudeHistoryMessages,
@@ -95,6 +96,61 @@ describe("toClaudeModelDescriptor", () => {
 });
 
 describe("toClaudeSlashCommandCatalog", () => {
+  test("publishes the OpenDucktor Claude command policy", () => {
+    const hiddenCommands = [
+      "__remote-workflow",
+      "agents",
+      "clear",
+      "color",
+      "config",
+      "design",
+      "design-consent",
+      "design-revoke",
+      "design-sync",
+      "effort",
+      "fast",
+      "heapdump",
+      "insights",
+      "mcp",
+      "model",
+      "reload-skills",
+      "rename",
+      "team-onboarding",
+      "workflow-launch-exec",
+    ];
+
+    const catalog = toClaudeSlashCommandCatalog([
+      ...hiddenCommands.map((name) => ({ name, description: name, argumentHint: "" })),
+      {
+        name: "compact",
+        description: "Free up context",
+        argumentHint: "<optional custom summarization instructions>",
+      },
+      { name: "goal", description: "Keep working", argumentHint: "" },
+      { name: "thermos", description: "Skill also exposed as a command", argumentHint: "" },
+    ]);
+
+    expect(catalog.commands).toEqual([
+      MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      {
+        id: "goal",
+        trigger: "goal",
+        title: "goal",
+        description: "Keep working",
+        source: "command",
+        hints: [],
+      },
+      {
+        id: "thermos",
+        trigger: "thermos",
+        title: "thermos",
+        description: "Skill also exposed as a command",
+        source: "skill",
+        hints: [],
+      },
+    ]);
+  });
+
   test("maps Claude slash commands into OpenDucktor catalogs", () => {
     expect(
       toClaudeSlashCommandCatalog([
@@ -121,7 +177,7 @@ describe("toClaudeSlashCommandCatalog", () => {
           trigger: "thermos",
           title: "thermos",
           description: "Run thermos review",
-          source: "command",
+          source: "skill",
           hints: ["[scope]"],
         },
       ],
@@ -149,7 +205,7 @@ describe("toClaudeSlashCommandCatalog", () => {
           trigger: "gitnexus:detect_impact (MCP)",
           title: "gitnexus:detect_impact (MCP)",
           description: "Analyze current changes",
-          source: "command",
+          source: "skill",
           hints: ["scope, base_ref"],
         },
         {
@@ -157,7 +213,7 @@ describe("toClaudeSlashCommandCatalog", () => {
           trigger: "gitnexus:generate_map (MCP)",
           title: "gitnexus:generate_map (MCP)",
           description: "Generate architecture documentation",
-          source: "command",
+          source: "skill",
           hints: ["repo"],
         },
       ],
@@ -185,7 +241,7 @@ describe("toClaudeSlashCommandCatalog", () => {
           trigger: "code-review",
           title: "code-review",
           description: "User code review command",
-          source: "command",
+          source: "skill",
           hints: [],
         },
       ],
@@ -194,40 +250,115 @@ describe("toClaudeSlashCommandCatalog", () => {
 });
 
 describe("toClaudeSkillCatalog", () => {
-  test("keeps the first SDK definition when inherited scopes expose the same skill", () => {
+  test("publishes skills and external prompts while excluding Claude non-skill commands", () => {
     expect(
       toClaudeSkillCatalog([
         {
           name: "code-review",
-          description: "User code review skill",
+          description: "Bundled code review skill",
           argumentHint: "",
         },
         {
-          name: "code-review",
-          description: "Plugin code review skill",
-          argumentHint: "[effort]",
+          name: "batch",
+          description: "Bundled batch skill",
+          argumentHint: "<instruction>",
         },
         {
-          name: "research",
-          description: "Research a topic",
+          name: "loop",
+          description: "Bundled loop skill",
+          argumentHint: "[interval] [prompt]",
+        },
+        {
+          name: "deep-research",
+          description: "Bundled workflow",
+          argumentHint: "<question>",
+        },
+        {
+          name: "design-sync",
+          description: "Bundled design skill",
+          argumentHint: "",
+        },
+        {
+          name: "grill-me",
+          description: "User-only skill",
+          argumentHint: "",
+        },
+        {
+          name: "grill-me",
+          description: "Plugin skill with the same name",
           argumentHint: "[topic]",
+        },
+        {
+          name: "gitnexus:generate_map (MCP)",
+          description: "MCP prompt",
+          argumentHint: "repo",
+        },
+        {
+          name: "future-prompt-command",
+          description: "Unknown commands remain user-invocable",
+          argumentHint: "",
+        },
+        {
+          name: "compact",
+          description: "Fixed Claude command",
+          argumentHint: "",
+        },
+        {
+          name: "config",
+          description: "Fixed Claude command",
+          argumentHint: "",
         },
       ]),
     ).toEqual({
       skills: [
         {
+          id: "batch",
+          name: "batch",
+          path: "batch",
+          title: "batch",
+          description: "Bundled batch skill",
+        },
+        {
           id: "code-review",
           name: "code-review",
           path: "code-review",
           title: "code-review",
-          description: "User code review skill",
+          description: "Bundled code review skill",
         },
         {
-          id: "research",
-          name: "research",
-          path: "research",
-          title: "research",
-          description: "Research a topic",
+          id: "design-sync",
+          name: "design-sync",
+          path: "design-sync",
+          title: "design-sync",
+          description: "Bundled design skill",
+        },
+        {
+          id: "future-prompt-command",
+          name: "future-prompt-command",
+          path: "future-prompt-command",
+          title: "future-prompt-command",
+          description: "Unknown commands remain user-invocable",
+        },
+        {
+          id: "gitnexus:generate_map (MCP)",
+          name: "gitnexus:generate_map (MCP)",
+          path: "gitnexus:generate_map (MCP)",
+          title: "gitnexus:generate_map (MCP)",
+          description: "MCP prompt",
+        },
+        {
+          id: "grill-me",
+          name: "grill-me",
+          path: "grill-me",
+          title: "grill-me",
+          description: "User-only skill",
+        },
+        {
+          id: "loop",
+          name: "loop",
+          path: "loop",
+          title: "loop",
+          description: "Bundled loop skill",
         },
       ],
     });

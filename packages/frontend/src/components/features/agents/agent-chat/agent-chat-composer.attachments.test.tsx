@@ -46,6 +46,7 @@ const buildModel = () => ({
   selectedModelSelection: buildModelSelection(),
   selectedModelDescriptor: null,
   isSelectionCatalogLoading: false,
+  supportsAttachments: true,
   supportsSlashCommands: true,
   supportsFileSearch: true,
   supportsSkillReferences: false,
@@ -509,6 +510,35 @@ describe("AgentChatComposer attachments", () => {
           readOnlyReason: "Read-only",
         }}
       />,
+    );
+
+    const attachmentInput = container.querySelector('input[type="file"]');
+    if (!(attachmentInput instanceof HTMLInputElement)) {
+      throw new Error("Expected hidden attachment input");
+    }
+
+    fireEvent.change(attachmentInput, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTitle("brief.pdf")).toBeNull();
+    });
+  });
+
+  test("disables attachment intake when the runtime does not support attachments", async () => {
+    const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          supportsAttachments: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Add attachment" }).hasAttribute("disabled")).toBe(
+      true,
     );
 
     const attachmentInput = container.querySelector('input[type="file"]');

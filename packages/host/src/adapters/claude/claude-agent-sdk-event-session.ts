@@ -1,11 +1,12 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
-import type { ClaudeSessionActivity } from "./claude-agent-sdk-types";
+import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claude-agent-sdk-types";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeEventSession = {
   acceptedUserMessages?: readonly unknown[];
+  activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount?: number;
   activity: ClaudeSessionActivity;
   externalSessionId: string;

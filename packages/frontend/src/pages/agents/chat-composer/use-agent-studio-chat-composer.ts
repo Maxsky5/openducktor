@@ -73,6 +73,7 @@ type AgentStudioChatComposerState = {
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
+  supportsAttachments: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
@@ -216,6 +217,7 @@ export function useAgentStudioChatComposer({
       ? promptInputRuntime.runtimeRef.runtimeKind
       : promptInputRuntime.runtimeKind;
   const {
+    supportsAttachments,
     runtimeSupportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
@@ -386,6 +388,7 @@ export function useAgentStudioChatComposer({
     selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
     supportsProfiles,
+    supportsAttachments,
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,

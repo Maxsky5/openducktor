@@ -142,6 +142,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "selectedModelDescriptor"
   | "isSelectionCatalogLoading"
   | "supportsProfiles"
+  | "supportsAttachments"
   | "supportsSlashCommands"
   | "supportsFileSearch"
   | "supportsSkillReferences"
@@ -288,6 +289,7 @@ export function useAgentStudioOrchestrationController({
     selectedModelDescriptor,
     isSelectionCatalogLoading,
     supportsProfiles,
+    supportsAttachments,
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
@@ -355,6 +357,7 @@ export function useAgentStudioOrchestrationController({
     selectedSession,
     runtimeDefinitions,
     selectedModelDescriptor,
+    supportsAttachments,
     sessionsForTask: view.sessionsForTask,
     selectedTask: view.selectedTask,
     isSelectedSessionModelSendable,
@@ -456,6 +459,7 @@ export function useAgentStudioOrchestrationController({
       selectedModelDescriptor,
       isSelectionCatalogLoading,
       supportsProfiles: supportsProfiles ?? true,
+      supportsAttachments,
       supportsSlashCommands,
       supportsFileSearch,
       supportsSkillReferences,

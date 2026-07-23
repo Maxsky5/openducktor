@@ -1,4 +1,7 @@
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import type {
+  ClaudeHistoryEntryMetadata,
+  ClaudeHistoryMessage,
+} from "./claude-agent-sdk-history-import";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 const CLAUDE_SYNTHETIC_MODEL = "<synthetic>";
@@ -37,5 +40,10 @@ export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | nu
   return content && content.length > 0 ? content : null;
 };
 
-export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean =>
-  isRecord(entry) && (entry as { isMeta?: unknown }).isMeta === true;
+export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean => {
+  if (!isRecord(entry)) {
+    return false;
+  }
+  const metadata = entry as ClaudeHistoryEntryMetadata;
+  return metadata.isMeta === true || metadata.interruptedByShutdown === true;
+};

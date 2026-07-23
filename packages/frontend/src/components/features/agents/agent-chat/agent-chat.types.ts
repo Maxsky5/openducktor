@@ -121,6 +121,7 @@ export type AgentChatComposerModel = {
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
+  supportsAttachments: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;

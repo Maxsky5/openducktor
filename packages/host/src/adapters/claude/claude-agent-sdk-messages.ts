@@ -5,15 +5,17 @@ import type {
   DocumentBlockParam,
   ImageBlockParam,
 } from "@anthropic-ai/sdk/resources";
-import type { AgentUserMessagePart } from "@openducktor/core";
+import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { readText } from "./claude-agent-sdk-utils";
 
+// Claude expands slash commands from streaming content blocks. A bare string is
+// accepted by the type but reaches the model as ordinary prompt text.
 export const toClaudeMessage = (text: string): SDKUserMessage => ({
   type: "user",
   message: {
     role: "user",
-    content: text,
+    content: [{ type: "text", text }],
   } as SDKUserMessage["message"],
   parent_tool_use_id: null,
 });
@@ -167,11 +169,19 @@ const shouldInsertSyntheticSpaceBeforeClaudePart = (
   return firstCharacter !== undefined && WORDLIKE_TEXT_START_PATTERN.test(firstCharacter);
 };
 
-export const encodeClaudePromptText = (parts: AgentUserMessagePart[]): string => {
+export const encodeClaudePromptTextWithSourceRanges = (
+  parts: AgentUserMessagePart[],
+): {
+  text: string;
+  sourceTextByPartIndex: readonly (AgentUserMessageSourceText | undefined)[];
+} => {
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
+  const sourceTextByPartIndex: (AgentUserMessageSourceText | undefined)[] = Array.from({
+    length: parts.length,
+  });
 
-  for (const part of parts) {
+  for (const [index, part] of parts.entries()) {
     if (part.kind === "attachment") {
       throw new HostValidationError({
         field: "parts",
@@ -184,6 +194,7 @@ export const encodeClaudePromptText = (parts: AgentUserMessagePart[]): string =>
       text += " ";
     }
 
+    const sourceStart = text.length;
     switch (part.kind) {
       case "text":
         text += part.text;
@@ -213,11 +224,35 @@ export const encodeClaudePromptText = (parts: AgentUserMessagePart[]): string =>
         text += `@${part.file.path}`;
         break;
     }
+    if (part.kind !== "text") {
+      sourceTextByPartIndex[index] = {
+        value: text.slice(sourceStart),
+        start: sourceStart,
+        end: text.length,
+      };
+    }
     previousPart = part;
   }
 
-  return text.trim();
+  const leadingWhitespaceLength = text.length - text.trimStart().length;
+  const trimmedText = text.trim();
+  return {
+    text: trimmedText,
+    sourceTextByPartIndex: sourceTextByPartIndex.map((sourceText) => {
+      if (!sourceText) {
+        return undefined;
+      }
+      return {
+        value: sourceText.value,
+        start: sourceText.start - leadingWhitespaceLength,
+        end: sourceText.end - leadingWhitespaceLength,
+      };
+    }),
+  };
 };
+
+export const encodeClaudePromptText = (parts: AgentUserMessagePart[]): string =>
+  encodeClaudePromptTextWithSourceRanges(parts).text;
 
 export const toClaudeMessageFromParts = async (
   parts: AgentUserMessagePart[],

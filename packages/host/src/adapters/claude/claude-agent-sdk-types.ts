@@ -62,6 +62,7 @@ export type PendingQuestion = {
 };
 
 export type ClaudeAcceptedUserMessage = {
+  isManualCompaction?: true;
   messageId: string;
   model?: AgentModelSelection;
   parts: AgentUserMessageDisplayPart[];
@@ -76,8 +77,14 @@ export type ClaudeSessionInput =
 
 export type ClaudeSessionActivity = "idle" | "running" | "stopped";
 
+export type ClaudeManualCompactionState = {
+  boundaryReceived: boolean;
+  messageId: string;
+};
+
 export type ClaudeSession = {
   acceptedUserMessages: ClaudeAcceptedUserMessage[];
+  activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount: number;
   abortController: AbortController;
   activity: ClaudeSessionActivity;

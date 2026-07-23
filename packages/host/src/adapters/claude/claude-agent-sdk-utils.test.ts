@@ -124,6 +124,22 @@ describe("toolPartType", () => {
 });
 
 describe("toClaudeMessageFromParts", () => {
+  test("encodes text-only slash commands as Claude SDK content blocks", async () => {
+    await expect(
+      toClaudeMessageFromParts([
+        { kind: "slash_command", command: slashCommand },
+        { kind: "text", text: " src/index.ts" },
+      ]),
+    ).resolves.toEqual({
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "/review src/index.ts" }],
+      },
+    });
+  });
+
   test("encodes image attachments as Claude SDK content blocks", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openducktor-claude-attachment-"));
     try {

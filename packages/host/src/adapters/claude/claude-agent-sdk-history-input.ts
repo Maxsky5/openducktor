@@ -22,7 +22,11 @@ type ClaudeVisibleHistoryMessage = Extract<
 
 type ClaudeHistoryInputProjection =
   | { handled: false }
-  | { handled: true; message?: ClaudeVisibleHistoryMessage };
+  | {
+      handled: true;
+      manualCompaction?: { messageId: string; timestamp: string };
+      message?: ClaudeVisibleHistoryMessage;
+    };
 
 const notHandled: ClaudeHistoryInputProjection = { handled: false };
 const handledWithoutMessage: ClaudeHistoryInputProjection = { handled: true };
@@ -32,6 +36,7 @@ export const createClaudeHistoryInputProjector = (options: {
   skills?: readonly AgentSkillReference[];
 }) => {
   const resolveLiveUserMessageId = createLiveUserMessageIdResolver(options.liveUserMessages);
+  const compactPromptIds = new Set<string>();
   let pendingQueuedPrompt: { text: string; timestamp: string } | null = null;
 
   const createUserMessage = (input: {
@@ -76,6 +81,14 @@ export const createClaudeHistoryInputProjector = (options: {
       const command = readClaudeCommandEnvelope(content);
       if (command) {
         const text = pendingQueuedPrompt?.text ?? command;
+        if (text.trim().toLowerCase() === "/compact") {
+          const commandTimestamp = pendingQueuedPrompt?.timestamp ?? timestamp;
+          pendingQueuedPrompt = null;
+          return {
+            handled: true,
+            manualCompaction: { messageId, timestamp: commandTimestamp },
+          };
+        }
         const message = createUserMessage({
           fallbackMessageId: messageId,
           message: { content: text },
@@ -109,11 +122,34 @@ export const createClaudeHistoryInputProjector = (options: {
       return handledWithoutMessage;
     }
 
+    const promptId = readStringProp(entry, "promptId");
+    const isCompactSummary = (entry as { isCompactSummary?: unknown }).isCompactSummary === true;
+    if (isCompactSummary) {
+      if (promptId) {
+        compactPromptIds.add(promptId);
+      }
+      return handledWithoutMessage;
+    }
+    if (pendingQueuedPrompt?.text.trim().toLowerCase() === "/compact" && promptId) {
+      compactPromptIds.add(promptId);
+    }
+
     const rawText = historyMessageText(entry.message);
     const command = readClaudeCommandEnvelope(rawText);
+    if (promptId && compactPromptIds.has(promptId) && !command) {
+      return handledWithoutMessage;
+    }
     const text = command ? (pendingQueuedPrompt?.text ?? command) : rawText;
     const queuedPromptTimestamp =
       pendingQueuedPrompt?.text === text ? pendingQueuedPrompt.timestamp : undefined;
+    if (text.trim().toLowerCase() === "/compact") {
+      const commandTimestamp = queuedPromptTimestamp ?? timestamp;
+      pendingQueuedPrompt = null;
+      return {
+        handled: true,
+        manualCompaction: { messageId: entry.uuid, timestamp: commandTimestamp },
+      };
+    }
     const message = createUserMessage({
       fallbackMessageId: entry.uuid,
       message: command ? { content: text } : entry.message,

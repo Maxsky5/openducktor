@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { snapshotForClaudeSession } from "./claude-agent-sdk-session-shape";
+import { snapshotForClaudeSession, toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
@@ -65,5 +65,41 @@ describe("snapshotForClaudeSession", () => {
         classification: "running",
       }),
     );
+  });
+});
+
+describe("toClaudeDisplayParts", () => {
+  test("projects Claude skill commands as source-mapped skill chips", () => {
+    expect(
+      toClaudeDisplayParts([
+        {
+          kind: "slash_command",
+          command: {
+            id: "grill-me",
+            trigger: "grill-me",
+            title: "grill-me",
+            description: "Grill a plan",
+            source: "skill",
+            hints: [],
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        kind: "skill_mention",
+        skill: {
+          id: "grill-me",
+          name: "grill-me",
+          path: "grill-me",
+          title: "grill-me",
+          description: "Grill a plan",
+        },
+        sourceText: {
+          value: "/grill-me",
+          start: 0,
+          end: 9,
+        },
+      },
+    ]);
   });
 });

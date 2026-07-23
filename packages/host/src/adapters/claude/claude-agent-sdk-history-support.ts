@@ -38,13 +38,16 @@ type ClaudeHistoryReferenceRange = {
   part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>;
 };
 
-const CLAUDE_SKILL_TOKEN_PATTERN = /\/([\p{L}\p{N}:_-]+)/gu;
 const CLAUDE_FILE_TOKEN_PATTERN = /@([^\s]+)/gu;
 const CLAUDE_FILE_TRAILING_PUNCTUATION_PATTERN = /[,.;!?)}\]]+$/u;
 const CLAUDE_REFERENCE_BOUNDARY_PATTERN = /[\s([{"']/u;
+const CLAUDE_REFERENCE_END_BOUNDARY_PATTERN = /[\s,.;!?)}\]}"']/u;
 
 const hasClaudeReferenceBoundary = (text: string, start: number): boolean =>
   start === 0 || CLAUDE_REFERENCE_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
+
+const hasClaudeReferenceEndBoundary = (text: string, end: number): boolean =>
+  end === text.length || CLAUDE_REFERENCE_END_BOUNDARY_PATTERN.test(text[end] ?? "");
 
 const claudeFileReference = (path: string): AgentFileReference => ({
   id: path,
@@ -58,18 +61,35 @@ const readClaudeHistoryReferenceRanges = (
   skillsByName: ReadonlyMap<string, AgentSkillReference>,
 ): ClaudeHistoryReferenceRange[] => {
   const ranges: ClaudeHistoryReferenceRange[] = [];
-  for (const match of text.matchAll(CLAUDE_SKILL_TOKEN_PATTERN)) {
-    const start = match.index;
-    const name = match[1];
-    const skill = name ? skillsByName.get(name) : undefined;
-    if (!skill || !hasClaudeReferenceBoundary(text, start)) {
+  const skillTokens = [...skillsByName.values()]
+    .map((skill) => ({ skill, token: `/${skill.name}` }))
+    .sort((left, right) => right.token.length - left.token.length);
+  for (let start = 0; start < text.length; start += 1) {
+    if (text[start] !== "/" || !hasClaudeReferenceBoundary(text, start)) {
       continue;
     }
+    const match = skillTokens.find(({ token }) => {
+      const end = start + token.length;
+      return text.startsWith(token, start) && hasClaudeReferenceEndBoundary(text, end);
+    });
+    if (!match) {
+      continue;
+    }
+    const end = start + match.token.length;
     ranges.push({
       start,
-      end: start + match[0].length,
-      part: { kind: "skill_mention", skill },
+      end,
+      part: {
+        kind: "skill_mention",
+        skill: match.skill,
+        sourceText: {
+          value: match.token,
+          start,
+          end,
+        },
+      },
     });
+    start = end - 1;
   }
   for (const match of text.matchAll(CLAUDE_FILE_TOKEN_PATTERN)) {
     const start = match.index;
@@ -83,7 +103,15 @@ const readClaudeHistoryReferenceRanges = (
     ranges.push({
       start,
       end: start + path.length + 1,
-      part: { kind: "file_reference", file: claudeFileReference(path) },
+      part: {
+        kind: "file_reference",
+        file: claudeFileReference(path),
+        sourceText: {
+          value: text.slice(start, start + path.length + 1),
+          start,
+          end: start + path.length + 1,
+        },
+      },
     });
   }
   return ranges.sort((left, right) => left.start - right.start);
