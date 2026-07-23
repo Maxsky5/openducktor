@@ -297,6 +297,7 @@ export const createTaskStreamController = ({
       return false;
     }
     paused = false;
+    requestDrain();
     return true;
   };
 

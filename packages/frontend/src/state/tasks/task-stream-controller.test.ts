@@ -238,6 +238,30 @@ describe("task stream controller recovery", () => {
     expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  test("drains a replay delivered before the replacement terminal subscription resolves", async () => {
+    const harness = createHarness({
+      onSubscribe: async (record, index) => {
+        if (index === 1) {
+          record.listener({ type: "change", cursor: cursor(1), event: event("replayed") });
+        }
+        return {
+          subscriptionId: `subscription-${index}`,
+          acknowledge: record.acknowledge,
+          unsubscribe: record.unsubscribe,
+        };
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("zero") });
+    await flush();
+    harness.failTerminally(0, new Error("stream ended"));
+    await flush();
+
+    expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(2);
+    expect(harness.records[1]?.acknowledge).toHaveBeenCalledWith(cursor(1));
+  });
+
   test("ignores terminal failures from an obsolete subscription", async () => {
     const harness = createHarness();
 

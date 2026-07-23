@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
+import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createTaskService,
   createTaskServiceWithMutationProgress,
@@ -448,6 +449,69 @@ describe("createTaskService planning", () => {
       { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "setPlan", input: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" } },
     ]);
+  });
+  test("reports transition failures after writing a plan as partial progress", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.transition-task",
+      message: "transition failed",
+    });
+    const taskStore: TaskStorePort = {
+      listTasks: () =>
+        Effect.succeed([task({ id: "task-1", issueType: "feature", status: "spec_ready" })]),
+      setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      transitionTask: () => Effect.fail(failure),
+    };
+
+    const result = await Effect.runPromise(
+      createTaskServiceWithMutationProgress({ taskStore })
+        .setPlan({
+          repoPath: "/repo",
+          taskId: "task-1",
+          markdown: "# Plan",
+          subtasks: [],
+          hasExplicitSubtasks: false,
+        })
+        .pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
+    expect(result.failure).toBe(failure);
+  });
+  test("reports initial epic subtask replacement failures as partial progress", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.delete-task",
+      message: "child delete failed",
+    });
+    const taskStore: TaskStorePort = {
+      listTasks: () =>
+        Effect.succeed([
+          task({ id: "epic-1", issueType: "epic", status: "spec_ready" }),
+          task({ id: "child-1", parentId: "epic-1" }),
+        ]),
+      setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      deleteTask: () => Effect.fail(failure),
+    };
+
+    const result = await Effect.runPromise(
+      createTaskServiceWithMutationProgress({ taskStore })
+        .setPlan({
+          repoPath: "/repo",
+          taskId: "epic-1",
+          markdown: "# Plan",
+          hasExplicitSubtasks: true,
+          subtasks: [{ title: "Replacement", issueType: "task" }],
+        })
+        .pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(result.changes).toEqual({ taskIds: ["epic-1"], removedTaskIds: [] });
+    expect(result.failure).toBe(failure);
   });
   test("publishes removed epic children when later replacement deletion fails", async () => {
     const mutationFailure = new HostOperationError({

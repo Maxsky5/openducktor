@@ -74,33 +74,35 @@ export const createSetPlanUseCase =
 
       const document = yield* taskStore.setPlanDocument({ repoPath, taskId, markdown });
       let changes: TaskChangeSet = { taskIds: [taskId], removedTaskIds: [] };
-      if (shouldReplaceEpicSubtasks) {
-        const removedTaskIds = yield* replaceEpicPlanSubtasks(
-          taskStore,
-          repoPath,
-          current,
-          currentTasks,
-          effectiveSubtaskCreates,
-        );
-        changes = { taskIds: [taskId, ...removedTaskIds], removedTaskIds };
-      }
-
-      if (current.status === "open" || current.status === "spec_ready") {
-        const transition = yield* Effect.either(
-          taskStore.transitionTask({ repoPath, taskId, status: "ready_for_dev" }),
-        );
-        if (transition._tag === "Left") {
-          if (changes.removedTaskIds.length > 0) {
-            return yield* Effect.fail(
-              new TaskMutationProgressFailure({
-                operation: "set-plan",
-                changes,
-                failure: transition.left,
-              }),
+      const postDocument = yield* Effect.either(
+        Effect.gen(function* () {
+          if (shouldReplaceEpicSubtasks) {
+            const removedTaskIds = yield* replaceEpicPlanSubtasks(
+              taskStore,
+              repoPath,
+              current,
+              currentTasks,
+              effectiveSubtaskCreates,
             );
+            changes = { taskIds: [taskId, ...removedTaskIds], removedTaskIds };
           }
-          return yield* Effect.fail(transition.left);
+
+          if (current.status === "open" || current.status === "spec_ready") {
+            yield* taskStore.transitionTask({ repoPath, taskId, status: "ready_for_dev" });
+          }
+        }),
+      );
+      if (postDocument._tag === "Left") {
+        if (postDocument.left instanceof TaskMutationProgressFailure) {
+          return yield* Effect.fail(postDocument.left);
         }
+        return yield* Effect.fail(
+          new TaskMutationProgressFailure({
+            operation: "set-plan",
+            changes,
+            failure: postDocument.left,
+          }),
+        );
       }
 
       return { document, changes };
