@@ -9,7 +9,12 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { createDeferred, withTimeout } from "../test-utils";
-import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } from "./runtime";
+import {
+  createEnsureRuntime,
+  loadRepoDefaultModel,
+  loadRepoPromptOverrides,
+  loadTaskDocuments,
+} from "./runtime";
 
 const taskBootstrapFixture = {
   bootstrapId: "bootstrap-1",
@@ -65,6 +70,23 @@ describe("agent-orchestrator-runtime", () => {
       taskSessionBootstrapComplete: async () => undefined,
       taskSessionBootstrapAbort: async () => undefined,
     };
+  });
+
+  test("loads startup documents from one fresh task metadata read", async () => {
+    const taskMetadataGetFresh = mock(async () => ({
+      spec: { markdown: "# Spec", updatedAt: "2026-04-10T13:10:00.000Z" },
+      plan: { markdown: "# Plan", updatedAt: "2026-04-10T13:10:00.000Z" },
+      qaReport: { markdown: "# QA", updatedAt: "2026-04-10T13:10:00.000Z" },
+    }));
+
+    await expect(
+      loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGetFresh as never),
+    ).resolves.toEqual({
+      specMarkdown: "# Spec",
+      planMarkdown: "# Plan",
+      qaMarkdown: "# QA",
+    });
+    expect(taskMetadataGetFresh).toHaveBeenCalledWith("/tmp/repo", "task-1");
   });
 
   test("starts build bootstrap and refreshes task data when no target worktree is provided", async () => {

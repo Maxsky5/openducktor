@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
-import { RepoPullRequestSyncPartialFailure } from "./repo-pull-request-sync-partial-failure";
+import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -2538,8 +2538,11 @@ describe("createTaskService pull requests", () => {
     const failure = await Effect.runPromise(
       service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
     );
-    expect(failure).toBeInstanceOf(RepoPullRequestSyncPartialFailure);
-    expect(failure).toMatchObject({ changedTaskIds: ["task-1"], failure: mutationFailure });
+    expect(failure).toBeInstanceOf(TaskMutationProgressFailure);
+    expect(failure).toMatchObject({
+      changes: { taskIds: ["task-1"], removedTaskIds: [] },
+      failure: mutationFailure,
+    });
   });
   test("preserves a pre-write pull request sync failure without partial progress", async () => {
     const mutationFailure = new HostOperationError({
@@ -2644,8 +2647,11 @@ describe("createTaskService pull requests", () => {
     const failure = await Effect.runPromise(
       service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
     );
-    expect(failure).toBeInstanceOf(RepoPullRequestSyncPartialFailure);
-    expect(failure).toMatchObject({ changedTaskIds: ["task-1"], failure: mutationFailure });
+    expect(failure).toBeInstanceOf(TaskMutationProgressFailure);
+    expect(failure).toMatchObject({
+      changes: { taskIds: ["task-1"], removedTaskIds: [] },
+      failure: mutationFailure,
+    });
   });
   test("skips pull request sync before reading candidates when provider is unavailable", async () => {
     const calls: unknown[] = [];

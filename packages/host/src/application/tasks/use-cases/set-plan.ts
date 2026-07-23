@@ -1,3 +1,4 @@
+import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   canSetPlan,
@@ -8,14 +9,14 @@ import {
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
-import { SetPlanProgressFailure } from "../set-plan-progress-failure";
 import { replaceEpicPlanSubtasks } from "../support/planning-rules";
 import type { SetPlanInput } from "../task-inputs";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskServiceError, TaskSetPlanResult } from "../task-service";
 
 export type SetPlanUseCase = (
   input: SetPlanInput,
-) => Effect.Effect<TaskSetPlanResult, TaskServiceError | SetPlanProgressFailure>;
+) => Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
 
 export const createSetPlanUseCase =
   (taskStore: TaskStorePort): SetPlanUseCase =>
@@ -72,7 +73,7 @@ export const createSetPlanUseCase =
       }
 
       const document = yield* taskStore.setPlanDocument({ repoPath, taskId, markdown });
-      let affectedTaskIds = [taskId];
+      let changes: TaskChangeSet = { taskIds: [taskId], removedTaskIds: [] };
       if (shouldReplaceEpicSubtasks) {
         const removedTaskIds = yield* replaceEpicPlanSubtasks(
           taskStore,
@@ -81,7 +82,7 @@ export const createSetPlanUseCase =
           currentTasks,
           effectiveSubtaskCreates,
         );
-        affectedTaskIds = [taskId, ...removedTaskIds];
+        changes = { taskIds: [taskId, ...removedTaskIds], removedTaskIds };
       }
 
       if (current.status === "open" || current.status === "spec_ready") {
@@ -89,14 +90,18 @@ export const createSetPlanUseCase =
           taskStore.transitionTask({ repoPath, taskId, status: "ready_for_dev" }),
         );
         if (transition._tag === "Left") {
-          if (affectedTaskIds.length > 1) {
+          if (changes.removedTaskIds.length > 0) {
             return yield* Effect.fail(
-              new SetPlanProgressFailure({ affectedTaskIds, failure: transition.left }),
+              new TaskMutationProgressFailure({
+                operation: "set-plan",
+                changes,
+                failure: transition.left,
+              }),
             );
           }
           return yield* Effect.fail(transition.left);
         }
       }
 
-      return { document, affectedTaskIds };
+      return { document, changes };
     });

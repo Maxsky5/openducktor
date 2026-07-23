@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { canSetSpecFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { SetPlanProgressFailure } from "../set-plan-progress-failure";
+import type { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
   CreateTaskServiceInput,
   TaskService,
@@ -19,7 +19,7 @@ type TaskDocumentUseCases = Omit<
 > & {
   setPlan(
     input: Parameters<TaskService["setPlan"]>[0],
-  ): Effect.Effect<TaskSetPlanResult, TaskServiceError | SetPlanProgressFailure>;
+  ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
 };
 
 export const createTaskDocumentUseCases = ({

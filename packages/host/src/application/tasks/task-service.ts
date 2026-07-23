@@ -1,3 +1,4 @@
+import type { TaskChangeSet } from "@openducktor/contracts";
 import {
   type AgentSessionRecord,
   type BuildSessionBootstrap,
@@ -41,8 +42,6 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import { RepoPullRequestSyncPartialFailure } from "./repo-pull-request-sync-partial-failure";
-import { SetPlanProgressFailure } from "./set-plan-progress-failure";
 import { createTaskGithubDependencies } from "./support/required-task-dependencies";
 import type {
   AgentSessionDeleteInput,
@@ -70,6 +69,7 @@ import type {
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
+import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import { createTaskCloseUseCase } from "./use-cases/close-task";
 import { createTaskCompleteDirectMergeUseCase } from "./use-cases/complete-direct-merge";
 import { createTaskDeleteUseCase } from "./use-cases/delete-task";
@@ -190,22 +190,22 @@ export type TaskService = {
 };
 export type TaskDeleteResult = {
   ok: boolean;
-  affectedTaskIds: string[];
+  changes: TaskChangeSet;
 };
 export type TaskSetPlanResult = {
   document: TaskMetadataDocument;
-  affectedTaskIds: string[];
+  changes: TaskChangeSet;
 };
 export type TaskServiceWithMutationProgress = Omit<TaskService, "setPlan"> & {
   setPlan(
     input: SetPlanInput,
-  ): Effect.Effect<TaskSetPlanResult, TaskServiceError | SetPlanProgressFailure>;
+  ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
 };
 export type RepoPullRequestSyncResult = {
   ran: boolean;
   changedTaskIds: string[];
 };
-export type RepoPullRequestSyncDetailedError = TaskServiceError | RepoPullRequestSyncPartialFailure;
+export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
   devServerService?: DevServerService;
@@ -246,35 +246,22 @@ const mapRepoPullRequestSyncDetailedErrors = <A, E>(
 ): Effect.Effect<A, RepoPullRequestSyncDetailedError> =>
   effect.pipe(
     Effect.mapError((cause) =>
-      cause instanceof RepoPullRequestSyncPartialFailure ? cause : toTaskServiceError(cause),
+      cause instanceof TaskMutationProgressFailure ? cause : toTaskServiceError(cause),
     ),
   );
 
 const mapSetPlanErrors = <A, E>(
   effect: Effect.Effect<A, E>,
-): Effect.Effect<A, TaskServiceError | SetPlanProgressFailure> =>
+): Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure> =>
   effect.pipe(
     Effect.mapError((cause) =>
-      cause instanceof SetPlanProgressFailure ? cause : toTaskServiceError(cause),
+      cause instanceof TaskMutationProgressFailure ? cause : toTaskServiceError(cause),
     ),
   );
 
 export const createTaskServiceWithMutationProgress = (
   input: CreateTaskServiceInput,
-): TaskServiceWithMutationProgress => {
-  const taskService = createTaskServiceImplementation(input);
-  return {
-    ...taskService,
-    setPlan: (setPlanInput) =>
-      taskService
-        .setPlan(setPlanInput)
-        .pipe(
-          Effect.mapError((cause) =>
-            cause instanceof SetPlanProgressFailure ? cause : toTaskServiceError(cause),
-          ),
-        ),
-  };
-};
+): TaskServiceWithMutationProgress => createTaskServiceImplementation(input);
 
 const createTaskServiceImplementation = (
   input: CreateTaskServiceInput,
@@ -408,7 +395,7 @@ export const withoutTaskMutationProgress = (
       taskService
         .setPlan(setPlanInput)
         .pipe(
-          Effect.catchTag("SetPlanProgressFailure", (progressFailure) =>
+          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
             Effect.fail(progressFailure.failure),
           ),
         ),

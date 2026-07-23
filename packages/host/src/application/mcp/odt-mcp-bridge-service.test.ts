@@ -218,17 +218,20 @@ describe("createOdtMcpBridgeService", () => {
     });
     const taskSyncService: Pick<
       TaskSyncService,
-      "publishExternalTaskCreated" | "publishTasksUpdated"
+      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
     > = {
       publishExternalTaskCreated(_repoPath, taskId) {
         return Effect.sync(() => {
           events.push({ kind: "created", taskIds: [taskId] });
         });
       },
-      publishTasksUpdated(_repoPath, taskIds) {
+      publishTasksUpdated(_repoPath, changes) {
         return Effect.sync(() => {
-          events.push({ kind: "updated", taskIds });
+          events.push({ kind: "updated", taskIds: changes.taskIds });
         });
+      },
+      syncRepoPullRequests() {
+        return Effect.succeed({ ran: true, changedTaskIds: [] });
       },
     };
     const service = createOdtMcpBridgeServiceForTest({
@@ -273,7 +276,7 @@ describe("createOdtMcpBridgeService", () => {
             revision: 2,
             updatedAt: "2026-07-22T00:00:00.000Z",
           },
-          affectedTaskIds: ["epic-1", "old-child"],
+          changes: { taskIds: ["epic-1", "old-child"], removedTaskIds: ["old-child"] },
         }),
     });
     const service = createOdtMcpBridgeServiceForTest({

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -17,6 +17,7 @@ import {
 import { Deferred, Effect, TestClock, TestContext } from "effect";
 import WebSocket from "ws";
 import { createWebLogger, type WebLogger } from "./logger";
+import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
   BufferedHostEventBus,
   stopTypescriptHostBackendServices,
@@ -101,6 +102,7 @@ type TestRequestOptions = Partial<{
   beginShutdown: () => void;
   shutdownStarted: boolean;
   stop: () => Promise<void>;
+  taskEventLeaseManager: TaskEventLeaseManager;
 }>;
 
 const handleTestRequest = (
@@ -113,8 +115,11 @@ const handleTestRequest = (
       allowedOrigins: new Set(),
       appToken: options.appToken ?? APP_TOKEN,
       controlToken: options.controlToken ?? CONTROL_TOKEN,
-      eventBus: options.eventBus ?? new BufferedHostEventBus(),
+      eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
       hostCommandRouter,
+      ...(options.taskEventLeaseManager
+        ? { taskEventLeaseManager: options.taskEventLeaseManager }
+        : {}),
       localAttachments: createLocalAttachmentAdapter(),
       logger: testLogger,
       request,
@@ -526,7 +531,7 @@ describe("TypeScript web host backend", () => {
         method: "GET",
         headers: { "x-openducktor-app-token": APP_TOKEN },
       }),
-      { eventBus: new BufferedHostEventBus() },
+      { eventBus: new BufferedHostEventBus({ report: () => {} }) },
     );
 
     expect(response.status).toBe(200);
@@ -543,12 +548,126 @@ describe("TypeScript web host backend", () => {
     }
   });
 
-  test("multiplexes every host event channel through the shared SSE endpoint", async () => {
-    const eventBus = new BufferedHostEventBus();
+  test("uses task leases instead of generic event replay and ignores Last-Event-ID", async () => {
+    let sink: ((frame: unknown) => void) | null = null;
+    const subscribeCalls: unknown[] = [];
+    const acknowledged: unknown[] = [];
+    const taskEventLeaseManager = createTaskEventLeaseManager({
+      encodeFrame: (frame) =>
+        new TextEncoder().encode(
+          `id: ${frame.cursor.epoch}:${frame.cursor.sequence}\nevent: task-frame\ndata: ${JSON.stringify(frame)}\n\n`,
+        ),
+      reportDeliveryFailure: () => {},
+      taskEventStream: {
+        acknowledge: (input) => acknowledged.push(input),
+        publish: () => {},
+        subscribe: (input, nextSink) => {
+          subscribeCalls.push(input);
+          sink = nextSink as (frame: unknown) => void;
+          return { subscriptionId: "host-subscription", unsubscribe: () => {} };
+        },
+      },
+    });
+    const create = await handleTestRequest(
+      new Request("http://127.0.0.1/task-events/subscriptions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-openducktor-app-token": APP_TOKEN },
+        body: JSON.stringify({ cursor: null }),
+      }),
+      { taskEventLeaseManager },
+    );
+    expect(create.status).toBe(201);
+    const created = (await create.json()) as { subscriptionId: string; streamToken: string };
+    expect(subscribeCalls).toEqual([{ cursor: null }]);
+
+    const stream = await handleTestRequest(
+      {
+        headers: new Headers([
+          ["cookie", `openducktor_web_session=${APP_TOKEN}`],
+          ["last-event-id", "999999"],
+        ]),
+        method: "GET",
+        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
+      } as Request,
+      { taskEventLeaseManager },
+    );
+    expect(stream.status).toBe(200);
+    const reader = stream.body?.getReader();
+    if (!reader || !sink) throw new Error("Expected task event stream subscription.");
+    const frame = {
+      type: "snapshot_required" as const,
+      cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
+      reason: "buffer_gap" as const,
+    };
+    (sink as (nextFrame: typeof frame) => void)(frame);
+    const sse = new TextDecoder().decode((await reader.read()).value);
+    expect(sse).toContain("event: task-frame");
+    expect(sse).toContain(JSON.stringify(frame));
+    await reader.cancel();
+
+    const reconnect = await handleTestRequest(
+      {
+        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+        method: "GET",
+        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
+      } as Request,
+      { taskEventLeaseManager },
+    );
+    expect(reconnect.status).toBe(200);
+    const reconnectReader = reconnect.body?.getReader();
+    if (!reconnectReader) throw new Error("Expected task event stream reconnection.");
+    expect(new TextDecoder().decode((await reconnectReader.read()).value)).toContain(
+      JSON.stringify(frame),
+    );
+    expect(subscribeCalls).toHaveLength(1);
+
+    const acknowledgement = await handleTestRequest(
+      new Request(`http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/ack`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+          "x-openducktor-task-stream-token": created.streamToken,
+        },
+        body: JSON.stringify({ cursor: frame.cursor }),
+      }),
+      { taskEventLeaseManager },
+    );
+    expect(acknowledgement.status).toBe(204);
+    expect(acknowledged).toEqual([{ cursor: frame.cursor, subscriptionId: "host-subscription" }]);
+    await reconnectReader.cancel();
+
+    const lease = taskEventLeaseManager.get(created.subscriptionId);
+    if (!lease) throw new Error("Expected task event stream lease.");
+    taskEventLeaseManager.delete(lease);
+    const expired = await handleTestRequest(
+      {
+        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+        method: "GET",
+        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
+      } as Request,
+      { taskEventLeaseManager },
+    );
+    expect(expired.status).toBe(410);
+    expect(subscribeCalls).toHaveLength(1);
+
+    const tampered = await handleTestRequest(
+      {
+        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+        method: "GET",
+        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=tampered`,
+      } as Request,
+      { taskEventLeaseManager },
+    );
+    expect(tampered.status).toBe(403);
+    expect(subscribeCalls).toHaveLength(1);
+  });
+
+  test("multiplexes non-task host event channels through the shared SSE endpoint", async () => {
+    const eventBus = new BufferedHostEventBus({ report: () => {} });
     const events = [
       ["openducktor://run-event", { type: "run" }],
       ["openducktor://dev-server-event", { type: "dev-server" }],
-      ["openducktor://task-event", { type: "task" }],
       [
         "openducktor://agent-session-live-event",
         {
@@ -594,8 +713,29 @@ describe("TypeScript web host backend", () => {
     }
   });
 
+  test("isolates buffered bus delivery failures after accepting and buffering the event", () => {
+    const failure = new Error("first listener failed");
+    const reported: unknown[] = [];
+    const eventBus = new BufferedHostEventBus({
+      report: ({ cause }) => reported.push(cause),
+    });
+    const received = mock(() => {});
+    const unsubscribeReceived = eventBus.subscribe("openducktor://run-event", received);
+    eventBus.subscribe("openducktor://run-event", () => {
+      throw failure;
+    });
+    let unsubscribeDuringDelivery = () => {};
+    eventBus.subscribe("openducktor://run-event", () => unsubscribeDuringDelivery());
+    unsubscribeDuringDelivery = unsubscribeReceived;
+
+    expect(() => eventBus.publish("openducktor://run-event", { type: "run" })).not.toThrow();
+    expect(received).toHaveBeenCalledWith({ type: "run" });
+    expect(reported).toEqual([failure]);
+    expect(eventBus.stream().replayAfter(0)).toHaveLength(1);
+  });
+
   test("emits a stream warning when shared SSE replay cannot cover the reconnect gap", async () => {
-    const eventBus = new BufferedHostEventBus();
+    const eventBus = new BufferedHostEventBus({ report: () => {} });
     for (let index = 0; index < 258; index += 1) {
       eventBus.publish("openducktor://dev-server-event", {
         type: "terminal_chunk",
@@ -888,7 +1028,7 @@ describe("TypeScript web host backend", () => {
   });
 
   test("rejects new SSE streams after the shutdown gate without opening a subscription", async () => {
-    const eventBus = new BufferedHostEventBus();
+    const eventBus = new BufferedHostEventBus({ report: () => {} });
     const stream = eventBus.stream();
     const originalStream = eventBus.stream.bind(eventBus);
     const originalSubscribe = stream.subscribe.bind(stream);
@@ -921,7 +1061,7 @@ describe("TypeScript web host backend", () => {
   });
 
   test("keeps active SSE streams open until forced server shutdown", async () => {
-    const eventBus = new BufferedHostEventBus();
+    const eventBus = new BufferedHostEventBus({ report: () => {} });
     const disposeStarted = createDeferred();
     const disposeReleased = createDeferred();
     let shutdownStarted = false;

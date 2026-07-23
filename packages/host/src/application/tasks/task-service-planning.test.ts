@@ -278,7 +278,7 @@ describe("createTaskService planning", () => {
         updatedAt: "2026-05-10T10:00:00.000Z",
         revision: 2,
       },
-      affectedTaskIds: ["epic-1", "old-child"],
+      changes: { taskIds: ["epic-1", "old-child"], removedTaskIds: ["old-child"] },
     });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
@@ -468,15 +468,16 @@ describe("createTaskService planning", () => {
         return deletionCount === 1 ? Effect.succeed(true) : Effect.fail(mutationFailure);
       },
     };
-    const events: string[][] = [];
+    const events: Array<{ taskIds: string[]; removedTaskIds: string[] }> = [];
     const service = createEventPublishingTaskService({
       taskService: createTaskServiceWithMutationProgress({ taskStore }),
       taskSyncService: {
         publishExternalTaskCreated: () => Effect.void,
-        publishTasksUpdated: (_repoPath, taskIds) =>
+        publishTasksUpdated: (_repoPath, changes) =>
           Effect.sync(() => {
-            events.push(taskIds);
+            events.push(changes);
           }),
+        syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
       },
     });
 
@@ -493,6 +494,6 @@ describe("createTaskService planning", () => {
           .pipe(Effect.flip),
       ),
     ).resolves.toBe(mutationFailure);
-    expect(events).toEqual([["epic-1", "child-1"]]);
+    expect(events).toEqual([{ taskIds: ["epic-1", "child-1"], removedTaskIds: ["child-1"] }]);
   });
 });

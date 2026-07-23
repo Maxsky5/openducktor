@@ -3,11 +3,21 @@ import type {
   AgentSessionLiveRefreshInput,
   AppUpdateCommandResult,
   AppUpdateState,
+  TaskEventCursor,
+  TaskEventStreamFrame,
   TerminalFailure,
 } from "@openducktor/contracts";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 
 export type HostEventListener = (payload: unknown) => void;
+
+export type TaskStreamFrame = TaskEventStreamFrame;
+
+export type TaskStreamSubscription = {
+  subscriptionId: string;
+  acknowledge(cursor: TaskEventCursor): Promise<void>;
+  unsubscribe(): void | Promise<void>;
+};
 
 export type DevServerEventSubscription = {
   transportEpoch: string;
@@ -22,7 +32,11 @@ export type HostBridge = {
     input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ) => Promise<() => void>;
-  subscribeTaskEvents: (listener: HostEventListener) => Promise<() => void>;
+  subscribeTaskStream: (
+    input: { cursor: TaskEventCursor | null },
+    onFrame: (frame: TaskStreamFrame) => void,
+    onTerminalFailure?: (error: unknown) => void,
+  ) => Promise<TaskStreamSubscription>;
 };
 
 export type ShellCapabilities = {
@@ -115,7 +129,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeRunEvents: failUnavailable,
   subscribeDevServerEvents: failUnavailable,
   observeAgentSessionLive: failUnavailable,
-  subscribeTaskEvents: failUnavailable,
+  subscribeTaskStream: failUnavailable,
   appUpdates: createDisabledAppUpdateBridge({
     status: "disabled",
     currentVersion: "unknown",

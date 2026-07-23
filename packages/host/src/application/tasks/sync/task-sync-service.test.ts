@@ -1,34 +1,47 @@
 import { describe, expect, test } from "bun:test";
+import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
-import type { HostEventBusPort } from "../../../events/host-event-bus";
+import type { TaskEventStreamPort } from "../../../events/task-event-stream";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
-import { RepoPullRequestSyncPartialFailure } from "../repo-pull-request-sync-partial-failure";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskService } from "../task-service";
 import { createTaskSyncService } from "./task-sync-service";
 
 type TaskSyncServiceTestInput = Omit<
   Parameters<typeof createTaskSyncService>[0],
-  "onBackgroundFailure"
+  "onBackgroundFailure" | "publicationReporter" | "taskEventStream"
 > &
-  Partial<Pick<Parameters<typeof createTaskSyncService>[0], "onBackgroundFailure">>;
+  Partial<
+    Pick<Parameters<typeof createTaskSyncService>[0], "onBackgroundFailure" | "publicationReporter">
+  > & { eventBus: Pick<TaskEventStreamPort, "publish"> };
 
 const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
   createTaskSyncService({
     ...input,
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
+    publicationReporter: input.publicationReporter ?? { report: () => Effect.void },
+    taskEventStream: {
+      publish: input.eventBus.publish,
+      subscribe: () => {
+        throw new Error("unexpected task event stream subscription");
+      },
+      acknowledge: () => {
+        throw new Error("unexpected task event stream acknowledgement");
+      },
+    },
   });
 const createEventBus = () => {
-  const events: Array<{
-    channel: string;
-    payload: unknown;
-  }> = [];
-  const eventBus: HostEventBusPort = {
-    publish(channel, payload) {
-      events.push({ channel, payload });
+  const events: ExternalTaskSyncEvent[] = [];
+  const eventBus: TaskEventStreamPort = {
+    publish(event) {
+      events.push(event);
     },
     subscribe() {
-      return () => {};
+      throw new Error("unexpected task event stream subscription");
+    },
+    acknowledge() {
+      throw new Error("unexpected task event stream acknowledgement");
     },
   };
   return { eventBus, events };
@@ -40,6 +53,196 @@ const createWorkspaceSettingsServiceFake = (
   service: Pick<WorkspaceSettingsService, "listWorkspaces">,
 ): WorkspaceSettingsService => service as unknown as WorkspaceSettingsService;
 describe("createTaskSyncService", () => {
+  test("reports task publication acceptance failures without rejecting committed work", async () => {
+    const reports: unknown[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus: {
+        publish() {
+          throw new Error("event transport unavailable");
+        },
+      },
+      publicationReporter: {
+        report: (failure) =>
+          Effect.sync(() => {
+            reports.push(failure);
+          }),
+      },
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces: () => Effect.succeed([]),
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.publishTasksUpdated(
+          "/repo",
+          { taskIds: ["task-1"], removedTaskIds: [] },
+          "task-update",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+    expect(reports).toEqual([
+      expect.objectContaining({ operation: "task-update", repoPath: "/repo", stage: "acceptance" }),
+    ]);
+  });
+  test("reports duplicate task IDs without normalizing or publishing the change set", async () => {
+    const { eventBus, events } = createEventBus();
+    const reports: unknown[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      publicationReporter: {
+        report: (failure) =>
+          Effect.sync(() => {
+            reports.push(failure);
+          }),
+      },
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces: () => Effect.succeed([]),
+      }),
+    });
+    const changes = { taskIds: ["task-1", "task-1"], removedTaskIds: [] };
+
+    await expect(
+      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update")),
+    ).resolves.toBeUndefined();
+
+    expect(events).toEqual([]);
+    expect(reports).toEqual([
+      expect.objectContaining({
+        operation: "task-update",
+        repoPath: "/repo",
+        changes,
+        stage: "acceptance",
+        cause: expect.objectContaining({ issues: expect.any(Array) }),
+      }),
+    ]);
+  });
+  test("reports removed IDs outside the affected IDs without dropping them", async () => {
+    const { eventBus, events } = createEventBus();
+    const reports: unknown[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      publicationReporter: {
+        report: (failure) =>
+          Effect.sync(() => {
+            reports.push(failure);
+          }),
+      },
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces: () => Effect.succeed([]),
+      }),
+    });
+    const changes = { taskIds: ["task-1"], removedTaskIds: ["task-2"] };
+
+    await expect(
+      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update")),
+    ).resolves.toBeUndefined();
+
+    expect(events).toEqual([]);
+    expect(reports).toEqual([
+      expect.objectContaining({
+        operation: "task-update",
+        repoPath: "/repo",
+        changes,
+        stage: "acceptance",
+        cause: expect.objectContaining({ issues: expect.any(Array) }),
+      }),
+    ]);
+  });
+  test("reports an empty proposed event instead of treating it as a no-op", async () => {
+    const { eventBus, events } = createEventBus();
+    const reports: unknown[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      publicationReporter: {
+        report: (failure) =>
+          Effect.sync(() => {
+            reports.push(failure);
+          }),
+      },
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces: () => Effect.succeed([]),
+      }),
+    });
+    const changes = { taskIds: [], removedTaskIds: [] };
+
+    await expect(
+      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update")),
+    ).resolves.toBeUndefined();
+
+    expect(events).toEqual([]);
+    expect(reports).toEqual([
+      expect.objectContaining({
+        operation: "task-update",
+        repoPath: "/repo",
+        changes,
+        stage: "acceptance",
+        cause: expect.objectContaining({ issues: expect.any(Array) }),
+      }),
+    ]);
+  });
+  test("publishes valid affected and removed task IDs unchanged", async () => {
+    const { eventBus, events } = createEventBus();
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces: () => Effect.succeed([]),
+      }),
+    });
+    const changes = { taskIds: ["task-1", "task-2"], removedTaskIds: ["task-2"] };
+
+    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "delete-task"));
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        kind: "tasks_updated",
+        taskIds: ["task-1", "task-2"],
+        removedTaskIds: ["task-2"],
+      }),
+    ]);
+  });
+  test("does not construct an event for a legitimate no-op pull request sync", async () => {
+    const { eventBus, events } = createEventBus();
+    const reports: unknown[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      publicationReporter: {
+        report: (failure) =>
+          Effect.sync(() => {
+            reports.push(failure);
+          }),
+      },
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces: () => Effect.succeed([]),
+      }),
+    });
+
+    await expect(Effect.runPromise(service.syncRepoPullRequests("/repo"))).resolves.toEqual({
+      ran: true,
+      changedTaskIds: [],
+    });
+
+    expect(events).toEqual([]);
+    expect(reports).toEqual([]);
+  });
   test("publishes host-compatible external task creation events", async () => {
     const { eventBus, events } = createEventBus();
     const service = createTaskSyncServiceForTest({
@@ -78,14 +281,11 @@ describe("createTaskSyncService", () => {
     await Effect.runPromise(service.publishExternalTaskCreated("/repo", "task-1"));
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
-      channel: "openducktor://task-event",
-      payload: {
-        kind: "external_task_created",
-        repoPath: "/repo",
-        taskId: "task-1",
-      },
+      kind: "external_task_created",
+      repoPath: "/repo",
+      taskId: "task-1",
     });
-    expect(events[0]?.payload).toMatchObject({
+    expect(events[0]).toMatchObject({
       eventId: expect.any(String),
       emittedAt: expect.any(String),
     });
@@ -143,12 +343,9 @@ describe("createTaskSyncService", () => {
     expect(calls).toEqual([{ repoPath: "/repo" }]);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
-      channel: "openducktor://task-event",
-      payload: {
-        kind: "tasks_updated",
-        repoPath: "/repo",
-        taskIds: ["task-1", "task-2"],
-      },
+      kind: "tasks_updated",
+      repoPath: "/repo",
+      taskIds: ["task-1", "task-2"],
     });
   });
   test("publishes partial sync progress once and returns the original failure", async () => {
@@ -162,8 +359,9 @@ describe("createTaskSyncService", () => {
       taskService: createTaskServiceFake({
         repoPullRequestSyncDetailed() {
           return Effect.fail(
-            new RepoPullRequestSyncPartialFailure({
-              changedTaskIds: ["task-1", "task-1", "task-2"],
+            new TaskMutationProgressFailure({
+              operation: "repo-pull-request-sync",
+              changes: { taskIds: ["task-1", "task-2"], removedTaskIds: [] },
               failure: mutationFailure,
             }),
           );
@@ -192,7 +390,9 @@ describe("createTaskSyncService", () => {
     ).resolves.toBe(mutationFailure);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
-      payload: { kind: "tasks_updated", repoPath: "/repo", taskIds: ["task-1", "task-2"] },
+      kind: "tasks_updated",
+      repoPath: "/repo",
+      taskIds: ["task-1", "task-2"],
     });
   });
   test("combines partial sync and publication failures", async () => {
@@ -206,15 +406,13 @@ describe("createTaskSyncService", () => {
         publish() {
           throw publicationCause;
         },
-        subscribe() {
-          return () => {};
-        },
       },
       taskService: createTaskServiceFake({
         repoPullRequestSyncDetailed: () =>
           Effect.fail(
-            new RepoPullRequestSyncPartialFailure({
-              changedTaskIds: ["task-1"],
+            new TaskMutationProgressFailure({
+              operation: "repo-pull-request-sync",
+              changes: { taskIds: ["task-1"], removedTaskIds: [] },
               failure: mutationFailure,
             }),
           ),
@@ -238,11 +436,7 @@ describe("createTaskSyncService", () => {
 
     await expect(
       Effect.runPromise(service.syncActiveWorkspacePullRequests().pipe(Effect.flip)),
-    ).resolves.toMatchObject({
-      operation: "task-sync.pull-request-sync",
-      cause: mutationFailure,
-      details: { mutationFailure },
-    });
+    ).resolves.toBe(mutationFailure);
   });
   test("logs a partial sync failure once after publishing one batch in the scheduler loop", async () => {
     const { eventBus, events } = createEventBus();
@@ -266,8 +460,9 @@ describe("createTaskSyncService", () => {
           taskService: createTaskServiceFake({
             repoPullRequestSyncDetailed: () =>
               Effect.fail(
-                new RepoPullRequestSyncPartialFailure({
-                  changedTaskIds: ["task-1"],
+                new TaskMutationProgressFailure({
+                  operation: "repo-pull-request-sync",
+                  changes: { taskIds: ["task-1"], removedTaskIds: [] },
                   failure: mutationFailure,
                 }),
               ),

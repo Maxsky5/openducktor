@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { validateParentRelationshipsForCreate } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
-import { SetPlanProgressFailure } from "../set-plan-progress-failure";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskServiceError } from "../task-service";
 export const replaceEpicPlanSubtasks = (
   taskStore: TaskStorePort,
@@ -50,8 +50,12 @@ export const replaceEpicPlanSubtasks = (
       return yield* Effect.fail(result.left);
     }
     return yield* Effect.fail(
-      new SetPlanProgressFailure({
-        affectedTaskIds: [task.id, ...removedTaskIds],
+      new TaskMutationProgressFailure({
+        operation: "set-plan",
+        changes: {
+          taskIds: [task.id, ...removedTaskIds],
+          removedTaskIds,
+        },
         failure: result.left,
       }),
     );

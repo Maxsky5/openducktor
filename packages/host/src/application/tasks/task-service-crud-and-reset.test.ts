@@ -519,7 +519,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true, affectedTaskIds: ["task-1"] });
+    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
@@ -784,7 +784,10 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo-alias", taskId: "epic-1", deleteSubtasks: true }),
       ),
-    ).resolves.toEqual({ ok: true, affectedTaskIds: ["epic-1", "task-1"] });
+    ).resolves.toEqual({
+      ok: true,
+      changes: { taskIds: ["epic-1", "task-1"], removedTaskIds: ["epic-1", "task-1"] },
+    });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
       {
@@ -962,7 +965,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true, affectedTaskIds: ["task-1"] });
+    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -1044,7 +1047,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true, affectedTaskIds: ["task-1"] });
+    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {

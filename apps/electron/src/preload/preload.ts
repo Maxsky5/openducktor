@@ -20,9 +20,11 @@ import {
   type OpenDucktorElectronTerminalApi,
 } from "../shared/electron-bridge-contract";
 import { createElectronHostInvoke } from "./electron-host-invoke";
+import { createElectronTaskStreamApi } from "./electron-task-stream-ipc";
 
 const { contextBridge, ipcRenderer } = electron;
 const invokeHost = createElectronHostInvoke(ipcRenderer);
+const taskStream = createElectronTaskStreamApi(ipcRenderer);
 
 const appUpdates: OpenDucktorElectronAppUpdateApi = {
   async getState() {
@@ -110,6 +112,7 @@ const electronApi: OpenDucktorElectronApi = {
     return ipcRenderer.invoke(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, path);
   },
   terminals,
+  taskStream,
 };
 
 contextBridge.exposeInMainWorld("openducktorElectron", electronApi);

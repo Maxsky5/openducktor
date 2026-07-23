@@ -41,11 +41,7 @@ type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   agentEngine: AgentEnginePort;
   /**
    * Optional dependency seam for tests and specialized callers.
@@ -268,7 +264,8 @@ export function useAgentOrchestratorOperations({
         resolveTaskWorktree: hostPort.taskWorktreeGet,
         ensureRuntime,
         ensureExistingSessionRuntime,
-        loadTaskDocuments,
+        loadTaskDocuments: (repoPath, taskId) =>
+          loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGetFresh),
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
         liveSessionHost: liveSessionHostPort,

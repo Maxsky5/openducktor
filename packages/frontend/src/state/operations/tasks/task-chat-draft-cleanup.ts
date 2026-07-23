@@ -20,103 +20,134 @@ type TaskChatDraftCleanupInput = {
   repoPath: string;
   workspaceId: string | null;
   taskIds: string[];
-  agentSessionReadPort: AgentSessionReadPort;
 };
 
-type RunTaskMutationWithChatDraftCleanupInput<TResult> = TaskChatDraftCleanupInput & {
+export type RunTaskMutationWithChatDraftCleanupInput<TResult> = TaskChatDraftCleanupInput & {
   mutation: () => Promise<TResult>;
   shouldCleanup?: (result: TResult) => boolean;
 };
 
-const reportTaskChatDraftCleanupFailure = (error: unknown): void => {
-  toast.error("Task updated, but chat draft cleanup failed", {
-    description: errorMessage(error),
-  });
+export type TaskChatDraftClearPort = {
+  clearDraftsForTargets: (targets: AgentChatDraftCleanupTarget[]) => void;
 };
 
-export const prepareTaskChatDraftCleanupTargets = async ({
-  queryClient,
-  repoPath,
-  workspaceId,
-  taskIds,
-  agentSessionReadPort,
-}: TaskChatDraftCleanupInput): Promise<TaskChatDraftCleanupPlan> => {
-  if (!workspaceId) {
-    throw new Error("Cannot clean chat drafts without an active workspace id.");
-  }
+export type TaskChatDraftCleanupNotificationPort = {
+  error: (title: string, options: { description: string }) => unknown;
+};
 
-  const sessionListsByTaskId = await loadAgentSessionListsFromQuery(
+export type TaskChatDraftCleanup = {
+  prepareTargets: (input: TaskChatDraftCleanupInput) => Promise<TaskChatDraftCleanupPlan>;
+  runMutation: <TResult>(
+    input: RunTaskMutationWithChatDraftCleanupInput<TResult>,
+  ) => Promise<TResult>;
+};
+
+export const createTaskChatDraftCleanup = ({
+  agentSessionReadPort,
+  draftClearPort,
+  notificationPort,
+}: {
+  agentSessionReadPort: AgentSessionReadPort;
+  draftClearPort: TaskChatDraftClearPort;
+  notificationPort: TaskChatDraftCleanupNotificationPort;
+}): TaskChatDraftCleanup => {
+  const reportFailure = (error: unknown): void => {
+    notificationPort.error("Task updated, but chat draft cleanup failed", {
+      description: errorMessage(error),
+    });
+  };
+
+  const prepareTargets = async ({
     queryClient,
     repoPath,
+    workspaceId,
     taskIds,
-    {
-      forceFresh: true,
-      readPort: agentSessionReadPort,
-    },
-  );
-  const targets = new Map<string, AgentChatDraftCleanupTarget>();
-
-  for (const [taskId, sessions] of Object.entries(sessionListsByTaskId)) {
-    for (const session of sessions) {
-      const target: AgentChatDraftCleanupTarget = {
-        workspaceId,
-        externalSessionId: session.externalSessionId,
-        runtimeKind: session.runtimeKind,
-        workingDirectory: session.workingDirectory,
-        taskId,
-      };
-      targets.set(toAgentChatDraftStorageKey(target), target);
+  }: TaskChatDraftCleanupInput): Promise<TaskChatDraftCleanupPlan> => {
+    if (!workspaceId) {
+      throw new Error("Cannot clean chat drafts without an active workspace id.");
     }
-  }
 
-  return { targets: Array.from(targets.values()) };
-};
-
-export const runTaskChatDraftCleanupAfterSuccess = (plan: TaskChatDraftCleanupPlan): boolean => {
-  const { targets } = plan;
-  if (targets.length === 0) {
-    return true;
-  }
-
-  try {
-    clearAgentChatDraftsForTargets(targets);
-    return true;
-  } catch (error) {
-    reportTaskChatDraftCleanupFailure(error);
-    return false;
-  }
-};
-
-export const runTaskMutationWithChatDraftCleanup = async <TResult>({
-  queryClient,
-  repoPath,
-  workspaceId,
-  taskIds,
-  agentSessionReadPort,
-  mutation,
-  shouldCleanup = () => true,
-}: RunTaskMutationWithChatDraftCleanupInput<TResult>): Promise<TResult> => {
-  let cleanupTargets: TaskChatDraftCleanupPlan | null = null;
-  let cleanupTargetLookupError: unknown = null;
-  try {
-    cleanupTargets = await prepareTaskChatDraftCleanupTargets({
+    const sessionListsByTaskId = await loadAgentSessionListsFromQuery(
       queryClient,
       repoPath,
-      workspaceId,
       taskIds,
-      agentSessionReadPort,
-    });
-  } catch (error) {
-    cleanupTargetLookupError = error;
-  }
+      { forceFresh: true, readPort: agentSessionReadPort },
+    );
+    const targets = new Map<string, AgentChatDraftCleanupTarget>();
 
-  const result = await mutation();
-  if (shouldCleanup(result)) {
-    if (cleanupTargetLookupError) {
-      reportTaskChatDraftCleanupFailure(cleanupTargetLookupError);
-    } else if (cleanupTargets) {
-      runTaskChatDraftCleanupAfterSuccess(cleanupTargets);
+    for (const [taskId, sessions] of Object.entries(sessionListsByTaskId)) {
+      for (const session of sessions) {
+        const target: AgentChatDraftCleanupTarget = {
+          workspaceId,
+          externalSessionId: session.externalSessionId,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+          taskId,
+        };
+        targets.set(toAgentChatDraftStorageKey(target), target);
+      }
     }
-  }
-  return result;
+
+    return { targets: Array.from(targets.values()) };
+  };
+
+  const runMutation = async <TResult>({
+    mutation,
+    shouldCleanup = () => true,
+    ...input
+  }: RunTaskMutationWithChatDraftCleanupInput<TResult>): Promise<TResult> => {
+    let cleanupTargets: TaskChatDraftCleanupPlan | null = null;
+    let cleanupTargetLookupError: unknown = null;
+    try {
+      cleanupTargets = await prepareTargets(input);
+    } catch (error) {
+      cleanupTargetLookupError = error;
+    }
+
+    const result = await mutation();
+    if (!shouldCleanup(result)) {
+      return result;
+    }
+    if (cleanupTargetLookupError) {
+      reportFailure(cleanupTargetLookupError);
+      return result;
+    }
+    if (!cleanupTargets || cleanupTargets.targets.length === 0) {
+      return result;
+    }
+
+    try {
+      draftClearPort.clearDraftsForTargets(cleanupTargets.targets);
+    } catch (error) {
+      reportFailure(error);
+    }
+    return result;
+  };
+
+  return { prepareTargets, runMutation };
+};
+
+export const createProductionTaskChatDraftCleanup = (
+  agentSessionReadPort: AgentSessionReadPort,
+): TaskChatDraftCleanup =>
+  createTaskChatDraftCleanup({
+    agentSessionReadPort,
+    draftClearPort: { clearDraftsForTargets: clearAgentChatDraftsForTargets },
+    notificationPort: toast,
+  });
+
+export const prepareTaskChatDraftCleanupTargets = (
+  input: TaskChatDraftCleanupInput & { agentSessionReadPort: AgentSessionReadPort },
+): Promise<TaskChatDraftCleanupPlan> => {
+  const { agentSessionReadPort, ...cleanupInput } = input;
+  return createProductionTaskChatDraftCleanup(agentSessionReadPort).prepareTargets(cleanupInput);
+};
+
+export const runTaskMutationWithChatDraftCleanup = <TResult>(
+  input: RunTaskMutationWithChatDraftCleanupInput<TResult> & {
+    agentSessionReadPort: AgentSessionReadPort;
+  },
+): Promise<TResult> => {
+  const { agentSessionReadPort, ...cleanupInput } = input;
+  return createProductionTaskChatDraftCleanup(agentSessionReadPort).runMutation(cleanupInput);
 };

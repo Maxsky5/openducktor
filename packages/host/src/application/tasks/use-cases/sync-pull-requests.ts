@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { RepoPullRequestSyncPartialFailure } from "../repo-pull-request-sync-partial-failure";
 import { cleanupMergedBuilderState } from "../support/builder-worktree-cleanup";
 import {
   fetchLinkedPullRequest,
@@ -15,6 +14,7 @@ import {
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { taskListWithCurrent } from "../support/task-workflow-helpers";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService, TaskServiceError } from "../task-service";
 
 export const createTaskPullRequestSyncUseCases = ({
@@ -126,8 +126,9 @@ export const createTaskPullRequestSyncUseCases = ({
         return yield* Effect.fail(failure);
       }
       return yield* Effect.fail(
-        new RepoPullRequestSyncPartialFailure({
-          changedTaskIds: [...changedTaskIds],
+        new TaskMutationProgressFailure({
+          operation: "repo-pull-request-sync",
+          changes: { taskIds: [...changedTaskIds], removedTaskIds: [] },
           failure,
         }),
       );
@@ -138,7 +139,7 @@ export const createTaskPullRequestSyncUseCases = ({
     repoPullRequestSync(input) {
       return Effect.gen(function* () {
         const result = yield* repoPullRequestSyncDetailed(input).pipe(
-          Effect.catchTag("RepoPullRequestSyncPartialFailure", (partialFailure) =>
+          Effect.catchTag("TaskMutationProgressFailure", (partialFailure) =>
             Effect.fail(partialFailure.failure),
           ),
         );

@@ -6,11 +6,7 @@ import { requireActiveRepo } from "./task-operations-model";
 
 type UseDelegationOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
 };
 
 type UseDelegationOperationsResult = {

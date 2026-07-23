@@ -16,7 +16,6 @@ import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract"
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
-const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 let nextDevServerTransportEpoch = 0;
 
@@ -85,7 +84,7 @@ export const createElectronShellBridge = (): ShellBridge => {
       }
       return unsubscribe;
     },
-    subscribeTaskEvents: subscribeElectronEvent(electronApi, TASK_EVENT_CHANNEL),
+    subscribeTaskStream: (input, onFrame) => electronApi.taskStream.subscribe(input, onFrame),
     appUpdates: {
       getState: async () => readAppUpdateState(await electronApi.appUpdates.getState()),
       check: async (input) => readAppUpdateCommandResult(await electronApi.appUpdates.check(input)),

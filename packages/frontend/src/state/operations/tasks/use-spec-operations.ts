@@ -1,6 +1,6 @@
 import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { TaskDocumentPayload } from "../../../types/task-documents";
 import { resolveLatestDocumentPayload } from "../../queries/document-utils";
@@ -10,7 +10,7 @@ import {
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "../../queries/documents";
-import { refreshRepoTaskViewsAfterMutation } from "../../queries/task-view-sync";
+import { getProductionTaskViewSync, type TaskViewSync } from "../../queries/task-view-sync";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -28,6 +28,26 @@ type UseSpecOperationsResult = {
   savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
+type SpecDocument = { markdown: string; updatedAt: string | null };
+
+export type SpecOperationsHost = Pick<
+  typeof host,
+  "setSpec" | "saveSpecDocument" | "savePlanDocument"
+>;
+
+export type SpecDocumentLoaders = {
+  loadSpecDocument: (repoPath: string, taskId: string) => Promise<SpecDocument>;
+  loadPlanDocument: (repoPath: string, taskId: string) => Promise<SpecDocument>;
+  loadQaReportDocument: (repoPath: string, taskId: string) => Promise<SpecDocument>;
+};
+
+export type CreateSpecOperationsArgs = {
+  activeRepoPath: string | null;
+  host: SpecOperationsHost;
+  queryClient: QueryClient;
+  taskViewSync: Pick<TaskViewSync, "refreshAfterLocalMutation">;
+} & SpecDocumentLoaders;
+
 const setLatestDocumentPayload = (
   current: TaskDocumentPayload | undefined,
   markdown: string,
@@ -39,48 +59,51 @@ const setLatestDocumentPayload = (
   });
 };
 
-export function useSpecOperations({
-  activeWorkspace,
-}: UseSpecOperationsArgs): UseSpecOperationsResult {
-  const queryClient = useQueryClient();
-  const activeRepoPath = activeWorkspace?.repoPath ?? null;
+export const createSpecOperations = ({
+  activeRepoPath,
+  host,
+  queryClient,
+  taskViewSync,
+  loadSpecDocument,
+  loadPlanDocument,
+  loadQaReportDocument,
+}: CreateSpecOperationsArgs): UseSpecOperationsResult => {
+  const saveDocument = async (
+    taskId: string,
+    markdown: string,
+    section: "spec" | "plan",
+  ): Promise<{ updatedAt: string }> => {
+    const repo = requireActiveRepo(activeRepoPath);
+    const saved =
+      section === "spec"
+        ? await host.saveSpecDocument({ repoPath: repo, taskId, markdown })
+        : await host.savePlanDocument({ repoPath: repo, taskId, markdown });
+    const queryKey =
+      section === "spec"
+        ? documentQueryKeys.spec(repo, taskId)
+        : documentQueryKeys.plan(repo, taskId);
+    queryClient.setQueryData<TaskDocumentPayload>(queryKey, (current) =>
+      setLatestDocumentPayload(current, markdown, saved.updatedAt),
+    );
+    await queryClient.invalidateQueries({ queryKey: documentQueryKeys.all });
+    await taskViewSync.refreshAfterLocalMutation(repo, {
+      kind: "refresh-documents",
+      taskIds: [taskId],
+    });
+    return saved;
+  };
 
-  const loadSpecDocument = useCallback(
-    async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      const repo = requireActiveRepo(activeRepoPath);
-      return loadSpecDocumentFromQuery(queryClient, repo, taskId);
-    },
-    [activeRepoPath, queryClient],
-  );
-
-  const loadPlanDocument = useCallback(
-    async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      const repo = requireActiveRepo(activeRepoPath);
-      return loadPlanDocumentFromQuery(queryClient, repo, taskId);
-    },
-    [activeRepoPath, queryClient],
-  );
-
-  const loadQaReportDocument = useCallback(
-    async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      const repo = requireActiveRepo(activeRepoPath);
-      return loadQaReportDocumentFromQuery(queryClient, repo, taskId);
-    },
-    [activeRepoPath, queryClient],
-  );
-
-  const loadSpec = useCallback(
-    async (taskId: string): Promise<string> => {
-      const spec = await loadSpecDocument(taskId);
+  return {
+    loadSpec: async (taskId) => {
+      const spec = await loadSpecDocument(requireActiveRepo(activeRepoPath), taskId);
       return spec.markdown || defaultSpecTemplateMarkdown;
     },
-    [loadSpecDocument],
-  );
-
-  const saveSpec = useCallback(
-    async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
+    loadSpecDocument: async (taskId) => loadSpecDocument(requireActiveRepo(activeRepoPath), taskId),
+    loadPlanDocument: async (taskId) => loadPlanDocument(requireActiveRepo(activeRepoPath), taskId),
+    loadQaReportDocument: async (taskId) =>
+      loadQaReportDocument(requireActiveRepo(activeRepoPath), taskId),
+    saveSpec: async (taskId, markdown) => {
       const repo = requireActiveRepo(activeRepoPath);
-
       const validation = validateSpecMarkdown(markdown);
       if (!validation.valid) {
         throw new Error(`Missing required sections: ${validation.missing.join(", ")}`);
@@ -91,76 +114,39 @@ export function useSpecOperations({
         documentQueryKeys.spec(repo, taskId),
         (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
       );
-      await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.all,
-      });
-      await refreshRepoTaskViewsAfterMutation(queryClient, repo, {
-        ignorePrimaryCancellation: true,
-        taskDocumentStrategy: "refresh",
+      await queryClient.invalidateQueries({ queryKey: documentQueryKeys.all });
+      await taskViewSync.refreshAfterLocalMutation(repo, {
+        kind: "refresh-documents",
         taskIds: [taskId],
       });
       return saved;
     },
-    [activeRepoPath, queryClient],
-  );
-
-  const saveSpecDocument = useCallback(
-    async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      const repo = requireActiveRepo(activeRepoPath);
-      const saved = await host.saveSpecDocument({
-        repoPath: repo,
-        taskId,
-        markdown,
-      });
-      queryClient.setQueryData<TaskDocumentPayload>(
-        documentQueryKeys.spec(repo, taskId),
-        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
-      );
-      await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.all,
-      });
-      await refreshRepoTaskViewsAfterMutation(queryClient, repo, {
-        ignorePrimaryCancellation: true,
-        taskDocumentStrategy: "refresh",
-        taskIds: [taskId],
-      });
-      return saved;
-    },
-    [activeRepoPath, queryClient],
-  );
-
-  const savePlanDocument = useCallback(
-    async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      const repo = requireActiveRepo(activeRepoPath);
-      const saved = await host.savePlanDocument({
-        repoPath: repo,
-        taskId,
-        markdown,
-      });
-      queryClient.setQueryData<TaskDocumentPayload>(
-        documentQueryKeys.plan(repo, taskId),
-        (current) => setLatestDocumentPayload(current, markdown, saved.updatedAt),
-      );
-      await queryClient.invalidateQueries({
-        queryKey: documentQueryKeys.all,
-      });
-      await refreshRepoTaskViewsAfterMutation(queryClient, repo, {
-        ignorePrimaryCancellation: true,
-        taskDocumentStrategy: "refresh",
-        taskIds: [taskId],
-      });
-      return saved;
-    },
-    [activeRepoPath, queryClient],
-  );
-
-  return {
-    loadSpec,
-    loadSpecDocument,
-    loadPlanDocument,
-    loadQaReportDocument,
-    saveSpec,
-    saveSpecDocument,
-    savePlanDocument,
+    saveSpecDocument: (taskId, markdown) => saveDocument(taskId, markdown, "spec"),
+    savePlanDocument: (taskId, markdown) => saveDocument(taskId, markdown, "plan"),
   };
+};
+
+export function useSpecOperations({
+  activeWorkspace,
+}: UseSpecOperationsArgs): UseSpecOperationsResult {
+  const queryClient = useQueryClient();
+  const taskViewSync = useMemo(() => getProductionTaskViewSync(queryClient), [queryClient]);
+  const activeRepoPath = activeWorkspace?.repoPath ?? null;
+
+  return useMemo(
+    () =>
+      createSpecOperations({
+        activeRepoPath,
+        host,
+        queryClient,
+        taskViewSync,
+        loadSpecDocument: (repoPath, taskId) =>
+          loadSpecDocumentFromQuery(queryClient, repoPath, taskId),
+        loadPlanDocument: (repoPath, taskId) =>
+          loadPlanDocumentFromQuery(queryClient, repoPath, taskId),
+        loadQaReportDocument: (repoPath, taskId) =>
+          loadQaReportDocumentFromQuery(queryClient, repoPath, taskId),
+      }),
+    [activeRepoPath, queryClient, taskViewSync],
+  );
 }

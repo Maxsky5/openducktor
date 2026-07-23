@@ -75,6 +75,8 @@ const TASK_METHODS = [
   "planGet",
   "taskMetadataGet",
   "taskMetadataGetFresh",
+  "reconcileExternalTaskSyncEvent",
+  "invalidateAllTaskMetadata",
   "taskDocumentGet",
   "taskDocumentGetFresh",
   "qaGetReport",
