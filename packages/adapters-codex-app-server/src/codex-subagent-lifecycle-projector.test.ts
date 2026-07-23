@@ -27,11 +27,12 @@ const childLifecycleNotification = (
   status: "inProgress" | "completed" | "failed",
   error?: string,
   timestampSeconds?: number,
+  childThreadId = "child-thread",
 ): CodexNotificationRecord => ({
   method,
   receivedAt: "2026-07-10T12:00:04.000Z",
   params: {
-    threadId: "child-thread",
+    threadId: childThreadId,
     turn: {
       id: "child-turn",
       status,
@@ -141,6 +142,41 @@ describe("CodexSubagentLifecycleProjector", () => {
 
     expect(emittedStatuses(events)).toEqual([]);
     expect(subagents.statusForChild("child-thread", "runtime-1")).toBe("running");
+  });
+
+  test("updates an unretained nested child lifecycle while keeping parent emission buffered", () => {
+    const { events, projector, sessions, subagents } = createHarness();
+    linkChild(subagents);
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "child-thread",
+      childThreadId: "grandchild-thread",
+      itemId: "spawn-grandchild",
+      status: "running",
+    });
+
+    projector.projectNotification(
+      "runtime-1",
+      childLifecycleNotification(
+        "turn/completed",
+        "completed",
+        undefined,
+        undefined,
+        "grandchild-thread",
+      ),
+    );
+
+    expect(subagents.statusForChild("grandchild-thread", "runtime-1")).toBe("completed");
+    expect(events).toEqual([]);
+
+    sessions.set("child-thread", createSession("child-thread"));
+    const route = subagents.routeForChild("grandchild-thread", "runtime-1");
+    if (!route) {
+      throw new Error("Expected grandchild route");
+    }
+    projector.projectBufferedRoute(route);
+
+    expect(emittedStatuses(events)).toEqual(["completed"]);
   });
 
   test("keeps a newer buffered restart when a stale completion arrives later", () => {
