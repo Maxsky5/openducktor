@@ -88,6 +88,7 @@ describe("createNodeEffectHostCommandRouter", () => {
       },
       runtimeDistribution,
       runtimeRegistry: createRuntimeRegistry(),
+      taskEventPublicationReporter: { report: () => Effect.void },
       taskStore: {} as TaskStorePort,
       terminalPty,
     });
