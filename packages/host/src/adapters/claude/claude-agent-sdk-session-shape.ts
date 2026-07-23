@@ -13,6 +13,7 @@ import {
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
+import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
 import type { ClaudeSession, ClaudeSessionInput } from "./claude-agent-sdk-types";
 import { claudeSessionRef, claudeWorkflowRole } from "./claude-agent-sdk-utils";
 
@@ -33,9 +34,34 @@ export const createClaudeSessionSummary = (
 export const toClaudeDisplayParts = (
   parts: SendAgentUserMessageInput["parts"],
 ): AgentUserMessageDisplayPart[] => {
+  const promptParts = parts.filter((part) => part.kind !== "attachment");
+  const { sourceTextByPartIndex } = encodeClaudePromptTextWithSourceRanges(promptParts);
   const displayParts: AgentUserMessageDisplayPart[] = [];
+  let promptPartIndex = 0;
   for (const part of parts) {
+    const sourceText =
+      part.kind === "attachment" ? undefined : sourceTextByPartIndex[promptPartIndex++];
     if (part.kind === "slash_command") {
+      if (part.command.source === "skill") {
+        if (!sourceText) {
+          throw new HostValidationError({
+            field: "parts",
+            message: `Claude skill command '/${part.command.trigger}' has no encoded source range.`,
+            details: { commandId: part.command.id },
+          });
+        }
+        displayParts.push({
+          kind: "skill_mention",
+          skill: {
+            id: part.command.id,
+            name: part.command.trigger,
+            path: part.command.trigger,
+            title: part.command.title,
+            ...(part.command.description ? { description: part.command.description } : {}),
+          },
+          sourceText,
+        });
+      }
       continue;
     }
     if (part.kind === "text") {
@@ -43,15 +69,27 @@ export const toClaudeDisplayParts = (
       continue;
     }
     if (part.kind === "file_reference") {
-      displayParts.push({ kind: "file_reference", file: part.file });
+      displayParts.push({
+        kind: "file_reference",
+        file: part.file,
+        ...(sourceText ? { sourceText } : {}),
+      });
       continue;
     }
     if (part.kind === "skill_mention") {
-      displayParts.push({ kind: "skill_mention", skill: part.skill });
+      displayParts.push({
+        kind: "skill_mention",
+        skill: part.skill,
+        ...(sourceText ? { sourceText } : {}),
+      });
       continue;
     }
     if (part.kind === "subagent_reference") {
-      displayParts.push({ kind: "subagent_reference", subagent: part.subagent });
+      displayParts.push({
+        kind: "subagent_reference",
+        subagent: part.subagent,
+        ...(sourceText ? { sourceText } : {}),
+      });
       continue;
     }
     if (part.kind === "attachment") {

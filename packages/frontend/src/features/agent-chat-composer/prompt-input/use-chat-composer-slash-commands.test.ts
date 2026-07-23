@@ -59,6 +59,16 @@ describe("use-chat-composer-slash-commands", () => {
     ).toEqual([MANUAL_SESSION_COMPACTION_SLASH_COMMAND]);
   });
 
+  test("keeps system commands in Claude session composers", () => {
+    expect(
+      filterSlashCommandsForComposerScope(
+        [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
+        "session",
+        "claude",
+      ),
+    ).toEqual([MANUAL_SESSION_COMPACTION_SLASH_COMMAND]);
+  });
+
   test("removes system commands from Codex repository composers", () => {
     expect(
       filterSlashCommandsForComposerScope(

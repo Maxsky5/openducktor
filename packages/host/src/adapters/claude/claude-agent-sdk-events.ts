@@ -1,6 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
 import { toClaudeSlashCommandCatalog } from "./claude-agent-sdk-catalog";
+import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
 import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
@@ -125,6 +126,15 @@ export const handleClaudeSdkMessage = ({
   }
   if (message.type === "system" && message.subtype === "model_refusal_fallback") {
     emitRetractedTranscriptMessages({ emit, message, session, timestamp });
+    return;
+  }
+  if (message.type === "system" && message.subtype === "compact_boundary") {
+    handleClaudeCompactionBoundary({
+      session,
+      timestamp,
+      boundaryMessageId: message.uuid,
+      emit,
+    });
     return;
   }
   if (message.type === "tool_progress") {

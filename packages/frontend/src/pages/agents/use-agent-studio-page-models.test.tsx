@@ -257,6 +257,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const modelSelection: HookArgs["modelSelection"] = {
     selectedModelSelection: null,
     isSelectionCatalogLoading: false,
+    supportsAttachments: true,
     supportsSlashCommands: true,
     supportsFileSearch: true,
     supportsSkillReferences: false,

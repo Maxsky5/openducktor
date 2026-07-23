@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
-import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
+import {
+  claudeHistoryMessageFixtures,
+  claudeSessionMessageFixture as toSessionMessage,
+} from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history", () => {
   test("preserves Claude transcript timestamps when loading history", () => {
@@ -139,6 +142,31 @@ describe("claude-agent-sdk-history", () => {
     expect(history[0]?.timestamp).toBe("2026-06-26T12:00:00.000Z");
   });
 
+  test("does not render Claude's interrupted tool-use control record as a user message", () => {
+    const history = toClaudeHistoryMessages(
+      claudeHistoryMessageFixtures([
+        {
+          type: "user",
+          uuid: "interrupted-tool-use-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-07-22T21:35:05.968Z",
+          promptId: "prompt-1",
+          interruptedByShutdown: true,
+          userType: "external",
+          entrypoint: "sdk-ts",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "[Request interrupted by user for tool use]" }],
+          },
+        },
+      ]),
+      () => "2026-07-22T22:00:00.000Z",
+    );
+
+    expect(history).toEqual([]);
+  });
+
   test("reuses live accepted user ids when hydrating matching Claude user turns", () => {
     const history = toClaudeHistoryMessages(
       [
@@ -274,6 +302,11 @@ describe("claude-agent-sdk-history", () => {
           path: "effect-ts",
           title: "effect-ts",
         },
+        sourceText: {
+          value: "/effect-ts",
+          start: 8,
+          end: 18,
+        },
       },
       { kind: "text", text: " and inspect " },
       {
@@ -283,6 +316,11 @@ describe("claude-agent-sdk-history", () => {
           path: "apps/api/src/routes/groups.ts",
           name: "groups.ts",
           kind: "code",
+        },
+        sourceText: {
+          value: "@apps/api/src/routes/groups.ts",
+          start: 31,
+          end: 61,
         },
       },
     ]);
@@ -312,6 +350,108 @@ describe("claude-agent-sdk-history", () => {
     expect(history[0]).toMatchObject({
       role: "user",
       displayParts: [{ kind: "text", text: "Run /help and contact dev@example.com" }],
+    });
+  });
+
+  test("hydrates Claude skill commands as source-mapped skill chips", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "user-skill-command",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: "/grill-me",
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      {
+        skills: [
+          {
+            id: "grill-me",
+            name: "grill-me",
+            path: "grill-me",
+            title: "grill-me",
+            description: "Grill a plan",
+          },
+        ],
+      },
+    );
+
+    expect(history[0]).toMatchObject({
+      role: "user",
+      text: "/grill-me",
+      displayParts: [
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "grill-me",
+            name: "grill-me",
+            path: "grill-me",
+            title: "grill-me",
+            description: "Grill a plan",
+          },
+          sourceText: {
+            value: "/grill-me",
+            start: 0,
+            end: 9,
+          },
+        },
+      ],
+    });
+  });
+
+  test("hydrates exact Claude skill names containing spaces as one chip", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "user-spaced-skill-command",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: "/gitnexus:generate_map (MCP)",
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      {
+        skills: [
+          {
+            id: "gitnexus:generate_map (MCP)",
+            name: "gitnexus:generate_map (MCP)",
+            path: "gitnexus:generate_map (MCP)",
+            title: "Generate architecture map",
+          },
+        ],
+      },
+    );
+
+    expect(history[0]).toMatchObject({
+      role: "user",
+      text: "/gitnexus:generate_map (MCP)",
+      displayParts: [
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "gitnexus:generate_map (MCP)",
+            name: "gitnexus:generate_map (MCP)",
+            path: "gitnexus:generate_map (MCP)",
+            title: "Generate architecture map",
+          },
+          sourceText: {
+            value: "/gitnexus:generate_map (MCP)",
+            start: 0,
+            end: 28,
+          },
+        },
+      ],
     });
   });
 });

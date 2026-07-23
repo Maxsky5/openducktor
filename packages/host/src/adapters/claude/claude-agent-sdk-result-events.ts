@@ -1,5 +1,9 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
+import {
+  clearClaudeManualCompaction,
+  settleClaudeManualCompactionResult,
+} from "./claude-agent-sdk-compaction";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import {
   isFailedClaudeResult,
@@ -8,10 +12,11 @@ import {
 } from "./claude-agent-sdk-result-lifecycle";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
-import type { ClaudeSessionActivity } from "./claude-agent-sdk-types";
+import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claude-agent-sdk-types";
 
 type ClaudeResultEventSession = {
   acceptedUserMessages?: readonly unknown[];
+  activeManualCompaction?: ClaudeManualCompactionState;
   activity: ClaudeSessionActivity;
   externalSessionId: string;
   pendingUserTurnCount?: number;
@@ -52,8 +57,16 @@ export const handleClaudeResultMessage = ({
   timestamp,
 }: ClaudeResultEventInput): void => {
   const completedUserTurnIndex = nextCompletedUserTurnIndex(session);
-  emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
-  if (isFailedClaudeResult(message)) {
+  const failed = isFailedClaudeResult(message);
+  const resultText =
+    "result" in message && typeof message.result === "string" ? message.result.trim() : "";
+  const handledManualCompaction =
+    !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
+  if (!handledManualCompaction) {
+    emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
+  }
+  if (failed) {
+    clearClaudeManualCompaction(session);
     const errors = "errors" in message && Array.isArray(message.errors) ? message.errors : [];
     const resultMessage =
       "result" in message && typeof message.result === "string" ? message.result.trim() : "";

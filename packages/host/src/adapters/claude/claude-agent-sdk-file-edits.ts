@@ -25,6 +25,11 @@ const readNumberProp = (record: Record<string, unknown>, key: string): number | 
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 };
 
+const readStringValue = (record: Record<string, unknown>, key: string): string | undefined => {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+};
+
 const diffHeaderPath = (file: string): string =>
   file.replaceAll("\\", "/").replace(/^\/+/, "").replace(/^\.\//, "");
 
@@ -102,6 +107,7 @@ const readFilePath = (
 const readPatchFromRecord = (
   record: Record<string, unknown>,
   file: string | undefined,
+  tool: string,
 ): string | null => {
   const directPatch = readStringProp(record, "patch") ?? readStringProp(record, "diff");
   if (directPatch) {
@@ -127,6 +133,18 @@ const readPatchFromRecord = (
       if (nestedPatch) {
         return nestedPatch;
       }
+    }
+  }
+
+  if (normalizeToolName(tool) === "write" && file) {
+    const resultType = readStringProp(record, "type")?.toLowerCase();
+    const content = readStringValue(record, "content");
+    if (resultType === "create" && content !== undefined) {
+      return createTwoFilesPatch(file, file, "", content, "", "", { context: 3 });
+    }
+    const originalFile = readStringValue(record, "originalFile");
+    if (resultType === "update" && originalFile !== undefined && content !== undefined) {
+      return createTwoFilesPatch(file, file, originalFile, content, "", "", { context: 3 });
     }
   }
 
@@ -190,9 +208,10 @@ const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unk
 const changeTypeFromToolInput = (
   tool: string,
   input: Record<string, unknown> | undefined,
+  record: Record<string, unknown>,
 ): FileDiff["type"] => {
   if (normalizeToolName(tool) === "write") {
-    return "modified";
+    return readStringProp(record, "type")?.toLowerCase() === "create" ? "added" : "modified";
   }
   const oldString = input?.old_string ?? input?.oldString;
   return typeof oldString === "string" && oldString.length === 0 ? "added" : "modified";
@@ -241,13 +260,13 @@ const readClaudeFileDiffs = ({
   const diffs: FileDiff[] = [];
   const seen = new Set<string>();
   for (const record of fileRecordsFromResult(raw)) {
-    const type = changeTypeFromToolInput(tool, input);
+    const type = changeTypeFromToolInput(tool, input, record);
     const additions = readNumberProp(record, "additions");
     const deletions = readNumberProp(record, "deletions");
     const file = readFilePath(record, input);
     const diffInput: Parameters<typeof normalizeClaudeFileDiff>[0] = {
       file,
-      patch: readPatchFromRecord(record, file),
+      patch: readPatchFromRecord(record, file, tool),
       type,
     };
     if (additions !== undefined) {

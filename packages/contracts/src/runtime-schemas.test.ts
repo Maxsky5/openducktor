@@ -170,6 +170,7 @@ describe("runtime schemas", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).not.toContain(
       "subagent_reference",
     );
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsAttachments).toBe(true);
   });
 
   test("Codex descriptor advertises its system slash command input", () => {
@@ -185,6 +186,7 @@ describe("runtime schemas", () => {
     expect(parsed).toEqual(CLAUDE_RUNTIME_DESCRIPTOR);
     expect(parsed.capabilities.sessionLifecycle.supportsQueuedUserMessages).toBe(true);
     expect(parsed.capabilities.promptInput).toMatchObject({
+      supportsAttachments: true,
       supportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: true,
@@ -197,7 +199,6 @@ describe("runtime schemas", () => {
         "skill_mention",
         "file_reference",
         "folder_reference",
-        "attachment",
       ]),
     );
     expect(parsed.capabilities.promptInput.supportedParts).not.toContain("subagent_reference");
@@ -1428,6 +1429,7 @@ describe("runtime schemas", () => {
             "plugin_mention",
             "runtime_specific",
           ],
+          supportsAttachments: true,
           supportsSlashCommands: true,
           supportsFileSearch: true,
           supportsSkillReferences: true,

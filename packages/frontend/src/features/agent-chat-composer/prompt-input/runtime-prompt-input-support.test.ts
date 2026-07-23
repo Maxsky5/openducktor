@@ -14,6 +14,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "opencode",
       }),
     ).toEqual({
+      supportsAttachments: true,
       runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: false,
@@ -28,6 +29,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "codex",
       }),
     ).toEqual({
+      supportsAttachments: true,
       runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: true,
@@ -42,6 +44,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "claude",
       }),
     ).toEqual({
+      supportsAttachments: true,
       runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: true,
@@ -56,6 +59,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: null,
       }),
     ).toEqual({
+      supportsAttachments: false,
       runtimeSupportsSlashCommands: false,
       supportsFileSearch: false,
       supportsSkillReferences: false,
@@ -70,6 +74,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "codex",
       }),
     ).toEqual({
+      supportsAttachments: false,
       runtimeSupportsSlashCommands: false,
       supportsFileSearch: false,
       supportsSkillReferences: false,

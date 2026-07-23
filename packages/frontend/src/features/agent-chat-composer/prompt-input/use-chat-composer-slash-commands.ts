@@ -54,7 +54,8 @@ export const filterSlashCommandsForComposerScope = (
   scope: "session" | "repo",
   runtimeKind: RuntimeKind,
 ): AgentSlashCommand[] =>
-  scope === "session" && (runtimeKind === "opencode" || runtimeKind === "codex")
+  scope === "session" &&
+  (runtimeKind === "opencode" || runtimeKind === "codex" || runtimeKind === "claude")
     ? commands
     : commands.filter((command) => !isManualSessionCompactionSlashCommand(command));
 

@@ -7,6 +7,65 @@ import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support"
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 describe("Claude session I/O queued messages", () => {
+  test("returns a skill chip for live Claude skill commands", async () => {
+    const pushed: SDKUserMessage[] = [];
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    queue.push = (message) => {
+      pushed.push(message);
+    };
+    const session = createClaudeSession({ queue });
+
+    const accepted = await sendClaudeUserMessage({
+      session,
+      now: () => "2026-06-25T20:00:00.000Z",
+      randomId: () => "message-skill-command",
+      emit: () => {},
+      messageInput: {
+        externalSessionId: "session-1",
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        parts: [
+          {
+            kind: "slash_command",
+            command: {
+              id: "grill-me",
+              trigger: "grill-me",
+              title: "grill-me",
+              description: "Grill a plan",
+              source: "skill",
+              hints: [],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(accepted).toMatchObject({
+      message: "/grill-me",
+      parts: [
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "grill-me",
+            name: "grill-me",
+            path: "grill-me",
+            title: "grill-me",
+            description: "Grill a plan",
+          },
+          sourceText: {
+            value: "/grill-me",
+            start: 0,
+            end: 9,
+          },
+        },
+      ],
+    });
+    expect(pushed[0]?.message.content).toEqual([{ type: "text", text: "/grill-me" }]);
+  });
+
   test("accepts queued user messages while the Claude SDK session is running", async () => {
     const pushed: SDKUserMessage[] = [];
     const events: AgentEvent[] = [];

@@ -4,17 +4,23 @@ import type {
   AgentSkillReference,
   AgentStreamPart,
 } from "@openducktor/core";
+import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
-import { isSupersededTextOnlyToolUseDraft } from "./claude-agent-sdk-history-drafts";
+import {
+  addClaudeHistoryFinishStep,
+  isLiveFinalAssistantStopReason,
+  type MutableAssistantHistoryMessage,
+  projectClaudeHistoryAssistantMessage,
+} from "./claude-agent-sdk-history-assistant";
 import {
   isNestedHistoryEntry,
-  readHistoryAssistantModel,
   readHistorySessionId,
   readHistoryTimestamp,
 } from "./claude-agent-sdk-history-entry";
 import {
   type ClaudeHistoryMessage,
   type ClaudeHistoryResultMessage,
+  isClaudeHistoryCompactBoundaryMessage,
   isClaudeHistorySubagentSystemMessage,
 } from "./claude-agent-sdk-history-import";
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
@@ -24,10 +30,8 @@ import {
   readHistoryToolResults,
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
-import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import {
   finishReasonForClaudeResult,
-  finishReasonForClaudeStopReason,
   isFailedClaudeResult,
   readClaudeResultDurationMs,
 } from "./claude-agent-sdk-result-lifecycle";
@@ -36,24 +40,12 @@ import {
   handleClaudeSubagentSystemMessage,
 } from "./claude-agent-sdk-subagents";
 import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
-import {
-  createClaudePendingToolPart,
-  decodeClaudeToolUseBlock,
-  isClaudeToolUseBlockType,
-  timestampMs,
-} from "./claude-agent-sdk-tool-shapes";
+import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import {
   isClaudeToolUseRetracted,
   retractClaudeTranscriptCorrelations,
 } from "./claude-agent-sdk-transcript-correlation";
-import {
-  createClaudeAssistantReasoningPart,
-  createClaudeAssistantTextPart,
-  createClaudeFinishStepPart,
-} from "./claude-agent-sdk-transcript-parts";
-import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
-
-type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "assistant" }>;
+import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 const successfulResultText = (entry: ClaudeHistoryResultMessage): string | null => {
   if (isFailedClaudeResult(entry)) {
@@ -62,19 +54,19 @@ const successfulResultText = (entry: ClaudeHistoryResultMessage): string | null 
   const text = typeof entry.result === "string" ? entry.result.trim() : "";
   return text.length > 0 ? text : null;
 };
-const isLiveFinalAssistantStopReason = (stopReason: string | undefined): boolean =>
-  stopReason === "end_turn" || stopReason === "stop_sequence";
-const addFinishStep = (message: MutableAssistantHistoryMessage, reason: string | null): void => {
-  if (!reason) {
-    return;
+const failedResultText = (entry: ClaudeHistoryResultMessage): string => {
+  const errors = Array.isArray(entry.errors)
+    ? entry.errors.filter((error): error is string => typeof error === "string")
+    : [];
+  if (errors.length > 0) {
+    return errors.join("\n");
   }
-  const part = createClaudeFinishStepPart({ messageId: message.messageId, reason });
-  if (
-    message.parts.some((candidate) => candidate.kind === "step" && candidate.partId === part.partId)
-  ) {
-    return;
+  const result = typeof entry.result === "string" ? entry.result.trim() : "";
+  if (result.length > 0) {
+    return result;
   }
-  message.parts.push(part);
+  const terminalReason = readStringProp(entry, "terminal_reason");
+  return `Claude Agent SDK result failed: ${terminalReason ?? String(entry.subtype)}`;
 };
 
 export const toClaudeHistoryMessages = (
@@ -115,6 +107,9 @@ export const toClaudeHistoryMessages = (
   let lastAssistantText: string | undefined;
   let lastFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastFinalAssistantText: string | undefined;
+  let pendingManualCompaction: { messageId: string; timestamp: string } | null = null;
+  let manualCompactionBoundaryReceived = false;
+  let unclaimedManualCompactionBoundary = false;
   const resetCurrentUserTurnAssistantTracking = () => {
     lastAssistantMessage = null;
     lastAssistantTextMessage = null;
@@ -170,6 +165,13 @@ export const toClaudeHistoryMessages = (
     const timestamp = readHistoryTimestamp(entry, now);
     const projectedInput = projectHistoryInput(entry, timestamp);
     if (projectedInput.handled) {
+      if (projectedInput.manualCompaction) {
+        pendingManualCompaction = projectedInput.manualCompaction;
+        manualCompactionBoundaryReceived = unclaimedManualCompactionBoundary;
+        unclaimedManualCompactionBoundary = false;
+        resetCurrentUserTurnAssistantTracking();
+        continue;
+      }
       const projectedMessage = projectedInput.message;
       if (!projectedMessage) {
         continue;
@@ -184,6 +186,29 @@ export const toClaudeHistoryMessages = (
       lastAssistantText = projectedMessage.text;
       lastFinalAssistantMessage = projectedMessage;
       lastFinalAssistantText = projectedMessage.text;
+      continue;
+    }
+    if (isClaudeHistoryCompactBoundaryMessage(entry)) {
+      history.push({
+        messageId: pendingManualCompaction?.messageId ?? entry.uuid,
+        role: "system",
+        timestamp,
+        text: CLAUDE_COMPACTED_MESSAGE,
+        notice: {
+          tone: "info",
+          reason: "session_compacted",
+          title: "Compacted",
+        },
+        parts: [],
+      });
+      if (pendingManualCompaction) {
+        manualCompactionBoundaryReceived = true;
+      } else if (
+        isRecord(entry.compact_metadata) &&
+        readStringProp(entry.compact_metadata, "trigger") === "manual"
+      ) {
+        unclaimedManualCompactionBoundary = true;
+      }
       continue;
     }
     if (isClaudeHistorySubagentSystemMessage(entry)) {
@@ -316,102 +341,31 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "assistant") {
-      if (isClaudeSyntheticAssistantMessage(entry)) {
-        continue;
-      }
-      const text = historyMessageText(entry.message);
-      const parts: AgentStreamPart[] = [];
-      const content = isRecord(entry.message) ? entry.message.content : undefined;
-      const stopReason = isRecord(entry.message)
-        ? readStringProp(entry.message, "stop_reason")
-        : undefined;
-      const preservesBlockOrder =
-        stopReason === "tool_use" &&
-        Array.isArray(content) &&
-        content.some((block) => isRecord(block) && readStringProp(block, "type") !== "text");
-      if (Array.isArray(content)) {
-        for (const [index, block] of content.entries()) {
-          if (!isRecord(block)) {
-            continue;
-          }
-          const type = readStringProp(block, "type");
-          if (type === "text" && preservesBlockOrder) {
-            const blockText = readStringProp(block, "text");
-            if (blockText && blockText.trim().length > 0) {
-              parts.push(
-                createClaudeAssistantTextPart({
-                  messageId: entry.uuid,
-                  partId: `${entry.uuid}:text:${index}`,
-                  text: blockText,
-                }),
-              );
-            }
-            continue;
-          }
-          if (isClaudeToolUseBlockType(type)) {
-            const toolUse = decodeClaudeToolUseBlock({
-              block,
-              fallbackMessageId: entry.uuid,
-              index,
-            });
-            if (toolUse) {
-              const part = createClaudePendingToolPart({ messageId: entry.uuid, toolUse });
-              parts.push(part);
-              toolMessageIdsByCallId.set(toolUse.callId, entry.uuid);
-              toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
-              if (toolUse.input) {
-                toolInputsByCallId.set(toolUse.callId, toolUse.input);
-              }
-            }
-            continue;
-          }
-          if (type === "thinking") {
-            const thinkingText = readStringProp(block, "thinking") ?? readStringProp(block, "text");
-            if (thinkingText) {
-              parts.push(
-                createClaudeAssistantReasoningPart({
-                  messageId: entry.uuid,
-                  partId: `${entry.uuid}:thinking:${index}`,
-                  text: thinkingText,
-                }),
-              );
-            }
-          }
-        }
-      }
-      if (stopReason === "tool_use" && text.trim().length > 0 && parts.length === 0) {
-        if (isSupersededTextOnlyToolUseDraft(messages, entryIndex, text.trim(), options)) {
-          continue;
-        }
-      }
-      if (text.trim().length === 0 && parts.length === 0) {
-        continue;
-      }
-      const model = readHistoryAssistantModel(entry);
-      const assistantMessage: MutableAssistantHistoryMessage = {
-        messageId: entry.uuid,
-        role: "assistant",
+      const projection = projectClaudeHistoryAssistantMessage({
+        entry,
+        entryIndex,
+        messages,
+        options,
         timestamp,
-        text,
-        parts,
-        ...(model ? { model } : {}),
-      };
-      // Compatible models may persist reasoning-only end-turn frames before the
-      // visible final answer. They are internal frames, not completed transcript turns.
-      if (text.trim().length > 0) {
-        addFinishStep(assistantMessage, finishReasonForClaudeStopReason(stopReason));
+        toolInputsByCallId,
+        toolMessageIdsByCallId,
+        toolNamesByCallId,
+      });
+      if (!projection) {
+        continue;
       }
+      const { message: assistantMessage, stopReason } = projection;
       history.push(assistantMessage);
       lastAssistantMessage = assistantMessage;
-      if (text.trim().length > 0) {
+      if (assistantMessage.text.trim().length > 0) {
         lastAssistantTextMessage = assistantMessage;
-        lastAssistantText = text;
+        lastAssistantText = assistantMessage.text;
         if (isLiveFinalAssistantStopReason(stopReason)) {
           lastFinalAssistantMessage = assistantMessage;
-          lastFinalAssistantText = text;
+          lastFinalAssistantText = assistantMessage.text;
         }
       }
-      for (const part of parts) {
+      for (const part of assistantMessage.parts) {
         if (part.kind === "tool") {
           assistantMessagesByToolCallId.set(part.callId, assistantMessage);
         }
@@ -419,6 +373,33 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "result") {
+      if (pendingManualCompaction) {
+        if (isFailedClaudeResult(entry)) {
+          history.push({
+            messageId: entry.uuid ?? pendingManualCompaction.messageId,
+            role: "system",
+            timestamp,
+            text: failedResultText(entry),
+            parts: [],
+          });
+        } else if (!manualCompactionBoundaryReceived) {
+          history.push({
+            messageId: pendingManualCompaction.messageId,
+            role: "system",
+            timestamp,
+            text: successfulResultText(entry) ?? "No session compaction was needed.",
+            notice: {
+              tone: "info",
+              reason: "session_compacted",
+              title: "Compacted",
+            },
+            parts: [],
+          });
+        }
+        pendingManualCompaction = null;
+        manualCompactionBoundaryReceived = false;
+        continue;
+      }
       const resultText = successfulResultText(entry);
       const durationMs = readClaudeResultDurationMs(entry);
       const lastMatchingAssistantTextMessage =
@@ -440,7 +421,7 @@ export const toClaudeHistoryMessages = (
           parts: [],
           ...(durationMs !== undefined ? { durationMs } : {}),
         };
-        addFinishStep(assistantMessage, finishReasonForClaudeResult(entry));
+        addClaudeHistoryFinishStep(assistantMessage, finishReasonForClaudeResult(entry));
         history.push(assistantMessage);
         lastAssistantMessage = assistantMessage;
         lastAssistantTextMessage = assistantMessage;
@@ -455,7 +436,7 @@ export const toClaudeHistoryMessages = (
       if (durationMs !== undefined) {
         resultTarget.durationMs = durationMs;
       }
-      addFinishStep(resultTarget, finishReasonForClaudeResult(entry));
+      addClaudeHistoryFinishStep(resultTarget, finishReasonForClaudeResult(entry));
       if (resultText) {
         lastFinalAssistantMessage = resultTarget;
         lastFinalAssistantText = resultText;

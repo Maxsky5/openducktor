@@ -137,6 +137,63 @@ describe("createClaudePostToolUseHook", () => {
     });
   });
 
+  test("projects created Write results as added file diffs", async () => {
+    const events: AgentEvent[] = [];
+    const session = createClaudeSession();
+    session.toolMessageIdsByCallId.set("tool-write-1", "assistant-1");
+    const hook = createClaudePostToolUseHook({
+      session,
+      now: () => "2026-06-25T20:00:01.000Z",
+      emit: (event) => events.push(event),
+    });
+
+    await hook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "session-1",
+        transcript_path: "/home/test/.claude/projects/repo/session-1.jsonl",
+        cwd: "/repo",
+        tool_name: "Write",
+        tool_use_id: "tool-write-1",
+        tool_input: {
+          file_path: "src/new-file.ts",
+          content: "export const value = 1;\n",
+        },
+        tool_response: {
+          type: "create",
+          filePath: "src/new-file.ts",
+          content: "export const value = 1;\n",
+          structuredPatch: [],
+          originalFile: null,
+          userModified: false,
+        },
+      },
+      "tool-write-1",
+      { signal: new AbortController().signal },
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      part: {
+        kind: "tool",
+        messageId: "assistant-1",
+        callId: "tool-write-1",
+        status: "completed",
+        fileDiffs: [
+          {
+            file: "src/new-file.ts",
+            type: "added",
+            additions: 1,
+            deletions: 0,
+            diff: expect.stringContaining("+export const value = 1;"),
+          },
+        ],
+      },
+    });
+  });
+
   test("does not project subagent file edits into the parent transcript", async () => {
     const events: AgentEvent[] = [];
     const hook = createClaudePostToolUseHook({

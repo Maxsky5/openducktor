@@ -19,6 +19,7 @@ type ResolveAgentStudioSendDraftPartsInput = {
   draft: AgentChatComposerDraft;
   reusablePrompts: ReusablePrompt[];
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
+  supportsAttachments: boolean;
   stageAttachment?: StageAgentStudioSendAttachment;
 };
 
@@ -40,6 +41,7 @@ export const resolveAgentStudioSendDraftParts = ({
   draft,
   reusablePrompts,
   selectedModelDescriptor,
+  supportsAttachments,
   stageAttachment = stageAgentStudioSendAttachment,
 }: ResolveAgentStudioSendDraftPartsInput): AgentStudioSendDraftParts | null => {
   let reusablePromptMessageParts: AgentUserMessagePart[] | null;
@@ -53,6 +55,9 @@ export const resolveAgentStudioSendDraftParts = ({
   }
 
   if ((draft.attachments ?? []).length > 0) {
+    if (!supportsAttachments) {
+      return null;
+    }
     if (draftHasSlashCommandSegment(draft)) {
       return null;
     }

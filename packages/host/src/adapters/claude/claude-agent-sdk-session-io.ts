@@ -3,12 +3,14 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type {
-  AcceptedAgentUserMessage,
-  AgentModelSelection,
-  SendAgentUserMessageInput,
+import {
+  type AcceptedAgentUserMessage,
+  type AgentModelSelection,
+  classifySystemSlashCommandInvocation,
+  type SendAgentUserMessageInput,
 } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { beginClaudeManualCompaction } from "./claude-agent-sdk-compaction";
 import {
   flushClaudeLiveContextUsageRefresh,
   scheduleClaudeLiveContextUsageRefresh,
@@ -236,6 +238,8 @@ export const sendClaudeUserMessage = async (input: {
   session: ClaudeSession;
 }): Promise<AcceptedAgentUserMessage> => {
   const { emit, messageInput, now, randomId, session } = input;
+  const isManualCompaction =
+    classifySystemSlashCommandInvocation(messageInput.parts).kind === "manual_session_compaction";
   if (session.activity === "stopped") {
     throw new HostValidationError({
       field: "externalSessionId",
@@ -271,6 +275,7 @@ export const sendClaudeUserMessage = async (input: {
   const previousPendingUserTurnCount = session.pendingUserTurnCount;
   session.acceptedUserMessages.push({
     messageId,
+    ...(isManualCompaction ? { isManualCompaction: true } : {}),
     ...(messageInput.model ? { model: messageInput.model } : {}),
     parts: displayParts,
     text: message,
@@ -281,6 +286,14 @@ export const sendClaudeUserMessage = async (input: {
   try {
     if (canSendImmediately) {
       pushClaudeSdkUserMessage(session, sdkMessage);
+      if (isManualCompaction) {
+        beginClaudeManualCompaction({
+          session,
+          timestamp,
+          messageId,
+          emit: (event) => emit(session, event),
+        });
+      }
     } else {
       session.queuedSdkMessages.push(sdkMessage);
     }
@@ -357,9 +370,17 @@ export const flushQueuedClaudeUserMessage = (input: {
       session.queuedSdkMessages.shift();
       removedFromQueue = true;
       pushClaudeSdkUserMessage(session, nextMessage);
+      if (acceptedMessage?.isManualCompaction) {
+        beginClaudeManualCompaction({
+          session,
+          timestamp,
+          messageId: acceptedMessage.messageId,
+          emit: (event) => emit(session, event),
+        });
+      }
     })
     .then(() => {
-      if (acceptedMessage) {
+      if (acceptedMessage && !acceptedMessage.isManualCompaction) {
         emit(session, {
           type: "user_message",
           externalSessionId: session.externalSessionId,

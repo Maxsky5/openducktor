@@ -10,6 +10,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   skillCatalogSchema,
   slashCommandCatalogSchema,
   subagentCatalogSchema,
@@ -116,20 +117,6 @@ const readClaudeSlashCommands = async (
   }
 };
 
-const readClaudeSkills = async (
-  cwd: string,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-): Promise<SlashCommand[]> => {
-  const session = await openClaudeCatalogSession(cwd, processEnv, claudeExecutablePath);
-  try {
-    const response = await session.sdkQuery.reloadSkills();
-    return response.skills;
-  } finally {
-    closeClaudeCatalogSession(session);
-  }
-};
-
 const readClaudeSubagents = async (
   cwd: string,
   processEnv: NodeJS.ProcessEnv | undefined,
@@ -198,6 +185,133 @@ type ClaudeSlashCommandCatalog = Extract<
   { type: "runtime_slash_commands_changed" }
 >["catalog"];
 
+const HIDDEN_CLAUDE_SLASH_COMMANDS = new Set([
+  "__remote-workflow",
+  "agents",
+  "clear",
+  "color",
+  "config",
+  "design",
+  "design-consent",
+  "design-revoke",
+  "design-sync",
+  "effort",
+  "fast",
+  "heapdump",
+  "insights",
+  "mcp",
+  "model",
+  "reload-skills",
+  "rename",
+  "team-onboarding",
+  "workflow-launch-exec",
+]);
+
+// supportedCommands() mixes fixed Claude commands, bundled workflows, skills,
+// and external prompts. Keep entries marked "Skill" in Claude's reference and
+// exclude the fixed commands and bundled workflows:
+// https://code.claude.com/docs/en/commands#commands
+const CLAUDE_NON_SKILL_COMMANDS = new Set([
+  "__remote-workflow",
+  "add-dir",
+  "advisor",
+  "agents",
+  "autofix-pr",
+  "background",
+  "branch",
+  "btw",
+  "bug",
+  "cd",
+  "chrome",
+  "clear",
+  "color",
+  "compact",
+  "config",
+  "context",
+  "copy",
+  "cost",
+  "deep-research",
+  "design",
+  "design-consent",
+  "design-login",
+  "design-revoke",
+  "desktop",
+  "diff",
+  "effort",
+  "exit",
+  "export",
+  "fast",
+  "feedback",
+  "focus",
+  "fork",
+  "goal",
+  "heapdump",
+  "help",
+  "hooks",
+  "ide",
+  "init",
+  "insights",
+  "install-github-app",
+  "install-slack-app",
+  "keybindings",
+  "login",
+  "logout",
+  "mcp",
+  "memory",
+  "mobile",
+  "model",
+  "passes",
+  "permissions",
+  "plan",
+  "plugin",
+  "powerup",
+  "pr-comments",
+  "privacy-settings",
+  "radio",
+  "recap",
+  "release-notes",
+  "reload-plugins",
+  "reload-skills",
+  "remote-control",
+  "remote-env",
+  "rename",
+  "resume",
+  "review",
+  "rewind",
+  "sandbox",
+  "schedule",
+  "scroll-speed",
+  "security-review",
+  "setup-bedrock",
+  "setup-vertex",
+  "skills",
+  "stats",
+  "status",
+  "statusline",
+  "stickers",
+  "stop",
+  "subtask",
+  "tasks",
+  "team-onboarding",
+  "teleport",
+  "terminal-setup",
+  "theme",
+  "tui",
+  "ultraplan",
+  "ultrareview",
+  "upgrade",
+  "usage",
+  "usage-credits",
+  "vim",
+  "voice",
+  "web-setup",
+  "workflow-launch-exec",
+  "workflows",
+]);
+
+const isClaudeSkillCommand = (command: SlashCommand): boolean =>
+  !CLAUDE_NON_SKILL_COMMANDS.has(command.name);
+
 export const toClaudeSlashCommandCatalog = (
   commands: SlashCommand[],
 ): ClaudeSlashCommandCatalog => {
@@ -205,21 +319,25 @@ export const toClaudeSlashCommandCatalog = (
   // multiple definitions for that name, so publish the first SDK entry once.
   const commandsByName = new Map<string, SlashCommand>();
   for (const command of commands) {
-    if (!commandsByName.has(command.name)) {
+    if (!HIDDEN_CLAUDE_SLASH_COMMANDS.has(command.name) && !commandsByName.has(command.name)) {
       commandsByName.set(command.name, command);
     }
   }
 
   const catalog: ClaudeSlashCommandCatalog = {
     commands: [...commandsByName.values()]
-      .map((command) => ({
-        id: command.name,
-        trigger: command.name,
-        title: command.name,
-        ...(command.description ? { description: command.description } : {}),
-        source: "command" as const,
-        hints: command.argumentHint ? [command.argumentHint] : [],
-      }))
+      .map((command) =>
+        command.name === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger
+          ? MANUAL_SESSION_COMPACTION_SLASH_COMMAND
+          : {
+              id: command.name,
+              trigger: command.name,
+              title: command.name,
+              ...(command.description ? { description: command.description } : {}),
+              source: isClaudeSkillCommand(command) ? ("skill" as const) : ("command" as const),
+              hints: command.argumentHint ? [command.argumentHint] : [],
+            },
+      )
       .sort((left, right) => left.trigger.localeCompare(right.trigger)),
   };
   slashCommandCatalogSchema.parse(catalog);
@@ -231,17 +349,21 @@ export const listClaudeSkills = async (
   processEnv: NodeJS.ProcessEnv | undefined,
   claudeExecutablePath: string,
 ): Promise<AgentSkillCatalog> => {
-  const skills = await readClaudeSkills(input.workingDirectory, processEnv, claudeExecutablePath);
-  return toClaudeSkillCatalog(skills);
+  const commands = await readClaudeSlashCommands(
+    input.workingDirectory,
+    processEnv,
+    claudeExecutablePath,
+  );
+  return toClaudeSkillCatalog(commands);
 };
 
-export const toClaudeSkillCatalog = (skills: SlashCommand[]): AgentSkillCatalog => {
-  // Claude skill references are addressable by name. Inherited scopes may expose
+export const toClaudeSkillCatalog = (commands: SlashCommand[]): AgentSkillCatalog => {
+  // Claude prompt references are addressable by name. Inherited scopes may expose
   // multiple definitions for that name, so publish the first SDK entry once.
   const skillsByName = new Map<string, SlashCommand>();
-  for (const skill of skills) {
-    if (!skillsByName.has(skill.name)) {
-      skillsByName.set(skill.name, skill);
+  for (const command of commands) {
+    if (isClaudeSkillCommand(command) && !skillsByName.has(command.name)) {
+      skillsByName.set(command.name, command);
     }
   }
 
