@@ -142,7 +142,7 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
         </div>
       ) : null}
       {hasBody ? (
-        <div className="min-w-0 overflow-hidden border-t border-border px-3 py-1">
+        <div className="min-w-0 overflow-x-auto border-t border-border px-3 py-1">
           <MarkdownRenderer
             markdown={comment.body}
             variant="compact"
