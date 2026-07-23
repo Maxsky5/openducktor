@@ -493,6 +493,101 @@ describe("createGithubPullRequestReviewReader", () => {
     ]);
   });
 
+  test("omits a bodyless commented review when its inline comments are loaded separately", async () => {
+    const provider = createGithubPullRequestReviewReader();
+    const commands: string[][] = [];
+    const pullRequestViewResponse = defaultPullRequestViewResponse() as {
+      reviews: unknown[];
+    };
+    pullRequestViewResponse.reviews.push(
+      {
+        id: "review-inline-only",
+        author: { login: "reviewer" },
+        body: "",
+        state: "COMMENTED",
+        submittedAt: "2026-07-08T10:03:00Z",
+      },
+      {
+        id: "review-standalone",
+        author: { login: "reviewer" },
+        body: "",
+        state: "COMMENTED",
+        submittedAt: "2026-07-08T10:04:00Z",
+      },
+      {
+        id: "review-with-summary",
+        author: { login: "reviewer" },
+        body: "Review summary.",
+        state: "COMMENTED",
+        submittedAt: "2026-07-08T10:05:00Z",
+      },
+    );
+
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          commands,
+          pullRequestViewResponse,
+          reviewThreadNodes: [
+            {
+              id: "thread-inline-replies",
+              isResolved: true,
+              comments: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    id: "thread-comment-inline-only",
+                    author: { login: "reviewer" },
+                    body: "Test",
+                    pullRequestReview: { id: "review-inline-only" },
+                    url: "https://github.com/openai/openducktor/pull/42#discussion-inline",
+                    createdAt: "2026-07-08T10:03:00Z",
+                    updatedAt: "2026-07-08T10:03:00Z",
+                    path: "packages/host/src/provider.ts",
+                    line: 33,
+                  },
+                  {
+                    id: "thread-comment-with-summary",
+                    author: { login: "reviewer" },
+                    body: "Inline detail.",
+                    pullRequestReview: { id: "review-with-summary" },
+                    url: "https://github.com/openai/openducktor/pull/42#discussion-summary",
+                    createdAt: "2026-07-08T10:05:00Z",
+                    updatedAt: "2026-07-08T10:05:00Z",
+                    path: "packages/host/src/provider.ts",
+                    line: 34,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
+        pullRequestNumber: 42,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(
+      context.comments
+        .filter((comment) => comment.source === "review")
+        .map((comment) => comment.id),
+    ).toEqual(["review-1", "review-standalone", "review-with-summary"]);
+    expect(
+      context.comments
+        .filter((comment) => comment.source === "review_thread")
+        .map((comment) => comment.body),
+    ).toEqual(["Test", "Inline detail."]);
+    const reviewThreadCommand = commands.find((args) =>
+      args.join(" ").includes("PullRequestReviewThreads"),
+    );
+    expect(reviewThreadCommand?.join(" ")).toContain("pullRequestReview {");
+  });
+
   test("includes unresolved code review threads alongside review summaries", async () => {
     const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];

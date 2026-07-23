@@ -26,12 +26,19 @@ export type ParsedReviewThreadsPage = {
   openThreadIds: string[];
   nextThreadsCursor: string | null;
   commentPageCursors: ReviewThreadCommentsCursor[];
+  reviewIdsWithComments: string[];
 };
 
 export type ParsedReviewThreadCommentsPage = {
   comments: PullRequestReviewActivity[];
   nextCommentsCursor: string | null;
+  reviewIdsWithComments: string[];
   threadId: string;
+};
+
+type ParsedReviewThreadComment = {
+  activity: PullRequestReviewActivity;
+  reviewId: string | null;
 };
 
 const REVIEW_THREAD_COMMENT_FIELDS = `
@@ -41,6 +48,9 @@ const REVIEW_THREAD_COMMENT_FIELDS = `
     avatarUrl(size: 64)
   }
   body
+  pullRequestReview {
+    id
+  }
   diffHunk
   url
   createdAt
@@ -113,7 +123,7 @@ const toReviewThreadComment = (
   field: string,
   threadId: string,
   isResolved: boolean,
-): PullRequestReviewActivity | null => {
+): ParsedReviewThreadComment | null => {
   const payload = requireGithubObject(payloadValue, field);
   const body = typeof payload.body === "string" ? payload.body : "";
   const patch = toNullableGithubString(payload.diffHunk);
@@ -130,21 +140,25 @@ const toReviewThreadComment = (
     return null;
   }
   const author = toNullableGithubObject(payload.author, `${field}.author`);
+  const review = toNullableGithubObject(payload.pullRequestReview, `${field}.pullRequestReview`);
   return {
-    id: requireGithubString(payload.id, `${field}.id`),
-    author: toNullableGithubString(author?.login),
-    authorAvatarUrl: toNullableGithubString(author?.avatarUrl),
-    body: content.body,
-    patch,
-    suggestionPatches: content.suggestionPatches,
-    url: toNullableGithubString(payload.url),
-    createdAt: toNullableGithubString(payload.createdAt),
-    updatedAt: toNullableGithubString(payload.updatedAt),
-    path: toNullableGithubString(payload.path),
-    line,
-    threadId,
-    isResolved,
-    source: "review_thread",
+    activity: {
+      id: requireGithubString(payload.id, `${field}.id`),
+      author: toNullableGithubString(author?.login),
+      authorAvatarUrl: toNullableGithubString(author?.avatarUrl),
+      body: content.body,
+      patch,
+      suggestionPatches: content.suggestionPatches,
+      url: toNullableGithubString(payload.url),
+      createdAt: toNullableGithubString(payload.createdAt),
+      updatedAt: toNullableGithubString(payload.updatedAt),
+      path: toNullableGithubString(payload.path),
+      line,
+      threadId,
+      isResolved,
+      source: "review_thread",
+    },
+    reviewId: review ? requireGithubString(review.id, `${field}.pullRequestReview.id`) : null,
   };
 };
 
@@ -160,6 +174,7 @@ const parseThread = (threadValue: unknown, field: string) => {
     });
   }
   const comments: PullRequestReviewActivity[] = [];
+  const reviewIdsWithComments: string[] = [];
   for (const [index, comment] of commentsConnection.nodes.entries()) {
     const normalized = toReviewThreadComment(
       comment,
@@ -168,7 +183,10 @@ const parseThread = (threadValue: unknown, field: string) => {
       isResolved,
     );
     if (normalized) {
-      comments.push(normalized);
+      comments.push(normalized.activity);
+      if (normalized.reviewId) {
+        reviewIdsWithComments.push(normalized.reviewId);
+      }
     }
   }
   return {
@@ -178,6 +196,7 @@ const parseThread = (threadValue: unknown, field: string) => {
       commentsConnection.pageInfo,
       `${field}.comments.pageInfo`,
     ),
+    reviewIdsWithComments,
     threadId,
   };
 };
@@ -198,9 +217,11 @@ const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
   const comments: PullRequestReviewActivity[] = [];
   const openThreadIds: string[] = [];
   const commentPageCursors: ReviewThreadCommentsCursor[] = [];
+  const reviewIdsWithComments: string[] = [];
   for (const [index, thread] of reviewThreads.nodes.entries()) {
     const parsedThread = parseThread(thread, `reviewThreads.nodes.${index}`);
     comments.push(...parsedThread.comments);
+    reviewIdsWithComments.push(...parsedThread.reviewIdsWithComments);
     if (!parsedThread.isResolved) {
       openThreadIds.push(parsedThread.threadId);
     }
@@ -216,6 +237,7 @@ const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
     openThreadIds,
     nextThreadsCursor: parseGithubNextPageCursor(reviewThreads.pageInfo, "reviewThreads.pageInfo"),
     commentPageCursors,
+    reviewIdsWithComments,
   };
 };
 
@@ -226,6 +248,7 @@ const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadComme
   return {
     comments: thread.comments,
     nextCommentsCursor: thread.nextCommentsCursor,
+    reviewIdsWithComments: thread.reviewIdsWithComments,
     threadId: thread.threadId,
   };
 };
@@ -264,6 +287,7 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
   Effect.gen(function* () {
     const comments: PullRequestReviewActivity[] = [];
     const openThreadIds = new Set<string>();
+    const reviewIdsWithComments = new Set<string>();
     let threadsCursor: string | null = null;
 
     do {
@@ -290,6 +314,9 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
         },
       });
       comments.push(...page.comments);
+      for (const reviewId of page.reviewIdsWithComments) {
+        reviewIdsWithComments.add(reviewId);
+      }
       for (const threadId of page.openThreadIds) {
         openThreadIds.add(threadId);
       }
@@ -327,6 +354,9 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
             );
           }
           comments.push(...parsedCommentsPage.comments);
+          for (const reviewId of parsedCommentsPage.reviewIdsWithComments) {
+            reviewIdsWithComments.add(reviewId);
+          }
           commentsCursor = parsedCommentsPage.nextCommentsCursor;
         }
       }
@@ -336,6 +366,7 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
 
     return {
       comments,
+      reviewIdsWithComments,
       summary: { openCount: openThreadIds.size },
     };
   });

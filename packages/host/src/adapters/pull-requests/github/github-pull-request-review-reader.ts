@@ -209,6 +209,16 @@ export const createGithubPullRequestReviewReader = (): GithubPullRequestReviewRe
           });
         },
       });
+      const overviewComments = overview.comments.filter((comment) => {
+        if (comment.source !== "review") {
+          return true;
+        }
+        const isInlineOnlyReview =
+          comment.reviewOutcome === "commented" &&
+          comment.body.length === 0 &&
+          reviewThreads.reviewIdsWithComments.has(comment.id);
+        return !isInlineOnlyReview;
+      });
       return yield* Effect.try({
         try: () =>
           pullRequestReviewContextSchema.parse({
@@ -217,7 +227,7 @@ export const createGithubPullRequestReviewReader = (): GithubPullRequestReviewRe
             pullRequest: overview.pullRequest,
             aggregateStatus: aggregateChecks(checks),
             checks,
-            comments: [...overview.comments, ...reviewThreads.comments],
+            comments: [...overviewComments, ...reviewThreads.comments],
             reviewThreads: reviewThreads.summary,
             refreshedAt: new Date().toISOString(),
           }),
