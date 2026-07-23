@@ -124,6 +124,96 @@ describe("createEventPublishingTaskService", () => {
       { changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["child-1"] } },
     ]);
   });
+  test("does not publish an update when the task is missing", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "update-task",
+      message: "Task task-1 not found",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        updateTask: () => Effect.fail(failure),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.updateTask({ repoPath: "/repo", taskId: "task-1", patch: {} }).pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([]);
+  });
+  test("does not publish when deleting a task fails", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "delete-task",
+      message: "Delete failed",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        deleteTask: () => Effect.fail(failure),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([]);
+  });
+  test("does not publish when pull request detection fails", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "detect-pull-request",
+      message: "Detection failed",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        detectPullRequest: () => Effect.fail(failure),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([]);
+  });
+  test("does not publish ordinary set-plan failures", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "set-plan",
+      message: "Plan update failed",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        setPlan: () => Effect.fail(failure),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .setPlan({
+            repoPath: "/repo",
+            taskId: "task-1",
+            markdown: "# Plan",
+            subtasks: [],
+            hasExplicitSubtasks: true,
+          })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([]);
+  });
   test("publishes deleted task ids as removed", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const service = createEventPublishingTaskService({

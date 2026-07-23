@@ -149,13 +149,15 @@ export const createTaskViewSync = ({
 
   const cancelDocuments = async (repoPath: string, taskIds?: string[]): Promise<void> => {
     const taskIdSet = taskIds ? new Set(taskIds) : null;
-    await Promise.all(
-      cachedDocumentEntries(queryClient, repoPath)
-        .filter((entry) => !taskIdSet || taskIdSet.has(entry.taskId))
-        .map((entry) =>
+    const cancellations: Promise<void>[] = [];
+    for (const entry of cachedDocumentEntries(queryClient, repoPath)) {
+      if (!taskIdSet || taskIdSet.has(entry.taskId)) {
+        cancellations.push(
           queryClient.cancelQueries({ queryKey: entry.queryKey, exact: true }, { silent: true }),
-        ),
-    );
+        );
+      }
+    }
+    await Promise.all(cancellations);
   };
 
   const cancelAllDocuments = (): Promise<void> =>
@@ -178,17 +180,19 @@ export const createTaskViewSync = ({
 
   const invalidateDocuments = async (repoPath: string, taskIds?: string[]): Promise<void> => {
     const taskIdSet = taskIds ? new Set(taskIds) : null;
-    await Promise.all(
-      cachedDocumentEntries(queryClient, repoPath)
-        .filter((entry) => !taskIdSet || taskIdSet.has(entry.taskId))
-        .map((entry) =>
+    const invalidations: Promise<void>[] = [];
+    for (const entry of cachedDocumentEntries(queryClient, repoPath)) {
+      if (!taskIdSet || taskIdSet.has(entry.taskId)) {
+        invalidations.push(
           queryClient.invalidateQueries({
             queryKey: entry.queryKey,
             exact: true,
             refetchType: "none",
           }),
-        ),
-    );
+        );
+      }
+    }
+    await Promise.all(invalidations);
   };
 
   const refreshCachedKanban = async (
@@ -325,15 +329,26 @@ export const createTaskViewSync = ({
       refreshActive(repoPath, { impact, refreshKanban: true }),
     reconcileExternalEvent: async (event, activeRepoPath) => {
       const { taskIds, removedTaskIds } = toEventChanges(event);
-      const retainedTaskIds = taskIds.filter((taskId) => !removedTaskIds.includes(taskId));
+      const removedTaskIdSet = new Set(removedTaskIds);
+      const retainedTaskIds: string[] = [];
+      for (const taskId of taskIds) {
+        if (!removedTaskIdSet.has(taskId)) {
+          retainedTaskIds.push(taskId);
+        }
+      }
       const affectedTaskIds = [...new Set([...taskIds, ...removedTaskIds])];
       if (activeRepoPath !== event.repoPath) {
-        await Promise.all([cancelDocuments(event.repoPath), cancelRepoTaskQueries(event.repoPath)]);
-        removeDocuments(event.repoPath, removedTaskIds);
-        await Promise.all([
-          invalidateRepoTaskQueries(queryClient, event.repoPath),
-          invalidateDocuments(event.repoPath),
-        ]);
+        await runActive(event.repoPath, async () => {
+          await Promise.all([
+            cancelDocuments(event.repoPath),
+            cancelRepoTaskQueries(event.repoPath),
+          ]);
+          removeDocuments(event.repoPath, removedTaskIds);
+          await Promise.all([
+            invalidateRepoTaskQueries(queryClient, event.repoPath),
+            invalidateDocuments(event.repoPath),
+          ]);
+        });
         return;
       }
       await refreshActive(event.repoPath, {

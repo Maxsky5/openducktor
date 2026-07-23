@@ -28,17 +28,16 @@ export const createEventPublishingTaskService = ({
   const publishAfterMutation = <A>(
     operation: string,
     repoPath: string,
-    failureChanges: TaskChangeSet,
+    changes: TaskChangeSet,
     mutation: Effect.Effect<A, TaskServiceError>,
-    successChanges: (result: A) => TaskChangeSet = () => failureChanges,
+    successChanges: (result: A) => TaskChangeSet = () => changes,
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
       const result = yield* Effect.either(mutation);
-      const changes = result._tag === "Right" ? successChanges(result.right) : failureChanges;
-      yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation);
       if (result._tag === "Left") {
         return yield* Effect.fail(result.left);
       }
+      yield* taskSyncService.publishTasksUpdated(repoPath, successChanges(result.right), operation);
       return result.right;
     });
 
@@ -51,35 +50,32 @@ export const createEventPublishingTaskService = ({
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
       const result = yield* Effect.either(mutation);
-      if (result._tag === "Right" && !mutated(result.right)) {
-        return result.right;
-      }
-      yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation);
       if (result._tag === "Left") {
         return yield* Effect.fail(result.left);
       }
+      if (!mutated(result.right)) {
+        return result.right;
+      }
+      yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation);
       return result.right;
     });
 
   const publishSetPlan = (input: Parameters<TaskService["setPlan"]>[0]) =>
     Effect.gen(function* () {
       const result = yield* Effect.either(taskService.setPlan(input));
-      const progress =
-        result._tag === "Left" && result.left instanceof TaskMutationProgressFailure
-          ? result.left
-          : null;
-      const changes =
-        result._tag === "Right"
-          ? result.right.changes
-          : (progress?.changes ?? changeForTask(input.taskId));
-      yield* taskSyncService.publishTasksUpdated(input.repoPath, changes, "set-plan");
-      if (result._tag === "Left") {
-        if (result.left instanceof TaskMutationProgressFailure) {
-          return yield* Effect.fail(result.left.failure);
-        }
-        return yield* Effect.fail(result.left);
+      if (result._tag === "Right") {
+        yield* taskSyncService.publishTasksUpdated(
+          input.repoPath,
+          result.right.changes,
+          "set-plan",
+        );
+        return result.right;
       }
-      return result.right;
+      if (result.left instanceof TaskMutationProgressFailure) {
+        yield* taskSyncService.publishTasksUpdated(input.repoPath, result.left.changes, "set-plan");
+        return yield* Effect.fail(result.left.failure);
+      }
+      return yield* Effect.fail(result.left);
     });
 
   return {

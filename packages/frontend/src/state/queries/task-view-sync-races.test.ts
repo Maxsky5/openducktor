@@ -648,6 +648,44 @@ describe("TaskViewSync races", () => {
     }
   });
 
+  test("coordinates an inactive event with a cancelled local task-list refresh", async () => {
+    const staleList = createDeferred<TaskCard[]>();
+    const staleListStarted = createDeferred<void>();
+    const listTasks = mock(async () => {
+      staleListStarted.resolve();
+      return staleList.promise;
+    });
+    const loadFreshDocument = mock(async () => ({ markdown: "# Unexpected", updatedAt: null }));
+    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+    const taskKey = taskQueryKeys.repoData("/inactive", doneVisibleDays);
+    const documentKey = documentQueryKeys.spec("/inactive", "task-1");
+    queryClient.setQueryData(taskKey, {
+      tasks: [createTaskCardFixture({ id: "task-1", status: "open" })],
+    });
+    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
+
+    const refresh = sync.refreshAfterLocalMutation("/inactive", { kind: "task-list-only" });
+    await staleListStarted.promise;
+    const event = sync.reconcileExternalEvent(
+      {
+        kind: "tasks_updated",
+        eventId: "event-inactive-remove",
+        repoPath: "/inactive",
+        taskIds: ["task-1"],
+        removedTaskIds: ["task-1"],
+        emittedAt: "2026-04-10T13:11:00.000Z",
+      },
+      "/active",
+    );
+
+    await expect(Promise.all([refresh, event])).resolves.toEqual([undefined, undefined]);
+
+    expect(listTasks).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryState(taskKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryData(documentKey)).toBeUndefined();
+    expect(loadFreshDocument).not.toHaveBeenCalled();
+  });
+
   test("globally cancels snapshot document reads while only refreshing retained active documents", async () => {
     const activeStaleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const inactiveStaleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();

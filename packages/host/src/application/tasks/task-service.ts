@@ -386,9 +386,7 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
   return withoutTaskMutationProgress(createTaskServiceWithMutationProgress(input));
 };
 
-export const withoutTaskMutationProgress = (
-  taskService: TaskServiceWithMutationProgress,
-): TaskService => {
+const withoutTaskMutationProgress = (taskService: TaskServiceWithMutationProgress): TaskService => {
   return {
     ...taskService,
     setPlan: (setPlanInput) =>
