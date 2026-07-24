@@ -36,50 +36,97 @@ const summaryPayload = {
 };
 
 describe("OdtHostBridgeClient", () => {
-  test("ready validates host health and required tool coverage", async () => {
-    const fetchImpl: typeof fetch = async (input) => {
-      const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
-      }
-      if (url.endsWith("/invoke/odt_mcp_ready")) {
-        return jsonResponse({
-          bridgeVersion: 1,
-          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
-        });
-      }
-      throw new Error(`Unexpected URL: ${url}`);
+  test("ready sends one authenticated readiness request and validates tool coverage", async () => {
+    const requests: Array<{
+      url: string;
+      method: string | undefined;
+      headers: HeadersInit | undefined;
+      body: string | undefined;
+    }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      requests.push({
+        url: String(input),
+        method: init?.method,
+        headers: init?.headers,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return jsonResponse({
+        bridgeVersion: 1,
+        toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+      });
     };
 
-    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+    const client = new OdtHostBridgeClient(
+      {
+        baseUrl: "http://127.0.0.1:14327",
+        appToken: "host-token",
+      },
+      { fetchImpl },
+    );
 
     await expect(client.ready()).resolves.toEqual({
       bridgeVersion: 1,
       toolNames: Object.keys(ODT_TOOL_SCHEMAS),
     });
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:14327/invoke/odt_mcp_ready",
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "x-openducktor-app-token": "host-token",
+        },
+        body: "{}",
+      },
+    ]);
   });
 
-  test("ready fails fast when the host is unhealthy", async () => {
-    const fetchImpl: typeof fetch = async (input) => {
-      const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: {
-              code: "ODT_HOST_BRIDGE_ERROR",
-              message: "bridge unavailable",
-            },
+  test("ready preserves invalid authentication failures", async () => {
+    const fetchImpl: typeof fetch = async () => {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "ODT_HOST_BRIDGE_ERROR",
+            message: "Invalid OpenDucktor web host app token.",
           },
-          { status: 503, statusText: "Service Unavailable" },
-        );
-      }
-      throw new Error(`Unexpected URL: ${url}`);
+        },
+        { status: 401, statusText: "Unauthorized" },
+      );
     };
 
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
-    await expect(client.ready()).rejects.toThrow("bridge unavailable");
+    await expect(client.ready()).rejects.toThrow("Invalid OpenDucktor web host app token.");
+  });
+
+  test("ready rejects malformed readiness responses", async () => {
+    const fetchImpl: typeof fetch = async () => jsonResponse({ bridgeVersion: 1 });
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    await expect(client.ready()).rejects.toMatchObject({
+      code: "ODT_HOST_RESPONSE_INVALID",
+      details: { command: "odt_mcp_ready" },
+    });
+  });
+
+  test("ready rejects readiness responses that omit required tools", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      jsonResponse({
+        bridgeVersion: 1,
+        toolNames: ["odt_read_task"],
+      });
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    await expect(client.ready()).rejects.toMatchObject({
+      code: "ODT_HOST_RESPONSE_INVALID",
+      details: {
+        missingToolNames: Object.keys(ODT_TOOL_SCHEMAS).filter(
+          (toolName) => toolName !== "odt_read_task",
+        ),
+      },
+    });
   });
 
   test("wraps host transport failures as bridge errors", async () => {
