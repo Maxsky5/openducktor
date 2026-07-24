@@ -830,14 +830,14 @@ describe("opencode-sdk-adapter", () => {
     const catalog = await adapter.listAvailableSlashCommands({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      workingDirectory: defaultRepoPath,
+      workingDirectory: "/repo/worktrees/task-1",
     });
 
     expect(createClient).toHaveBeenCalledWith({
       runtimeEndpoint: "http://127.0.0.1:12345",
-      workingDirectory: "/repo",
+      workingDirectory: "/repo/worktrees/task-1",
     });
-    expect(list).toHaveBeenCalledWith({ directory: "/repo" });
+    expect(list).toHaveBeenCalledWith({ directory: "/repo/worktrees/task-1" });
     expect(catalog).toEqual({
       commands: [
         MANUAL_SESSION_COMPACTION_SLASH_COMMAND,

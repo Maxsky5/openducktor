@@ -374,6 +374,24 @@ describe("buildClaudeAgentSdkOptions", () => {
     }
   });
 
+  test("explicitly allows safe reads when inherited dontAsk mode would skip permission prompts", async () => {
+    const session = createSession("spec");
+    const options = await buildOptions(session);
+
+    expect(
+      await preToolUseHook(options, {
+        permissionMode: "dontAsk",
+        toolName: "Read",
+        toolInput: { file_path: session.input.workingDirectory },
+      }),
+    ).toMatchObject({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+      },
+    });
+  });
+
   test("keeps worktree path routing active in inherited bypass mode", async () => {
     const root = await mkdtemp(join(tmpdir(), "openducktor-claude-routing-"));
     const repoPath = join(root, "repo");

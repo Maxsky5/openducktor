@@ -90,6 +90,7 @@ export type ClaudeSession = {
   activity: ClaudeSessionActivity;
   externalSessionId: string;
   input: ClaudeSessionInput;
+  lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
   lastAssistantTextTurnIndex?: number;
   model: AgentModelSelection | undefined;

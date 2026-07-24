@@ -159,7 +159,10 @@ export function useAgentStudioSessionStartFlow({
                 selectedSessionIdentity?.runtimeKind ??
                 null)
               : null,
-          selectedModel: request.taskId === taskId ? (selectionForNewSession ?? null) : null,
+          selectedModel:
+            request.role === role && request.taskId === taskId
+              ? (selectionForNewSession ?? null)
+              : null,
           taskSessions: sessionsForTask,
           preferredSourceSession: isWorkflowAgentSession(loadedSession) ? loadedSession : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
@@ -169,6 +172,7 @@ export function useAgentStudioSessionStartFlow({
     },
     [
       loadedSession,
+      role,
       runInternalSessionStartRequest,
       selectionForNewSession,
       selectedSessionIdentity?.runtimeKind,

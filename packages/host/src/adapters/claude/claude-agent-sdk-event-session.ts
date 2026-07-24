@@ -16,6 +16,7 @@ export type ClaudeEventSession = {
   pendingUserTurnCount?: number;
   retractedSubagentTaskIds?: Set<string>;
   retractedToolUseIds?: Set<string>;
+  lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
@@ -79,11 +80,13 @@ const activeAssistantTurnIndex = (session: ClaudeEventSession): number => {
 export const rememberAssistantTextForCurrentTurn = (
   session: ClaudeEventSession,
   text: string,
+  messageId: string,
 ): void => {
   const trimmed = text.trim();
   if (!trimmed) {
     return;
   }
+  session.lastAssistantTextMessageId = messageId;
   session.lastAssistantText = trimmed;
   session.lastAssistantTextTurnIndex = activeAssistantTurnIndex(session);
 };

@@ -44,7 +44,8 @@ export const createClaudePreToolUseHook = ({
     if (authorization.behavior === "deny") {
       return denyToolUse(authorization.message);
     }
-    if (authorization.toolInput === preToolUseInput.tool_input) {
+    const inputChanged = authorization.toolInput !== preToolUseInput.tool_input;
+    if (!inputChanged && !authorization.autoApprove) {
       return {};
     }
 
@@ -57,8 +58,10 @@ export const createClaudePreToolUseHook = ({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: autoApprove ? "allow" : "ask",
-        permissionDecisionReason: "OpenDucktor routed the tool input to the session worktree.",
-        updatedInput: authorization.toolInput,
+        permissionDecisionReason: inputChanged
+          ? "OpenDucktor routed the tool input to the session worktree."
+          : "OpenDucktor approved this tool use.",
+        ...(inputChanged ? { updatedInput: authorization.toolInput } : {}),
       },
     };
   };

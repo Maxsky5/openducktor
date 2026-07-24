@@ -214,7 +214,7 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
-  test("publishes the running start snapshot before suppressing SDK initialization idle", async () => {
+  test("keeps a no-message start idle after SDK initialization settles", async () => {
     const harness = await createHarness();
     harness.setStartSession(() =>
       Effect.promise(async () => {
@@ -238,14 +238,23 @@ describe("Claude host live-session adapter", () => {
       Effect.runPromise(harness.adapter.startSession(startInput)),
     ).resolves.toMatchObject({
       externalSessionId: "session-1",
-      status: "running",
+      status: "idle",
     });
 
-    expect(harness.changes[0]).toMatchObject({
-      type: "session_upsert",
-      snapshot: { activity: "running" },
+    expect(
+      await Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
     });
-    expect(transcriptEventTypes(harness.changes)).toEqual(["session_started"]);
+    expect(transcriptEventTypes(harness.changes)).toEqual(["session_started", "session_idle"]);
   });
 
   test("publishes accepted input before draining its runtime response", async () => {
@@ -426,6 +435,12 @@ describe("Claude host live-session adapter", () => {
   test("keeps a retained running session running when it is resumed", async () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "session_status",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      status: { type: "busy", message: null },
+    });
 
     await Effect.runPromise(
       harness.adapter.resumeSession({

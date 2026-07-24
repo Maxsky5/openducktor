@@ -165,7 +165,7 @@ describe("handleClaudeSdkMessage result events", () => {
       type: "assistant_message",
       externalSessionId: "session-1",
       timestamp: "2026-06-25T20:00:02.000Z",
-      messageId: "result-1",
+      messageId: "assistant-final",
       message: "Final answer",
       durationMs: 2_000,
       model: {

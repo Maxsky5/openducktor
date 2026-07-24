@@ -20,6 +20,7 @@ type ClaudeResultEventSession = {
   activity: ClaudeSessionActivity;
   externalSessionId: string;
   pendingUserTurnCount?: number;
+  lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
@@ -178,12 +179,17 @@ const emitSuccessfulResultText = ({
   if (!text || (duplicatesAssistantTextFromSameTurn && durationMs === undefined)) {
     return;
   }
+  const streamedMessageIds = streamedTextMessageIds(session);
+  const streamedMessageId = streamedMessageIds[0];
+  const messageId =
+    streamedMessageId ??
+    (duplicatesAssistantTextFromSameTurn ? session.lastAssistantTextMessageId : undefined) ??
+    message.uuid;
   if (!duplicatesAssistantTextFromSameTurn) {
+    session.lastAssistantTextMessageId = messageId;
     session.lastAssistantText = text;
     session.lastAssistantTextTurnIndex = completedUserTurnIndex;
   }
-  const streamedMessageIds = streamedTextMessageIds(session);
-  const streamedMessageId = streamedMessageIds[0];
   if (streamedMessageIds.length > 1) {
     emit({
       type: "transcript_retracted",
@@ -196,7 +202,7 @@ const emitSuccessfulResultText = ({
     type: "assistant_message",
     externalSessionId: session.externalSessionId,
     timestamp,
-    messageId: streamedMessageId ?? message.uuid,
+    messageId,
     message: text,
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(session.model ? { model: session.model } : {}),

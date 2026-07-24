@@ -308,10 +308,8 @@ export const createClaudeLiveSessionAdapterPreparer =
         startSession: (input) =>
           requireClaudePolicy(input.runtimeKind, "start-session").pipe(
             Effect.flatMap(() =>
-              runSummary(
-                "claude-live-session.start-session",
-                () => service.startSession(toClaudeStartInput(input), runtime.runtimeId),
-                { forceRunning: true },
+              runSummary("claude-live-session.start-session", () =>
+                service.startSession(toClaudeStartInput(input), runtime.runtimeId),
               ),
             ),
           ),

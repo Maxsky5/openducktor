@@ -356,11 +356,11 @@ const handleAssistantMessage = ({
       if (type === "text" && hasToolUse) {
         const blockText = readStringProp(block, "text");
         if (blockText) {
-          rememberAssistantTextForCurrentTurn(session, blockText);
+          const messageId = streamedTextMessageIdForBlock(session, message.uuid, index);
+          rememberAssistantTextForCurrentTurn(session, blockText, messageId);
           completedStreamedAssistantText =
             completedStreamedAssistantText ||
             session.streamAssistantMessageIdsByBlockIndex.has(index);
-          const messageId = streamedTextMessageIdForBlock(session, message.uuid, index);
           emit(
             claudeAssistantTextPartEvent({
               externalSessionId: session.externalSessionId,
@@ -425,8 +425,8 @@ const handleAssistantMessage = ({
       return;
     }
     if (stopReason === "end_turn" || stopReason === "stop_sequence") {
-      rememberAssistantTextForCurrentTurn(session, text);
       const messageId = finalAssistantTextMessageId(session, message.uuid, content);
+      rememberAssistantTextForCurrentTurn(session, text, messageId);
       settleClaudeStreamedAssistantText({ emit, content, session, timestamp });
       emit({
         type: "assistant_message",
@@ -438,8 +438,8 @@ const handleAssistantMessage = ({
       });
       return;
     }
-    rememberAssistantTextForCurrentTurn(session, text);
     const messageId = finalAssistantTextMessageId(session, message.uuid, content);
+    rememberAssistantTextForCurrentTurn(session, text, messageId);
     emit(
       claudeAssistantTextPartEvent({
         externalSessionId: session.externalSessionId,

@@ -697,7 +697,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("handleCreateSession seeds cross-role modals from the current selection", async () => {
+  test("handleCreateSession keeps the current runtime but uses the target role model default", async () => {
     const currentSelection = {
       runtimeKind: "opencode" as const,
       providerId: "anthropic",
@@ -756,7 +756,14 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     const modal = await waitForSessionStartModal(harness);
-    expect(modal.selectedModelSelection).toEqual(currentSelection);
+    expect(modal.selectedRuntimeKind).toBe("opencode");
+    expect(modal.selectedModelSelection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "planner",
+    });
 
     await harness.unmount();
   });
