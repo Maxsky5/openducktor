@@ -44,6 +44,22 @@ export type CodexTurnLifecycleContext = {
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 
+const sessionIsRetained = (
+  context: CodexTurnLifecycleContext,
+  session: CodexSessionState,
+): boolean => context.sessions.get(session.threadId) === session;
+
+const requireRetainedTurnSession = (
+  context: CodexTurnLifecycleContext,
+  session: CodexSessionState,
+): void => {
+  if (!sessionIsRetained(context, session)) {
+    throw new Error(
+      `Cannot continue Codex turn for session '${session.threadId}' because its retained owner was released or replaced.`,
+    );
+  }
+};
+
 const flushQueuedUserMessages = async (
   context: CodexTurnLifecycleContext,
   activeTurn: ActiveCodexTurn,
@@ -114,6 +130,9 @@ const emitTurnStartErrorLater = (
   turnStartPromise: Promise<unknown>,
 ): void => {
   void turnStartPromise.catch((error) => {
+    if (!sessionIsRetained(context, session)) {
+      return;
+    }
     context.emitSessionEvent(session.threadId, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -135,6 +154,7 @@ export const startCodexTurnForSession = async (
     throw new Error(`Unknown Codex session '${externalSessionId}'.`);
   }
   await context.ensureRuntimeEventSubscription(session.runtimeId);
+  requireRetainedTurnSession(context, session);
   const input = toCodexTurnInputList(parts);
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
@@ -192,9 +212,9 @@ export const startCodexTurnForSession = async (
   }
   try {
     await context.validateModel(client, session.runtimeId, model);
+    requireRetainedTurnSession(context, session);
   } catch (error) {
-    turnSettled = true;
-    context.activeTurnsBySessionId.delete(session.threadId);
+    activeTurnState.markTurnSettled();
     throw error;
   }
 
@@ -221,7 +241,7 @@ export const startCodexTurnForSession = async (
       effort: toTransportModelSelection(model).effort,
     })
     .then((result) => {
-      if (context.sessions.get(session.threadId) !== session) {
+      if (!sessionIsRetained(context, session)) {
         activeTurnState.markTurnSettled();
         return result;
       }

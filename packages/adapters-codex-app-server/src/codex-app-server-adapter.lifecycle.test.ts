@@ -6,6 +6,7 @@ import {
   codexStartSessionInput,
   codexUserMessageInput,
   createAdapterWithTransport,
+  createDeferred,
   createHarness,
   defaultCodexEffectivePolicy,
   defaultCodexRuntimeConfig,
@@ -29,6 +30,31 @@ class NameFailingTransport extends RecordingTransport {
     if (request.method === "thread/name/set") {
       this.calls.push(request);
       throw new Error("name failed");
+    }
+    return super.request<Response>(request);
+  }
+}
+
+class RejectableTurnTransport extends RecordingTransport {
+  private rejectTurnStart: (error: Error) => void = () => undefined;
+  private readonly turnStartFailure = new Promise<never>((_resolve, reject) => {
+    this.rejectTurnStart = reject;
+  });
+
+  constructor() {
+    super("runtime-live", false);
+  }
+
+  failTurnStart(error: Error): void {
+    this.rejectTurnStart(error);
+  }
+
+  async request<Response>(
+    request: Parameters<RecordingTransport["request"]>[0],
+  ): Promise<Response> {
+    if (request.method === "turn/start") {
+      this.calls.push(request);
+      return (await this.turnStartFailure) as Response;
     }
     return super.request<Response>(request);
   }
@@ -264,6 +290,169 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
       classification: "running",
     });
+  });
+
+  test("does not begin a turn after runtime release wins subscription readiness", async () => {
+    const { adapter } = createHarness();
+    const threadInventory = (
+      adapter as unknown as {
+        threadInventory: CodexThreadInventoryReader;
+      }
+    ).threadInventory;
+    const statusOverridesByRuntimeId = (
+      threadInventory as unknown as {
+        statusOverridesByRuntimeId: Map<string, Map<string, CodexThreadStatusSnapshot>>;
+      }
+    ).statusOverridesByRuntimeId;
+
+    await adapter.startSession(codexStartSessionInput());
+    const send = adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "Race runtime release" }],
+      }),
+    );
+    adapter.releaseRuntime("runtime-live");
+
+    await expect(send).rejects.toThrow(
+      "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
+    );
+    expect(statusOverridesByRuntimeId.size).toBe(0);
+    expect(statusOverridesByRuntimeId.get("runtime-live")?.size ?? 0).toBe(0);
+
+    const client = {
+      threadLoadedList: async () => ({
+        data: ["thread/start-runtime-live"],
+        nextCursor: null,
+      }),
+      threadList: async () => ({
+        data: [
+          {
+            id: "thread/start-runtime-live",
+            cwd: "/repo",
+            createdAt: 1,
+            updatedAt: 2,
+            preview: "Reused idle session",
+            status: { type: "idle" },
+          },
+        ],
+        nextCursor: null,
+      }),
+    } as unknown as CodexAppServerClient;
+    const freshInventory = await threadInventory.read(client, "runtime-live");
+    expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
+      classification: "idle",
+    });
+  });
+
+  test("does not send a turn after ownership is lost during model validation", async () => {
+    const { adapter, transports } = createHarness();
+    const internals = adapter as unknown as {
+      models: {
+        validate: (
+          client: CodexAppServerClient,
+          runtimeId: string,
+          model: { providerId: string; modelId: string; variant: string },
+        ) => Promise<void>;
+      };
+      threadInventory: CodexThreadInventoryReader;
+    };
+    const statusOverridesByRuntimeId = (
+      internals.threadInventory as unknown as {
+        statusOverridesByRuntimeId: Map<string, Map<string, CodexThreadStatusSnapshot>>;
+      }
+    ).statusOverridesByRuntimeId;
+    const validationStarted = createDeferred<void>();
+    const allowValidation = createDeferred<void>();
+
+    await adapter.startSession(codexStartSessionInput());
+    const validateModel = internals.models.validate;
+    internals.models.validate = async () => {
+      validationStarted.resolve();
+      await allowValidation.promise;
+    };
+    try {
+      const send = adapter.sendUserMessage(
+        codexUserMessageInput({
+          parts: [{ kind: "text", text: "Release during validation" }],
+        }),
+      );
+      await validationStarted.promise;
+      adapter.releaseRuntime("runtime-live");
+      allowValidation.resolve();
+
+      await expect(send).rejects.toThrow(
+        "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
+      );
+      expect(statusOverridesByRuntimeId.size).toBe(0);
+      expect(statusOverridesByRuntimeId.get("runtime-live")?.size ?? 0).toBe(0);
+      const transport = transports.get("runtime-live");
+      if (!transport) {
+        throw new Error("Expected the runtime transport used during model validation.");
+      }
+      expect(transport.calls.filter((request) => request.method === "turn/start")).toEqual([]);
+    } finally {
+      internals.models.validate = validateModel;
+    }
+  });
+
+  test("does not report a released turn failure to a replacement session", async () => {
+    const transport = new RejectableTurnTransport();
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "Fail after release" }],
+      }),
+    );
+    adapter.releaseRuntime("runtime-live");
+    await adapter.startSession(codexStartSessionInput());
+
+    const replacementEvents: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => replacementEvents.push(event),
+    );
+    try {
+      transport.failTurnStart(new Error("old turn failed"));
+      await flushCodexAdapterWork();
+
+      expect(replacementEvents).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("reports a rejected turn to its current retained session", async () => {
+    const transport = new RejectableTurnTransport();
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "Fail while retained" }],
+      }),
+    );
+
+    const events: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+    try {
+      transport.failTurnStart(new Error("current turn failed"));
+      await flushCodexAdapterWork();
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "session_error",
+          externalSessionId: "thread/start-runtime-live",
+          message: "current turn failed",
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("supports read-only construction without renderer-owned live event plumbing", async () => {
