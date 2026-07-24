@@ -7,7 +7,7 @@ import {
 } from "./claude-agent-sdk-pending-input-routing";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 
-export const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
+const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 export const CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS = [
   "permission_ask_user_question",
   "ask_user_question",
@@ -41,7 +41,7 @@ export type ClaudeAskUserQuestionPayload = {
 export const isClaudeAskUserQuestionTool = (toolName: string): boolean =>
   toolName.trim().toLowerCase() === CLAUDE_ASK_USER_QUESTION_TOOL_NAME.toLowerCase();
 
-export const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
+const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
   CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS.some(
     (candidate) => candidate.toLowerCase() === dialogKind.trim().toLowerCase(),
   );
@@ -74,7 +74,7 @@ const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
   return options;
 };
 
-export const parseClaudeAskUserQuestionInput = (
+const parseClaudeAskUserQuestionInput = (
   toolInput: Record<string, unknown>,
 ): ClaudeAskUserQuestionPayload | null => {
   const rawQuestions = toolInput.questions;
@@ -142,16 +142,6 @@ export const buildClaudeAskUserQuestionResult = ({
     questions: payload.sdkQuestions,
     answers: answersByQuestion,
   };
-};
-
-export const formatClaudeAskUserQuestionAnswerMessage = (
-  result: ReturnType<typeof buildClaudeAskUserQuestionResult>,
-): string => {
-  const lines = Object.entries(result.answers).map(([question, answer]) => {
-    const trimmedAnswer = answer.trim();
-    return `- ${question}: ${trimmedAnswer || "(no answer)"}`;
-  });
-  return ["User answered Claude's questions:", ...lines].join("\n");
 };
 
 export const requestClaudeAskUserQuestion = async ({

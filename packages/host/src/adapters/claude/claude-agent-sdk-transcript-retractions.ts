@@ -19,7 +19,7 @@ const readStringArrayProp = (value: unknown, key: string): string[] => {
   return candidate.filter((item): item is string => typeof item === "string" && item.length > 0);
 };
 
-export const emitTranscriptRetraction = ({
+const emitTranscriptRetraction = ({
   emit,
   messageIds,
   session,

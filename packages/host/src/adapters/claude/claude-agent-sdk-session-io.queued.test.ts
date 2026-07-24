@@ -4,6 +4,7 @@ import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { flushQueuedClaudeUserMessage, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
+import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 describe("Claude session I/O queued messages", () => {
@@ -535,6 +536,76 @@ describe("Claude session I/O queued messages", () => {
       "00000000-0000-4000-8000-000000000002",
       "00000000-0000-4000-8000-000000000003",
     ]);
+  });
+
+  test("does not restore queued state when the session stops during a model update", async () => {
+    let resolveModelUpdate: (() => void) | undefined;
+    let markModelUpdateStarted: (() => void) | undefined;
+    const modelUpdate = new Promise<void>((resolve) => {
+      resolveModelUpdate = resolve;
+    });
+    const modelUpdateStarted = new Promise<void>((resolve) => {
+      markModelUpdateStarted = resolve;
+    });
+    const queuedMessage: SDKUserMessage = {
+      type: "user",
+      uuid: "00000000-0000-4000-8000-000000000002",
+      session_id: "session-1",
+      timestamp: "2026-06-25T20:00:01.000Z",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "queued" }],
+      },
+    };
+    const session = createClaudeSession({
+      acceptedUserMessages: [
+        {
+          messageId: "00000000-0000-4000-8000-000000000002",
+          model: {
+            providerId: "claude",
+            modelId: "claude-opus-4-6",
+            runtimeKind: "claude",
+          },
+          parts: [{ kind: "text", text: "queued" }],
+          text: "queued",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+      activity: "running",
+      pendingUserTurnCount: 1,
+      query: {
+        close: mock(() => {}),
+        setModel: mock(async () => {
+          markModelUpdateStarted?.();
+          await modelUpdate;
+        }),
+      } as unknown as ClaudeSession["query"],
+      queuedSdkMessages: [queuedMessage],
+      sdkState: "idle",
+    });
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
+
+    const flushPromise = flushQueuedClaudeUserMessage({
+      emit: () => {},
+      now: () => "2026-06-25T20:00:02.000Z",
+      session,
+    });
+    await modelUpdateStarted;
+
+    sessionStore.close(session);
+    resolveModelUpdate?.();
+
+    await expect(flushPromise).rejects.toMatchObject({
+      _tag: "HostValidationError",
+      field: "externalSessionId",
+    });
+    expect(session.activity).toBe("stopped");
+    expect(session.queuedSdkMessages).toEqual([]);
+    expect(session.pendingUserTurnCount).toBe(0);
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(session.model).toBeUndefined();
   });
 
   test("does not mark user messages accepted when the Claude input queue is closed", async () => {

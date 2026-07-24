@@ -153,7 +153,7 @@ const toolResultBlockText = (block: unknown): string => {
   );
 };
 
-export const claudeToolResultContentText = (value: Record<string, unknown>): string => {
+const claudeToolResultContentText = (value: Record<string, unknown>): string => {
   const text =
     readStringProp(value, "content") ??
     readStringProp(value, "text") ??

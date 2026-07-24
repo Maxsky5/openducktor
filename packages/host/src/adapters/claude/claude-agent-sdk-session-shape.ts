@@ -2,16 +2,10 @@ import type {
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
-  ListSessionRuntimeSnapshotsInput,
   SendAgentUserMessageInput,
   SessionRef,
 } from "@openducktor/core";
-import {
-  agentSessionRefKey,
-  agentSessionRefsEqual,
-  agentSessionRuntimeStreamKey,
-  toAgentSessionRuntimeSnapshot,
-} from "@openducktor/core";
+import { agentSessionRefsEqual, toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
 import type { ClaudeSession, ClaudeSessionInput } from "./claude-agent-sdk-types";
@@ -124,60 +118,6 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
       pendingQuestions: [...session.pendingQuestions.values()].map((entry) => entry.event),
     },
   });
-};
-
-export const snapshotForClaudeSubagentSession = (
-  session: ClaudeSession,
-  ref: SessionRef,
-): AgentSessionRuntimeSnapshot => {
-  if (session.activity === "stopped") {
-    return toAgentSessionRuntimeSnapshot({ ref, snapshot: null });
-  }
-  const pendingApprovals = [...session.pendingApprovals.values()]
-    .map((entry) => entry.event)
-    .filter((event) => event.childExternalSessionId === ref.externalSessionId);
-  const pendingQuestions = [...session.pendingQuestions.values()]
-    .map((entry) => entry.event)
-    .filter((event) => event.childExternalSessionId === ref.externalSessionId);
-  return toAgentSessionRuntimeSnapshot({
-    ref,
-    snapshot: {
-      parentExternalSessionId: session.externalSessionId,
-      title: "Claude subagent",
-      startedAt: session.startedAt,
-      runtimeActivity: session.activity,
-      pendingApprovals,
-      pendingQuestions,
-    },
-  });
-};
-
-export const emptyClaudeSessionSnapshot = (ref: SessionRef): AgentSessionRuntimeSnapshot =>
-  toAgentSessionRuntimeSnapshot({ ref, snapshot: null });
-
-export const matchesClaudeSessionRuntimeSnapshotQuery = (
-  session: ClaudeSession,
-  input: ListSessionRuntimeSnapshotsInput,
-): boolean => {
-  if (
-    agentSessionRuntimeStreamKey(claudeSessionRef(session)) !== agentSessionRuntimeStreamKey(input)
-  ) {
-    return false;
-  }
-  if (!input.directories) {
-    return true;
-  }
-  const sessionKey = agentSessionRefKey(claudeSessionRef(session));
-  return input.directories.some(
-    (workingDirectory) =>
-      sessionKey ===
-      agentSessionRefKey({
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-        workingDirectory,
-        externalSessionId: session.externalSessionId,
-      }),
-  );
 };
 
 export const assertClaudeSessionRef = (

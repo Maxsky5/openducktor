@@ -135,4 +135,51 @@ describe("Claude session I/O model changes", () => {
     expect(session.model?.variant).toBe("xhigh");
     expect(pushed).toHaveLength(1);
   });
+
+  test("rolls the Claude SDK model back when message delivery fails", async () => {
+    const setModel = mock(async (_model?: string) => {});
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    queue.push = () => {
+      throw new Error("queue unavailable");
+    };
+    const session = createClaudeSession({
+      activity: "idle",
+      model: {
+        providerId: "claude",
+        modelId: "claude-sonnet-4-6",
+        runtimeKind: "claude",
+      },
+      query: { setModel } as unknown as ClaudeSession["query"],
+      queue,
+    });
+
+    await expect(
+      sendClaudeUserMessage({
+        session,
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => "message-1",
+        emit: () => {},
+        messageInput: {
+          externalSessionId: "session-1",
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          model: {
+            providerId: "claude",
+            modelId: "claude-opus-4-6",
+            runtimeKind: "claude",
+          },
+          parts: [{ kind: "text", text: "hello" }],
+        },
+      }),
+    ).rejects.toThrow("queue unavailable");
+
+    expect(setModel.mock.calls.map(([model]) => model)).toEqual([
+      "claude-opus-4-6",
+      "claude-sonnet-4-6",
+    ]);
+    expect(session.model?.modelId).toBe("claude-sonnet-4-6");
+  });
 });

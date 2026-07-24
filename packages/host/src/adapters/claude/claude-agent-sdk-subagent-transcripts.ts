@@ -5,7 +5,7 @@ export type ClaudeTranscriptTarget = {
   subpath?: string;
 };
 
-export const claudeSubagentSubpath = (taskId: string): string => {
+const claudeSubagentSubpath = (taskId: string): string => {
   const normalizedTaskId = taskId.startsWith("agent-") ? taskId : `agent-${taskId}`;
   return `subagents/${normalizedTaskId}`;
 };

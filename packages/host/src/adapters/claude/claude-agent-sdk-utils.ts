@@ -1,4 +1,4 @@
-import { CLAUDE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
@@ -271,8 +271,3 @@ export const unsupported = (operation: string): never => {
     message: `Claude Agent SDK does not expose ${operation} through a stable request API.`,
   });
 };
-
-export const claudeSessionRoute = (runtimeId: string): RuntimeInstanceSummary["runtimeRoute"] => ({
-  type: "stdio",
-  identity: runtimeId,
-});

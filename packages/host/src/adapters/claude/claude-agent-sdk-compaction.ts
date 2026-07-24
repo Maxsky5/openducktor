@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@openducktor/core";
 import type { ClaudeManualCompactionState } from "./claude-agent-sdk-types";
 
-export const CLAUDE_COMPACTION_STARTED_MESSAGE = "Session compaction started.";
+const CLAUDE_COMPACTION_STARTED_MESSAGE = "Session compaction started.";
 export const CLAUDE_COMPACTED_MESSAGE = "Session compacted.";
 
 type ClaudeCompactionSession = {

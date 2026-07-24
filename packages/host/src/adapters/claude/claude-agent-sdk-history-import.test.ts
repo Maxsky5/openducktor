@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
-import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
+import {
+  filterClaudeHistoryMessages,
+  loadClaudeRawHistoryMessages,
+} from "./claude-agent-sdk-history-import";
 
 describe("Claude SDK history import", () => {
   test("excludes meta peer queue entries using their paired SDK attachment", () => {
@@ -45,5 +51,25 @@ describe("Claude SDK history import", () => {
     ];
 
     expect(filterClaudeHistoryMessages(entries)).toEqual([compactQueueEntry]);
+  });
+
+  test("propagates missing Claude transcripts as typed history errors", async () => {
+    const workingDirectory = await mkdtemp(join(tmpdir(), "openducktor-claude-history-"));
+    try {
+      await expect(
+        loadClaudeRawHistoryMessages({
+          repoPath: workingDirectory,
+          runtimeKind: "claude",
+          workingDirectory,
+          externalSessionId: "00000000-0000-4000-8000-000000000001",
+          runtimePolicy: { kind: "claude" },
+        }),
+      ).rejects.toMatchObject({
+        _tag: "HostOperationError",
+        operation: "claude.session.history.import",
+      });
+    } finally {
+      await rm(workingDirectory, { recursive: true, force: true });
+    }
   });
 });

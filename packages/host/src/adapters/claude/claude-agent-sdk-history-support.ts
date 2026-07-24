@@ -284,9 +284,6 @@ export const readHistoryToolResults = (message: SessionMessage) => {
   return camelCaseResult ? [camelCaseResult] : [];
 };
 
-export const readHistoryToolResult = (message: SessionMessage) =>
-  readHistoryToolResults(message)[0] ?? null;
-
 const readStringArrayProp = (value: unknown, key: string): string[] => {
   if (!isRecord(value)) {
     return [];

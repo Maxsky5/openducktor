@@ -380,7 +380,7 @@ export const toClaudeSkillCatalog = (commands: SlashCommand[]): AgentSkillCatalo
   });
 };
 
-export const toClaudeSubagentCatalog = (agents: AgentInfo[]): AgentSubagentCatalog => {
+const toClaudeSubagentCatalog = (agents: AgentInfo[]): AgentSubagentCatalog => {
   return subagentCatalogSchema.parse({
     subagents: agents
       .map((agent) => ({
