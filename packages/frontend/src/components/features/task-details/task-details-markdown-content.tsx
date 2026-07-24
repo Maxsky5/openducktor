@@ -29,7 +29,7 @@ type TaskDetailsRenderedMarkdownProps = {
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
-function TaskDetailsRenderedMarkdown({
+const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
   markdown,
   hasLabeledCodeFence,
   taskAssetContext,
@@ -47,7 +47,7 @@ function TaskDetailsRenderedMarkdown({
       {...(taskAssetContext ? { taskAssetContext } : {})}
     />
   );
-}
+});
 
 type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
   active: boolean;

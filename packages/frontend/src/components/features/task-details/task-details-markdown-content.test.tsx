@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { buildCopyPreview } from "@/lib/copy-preview";
@@ -168,5 +168,48 @@ describe("TaskDetailsMarkdownContent", () => {
         rendered.unmount();
       }
     });
+  });
+
+  test("keeps a rendered Mermaid diagram mounted when copy state changes", async () => {
+    const renderModule = await import("@/components/ui/markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text>Diagram</text></svg>',
+    );
+
+    try {
+      await withMockedToast(async () => {
+        const markdown = "```mermaid\ngraph TD\n  A --> B\n```";
+        const rendered = render(
+          createElement(TaskDetailsMarkdownContent, {
+            markdown,
+            empty: "No doc",
+            active: true,
+            copyableMarkdown: markdown,
+          }),
+        );
+
+        try {
+          const diagramLabel = await rendered.findByText("Diagram");
+          const diagram = diagramLabel.closest("svg");
+          expect(diagram).not.toBeNull();
+          expect(renderSpy).toHaveBeenCalledTimes(1);
+
+          fireEvent.click(rendered.getByTestId("copy-document-content"));
+
+          await waitFor(() => {
+            expect(
+              rendered.getByTestId("copy-document-content").querySelector(".lucide-check"),
+            ).not.toBeNull();
+          });
+          expect(rendered.queryByText("Diagram")?.closest("svg")?.isSameNode(diagram)).toBe(true);
+          expect(rendered.queryByText(/graph TD/)).toBeNull();
+          expect(renderSpy).toHaveBeenCalledTimes(1);
+        } finally {
+          rendered.unmount();
+        }
+      });
+    } finally {
+      renderSpy.mockRestore();
+    }
   });
 });
