@@ -608,6 +608,94 @@ describe("Claude session I/O queued messages", () => {
     expect(session.model).toBeUndefined();
   });
 
+  test("does not restore direct-send state when message delivery observes a stopped session", async () => {
+    const events: AgentEvent[] = [];
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    const session = createClaudeSession({
+      activity: "idle",
+      queue,
+    });
+    queue.push = () => {
+      session.activity = "stopped";
+      queue.close();
+      throw new Error("session stopped during delivery");
+    };
+
+    await expect(
+      sendClaudeUserMessage({
+        session,
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => "message-1",
+        emit: (_session, event) => events.push(event),
+        messageInput: {
+          externalSessionId: "session-1",
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          parts: [{ kind: "text", text: "should remain stopped" }],
+        },
+      }),
+    ).rejects.toThrow("session stopped during delivery");
+
+    expect(session.activity).toBe("stopped");
+    expect(events).toEqual([]);
+  });
+
+  test("does not emit queued-message events after the session stops", async () => {
+    const events: AgentEvent[] = [];
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    const queuedMessage: SDKUserMessage = {
+      type: "user",
+      uuid: "00000000-0000-4000-8000-000000000002",
+      session_id: "session-1",
+      timestamp: "2026-06-25T20:00:01.000Z",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "queued" }],
+      },
+    };
+    const session = createClaudeSession({
+      acceptedUserMessages: [
+        {
+          messageId: "00000000-0000-4000-8000-000000000002",
+          parts: [{ kind: "text", text: "queued" }],
+          text: "queued",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+      activity: "running",
+      pendingUserTurnCount: 1,
+      query: {
+        close: mock(() => {}),
+      } as unknown as ClaudeSession["query"],
+      queue,
+      queuedSdkMessages: [queuedMessage],
+      sdkState: "idle",
+    });
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
+    queue.push = () => {
+      queueMicrotask(() => sessionStore.close(session));
+    };
+
+    await expect(
+      flushQueuedClaudeUserMessage({
+        emit: (_session, event) => events.push(event),
+        now: () => "2026-06-25T20:00:02.000Z",
+        session,
+      }),
+    ).rejects.toMatchObject({
+      _tag: "HostValidationError",
+      field: "externalSessionId",
+    });
+
+    expect(session.activity).toBe("stopped");
+    expect(events).toEqual([]);
+  });
+
   test("does not mark user messages accepted when the Claude input queue is closed", async () => {
     const events: AgentEvent[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();
