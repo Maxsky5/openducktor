@@ -114,8 +114,12 @@ export const createClaudeRuntimeCommandHandlers = (
         runtimePolicy: input.runtimePolicy,
         ...(input.model ? { model: input.model } : {}),
       };
-      return runtimeService.loadSessionTodos(
-        input.sessionScope ? { ...todosInput, sessionScope: input.sessionScope } : todosInput,
+      return requireLiveClaudeWorkspaceRuntime(runtimeRegistry, input).pipe(
+        Effect.flatMap(() =>
+          runtimeService.loadSessionTodos(
+            input.sessionScope ? { ...todosInput, sessionScope: input.sessionScope } : todosInput,
+          ),
+        ),
       );
     },
   ),

@@ -178,7 +178,7 @@ export const buildClaudeAgentSdkOptions = async ({
   return options;
 };
 
-export const applyClaudeCodeExecutablePath = (options: Options, executablePath: string): void => {
+const applyClaudeCodeExecutablePath = (options: Options, executablePath: string): void => {
   options.pathToClaudeCodeExecutable = executablePath;
 };
 

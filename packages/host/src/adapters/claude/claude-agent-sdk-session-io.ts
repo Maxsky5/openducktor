@@ -42,6 +42,21 @@ const canPushSdkUserMessageNow = (session: ClaudeSession): boolean =>
   session.queuedSdkMessages.length === 0 &&
   session.sdkState !== "running";
 
+const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
+  if (session.activity !== "stopped") {
+    return;
+  }
+  throw new HostValidationError({
+    field: "externalSessionId",
+    message:
+      "Claude Agent SDK session is no longer accepting messages after its SDK stream stopped.",
+    details: {
+      externalSessionId: session.externalSessionId,
+      activity: session.activity,
+    },
+  });
+};
+
 const pushClaudeSdkUserMessage = (session: ClaudeSession, message: SDKUserMessage): void => {
   session.activeSdkUserTurnCount += 1;
   session.sdkState = "running";
@@ -82,6 +97,7 @@ export const applyClaudeSessionModel = async (
   session: ClaudeSession,
   model: AgentModelSelection | null | undefined,
 ): Promise<void> => {
+  assertClaudeSessionAcceptingMessages(session);
   const nextModel = model ?? undefined;
   assertClaudeSessionModelUpdateSupported(session, nextModel);
 
@@ -91,6 +107,7 @@ export const applyClaudeSessionModel = async (
   try {
     if (modelChanged) {
       await session.query.setModel(nextModel?.modelId);
+      assertClaudeSessionAcceptingMessages(session);
     }
     if (effortChanged) {
       await session.query.applyFlagSettings({
@@ -98,8 +115,12 @@ export const applyClaudeSessionModel = async (
           ? assertSupportedClaudeLiveEffort(nextModel, session.externalSessionId)
           : null,
       });
+      assertClaudeSessionAcceptingMessages(session);
     }
   } catch (cause) {
+    if (session.activity === "stopped") {
+      throw cause;
+    }
     const rollbackFailures: string[] = [];
     if (effortChanged) {
       try {
@@ -135,6 +156,28 @@ export const applyClaudeSessionModel = async (
     throw cause;
   }
   session.model = nextModel;
+};
+
+const rollbackClaudeSessionModel = async (input: {
+  cause: unknown;
+  operation: string;
+  previousModel: AgentModelSelection | undefined;
+  session: ClaudeSession;
+}): Promise<void> => {
+  const { cause, operation, previousModel, session } = input;
+  try {
+    await applyClaudeSessionModel(session, previousModel);
+  } catch (rollbackCause) {
+    throw new HostOperationError({
+      operation,
+      message: `Claude message delivery failed and model rollback was incomplete: ${errorMessage(rollbackCause)}`,
+      cause,
+      details: {
+        externalSessionId: session.externalSessionId,
+        rollbackFailure: errorMessage(rollbackCause),
+      },
+    });
+  }
 };
 
 const assertClaudeSessionModelUpdateSupported = (
@@ -240,32 +283,26 @@ export const sendClaudeUserMessage = async (input: {
   const { emit, messageInput, now, randomId, session } = input;
   const isManualCompaction =
     classifySystemSlashCommandInvocation(messageInput.parts).kind === "manual_session_compaction";
-  if (session.activity === "stopped") {
-    throw new HostValidationError({
-      field: "externalSessionId",
-      message:
-        "Claude Agent SDK session is no longer accepting messages after its SDK stream stopped.",
-      details: {
-        externalSessionId: session.externalSessionId,
-        activity: session.activity,
-      },
-    });
-  }
+  assertClaudeSessionAcceptingMessages(session);
   const timestamp = now();
   const messageId = randomId();
   const message = encodeClaudePromptText(
     messageInput.parts.filter((part) => part.kind !== "attachment"),
   );
   const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
+  assertClaudeSessionAcceptingMessages(session);
   const displayParts = toClaudeDisplayParts(messageInput.parts);
   sdkMessage.uuid = messageId as NonNullable<SDKUserMessage["uuid"]>;
   sdkMessage.session_id = session.externalSessionId;
   sdkMessage.timestamp = timestamp;
   const canSendImmediately = canPushSdkUserMessageNow(session);
   const previousModel = session.model;
+  let modelApplied = false;
   if (messageInput.model !== undefined) {
     if (canSendImmediately) {
       await applyClaudeSessionModel(session, messageInput.model);
+      modelApplied = true;
+      assertClaudeSessionAcceptingMessages(session);
     } else {
       assertClaudeSessionModelUpdateSupported(session, messageInput.model);
     }
@@ -297,7 +334,7 @@ export const sendClaudeUserMessage = async (input: {
     } else {
       session.queuedSdkMessages.push(sdkMessage);
     }
-  } catch (error) {
+  } catch (cause) {
     session.acceptedUserMessages.pop();
     session.pendingUserTurnCount = previousPendingUserTurnCount;
     session.activity = previousActivity;
@@ -306,8 +343,17 @@ export const sendClaudeUserMessage = async (input: {
     } else {
       session.sdkState = previousSdkState;
     }
-    session.model = previousModel;
-    throw error;
+    if (modelApplied) {
+      await rollbackClaudeSessionModel({
+        cause,
+        operation: "claudeRuntime.sendUserMessage",
+        previousModel,
+        session,
+      });
+    } else {
+      session.model = previousModel;
+    }
+    throw cause;
   }
   emit(session, {
     type: "session_status",
@@ -354,12 +400,15 @@ export const flushQueuedClaudeUserMessage = (input: {
     (message) => message.messageId === nextMessage.uuid,
   );
   const previousModel = session.model;
+  let modelApplied = false;
   let removedFromQueue = false;
   return Promise.resolve()
     .then(async () => {
       if (acceptedMessage?.model) {
         await applyClaudeSessionModel(session, acceptedMessage.model);
+        modelApplied = true;
       }
+      assertClaudeSessionAcceptingMessages(session);
       if (session.queuedSdkMessages[0] !== nextMessage) {
         throw new HostOperationError({
           operation: "claudeRuntime.flushQueuedUserMessage",
@@ -399,18 +448,30 @@ export const flushQueuedClaudeUserMessage = (input: {
         status: { type: "busy", message: null },
       });
     })
-    .catch((error) => {
+    .catch(async (cause) => {
+      if (session.activity === "stopped") {
+        throw cause;
+      }
       if (removedFromQueue) {
         session.queuedSdkMessages.unshift(nextMessage);
       }
-      session.model = previousModel;
       session.activity = previousActivity;
       if (previousSdkState === undefined) {
         delete session.sdkState;
       } else {
         session.sdkState = previousSdkState;
       }
-      throw error;
+      if (modelApplied) {
+        await rollbackClaudeSessionModel({
+          cause,
+          operation: "claudeRuntime.flushQueuedUserMessage",
+          previousModel,
+          session,
+        });
+      } else {
+        session.model = previousModel;
+      }
+      throw cause;
     });
 };
 

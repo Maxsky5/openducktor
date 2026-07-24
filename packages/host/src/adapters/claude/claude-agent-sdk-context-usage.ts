@@ -57,7 +57,7 @@ export const readClaudeContextUsageFromQuery = async (
   };
 };
 
-export const emitClaudeContextUsageFromQuery = async ({
+const emitClaudeContextUsageFromQuery = async ({
   emit,
   externalSessionId,
   query: sdkQuery,

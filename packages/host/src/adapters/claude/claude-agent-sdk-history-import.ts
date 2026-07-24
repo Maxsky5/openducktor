@@ -6,6 +6,7 @@ import {
   type SessionStoreEntry,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
+import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
@@ -181,9 +182,6 @@ const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: s
   return { entries, store };
 };
 
-const isMissingClaudeSessionError = (error: unknown, sessionId: string): boolean =>
-  error instanceof Error && error.message === `Session ${sessionId} not found`;
-
 export const loadClaudeRawHistoryMessages = async (
   input: LoadAgentSessionHistoryInput,
 ): Promise<ClaudeHistoryMessage[]> => {
@@ -194,11 +192,16 @@ export const loadClaudeRawHistoryMessages = async (
       dir: input.workingDirectory,
       includeSubagents: target.subpath !== undefined,
     });
-  } catch (error) {
-    if (isMissingClaudeSessionError(error, target.sessionId)) {
-      return [];
-    }
-    throw error;
+  } catch (cause) {
+    throw new HostOperationError({
+      operation: "claude.session.history.import",
+      message: `Failed to load Claude session '${target.sessionId}' history: ${errorMessage(cause)}`,
+      cause,
+      details: {
+        externalSessionId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
+      },
+    });
   }
   return filterClaudeHistoryMessages(entries);
 };

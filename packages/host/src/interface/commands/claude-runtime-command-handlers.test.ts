@@ -185,4 +185,71 @@ describe("createClaudeRuntimeCommandHandlers", () => {
       },
     });
   });
+
+  test("requires a live Claude workspace runtime before loading session todos", async () => {
+    const loadSessionTodos = mock(() => Effect.succeed([]));
+    const service = { loadSessionTodos } as unknown as ClaudeAgentSdkService;
+    const router = createHostCommandRouter({
+      handlers: createHandlers(service),
+    });
+
+    await expect(
+      router.invoke("claude_runtime_load_session_todos", {
+        input: {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "HostValidationError",
+      field: "runtimeKind",
+      message: "No live Claude workspace runtime found for repo '/repo'.",
+    });
+    expect(loadSessionTodos).not.toHaveBeenCalled();
+  });
+
+  test("loads session todos after resolving the live Claude workspace runtime", async () => {
+    const loadSessionTodos = mock(() => Effect.succeed([]));
+    const service = { loadSessionTodos } as unknown as ClaudeAgentSdkService;
+    const runtimeRegistry = createRuntimeRegistry({
+      runtimes: [
+        {
+          kind: "claude",
+          runtimeId: "runtime-claude",
+          repoPath: "/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/repo",
+          runtimeRoute: { type: "host_service", identity: "runtime-claude" },
+          startedAt: "2026-07-18T10:00:00.000Z",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+        },
+      ],
+    });
+    const router = createHostCommandRouter({
+      handlers: createHandlers(service, runtimeRegistry),
+    });
+
+    await expect(
+      router.invoke("claude_runtime_load_session_todos", {
+        input: {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+        },
+      }),
+    ).resolves.toEqual([]);
+    expect(loadSessionTodos).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      runtimePolicy: { kind: "claude" },
+    });
+  });
 });

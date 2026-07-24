@@ -1,17 +1,17 @@
 import { readFile } from "node:fs/promises";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type {
-  ContentBlockParam,
-  DocumentBlockParam,
-  ImageBlockParam,
-} from "@anthropic-ai/sdk/resources";
 import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { readText } from "./claude-agent-sdk-utils";
 
+type ClaudeMessageContent = Exclude<SDKUserMessage["message"]["content"], string>;
+type ClaudeMessageContentBlock = ClaudeMessageContent[number];
+type ClaudeDocumentBlock = Extract<ClaudeMessageContentBlock, { type: "document" }>;
+type ClaudeImageBlock = Extract<ClaudeMessageContentBlock, { type: "image" }>;
+
 // Claude expands slash commands from streaming content blocks. A bare string is
 // accepted by the type but reaches the model as ordinary prompt text.
-export const toClaudeMessage = (text: string): SDKUserMessage => ({
+const toClaudeMessage = (text: string): SDKUserMessage => ({
   type: "user",
   message: {
     role: "user",
@@ -81,7 +81,7 @@ const inferClaudeAttachmentMime = (
 
 const toClaudeAttachmentBlock = async (
   attachment: Extract<AgentUserMessagePart, { kind: "attachment" }>["attachment"],
-): Promise<ImageBlockParam | DocumentBlockParam> => {
+): Promise<ClaudeImageBlock | ClaudeDocumentBlock> => {
   if (attachment.kind !== "image" && attachment.kind !== "pdf") {
     throw new HostValidationError({
       field: "parts",
@@ -262,7 +262,7 @@ export const toClaudeMessageFromParts = async (
     return toClaudeMessage(encodeClaudePromptText(parts));
   }
 
-  const content: ContentBlockParam[] = [];
+  const content: ClaudeMessageContent = [];
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
 
