@@ -17,10 +17,7 @@ import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
-import {
-  type AgentSessionLiveFaultLogger,
-  createAgentSessionLiveStateService,
-} from "../../application/agent-sessions/agent-session-live-state-service";
+import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -97,6 +94,7 @@ import {
   type CreateNodeHostDefaultPortsInput,
   createNodeHostDefaultPorts,
 } from "./node-host-default-ports";
+import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
 export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
@@ -110,16 +108,6 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   runtimeRegistry?: RuntimeRegistryPort;
   taskStore?: TaskStorePort;
 };
-
-const defaultLifecycleLogger: HostLifecycleLogger = {
-  error: (message) => Effect.sync(() => console.error(message)),
-  info: (message) => Effect.sync(() => console.info(message)),
-};
-
-export const createLiveSessionFaultLogger =
-  (lifecycleLogger: HostLifecycleLogger): AgentSessionLiveFaultLogger =>
-  (message) =>
-    writeHostLifecycleLog(lifecycleLogger, "error", message);
 
 export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
   readonly taskEventStream: TaskEventStreamPort;
