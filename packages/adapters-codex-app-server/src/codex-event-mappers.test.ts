@@ -635,6 +635,188 @@ describe("Codex subagent event mapper", () => {
     expect(projectedSubagents(interacted)[0]).toMatchObject({ status: "completed" });
   });
 
+  test("creates nested routes from live activity emitted by each owning thread", () => {
+    const subagents = new CodexSubagentLinkState();
+    const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+    const activity = (id: string, agentThreadId: string) => ({
+      type: "subAgentActivity",
+      id,
+      agentThreadId,
+      kind: "started",
+    });
+
+    pipeline.runLive(
+      { kind: "item_completed", item: activity("root-started-child", "child-thread") },
+      { source: "live", runtimeId: "runtime-1", threadId: "root-thread" },
+    );
+    pipeline.runLive(
+      { kind: "item_completed", item: activity("child-started-grandchild", "grandchild-thread") },
+      { source: "live", runtimeId: "runtime-1", threadId: "child-thread" },
+    );
+
+    expect(subagents.routeForChild("child-thread", "runtime-1")).toMatchObject({
+      parentExternalSessionId: "root-thread",
+      childExternalSessionId: "child-thread",
+    });
+    expect(subagents.routeForChild("grandchild-thread", "runtime-1")).toMatchObject({
+      parentExternalSessionId: "child-thread",
+      childExternalSessionId: "grandchild-thread",
+    });
+  });
+
+  test("does not create routes from unlinked live interacted or interrupted activity", () => {
+    const subagents = new CodexSubagentLinkState();
+    const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+    const activity = (id: string, kind: "interacted" | "interrupted") => ({
+      type: "subAgentActivity",
+      id,
+      agentThreadId: "child-thread",
+      kind,
+    });
+
+    expect(
+      pipeline.runLiveResult(
+        { kind: "item_completed", item: activity("unlinked-interacted", "interacted") },
+        { source: "live", threadId: "root-thread" },
+      ),
+    ).toEqual({ handled: true, events: [] });
+    expect(
+      pipeline.runLiveResult(
+        { kind: "item_completed", item: activity("unlinked-interrupted", "interrupted") },
+        { source: "live", threadId: "root-thread" },
+      ),
+    ).toEqual({ handled: true, events: [] });
+    expect(subagents.routeForChild("child-thread")).toBeNull();
+  });
+
+  test("fails fast for self and conflicting live activity parents", () => {
+    const selfPipeline = createCodexEventMapperPipeline(
+      createCodexEventMappers(new CodexSubagentLinkState()),
+    );
+    const selfActivity = {
+      type: "subAgentActivity",
+      id: "self-started",
+      agentThreadId: "root-thread",
+      kind: "started",
+    };
+
+    expect(() =>
+      selfPipeline.runLive(
+        { kind: "item_completed", item: selfActivity },
+        { source: "live", threadId: "root-thread" },
+      ),
+    ).toThrow("parent thread matches child thread");
+
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      parentThreadId: "root-thread",
+      childThreadId: "child-thread",
+      itemId: "root-started-child",
+      status: "running",
+    });
+    const conflictPipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+
+    expect(() =>
+      conflictPipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "subAgentActivity",
+            id: "other-started-child",
+            agentThreadId: "child-thread",
+            kind: "started",
+          },
+        },
+        { source: "live", threadId: "other-root-thread" },
+      ),
+    ).toThrow("already linked to parent");
+  });
+
+  test("updates a known child only from its authoritative parent transcript", () => {
+    const subagents = new CodexSubagentLinkState();
+    const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+    subagents.recordThread({
+      id: "child-thread",
+      cwd: "/repo",
+      startedAt: "2026-07-22T00:00:00.000Z",
+      updatedAtMs: Date.parse("2026-07-22T00:00:00.000Z"),
+      title: "Child",
+      parentThreadId: "root-thread",
+      status: { classification: "running" },
+      agentNickname: null,
+      agentRole: null,
+      subAgentSource: null,
+    });
+
+    const result = pipeline.runThreadItemResult(
+      {
+        index: 4,
+        timestamp: "2026-07-22T00:00:00.000Z",
+        item: {
+          type: "subAgentActivity",
+          id: "root-interacted",
+          agentThreadId: "child-thread",
+          kind: "interacted",
+        },
+      },
+      { source: "thread_read", threadId: "root-thread" },
+    );
+
+    expect(result).toMatchObject({ handled: true });
+    expect(result.events).toEqual([
+      expect.objectContaining({
+        threadId: "root-thread",
+        part: expect.objectContaining({
+          kind: "subagent",
+          externalSessionId: "child-thread",
+          correlationKey: "codex-subagent:root-thread:child-thread",
+        }),
+      }),
+    ]);
+    expect(subagents.routeForChild("child-thread")).toMatchObject({
+      parentExternalSessionId: "root-thread",
+      childExternalSessionId: "child-thread",
+    });
+  });
+
+  test("keeps explicit collab parent conflicts fail-fast", () => {
+    const subagents = new CodexSubagentLinkState();
+    const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+    pipeline.runLive(
+      {
+        kind: "item_completed",
+        item: {
+          type: "collabAgentToolCall",
+          id: "root-spawn",
+          tool: "spawnAgent",
+          status: "completed",
+          senderThreadId: "root-thread",
+          receiverThreadIds: ["child-thread"],
+          agentsStates: { "child-thread": { status: "running" } },
+        },
+      },
+      { source: "live", threadId: "root-thread" },
+    );
+
+    expect(() =>
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "collabAgentToolCall",
+            id: "other-root-spawn",
+            tool: "spawnAgent",
+            status: "completed",
+            senderThreadId: "other-root-thread",
+            receiverThreadIds: ["child-thread"],
+            agentsStates: { "child-thread": { status: "running" } },
+          },
+        },
+        { source: "live", threadId: "other-root-thread" },
+      ),
+    ).toThrow("already linked to parent");
+  });
+
   test("projects thread-read collab items to subagent history instead of generic collab tools", () => {
     const pipeline = createCodexEventMapperPipeline();
     const result = pipeline.runThreadItemResult(

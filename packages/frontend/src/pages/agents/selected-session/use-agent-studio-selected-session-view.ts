@@ -100,7 +100,8 @@ export function useAgentStudioSelectedSessionView({
     ? null
     : selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
-  const { sessionReadModelLoadState } = useAgentSessionReadModelState();
+  const { getSessionFault, sessionReadModelLoadState } = useAgentSessionReadModelState();
+  const selectedSessionFault = getSessionFault(selectedSessionIdentity);
   const runtimeTarget = useMemo(
     () =>
       isUnresolvedExplicitRouteSession
@@ -132,6 +133,7 @@ export function useAgentStudioSelectedSessionView({
         activityState: null,
         selectedModel: null,
         transcriptState: { kind: "session_loading", reason: "preparing" } as const,
+        sessionAuxiliaryError: null,
       };
     }
     if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "missing") {
@@ -143,6 +145,7 @@ export function useAgentStudioSelectedSessionView({
           kind: "failed",
           message: `Agent session "${routeSessionResolution.sessionExternalId}" was not found for ${missingSessionTask}.`,
         } as const,
+        sessionAuxiliaryError: null,
       };
     }
     if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "failed") {
@@ -153,6 +156,7 @@ export function useAgentStudioSelectedSessionView({
           kind: "failed",
           message: routeSessionResolution.message,
         } as const,
+        sessionAuxiliaryError: null,
       };
     }
 
@@ -161,6 +165,7 @@ export function useAgentStudioSelectedSessionView({
       session,
       sessionSummary: selection.sessionSummary,
       selectedTask,
+      sessionFault: selectedSessionFault,
       readModelLoadState: sessionReadModelLoadState,
       repoReadinessState,
     });
@@ -172,6 +177,7 @@ export function useAgentStudioSelectedSessionView({
     selectedTask,
     session,
     selection.sessionSummary,
+    selectedSessionFault,
     sessionReadModelLoadState,
   ]);
   const selectedSessionActivityState = selectedSessionViewProjection.activityState;
@@ -201,6 +207,7 @@ export function useAgentStudioSelectedSessionView({
       runtimeData,
       runtimeReadiness,
       transcriptState,
+      sessionAuxiliaryError: selectedSessionViewProjection.sessionAuxiliaryError,
     }),
     [
       transcriptState,
@@ -209,6 +216,7 @@ export function useAgentStudioSelectedSessionView({
       selectedSessionActivityState,
       selectedSessionIdentity,
       selectedSessionModel,
+      selectedSessionViewProjection.sessionAuxiliaryError,
       session,
     ],
   );

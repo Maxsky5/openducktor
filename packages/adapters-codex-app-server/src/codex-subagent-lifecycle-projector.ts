@@ -134,10 +134,7 @@ export class CodexSubagentLifecycleProjector {
       );
     }
     const parentSession = this.deps.sessions.get(route.parentExternalSessionId);
-    if (!parentSession) {
-      return false;
-    }
-    if (parentSession.runtimeId !== runtimeId) {
+    if (parentSession && parentSession.runtimeId !== runtimeId) {
       throw new Error(
         `Cannot project Codex subagent lifecycle for thread '${childThreadId}' because parent '${parentSession.threadId}' belongs to runtime '${parentSession.runtimeId}', not '${runtimeId}'.`,
       );
@@ -155,6 +152,9 @@ export class CodexSubagentLifecycleProjector {
         ? { startedAtMs: update.timestampMs }
         : { endedAtMs: update.timestampMs }),
     });
+    if (!parentSession) {
+      return false;
+    }
     const isTerminal =
       part.status === "completed" || part.status === "cancelled" || part.status === "error";
     const isSameTerminalLifecycle = isTerminal && part.status === update.status;

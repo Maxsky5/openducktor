@@ -216,10 +216,6 @@ const activityKind = (item: Record<string, unknown>): CodexSubagentActivityKind 
   return kind as CodexSubagentActivityKind;
 };
 
-const mapActivityStatus = (_kind: CodexSubagentActivityKind): StatusMapping => {
-  return { status: "running" };
-};
-
 const SUBAGENT_DESCRIPTION_MAX_LENGTH = 140;
 
 const creationDescriptionForPrompt = (
@@ -337,23 +333,27 @@ export const codexSubagentPartsFromItem = (
       ["agentThreadId", "agent_thread_id"],
       "agentThreadId",
     );
-    const parentThreadId = ctx.threadId;
-    if (parentThreadId === childThreadId) {
+    const sourceThreadId = ctx.threadId;
+    const kind = activityKind(item);
+    const route = linkState.routeForChild(childThreadId, ctx.runtimeId);
+    if (sourceThreadId === childThreadId) {
       throw itemError(item, "subAgentActivity parent thread matches child thread", {
-        parentThreadId,
+        parentThreadId: sourceThreadId,
         childThreadId,
       });
     }
-    const mapped = mapActivityStatus(activityKind(item));
+    if (!route && kind !== "started") {
+      return [];
+    }
+    const runtimeId = route?.runtimeId ?? ctx.runtimeId;
     return [
       linkState.upsertLink({
-        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : {}),
-        parentThreadId,
+        ...(runtimeId ? { runtimeId } : {}),
+        parentThreadId: sourceThreadId,
         childThreadId,
         itemId,
-        status: mapped.status,
-        ...(mapped.error ? { error: mapped.error } : {}),
-        metadata: activityMetadata(item, parentThreadId, childThreadId),
+        status: "running",
+        metadata: activityMetadata(item, sourceThreadId, childThreadId),
       }),
     ];
   }

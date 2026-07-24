@@ -75,12 +75,24 @@ const fakeAdapter = (input: {
 
 const createHarness = () => {
   const events: AgentSessionLiveEnvelope[] = [];
+  const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
     adapterRegistry,
+    faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
     publish: (event) => events.push(event),
   });
-  return { adapterRegistry, events, service };
+  return { adapterRegistry, events, faultLogs, service };
+};
+
+const expectHostFailure = async <Success>(
+  effect: Effect.Effect<Success, HostError>,
+): Promise<HostError> => {
+  const result = await Effect.runPromise(Effect.either(effect));
+  if (result._tag === "Right") {
+    throw new Error("Expected effect to fail.");
+  }
+  return result.left;
 };
 
 describe("createAgentSessionLiveStateService", () => {
@@ -346,6 +358,304 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     expect(events).toEqual([{ type: "session_upsert", session: updated }]);
+  });
+
+  test("publishes a scoped adapter fault with its exact live-session ref", async () => {
+    const { events, faultLogs, service } = createHarness();
+    const ref = sessionRef("session-1");
+
+    await Effect.runPromise(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              operation: "codex-live-session.process-event",
+              message: "Codex event processing failed.",
+              ref,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(events).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        operation: "codex-live-session.process-event",
+        message: "Codex event processing failed.",
+        ref,
+      },
+    ]);
+    expect(faultLogs).toEqual([
+      'agent-session-live.fault {"repoPath":"/repo","message":"Codex event processing failed.","operation":"codex-live-session.process-event","runtimeKind":"codex","workingDirectory":"/repo/session-1","externalSessionId":"session-1"}',
+    ]);
+  });
+
+  test("publishes an unscoped adapter fault without a live-session ref", async () => {
+    const { events, faultLogs, service } = createHarness();
+
+    await Effect.runPromise(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              operation: "codex-live-session.process-event",
+              message: "Codex event processing failed before routing.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(events).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        operation: "codex-live-session.process-event",
+        message: "Codex event processing failed before routing.",
+      },
+    ]);
+    expect(faultLogs).toEqual([
+      'agent-session-live.fault {"repoPath":"/repo","message":"Codex event processing failed before routing.","operation":"codex-live-session.process-event"}',
+    ]);
+  });
+
+  test("publishes a fault envelope when mandatory fault logging fails", async () => {
+    const events: AgentSessionLiveEnvelope[] = [];
+    let logAttempts = 0;
+    const logFailure = new HostOperationError({
+      operation: "test.fault-log",
+      message: "fault logging failed",
+    });
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () =>
+        Effect.sync(() => {
+          logAttempts += 1;
+        }).pipe(Effect.zipRight(Effect.fail(logFailure))),
+      publish: (event) => events.push(event),
+    });
+
+    const failure = await expectHostFailure(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              message: "Codex event processing failed.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(failure).toBe(logFailure);
+    expect(logAttempts).toBe(1);
+    expect(events).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        message: "Codex event processing failed.",
+      },
+    ]);
+  });
+
+  test("publishes later changes after a fault logging failure before returning it", async () => {
+    const events: AgentSessionLiveEnvelope[] = [];
+    const logFailure = new HostOperationError({
+      operation: "test.fault-log",
+      message: "fault logging failed",
+    });
+    const snapshot = liveSnapshot("session-1");
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.fail(logFailure),
+      publish: (event) => events.push(event),
+    });
+
+    const failure = await expectHostFailure(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              message: "Codex event processing failed.",
+            },
+            { type: "session_upsert" as const, snapshot },
+          ],
+        }),
+      ),
+    );
+
+    expect(failure).toBe(logFailure);
+    expect(events).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        message: "Codex event processing failed.",
+      },
+      { type: "session_upsert", session: snapshot },
+    ]);
+  });
+
+  test("attempts mandatory fault logging when fault envelope publication fails", async () => {
+    let logAttempts = 0;
+    let publishAttempts = 0;
+    const publishFailure = new HostOperationError({
+      operation: "test.publish",
+      message: "fault publication failed",
+    });
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () =>
+        Effect.sync(() => {
+          logAttempts += 1;
+        }),
+      publish: () => {
+        publishAttempts += 1;
+        throw publishFailure;
+      },
+    });
+
+    const failure = await expectHostFailure(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              message: "Codex event processing failed.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(failure).toBe(publishFailure);
+    expect(logAttempts).toBe(1);
+    expect(publishAttempts).toBe(1);
+  });
+
+  test("stops later changes when fault envelope publication fails", async () => {
+    const published: AgentSessionLiveEnvelope[] = [];
+    const publishFailure = new HostOperationError({
+      operation: "test.publish",
+      message: "fault publication failed",
+    });
+    const snapshot = liveSnapshot("session-1");
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
+      publish: (event) => {
+        published.push(event);
+        if (event.type === "fault") {
+          throw publishFailure;
+        }
+      },
+    });
+
+    const failure = await expectHostFailure(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              message: "Codex event processing failed.",
+            },
+            { type: "session_upsert" as const, snapshot },
+          ],
+        }),
+      ),
+    );
+
+    expect(failure).toBe(publishFailure);
+    expect(published).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        message: "Codex event processing failed.",
+      },
+    ]);
+  });
+
+  test("reports both failures when fault logging and publication fail", async () => {
+    let logAttempts = 0;
+    let publishAttempts = 0;
+    const logFailure = new HostOperationError({
+      operation: "test.fault-log",
+      message: "fault logging failed",
+    });
+    const publishFailure = new HostOperationError({
+      operation: "test.publish",
+      message: "fault publication failed",
+    });
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () =>
+        Effect.sync(() => {
+          logAttempts += 1;
+        }).pipe(Effect.zipRight(Effect.fail(logFailure))),
+      publish: () => {
+        publishAttempts += 1;
+        throw publishFailure;
+      },
+    });
+
+    const failure = await expectHostFailure(
+      service.runAdapterMutation(
+        Effect.succeed({
+          value: undefined,
+          changes: [
+            {
+              type: "fault" as const,
+              repoPath: "/repo",
+              message: "Codex event processing failed.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(logAttempts).toBe(1);
+    expect(publishAttempts).toBe(1);
+    expect(failure.message).toContain("fault logging failed");
+    expect(failure.message).toContain("fault publication failed");
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "agent-session-live.publish-fault",
+      message: expect.stringContaining("fault logging failed"),
+      details: {
+        faultLogFailure: logFailure,
+        publishFailure,
+      },
+      cause: {
+        faultLogFailure: logFailure,
+        publishFailure,
+      },
+    });
+  });
+
+  test("does not log ordinary live-session envelopes", async () => {
+    const { events, faultLogs, service } = createHarness();
+
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+
+    expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
+    expect(faultLogs).toEqual([]);
   });
 
   test("context failure does not make retained pending/session state unreadable", async () => {

@@ -74,6 +74,14 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
   ...overrides,
 });
 
+const scopedFault = (ref = snapshot().ref) =>
+  ({
+    type: "fault",
+    repoPath: "/repo",
+    message: "The runtime lost this session.",
+    ref,
+  }) as const satisfies AgentSessionLiveEnvelope;
+
 const createState = (
   duringObservation: (
     emit: (event: AgentSessionLiveEnvelope) => void,
@@ -595,6 +603,301 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to recover transcript history after a live-stream gap: history reload failed",
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps a scoped fault isolated to its exact session identity", async () => {
+    const secondRecord = { ...record, externalSessionId: "thread-2" };
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [
+            snapshot(),
+            snapshot({
+              ref: {
+                repoPath: "/repo",
+                runtimeKind: secondRecord.runtimeKind,
+                workingDirectory: secondRecord.workingDirectory,
+                externalSessionId: secondRecord.externalSessionId,
+              },
+            }),
+          ],
+        });
+      },
+      [record, secondRecord],
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit(
+          scopedFault({
+            repoPath: "/repo",
+            runtimeKind: secondRecord.runtimeKind,
+            workingDirectory: secondRecord.workingDirectory,
+            externalSessionId: secondRecord.externalSessionId,
+          }),
+        );
+      });
+
+      expect(
+        state.harness.getLatest().getSessionFault({
+          externalSessionId: record.externalSessionId,
+          runtimeKind: record.runtimeKind,
+          workingDirectory: record.workingDirectory,
+        }),
+      ).toBeNull();
+      expect(
+        state.harness.getLatest().getSessionFault({
+          externalSessionId: secondRecord.externalSessionId,
+          runtimeKind: secondRecord.runtimeKind,
+          workingDirectory: secondRecord.workingDirectory,
+        }),
+      ).toEqual({ message: "Live-session observation failed: The runtime lost this session." });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("records a scoped fault before the initial snapshot without failing the repository", async () => {
+    const state = createState((emit) => {
+      emit(scopedFault());
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(
+        state.harness.getLatest().getSessionFault({
+          externalSessionId: record.externalSessionId,
+          runtimeKind: record.runtimeKind,
+          workingDirectory: record.workingDirectory,
+        }),
+      ).toEqual({ message: "Live-session observation failed: The runtime lost this session." });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("normalizes repository paths when looking up a scoped fault", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit(scopedFault({ ...snapshot().ref, repoPath: "/repo/" }));
+      });
+
+      expect(
+        state.harness.getLatest().getSessionFault({
+          externalSessionId: record.externalSessionId,
+          runtimeKind: record.runtimeKind,
+          workingDirectory: record.workingDirectory,
+        }),
+      ).toEqual({ message: "Live-session observation failed: The runtime lost this session." });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("clears only the fault matching a successful live session delta", async () => {
+    const secondRecord = { ...record, externalSessionId: "thread-2" };
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      [record, secondRecord],
+    );
+    const firstIdentity = {
+      externalSessionId: record.externalSessionId,
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+    const secondIdentity = {
+      externalSessionId: secondRecord.externalSessionId,
+      runtimeKind: secondRecord.runtimeKind,
+      workingDirectory: secondRecord.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit(scopedFault());
+        state.emit(
+          scopedFault({
+            repoPath: "/repo",
+            runtimeKind: secondRecord.runtimeKind,
+            workingDirectory: secondRecord.workingDirectory,
+            externalSessionId: secondRecord.externalSessionId,
+          }),
+        );
+        state.emit({
+          type: "session_upsert",
+          session: snapshot({
+            ref: {
+              repoPath: "/repo",
+              ...secondIdentity,
+            },
+          }),
+        });
+      });
+
+      expect(state.harness.getLatest().getSessionFault(firstIdentity)).toEqual({
+        message: "Live-session observation failed: The runtime lost this session.",
+      });
+      expect(state.harness.getLatest().getSessionFault(secondIdentity)).toBeNull();
+
+      await state.harness.run(() => {
+        state.emit({ type: "session_removed", ref: { repoPath: "/repo", ...firstIdentity } });
+      });
+      expect(state.harness.getLatest().getSessionFault(firstIdentity)).toBeNull();
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("clears only the matching fault when a transcript event recovers a session", async () => {
+    const secondRecord = { ...record, externalSessionId: "thread-2" };
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      [record, secondRecord],
+    );
+    const firstIdentity = {
+      externalSessionId: record.externalSessionId,
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+    const secondIdentity = {
+      externalSessionId: secondRecord.externalSessionId,
+      runtimeKind: secondRecord.runtimeKind,
+      workingDirectory: secondRecord.workingDirectory,
+    };
+    const transcriptEvent = {
+      type: "assistant_message",
+      externalSessionId: secondIdentity.externalSessionId,
+      messageId: "recovered-message",
+      message: "The session is streaming again.",
+      timestamp: "2026-07-17T14:00:00.000Z",
+      sessionRef: { repoPath: "/repo", ...secondIdentity },
+    } as const;
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit(scopedFault({ repoPath: "/repo", ...firstIdentity }));
+        state.emit(scopedFault({ repoPath: "/repo", ...secondIdentity }));
+        state.emit({ type: "transcript_event", event: transcriptEvent });
+      });
+
+      expect(state.harness.getLatest().getSessionFault(firstIdentity)).toEqual({
+        message: "Live-session observation failed: The runtime lost this session.",
+      });
+      expect(state.harness.getLatest().getSessionFault(secondIdentity)).toBeNull();
+      expect(state.transcriptEvents.handle).toHaveBeenCalledWith(transcriptEvent);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps a fault without a session reference as a repository failure", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "fault",
+        repoPath: "/repo",
+        message: "The observation stream stopped.",
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message: "Live-session observation failed: The observation stream stopped.",
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps sibling scoped faults when an explicit retry fails before observation restarts", async () => {
+    const secondRecord = { ...record, externalSessionId: "thread-2" };
+    const batchList = mock(async () => {
+      throw new Error("retry failed");
+    });
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      [record, secondRecord],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+    const firstIdentity = {
+      externalSessionId: record.externalSessionId,
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+    const secondIdentity = {
+      externalSessionId: secondRecord.externalSessionId,
+      runtimeKind: secondRecord.runtimeKind,
+      workingDirectory: secondRecord.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("initial retry trigger");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("initial retry trigger");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      await state.harness.run(() => {
+        state.emit(scopedFault());
+        state.emit(
+          scopedFault({
+            repoPath: "/repo",
+            runtimeKind: secondRecord.runtimeKind,
+            workingDirectory: secondRecord.workingDirectory,
+            externalSessionId: secondRecord.externalSessionId,
+          }),
+        );
+        state.harness.getLatest().reloadSessionReadModel();
+      });
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(state.harness.getLatest().getSessionFault(firstIdentity)).toEqual({
+        message: "Live-session observation failed: The runtime lost this session.",
+      });
+      expect(state.harness.getLatest().getSessionFault(secondIdentity)).toEqual({
+        message: "Live-session observation failed: The runtime lost this session.",
       });
     } finally {
       await state.harness.unmount();

@@ -8,7 +8,7 @@ import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codex0144MultiAgentV2Replay } from "./test-fixtures/codex-0-144-multi-agent-v2";
-import type { CodexSessionState } from "./types";
+import type { CodexRuntimeEventQueueFailureHandler, CodexSessionState } from "./types";
 
 const waitForRuntimeEvent = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 const flushRuntimeEvents = async (): Promise<void> => {
@@ -33,8 +33,9 @@ const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
 
 const createRuntimeEvents = (
   overrides: Partial<ConstructorParameters<typeof CodexRuntimeSessionEvents>[0]> = {},
-) =>
-  new CodexRuntimeSessionEvents({
+) => {
+  const { subscribeEvents, onRuntimeEventQueueFailure, ...rest } = overrides;
+  const deps = {
     subscribeEvents: undefined,
     respondServerRequest: async () => undefined,
     sessions: new Map(),
@@ -44,8 +45,24 @@ const createRuntimeEvents = (
     subagents: new CodexSubagentLinkState(),
     updateThreadStatus: () => undefined,
     flushQueuedUserMessagesLater: () => undefined,
-    ...overrides,
+    ...rest,
+  };
+  if (!subscribeEvents) {
+    if (onRuntimeEventQueueFailure) {
+      throw new Error("Runtime event queue failure handling requires an event subscriber.");
+    }
+    return new CodexRuntimeSessionEvents(deps);
+  }
+  return new CodexRuntimeSessionEvents({
+    ...deps,
+    subscribeEvents,
+    onRuntimeEventQueueFailure:
+      onRuntimeEventQueueFailure ??
+      (() => {
+        return undefined;
+      }),
   });
+};
 
 const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
 
@@ -73,6 +90,19 @@ const createSessionForRuntime = (threadId: string, runtimeId: string): CodexSess
   runtimeId,
 });
 
+const createRoutedSession = (
+  retainedSession: CodexSessionState,
+  externalSessionId: string,
+): CodexSessionState => ({
+  ...retainedSession,
+  summary: {
+    ...retainedSession.summary,
+    externalSessionId,
+    title: externalSessionId,
+  },
+  threadId: externalSessionId,
+});
+
 const createActiveTurn = (
   threadId: string,
   turnModel: AgentModelSelection = model,
@@ -89,6 +119,17 @@ const createActiveTurn = (
 });
 
 describe("CodexRuntimeSessionEvents", () => {
+  test("requires a synchronous queue failure handler that returns exactly undefined", () => {
+    const handler: CodexRuntimeEventQueueFailureHandler = () => {
+      return undefined;
+    };
+    expect(handler({ runtimeId: "runtime-1", error: new Error("failed") })).toBeUndefined();
+
+    // @ts-expect-error Queue failure reporting must not return a promise.
+    const asyncHandler: CodexRuntimeEventQueueFailureHandler = async () => undefined;
+    void asyncHandler;
+  });
+
   test("normalizes Codex skill catalog invalidation without exposing its raw method", async () => {
     let listener: RuntimeListener | null = null;
     const invalidations: unknown[] = [];
@@ -111,6 +152,232 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(invalidations).toEqual([{ runtimeId: "runtime-1", catalog: "skills" }]);
     expect(invalidations[0]).not.toHaveProperty("method");
     expect(invalidations[0]).not.toHaveProperty("params");
+  });
+
+  test("reports rejected live mutation delivery without converting it into a session error", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("thread-live-mutation");
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const failures: Array<{ runtimeId: string; error: unknown }> = [];
+    const deliveryFailure = new Error("live mutation delivery failed");
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[session.threadId, session]]),
+      sessionEvents,
+      onLiveSessionMutation: async () => {
+        throw deliveryFailure;
+      },
+      onRuntimeEventQueueFailure: (failure) => {
+        failures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: session.threadId,
+          turnId: "turn-1",
+          itemId: "message-1",
+          delta: "Working",
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
+    expect(emittedEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
+  });
+
+  test("reports rejected catalog invalidation delivery without converting it into a session error", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("thread-catalog");
+    const sessionEvents = new CodexSessionEventBus();
+    const emittedEvents: unknown[] = [];
+    const failures: Array<{ runtimeId: string; error: unknown }> = [];
+    const catalogFailure = new Error("catalog invalidation delivery failed");
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[session.threadId, session]]),
+      sessionEvents,
+      onCatalogInvalidated: async () => {
+        throw catalogFailure;
+      },
+      onRuntimeEventQueueFailure: (failure) => {
+        failures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "skills/changed",
+        params: { threadId: session.threadId },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(failures).toEqual([{ runtimeId: "runtime-1", error: catalogFailure }]);
+    expect(emittedEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
+  });
+
+  test("reports one failed mutation delivery and continues the same runtime queue", async () => {
+    let listener: RuntimeListener | null = null;
+    const processingFailure = new Error("first mutation failed");
+    const failures: Array<{ runtimeId: string; error: unknown }> = [];
+    const mutations: unknown[] = [];
+    let attempts = 0;
+    let rejectFirstDelivery: ((error: unknown) => void) | undefined;
+    const firstDelivery = new Promise<void>((_resolve, reject) => {
+      rejectFirstDelivery = reject;
+    });
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      onLiveSessionMutation: (mutation) => {
+        attempts += 1;
+        if (attempts === 1) {
+          return firstDelivery;
+        }
+        mutations.push(mutation);
+      },
+      onRuntimeEventQueueFailure: (failure) => {
+        failures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "thread/status/changed", params: { threadId: "missing-thread" } },
+    });
+    await waitForRuntimeEvent();
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "thread/status/changed", params: { threadId: "missing-thread" } },
+    });
+    rejectFirstDelivery?.(processingFailure);
+    await flushRuntimeEvents();
+
+    expect(failures).toEqual([{ runtimeId: "runtime-1", error: processingFailure }]);
+    expect(attempts).toBe(2);
+    expect(mutations).toHaveLength(1);
+  });
+
+  test("starts catalog and mutation delivery once before preserving a single failure by identity", async () => {
+    let listener: RuntimeListener | null = null;
+    const deliveryFailure = new Error("catalog delivery failed");
+    const deliveries: string[] = [];
+    const failures: Array<{ runtimeId: string; error: unknown }> = [];
+    let rejectCatalog: ((error: unknown) => void) | undefined;
+    let resolveMutation: (() => void) | undefined;
+    const catalogDelivery = new Promise<void>((_resolve, reject) => {
+      rejectCatalog = reject;
+    });
+    const mutationDelivery = new Promise<void>((resolve) => {
+      resolveMutation = resolve;
+    });
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      onCatalogInvalidated: () => {
+        deliveries.push("catalog");
+        return catalogDelivery;
+      },
+      onLiveSessionMutation: () => {
+        deliveries.push("mutation");
+        return mutationDelivery;
+      },
+      onRuntimeEventQueueFailure: (failure) => {
+        failures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "skills/changed", params: {} },
+    });
+    await waitForRuntimeEvent();
+
+    expect(deliveries).toEqual(["catalog", "mutation"]);
+    expect(failures).toEqual([]);
+    rejectCatalog?.(deliveryFailure);
+    await waitForRuntimeEvent();
+    expect(failures).toEqual([]);
+    resolveMutation?.();
+    await flushRuntimeEvents();
+    expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
+  });
+
+  test("reports both catalog and mutation delivery failures as one actionable aggregate", async () => {
+    let listener: RuntimeListener | null = null;
+    const catalogFailure = new Error("catalog delivery failed");
+    const mutationFailure = new Error("mutation delivery failed");
+    const deliveries: string[] = [];
+    const failures: Array<{ runtimeId: string; error: unknown }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      onCatalogInvalidated: () => {
+        deliveries.push("catalog");
+        throw catalogFailure;
+      },
+      onLiveSessionMutation: () => {
+        deliveries.push("mutation");
+        throw mutationFailure;
+      },
+      onRuntimeEventQueueFailure: (failure) => {
+        failures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "skills/changed", params: {} },
+    });
+    await flushRuntimeEvents();
+
+    expect(deliveries).toEqual(["catalog", "mutation"]);
+    expect(failures).toHaveLength(1);
+    const failure = failures[0]?.error;
+    if (!(failure instanceof AggregateError)) {
+      throw new Error("Expected an AggregateError for dual delivery failures.");
+    }
+    expect(failure.errors).toEqual([catalogFailure, mutationFailure]);
+    expect(failure.message).toContain("runtime-1");
+    expect(failure.message).toContain("catalog invalidation: catalog delivery failed");
+    expect(failure.message).toContain("live session mutation: mutation delivery failed");
   });
 
   test("projects Codex 0.144 MultiAgentV2 child completion onto the parent subagent", async () => {
@@ -520,12 +787,22 @@ describe("CodexRuntimeSessionEvents", () => {
 
   test("records a malformed token notification as a stream fault without changing usage", async () => {
     let listener: RuntimeListener | null = null;
-    const mutations: Array<{ fault?: string }> = [];
+    const firstSession = createSession("first-retained-thread");
+    const secondSession = createSession("second-retained-thread");
+    const mutations: Array<{
+      fault?: string;
+      faultRef?: unknown;
+      transcriptEvents: Array<{ type?: string; sessionRef?: unknown }>;
+    }> = [];
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
         listener = (event) => next(withRuntimeReceivedAt(event));
         return () => undefined;
       },
+      sessions: new Map([
+        [firstSession.threadId, firstSession],
+        [secondSession.threadId, secondSession],
+      ]),
       onLiveSessionMutation: (mutation) => mutations.push(mutation),
     });
 
@@ -549,6 +826,648 @@ describe("CodexRuntimeSessionEvents", () => {
 
     expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toBeNull();
     expect(mutations.at(-1)?.fault).toContain("missing threadId");
+    expect(mutations.at(-1)?.faultRef).toBeUndefined();
+  });
+
+  test("scopes a routed stream processing fault to the routed child live ref", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const childThreadId = "child-thread";
+    const childLiveSession = {
+      ...parentSession,
+      summary: {
+        ...parentSession.summary,
+        externalSessionId: childThreadId,
+        title: childThreadId,
+      },
+      threadId: childThreadId,
+    };
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: parentSession.threadId,
+      childThreadId,
+      itemId: "spawn-1",
+      status: "running",
+    });
+    const mutations: Array<{ fault?: string; faultRef?: unknown }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[parentSession.threadId, parentSession]]),
+      subagents,
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "invalid-request",
+        method: "",
+        params: { threadId: childThreadId },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(mutations.at(-1)?.fault).toBe("Codex app-server server request is missing method.");
+    expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
+    const sessionErrors =
+      mutations.at(-1)?.transcriptEvents.filter((event) => event.type === "session_error") ?? [];
+    expect(sessionErrors).toEqual([
+      expect.objectContaining({ sessionRef: codexSessionRef(childLiveSession) }),
+    ]);
+    expect(sessionErrors).not.toContainEqual(
+      expect.objectContaining({ sessionRef: codexSessionRef(parentSession) }),
+    );
+  });
+
+  test("scopes malformed grandchild events to the grandchild through a retained root", async () => {
+    let listener: RuntimeListener | null = null;
+    const rootSession = createSession("root-thread");
+    const grandchildSession = {
+      ...rootSession,
+      summary: {
+        ...rootSession.summary,
+        externalSessionId: "grandchild-thread",
+        title: "grandchild-thread",
+      },
+      threadId: "grandchild-thread",
+    };
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: rootSession.threadId,
+      childThreadId: "child-thread",
+      itemId: "spawn-child",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "child-thread",
+      childThreadId: grandchildSession.threadId,
+      itemId: "spawn-grandchild",
+      status: "running",
+    });
+    const rootEvents: unknown[] = [];
+    const grandchildEvents: unknown[] = [];
+    const sessionEvents = new CodexSessionEventBus();
+    sessionEvents.subscribe(codexSessionRef(rootSession), (event) => rootEvents.push(event));
+    sessionEvents.subscribe(codexSessionRef(grandchildSession), (event) =>
+      grandchildEvents.push(event),
+    );
+    const mutations: Array<{
+      faultRef?: unknown;
+      transcriptEvents: Array<{ type?: string; sessionRef?: unknown }>;
+    }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[rootSession.threadId, rootSession]]),
+      sessionEvents,
+      subagents,
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "invalid-grandchild-request",
+        method: "",
+        params: { threadId: grandchildSession.threadId },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(grandchildSession));
+    expect(mutations.at(-1)?.transcriptEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        sessionRef: codexSessionRef(grandchildSession),
+      }),
+    );
+    expect(rootEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
+    expect(grandchildEvents).toContainEqual(expect.objectContaining({ type: "session_error" }));
+  });
+
+  test("emits and resolves nested grandchild questions through the grandchild event identity", async () => {
+    let listener: RuntimeListener | null = null;
+    const rootSession = createSession("root-thread");
+    const grandchildSession = createRoutedSession(rootSession, "grandchild-thread");
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: rootSession.threadId,
+      childThreadId: "child-thread",
+      itemId: "spawn-child",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "child-thread",
+      childThreadId: grandchildSession.threadId,
+      itemId: "spawn-grandchild",
+      status: "running",
+    });
+    const pendingInput = new CodexPendingInputState();
+    const grandchildEvents: unknown[] = [];
+    const sessionEvents = new CodexSessionEventBus();
+    sessionEvents.subscribe(codexSessionRef(grandchildSession), (event) =>
+      grandchildEvents.push(event),
+    );
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[rootSession.threadId, rootSession]]),
+      subagents,
+      pendingInput,
+      sessionEvents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "nested-question",
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: grandchildSession.threadId,
+          turnId: "grandchild-turn",
+          questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    const pending = pendingInput.nativeRequest(
+      "runtime-1",
+      grandchildSession.threadId,
+      "nested-question",
+    );
+    expect(pending).toMatchObject({
+      kind: "question",
+      entry: { threadId: grandchildSession.threadId },
+    });
+    const requestId = pending?.entry.request.requestId;
+    expect(grandchildEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "question_required",
+          externalSessionId: grandchildSession.threadId,
+          parentExternalSessionId: "child-thread",
+          childExternalSessionId: grandchildSession.threadId,
+          sessionRef: codexSessionRef(grandchildSession),
+        }),
+        expect.objectContaining({
+          type: "assistant_part",
+          externalSessionId: grandchildSession.threadId,
+          part: expect.objectContaining({ kind: "tool", status: "running" }),
+        }),
+      ]),
+    );
+
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "serverRequest/resolved",
+        params: { threadId: grandchildSession.threadId, requestId: "nested-question" },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(
+      pendingInput.nativeRequest("runtime-1", grandchildSession.threadId, "nested-question"),
+    ).toBeUndefined();
+    expect(grandchildEvents).toContainEqual(
+      expect.objectContaining({
+        type: "question_resolved",
+        externalSessionId: grandchildSession.threadId,
+        requestId,
+        parentExternalSessionId: "child-thread",
+        childExternalSessionId: grandchildSession.threadId,
+        sessionRef: codexSessionRef(grandchildSession),
+      }),
+    );
+  });
+
+  test("emits and resolves nested grandchild approvals through the grandchild event identity", async () => {
+    let listener: RuntimeListener | null = null;
+    const rootSession = createSession("root-thread");
+    const grandchildSession = createRoutedSession(rootSession, "grandchild-thread");
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: rootSession.threadId,
+      childThreadId: "child-thread",
+      itemId: "spawn-child",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "child-thread",
+      childThreadId: grandchildSession.threadId,
+      itemId: "spawn-grandchild",
+      status: "running",
+    });
+    const pendingInput = new CodexPendingInputState();
+    const grandchildEvents: unknown[] = [];
+    const sessionEvents = new CodexSessionEventBus();
+    sessionEvents.subscribe(codexSessionRef(grandchildSession), (event) =>
+      grandchildEvents.push(event),
+    );
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[rootSession.threadId, rootSession]]),
+      subagents,
+      pendingInput,
+      sessionEvents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "nested-approval",
+        method: "mcpServer/elicitation/request",
+        params: {
+          threadId: grandchildSession.threadId,
+          turnId: "grandchild-turn",
+          serverName: "semble",
+          mode: "form",
+          message: "Allow search?",
+          requestedSchema: { type: "object", properties: {} },
+          _meta: {
+            codex_approval_kind: "mcp_tool_call",
+            tool_name: "search",
+            persist: ["session"],
+          },
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    const pending = pendingInput.nativeRequest(
+      "runtime-1",
+      grandchildSession.threadId,
+      "nested-approval",
+    );
+    expect(pending).toMatchObject({
+      kind: "approval",
+      entry: { threadId: grandchildSession.threadId },
+    });
+    const requestId = pending?.entry.request.requestId;
+    expect(grandchildEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: grandchildSession.threadId,
+        parentExternalSessionId: "child-thread",
+        childExternalSessionId: grandchildSession.threadId,
+        sessionRef: codexSessionRef(grandchildSession),
+      }),
+    );
+
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "serverRequest/resolved",
+        params: { threadId: grandchildSession.threadId, requestId: "nested-approval" },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(
+      pendingInput.nativeRequest("runtime-1", grandchildSession.threadId, "nested-approval"),
+    ).toBeUndefined();
+    expect(grandchildEvents).toContainEqual(
+      expect.objectContaining({
+        type: "approval_resolved",
+        externalSessionId: grandchildSession.threadId,
+        requestId,
+        parentExternalSessionId: "child-thread",
+        childExternalSessionId: grandchildSession.threadId,
+        sessionRef: codexSessionRef(grandchildSession),
+      }),
+    );
+  });
+
+  test("emits routed question lifecycle events once to retained child and parent", async () => {
+    let listener: RuntimeListener | null = null;
+    const parentSession = createSession("parent-thread");
+    const childSession = createSession("child-thread");
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: parentSession.threadId,
+      childThreadId: childSession.threadId,
+      itemId: "spawn-child",
+      status: "running",
+    });
+    const pendingInput = new CodexPendingInputState();
+    const parentEvents: unknown[] = [];
+    const childEvents: unknown[] = [];
+    const sessionEvents = new CodexSessionEventBus();
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => parentEvents.push(event));
+    sessionEvents.subscribe(codexSessionRef(childSession), (event) => childEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([
+        [parentSession.threadId, parentSession],
+        [childSession.threadId, childSession],
+      ]),
+      subagents,
+      pendingInput,
+      sessionEvents,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "retained-child-question",
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: childSession.threadId,
+          turnId: "child-turn",
+          questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    const pending = pendingInput.nativeRequest(
+      "runtime-1",
+      childSession.threadId,
+      "retained-child-question",
+    );
+    const requestId = pending?.entry.request.requestId;
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "serverRequest/resolved",
+        params: { threadId: childSession.threadId, requestId: "retained-child-question" },
+      },
+    });
+    await flushRuntimeEvents();
+
+    const eventsByType = (events: unknown[], type: string) =>
+      events.filter(
+        (event) =>
+          typeof event === "object" && event !== null && "type" in event && event.type === type,
+      );
+    const parentRequired = eventsByType(parentEvents, "question_required");
+    const childRequired = eventsByType(childEvents, "question_required");
+    const parentResolved = eventsByType(parentEvents, "question_resolved");
+    const childResolved = eventsByType(childEvents, "question_resolved");
+
+    expect(parentRequired).toHaveLength(1);
+    expect(childRequired).toHaveLength(1);
+    expect(parentResolved).toHaveLength(1);
+    expect(childResolved).toHaveLength(1);
+    expect(parentRequired[0]).toMatchObject({
+      externalSessionId: parentSession.threadId,
+      parentExternalSessionId: parentSession.threadId,
+      childExternalSessionId: childSession.threadId,
+    });
+    expect(childRequired[0]).toMatchObject({
+      externalSessionId: childSession.threadId,
+      parentExternalSessionId: parentSession.threadId,
+      childExternalSessionId: childSession.threadId,
+    });
+    expect(parentResolved[0]).toMatchObject({ requestId });
+    expect(childResolved[0]).toMatchObject({ requestId });
+  });
+
+  test("leaves cross-runtime, incomplete, and cyclic route chains unscoped", async () => {
+    let listener: RuntimeListener | null = null;
+    const rootSession = createSessionForRuntime("root-thread", "runtime-2");
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: rootSession.threadId,
+      childThreadId: "cross-runtime-child",
+      itemId: "cross-runtime-root",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "cross-runtime-child",
+      childThreadId: "cross-runtime-grandchild",
+      itemId: "cross-runtime-child",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "missing-parent",
+      childThreadId: "incomplete-child",
+      itemId: "incomplete",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "cycle-child",
+      childThreadId: "cycle-grandchild",
+      itemId: "cycle-forward",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "cycle-grandchild",
+      childThreadId: "cycle-child",
+      itemId: "cycle-backward",
+      status: "running",
+    });
+    const mutations: Array<{ faultRef?: unknown; transcriptEvents: Array<{ type?: string }> }> = [];
+    const rootEvents: unknown[] = [];
+    const sessionEvents = new CodexSessionEventBus();
+    sessionEvents.subscribe(codexSessionRef(rootSession), (event) => rootEvents.push(event));
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[rootSession.threadId, rootSession]]),
+      subagents,
+      sessionEvents,
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    for (const threadId of ["cross-runtime-grandchild", "incomplete-child", "cycle-grandchild"]) {
+      listener?.({
+        runtimeId: "runtime-1",
+        kind: "server_request",
+        message: { id: `invalid-${threadId}`, method: "", params: { threadId } },
+      });
+      await flushRuntimeEvents();
+    }
+
+    expect(mutations).toHaveLength(3);
+    expect(rootEvents).toEqual([]);
+    for (const mutation of mutations) {
+      expect(mutation.faultRef).toBeUndefined();
+      expect(mutation.transcriptEvents).not.toContainEqual(
+        expect.objectContaining({ type: "session_error" }),
+      );
+    }
+  });
+
+  test("scopes malformed routed child token usage to the child live ref", async () => {
+    let listener: RuntimeListener | null = null;
+    const backgroundFailures: Array<{ runtimeId: string; error: unknown }> = [];
+    const parentSession = createSession("parent-thread");
+    const childThreadId = "child-thread";
+    const childLiveSession = {
+      ...parentSession,
+      summary: {
+        ...parentSession.summary,
+        externalSessionId: childThreadId,
+        title: childThreadId,
+      },
+      threadId: childThreadId,
+    };
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: parentSession.threadId,
+      childThreadId,
+      itemId: "spawn-1",
+      status: "running",
+    });
+    const mutations: Array<{
+      fault?: string;
+      faultRef?: unknown;
+      transcriptEvents: Array<{ type?: string; sessionRef?: unknown }>;
+    }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[parentSession.threadId, parentSession]]),
+      subagents,
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
+      onRuntimeEventQueueFailure: (failure) => {
+        backgroundFailures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "thread/tokenUsage/updated",
+        params: {
+          threadId: childThreadId,
+          turnId: "child-turn",
+          tokenUsage: {},
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(mutations.at(-1)?.fault).toBe(
+      "Codex context usage notification for thread 'child-thread' has invalid token usage.",
+    );
+    expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
+    const sessionErrors =
+      mutations.at(-1)?.transcriptEvents.filter((event) => event.type === "session_error") ?? [];
+    expect(sessionErrors).toEqual([
+      expect.objectContaining({ sessionRef: codexSessionRef(childLiveSession) }),
+    ]);
+    expect(sessionErrors).not.toContainEqual(
+      expect.objectContaining({ sessionRef: codexSessionRef(parentSession) }),
+    );
+    expect(backgroundFailures).toEqual([]);
+  });
+
+  test("keeps direct stream fault diagnostics on the retained session ref", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("direct-thread");
+    const mutations: Array<{
+      fault?: string;
+      faultRef?: unknown;
+      transcriptEvents: Array<{ type?: string; sessionRef?: unknown }>;
+    }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[session.threadId, session]]),
+      onLiveSessionMutation: (mutation) => mutations.push(mutation),
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "invalid-request",
+        method: "",
+        params: { threadId: session.threadId },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(session));
+    expect(
+      mutations.at(-1)?.transcriptEvents.filter((event) => event.type === "session_error"),
+    ).toEqual([expect.objectContaining({ sessionRef: codexSessionRef(session) })]);
+  });
+
+  test("updates the actual retained session for direct status notifications", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("direct-status-thread");
+    session.summary = { ...session.summary, status: "idle" };
+    const updatedStatuses: Array<{ threadId: string; status: string }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[session.threadId, session]]),
+      updateThreadStatus: (_runtimeId, threadId, status) => {
+        updatedStatuses.push({ threadId, status: status.classification });
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "thread/status/changed",
+        params: { threadId: session.threadId, status: { type: "active", activeFlags: [] } },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(session.liveStatus).toEqual({ classification: "running" });
+    expect(session.summary.status).toBe("running");
+    expect(updatedStatuses).toEqual([{ threadId: session.threadId, status: "running" }]);
   });
 
   test("retains canonical zero token usage without a stream fault", async () => {
@@ -964,13 +1883,24 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
-  test("emits routed child request processing errors on the loaded parent session", async () => {
+  test("emits routed child request processing errors on the routed child session", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");
+    const childSession = {
+      ...parentSession,
+      summary: {
+        ...parentSession.summary,
+        externalSessionId: "child-thread",
+        title: "child-thread",
+      },
+      threadId: "child-thread",
+    };
     const sessions = new Map([[parentSession.threadId, parentSession]]);
     const sessionEvents = new CodexSessionEventBus();
-    const emittedEvents: unknown[] = [];
-    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
+    const parentEvents: unknown[] = [];
+    const childEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(parentSession), (event) => parentEvents.push(event));
+    sessionEvents.subscribe(codexSessionRef(childSession), (event) => childEvents.push(event));
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({
       parentThreadId: "parent-thread",
@@ -1003,13 +1933,14 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    expect(emittedEvents).toContainEqual(
+    expect(childEvents).toContainEqual(
       expect.objectContaining({
         type: "session_error",
-        externalSessionId: "parent-thread",
+        externalSessionId: "child-thread",
         message: "Codex app-server server request is missing method.",
       }),
     );
+    expect(parentEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
   });
 
   test("does not process buffered child requests across runtimes", async () => {
