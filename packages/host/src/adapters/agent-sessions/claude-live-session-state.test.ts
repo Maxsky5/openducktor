@@ -232,6 +232,27 @@ describe("Claude host live-session state", () => {
     expect(state.contextRevision(ref)).toBe(revision + 1);
   });
 
+  test("scopes context refresh errors to the affected session", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+
+    expect(
+      state.applyEvent(session, {
+        type: "session_context_error",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:03:02.000Z",
+        message: "Context refresh timed out.",
+      }),
+    ).toEqual([
+      {
+        type: "fault",
+        repoPath: "/repo",
+        operation: "claude-live-session.load-context",
+        message: "Context refresh timed out.",
+        ref,
+      },
+    ]);
+  });
+
   test("replaces stale retained context when no newer context update arrives", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary(summary);

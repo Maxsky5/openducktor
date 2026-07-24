@@ -272,6 +272,7 @@ export const createClaudeLiveSessionState = ({
           repoPath: runtime.repoPath,
           operation: "claude-live-session.load-context",
           message: event.message,
+          ref: eventRef(session, event),
         },
       ];
     }
