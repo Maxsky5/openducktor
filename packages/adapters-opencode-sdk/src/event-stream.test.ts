@@ -93,6 +93,21 @@ const buildQueuedSignature = (message: string, model?: AgentModelSelection | nul
   return buildQueuedRequestSignature(parts, model ?? undefined);
 };
 
+const childSessionLifecycleEvent = (): Event =>
+  ({
+    type: "session.created",
+    properties: {
+      sessionID: "external-child-session",
+      info: {
+        id: "external-child-session",
+        parentID: "external-session-1",
+        time: {
+          created: Date.parse("2026-02-22T12:00:10.000Z"),
+        },
+      },
+    },
+  }) as unknown as Event;
+
 test("readEventParentExternalSessionId accepts OpenCode parent id spellings", () => {
   for (const key of ["parentID", "parentId", "parent_id"] as const) {
     expect(readEventParentExternalSessionId({ [key]: "external-parent-session" })).toBe(
@@ -2091,19 +2106,23 @@ describe("event-stream", () => {
     expect(isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent)).toBe(false);
     expect(
       isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent, {
-        isKnownChildExternalSessionId: (externalSessionId) =>
-          externalSessionId === "external-child-session",
+        resolveParentExternalSessionId: (externalSessionId) =>
+          externalSessionId === "external-child-session"
+            ? parentSubscriber.externalSessionId
+            : undefined,
       }),
     ).toBe(true);
     expect(
       isRelevantSubscriberEvent(parentSubscriber, childMessageEvent, {
-        isKnownChildExternalSessionId: (externalSessionId) =>
-          externalSessionId === "external-child-session",
+        resolveParentExternalSessionId: (externalSessionId) =>
+          externalSessionId === "external-child-session"
+            ? parentSubscriber.externalSessionId
+            : undefined,
       }),
     ).toBe(false);
   });
 
-  test("treats child session creation with top-level parent id as relevant to the parent subscriber", () => {
+  test("does not treat a top-level lifecycle parent id as authoritative", () => {
     const childSessionCreatedEvent = {
       type: "session.created",
       properties: {
@@ -2122,7 +2141,7 @@ describe("event-stream", () => {
       input: makeSessionInput(),
     };
 
-    expect(isRelevantSubscriberEvent(parentSubscriber, childSessionCreatedEvent)).toBe(true);
+    expect(isRelevantSubscriberEvent(parentSubscriber, childSessionCreatedEvent)).toBe(false);
     expect(isRelevantSubscriberEvent(otherSubscriber, childSessionCreatedEvent)).toBe(false);
   });
 
@@ -2508,6 +2527,7 @@ describe("event-stream", () => {
   test("runtime event transport forwards known child question events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
+        childSessionLifecycleEvent(),
         {
           type: "question.asked",
           properties: {
@@ -2740,6 +2760,7 @@ describe("event-stream", () => {
   test("runtime event transport forwards known child permission events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
+        childSessionLifecycleEvent(),
         {
           type: "permission.asked",
           properties: {
@@ -2773,6 +2794,7 @@ describe("event-stream", () => {
   test("runtime event transport forwards known child permission v2 events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
+        childSessionLifecycleEvent(),
         {
           type: "permission.v2.asked",
           properties: {
@@ -2806,6 +2828,7 @@ describe("event-stream", () => {
   test("runtime event transport forwards known child permission resolved events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
+        childSessionLifecycleEvent(),
         {
           type: "permission.replied",
           properties: {

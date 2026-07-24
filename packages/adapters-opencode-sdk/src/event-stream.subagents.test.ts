@@ -811,8 +811,8 @@ describe("event-stream subagent correlation", () => {
     );
   });
 
-  test("binds child session creation when the parent id is on event properties", async () => {
-    const { emitted, sessionRecord } = await runEventStreamWithSession([
+  test("reports child session creation when info.parentID is missing", async () => {
+    const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-top-level-parent"),
       makeAssistantSubtaskPartUpdatedEvent({
         messageId: "assistant-subagent-top-level-parent",
@@ -825,18 +825,11 @@ describe("event-stream subagent correlation", () => {
       }),
     ]);
 
-    const subagentParts = readSubagentParts(emitted);
-    expect(subagentParts).toHaveLength(2);
-    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
-      undefined,
-      "external-child-session",
-    ]);
-    expect(subagentParts[1]).toMatchObject({
-      correlationKey: "part:assistant-subagent-top-level-parent:subtask-a",
-      status: "running",
-    });
-    expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
-      "subtask-a",
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        message: expect.stringContaining("info.parentID"),
+      }),
     );
   });
 

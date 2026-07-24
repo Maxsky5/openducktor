@@ -99,6 +99,7 @@ export type RuntimeEventTransportRecord = {
   subscribers: Map<string, EventStreamSubscriber>;
   observers: Set<(event: Event) => void | Promise<void>>;
   terminalObservers: Set<(error: Error) => void | Promise<void>>;
+  parentExternalSessionIdByChildExternalSessionId: Map<string, string>;
 };
 
 export type ClientFactory = (input: {

@@ -48,7 +48,7 @@ type LogEventInput = {
 };
 
 type RelevantSubscriberEventOptions = {
-  isKnownChildExternalSessionId?: (externalSessionId: string) => boolean;
+  resolveParentExternalSessionId?: (childExternalSessionId: string) => string | undefined;
 };
 
 type GlobalEventStream = {
@@ -65,6 +65,7 @@ const SYNC_EVENT_TYPE_BY_NAME = {
   "message.part.removed.1": "message.part.removed",
   "session.created.1": "session.created",
   "session.updated.1": "session.updated",
+  "session.deleted.1": "session.deleted",
 } as const;
 
 const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
@@ -100,19 +101,24 @@ const normalizeGlobalEventPayload = (payload: Event): Event => {
     return payload;
   }
 
-  const name = payloadRecord.name;
-  if (typeof name !== "string") {
+  const syncEvent = asUnknownRecord(payloadRecord.syncEvent);
+  if (!syncEvent) {
+    return payload;
+  }
+  const syncEventType = syncEvent.type;
+  if (typeof syncEventType !== "string") {
     return payload;
   }
 
-  const eventType = SYNC_EVENT_TYPE_BY_NAME[name as keyof typeof SYNC_EVENT_TYPE_BY_NAME];
-  const data = asUnknownRecord(payloadRecord.data);
+  const eventType = SYNC_EVENT_TYPE_BY_NAME[syncEventType as keyof typeof SYNC_EVENT_TYPE_BY_NAME];
+  const data = asUnknownRecord(syncEvent.data);
   if (!eventType || !data) {
     return payload;
   }
 
   return {
     ...payloadRecord,
+    ...(typeof syncEvent.id === "string" ? { id: syncEvent.id } : {}),
     type: eventType,
     properties: data,
   } as unknown as Event;
@@ -239,7 +245,14 @@ export const isRelevantSubscriberEvent = (
   if (eventExternalSessionId) {
     const eventType = String(event.type);
     const properties = "properties" in event ? event.properties : undefined;
-    const parentExternalSessionId = readEventParentExternalSessionId(properties);
+    const propertiesRecord = asUnknownRecord(properties);
+    const parentSource =
+      eventType === "session.created" ||
+      eventType === "session.updated" ||
+      eventType === "session.deleted"
+        ? propertiesRecord?.info
+        : properties;
+    const parentExternalSessionId = readEventParentExternalSessionId(parentSource);
 
     if (eventType === "question.asked" && parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;
@@ -255,7 +268,8 @@ export const isRelevantSubscriberEvent = (
         eventType === "permission.replied" ||
         eventType === "question.asked" ||
         eventType === "question.replied") &&
-      options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
+      options?.resolveParentExternalSessionId?.(eventExternalSessionId) ===
+        subscriber.externalSessionId
     ) {
       return true;
     }

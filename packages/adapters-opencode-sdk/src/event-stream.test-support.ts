@@ -1,4 +1,4 @@
-import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
+import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
@@ -11,15 +11,9 @@ import type {
 
 type RunEventStreamOptions = {
   logEvent?: OpencodeEventLogger;
-  childrenBySessionId?: Record<string, Session[]>;
 };
 
-export const makeClientWithEvents = (
-  events: Event[],
-  options?: {
-    childrenBySessionId?: Record<string, Session[]>;
-  },
-): OpencodeClient => {
+export const makeClientWithEvents = (events: Event[]): OpencodeClient => {
   return {
     global: {
       event: async () => {
@@ -34,15 +28,6 @@ export const makeClientWithEvents = (
         return { stream: iterator() };
       },
     },
-    ...(options?.childrenBySessionId
-      ? {
-          session: {
-            children: async ({ sessionID }: { sessionID: string }) => ({
-              data: options.childrenBySessionId?.[sessionID] ?? [],
-            }),
-          },
-        }
-      : {}),
   } as unknown as OpencodeClient;
 };
 
@@ -99,9 +84,7 @@ export const runEventStreamWithSession = async (
   configureSession?: (sessionRecord: SessionRecord) => void,
   options: RunEventStreamOptions = {},
 ): Promise<{ emitted: AgentEvent[]; sessionRecord: SessionRecord }> => {
-  const client = makeClientWithEvents(events, {
-    ...(options.childrenBySessionId ? { childrenBySessionId: options.childrenBySessionId } : {}),
-  });
+  const client = makeClientWithEvents(events);
   const emitted: AgentEvent[] = [];
   const sessionRecord = makeSessionRecord(client);
   configureSession?.(sessionRecord);
