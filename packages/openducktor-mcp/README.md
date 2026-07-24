@@ -74,12 +74,15 @@ Startup behavior:
 
 - The MCP uses `ODT_HOST_URL` or `--host-url` first when provided.
 - Otherwise it discovers the current host bridge from the local discovery file.
-- It checks the host bridge `/health` endpoint.
-- It calls `odt_mcp_ready` before serving requests.
+- It calls authenticated `odt_mcp_ready` before serving requests.
+- When a default workspace is configured, it calls `odt_get_workspaces` alongside readiness and requires both calls to succeed.
+- The unauthenticated `/health` endpoint remains available for diagnostics, but MCP startup does not call it.
 - Startup fails if the host does not expose the full ODT tool surface.
 - Startup no longer requires `--workspace-id` or `ODT_WORKSPACE_ID`.
 - When both a startup default and a tool-input `workspaceId` are present, the tool input wins.
 - Workspace-scoped tools fail fast with an explicit error when neither a startup default nor a tool-input `workspaceId` is available.
+
+[Recorded process benchmark results and reproduction steps](../../docs/benchmarks/mcp-startup-health-probe.md) compare startup against the prior `/health` flow.
 
 OpenDucktor-managed OpenCode and Codex sessions receive explicit host URL and token values. Their routing does not use `OPENDUCKTOR_CHANNEL`.
 

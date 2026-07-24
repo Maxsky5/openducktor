@@ -86,6 +86,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
   const server = createServer(async (request, response) => {
     const url = request.url ?? "/";
 
+    // Bun's test fetch applies browser CORS rules to concurrent loopback JSON requests.
     if (request.method === "OPTIONS") {
       response.statusCode = 204;
       response.setHeader("Access-Control-Allow-Headers", "content-type");

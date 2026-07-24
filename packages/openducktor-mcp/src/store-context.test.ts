@@ -410,6 +410,23 @@ describe("resolveStoreContext", () => {
     );
   });
 
+  test("keeps discovery context when the discovered host URL is invalid", async () => {
+    const configDir = await createDiscoveryFile({ hostUrl: "not-a-url" });
+    const discoveryPath = join(configDir, "runtime", "mcp-bridge.json");
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+
+    try {
+      await resolveStoreContext({});
+      throw new Error("Expected resolveStoreContext() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toStartWith(
+        `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. not-a-url: `,
+      );
+      expect((error as Error).message).toEndWith(" Provide ODT_HOST_URL to override discovery.");
+    }
+  });
+
   test("preserves the exact unknown-workspace error during host discovery", async () => {
     const configDir = await createDiscoveryFile();
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
@@ -442,8 +459,9 @@ describe("resolveStoreContext", () => {
 
     process.env.ODT_WORKSPACE_ID = "missing-repo";
 
-    await expect(resolveStoreContext({})).rejects.toThrow(
-      "Configured default workspace 'missing-repo' was not found on the running OpenDucktor host. Start @openducktor/mcp with a valid --workspace-id or omit it and provide workspaceId per tool call.",
-    );
+    await expect(resolveStoreContext({})).rejects.toMatchObject({
+      message:
+        "Configured default workspace 'missing-repo' was not found on the running OpenDucktor host. Start @openducktor/mcp with a valid --workspace-id or omit it and provide workspaceId per tool call.",
+    });
   });
 });

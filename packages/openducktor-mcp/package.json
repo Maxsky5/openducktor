@@ -27,6 +27,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "build": "bun run scripts/build.ts",
+    "benchmark:startup": "bun run scripts/benchmark-startup.ts",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit && bunx tsc -p tsconfig.scripts.json --noEmit",
     "test": "bun test --timeout 1000 --max-concurrency=1",
     "lint": "biome check src scripts",

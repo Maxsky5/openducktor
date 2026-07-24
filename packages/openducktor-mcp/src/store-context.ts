@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
-import { OdtToolError } from "./tool-results";
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
+
+class ConfiguredWorkspaceNotFoundError extends Error {}
 
 export type OdtStoreOptions = {
   workspaceId?: string;
@@ -65,7 +66,7 @@ const validateConfiguredWorkspace = async (
     return;
   }
 
-  throw new Error(
+  throw new ConfiguredWorkspaceNotFoundError(
     `Configured default workspace '${workspaceId}' was not found on the running OpenDucktor host. Start @openducktor/mcp with a valid --workspace-id or omit it and provide workspaceId per tool call.`,
   );
 };
@@ -164,7 +165,7 @@ const discoverHostConnection = async (
       hostUrl: discovered.hostUrl,
     };
   } catch (error) {
-    if (!(error instanceof OdtToolError)) {
+    if (error instanceof ConfiguredWorkspaceNotFoundError) {
       throw error;
     }
     const reason = error instanceof Error ? error.message : String(error);
