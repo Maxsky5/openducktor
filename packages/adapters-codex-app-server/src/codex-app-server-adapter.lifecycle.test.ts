@@ -3,6 +3,7 @@ import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexStartSessionInput,
   codexUserMessageInput,
   createAdapterWithTransport,
   createHarness,
@@ -195,6 +196,74 @@ describe("CodexAppServerAdapter lifecycle", () => {
       "thread/loaded/list",
       "thread/list",
     ]);
+  });
+
+  test("ignores terminal turn completion from a disposed runtime owner", async () => {
+    const { adapter, transports } = createHarness({}, { deferTurnStart: true });
+    const internals = adapter as unknown as {
+      localSessions: { get(externalSessionId: string): unknown };
+      threadInventory: CodexThreadInventoryReader;
+    };
+    const statusOverridesByRuntimeId = (
+      internals.threadInventory as unknown as {
+        statusOverridesByRuntimeId: Map<string, Map<string, CodexThreadStatusSnapshot>>;
+      }
+    ).statusOverridesByRuntimeId;
+
+    await adapter.startSession(codexStartSessionInput());
+    const releasedSession = internals.localSessions.get("thread/start-runtime-live");
+    if (!releasedSession) {
+      throw new Error("Expected the original session to be retained.");
+    }
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "Complete after release" }],
+      }),
+    );
+    expect(statusOverridesByRuntimeId.size).toBe(1);
+    expect(statusOverridesByRuntimeId.get("runtime-live")?.size).toBe(1);
+
+    adapter.releaseRuntime("runtime-live");
+
+    expect(statusOverridesByRuntimeId.size).toBe(0);
+    expect(statusOverridesByRuntimeId.get("runtime-live")?.size ?? 0).toBe(0);
+    await adapter.startSession(codexStartSessionInput());
+    expect(internals.localSessions.get("thread/start-runtime-live")).not.toBe(releasedSession);
+
+    const transport = transports.get("runtime-live");
+    if (!transport) {
+      throw new Error("Expected the runtime transport to retain the deferred turn.");
+    }
+    transport.turnStartDeferred.resolve({
+      turn: { id: "turn-late", status: "completed" },
+    });
+    await flushCodexAdapterWork();
+
+    expect(statusOverridesByRuntimeId.size).toBe(0);
+    expect(statusOverridesByRuntimeId.get("runtime-live")?.size ?? 0).toBe(0);
+    const client = {
+      threadLoadedList: async () => ({
+        data: ["thread/start-runtime-live"],
+        nextCursor: null,
+      }),
+      threadList: async () => ({
+        data: [
+          {
+            id: "thread/start-runtime-live",
+            cwd: "/repo",
+            createdAt: 1,
+            updatedAt: 2,
+            preview: "Replacement session",
+            status: { type: "active", activeFlags: [] },
+          },
+        ],
+        nextCursor: null,
+      }),
+    } as unknown as CodexAppServerClient;
+    const freshInventory = await internals.threadInventory.read(client, "runtime-live");
+    expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
+      classification: "running",
+    });
   });
 
   test("supports read-only construction without renderer-owned live event plumbing", async () => {

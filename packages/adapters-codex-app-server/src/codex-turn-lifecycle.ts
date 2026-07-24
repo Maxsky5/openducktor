@@ -221,6 +221,10 @@ export const startCodexTurnForSession = async (
       effort: toTransportModelSelection(model).effort,
     })
     .then((result) => {
+      if (context.sessions.get(session.threadId) !== session) {
+        activeTurnState.markTurnSettled();
+        return result;
+      }
       const turnStartedAtMs = Date.now();
       const turnId = extractTurnId(result);
       if (turnId) {
