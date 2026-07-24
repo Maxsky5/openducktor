@@ -77,8 +77,8 @@ import { createElectronMainLogger, initializeElectronMainLogger } from "./electr
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
-import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
+import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 import {

@@ -35,12 +35,10 @@ import { createRuntimeDefinitionsService } from "../../application/runtimes/runt
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import type { TaskAssetReadService } from "../../application/task-assets/task-asset-read-service";
-import { createEventPublishingTaskService } from "../../application/tasks/event-publishing-task-service";
 import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
-import {
-  createTaskSyncService,
-  type TaskEventPublicationReporter,
-  type TaskSyncLoopHandle,
+import type {
+  TaskEventPublicationReporter,
+  TaskSyncLoopHandle,
 } from "../../application/tasks/sync/task-sync-service";
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
@@ -52,7 +50,7 @@ import { loadGlobalConfig } from "../../application/workspaces/workspace-setting
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
-import { createTaskEventStream, type TaskEventStreamPort } from "../../events/task-event-stream";
+import type { TaskEventStreamPort } from "../../events/task-event-stream";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createClaudeRuntimeCommandHandlers } from "../../interface/commands/claude-runtime-command-handlers";
@@ -98,6 +96,7 @@ import {
 } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
+import { createNodeTaskEventServices } from "./node-task-event-services";
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
 export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
@@ -303,32 +302,12 @@ export const createNodeEffectHostCommandRouter = (
     runtimeRegistry: effectiveRuntimeRegistry,
     worktreeFiles,
   });
-  const taskEventStream = createTaskEventStream({
-    reporter: {
-      report: (failure) =>
-        Effect.runFork(
-          onBackgroundFailure(
-            new HostOperationError({
-              operation: "task-event-stream.delivery",
-              message: "Task event stream subscriber delivery failed.",
-              cause: failure.cause,
-              details: { frame: failure.frame, subscriptionId: failure.subscriptionId },
-            }),
-          ),
-        ),
-    },
-  });
-  const taskSyncService = createTaskSyncService({
-    logger: lifecycleLogger,
+  const { taskEventStream, taskService, taskSyncService } = createNodeTaskEventServices({
+    baseTaskService,
+    lifecycleLogger,
     onBackgroundFailure,
-    publicationReporter: taskEventPublicationReporter,
-    taskEventStream,
-    taskService: baseTaskService,
+    taskEventPublicationReporter,
     workspaceSettingsService,
-  });
-  const taskService = createEventPublishingTaskService({
-    taskService: baseTaskService,
-    taskSyncService,
   });
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskAssetReadService,

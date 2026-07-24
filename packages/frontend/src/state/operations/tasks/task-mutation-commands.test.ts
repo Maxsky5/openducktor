@@ -260,12 +260,7 @@ describe("createTaskMutationCommands", () => {
       },
       assets,
     );
-    expect(taskUpdate).toHaveBeenCalledWith(
-      "/repo",
-      "task-1",
-      { description: "Updated" },
-      assets,
-    );
+    expect(taskUpdate).toHaveBeenCalledWith("/repo", "task-1", { description: "Updated" }, assets);
   });
 
   test("deletes the full task subtree and requests cached document removal for every deleted id", async () => {

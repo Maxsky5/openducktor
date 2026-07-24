@@ -39,7 +39,7 @@ describe("workflow docs contract", () => {
       "Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.",
     );
     expect(transitionDoc).toContain(
-      "collect the relevant IDs and call `odt_read_task_assets` once for the batch.",
+      "collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.",
     );
 
     expect(transitionDoc).toMatch(
