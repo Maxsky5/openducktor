@@ -8,7 +8,13 @@ import {
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
-import type { CodexAppServerAdapter, CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
+import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import type {
+  CodexAppServerAdapter,
+  CodexJsonRpcRequest,
+  CodexJsonRpcTransport,
+  CodexLiveSessionMutation,
+} from "./index";
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -801,6 +807,111 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     unsubscribe();
+  });
+
+  test("clears unmatched routed-child item timing when its retained parent is released", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const liveMutations: CodexLiveSessionMutation[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => {
+        liveMutations.push(mutation);
+      },
+    });
+    const parentThreadId = "thread-saved";
+    const childThreadId = "child-thread";
+    const itemId = "reused-child-item";
+    const internals = adapter as unknown as {
+      subagents: CodexSubagentLinkState;
+      runtimeEvents: {
+        startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;
+      };
+    };
+
+    await observeSessionState(adapter, parentThreadId);
+    internals.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId,
+      childThreadId,
+      itemId: "spawn-child",
+      status: "running",
+    });
+    emitNotification({
+      method: "item/started",
+      params: {
+        threadId: childThreadId,
+        turnId: "turn-before-release",
+        startedAtMs: 1_783_196_401_000,
+        item: {
+          type: "commandExecution",
+          id: itemId,
+          command: "true",
+          cwd: "/repo",
+          status: "inProgress",
+          commandActions: [],
+          aggregatedOutput: "",
+        },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    expect(
+      internals.runtimeEvents.startedItemTimestampsByRuntimeId
+        .get("runtime-live")
+        ?.get(childThreadId),
+    ).toEqual(new Map([[itemId, 1_783_196_401_000]]));
+
+    await adapter.releaseSession(codexSessionRuntimeRef(parentThreadId));
+
+    expect(
+      internals.runtimeEvents.startedItemTimestampsByRuntimeId
+        .get("runtime-live")
+        ?.has(childThreadId) ?? false,
+    ).toBe(false);
+    expect(internals.subagents.routeForChild(childThreadId, "runtime-live")).toBeNull();
+
+    await observeSessionState(adapter, parentThreadId);
+    internals.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId,
+      childThreadId,
+      itemId: "spawn-child-reused",
+      status: "running",
+    });
+    liveMutations.length = 0;
+    emitNotification({
+      method: "item/completed",
+      params: {
+        threadId: childThreadId,
+        turnId: "turn-after-release",
+        completedAtMs: 1_783_196_402_000,
+        item: {
+          type: "commandExecution",
+          id: itemId,
+          command: "true",
+          cwd: "/repo",
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "",
+          exitCode: 0,
+        },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    const completedPart = liveMutations
+      .flatMap((mutation) => mutation.transcriptEvents)
+      .flatMap((event) =>
+        event.type === "assistant_part" &&
+        event.part.kind === "tool" &&
+        event.part.callId === itemId &&
+        event.part.status === "completed"
+          ? [event.part]
+          : [],
+      )
+      .at(-1);
+    expect(completedPart).toBeDefined();
+    expect(completedPart).not.toHaveProperty("startedAtMs");
   });
 
   test("does not retain streamed events for a late renderer subscription", async () => {
