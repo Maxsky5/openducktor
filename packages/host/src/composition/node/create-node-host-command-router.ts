@@ -452,11 +452,9 @@ export const createNodeEffectHostCommandRouter = (
         if (shutdownResult._tag === "Left") {
           return yield* Effect.fail(shutdownResult.left);
         }
-        if (loggingFailures.length === 1) {
-          const [loggingFailure] = loggingFailures;
-          if (loggingFailure) {
-            return yield* Effect.fail(loggingFailure);
-          }
+        const [loggingFailure] = loggingFailures;
+        if (loggingFailures.length === 1 && loggingFailure) {
+          return yield* Effect.fail(loggingFailure);
         }
         if (loggingFailures.length > 1) {
           return yield* Effect.fail(
