@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRole } from "@openducktor/core";
+import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
 import type { HostOperationError } from "../../effect/host-errors";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
@@ -404,8 +405,9 @@ describe("buildClaudeAgentSdkOptions", () => {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "allow",
+          permissionDecisionReason: "OpenDucktor routed the tool input to the session worktree.",
           updatedInput: {
-            file_path: join(workingDirectory, "src", "index.ts"),
+            file_path: normalizePathForComparison(join(workingDirectory, "src", "index.ts")),
             content: "export {};",
           },
         },
