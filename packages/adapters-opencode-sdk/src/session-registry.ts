@@ -12,6 +12,7 @@ import { readEventInfo, readEventProperties } from "./event-stream/schemas";
 import {
   readEventParentExternalSessionId,
   readEventSessionId,
+  readLifecycleParentExternalSessionId,
   type SubagentSessionLink,
 } from "./event-stream/shared";
 import type {
@@ -84,7 +85,7 @@ const processRuntimeSessionLineage = (
     );
   }
 
-  const parentExternalSessionId = readEventParentExternalSessionId(info);
+  const parentExternalSessionId = readLifecycleParentExternalSessionId(info);
   if (!parentExternalSessionId) {
     const hasNonAuthoritativeParent = Boolean(readEventParentExternalSessionId(properties));
     const isConfirmedChild =

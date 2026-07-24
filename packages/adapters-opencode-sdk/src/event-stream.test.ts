@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { Event } from "@opencode-ai/sdk/v2/client";
+import type {
+  Event,
+  EventSessionCreated,
+  EventSessionUpdated,
+  Session,
+} from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import {
   isRelevantSubscriberEvent,
@@ -93,20 +98,29 @@ const buildQueuedSignature = (message: string, model?: AgentModelSelection | nul
   return buildQueuedRequestSignature(parts, model ?? undefined);
 };
 
-const childSessionLifecycleEvent = (): Event =>
+const childSessionInfo = (parentID: string | null = "external-session-1"): Session => ({
+  id: "external-child-session",
+  slug: "external-child-session",
+  projectID: "project-1",
+  directory: "/repo",
+  ...(parentID ? { parentID } : {}),
+  title: "Subagent",
+  version: "1.0.0",
+  time: {
+    created: Date.parse("2026-02-22T12:00:10.000Z"),
+    updated: Date.parse("2026-02-22T12:00:10.000Z"),
+  },
+});
+
+const childSessionLifecycleEvent = (): EventSessionCreated =>
   ({
+    id: "event-child-session-created",
     type: "session.created",
     properties: {
       sessionID: "external-child-session",
-      info: {
-        id: "external-child-session",
-        parentID: "external-session-1",
-        time: {
-          created: Date.parse("2026-02-22T12:00:10.000Z"),
-        },
-      },
+      info: childSessionInfo(),
     },
-  }) as unknown as Event;
+  }) satisfies EventSessionCreated;
 
 test("readEventParentExternalSessionId accepts OpenCode parent id spellings", () => {
   for (const key of ["parentID", "parentId", "parent_id"] as const) {
@@ -2145,6 +2159,67 @@ describe("event-stream", () => {
     expect(isRelevantSubscriberEvent(otherSubscriber, childSessionCreatedEvent)).toBe(false);
   });
 
+  test("does not treat lifecycle parent aliases as authoritative", () => {
+    const parentSubscriber = {
+      externalSessionId: "external-parent-session",
+      input: makeSessionInput(),
+    };
+
+    for (const parentAlias of ["parentId", "parent_id"] as const) {
+      const info = {
+        ...childSessionInfo(null),
+        [parentAlias]: parentSubscriber.externalSessionId,
+      };
+      const lifecycleEvent = {
+        id: `event-child-session-created-${parentAlias}`,
+        type: "session.created",
+        properties: {
+          sessionID: "external-child-session",
+          info,
+        },
+      } satisfies EventSessionCreated;
+
+      expect(isRelevantSubscriberEvent(parentSubscriber, lifecycleEvent)).toBe(false);
+    }
+  });
+
+  test("does not bind child correlation from lifecycle parent aliases", () => {
+    for (const parentAlias of ["parentId", "parent_id"] as const) {
+      const sessionRecord = makeSessionRecord(makeClientWithEvents([]));
+      sessionRecord.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
+      const info = {
+        ...childSessionInfo(null),
+        [parentAlias]: sessionRecord.externalSessionId,
+      };
+      const lifecycleEvent = {
+        id: `event-child-session-created-${parentAlias}`,
+        type: "session.created",
+        properties: {
+          sessionID: "external-child-session",
+          info,
+        },
+      } satisfies EventSessionCreated;
+
+      processOpencodeEvent({
+        context: {
+          externalSessionId: sessionRecord.externalSessionId,
+          input: sessionRecord.input,
+        },
+        event: lifecycleEvent,
+        now: () => "2026-02-22T12:00:00.000Z",
+        emit: () => undefined,
+        getSession: () => sessionRecord,
+      });
+
+      expect(
+        sessionRecord.pendingSubagentSessionsByExternalSessionId.has("external-child-session"),
+      ).toBe(false);
+      expect(
+        sessionRecord.subagentCorrelationKeyByExternalSessionId.has("external-child-session"),
+      ).toBe(false);
+    }
+  });
+
   test("does not treat same-directory child input events as parent-owned without a child link", () => {
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
@@ -2618,17 +2693,13 @@ describe("event-stream", () => {
           },
         } as unknown as Event,
         {
+          id: "event-child-session-updated",
           type: "session.updated",
           properties: {
-            info: {
-              id: "external-child-session",
-              parentID: "external-session-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:11.000Z"),
-              },
-            },
+            sessionID: "external-child-session",
+            info: childSessionInfo(),
           },
-        } as unknown as Event,
+        } satisfies EventSessionUpdated,
       ],
       (session) => {
         session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");

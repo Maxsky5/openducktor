@@ -25,6 +25,7 @@ import {
   readEventDirectory,
   readEventParentExternalSessionId,
   readEventSessionId,
+  readLifecycleParentExternalSessionId,
   removePendingSubagentCorrelationKey,
 } from "./shared";
 
@@ -411,7 +412,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
   const properties = readEventProperties(event);
   const info = readEventInfo(properties);
   const childExternalSessionId = readEventSessionId(event);
-  const parentExternalSessionId = readEventParentExternalSessionId(properties);
+  const parentExternalSessionId = readLifecycleParentExternalSessionId(info);
 
   if (
     !childExternalSessionId ||

@@ -1,4 +1,4 @@
-import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
@@ -14,16 +14,24 @@ type RunEventStreamOptions = {
 };
 
 type GlobalEventPayload = GlobalEvent["payload"];
+type WithoutOuterSyncId<T> = T extends { type: "sync" } ? Omit<T, "id"> : never;
 
-export const makeClientWithEvents = (events: GlobalEventPayload[]): OpencodeClient => {
+export type TestGlobalEventPayload = GlobalEventPayload | WithoutOuterSyncId<GlobalEventPayload>;
+
+type TestGlobalEvent = Omit<GlobalEvent, "payload"> & {
+  payload: TestGlobalEventPayload;
+};
+
+export const makeClientWithEvents = (events: TestGlobalEventPayload[]): OpencodeClient => {
   return {
     global: {
       event: async () => {
-        async function* iterator(): AsyncGenerator<GlobalEvent> {
+        async function* iterator(): AsyncGenerator<TestGlobalEvent> {
           for (const event of events) {
-            const directory =
-              (event as Event & { properties?: { directory?: string } }).properties?.directory ??
-              "/repo";
+            const properties = "properties" in event ? event.properties : undefined;
+            const directoryValue =
+              properties && "directory" in properties ? properties.directory : undefined;
+            const directory = typeof directoryValue === "string" ? directoryValue : "/repo";
             yield { directory, payload: event };
           }
         }
@@ -82,7 +90,7 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
 });
 
 export const runEventStreamWithSession = async (
-  events: GlobalEventPayload[],
+  events: TestGlobalEventPayload[],
   configureSession?: (sessionRecord: SessionRecord) => void,
   options: RunEventStreamOptions = {},
 ): Promise<{ emitted: AgentEvent[]; sessionRecord: SessionRecord }> => {
@@ -116,6 +124,6 @@ export const runEventStreamWithSession = async (
   return { emitted, sessionRecord };
 };
 
-export const runEventStream = async (events: GlobalEventPayload[]): Promise<AgentEvent[]> => {
+export const runEventStream = async (events: TestGlobalEventPayload[]): Promise<AgentEvent[]> => {
   return (await runEventStreamWithSession(events)).emitted;
 };

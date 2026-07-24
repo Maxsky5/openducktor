@@ -9,6 +9,7 @@ import {
   readEventDirectory,
   readEventParentExternalSessionId,
   readEventSessionId,
+  readLifecycleParentExternalSessionId,
 } from "./event-stream/shared";
 import { asUnknownRecord } from "./guards";
 import type {
@@ -257,13 +258,14 @@ export const isRelevantSubscriberEvent = (
     const eventType = String(event.type);
     const properties = "properties" in event ? event.properties : undefined;
     const propertiesRecord = asUnknownRecord(properties);
-    const parentSource =
+    const isLifecycleEvent =
       eventType === "session.created" ||
       eventType === "session.updated" ||
-      eventType === "session.deleted"
-        ? propertiesRecord?.info
-        : properties;
-    const parentExternalSessionId = readEventParentExternalSessionId(parentSource);
+      eventType === "session.deleted";
+    const parentSource = isLifecycleEvent ? propertiesRecord?.info : properties;
+    const parentExternalSessionId = isLifecycleEvent
+      ? readLifecycleParentExternalSessionId(parentSource)
+      : readEventParentExternalSessionId(parentSource);
 
     if (eventType === "question.asked" && parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;
