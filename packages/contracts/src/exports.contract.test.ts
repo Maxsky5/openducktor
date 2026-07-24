@@ -194,11 +194,19 @@ import type {
   TaskAction,
   TaskAgentSessions,
   TaskCard,
+  TaskChangeSet,
   TaskCreateInput,
   TaskDirectMergeInput,
   TaskDirectMergeResult,
   TaskDocumentPresence,
   TaskDocumentSummary,
+  TaskEventChangeFrame,
+  TaskEventCursor,
+  TaskEventSnapshotRequiredFrame,
+  TaskEventSnapshotRequiredReason,
+  TaskEventStreamAcknowledge,
+  TaskEventStreamFrame,
+  TaskEventStreamSubscribe,
   TaskMetadataDocument,
   TaskMetadataPayload,
   TaskMetadataQaReport,
@@ -392,6 +400,13 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "externalTaskCreatedEventSchema",
   "externalTaskSyncEventKindSchema",
   "externalTaskSyncEventSchema",
+  "taskEventChangeFrameSchema",
+  "taskEventCursorSchema",
+  "taskEventSnapshotRequiredFrameSchema",
+  "taskEventSnapshotRequiredReasonSchema",
+  "taskEventStreamAcknowledgeSchema",
+  "taskEventStreamFrameSchema",
+  "taskEventStreamSubscribeSchema",
   "DEFAULT_BRANCH_PREFIX",
   "failureKindSchema",
   "gitCommitAllRequestSchema",
@@ -607,6 +622,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskApprovalContextSchema",
   "taskApprovalContextLoadResultSchema",
   "taskCardSchema",
+  "taskChangeSetSchema",
   "taskCreateInputSchema",
   "taskDirectMergeInputSchema",
   "taskDirectMergeResultSchema",
@@ -871,6 +887,14 @@ type ExportedTypeContract = {
   SystemOpenInToolInfo: SystemOpenInToolInfo;
   TaskAction: TaskAction;
   TaskCard: TaskCard;
+  TaskChangeSet: TaskChangeSet;
+  TaskEventChangeFrame: TaskEventChangeFrame;
+  TaskEventCursor: TaskEventCursor;
+  TaskEventSnapshotRequiredFrame: TaskEventSnapshotRequiredFrame;
+  TaskEventSnapshotRequiredReason: TaskEventSnapshotRequiredReason;
+  TaskEventStreamAcknowledge: TaskEventStreamAcknowledge;
+  TaskEventStreamFrame: TaskEventStreamFrame;
+  TaskEventStreamSubscribe: TaskEventStreamSubscribe;
   TaskCreateInput: TaskCreateInput;
   TaskDirectMergeInput: TaskDirectMergeInput;
   TaskDirectMergeResult: TaskDirectMergeResult;

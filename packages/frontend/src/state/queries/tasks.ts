@@ -8,6 +8,8 @@ export type RepoTaskData = {
   tasks: TaskCard[];
 };
 
+export type ListTasks = (repoPath: string, doneVisibleDays: number) => Promise<TaskCard[]>;
+
 export const taskQueryKeys = {
   all: ["tasks"] as const,
   repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
@@ -17,16 +19,19 @@ export const taskQueryKeys = {
     taskQueryKeys.repoData(repoPath, doneVisibleDays),
 };
 
-export const repoTaskDataQueryOptions = (repoPath: string, doneVisibleDays: number) =>
-  queryOptions({
-    queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
-    queryFn: async (): Promise<RepoTaskData> => {
-      return {
-        tasks: await host.tasksList(repoPath, doneVisibleDays),
-      };
-    },
-    staleTime: TASK_DATA_STALE_TIME_MS,
-  });
+export const createRepoTaskDataQueryOptions =
+  (listTasks: ListTasks) => (repoPath: string, doneVisibleDays: number) =>
+    queryOptions({
+      queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
+      queryFn: async (): Promise<RepoTaskData> => ({
+        tasks: await listTasks(repoPath, doneVisibleDays),
+      }),
+      staleTime: TASK_DATA_STALE_TIME_MS,
+    });
+
+export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions(
+  (repoPath, doneVisibleDays) => host.tasksList(repoPath, doneVisibleDays),
+);
 
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,

@@ -19,6 +19,7 @@ export type AgentOrchestratorHostPort = AgentSessionReadPort & {
     taskId: string,
     record: AgentSessionRecord,
   ) => Promise<void>;
+  taskMetadataGetFresh: typeof host.taskMetadataGetFresh;
   taskWorktreeGet: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
 };
 

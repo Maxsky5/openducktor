@@ -34,7 +34,6 @@ const createConsumerHarness = (
       updateSession,
       updateSessionTodos: () => undefined,
       sessionTurnState: createSessionTurnState(),
-      refreshTaskData: async () => undefined,
     },
     { batchWindowMs },
   );

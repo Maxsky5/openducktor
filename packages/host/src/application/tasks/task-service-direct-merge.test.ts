@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
+import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createAgentSessionRecord,
   createApprovalSystemCommands,
@@ -10,6 +11,7 @@ import {
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createTaskService,
+  createTaskServiceWithMutationProgress,
   extendGitPort,
   extendSettingsConfigPort,
   type TaskStorePort,
@@ -321,6 +323,88 @@ describe("createTaskService direct merge", () => {
         input: { repoPath: "/repo", taskId: "task-1", status: "human_review" },
       },
     ]);
+  });
+  test("reports failures after recording a direct merge as partial progress", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.transition-task",
+      message: "transition failed",
+    });
+    let directMergeWritten = false;
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ status: "ai_review" })]),
+      getTaskMetadata: () =>
+        Effect.succeed({
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        }),
+      setDirectMerge: () =>
+        Effect.sync(() => {
+          directMergeWritten = true;
+          return true;
+        }),
+      transitionTask: () => Effect.fail(failure),
+    };
+    const calls: unknown[] = [];
+    const service = createTaskServiceWithMutationProgress({
+      devServerService: createDirectMergeDevServerService(calls),
+      gitPort: extendGitPort(
+        createDirectMergeGitPort({
+          calls,
+          currentBranches: {
+            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+          },
+        }),
+        {
+          getWorktreeStatusSummaryData: () =>
+            Effect.succeed({
+              currentBranch: { name: "odt/task-1", detached: false },
+              fileStatuses: [],
+              fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+              targetAheadBehind: { ahead: 1, behind: 0 },
+              upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+            }),
+          suggestedSquashCommitMessage: () => Effect.succeed("Direct merge task"),
+          mergeBranch: () => Effect.succeed({ outcome: "merged", output: "merged" }),
+        },
+      ),
+      settingsConfig: extendSettingsConfigPort(
+        createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        {
+          readConfig: () =>
+            Effect.succeed({
+              ...createDefaultGlobalConfig(),
+              git: { defaultMergeMethod: "merge_commit" },
+            }),
+        },
+      ),
+      systemCommands: createApprovalSystemCommands(),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const result = await Effect.runPromise(
+      service
+        .directMerge({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { mergeMethod: "merge_commit" },
+        })
+        .pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(directMergeWritten).toBe(true);
+    expect(result.operation).toBe("direct-merge");
+    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
+    expect(result.failure).toBe(failure);
   });
   test("returns direct merge conflicts without recording metadata", async () => {
     const calls: unknown[] = [];

@@ -14,7 +14,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, render, waitFor } from "@testing-library/react";
 import { act, isValidElement, type ReactElement } from "react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router";
 import { hostClient } from "@/lib/host-client";
 import { createQueryClient } from "@/lib/query-client";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";

@@ -114,6 +114,7 @@ export const createTestDependencies = (
       agentSessionsListForTasks: async (_repoPath, taskIds) =>
         taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
       agentSessionUpsert: (...args) => host.agentSessionUpsert(...args),
+      taskMetadataGetFresh: (...args) => host.taskMetadataGetFresh(...args),
       taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
       ...hostOverrides,
     },

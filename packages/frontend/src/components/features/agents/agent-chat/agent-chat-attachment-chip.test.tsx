@@ -22,7 +22,11 @@ const configureAttachmentPreviewShellBridge = (
       unsubscribe: () => {},
     }),
     observeAgentSessionLive: async () => () => {},
-    subscribeTaskEvents: async () => () => {},
+    subscribeTaskStream: async () => ({
+      subscriptionId: "test-subscription",
+      acknowledge: async () => {},
+      unsubscribe: () => {},
+    }),
     appUpdates: createDisabledAppUpdateBridge({
       status: "disabled",
       currentVersion: "unknown",

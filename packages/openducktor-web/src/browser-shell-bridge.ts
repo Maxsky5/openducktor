@@ -18,7 +18,7 @@ import {
   observeLocalHostAgentSessions,
   subscribeLocalHostDevServerEvents,
   subscribeLocalHostRunEvents,
-  subscribeLocalHostTaskEvents,
+  subscribeLocalHostTaskStream,
 } from "./local-host-transport";
 import { createBrowserTerminalBridge } from "./terminals/browser-terminal-transport";
 
@@ -85,7 +85,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
     subscribeRunEvents: subscribeLocalHostRunEvents,
     subscribeDevServerEvents: subscribeLocalHostDevServerEvents,
     observeAgentSessionLive: observeLocalHostAgentSessions,
-    subscribeTaskEvents: subscribeLocalHostTaskEvents,
+    subscribeTaskStream: subscribeLocalHostTaskStream,
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
     resolveLocalAttachmentPreviewSrc: (path) =>
       runWebBoundary(resolveLocalAttachmentPreviewSrcEffect(client, path)),

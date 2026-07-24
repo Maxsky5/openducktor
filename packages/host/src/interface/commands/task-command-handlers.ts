@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { TaskService } from "../../application/tasks/task-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import {
@@ -85,7 +86,8 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
   task_pull_request_upsert: (args) =>
     taskService.upsertPullRequest(parsePullRequestUpsertInput(args)),
   task_create: (args) => taskService.createTask(parseCreateTaskInput(args)),
-  task_delete: (args) => taskService.deleteTask(parseDeleteTaskInput(args)),
+  task_delete: (args) =>
+    taskService.deleteTask(parseDeleteTaskInput(args)).pipe(Effect.map(({ ok }) => ({ ok }))),
   task_metadata_get: (args) =>
     taskService.getTaskMetadata(parseTaskIdInput(args, "task_metadata_get input")),
   task_reset: (args) => taskService.resetTask(parseTaskIdInput(args, "task_reset input")),
@@ -93,7 +95,8 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
     taskService.resetImplementation(parseTaskIdInput(args, "task_reset_implementation input")),
   task_transition: (args) => taskService.transitionTask(parseTransitionTaskInput(args)),
   task_update: (args) => taskService.updateTask(parseUpdateTaskInput(args)),
-  set_plan: (args) => taskService.setPlan(parseSetPlanInput(args)),
+  set_plan: (args) =>
+    taskService.setPlan(parseSetPlanInput(args)).pipe(Effect.map(({ document }) => document)),
   set_spec: (args) =>
     taskService.setSpec(parseMarkdownDocumentInput(args, "set_spec input", "spec")),
   plan_get: (args) => taskService.planGet(parseTaskIdInput(args, "plan_get input")),

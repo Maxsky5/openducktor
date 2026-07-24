@@ -47,7 +47,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       clearTurnDuration: () => {
         clearTurnDurationCalls += 1;
       },
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -129,7 +128,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         },
         resolveTurnDurationMs: () => 300,
         clearTurnDuration: () => {},
-        refreshTaskData: async () => {},
       });
 
       const handleEvent = handlers[0];
@@ -252,7 +250,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       },
       resolveTurnDurationMs: () => 300,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -315,7 +312,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
   test("handles session start and assistant parts matrix", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    let refreshCalls = 0;
     let clearCalls = 0;
 
     const adapter: SessionEventAdapter = {
@@ -341,9 +337,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => 300,
       clearTurnDuration: () => {
         clearCalls += 1;
-      },
-      refreshTaskData: async () => {
-        refreshCalls += 1;
       },
     });
 
@@ -503,7 +496,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       timestamp: "2026-02-22T08:00:04.000Z",
     });
 
-    expect(refreshCalls).toBe(1);
     expect(clearCalls).toBeGreaterThan(0);
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
     expect(
@@ -612,7 +604,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -679,10 +670,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
       },
-      refresh: {
-        refreshTaskData: async () => {},
-        workflowToolAliasesByCanonical: undefined,
-      },
       todos: {
         updateSessionTodos: () => {},
       },
@@ -734,7 +721,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       recordTurnActivityTimestamp,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -785,7 +771,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -864,7 +849,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -928,7 +912,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1033,7 +1016,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1114,7 +1096,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1197,7 +1178,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1305,7 +1285,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];

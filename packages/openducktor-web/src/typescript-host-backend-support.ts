@@ -28,6 +28,9 @@ export type BufferedHostEventReplay = {
   events: BufferedHostEvent[];
   skippedEventCount: number;
 };
+export type BufferedHostEventDeliveryReporter = {
+  report(failure: { channel: HostEventChannel; cause: unknown }): void;
+};
 type StopTypescriptHostBackendServicesInput = {
   disposeHost: () => Effect.Effect<void, unknown>;
   logger: WebLogger;
@@ -44,7 +47,7 @@ export class BufferedHostEventStream {
 
   constructor(private readonly capacity: number) {}
 
-  emit(payload: unknown): void {
+  emit(payload: unknown, reportDeliveryFailure: (cause: unknown) => void): void {
     this.nextId += 1;
     const event = {
       id: this.nextId,
@@ -54,8 +57,12 @@ export class BufferedHostEventStream {
     if (this.recent.length > this.capacity) {
       this.recent.shift();
     }
-    for (const listener of this.listeners) {
-      listener(event);
+    for (const listener of [...this.listeners]) {
+      try {
+        listener(event);
+      } catch (cause) {
+        reportDeliveryFailure(cause);
+      }
     }
   }
 
@@ -95,15 +102,23 @@ export class BufferedHostEventBus implements HostEventBusPort {
   private readonly eventStream = new BufferedHostEventStream(EVENT_BUFFER_CAPACITY);
   private readonly listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
 
+  constructor(private readonly deliveryReporter: BufferedHostEventDeliveryReporter) {}
+
   publish(channel: string, payload: unknown): void {
     const hostChannel = this.requireChannel(channel);
-    this.eventStream.emit({ channel: hostChannel, payload });
+    this.eventStream.emit({ channel: hostChannel, payload }, (cause) =>
+      this.deliveryReporter.report({ channel: hostChannel, cause }),
+    );
     const listeners = this.listenersByChannel.get(hostChannel);
     if (!listeners) {
       return;
     }
-    for (const listener of listeners) {
-      listener(payload);
+    for (const listener of [...listeners]) {
+      try {
+        listener(payload);
+      } catch (cause) {
+        this.deliveryReporter.report({ channel: hostChannel, cause });
+      }
     }
   }
 

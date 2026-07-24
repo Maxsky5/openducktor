@@ -1,6 +1,6 @@
 import { Activity, ChevronRight, CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { formatAgentSessionActivityStateLabel } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";

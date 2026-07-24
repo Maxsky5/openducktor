@@ -58,7 +58,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -110,7 +109,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -184,7 +182,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -244,7 +241,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -333,7 +329,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -418,7 +413,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -496,7 +490,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -556,7 +549,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -603,7 +595,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -645,7 +636,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -721,7 +711,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       updateSession,
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];

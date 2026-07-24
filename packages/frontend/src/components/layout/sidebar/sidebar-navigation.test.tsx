@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, lazy, type MouseEvent, type ReactElement, Suspense } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { SidebarNavigation } from "./sidebar-navigation";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 

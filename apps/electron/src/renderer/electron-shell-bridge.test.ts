@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
+import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
+import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import {
   createElectronShellBridge,
@@ -7,6 +10,36 @@ import {
 } from "./electron-shell-bridge";
 
 const originalWindow = globalThis.window;
+
+const taskStreamEpoch = "11111111-1111-4111-8111-111111111111";
+const taskStreamCursor = (sequence: number): TaskEventCursor => ({
+  epoch: taskStreamEpoch,
+  sequence,
+});
+const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
+  eventId: `event-${sequence}`,
+  kind: "external_task_created",
+  repoPath: "/repo",
+  taskId: `task-${sequence}`,
+  emittedAt: "2026-04-10T13:00:00.000Z",
+});
+
+const deferred = <Value>() => {
+  let resolve!: (value: Value) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+};
+
+const flushTaskStream = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await Promise.resolve();
+};
 
 const setElectronApi = (electronApi: OpenDucktorElectronApi | undefined): void => {
   Object.defineProperty(globalThis, "window", {
@@ -19,9 +52,11 @@ const createElectronApi = (): {
   electronApi: OpenDucktorElectronApi;
   unsubscribeAppUpdates: ReturnType<typeof mock>;
   unsubscribe: ReturnType<typeof mock>;
+  unsubscribeTaskStream: ReturnType<typeof mock>;
 } => {
   const unsubscribe = mock(() => {});
   const unsubscribeAppUpdates = mock(() => {});
+  const unsubscribeTaskStream = mock(() => {});
   return {
     electronApi: {
       invoke: mock(async () => ({ ok: true as const, value: {} })),
@@ -58,9 +93,22 @@ const createElectronApi = (): {
       },
       openExternalUrl: mock(async () => {}),
       resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
+      taskStream: {
+        subscribe: mock(async () => ({
+          acknowledge: mock(async () => {}),
+          subscriptionId: "22222222-2222-4222-8222-222222222222",
+          unsubscribe: unsubscribeTaskStream,
+        })),
+      },
+      terminals: {
+        disconnect: mock(async () => {}),
+        send: mock(async () => {}),
+        subscribe: mock(() => unsubscribe),
+      },
     },
     unsubscribeAppUpdates,
     unsubscribe,
+    unsubscribeTaskStream,
   };
 };
 
@@ -96,13 +144,18 @@ describe("electron shell bridge", () => {
 
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
+    const onTerminalFailure = mock((_error: unknown) => {});
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
     const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
     const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
       { repoPath: "/repo" },
       listener,
     );
-    const unsubscribeTaskEvents = await bridge.subscribeTaskEvents(listener);
+    const taskStreamSubscription = await bridge.subscribeTaskStream(
+      { cursor: null },
+      listener,
+      onTerminalFailure,
+    );
 
     expect(bridge.capabilities).toEqual({
       canOpenExternalUrls: true,
@@ -110,7 +163,11 @@ describe("electron shell bridge", () => {
     });
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://run-event", listener);
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://dev-server-event", listener);
-    expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://task-event", listener);
+    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
+      { cursor: null },
+      listener,
+      onTerminalFailure,
+    );
     expect(electronApi.subscribe).toHaveBeenCalledWith(
       "openducktor://agent-session-live-event",
       expect.any(Function),
@@ -123,8 +180,99 @@ describe("electron shell bridge", () => {
     expect(devServerSubscription.transportEpoch).toMatch(/^electron:\d+$/);
     devServerSubscription.unsubscribe();
     stopObservingLiveSessions();
-    unsubscribeTaskEvents();
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(4);
+    taskStreamSubscription.unsubscribe();
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(3);
+  });
+
+  test("forwards task stream frames without mutating client task metadata", async () => {
+    const { electronApi } = createElectronApi();
+    setElectronApi(electronApi);
+    const bridge = createElectronShellBridge();
+    const reconcile = mock(() => {});
+    bridge.client.reconcileExternalTaskSyncEvent = reconcile;
+    const listener = mock(() => {});
+
+    await bridge.subscribeTaskStream({ cursor: null }, listener);
+
+    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
+      { cursor: null },
+      listener,
+      undefined,
+    );
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  test("supersedes an in-flight change with the host overflow snapshot without acknowledging the obsolete cursor", async () => {
+    const failures: unknown[] = [];
+    let nextSubscriptionId = 0;
+    const stream = createTaskEventStream({
+      epochFactory: () => taskStreamEpoch,
+      reporter: { report: (failure) => failures.push(failure) },
+      subscriptionIdFactory: () =>
+        ["22222222-2222-4222-8222-222222222222"][nextSubscriptionId++] ?? crypto.randomUUID(),
+    });
+    const acknowledgements: TaskEventCursor[] = [];
+    const firstChangeStarted = deferred<void>();
+    const finishFirstChange = deferred<void>();
+    const reconcileExternalEvent = mock(async (event: ExternalTaskSyncEvent) => {
+      if (event.kind === "external_task_created" && event.taskId === "task-1") {
+        firstChangeStarted.resolve();
+        await finishFirstChange.promise;
+      }
+    });
+    const reconcileStreamSnapshot = mock(async () => {});
+    const invalidateAllTaskMetadata = mock(() => {});
+    const controller = createTaskStreamController({
+      transport: {
+        subscribeTaskStream: async (input, onFrame) => {
+          const subscription = stream.subscribe(input, onFrame);
+          return {
+            subscriptionId: subscription.subscriptionId,
+            acknowledge: async (cursor) => {
+              acknowledgements.push(cursor);
+              stream.acknowledge({ subscriptionId: subscription.subscriptionId, cursor });
+            },
+            unsubscribe: async () => subscription.unsubscribe(),
+          };
+        },
+      },
+      metadata: {
+        reconcileExternalTaskSyncEvent: mock(() => {}),
+        invalidateAllTaskMetadata,
+      },
+      taskViewSync: {
+        loadWorkspace: async () => {},
+        refreshManually: async () => {},
+        refreshAfterLocalMutation: async () => {},
+        reconcileExternalEvent,
+        reconcileStreamSnapshot,
+      },
+      getActiveRepoPath: () => "/repo",
+      onDegraded: (error) => failures.push(error),
+    });
+
+    await controller.start();
+    await flushTaskStream();
+    expect(acknowledgements).toEqual([taskStreamCursor(0)]);
+    reconcileStreamSnapshot.mockClear();
+    invalidateAllTaskMetadata.mockClear();
+
+    stream.publish(taskStreamEvent(1));
+    await firstChangeStarted.promise;
+    for (let sequence = 2; sequence <= 257; sequence += 1) {
+      stream.publish(taskStreamEvent(sequence));
+    }
+    await flushTaskStream();
+    finishFirstChange.resolve();
+    await flushTaskStream();
+
+    expect(reconcileExternalEvent).toHaveBeenCalledTimes(1);
+    expect(reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(invalidateAllTaskMetadata).toHaveBeenCalledTimes(1);
+    expect(acknowledgements).toEqual([taskStreamCursor(0), taskStreamCursor(257)]);
+    expect(failures).toEqual([]);
+
+    await controller.stop();
   });
 
   test("delivers transcript events received during live-session attachment after its snapshot", async () => {

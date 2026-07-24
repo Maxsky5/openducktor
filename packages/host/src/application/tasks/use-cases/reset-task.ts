@@ -20,6 +20,7 @@ import {
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
+import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskFullResetUseCase = ({
@@ -32,8 +33,8 @@ export const createTaskFullResetUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
-}: CreateTaskServiceInput): Pick<TaskService, "resetTask"> => ({
-  resetTask(input) {
+}: CreateTaskServiceInput) => ({
+  resetTask(input: Parameters<TaskService["resetTask"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
@@ -122,6 +123,7 @@ export const createTaskFullResetUseCase = ({
         [taskId],
       );
       const cleanupProgress = createTaskCleanupProgressState();
+      let taskStoreWriteCompleted = false;
 
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
@@ -139,6 +141,7 @@ export const createTaskFullResetUseCase = ({
           worktreePaths,
         });
         yield* storeDependencies.clearWorkflowDocuments({ repoPath: effectiveRepoPath, taskId });
+        taskStoreWriteCompleted = true;
         cleanupProgress.completedSteps.push("cleared workflow documents");
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
@@ -164,16 +167,18 @@ export const createTaskFullResetUseCase = ({
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(
-            appendTaskCleanupProgress(error, {
-              operation: "task_reset",
-              removedWorktrees: cleanupProgress.removedWorktrees,
-              deletedBranches: cleanupProgress.deletedBranches,
-              completedSteps: cleanupProgress.completedSteps,
-            }),
-          ),
-        ),
+        Effect.catchAll((error) => {
+          const decoratedFailure = appendTaskCleanupProgress(error, {
+            operation: "task_reset",
+            removedWorktrees: cleanupProgress.removedWorktrees,
+            deletedBranches: cleanupProgress.deletedBranches,
+            completedSteps: cleanupProgress.completedSteps,
+          });
+          const failure = taskStoreWriteCompleted
+            ? createTaskMutationProgressFailure("reset-task", taskId, decoratedFailure)
+            : decoratedFailure;
+          return Effect.fail(failure);
+        }),
       );
     }).pipe(Effect.scoped);
   },

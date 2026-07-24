@@ -1,9 +1,16 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import { host } from "../shared/host";
+import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import { useTaskMutationRunner } from "./task-mutation-runner";
 import type { UseTaskOperationsArgs, UseTaskOperationsResult } from "./task-operations-types";
 import { useTaskMutationCommands } from "./use-task-mutation-commands";
-import { useTaskPullRequestOperations } from "./use-task-pull-request-operations";
+import {
+  type TaskPullRequestChatDraftCleanupPort,
+  type TaskPullRequestHostPort,
+  type TaskPullRequestNotificationPort,
+  useTaskPullRequestOperations,
+} from "./use-task-pull-request-operations";
 import { useTaskReadFlow } from "./use-task-read-flow";
 import { useTaskResetOperations } from "./use-task-reset-operations";
 
@@ -13,6 +20,29 @@ export function useTaskOperations({
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
+  const pullRequestHostPort = useMemo<TaskPullRequestHostPort>(
+    () => ({
+      detectPullRequest: host.taskPullRequestDetect,
+      linkMergedPullRequest: host.taskPullRequestLinkMerged,
+      unlinkPullRequest: host.taskPullRequestUnlink,
+    }),
+    [],
+  );
+  const pullRequestNotificationPort = useMemo<TaskPullRequestNotificationPort>(
+    () => ({
+      success: (title, description) => toast.success(title, { description }),
+      warning: (title, description) => toast.warning(title, { description }),
+      error: (title, description) => toast.error(title, { description }),
+    }),
+    [],
+  );
+  const pullRequestChatDraftCleanup = useMemo<TaskPullRequestChatDraftCleanupPort>(
+    () => ({
+      runMutation: (input) =>
+        runTaskMutationWithChatDraftCleanup({ ...input, agentSessionReadPort }),
+    }),
+    [agentSessionReadPort],
+  );
   const taskReadFlow = useTaskReadFlow({ activeRepoPath });
   const mutationRunner = useTaskMutationRunner({ activeRepoPath });
   const mutationCommands = useTaskMutationCommands({
@@ -32,7 +62,9 @@ export function useTaskOperations({
     activeWorkspaceId,
     refreshTaskData: taskReadFlow.refreshTaskData,
     runTaskMutation: mutationRunner.runTaskMutation,
-    agentSessionReadPort,
+    pullRequestHostPort,
+    notificationPort: pullRequestNotificationPort,
+    taskChatDraftCleanup: pullRequestChatDraftCleanup,
   });
 
   const clearTaskData = useCallback(() => {
@@ -52,6 +84,7 @@ export function useTaskOperations({
     setIsLoadingTasks: taskReadFlow.setIsLoadingTasks,
     clearTaskData,
     refreshTaskData: taskReadFlow.refreshTaskData,
+    loadWorkspaceTasks: taskReadFlow.loadWorkspaceTasks,
     refreshTasksWithOptions: taskReadFlow.refreshTasksWithOptions,
     refreshTasks: taskReadFlow.refreshTasks,
     syncPullRequests: pullRequestOperations.syncPullRequests,

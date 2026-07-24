@@ -97,17 +97,9 @@ export type TaskRefreshOptions = {
   trigger?: "manual" | "scheduled";
 };
 
-export type TaskDataRefreshOptions = {
-  forceFreshTaskList?: boolean;
-  source?: "external-sync";
-};
-
 export type TaskControlContextValue = {
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: TaskDataRefreshOptions,
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   clearTaskData: () => void;
   setIsLoadingTasks: (value: boolean) => void;

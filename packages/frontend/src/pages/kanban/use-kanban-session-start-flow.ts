@@ -1,7 +1,7 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
-import type { NavigateFunction } from "react-router-dom";
+import type { NavigateFunction } from "react-router";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import {

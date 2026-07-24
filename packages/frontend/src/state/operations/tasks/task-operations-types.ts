@@ -6,7 +6,7 @@ import type {
   TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
-import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
+import type { TaskRefreshOptions } from "@/state/app-state-contexts";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
@@ -26,11 +26,8 @@ export type UseTaskOperationsResult = {
   pendingMergedPullRequest: { taskId: string; pullRequest: PullRequest } | null;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: TaskDataRefreshOptions,
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;

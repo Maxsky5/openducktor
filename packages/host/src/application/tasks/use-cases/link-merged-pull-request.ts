@@ -19,6 +19,7 @@ import {
   validateTaskTransitionEffect,
 } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
+import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskLinkMergedPullRequestUseCase = ({
@@ -30,8 +31,8 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   taskWorktreeService,
   terminalService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<TaskService, "linkMergedPullRequest"> => ({
-  linkMergedPullRequest(input) {
+}: CreateTaskServiceInput) => ({
+  linkMergedPullRequest(input: Parameters<TaskService["linkMergedPullRequest"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId, pullRequest } = input;
 
@@ -108,32 +109,42 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       }
 
       yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
-      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-      const cleanupEffect = cleanup
-        ? cleanupMergedBuilderState(
-            dependencies,
-            taskStore,
+      const postLink = yield* Effect.either(
+        Effect.gen(function* () {
+          yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
+          const cleanupEffect = cleanup
+            ? cleanupMergedBuilderState(
+                dependencies,
+                taskStore,
+                repoPath,
+                taskId,
+                cleanup.sourceBranch,
+                cleanup.targetBranch,
+              )
+            : runTaskRuntimeCleanup({
+                devServerService: dependencies.devServerService,
+                progress: createTaskCleanupProgressState(),
+                repoPath,
+                taskIds: [taskId],
+                terminalService: dependencies.terminalService,
+              });
+          return yield* completeTaskClosure({
+            cleanup: cleanupEffect,
+            gitPort: dependencies.gitPort,
+            operation: "link merged pull request",
             repoPath,
             taskId,
-            cleanup.sourceBranch,
-            cleanup.targetBranch,
-          )
-        : runTaskRuntimeCleanup({
-            devServerService: dependencies.devServerService,
-            progress: createTaskCleanupProgressState(),
-            repoPath,
-            taskIds: [taskId],
-            terminalService: dependencies.terminalService,
+            taskSessionBootstrapCoordinator,
+            taskStore,
           });
-      const task = yield* completeTaskClosure({
-        cleanup: cleanupEffect,
-        gitPort: dependencies.gitPort,
-        operation: "link merged pull request",
-        repoPath,
-        taskId,
-        taskSessionBootstrapCoordinator,
-        taskStore,
-      });
+        }),
+      );
+      if (postLink._tag === "Left") {
+        return yield* Effect.fail(
+          createTaskMutationProgressFailure("link-merged-pull-request", taskId, postLink.left),
+        );
+      }
+      const task = postLink.right;
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
       return enrichTask(task, nextTasks);

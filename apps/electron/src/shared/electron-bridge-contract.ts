@@ -3,8 +3,17 @@ import type {
   AppUpdateCommandResult,
   AppUpdateState,
   HostInvokeFailure,
+  TaskEventCursor,
+  TaskEventStreamAcknowledge,
+  TaskEventStreamFrame,
+  TaskEventStreamSubscribe,
+} from "@openducktor/contracts";
+import {
+  taskEventStreamAcknowledgeSchema,
+  taskEventStreamFrameSchema,
 } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
+import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
@@ -20,6 +29,12 @@ export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
 export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
 export const ELECTRON_TERMINAL_DISCONNECT_CHANNEL = "openducktor:terminal:disconnect";
 export const ELECTRON_TERMINAL_EVENT_CHANNEL = "openducktor:terminal:event";
+export const ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL = "openducktor:task-stream:subscribe";
+export const ELECTRON_TASK_STREAM_FRAME_CHANNEL = "openducktor:task-stream:frame";
+export const ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL =
+  "openducktor:task-stream:terminal-failure";
+export const ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL = "openducktor:task-stream:acknowledge";
+export const ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL = "openducktor:task-stream:unsubscribe";
 
 export type ElectronHostInvokeRequest = {
   command: string;
@@ -55,6 +70,34 @@ export type ElectronTerminalEventEnvelope = {
   frame: Uint8Array;
 };
 
+export const electronTaskStreamSubscriptionSchema = taskEventStreamAcknowledgeSchema.pick({
+  subscriptionId: true,
+});
+export type ElectronTaskStreamSubscription = Pick<TaskEventStreamAcknowledge, "subscriptionId">;
+
+export const electronTaskStreamUnsubscribeSchema = taskEventStreamAcknowledgeSchema.pick({
+  subscriptionId: true,
+});
+export type ElectronTaskStreamUnsubscribe = Pick<TaskEventStreamAcknowledge, "subscriptionId">;
+
+export const electronTaskStreamFrameEnvelopeSchema = taskEventStreamAcknowledgeSchema
+  .extend({ frame: taskEventStreamFrameSchema })
+  .pick({ frame: true, subscriptionId: true });
+export type ElectronTaskStreamFrameEnvelope = Pick<TaskEventStreamAcknowledge, "subscriptionId"> & {
+  frame: TaskEventStreamFrame;
+};
+
+export const electronTaskStreamTerminalFailureEnvelopeSchema =
+  electronTaskStreamSubscriptionSchema.extend({
+    message: z.string().min(1),
+  });
+export type ElectronTaskStreamTerminalFailureEnvelope = Pick<
+  TaskEventStreamAcknowledge,
+  "subscriptionId"
+> & {
+  message: string;
+};
+
 export type ElectronAppUpdateCheckInput = AppUpdateCheckInput;
 
 export type OpenDucktorElectronAppUpdateApi = {
@@ -71,6 +114,18 @@ export type OpenDucktorElectronTerminalApi = {
   subscribe(clientId: string, listener: (frame: Uint8Array) => void): () => void;
 };
 
+export type OpenDucktorElectronTaskStreamApi = {
+  subscribe(
+    input: TaskEventStreamSubscribe,
+    listener: (frame: TaskEventStreamFrame) => void,
+    onTerminalFailure?: (error: unknown) => void,
+  ): Promise<{
+    subscriptionId: string;
+    acknowledge(cursor: TaskEventCursor): Promise<void>;
+    unsubscribe(): void | Promise<void>;
+  }>;
+};
+
 export type OpenDucktorElectronApi = {
   invoke(
     command: HostCommandName,
@@ -81,4 +136,5 @@ export type OpenDucktorElectronApi = {
   openExternalUrl(url: string): Promise<void>;
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
   terminals: OpenDucktorElectronTerminalApi;
+  taskStream: OpenDucktorElectronTaskStreamApi;
 };

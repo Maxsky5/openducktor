@@ -62,7 +62,11 @@ export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge 
     unsubscribe: () => {},
   }),
   observeAgentSessionLive: async () => () => {},
-  subscribeTaskEvents: async () => () => {},
+  subscribeTaskStream: async () => ({
+    subscriptionId: "test-subscription",
+    acknowledge: async () => {},
+    unsubscribe: () => {},
+  }),
   appUpdates,
   capabilities: {
     canOpenExternalUrls: true,

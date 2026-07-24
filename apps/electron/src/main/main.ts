@@ -52,6 +52,7 @@ import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-ada
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
+import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
 import { runElectronHostInvoke } from "./electron-host-invoke";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
@@ -74,6 +75,7 @@ import { createElectronMainLogger, initializeElectronMainLogger } from "./electr
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
+import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 import {
   createElectronTerminalIpcController,
@@ -101,7 +103,22 @@ const electronMainLogger = await initializeElectronMainLogger({
 const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);
 const electronAppUpdateLogger = electronMainRuntimeBindings.appUpdateLogger;
 const electronLifecycleLogger = electronMainRuntimeBindings.lifecycleLogger;
-const hostEventBus = createHostEventBus();
+const reportElectronNonFatalDeliveryFailure = (message: string, cause: unknown): void => {
+  void runElectronEffect(electronMainLogger.error(message, cause)).catch(
+    (loggingCause: unknown) => {
+      process.stderr.write(
+        `OpenDucktor Electron non-fatal event delivery reporting failed: ${errorMessage(loggingCause)}\n`,
+      );
+    },
+  );
+};
+const hostEventBus = createHostEventBus({
+  report: ({ channel, cause }) =>
+    reportElectronNonFatalDeliveryFailure(
+      `OpenDucktor host event delivery failed for channel '${channel}'.`,
+      cause,
+    ),
+});
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
 
@@ -211,6 +228,15 @@ const createElectronHostCommandRouter = (
       Effect.sync(() => {
         reportElectronMainFatalFailure(failure);
       }),
+    taskEventPublicationReporter: {
+      report: (failure) =>
+        Effect.sync(() =>
+          reportElectronNonFatalDeliveryFailure(
+            `OpenDucktor task event publication failed during '${failure.operation}' for '${failure.repoPath}'.`,
+            failure.cause,
+          ),
+        ),
+    },
     runtimeDistribution,
     terminalPty: createNodePtyPort(),
   });
@@ -454,13 +480,20 @@ const createMainWindow = (rendererSession: ElectronSession): Promise<ElectronBro
 const registerHostEventForwarding = (): void => {
   for (const channel of HOST_EVENT_CHANNELS) {
     hostEventBus.subscribe(channel, (payload) => {
-      const envelope: ElectronHostEventEnvelope = { channel, payload };
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (window.isDestroyed() || window.webContents.isDestroyed()) {
-          continue;
-        }
-        window.webContents.send(ELECTRON_HOST_EVENT_CHANNEL, envelope);
-      }
+      const envelope: ElectronHostEventEnvelope & { channel: typeof channel } = {
+        channel,
+        payload,
+      };
+      forwardElectronHostEvent(
+        BrowserWindow.getAllWindows(),
+        ELECTRON_HOST_EVENT_CHANNEL,
+        envelope,
+        ({ channel: failedChannel, cause }) =>
+          reportElectronNonFatalDeliveryFailure(
+            `OpenDucktor renderer event delivery failed for channel '${failedChannel}'.`,
+            cause,
+          ),
+      );
     });
   }
 };
@@ -620,6 +653,15 @@ const registerIpcHandlers = (
   hostCommandRouter: EffectNodeHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
 ): void => {
+  registerElectronTaskStreamIpc({
+    ipcMain,
+    reportDeliveryFailure: ({ cause, subscriptionId }) =>
+      reportElectronNonFatalDeliveryFailure(
+        `OpenDucktor task stream delivery failed for subscription '${subscriptionId}'.`,
+        cause,
+      ),
+    taskEventStream: hostCommandRouter.taskEventStream,
+  });
   const terminalIpc = createElectronTerminalIpcController(hostCommandRouter.terminalService);
   const boundTerminalSenders = new WeakSet<Electron.WebContents>();
   const bindTerminalSenderCleanup = (sender: Electron.WebContents): void => {

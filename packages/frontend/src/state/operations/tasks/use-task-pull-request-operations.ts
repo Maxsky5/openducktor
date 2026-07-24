@@ -1,22 +1,43 @@
-import type { PullRequest } from "@openducktor/contracts";
+import type { PullRequest, TaskCard, TaskPullRequestDetectResult } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { invalidatePullRequestReviewContextQueries } from "@/state/queries/pull-request-review";
-import { host } from "../shared/host";
-import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
+import type { RunTaskMutationWithChatDraftCleanupInput } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { requireActiveRepo } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
+
+export type TaskPullRequestHostPort = {
+  detectPullRequest: (repoPath: string, taskId: string) => Promise<TaskPullRequestDetectResult>;
+  linkMergedPullRequest: (
+    repoPath: string,
+    taskId: string,
+    pullRequest: PullRequest,
+  ) => Promise<TaskCard>;
+  unlinkPullRequest: (repoPath: string, taskId: string) => Promise<{ ok: boolean }>;
+};
+
+export type TaskPullRequestNotificationPort = {
+  success: (title: string, description: string) => void;
+  warning: (title: string, description: string) => void;
+  error: (title: string, description: string) => void;
+};
+
+export type TaskPullRequestChatDraftCleanupPort = {
+  runMutation: <TResult>(
+    input: RunTaskMutationWithChatDraftCleanupInput<TResult>,
+  ) => Promise<TResult>;
+};
 
 type UseTaskPullRequestOperationsArgs = {
   activeRepoPath: string | null;
   activeWorkspaceId: string | null;
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
-  agentSessionReadPort: AgentSessionReadPort;
+  pullRequestHostPort: TaskPullRequestHostPort;
+  notificationPort: TaskPullRequestNotificationPort;
+  taskChatDraftCleanup: TaskPullRequestChatDraftCleanupPort;
 };
 
 type PendingMergedPullRequestState = {
@@ -47,7 +68,9 @@ export function useTaskPullRequestOperations({
   activeWorkspaceId,
   refreshTaskData,
   runTaskMutation,
-  agentSessionReadPort,
+  pullRequestHostPort,
+  notificationPort,
+  taskChatDraftCleanup,
 }: UseTaskPullRequestOperationsArgs): TaskPullRequestOperations {
   const queryClient = useQueryClient();
   const [detectingPullRequestState, setDetectingPullRequestState] = useState<TaskRepoState | null>(
@@ -96,24 +119,23 @@ export function useTaskPullRequestOperations({
       try {
         repoPath = requireActiveRepo(activeRepoPath);
         setDetectingPullRequestState({ repoPath, taskId });
-        const result = await host.taskPullRequestDetect(repoPath, taskId);
+        const result = await pullRequestHostPort.detectPullRequest(repoPath, taskId);
         if (activeRepoPathRef.current === repoPath) {
           if (result.outcome === "linked") {
             await refreshTaskData(repoPath, taskId);
             await invalidatePullRequestReviewContextQueries(queryClient);
-            toast.success("Pull request linked", {
-              description: `PR #${result.pullRequest.number}`,
-            });
+            notificationPort.success("Pull request linked", `PR #${result.pullRequest.number}`);
           } else if (result.outcome === "merged") {
             setPendingMergedPullRequestState({ repoPath, taskId, pullRequest: result.pullRequest });
           } else {
-            toast.warning("No pull request found", {
-              description: `No open GitHub pull request found for ${result.sourceBranch}.`,
-            });
+            notificationPort.warning(
+              "No pull request found",
+              `No open GitHub pull request found for ${result.sourceBranch}.`,
+            );
           }
         }
       } catch (error) {
-        toast.error("Failed to detect pull request", { description: errorMessage(error) });
+        notificationPort.error("Failed to detect pull request", errorMessage(error));
       } finally {
         setDetectingPullRequestState((current) =>
           repoPath !== null && current?.repoPath === repoPath && current.taskId === taskId
@@ -122,7 +144,7 @@ export function useTaskPullRequestOperations({
         );
       }
     },
-    [activeRepoPath, queryClient, refreshTaskData],
+    [activeRepoPath, notificationPort, pullRequestHostPort, queryClient, refreshTaskData],
   );
 
   const cancelLinkMergedPullRequest = useCallback((): void => {
@@ -138,9 +160,10 @@ export function useTaskPullRequestOperations({
       pendingMergedPullRequestState.repoPath !== activeRepoPathRef.current
     ) {
       setPendingMergedPullRequestState(null);
-      toast.error("Merged pull request state expired", {
-        description: "Re-run pull request detection and try again.",
-      });
+      notificationPort.error(
+        "Merged pull request state expired",
+        "Re-run pull request detection and try again.",
+      );
       return;
     }
 
@@ -148,14 +171,13 @@ export function useTaskPullRequestOperations({
     linkingMergedPullRequestTaskIdRef.current = taskId;
     setLinkingMergedPullRequestTaskId(taskId);
     try {
-      await runTaskMutationWithChatDraftCleanup({
+      await taskChatDraftCleanup.runMutation({
         queryClient,
         repoPath,
         workspaceId: activeWorkspaceId,
         taskIds: [taskId],
-        agentSessionReadPort,
         mutation: async () => {
-          await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
+          await pullRequestHostPort.linkMergedPullRequest(repoPath, taskId, pullRequest);
         },
       });
       setPendingMergedPullRequestState((current) =>
@@ -163,11 +185,12 @@ export function useTaskPullRequestOperations({
       );
       await refreshTaskData(repoPath, taskId);
       await invalidatePullRequestReviewContextQueries(queryClient);
-      toast.success("Merged pull request linked", {
-        description: `PR #${pullRequest.number}; task moved to Done.`,
-      });
+      notificationPort.success(
+        "Merged pull request linked",
+        `PR #${pullRequest.number}; task moved to Done.`,
+      );
     } catch (error) {
-      toast.error("Failed to link merged pull request", { description: errorMessage(error) });
+      notificationPort.error("Failed to link merged pull request", errorMessage(error));
     } finally {
       if (linkingMergedPullRequestTaskIdRef.current === taskId) {
         linkingMergedPullRequestTaskIdRef.current = null;
@@ -178,10 +201,12 @@ export function useTaskPullRequestOperations({
     }
   }, [
     activeWorkspaceId,
-    agentSessionReadPort,
+    notificationPort,
     pendingMergedPullRequestState,
+    pullRequestHostPort,
     queryClient,
     refreshTaskData,
+    taskChatDraftCleanup,
   ]);
 
   const unlinkPullRequest = useCallback(
@@ -192,7 +217,7 @@ export function useTaskPullRequestOperations({
           await runTaskMutation({
             refreshStrategy: { kind: "task", taskId },
             run: async (repoPath) => {
-              await host.taskPullRequestUnlink(repoPath, taskId);
+              await pullRequestHostPort.unlinkPullRequest(repoPath, taskId);
             },
             successTitle: "Pull request unlinked",
             successDescription: taskId,
@@ -208,7 +233,7 @@ export function useTaskPullRequestOperations({
         );
       }
     },
-    [queryClient, runTaskMutation],
+    [pullRequestHostPort, queryClient, runTaskMutation],
   );
 
   return {

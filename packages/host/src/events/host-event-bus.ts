@@ -3,13 +3,19 @@ import { HostValidationError } from "../effect/host-errors";
 export const HOST_EVENT_CHANNELS = [
   "openducktor://run-event",
   "openducktor://dev-server-event",
-  "openducktor://task-event",
   "openducktor://agent-session-live-event",
 ] as const;
 
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
 export type HostEventListener = (payload: unknown) => void;
 export type HostEventUnsubscribe = () => void;
+export type HostEventDeliveryFailure = {
+  channel: HostEventChannel;
+  cause: unknown;
+};
+export type HostEventDeliveryReporter = {
+  report(failure: HostEventDeliveryFailure): void;
+};
 
 export type HostEventBusPort = {
   publish(channel: string, payload: unknown): void;
@@ -33,7 +39,7 @@ export const parseHostEventChannel = (value: string): HostEventChannel => {
   });
 };
 
-export const createHostEventBus = (): HostEventBusPort => {
+export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEventBusPort => {
   const listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
 
   return {
@@ -44,8 +50,12 @@ export const createHostEventBus = (): HostEventBusPort => {
         return;
       }
 
-      for (const listener of listeners) {
-        listener(payload);
+      for (const listener of [...listeners]) {
+        try {
+          listener(payload);
+        } catch (cause) {
+          reporter.report({ channel: hostChannel, cause });
+        }
       }
     },
     subscribe(channel, listener) {

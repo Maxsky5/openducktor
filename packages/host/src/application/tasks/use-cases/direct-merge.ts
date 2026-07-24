@@ -16,6 +16,7 @@ import {
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
+import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskDirectMergeUseCase = ({
@@ -27,8 +28,8 @@ export const createTaskDirectMergeUseCase = ({
   taskWorktreeService,
   terminalService,
   workspaceSettingsService,
-}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "directMerge"> => ({
-  directMerge(input) {
+}: CreateTaskServiceInput & TaskGithubDependencyInput) => ({
+  directMerge(input: Parameters<TaskService["directMerge"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const mergeInput = input.input;
@@ -98,7 +99,7 @@ export const createTaskDirectMergeUseCase = ({
       const mergeResult = yield* dependencies.gitPort.mergeBranch(effectiveRepoPath, mergeRequest);
       if (mergeResult.outcome === "conflicts") {
         return {
-          outcome: "conflicts",
+          outcome: "conflicts" as const,
           conflict: directMergeConflict(
             effectiveRepoPath,
             approval,
@@ -121,54 +122,55 @@ export const createTaskDirectMergeUseCase = ({
         directMerge,
       });
 
-      if (approval.publishTarget !== undefined) {
-        if (current.status === "ai_review") {
-          yield* validateTaskTransitionEffect(
-            current,
-            currentTasks,
-            current.status,
-            "human_review",
-          );
-          const task = yield* taskStore.transitionTask({
+      const postRecord = yield* Effect.either(
+        Effect.gen(function* () {
+          if (approval.publishTarget !== undefined) {
+            if (current.status === "ai_review") {
+              yield* validateTaskTransitionEffect(
+                current,
+                currentTasks,
+                current.status,
+                "human_review",
+              );
+              const task = yield* taskStore.transitionTask({
+                repoPath: effectiveRepoPath,
+                taskId,
+                status: "human_review",
+              });
+              const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
+              return { outcome: "completed" as const, task: enrichTask(task, nextTasks) };
+            }
+
+            return { outcome: "completed" as const, task: enrichTask(current, currentTasks) };
+          }
+
+          yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
+          const task = yield* completeTaskClosure({
+            cleanup: cleanupDirectMergeBuilderState(
+              dependencies,
+              taskStore,
+              effectiveRepoPath,
+              taskId,
+              directMerge,
+            ),
+            gitPort: dependencies.gitPort,
+            operation: "direct merge",
             repoPath: effectiveRepoPath,
             taskId,
-            status: "human_review",
+            taskSessionBootstrapCoordinator,
+            taskStore,
           });
           const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
-          return {
-            outcome: "completed",
-            task: enrichTask(task, nextTasks),
-          };
-        }
 
-        return {
-          outcome: "completed",
-          task: enrichTask(current, currentTasks),
-        };
+          return { outcome: "completed" as const, task: enrichTask(task, nextTasks) };
+        }),
+      );
+      if (postRecord._tag === "Left") {
+        return yield* Effect.fail(
+          createTaskMutationProgressFailure("direct-merge", taskId, postRecord.left),
+        );
       }
-
-      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-      const task = yield* completeTaskClosure({
-        cleanup: cleanupDirectMergeBuilderState(
-          dependencies,
-          taskStore,
-          effectiveRepoPath,
-          taskId,
-          directMerge,
-        ),
-        gitPort: dependencies.gitPort,
-        operation: "direct merge",
-        repoPath: effectiveRepoPath,
-        taskId,
-        taskSessionBootstrapCoordinator,
-        taskStore,
-      });
-      const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
-
-      return {
-        outcome: "completed",
-        task: enrichTask(task, nextTasks),
-      };
+      return postRecord.right;
     });
   },
 });

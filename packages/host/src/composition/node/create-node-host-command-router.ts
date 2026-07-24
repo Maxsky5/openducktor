@@ -32,12 +32,14 @@ import {
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
+import { createEventPublishingTaskService } from "../../application/tasks/event-publishing-task-service";
 import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import {
   createTaskSyncService,
+  type TaskEventPublicationReporter,
   type TaskSyncLoopHandle,
 } from "../../application/tasks/sync/task-sync-service";
-import { createTaskService } from "../../application/tasks/task-service";
+import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import {
   createTerminalService,
@@ -47,6 +49,7 @@ import { loadGlobalConfig } from "../../application/workspaces/workspace-setting
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
+import { createTaskEventStream, type TaskEventStreamPort } from "../../events/task-event-stream";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createCodexAppServerCommandHandlers } from "../../interface/commands/codex-app-server-command-handlers";
@@ -98,6 +101,7 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   mcpHostBridge?: McpHostBridgeServer;
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
+  taskEventPublicationReporter: TaskEventPublicationReporter;
   runtimeRegistry?: RuntimeRegistryPort;
   taskStore?: TaskStorePort;
 };
@@ -108,6 +112,7 @@ const defaultLifecycleLogger: HostLifecycleLogger = {
 };
 
 export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
+  readonly taskEventStream: TaskEventStreamPort;
   readonly terminalService: TerminalService;
 };
 
@@ -122,6 +127,7 @@ export const createNodeEffectHostCommandRouter = (
     onBackgroundFailure,
     runtimeRegistry,
     taskStore: configuredTaskStore,
+    taskEventPublicationReporter,
   } = input;
   const {
     codexAppServer: effectiveCodexAppServer,
@@ -280,7 +286,7 @@ export const createNodeEffectHostCommandRouter = (
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,
   });
-  const taskService = createTaskService({
+  const baseTaskService = createTaskServiceWithMutationProgress({
     devServerService,
     terminalService,
     gitPort: git,
@@ -295,18 +301,35 @@ export const createNodeEffectHostCommandRouter = (
     runtimeRegistry: effectiveRuntimeRegistry,
     worktreeFiles,
   });
-  const taskSyncService = eventBus
-    ? createTaskSyncService({
-        eventBus,
-        logger: lifecycleLogger,
-        onBackgroundFailure,
-        taskService,
-        workspaceSettingsService,
-      })
-    : null;
+  const taskEventStream = createTaskEventStream({
+    reporter: {
+      report: (failure) =>
+        Effect.runFork(
+          onBackgroundFailure(
+            new HostOperationError({
+              operation: "task-event-stream.delivery",
+              message: "Task event stream subscriber delivery failed.",
+              cause: failure.cause,
+              details: { frame: failure.frame, subscriptionId: failure.subscriptionId },
+            }),
+          ),
+        ),
+    },
+  });
+  const taskSyncService = createTaskSyncService({
+    logger: lifecycleLogger,
+    onBackgroundFailure,
+    publicationReporter: taskEventPublicationReporter,
+    taskEventStream,
+    taskService: baseTaskService,
+    workspaceSettingsService,
+  });
+  const taskService = createEventPublishingTaskService({
+    taskService: baseTaskService,
+    taskSyncService,
+  });
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskService,
-    ...(taskSyncService ? { taskSyncService } : {}),
     workspaceSettingsService,
   });
   const githubCommandDependencies = createGithubCommandDependencies({
@@ -460,7 +483,7 @@ export const createNodeEffectHostCommandRouter = (
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),
     },
   });
-  return Object.assign(router, { terminalService });
+  return Object.assign(router, { taskEventStream, terminalService });
 };
 
 export const createNodeHostCommandRouter = (

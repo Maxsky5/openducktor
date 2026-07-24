@@ -29,7 +29,11 @@ const createTestShellBridge = (): ShellBridge =>
       transportEpoch: "test:0",
       unsubscribe: () => {},
     }),
-    subscribeTaskEvents: async () => () => {},
+    subscribeTaskStream: async () => ({
+      subscriptionId: "test-subscription",
+      acknowledge: async () => {},
+      unsubscribe: () => {},
+    }),
     appUpdates: createDisabledAppUpdateBridge({
       status: "disabled",
       currentVersion: "unknown",

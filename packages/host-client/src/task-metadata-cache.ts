@@ -49,6 +49,13 @@ export class TaskMetadataCache {
     }
   }
 
+  invalidateAll(): void {
+    this.cache.clear();
+    this.inFlight.clear();
+    this.forceFreshInFlight.clear();
+    this.latestFetchTokenByKey.clear();
+  }
+
   private fetchMetadata(
     invokeFn: InvokeFn,
     repoPath: string,

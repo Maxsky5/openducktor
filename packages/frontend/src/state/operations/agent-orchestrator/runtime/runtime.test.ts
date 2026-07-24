@@ -9,7 +9,12 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { createDeferred, withTimeout } from "../test-utils";
-import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } from "./runtime";
+import {
+  createEnsureRuntime,
+  loadRepoDefaultModel,
+  loadRepoPromptOverrides,
+  loadTaskDocuments,
+} from "./runtime";
 
 const taskBootstrapFixture = {
   bootstrapId: "bootstrap-1",
@@ -67,8 +72,25 @@ describe("agent-orchestrator-runtime", () => {
     };
   });
 
+  test("loads startup documents from one fresh task metadata read", async () => {
+    const taskMetadataGetFresh = mock(async () => ({
+      spec: { markdown: "# Spec", updatedAt: "2026-04-10T13:10:00.000Z" },
+      plan: { markdown: "# Plan", updatedAt: "2026-04-10T13:10:00.000Z" },
+      qaReport: { markdown: "# QA", updatedAt: "2026-04-10T13:10:00.000Z" },
+    }));
+
+    await expect(
+      loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGetFresh as never),
+    ).resolves.toEqual({
+      specMarkdown: "# Spec",
+      planMarkdown: "# Plan",
+      qaMarkdown: "# QA",
+    });
+    expect(taskMetadataGetFresh).toHaveBeenCalledWith("/tmp/repo", "task-1");
+  });
+
   test("starts build bootstrap and refreshes task data when no target worktree is provided", async () => {
-    let refreshCalls = 0;
+    const refreshTaskData = mock(async () => {});
     let prepareCalls = 0;
 
     runtimeHost.taskSessionBootstrapPrepare = async (_repoPath, _taskId, role, runtimeKind) => {
@@ -79,9 +101,7 @@ describe("agent-orchestrator-runtime", () => {
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
       repoConfigLoader,
-      refreshTaskData: async () => {
-        refreshCalls += 1;
-      },
+      refreshTaskData,
     });
 
     const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
@@ -93,9 +113,9 @@ describe("agent-orchestrator-runtime", () => {
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(prepareCalls).toBe(1);
-    expect(refreshCalls).toBe(0);
+    expect(refreshTaskData).not.toHaveBeenCalled();
     await runtime.bootstrap?.complete();
-    expect(refreshCalls).toBe(1);
+    expect(refreshTaskData).toHaveBeenCalledWith("/tmp/repo", "task-1");
   });
 
   test("invalidates a cached missing worktree after Spec bootstrap completes", async () => {

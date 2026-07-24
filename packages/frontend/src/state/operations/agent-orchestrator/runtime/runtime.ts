@@ -48,11 +48,7 @@ export type TaskDocuments = {
 
 type EnsureRuntimeDependencies = {
   queryClient?: QueryClient;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   hostClient?: RuntimeStartupHost;
   repoConfigLoader?: RepoConfigLoader;
 };
@@ -76,17 +72,14 @@ const defaultRepoConfigLoader: RepoConfigLoader = (workspaceId: string): Promise
 export const loadTaskDocuments = async (
   repoPath: string,
   taskId: string,
+  taskMetadataGetFresh: typeof host.taskMetadataGetFresh = host.taskMetadataGetFresh,
 ): Promise<TaskDocuments> => {
-  const [spec, plan, qa] = await Promise.all([
-    host.specGet(repoPath, taskId).then((document) => document.markdown),
-    host.planGet(repoPath, taskId).then((document) => document.markdown),
-    host.qaGetReport(repoPath, taskId).then((document) => document.markdown),
-  ]);
+  const metadata = await taskMetadataGetFresh(repoPath, taskId);
 
   return {
-    specMarkdown: spec,
-    planMarkdown: plan,
-    qaMarkdown: qa,
+    specMarkdown: metadata.spec.markdown,
+    planMarkdown: metadata.plan.markdown,
+    qaMarkdown: metadata.qaReport?.markdown ?? "",
   };
 };
 
@@ -210,7 +203,7 @@ export const createEnsureRuntime = ({
           if (role === "build") {
             runOrchestratorSideEffect(
               "runtime-refresh-task-data-after-build-start",
-              refreshTaskData(repoPath),
+              refreshTaskData(repoPath, taskId),
               { tags: { repoPath, taskId, role } },
             );
           }

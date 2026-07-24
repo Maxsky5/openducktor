@@ -31,7 +31,11 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
     unsubscribe: () => {},
   }),
   observeAgentSessionLive: async () => () => {},
-  subscribeTaskEvents: async () => () => {},
+  subscribeTaskStream: async () => ({
+    subscriptionId: "test-subscription",
+    acknowledge: async () => {},
+    unsubscribe: () => {},
+  }),
   appUpdates: createDisabledAppUpdateBridge({
     status: "disabled",
     currentVersion: "unknown",
@@ -61,24 +65,37 @@ describe("host-client", () => {
     );
   });
 
-  test("returns the active shell bridge for event subscriptions", async () => {
+  test("forwards task stream subscriptions and terminal failures to the active shell bridge", async () => {
     const listener = mock(() => {});
+    const terminalFailure = new Error("stream terminated");
+    const onTerminalFailure = mock((_error: unknown) => {});
     const unsubscribe = mock(() => {});
-    const subscribeTaskEvents = mock(async (receivedListener: (payload: unknown) => void) => {
-      receivedListener({ kind: "tasks_updated", repoPath: "/repo", taskIds: ["task-1"] });
-      return unsubscribe;
+    const acknowledge = mock(async () => {});
+    const subscribeTaskStream = mock(async (_input, receivedFrame, receivedTerminalFailure) => {
+      receivedFrame({
+        type: "snapshot_required",
+        cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 },
+        reason: "buffer_gap",
+      });
+      receivedTerminalFailure?.(terminalFailure);
+      return { subscriptionId: "test-subscription", acknowledge, unsubscribe };
     });
-    configureShellBridge(createTestShellBridge({ subscribeTaskEvents }));
+    configureShellBridge(createTestShellBridge({ subscribeTaskStream }));
 
-    const { createHostBridge } = await import("./host-client");
-    const result = await createHostBridge().subscribeTaskEvents(listener);
+    const { hostBridge } = await import("./host-client");
+    const result = await hostBridge.subscribeTaskStream(
+      { cursor: null },
+      listener,
+      onTerminalFailure,
+    );
 
     expect(listener).toHaveBeenCalledWith({
-      kind: "tasks_updated",
-      repoPath: "/repo",
-      taskIds: ["task-1"],
+      type: "snapshot_required",
+      cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 },
+      reason: "buffer_gap",
     });
-    expect(result).toBe(unsubscribe);
+    expect(onTerminalFailure).toHaveBeenCalledWith(terminalFailure);
+    expect(result.unsubscribe).toBe(unsubscribe);
   });
 
   test("hostClient proxies calls to the currently configured shell client", async () => {

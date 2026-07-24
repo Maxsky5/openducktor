@@ -40,7 +40,6 @@ describe("agent-orchestrator session transcript events", () => {
         eventBatchWindowMs: 0,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
-        refreshTaskData: async () => {},
       });
 
       const handleEvent = handlers[0];
@@ -123,7 +122,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -164,7 +162,6 @@ describe("agent-orchestrator session transcript events", () => {
       recordTurnActivityTimestamp: turnTiming.recordTurnActivityTimestamp,
       resolveTurnDurationMs: turnTiming.resolveTurnDurationMs,
       clearTurnDuration: turnTiming.clearTurnDuration,
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -238,7 +235,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -283,7 +279,6 @@ describe("agent-orchestrator session transcript events", () => {
         updateSession,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
-        refreshTaskData: async () => {},
       });
 
       const handleEvent = handlers[0];
@@ -402,7 +397,6 @@ describe("agent-orchestrator session transcript events", () => {
         updateSession: () => null,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
-        refreshTaskData: async () => {},
       });
 
       const handleEvent = handlers[0];
@@ -428,108 +422,66 @@ describe("agent-orchestrator session transcript events", () => {
     });
   });
 
-  test("runs completion side effects once for duplicate completed tool events", async () => {
-    const cases = [
-      {
-        name: "workflow mutation tool refresh",
-        tool: "odt_set_plan",
-        toolType: "workflow" as const,
-        output: "ok",
-        expectedRefreshTaskDataCalls: 1,
+  test("writes completed workflow tools into the transcript", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
       },
-      {
-        name: "todo tool refresh",
-        tool: "todowrite",
-        toolType: "todo" as const,
-        output: '{"todos":[]}',
-        expectedRefreshTaskDataCalls: 0,
-      },
-    ] as const;
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "planner" })]);
 
-    await Promise.all(
-      cases.map(async (testCase) => {
-        const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-        let refreshTaskDataCalls = 0;
-        const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
 
-        const adapter: SessionEventAdapter = {
-          subscribeEvents: async (_externalSessionId, handler) => {
-            handlers.push(
-              handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-            );
-            return () => {};
-          },
-          replyApproval: async () => {},
-        };
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
 
-        const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+    for (const [tool, callId] of [
+      ["odt_set_spec", "call-spec"],
+      ["odt_set_plan", "call-plan"],
+    ]) {
+      handleEvent({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        part: {
+          kind: "tool",
+          messageId: `tool-msg-${callId}`,
+          partId: `part-${callId}`,
+          callId,
+          tool,
+          toolType: "workflow",
+          status: "completed",
+          output: "ok",
+          error: "",
+        },
+      });
+    }
 
-        const updateSession = createSessionUpdater(sessionsRef);
-
-        await listenToAgentSessionEvents({
-          adapter,
-          repoPath: "/tmp/repo",
-          externalSessionId: "session-1",
-          sessionsRef,
-          updateSession,
-          resolveTurnDurationMs: () => undefined,
-          clearTurnDuration: () => {},
-          refreshTaskData: async (repoPath, taskIdOrIds) => {
-            refreshTaskDataCalls += 1;
-            refreshTaskDataArgs.push([
-              repoPath,
-              typeof taskIdOrIds === "string" ? taskIdOrIds : undefined,
-            ]);
-          },
-        });
-
-        const handleEvent = handlers[0];
-        if (!handleEvent) {
-          throw new Error("Expected session event handler to be registered");
-        }
-
-        handleEvent({
-          type: "assistant_part",
-          externalSessionId: "session-1",
-          timestamp: "2026-02-22T08:00:05.000Z",
-          part: {
-            kind: "tool",
-            messageId: "tool-msg-dup",
-            partId: "part-dup",
-            callId: "call-dup",
-            tool: testCase.tool,
-            toolType: testCase.toolType,
-            status: "completed",
-            output: testCase.output,
-            error: "",
-          },
-        });
-
-        handleEvent({
-          type: "assistant_part",
-          externalSessionId: "session-1",
-          timestamp: "2026-02-22T08:00:06.000Z",
-          part: {
-            kind: "tool",
-            messageId: "tool-msg-dup",
-            partId: "part-dup",
-            callId: "call-dup",
-            tool: testCase.tool,
-            toolType: testCase.toolType,
-            status: "completed",
-            output: testCase.output,
-            error: "",
-          },
-        });
-
-        await Promise.resolve();
-
-        expect(refreshTaskDataCalls).toBe(testCase.expectedRefreshTaskDataCalls);
-        if (testCase.expectedRefreshTaskDataCalls > 0) {
-          expect(refreshTaskDataArgs).toEqual([["/tmp/repo", "task-1"]]);
-        }
-      }),
-    );
+    expect(
+      getSessionMessages(sessionsRef)
+        .filter((message) => message.meta?.kind === "tool")
+        .map((message) =>
+          message.meta?.kind === "tool" ? [message.meta.tool, message.meta.status] : null,
+        ),
+    ).toEqual([
+      ["odt_set_spec", "completed"],
+      ["odt_set_plan", "completed"],
+    ]);
   });
 
   test("writes canonical user_message events into the transcript", async () => {
@@ -556,7 +508,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -677,7 +628,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -791,7 +741,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -870,7 +819,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSessionTodos: todosRecorder.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -946,7 +894,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1013,7 +960,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -1114,7 +1060,6 @@ describe("agent-orchestrator session transcript events", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];

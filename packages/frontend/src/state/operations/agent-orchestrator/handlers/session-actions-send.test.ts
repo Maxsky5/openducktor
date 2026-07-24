@@ -227,7 +227,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       repoPath: "/tmp/repo",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
     const actions = createSessionActions({
       adapter,
@@ -291,7 +290,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       repoPath: "/tmp/repo",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
     const actions = createSessionActions({
       adapter,
@@ -357,7 +355,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       repoPath: "/tmp/repo",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
     const actions = createSessionActions({
       adapter,

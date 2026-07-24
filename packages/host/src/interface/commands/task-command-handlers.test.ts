@@ -226,7 +226,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_delete", input });
-            return { ok: true };
+            return { ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -394,7 +394,10 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_plan", input });
-            return {} as never;
+            return {
+              document: { markdown: "# Plan" },
+              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+            };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -957,7 +960,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toEqual({ markdown: "# Plan" });
     await expect(
       runHandler(
         handlers.plan_save_document?.(

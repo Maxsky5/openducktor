@@ -23,11 +23,7 @@ export type StopAgentSessionDependencies = {
   clearSessionTurnState: (session: AgentSessionIdentity) => void;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
 };
 
 const appendUserStoppedNotice = (

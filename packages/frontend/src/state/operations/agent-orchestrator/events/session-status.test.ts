@@ -30,7 +30,6 @@ const observeSession = async (session = buildSession()) => {
     recordTurnActivityTimestamp: () => {},
     resolveTurnDurationMs: () => undefined,
     clearTurnDuration: () => {},
-    refreshTaskData: async () => {},
   });
 
   if (!handleEvent) {
