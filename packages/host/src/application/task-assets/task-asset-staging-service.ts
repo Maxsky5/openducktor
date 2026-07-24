@@ -21,6 +21,7 @@ export type TaskAssetStagingService = {
     assetIds: string[];
   }): Effect.Effect<StagedTaskAsset[], TaskAssetError>;
   startupSweep(): Effect.Effect<number, TaskAssetError>;
+  shutdownCleanup(): Effect.Effect<void, TaskAssetError>;
 };
 
 const hasCompleteImageEnvelope = (bytes: Uint8Array, mediaType: string): boolean => {
@@ -163,6 +164,11 @@ export const createTaskAssetStagingService = (
     getStagedAssets,
     startupSweep() {
       return filePort.clearStaging().pipe(Effect.tap(() => Effect.sync(() => staged.clear())));
+    },
+    shutdownCleanup() {
+      return filePort
+        .cleanupCurrentOwner()
+        .pipe(Effect.tap(() => Effect.sync(() => staged.clear())));
     },
   };
 };

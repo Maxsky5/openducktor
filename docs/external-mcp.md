@@ -321,7 +321,7 @@ Input:
 - `taskId` required
 - `assetIds` required array of 1 to 50 distinct asset UUIDs
 
-The caller should collect all description images needed for the current work and request them in one call. The host resolves aliases or titles to the canonical task ID, checks each asset against the exact workspace, task, and `description` scope, and keeps request order. The whole call fails if any ID is missing, belongs to another task or workspace, or cannot pass the stored media and byte-size checks.
+The caller should collect all description images needed for the current work and request them in one call when their raw total is at most 20 MiB. Split only larger sets. The host resolves aliases or titles to the canonical task ID, checks each registry row and the aggregate byte limit before reading files, checks each asset against the exact workspace, task, and `description` scope, and keeps request order. The whole call fails if any ID is missing, belongs to another task or workspace, exceeds a byte limit, or cannot pass the stored media and byte-size checks.
 
 The MCP response contains, for each requested ID:
 

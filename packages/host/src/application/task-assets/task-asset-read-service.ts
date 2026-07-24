@@ -1,13 +1,17 @@
 import {
+  ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
+  TASK_ASSET_MAX_DESCRIPTION_ASSETS,
+  TASK_ASSET_MAX_FILE_BYTES,
   type TaskAssetMediaType,
   type TaskAssetRenderContext,
+  taskAssetIdSchema,
   taskAssetMediaTypeSchema,
   taskAssetRenderContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
-import type { TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
+import type { TaskAssetRecord, TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
 
 export type TaskAssetReadResult = {
   bytes: Uint8Array;
@@ -15,9 +19,39 @@ export type TaskAssetReadResult = {
   headers: Readonly<Record<string, string>>;
 };
 
+export type TaskAssetBatchReadResult =
+  | {
+      kind: "available";
+      assets: Array<{ assetId: string; asset: TaskAssetReadResult }>;
+    }
+  | {
+      kind: "missing";
+      assetIds: string[];
+    }
+  | {
+      kind: "too_large";
+      requestedBytes: number;
+      maxBytes: number;
+    };
+
 export type TaskAssetReadService = {
   read(input: unknown): Effect.Effect<TaskAssetReadResult | null, TaskAssetError>;
+  readBatch(input: unknown): Effect.Effect<TaskAssetBatchReadResult, TaskAssetError>;
 };
+
+const taskAssetReadBatchContextSchema = taskAssetRenderContextSchema
+  .omit({ assetId: true })
+  .extend({
+    assetIds: taskAssetIdSchema
+      .array()
+      .min(1)
+      .max(TASK_ASSET_MAX_DESCRIPTION_ASSETS)
+      .refine(
+        (assetIds) => new Set(assetIds).size === assetIds.length,
+        "Asset IDs must be distinct.",
+      ),
+  })
+  .strict();
 
 const serveError = (
   phase: string,
@@ -56,57 +90,28 @@ const contentDisposition = (originalName: string): string => {
   return `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(wellFormedName)}`;
 };
 
+const responseHeaders = (
+  record: TaskAssetRecord,
+  mediaType: TaskAssetMediaType,
+): Readonly<Record<string, string>> => ({
+  "Cache-Control": "private, no-store",
+  "Content-Disposition": contentDisposition(record.originalName),
+  "Content-Type": mediaType,
+  "X-Content-Type-Options": "nosniff",
+});
+
 export const createTaskAssetReadService = (input: {
   filePort: Pick<TaskAssetFilePort, "readDurable">;
   registry: Pick<TaskAssetRegistryPort, "getAsset">;
   resolveRepoPath(workspaceId: string): Effect.Effect<string, unknown>;
-}): TaskAssetReadService => ({
-  read(rawInput) {
-    return Effect.gen(function* () {
-      const parsed = taskAssetRenderContextSchema.safeParse(rawInput);
-      if (!parsed.success) {
-        return yield* new TaskAssetError({
-          operation: "serve",
-          code: "validation",
-          assetIds: [],
-          failedPhase: "validate_identifiers",
-          durableState: "unchanged",
-          retryAllowed: false,
-          message: "Task asset identifiers are invalid.",
-        });
-      }
-      const repoPath = yield* input
-        .resolveRepoPath(parsed.data.workspaceId)
-        .pipe(
-          Effect.mapError(() =>
-            serveError("resolve_workspace", "Task asset was not found.", parsed.data),
-          ),
-        );
-      const record = yield* input.registry
-        .getAsset({
-          repoPath,
-          taskId: parsed.data.taskId,
-          scope: parsed.data.scope,
-          assetId: parsed.data.assetId,
-        })
-        .pipe(
-          Effect.mapError(() =>
-            serveError("read_registry", "Task asset could not be read.", parsed.data, "database"),
-          ),
-        );
-      if (!record) {
-        return null;
-      }
-      const mediaType = taskAssetMediaTypeSchema.safeParse(record.mediaType);
-      if (!mediaType.success) {
-        return yield* serveError(
-          "validate_registered_media_type",
-          "Task asset has an unsupported registered media type.",
-          parsed.data,
-          "database",
-        );
-      }
-      const bytes = yield* input.filePort.readDurable(parsed.data);
+}): TaskAssetReadService => {
+  const readRegisteredAsset = (
+    context: TaskAssetRenderContext,
+    record: TaskAssetRecord,
+    mediaType: TaskAssetMediaType,
+  ) =>
+    Effect.gen(function* () {
+      const bytes = yield* input.filePort.readDurable(context);
       if (!bytes) {
         return null;
       }
@@ -114,20 +119,188 @@ export const createTaskAssetReadService = (input: {
         return yield* serveError(
           "validate_registered_byte_size",
           "Task asset content does not match its registry entry.",
-          parsed.data,
+          context,
           "database",
         );
       }
       return {
         bytes,
-        mediaType: mediaType.data,
-        headers: {
-          "Cache-Control": "private, no-store",
-          "Content-Disposition": contentDisposition(record.originalName),
-          "Content-Type": mediaType.data,
-          "X-Content-Type-Options": "nosniff",
-        },
+        mediaType,
+        headers: responseHeaders(record, mediaType),
       };
     });
-  },
-});
+
+  return {
+    read(rawInput) {
+      return Effect.gen(function* () {
+        const parsed = taskAssetRenderContextSchema.safeParse(rawInput);
+        if (!parsed.success) {
+          return yield* new TaskAssetError({
+            operation: "serve",
+            code: "validation",
+            assetIds: [],
+            failedPhase: "validate_identifiers",
+            durableState: "unchanged",
+            retryAllowed: false,
+            message: "Task asset identifiers are invalid.",
+          });
+        }
+        const repoPath = yield* input
+          .resolveRepoPath(parsed.data.workspaceId)
+          .pipe(
+            Effect.mapError(() =>
+              serveError("resolve_workspace", "Task asset was not found.", parsed.data),
+            ),
+          );
+        const record = yield* input.registry
+          .getAsset({
+            repoPath,
+            taskId: parsed.data.taskId,
+            scope: parsed.data.scope,
+            assetId: parsed.data.assetId,
+          })
+          .pipe(
+            Effect.mapError(() =>
+              serveError("read_registry", "Task asset could not be read.", parsed.data, "database"),
+            ),
+          );
+        if (!record) {
+          return null;
+        }
+        const mediaType = taskAssetMediaTypeSchema.safeParse(record.mediaType);
+        if (!mediaType.success) {
+          return yield* serveError(
+            "validate_registered_media_type",
+            "Task asset has an unsupported registered media type.",
+            parsed.data,
+            "database",
+          );
+        }
+        return yield* readRegisteredAsset(parsed.data, record, mediaType.data);
+      });
+    },
+    readBatch(rawInput) {
+      return Effect.gen(function* () {
+        const parsed = taskAssetReadBatchContextSchema.safeParse(rawInput);
+        if (!parsed.success) {
+          return yield* new TaskAssetError({
+            operation: "serve",
+            code: "validation",
+            assetIds: [],
+            failedPhase: "validate_batch_identifiers",
+            durableState: "unchanged",
+            retryAllowed: false,
+            message: "Task asset batch identifiers are invalid.",
+          });
+        }
+        const { assetIds, ...renderContext } = parsed.data;
+        const repoPath = yield* input.resolveRepoPath(renderContext.workspaceId).pipe(
+          Effect.mapError(
+            () =>
+              new TaskAssetError({
+                operation: "serve",
+                code: "validation",
+                taskId: renderContext.taskId,
+                assetIds,
+                failedPhase: "resolve_workspace",
+                durableState: "unchanged",
+                retryAllowed: false,
+                message: "Task assets were not found.",
+              }),
+          ),
+        );
+        const registeredAssets = yield* Effect.forEach(assetIds, (assetId) => {
+          const context = { ...renderContext, assetId };
+          return input.registry
+            .getAsset({
+              repoPath,
+              taskId: context.taskId,
+              scope: context.scope,
+              assetId,
+            })
+            .pipe(
+              Effect.map((record) => ({ assetId, context, record })),
+              Effect.mapError(() =>
+                serveError("read_registry", "Task asset could not be read.", context, "database"),
+              ),
+            );
+        });
+        const missingAssetIds = registeredAssets
+          .filter((entry) => entry.record === null)
+          .map((entry) => entry.assetId);
+        if (missingAssetIds.length > 0) {
+          return { kind: "missing" as const, assetIds: missingAssetIds };
+        }
+        const validatedAssets = yield* Effect.forEach(registeredAssets, (entry) =>
+          Effect.gen(function* () {
+            const record = entry.record;
+            if (!record) {
+              return yield* serveError(
+                "read_registry",
+                "Task asset registry entry disappeared.",
+                entry.context,
+                "database",
+              );
+            }
+            const mediaType = taskAssetMediaTypeSchema.safeParse(record.mediaType);
+            if (!mediaType.success) {
+              return yield* serveError(
+                "validate_registered_media_type",
+                "Task asset has an unsupported registered media type.",
+                entry.context,
+                "database",
+              );
+            }
+            if (
+              !Number.isSafeInteger(record.byteSize) ||
+              record.byteSize < 0 ||
+              record.byteSize > TASK_ASSET_MAX_FILE_BYTES
+            ) {
+              return yield* serveError(
+                "validate_registered_byte_size",
+                "Task asset registry entry has an invalid byte size.",
+                entry.context,
+                "database",
+              );
+            }
+            return { ...entry, record, mediaType: mediaType.data };
+          }),
+        );
+        const requestedBytes = validatedAssets.reduce(
+          (total, entry) => total + entry.record.byteSize,
+          0,
+        );
+        if (requestedBytes > ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES) {
+          return {
+            kind: "too_large" as const,
+            requestedBytes,
+            maxBytes: ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
+          };
+        }
+        const readAssets = yield* Effect.forEach(validatedAssets, (entry) =>
+          readRegisteredAsset(entry.context, entry.record, entry.mediaType).pipe(
+            Effect.map((asset) => ({ assetId: entry.assetId, asset })),
+          ),
+        );
+        const missingDurableAssetIds = readAssets
+          .filter((entry) => entry.asset === null)
+          .map((entry) => entry.assetId);
+        if (missingDurableAssetIds.length > 0) {
+          return { kind: "missing" as const, assetIds: missingDurableAssetIds };
+        }
+        const availableAssets = readAssets.filter(
+          (
+            entry,
+          ): entry is {
+            assetId: string;
+            asset: TaskAssetReadResult;
+          } => entry.asset !== null,
+        );
+        return {
+          kind: "available" as const,
+          assets: availableAssets,
+        };
+      });
+    },
+  };
+};

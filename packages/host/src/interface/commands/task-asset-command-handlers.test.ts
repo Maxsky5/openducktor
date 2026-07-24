@@ -26,6 +26,7 @@ describe("task asset command handlers", () => {
       },
       getStagedAssets: () => Effect.succeed([]),
       startupSweep: () => Effect.succeed(0),
+      shutdownCleanup: () => Effect.void,
     };
     const handlers = createTaskAssetCommandHandlers(service);
 
@@ -66,6 +67,7 @@ describe("task asset command handlers", () => {
       discard: () => Effect.die("must not run"),
       getStagedAssets: () => Effect.succeed([]),
       startupSweep: () => Effect.succeed(0),
+      shutdownCleanup: () => Effect.void,
     } as TaskAssetStagingService;
     const handler = createTaskAssetCommandHandlers(service).task_asset_stage;
 

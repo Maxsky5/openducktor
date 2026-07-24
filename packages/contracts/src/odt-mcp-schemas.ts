@@ -25,6 +25,8 @@ import {
   taskStatusSchema,
 } from "./task-schemas";
 
+export const ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+
 export const odtToolErrorCodeSchema = z.enum([
   "TASK_POLICY_ERROR",
   "TASK_TRANSITION_NOT_ALLOWED",
@@ -450,7 +452,17 @@ export const readTaskAssetsResultSchema = z
         "Asset IDs must be distinct.",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((result, ctx) => {
+    const totalByteSize = result.assets.reduce((total, asset) => total + asset.byteSize, 0);
+    if (totalByteSize > ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["assets"],
+        message: `Task asset batches must be ${ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES} bytes or smaller.`,
+      });
+    }
+  });
 export type ReadTaskAssetsResult = z.infer<typeof readTaskAssetsResultSchema>;
 
 export const getWorkspacesResultSchema = z

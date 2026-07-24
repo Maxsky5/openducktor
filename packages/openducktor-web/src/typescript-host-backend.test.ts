@@ -99,6 +99,7 @@ const createTestHostCommandRouter = (
 
 const missingTaskAssetReadService: TaskAssetReadService = {
   read: () => Effect.succeed(null),
+  readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
 };
 
 type TestRequestOptions = Partial<{
@@ -1087,6 +1088,7 @@ describe("TypeScript web host backend", () => {
           },
         });
       },
+      readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
     };
     const url = `http://127.0.0.1/task-assets/${context.workspaceId}/${context.taskId}/${context.scope}/${context.assetId}`;
 

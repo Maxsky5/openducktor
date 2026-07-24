@@ -3,7 +3,6 @@ import type {
   OdtToolErrorCode,
   OdtToolErrorIssue,
   OdtToolErrorPayload,
-  ReadTaskAssetsResult,
 } from "@openducktor/contracts";
 import { readTaskAssetsResultSchema } from "@openducktor/contracts";
 import { z } from "zod";
@@ -100,7 +99,7 @@ export const toToolResult = (payload: unknown): ToolResult => {
   };
 };
 
-export const toTaskAssetsToolResult = (payload: ReadTaskAssetsResult): ToolResult => {
+export const toTaskAssetsToolResult = (payload: unknown): ToolResult => {
   const parsed = readTaskAssetsResultSchema.parse(payload);
   return {
     content: parsed.assets.flatMap((asset) => [

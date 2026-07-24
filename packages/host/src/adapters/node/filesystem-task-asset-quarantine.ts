@@ -32,14 +32,8 @@ const validateManifest = (value: unknown): QuarantineManifest => {
     !manifest.assetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
     !Array.isArray(manifest.promotedAssetIds) ||
     !manifest.promotedAssetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
-    typeof manifest.workspaceId !== "string" ||
-    typeof manifest.taskId !== "string" ||
-    !taskAssetRenderContextSchema.safeParse({
-      workspaceId: manifest.workspaceId,
-      taskId: manifest.taskId,
-      scope: "description",
-      assetId: "00000000-0000-4000-8000-000000000000",
-    }).success
+    !taskAssetRenderContextSchema.shape.workspaceId.safeParse(manifest.workspaceId).success ||
+    !taskAssetRenderContextSchema.shape.taskId.safeParse(manifest.taskId).success
   ) {
     throw new Error("Task asset quarantine manifest is invalid.");
   }
@@ -49,9 +43,11 @@ const validateManifest = (value: unknown): QuarantineManifest => {
 export const createTaskAssetQuarantineFiles = ({
   durableRoot,
   quarantineRoot,
+  reservedDirectoryNames,
 }: {
   durableRoot: string;
   quarantineRoot: string;
+  reservedDirectoryNames: readonly string[];
 }) => {
   const root = (quarantineId: string) => path.join(quarantineRoot, quarantineId);
   const manifestPath = (quarantineId: string) => path.join(root(quarantineId), "manifest.json");
@@ -100,10 +96,17 @@ export const createTaskAssetQuarantineFiles = ({
         return [];
       }
       const entries = await readdir(quarantineRoot, { withFileTypes: true });
-      const quarantineIds = entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-        .sort();
+      const quarantineIds: string[] = [];
+      for (const entry of entries) {
+        if (reservedDirectoryNames.includes(entry.name)) {
+          continue;
+        }
+        if (!entry.isDirectory() || !taskAssetIdSchema.safeParse(entry.name).success) {
+          throw new Error(`Unexpected task asset quarantine entry '${entry.name}'.`);
+        }
+        quarantineIds.push(entry.name);
+      }
+      quarantineIds.sort();
       const manifests: TaskAssetQuarantine[] = [];
       for (const quarantineId of quarantineIds) {
         const { version: _version, ...entry } = await read(quarantineId);

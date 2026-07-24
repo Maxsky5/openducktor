@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Cause, Effect, Exit } from "effect";
@@ -14,7 +23,21 @@ afterEach(async () => {
 const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
   roots.push(configDir);
-  return { configDir, port: createNodeTaskAssetFilePort({ configDir }) };
+  const aliveProcessIds = new Set([10_001]);
+  const createPort = (instanceId: string, processId: number) =>
+    createNodeTaskAssetFilePort(
+      { configDir },
+      {
+        owner: { version: 1, instanceId, processId, startedAtMs: processId },
+        processIsAlive: (candidate) => aliveProcessIds.has(candidate),
+      },
+    );
+  return {
+    aliveProcessIds,
+    configDir,
+    createPort,
+    port: createPort("10000000-0000-4000-8000-000000000001", 10_001),
+  };
 };
 
 const workspaceId = "fairnest";
@@ -25,13 +48,19 @@ describe("node task asset file port", () => {
   test("promotes, quarantines, restores, and purges within the dedicated namespace", async () => {
     const { configDir, port } = await createHarness();
     await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1, 2, 3]) }));
-    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId }));
+    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "update" }));
     expect(await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId }))).toEqual(
       new Uint8Array([1, 2, 3]),
     );
 
     const quarantineId = await Effect.runPromise(
-      port.quarantineAssets({ workspaceId, taskId, assetIds: [assetId] }),
+      port.quarantineAssets({
+        workspaceId,
+        taskId,
+        assetIds: [assetId],
+        promotedAssetIds: [],
+        operation: "update",
+      }),
     );
     expect(quarantineId).not.toBeNull();
     expect(await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId }))).toBeNull();
@@ -45,23 +74,40 @@ describe("node task asset file port", () => {
     );
     await Effect.runPromise(port.purgeQuarantine(taskQuarantineId as string));
     expect(
-      await readFile(path.join(configDir, "task-asset-staging", workspaceId, assetId)),
+      await readFile(
+        path.join(
+          configDir,
+          "task-asset-staging",
+          "instances",
+          "10000000-0000-4000-8000-000000000001",
+          workspaceId,
+          assetId,
+        ),
+      ),
     ).toEqual(Buffer.from([1, 2, 3]));
     expect(await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId }))).toBeNull();
   });
 
   test("restores a quarantine after the file port is recreated", async () => {
-    const { configDir, port } = await createHarness();
+    const { aliveProcessIds, createPort, port } = await createHarness();
     await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1, 2, 3]) }));
-    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId }));
+    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "update" }));
     const quarantineId = await Effect.runPromise(
-      port.quarantineAssets({ workspaceId, taskId, assetIds: [assetId] }),
+      port.quarantineAssets({
+        workspaceId,
+        taskId,
+        assetIds: [assetId],
+        promotedAssetIds: [],
+        operation: "update",
+      }),
     );
     if (!quarantineId) {
       throw new Error("Expected an asset quarantine.");
     }
 
-    const restartedPort = createNodeTaskAssetFilePort({ configDir });
+    aliveProcessIds.delete(10_001);
+    aliveProcessIds.add(10_002);
+    const restartedPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
     expect(await Effect.runPromise(restartedPort.listQuarantines())).toEqual([
       {
         id: quarantineId,
@@ -87,7 +133,7 @@ describe("node task asset file port", () => {
     ).rejects.toThrow("identifiers are invalid");
 
     await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
-    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId }));
+    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "update" }));
     const durablePath = path.join(configDir, "task-assets", workspaceId, taskId, assetId);
     const outsidePath = path.join(configDir, "outside.png");
     await writeFile(outsidePath, new Uint8Array([9]));
@@ -116,12 +162,49 @@ describe("node task asset file port", () => {
     }
   });
 
+  test("keeps the caller operation on filesystem failures and validates task-only deletes", async () => {
+    const { port } = await createHarness();
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "create" }));
+
+    const promoteExit = await Effect.runPromiseExit(
+      port.promote({ workspaceId, taskId, assetId, operation: "create" }),
+    );
+    expect(Exit.isFailure(promoteExit)).toBe(true);
+    if (Exit.isFailure(promoteExit)) {
+      expect(Array.from(Cause.failures(promoteExit.cause))).toEqual([
+        expect.objectContaining({
+          _tag: "TaskAssetError",
+          operation: "create",
+          failedPhase: "promote_staged_file",
+        }),
+      ]);
+    }
+
+    const deleteExit = await Effect.runPromiseExit(
+      port.quarantineTaskDirectory({ workspaceId, taskId: "../other" }),
+    );
+    expect(Exit.isFailure(deleteExit)).toBe(true);
+    if (Exit.isFailure(deleteExit)) {
+      expect(Array.from(Cause.failures(deleteExit.cause))).toEqual([
+        expect.objectContaining({
+          _tag: "TaskAssetError",
+          operation: "delete",
+          failedPhase: "validate_identifiers",
+          assetIds: [],
+        }),
+      ]);
+    }
+  });
+
   test("restores earlier files when a multi-file quarantine fails partway", async () => {
     const { configDir, port } = await createHarness();
     const missingAssetId = "750e8400-e29b-41d4-a716-446655440001";
     for (const id of [assetId, missingAssetId]) {
       await Effect.runPromise(port.stage({ workspaceId, assetId: id, bytes: new Uint8Array([1]) }));
-      await Effect.runPromise(port.promote({ workspaceId, taskId, assetId: id }));
+      await Effect.runPromise(
+        port.promote({ workspaceId, taskId, assetId: id, operation: "update" }),
+      );
     }
     await unlink(path.join(configDir, "task-assets", workspaceId, taskId, missingAssetId));
 
@@ -131,11 +214,156 @@ describe("node task asset file port", () => {
           workspaceId,
           taskId,
           assetIds: [assetId, missingAssetId],
+          promotedAssetIds: [],
+          operation: "update",
         }),
       ),
     ).rejects.toThrow(`Failed to quarantine obsolete task asset ${missingAssetId}`);
     expect(
       await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId })),
     ).not.toBeNull();
+  });
+
+  test("isolates live owners and removes dead-owner staging after recovery", async () => {
+    const { aliveProcessIds, configDir, createPort, port } = await createHarness();
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "update" }));
+    const quarantineId = await Effect.runPromise(
+      port.quarantineAssets({
+        workspaceId,
+        taskId,
+        assetIds: [assetId],
+        promotedAssetIds: [],
+        operation: "update",
+      }),
+    );
+    if (!quarantineId) {
+      throw new Error("Expected an asset quarantine.");
+    }
+
+    aliveProcessIds.add(10_002);
+    const concurrentPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
+    expect(await Effect.runPromise(concurrentPort.listQuarantines())).toEqual([]);
+    expect(await Effect.runPromise(concurrentPort.clearStaging())).toBe(0);
+    await expect(
+      readFile(
+        path.join(
+          configDir,
+          "task-asset-staging",
+          "instances",
+          "10000000-0000-4000-8000-000000000001",
+          workspaceId,
+          assetId,
+        ),
+      ),
+    ).resolves.toEqual(Buffer.from([1]));
+
+    aliveProcessIds.delete(10_001);
+    aliveProcessIds.add(10_003);
+    const recoveryPort = createPort("10000000-0000-4000-8000-000000000003", 10_003);
+    expect(await Effect.runPromise(recoveryPort.listQuarantines())).toHaveLength(1);
+    await Effect.runPromise(recoveryPort.restoreQuarantine(quarantineId));
+    expect(await Effect.runPromise(recoveryPort.clearStaging())).toBe(1);
+    expect(await readdir(path.join(configDir, "task-asset-owners"))).not.toContain(
+      "10000000-0000-4000-8000-000000000001.json",
+    );
+  });
+
+  test("keeps crash cleanup bounded across repeated owner generations", async () => {
+    const { aliveProcessIds, configDir, createPort } = await createHarness();
+    aliveProcessIds.clear();
+
+    for (let index = 1; index <= 4; index += 1) {
+      const instanceId = `20000000-0000-4000-8000-${index.toString().padStart(12, "0")}`;
+      const processId = 20_000 + index;
+      aliveProcessIds.add(processId);
+      const crashPort = createPort(instanceId, processId);
+      await Effect.runPromise(
+        crashPort.stage({
+          workspaceId,
+          assetId: `30000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+          bytes: new Uint8Array([index]),
+        }),
+      );
+      aliveProcessIds.delete(processId);
+
+      const sweeperProcessId = 30_000 + index;
+      const sweeperId = `40000000-0000-4000-8000-${index.toString().padStart(12, "0")}`;
+      aliveProcessIds.add(sweeperProcessId);
+      const sweeper = createPort(sweeperId, sweeperProcessId);
+      await Effect.runPromise(sweeper.clearStaging());
+      await Effect.runPromise(sweeper.cleanupCurrentOwner());
+      aliveProcessIds.delete(sweeperProcessId);
+    }
+
+    expect(await readdir(path.join(configDir, "task-asset-owners"))).toEqual([]);
+    expect(await readdir(path.join(configDir, "task-asset-staging", "instances"))).toEqual([]);
+  });
+
+  test("recovers legacy ownerless quarantine data and clears legacy staging", async () => {
+    const { configDir, port } = await createHarness();
+    const quarantineId = "50000000-0000-4000-8000-000000000001";
+    const legacyQuarantineRoot = path.join(configDir, "task-asset-quarantine", quarantineId);
+    await mkdir(legacyQuarantineRoot, { recursive: true });
+    await writeFile(
+      path.join(legacyQuarantineRoot, "manifest.json"),
+      JSON.stringify({
+        version: 1,
+        id: quarantineId,
+        workspaceId,
+        taskId,
+        operation: "update",
+        assetIds: [assetId],
+        promotedAssetIds: [],
+      }),
+    );
+    await writeFile(path.join(legacyQuarantineRoot, assetId), new Uint8Array([7]));
+    const legacyStagingFile = path.join(configDir, "task-asset-staging", workspaceId, assetId);
+    await mkdir(path.dirname(legacyStagingFile), { recursive: true });
+    await writeFile(legacyStagingFile, new Uint8Array([8]));
+
+    expect(await Effect.runPromise(port.listQuarantines())).toEqual([
+      {
+        id: quarantineId,
+        workspaceId,
+        taskId,
+        operation: "update",
+        assetIds: [assetId],
+        promotedAssetIds: [],
+      },
+    ]);
+    await Effect.runPromise(port.restoreQuarantine(quarantineId));
+    expect(await Effect.runPromise(port.clearStaging())).toBe(1);
+    expect(await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId }))).toEqual(
+      new Uint8Array([7]),
+    );
+  });
+
+  test("reports malformed owner records without deleting their state", async () => {
+    const { configDir, port } = await createHarness();
+    const malformedOwnerId = "60000000-0000-4000-8000-000000000001";
+    const marker = path.join(configDir, "task-asset-owners", `${malformedOwnerId}.json`);
+    const ownedState = path.join(
+      configDir,
+      "task-asset-staging",
+      "instances",
+      malformedOwnerId,
+      workspaceId,
+      assetId,
+    );
+    await mkdir(path.dirname(marker), { recursive: true });
+    await writeFile(marker, "{}");
+    await mkdir(path.dirname(ownedState), { recursive: true });
+    await writeFile(ownedState, new Uint8Array([9]));
+
+    const error = await Effect.runPromise(Effect.flip(port.clearStaging()));
+    expect(error).toMatchObject({
+      _tag: "TaskAssetError",
+      failedPhase: "clear_staging",
+      cause: expect.objectContaining({
+        message: "Task asset owner record is invalid.",
+      }),
+    });
+    await expect(readFile(ownedState)).resolves.toEqual(Buffer.from([9]));
   });
 });

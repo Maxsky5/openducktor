@@ -21,27 +21,31 @@ export type TaskAssetFilePort = {
     assetIds: string[];
   }): Effect.Effect<void, TaskAssetError>;
   clearStaging(): Effect.Effect<number, TaskAssetError>;
+  cleanupCurrentOwner(): Effect.Effect<void, TaskAssetError>;
   promote(input: {
     workspaceId: string;
     taskId: string;
     assetId: string;
+    operation: "create" | "update";
   }): Effect.Effect<void, TaskAssetError>;
   durableExists(input: {
     workspaceId: string;
     taskId: string;
     assetId: string;
+    operation: "create" | "update" | "startup_sweep";
   }): Effect.Effect<boolean, TaskAssetError>;
   removeDurable(input: {
     workspaceId: string;
     taskId: string;
     assetIds: string[];
+    operation: "create" | "update" | "startup_sweep";
   }): Effect.Effect<void, TaskAssetError>;
   quarantineAssets(input: {
     workspaceId: string;
     taskId: string;
     assetIds: string[];
-    promotedAssetIds?: string[];
-    operation?: "create" | "update";
+    promotedAssetIds: string[];
+    operation: "create" | "update";
   }): Effect.Effect<string | null, TaskAssetError>;
   quarantineTaskDirectory(input: {
     workspaceId: string;

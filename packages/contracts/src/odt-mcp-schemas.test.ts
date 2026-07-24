@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   getWorkspacesResultSchema,
+  ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
   ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   odtToolErrorPayloadSchema,
@@ -204,6 +205,32 @@ describe("odt mcp public task schemas", () => {
         ],
       }).success,
     ).toBe(false);
+
+    const aggregateResult = readTaskAssetsResultSchema.safeParse({
+      assets: [
+        {
+          assetId: firstAssetId,
+          mediaType: "image/png",
+          byteSize: ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
+          dataBase64: "AQ==",
+        },
+        {
+          assetId: secondAssetId,
+          mediaType: "image/webp",
+          byteSize: 1,
+          dataBase64: "Ag==",
+        },
+      ],
+    });
+    expect(aggregateResult.success).toBe(false);
+    if (!aggregateResult.success) {
+      expect(aggregateResult.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: ["assets"],
+          message: `Task asset batches must be ${ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES} bytes or smaller.`,
+        }),
+      );
+    }
   });
 
   test("get workspaces result keeps workspace records in an object payload", () => {

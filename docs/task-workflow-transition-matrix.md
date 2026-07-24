@@ -25,7 +25,7 @@ MCP workflow tools:
 
 Read flow:
 - Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
-- When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once for the batch.
+- When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.
 - Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.
 
 `subtasks` payload (optional):

@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import {
+  ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
+  TASK_ASSET_MAX_FILE_BYTES,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createTaskAssetReadService } from "./task-asset-read-service";
 
@@ -65,5 +69,48 @@ describe("task asset read service", () => {
 
     expect(await Effect.runPromise(service.read(context))).toBeNull();
     expect(readDisk).toBe(false);
+  });
+
+  test("rejects an oversized batch before reading any durable files", async () => {
+    const secondAssetId = "96d20c03-a470-47f6-9472-1a1d34cd23df";
+    const thirdAssetId = "2ee9b455-b45d-485b-862b-70909b1c58bd";
+    let durableReadCount = 0;
+    const service = createTaskAssetReadService({
+      resolveRepoPath: () => Effect.succeed("/repo"),
+      registry: {
+        getAsset: ({ assetId }) =>
+          Effect.succeed({
+            id: assetId,
+            taskId: context.taskId,
+            scope: "description",
+            originalName: `${assetId}.png`,
+            mediaType: "image/png",
+            byteSize: assetId === thirdAssetId ? 1 : TASK_ASSET_MAX_FILE_BYTES,
+            createdAt: new Date(0),
+          }),
+      },
+      filePort: {
+        readDurable: () => {
+          durableReadCount += 1;
+          return Effect.succeed(new Uint8Array());
+        },
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.readBatch({
+          workspaceId: context.workspaceId,
+          taskId: context.taskId,
+          scope: context.scope,
+          assetIds: [context.assetId, secondAssetId, thirdAssetId],
+        }),
+      ),
+    ).resolves.toEqual({
+      kind: "too_large",
+      requestedBytes: ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES + 1,
+      maxBytes: ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
+    });
+    expect(durableReadCount).toBe(0);
   });
 });

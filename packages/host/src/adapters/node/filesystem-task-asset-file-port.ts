@@ -12,10 +12,20 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { taskAssetRenderContextSchema, workspaceIdSchema } from "@openducktor/contracts";
+import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
+import {
+  taskAssetFileTryPromise as tryPromise,
+  validateTaskAssetContext as validateContext,
+  validateTaskAssetStageContext as validateStageContext,
+  validateTaskAssetTaskContext as validateTaskContext,
+} from "./filesystem-task-asset-errors";
+import {
+  createTaskAssetFileOwnership,
+  type TaskAssetFileOwnershipDependencies,
+} from "./filesystem-task-asset-ownership";
 import {
   createTaskAssetQuarantineFiles,
   type QuarantineManifest,
@@ -25,78 +35,6 @@ type QuarantineMove = { from: string; to: string };
 
 const isMissing = (cause: unknown): boolean =>
   typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
-
-const createFileError = (input: {
-  operation: "stage" | "create" | "update" | "delete" | "discard" | "startup_sweep" | "serve";
-  code: "validation" | "promotion" | "quarantine" | "restore" | "purge" | "partial_state";
-  phase: string;
-  message: string;
-  assetIds?: string[];
-  taskId?: string;
-  cause?: unknown;
-}): TaskAssetError =>
-  new TaskAssetError({
-    operation: input.operation,
-    code: input.code,
-    ...(input.taskId ? { taskId: input.taskId } : {}),
-    assetIds: input.assetIds ?? [],
-    failedPhase: input.phase,
-    durableState: "unchanged",
-    retryAllowed: true,
-    message: input.message,
-    ...(input.cause === undefined ? {} : { cause: input.cause }),
-  });
-
-const validateContext = (
-  workspaceId: string,
-  taskId: string,
-  assetId: string,
-): Effect.Effect<void, TaskAssetError> => {
-  const parsed = taskAssetRenderContextSchema.safeParse({
-    workspaceId,
-    taskId,
-    scope: "description",
-    assetId,
-  });
-  if (!parsed.success) {
-    return Effect.fail(
-      createFileError({
-        operation: "serve",
-        code: "validation",
-        phase: "validate_identifiers",
-        message: "Task asset identifiers are invalid.",
-        assetIds: [assetId],
-        taskId,
-        cause: parsed.error,
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const validateStageContext = (
-  workspaceId: string,
-  assetId: string,
-): Effect.Effect<void, TaskAssetError> => {
-  if (!workspaceIdSchema.safeParse(workspaceId).success || !/^[0-9a-f-]{36}$/i.test(assetId)) {
-    return Effect.fail(
-      createFileError({
-        operation: "stage",
-        code: "validation",
-        phase: "validate_identifiers",
-        message: "Task asset staging identifiers are invalid.",
-        assetIds: [assetId],
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const tryPromise = <A>(
-  run: () => Promise<A>,
-  error: Omit<Parameters<typeof createFileError>[0], "cause">,
-): Effect.Effect<A, TaskAssetError> =>
-  Effect.tryPromise({ try: run, catch: (cause) => createFileError({ ...error, cause }) });
 
 const existingStat = async (target: string) => {
   try {
@@ -109,35 +47,86 @@ const existingStat = async (target: string) => {
   }
 };
 
-export const createNodeTaskAssetFilePort = ({
-  configDir,
-}: {
-  configDir: string;
-}): TaskAssetFilePort => {
+export const createNodeTaskAssetFilePort = (
+  {
+    configDir,
+  }: {
+    configDir: string;
+  },
+  ownership?: TaskAssetFileOwnershipDependencies,
+): TaskAssetFilePort => {
   const durableRoot = path.resolve(configDir, "task-assets");
-  const stagingRoot = path.resolve(configDir, "task-asset-staging");
-  const quarantineRoot = path.resolve(configDir, "task-asset-quarantine");
+  const ownerState = createTaskAssetFileOwnership({ configDir }, ownership);
+  const { ownedQuarantineRoot, ownedStagingRoot, quarantineRoot } = ownerState;
   const stagedPath = (workspaceId: string, assetId: string) =>
-    path.join(stagingRoot, workspaceId, assetId);
+    path.join(ownedStagingRoot, workspaceId, assetId);
   const durablePath = (workspaceId: string, taskId: string, assetId: string) =>
     path.join(durableRoot, workspaceId, taskId, assetId);
-  const quarantineFiles = createTaskAssetQuarantineFiles({ durableRoot, quarantineRoot });
+  const quarantineFilesForRoot = (root: string, reservedDirectoryNames: readonly string[]) =>
+    createTaskAssetQuarantineFiles({
+      durableRoot,
+      quarantineRoot: root,
+      reservedDirectoryNames,
+    });
+  const quarantineFiles = quarantineFilesForRoot(ownedQuarantineRoot, []);
+  const legacyQuarantineFiles = quarantineFilesForRoot(quarantineRoot, ["instances"]);
+  const findQuarantineFiles = async (quarantineId: string) => {
+    if (!taskAssetIdSchema.safeParse(quarantineId).success) {
+      throw new Error("Task asset quarantine ID is invalid.");
+    }
+    const candidates = [
+      legacyQuarantineFiles,
+      ...(await ownerState.listAll()).map((owner) =>
+        quarantineFilesForRoot(ownerState.quarantineRootFor(owner.instanceId), []),
+      ),
+    ];
+    const matches = [];
+    for (const candidate of candidates) {
+      if (await existingStat(candidate.root(quarantineId))) {
+        matches.push(candidate);
+      }
+    }
+    if (matches.length !== 1) {
+      throw new Error(
+        matches.length === 0
+          ? "Task asset quarantine was not found."
+          : "Task asset quarantine ID exists under more than one owner.",
+      );
+    }
+    const [match] = matches;
+    if (!match) {
+      throw new Error("Task asset quarantine was not found.");
+    }
+    return match;
+  };
   const readQuarantineManifest = (quarantineId: string) =>
-    tryPromise(() => quarantineFiles.read(quarantineId), {
-      operation: "startup_sweep",
-      code: "restore",
-      phase: "read_quarantine_manifest",
-      message: "Failed to read task asset quarantine recovery data.",
-    });
+    tryPromise(
+      async () => {
+        const files = await findQuarantineFiles(quarantineId);
+        return { files, manifest: await files.read(quarantineId) };
+      },
+      {
+        operation: "startup_sweep",
+        code: "restore",
+        phase: "read_quarantine_manifest",
+        message: "Failed to read task asset quarantine recovery data.",
+      },
+    );
   const writeQuarantineManifest = (manifest: QuarantineManifest) =>
-    tryPromise(() => quarantineFiles.write(manifest), {
-      operation: manifest.operation,
-      code: "quarantine",
-      phase: "write_quarantine_manifest",
-      message: "Failed to write task asset quarantine recovery data.",
-      assetIds: manifest.assetIds,
-      taskId: manifest.taskId,
-    });
+    tryPromise(
+      async () => {
+        await ownerState.ensureCurrent();
+        await quarantineFiles.write(manifest);
+      },
+      {
+        operation: manifest.operation,
+        code: "quarantine",
+        phase: "write_quarantine_manifest",
+        message: "Failed to write task asset quarantine recovery data.",
+        assetIds: manifest.assetIds,
+        taskId: manifest.taskId,
+      },
+    );
 
   return {
     stage(input) {
@@ -146,6 +135,7 @@ export const createNodeTaskAssetFilePort = ({
         const destination = stagedPath(input.workspaceId, input.assetId);
         yield* tryPromise(
           async () => {
+            await ownerState.ensureCurrent();
             await mkdir(path.dirname(destination), { recursive: true });
             await writeFile(destination, input.bytes, { flag: "wx", mode: 0o600 });
           },
@@ -174,25 +164,24 @@ export const createNodeTaskAssetFilePort = ({
       });
     },
     clearStaging() {
-      return tryPromise(
-        async () => {
-          const stat = await existingStat(stagingRoot);
-          const removed = stat ? 1 : 0;
-          await rm(stagingRoot, { force: true, recursive: true });
-          await mkdir(stagingRoot, { recursive: true });
-          return removed;
-        },
-        {
-          operation: "startup_sweep",
-          code: "purge",
-          phase: "clear_staging",
-          message: "Failed to clear expired task asset staging files.",
-        },
-      );
+      return tryPromise(() => ownerState.clearExpiredStaging(), {
+        operation: "startup_sweep",
+        code: "purge",
+        phase: "clear_staging",
+        message: "Failed to clear expired task asset staging files.",
+      });
+    },
+    cleanupCurrentOwner() {
+      return tryPromise(() => ownerState.cleanupCurrent(), {
+        operation: "discard",
+        code: "purge",
+        phase: "cleanup_owner_staging",
+        message: "Failed to clean up task asset state for the current host instance.",
+      });
     },
     promote(input) {
       return Effect.gen(function* () {
-        yield* validateContext(input.workspaceId, input.taskId, input.assetId);
+        yield* validateContext(input.workspaceId, input.taskId, input.assetId, input.operation);
         const destination = durablePath(input.workspaceId, input.taskId, input.assetId);
         yield* tryPromise(
           async () => {
@@ -204,7 +193,7 @@ export const createNodeTaskAssetFilePort = ({
             );
           },
           {
-            operation: "update",
+            operation: input.operation,
             code: "promotion",
             phase: "promote_staged_file",
             message: `Failed to promote task asset ${input.assetId}.`,
@@ -216,13 +205,13 @@ export const createNodeTaskAssetFilePort = ({
     },
     durableExists(input) {
       return Effect.gen(function* () {
-        yield* validateContext(input.workspaceId, input.taskId, input.assetId);
+        yield* validateContext(input.workspaceId, input.taskId, input.assetId, input.operation);
         return yield* tryPromise(
           async () =>
             (await existingStat(durablePath(input.workspaceId, input.taskId, input.assetId))) !==
             null,
           {
-            operation: "update",
+            operation: input.operation,
             code: "validation",
             phase: "check_destination",
             message: `Failed to check task asset ${input.assetId}.`,
@@ -235,9 +224,9 @@ export const createNodeTaskAssetFilePort = ({
     removeDurable(input) {
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
-          yield* validateContext(input.workspaceId, input.taskId, assetId);
+          yield* validateContext(input.workspaceId, input.taskId, assetId, input.operation);
           yield* tryPromise(() => unlink(durablePath(input.workspaceId, input.taskId, assetId)), {
-            operation: "update",
+            operation: input.operation,
             code: "purge",
             phase: "remove_promoted_file",
             message: `Failed to remove promoted task asset ${assetId}.`,
@@ -248,8 +237,7 @@ export const createNodeTaskAssetFilePort = ({
       });
     },
     quarantineAssets(input) {
-      const promotedAssetIds = input.promotedAssetIds ?? [];
-      if (input.assetIds.length === 0 && promotedAssetIds.length === 0) {
+      if (input.assetIds.length === 0 && input.promotedAssetIds.length === 0) {
         return Effect.succeed(null);
       }
       return Effect.gen(function* () {
@@ -261,13 +249,13 @@ export const createNodeTaskAssetFilePort = ({
           id: quarantineId,
           workspaceId: input.workspaceId,
           taskId: input.taskId,
-          operation: input.operation ?? "update",
+          operation: input.operation,
           assetIds: input.assetIds,
-          promotedAssetIds,
+          promotedAssetIds: input.promotedAssetIds,
         };
         yield* writeQuarantineManifest(manifest);
         for (const assetId of input.assetIds) {
-          yield* validateContext(input.workspaceId, input.taskId, assetId);
+          yield* validateContext(input.workspaceId, input.taskId, assetId, input.operation);
           const from = durablePath(input.workspaceId, input.taskId, assetId);
           const to = path.join(root, assetId);
           yield* tryPromise(
@@ -277,7 +265,7 @@ export const createNodeTaskAssetFilePort = ({
               moves.push({ from, to });
             },
             {
-              operation: "update",
+              operation: input.operation,
               code: "quarantine",
               phase: "quarantine_obsolete_file",
               message: `Failed to quarantine obsolete task asset ${assetId}.`,
@@ -297,7 +285,7 @@ export const createNodeTaskAssetFilePort = ({
                       await rm(root, { force: true, recursive: true });
                     },
                     {
-                      operation: "update",
+                      operation: input.operation,
                       code: "restore",
                       phase: "restore_partial_quarantine",
                       message: "Failed to restore a partially quarantined task asset set.",
@@ -308,7 +296,7 @@ export const createNodeTaskAssetFilePort = ({
                 );
                 if (Exit.isFailure(restoreExit)) {
                   return yield* new TaskAssetError({
-                    operation: "update",
+                    operation: input.operation,
                     code: "partial_state",
                     taskId: input.taskId,
                     assetIds: input.assetIds,
@@ -328,6 +316,7 @@ export const createNodeTaskAssetFilePort = ({
     },
     quarantineTaskDirectory(input) {
       return Effect.gen(function* () {
+        yield* validateTaskContext(input.workspaceId, input.taskId, "delete");
         const taskRoot = path.join(durableRoot, input.workspaceId, input.taskId);
         const stat = yield* tryPromise(() => existingStat(taskRoot), {
           operation: "delete",
@@ -339,8 +328,6 @@ export const createNodeTaskAssetFilePort = ({
         if (!stat) {
           return null;
         }
-        const placeholderAssetId = "00000000-0000-4000-8000-000000000000";
-        yield* validateContext(input.workspaceId, input.taskId, placeholderAssetId);
         const quarantineId = randomUUID();
         const root = quarantineFiles.root(quarantineId);
         const to = path.join(root, input.taskId);
@@ -370,42 +357,55 @@ export const createNodeTaskAssetFilePort = ({
       });
     },
     listQuarantines() {
-      return tryPromise(() => quarantineFiles.list(), {
-        operation: "startup_sweep",
-        code: "restore",
-        phase: "list_quarantines",
-        message: "Failed to list task asset quarantine recovery data.",
-      });
+      return tryPromise(
+        async () => {
+          const quarantines = await legacyQuarantineFiles.list();
+          for (const owner of await ownerState.listDead()) {
+            const ownerFiles = quarantineFilesForRoot(
+              ownerState.quarantineRootFor(owner.instanceId),
+              [],
+            );
+            quarantines.push(...(await ownerFiles.list()));
+          }
+          return quarantines;
+        },
+        {
+          operation: "startup_sweep",
+          code: "restore",
+          phase: "list_quarantines",
+          message: "Failed to list task asset quarantine recovery data.",
+        },
+      );
     },
     restoreQuarantine(quarantineId) {
       return Effect.gen(function* () {
-        const entry = yield* readQuarantineManifest(quarantineId);
-        yield* tryPromise(() => quarantineFiles.restore(entry), {
-          operation: entry.operation,
+        const { files, manifest } = yield* readQuarantineManifest(quarantineId);
+        yield* tryPromise(() => files.restore(manifest), {
+          operation: manifest.operation,
           code: "restore",
           phase: "restore_quarantine",
           message: "Failed to restore quarantined task assets.",
-          assetIds: entry.assetIds,
-          taskId: entry.taskId,
+          assetIds: manifest.assetIds,
+          taskId: manifest.taskId,
         });
       });
     },
     purgeQuarantine(quarantineId) {
       return Effect.gen(function* () {
-        const entry = yield* readQuarantineManifest(quarantineId);
-        yield* tryPromise(() => quarantineFiles.purge(quarantineId), {
-          operation: entry.operation,
+        const { files, manifest } = yield* readQuarantineManifest(quarantineId);
+        yield* tryPromise(() => files.purge(quarantineId), {
+          operation: manifest.operation,
           code: "purge",
           phase: "purge_quarantine",
           message: "Failed to purge quarantined task assets.",
-          assetIds: entry.assetIds,
-          taskId: entry.taskId,
+          assetIds: manifest.assetIds,
+          taskId: manifest.taskId,
         });
       });
     },
     readDurable(input) {
       return Effect.gen(function* () {
-        yield* validateContext(input.workspaceId, input.taskId, input.assetId);
+        yield* validateContext(input.workspaceId, input.taskId, input.assetId, "serve");
         return yield* tryPromise(
           async () => {
             const taskRoot = path.join(durableRoot, input.workspaceId, input.taskId);

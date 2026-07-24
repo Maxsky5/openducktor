@@ -82,6 +82,7 @@ export const createTaskAssetRecoveryService = ({
               workspaceId: quarantine.workspaceId,
               taskId: quarantine.taskId,
               assetId,
+              operation: "startup_sweep",
             })
           ) {
             existingPromotedAssetIds.push(assetId);
@@ -105,6 +106,7 @@ export const createTaskAssetRecoveryService = ({
               workspaceId: quarantine.workspaceId,
               taskId: quarantine.taskId,
               assetIds: existingPromotedAssetIds,
+              operation: "startup_sweep",
             });
           }
           yield* filePort.purgeQuarantine(quarantine.id);
@@ -115,6 +117,7 @@ export const createTaskAssetRecoveryService = ({
             workspaceId: quarantine.workspaceId,
             taskId: quarantine.taskId,
             assetIds: existingPromotedAssetIds,
+            operation: "startup_sweep",
           });
         }
         yield* filePort.restoreQuarantine(quarantine.id);

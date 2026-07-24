@@ -207,7 +207,7 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
 - `taskId`
 - `assetIds`: 1 to 50 distinct asset UUIDs
 
-Use one call for all description images needed for the current work. The host checks the exact workspace, canonical task, description scope, media type, and byte size for every asset. It keeps request order and fails the whole call if any asset is unavailable.
+Use one call when the requested assets have a raw total of at most 20 MiB. Split only larger sets. The host checks the exact workspace, canonical task, description scope, media type, per-file byte size, and aggregate byte size before reading files. It keeps request order and fails the whole call if any asset is unavailable.
 
 The result contains a short label and a native MCP `image` content block for each asset. It does not expose the private bridge JSON as `structuredContent`, declare an MCP `outputSchema`, or return storage paths and runtime URLs.
 

@@ -421,6 +421,20 @@ export const createNodeEffectHostCommandRouter = (
               createStopDevServersStep(devServerService, lifecycleLogger),
               createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
               createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
+              {
+                label: "task asset staging",
+                run: () =>
+                  taskAssetStagingService.shutdownCleanup().pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new HostOperationError({
+                          operation: "host.dispose.task_assets",
+                          message: cause.message,
+                          cause,
+                        }),
+                    ),
+                  ),
+              },
             ],
             lifecycleLogger,
           ),

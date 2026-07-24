@@ -115,6 +115,7 @@ export const createTaskAssetAwareTaskStore = ({
             workspaceId,
             taskId: created.id,
             assetId: asset.assetId,
+            operation: "create",
           })
         ) {
           return yield* new TaskAssetError({
@@ -128,7 +129,12 @@ export const createTaskAssetAwareTaskStore = ({
             message: `Task asset destination ${asset.assetId} already exists.`,
           });
         }
-        yield* filePort.promote({ workspaceId, taskId: created.id, assetId: asset.assetId });
+        yield* filePort.promote({
+          workspaceId,
+          taskId: created.id,
+          assetId: asset.assetId,
+          operation: "create",
+        });
         promotedAssetIds.push(asset.assetId);
       }
       yield* registry.registerAssets({
@@ -201,6 +207,7 @@ export const createTaskAssetAwareTaskStore = ({
                   workspaceId: cleanupWorkspaceId,
                   taskId,
                   assetIds: promotedAssetIds,
+                  operation: "create",
                 })
               : Effect.void,
           );
@@ -344,6 +351,7 @@ export const createTaskAssetAwareTaskStore = ({
             workspaceId,
             taskId: input.taskId,
             assetId: asset.assetId,
+            operation: "update",
           })
         ) {
           return yield* new TaskAssetError({
@@ -373,6 +381,7 @@ export const createTaskAssetAwareTaskStore = ({
           workspaceId,
           taskId: input.taskId,
           assetId: asset.assetId,
+          operation: "update",
         });
         promotedAssetIds.push(asset.assetId);
       }
@@ -437,6 +446,7 @@ export const createTaskAssetAwareTaskStore = ({
                     workspaceId: cleanupWorkspaceId,
                     taskId: input.taskId,
                     assetIds: promotedAssetIds,
+                    operation: "update",
                   }),
                 )
               : Exit.succeed(undefined);

@@ -193,55 +193,53 @@ export const createOdtMcpBridgeService = ({
           case "odt_read_task_assets": {
             const parsed = yield* parseToolInput(toolName, input);
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const readAssets = yield* Effect.forEach(parsed.assetIds, (assetId) =>
-              taskAssetReadService
-                .read({
-                  workspaceId: parsed.workspaceId ?? "",
-                  taskId: task.id,
-                  scope: "description",
-                  assetId,
-                })
-                .pipe(
-                  Effect.map((asset) => ({ assetId, asset })),
-                  Effect.mapError(
-                    (cause) =>
-                      new HostOperationError({
-                        operation: "odt_mcp_bridge.read_task_assets",
-                        message: cause.message,
-                        cause,
-                        details: {
-                          taskId: task.id,
-                          assetId,
-                          failedPhase: cause.failedPhase,
-                        },
-                      }),
-                  ),
+            const batch = yield* taskAssetReadService
+              .readBatch({
+                workspaceId: parsed.workspaceId ?? "",
+                taskId: task.id,
+                scope: "description",
+                assetIds: parsed.assetIds,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new HostOperationError({
+                      operation: "odt_mcp_bridge.read_task_assets",
+                      message: cause.message,
+                      cause,
+                      details: {
+                        taskId: task.id,
+                        assetIds: parsed.assetIds,
+                        failedPhase: cause.failedPhase,
+                      },
+                    }),
                 ),
-            );
-            const missingAssetIds = readAssets
-              .filter((entry) => entry.asset === null)
-              .map((entry) => entry.assetId);
-            if (missingAssetIds.length > 0) {
+              );
+            if (batch.kind === "missing") {
               return yield* new HostValidationError({
                 field: "assetIds",
                 message: "One or more requested task description assets were not found.",
                 details: {
                   field: "assetIds",
                   taskId: task.id,
-                  missingAssetIds,
+                  missingAssetIds: batch.assetIds,
                 },
               });
             }
-            const availableAssets = readAssets.filter(
-              (
-                entry,
-              ): entry is {
-                assetId: string;
-                asset: NonNullable<(typeof entry)["asset"]>;
-              } => entry.asset !== null,
-            );
+            if (batch.kind === "too_large") {
+              return yield* new HostValidationError({
+                field: "assetIds",
+                message: "Requested task description assets exceed the per-call byte limit.",
+                details: {
+                  field: "assetIds",
+                  taskId: task.id,
+                  requestedBytes: batch.requestedBytes,
+                  maxBytes: batch.maxBytes,
+                },
+              });
+            }
             return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_read_task_assets, {
-              assets: availableAssets.map(({ assetId, asset }) => ({
+              assets: batch.assets.map(({ assetId, asset }) => ({
                 assetId,
                 mediaType: asset.mediaType,
                 byteSize: asset.bytes.byteLength,
