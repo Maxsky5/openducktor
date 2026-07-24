@@ -26,6 +26,7 @@ const createStore = () => {
   const clearedRuntimeEvents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedSubagents: Array<{ externalSessionId: string; runtimeId?: string }> = [];
   const clearedThreadStatusOverrides: Array<{ runtimeId: string; threadId: string }> = [];
+  const cleanupOrder: string[] = [];
   const activeTurnsBySessionId = new Map<string, unknown>();
   const store = new CodexLocalSessionState({
     sessionEvents: {
@@ -36,15 +37,19 @@ const createStore = () => {
       clearSession: (externalSessionId) => clearedPendingInput.push(externalSessionId),
     },
     subagents: {
-      clearSession: (externalSessionId, runtimeId) =>
-        clearedSubagents.push({ externalSessionId, runtimeId }),
+      clearSession: (externalSessionId, runtimeId) => {
+        cleanupOrder.push("subagents");
+        clearedSubagents.push({ externalSessionId, runtimeId });
+      },
     },
     threadStatusOverrides: {
       clear: (runtimeId, threadId) => clearedThreadStatusOverrides.push({ runtimeId, threadId }),
     },
     runtimeEvents: {
-      clearSession: (externalSessionId, runtimeId) =>
-        clearedRuntimeEvents.push({ externalSessionId, runtimeId }),
+      clearSession: (externalSessionId, runtimeId) => {
+        cleanupOrder.push("runtimeEvents");
+        clearedRuntimeEvents.push({ externalSessionId, runtimeId });
+      },
     },
   });
   return {
@@ -55,6 +60,7 @@ const createStore = () => {
     clearedRuntimeEvents,
     clearedSubagents,
     clearedThreadStatusOverrides,
+    cleanupOrder,
   };
 };
 
@@ -79,6 +85,7 @@ describe("CodexLocalSessionState", () => {
       clearedRuntimeEvents,
       clearedSubagents,
       clearedThreadStatusOverrides,
+      cleanupOrder,
     } = createStore();
     store.remember(session("thread-1"));
     store.remember(session("thread-2"));
@@ -101,6 +108,7 @@ describe("CodexLocalSessionState", () => {
     expect(clearedThreadStatusOverrides).toEqual([
       { runtimeId: "runtime-1", threadId: "thread-1" },
     ]);
+    expect(cleanupOrder).toEqual(["runtimeEvents", "subagents"]);
   });
 
   test("releases the last local session without runtime coordination", () => {

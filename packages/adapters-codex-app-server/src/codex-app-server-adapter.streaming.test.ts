@@ -820,7 +820,9 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const parentThreadId = "thread-saved";
     const childThreadId = "child-thread";
+    const grandchildThreadId = "grandchild-thread";
     const itemId = "reused-child-item";
+    const grandchildItemId = "grandchild-item";
     const internals = adapter as unknown as {
       subagents: CodexSubagentLinkState;
       runtimeEvents: {
@@ -834,6 +836,13 @@ describe("CodexAppServerAdapter streaming", () => {
       parentThreadId,
       childThreadId,
       itemId: "spawn-child",
+      status: "running",
+    });
+    internals.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId: childThreadId,
+      childThreadId: grandchildThreadId,
+      itemId: "spawn-grandchild",
       status: "running",
     });
     emitNotification({
@@ -853,6 +862,23 @@ describe("CodexAppServerAdapter streaming", () => {
         },
       },
     });
+    emitNotification({
+      method: "item/started",
+      params: {
+        threadId: grandchildThreadId,
+        turnId: "grandchild-turn-before-release",
+        startedAtMs: 1_783_196_401_500,
+        item: {
+          type: "commandExecution",
+          id: grandchildItemId,
+          command: "true",
+          cwd: "/repo",
+          status: "inProgress",
+          commandActions: [],
+          aggregatedOutput: "",
+        },
+      },
+    });
     await flushCodexAdapterWork();
 
     expect(
@@ -860,6 +886,11 @@ describe("CodexAppServerAdapter streaming", () => {
         .get("runtime-live")
         ?.get(childThreadId),
     ).toEqual(new Map([[itemId, 1_783_196_401_000]]));
+    expect(
+      internals.runtimeEvents.startedItemTimestampsByRuntimeId
+        .get("runtime-live")
+        ?.get(grandchildThreadId),
+    ).toEqual(new Map([[grandchildItemId, 1_783_196_401_500]]));
 
     await adapter.releaseSession(codexSessionRuntimeRef(parentThreadId));
 
@@ -867,6 +898,11 @@ describe("CodexAppServerAdapter streaming", () => {
       internals.runtimeEvents.startedItemTimestampsByRuntimeId
         .get("runtime-live")
         ?.has(childThreadId) ?? false,
+    ).toBe(false);
+    expect(
+      internals.runtimeEvents.startedItemTimestampsByRuntimeId
+        .get("runtime-live")
+        ?.has(grandchildThreadId) ?? false,
     ).toBe(false);
     expect(internals.subagents.routeForChild(childThreadId, "runtime-live")).toBeNull();
 
@@ -912,6 +948,79 @@ describe("CodexAppServerAdapter streaming", () => {
       .at(-1);
     expect(completedPart).toBeDefined();
     expect(completedPart).not.toHaveProperty("startedAtMs");
+  });
+
+  test("keeps routed item timing below a separately retained child lifecycle", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents });
+    const parentThreadId = "thread-saved";
+    const childThreadId = "retained-child-thread";
+    const grandchildThreadId = "owned-grandchild-thread";
+    const internals = adapter as unknown as {
+      subagents: CodexSubagentLinkState;
+      runtimeEvents: {
+        startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;
+      };
+    };
+
+    await observeSessionState(adapter, parentThreadId);
+    await adapter.resumeSession(codexSessionRuntimeRef(childThreadId));
+    internals.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId,
+      childThreadId,
+      itemId: "spawn-retained-child",
+      status: "running",
+    });
+    internals.subagents.upsertLink({
+      runtimeId: "runtime-live",
+      parentThreadId: childThreadId,
+      childThreadId: grandchildThreadId,
+      itemId: "spawn-owned-grandchild",
+      status: "running",
+    });
+    for (const [threadId, itemId, startedAtMs] of [
+      [childThreadId, "retained-child-item", 1_783_196_403_000],
+      [grandchildThreadId, "owned-grandchild-item", 1_783_196_404_000],
+    ] as const) {
+      emitNotification({
+        method: "item/started",
+        params: {
+          threadId,
+          turnId: `turn-${threadId}`,
+          startedAtMs,
+          item: {
+            type: "commandExecution",
+            id: itemId,
+            command: "true",
+            cwd: "/repo",
+            status: "inProgress",
+            commandActions: [],
+            aggregatedOutput: "",
+          },
+        },
+      });
+    }
+    await flushCodexAdapterWork();
+
+    await adapter.releaseSession(codexSessionRuntimeRef(parentThreadId));
+
+    expect(
+      internals.runtimeEvents.startedItemTimestampsByRuntimeId
+        .get("runtime-live")
+        ?.get(childThreadId),
+    ).toEqual(new Map([["retained-child-item", 1_783_196_403_000]]));
+    expect(
+      internals.runtimeEvents.startedItemTimestampsByRuntimeId
+        .get("runtime-live")
+        ?.get(grandchildThreadId),
+    ).toEqual(new Map([["owned-grandchild-item", 1_783_196_404_000]]));
+
+    await adapter.releaseSession(codexSessionRuntimeRef(childThreadId));
+
+    expect(internals.runtimeEvents.startedItemTimestampsByRuntimeId.has("runtime-live")).toBe(
+      false,
+    );
   });
 
   test("does not retain streamed events for a late renderer subscription", async () => {

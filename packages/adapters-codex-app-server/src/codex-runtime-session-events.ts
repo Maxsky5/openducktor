@@ -357,7 +357,14 @@ export class CodexRuntimeSessionEvents {
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
     const routedDescendantThreadIds =
-      runtimeId === undefined ? [] : this.routedDescendantThreadIds(externalSessionId, runtimeId);
+      runtimeId === undefined
+        ? []
+        : this.deps.subagents
+            .descendantRoutesForParent(externalSessionId, runtimeId, (route) => {
+              const retainedChild = this.deps.sessions.get(route.childExternalSessionId);
+              return retainedChild?.runtimeId !== runtimeId;
+            })
+            .map((route) => route.childExternalSessionId);
     this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
     if (runtimeId !== undefined) {
       this.clearStartedItemTimestampsForSession(runtimeId, externalSessionId);
@@ -902,32 +909,6 @@ export class CodexRuntimeSessionEvents {
 
   private clearStartedItemTimestampsForRuntime(runtimeId: string): void {
     this.startedItemTimestampsByRuntimeId.delete(runtimeId);
-  }
-
-  private routedDescendantThreadIds(parentThreadId: string, runtimeId: string): string[] {
-    const descendants: string[] = [];
-    const pendingParentThreadIds = [parentThreadId];
-    const visitedThreadIds = new Set(pendingParentThreadIds);
-    while (pendingParentThreadIds.length > 0) {
-      const currentParentThreadId = pendingParentThreadIds.pop();
-      if (!currentParentThreadId) {
-        continue;
-      }
-      for (const route of this.deps.subagents.routesForParent(currentParentThreadId, runtimeId)) {
-        const childThreadId = route.childExternalSessionId;
-        if (visitedThreadIds.has(childThreadId)) {
-          continue;
-        }
-        visitedThreadIds.add(childThreadId);
-        const retainedChild = this.deps.sessions.get(childThreadId);
-        if (retainedChild?.runtimeId === runtimeId) {
-          continue;
-        }
-        descendants.push(childThreadId);
-        pendingParentThreadIds.push(childThreadId);
-      }
-    }
-    return descendants;
   }
 
   private async handleServerRequest(

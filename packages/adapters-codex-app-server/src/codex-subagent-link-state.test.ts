@@ -204,6 +204,84 @@ describe("CodexSubagentLinkState", () => {
     }
   });
 
+  test("walks only the requested runtime's routed descendant subtree", () => {
+    const subagents = new CodexSubagentLinkState();
+    for (const [runtimeId, parentThreadId, childThreadId] of [
+      ["runtime-1", "parent-thread", "child-thread"],
+      ["runtime-1", "child-thread", "grandchild-thread"],
+      ["runtime-1", "unrelated-parent", "unrelated-child"],
+      ["runtime-2", "parent-thread", "child-thread"],
+      ["runtime-2", "child-thread", "grandchild-thread"],
+    ] as const) {
+      subagents.upsertLink({
+        runtimeId,
+        parentThreadId,
+        childThreadId,
+        itemId: `spawn-${childThreadId}`,
+        status: "running",
+      });
+    }
+
+    const descendants = subagents.descendantRoutesForParent(
+      "parent-thread",
+      "runtime-1",
+      () => true,
+    );
+
+    expect(descendants.map((route) => route.childExternalSessionId)).toEqual([
+      "child-thread",
+      "grandchild-thread",
+    ]);
+  });
+
+  test("stops descendant traversal at a retained child boundary", () => {
+    const subagents = new CodexSubagentLinkState();
+    for (const [parentThreadId, childThreadId] of [
+      ["parent-thread", "retained-child"],
+      ["retained-child", "owned-grandchild"],
+    ] as const) {
+      subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId,
+        childThreadId,
+        itemId: `spawn-${childThreadId}`,
+        status: "running",
+      });
+    }
+
+    const descendants = subagents.descendantRoutesForParent(
+      "parent-thread",
+      "runtime-1",
+      (route) => route.childExternalSessionId !== "retained-child",
+    );
+
+    expect(descendants).toEqual([]);
+  });
+
+  test("terminates descendant traversal when routed links form a cycle", () => {
+    const subagents = new CodexSubagentLinkState();
+    for (const [parentThreadId, childThreadId] of [
+      ["parent-thread", "child-thread"],
+      ["child-thread", "parent-thread"],
+    ] as const) {
+      subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId,
+        childThreadId,
+        itemId: `spawn-${childThreadId}`,
+        status: "running",
+      });
+    }
+
+    const descendants = subagents.descendantRoutesForParent(
+      "parent-thread",
+      "runtime-1",
+      () => true,
+    );
+
+    expect(descendants.map((route) => route.childExternalSessionId)).toEqual(["child-thread"]);
+  });
+
   test("clears links for one runtime without deleting matching thread ids in another runtime", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({
