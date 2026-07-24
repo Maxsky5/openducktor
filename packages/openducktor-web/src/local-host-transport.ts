@@ -3,6 +3,7 @@ import {
   type AgentSessionLiveRefreshInput,
   agentSessionLiveEnvelopeSchema,
   hostInvokeFailureSchema,
+  type TaskEventCursor,
 } from "@openducktor/contracts";
 import type { DevServerEventSubscription } from "@openducktor/frontend";
 import {
@@ -13,6 +14,10 @@ import {
   browserLiveControlEvent,
   isBrowserLiveControlEvent,
 } from "@openducktor/frontend/lib/browser-live-control-events";
+import type {
+  TaskStreamFrame,
+  TaskStreamSubscription,
+} from "@openducktor/frontend/lib/shell-bridge";
 import type { HostEventChannel } from "@openducktor/host";
 import {
   createAgentSessionLiveAttachment,
@@ -32,6 +37,7 @@ import {
   WebHostRequestError,
 } from "./effect/web-errors";
 import { readLocalHostErrorPayloadEffect } from "./local-host-errors";
+import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
 
 type BrowserSseListener = (payload: unknown) => void;
 type BrowserSseListenerRegistration = {
@@ -43,7 +49,6 @@ type BrowserSseListenerRegistration = {
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
-const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const HOST_EVENT_STREAM_PATH = "events";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
@@ -584,16 +589,17 @@ export const observeLocalHostAgentSessions = async (
   );
 };
 
-export const subscribeLocalHostTaskEvents = async (
-  listener: (payload: unknown) => void,
-): Promise<() => void> => {
-  return runWebBoundary(
-    Effect.gen(function* () {
-      yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect(TASK_EVENT_CHANNEL, listener, true)).unsubscribe;
+export const subscribeLocalHostTaskStream = async (
+  input: { cursor: TaskEventCursor | null },
+  onFrame: (frame: TaskStreamFrame) => void,
+  onTerminalFailure?: (error: unknown) => void,
+): Promise<TaskStreamSubscription> =>
+  runWebBoundary(
+    subscribeLocalTaskEventStreamEffect(input, onFrame, onTerminalFailure, {
+      ensureSession: ensureLocalHostSessionDedupedEffect,
+      localHostRequestErrorEffect,
     }),
   );
-};
 
 export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {
   const baseUrl = browserBackendUrl.replace(/\/$/, "");

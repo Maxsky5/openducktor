@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
+import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -8,6 +9,7 @@ import {
   createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createTaskService,
+  createTaskServiceWithMutationProgress,
   type TaskActivityGuardPort,
   type TaskStorePort,
   task,
@@ -519,7 +521,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
@@ -784,7 +786,10 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo-alias", taskId: "epic-1", deleteSubtasks: true }),
       ),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({
+      ok: true,
+      changes: { taskIds: ["epic-1", "task-1"], removedTaskIds: ["epic-1", "task-1"] },
+    });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
       {
@@ -962,7 +967,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -1044,7 +1049,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -1785,6 +1790,90 @@ describe("createTaskService task mutations and reset", () => {
         input: { repoPath: "/repo", taskId: "task-1", status: "open" },
       },
     ]);
+  });
+  test("reports implementation reset failures after the first store clear as partial progress", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.clear-qa-reports",
+      message: "clear QA reports failed",
+    });
+    let sessionsCleared = false;
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ status: "blocked" })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      clearAgentSessionsByRoles: () =>
+        Effect.sync(() => {
+          sessionsCleared = true;
+          return true;
+        }),
+      clearQaReports: () => Effect.fail(failure),
+    };
+    const service = createTaskServiceWithMutationProgress({
+      devServerService: createDirectMergeDevServerService([]),
+      gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      taskStore,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const result = await Effect.runPromise(
+      service.resetImplementation({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(sessionsCleared).toBe(true);
+    expect(result.operation).toBe("reset-implementation");
+    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
+    expect(result.failure.message).toContain("clear QA reports failed");
+    expect(result.failure.message).toContain("Cleared Builder and QA session records.");
+    expect(result.failure).toMatchObject({ cause: failure });
+  });
+  test("reports task reset failures after workflow document clearing as partial progress", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.clear-agent-sessions",
+      message: "clear sessions failed",
+    });
+    let documentsCleared = false;
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ status: "human_review" })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      clearWorkflowDocuments: () =>
+        Effect.sync(() => {
+          documentsCleared = true;
+          return true;
+        }),
+      clearAgentSessionsByRoles: () => Effect.fail(failure),
+    };
+    const service = createTaskServiceWithMutationProgress({
+      devServerService: createDirectMergeDevServerService([]),
+      gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      taskStore,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const result = await Effect.runPromise(
+      service.resetTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(documentsCleared).toBe(true);
+    expect(result.operation).toBe("reset-task");
+    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
+    expect(result.failure.message).toContain("clear sessions failed");
+    expect(result.failure.message).toContain("cleared workflow documents");
+    expect(result.failure).toMatchObject({ cause: failure });
   });
   test("fails fast when implementation reset needs live activity checks but no guard is configured", async () => {
     const session = createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" });

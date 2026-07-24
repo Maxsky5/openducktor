@@ -1,6 +1,8 @@
 import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
+import type { TaskSyncService } from "../tasks/sync/task-sync-service";
 import type { TaskService } from "../tasks/task-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
@@ -202,8 +204,106 @@ describe("createOdtMcpBridgeService", () => {
       { type: "listTasks", input: { repoPath: "/repo" } },
     ]);
   });
-  test("publishes a host-compatible task event after external task creation", async () => {
-    const events: unknown[] = [];
+  test("uses the task facade to publish one event for MCP document and create mutations", async () => {
+    const events: Array<{ kind: "created" | "updated"; taskIds: string[] }> = [];
+    const baseTaskService = createTaskService({
+      createTask: () => Effect.succeed(taskCard({ id: "task-new", title: "New task" })),
+      listTasks: () => Effect.succeed([taskCard()]),
+      setSpec: () =>
+        Effect.succeed({
+          markdown: "## Spec",
+          revision: 1,
+          updatedAt: "2026-07-22T00:00:00.000Z",
+        }),
+    });
+    const taskSyncService: Pick<
+      TaskSyncService,
+      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
+    > = {
+      publishExternalTaskCreated(_repoPath, taskId) {
+        return Effect.sync(() => {
+          events.push({ kind: "created", taskIds: [taskId] });
+        });
+      },
+      publishTasksUpdated(_repoPath, changes) {
+        return Effect.sync(() => {
+          events.push({ kind: "updated", taskIds: changes.taskIds });
+        });
+      },
+      syncRepoPullRequests() {
+        return Effect.succeed({ ran: true, changedTaskIds: [] });
+      },
+    };
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService: createEventPublishingTaskService({
+        taskService: baseTaskService,
+        taskSyncService,
+      }),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    await Effect.runPromise(
+      service.invoke("odt_set_spec", {
+        workspaceId: "repo",
+        taskId: "task-1",
+        markdown: "## Spec",
+      }),
+    );
+    await Effect.runPromise(
+      service.invoke("odt_create_task", {
+        workspaceId: "repo",
+        title: "New task",
+        issueType: "task",
+        priority: 2,
+        description: "Created by MCP",
+        labels: [],
+        aiReviewEnabled: true,
+      }),
+    );
+
+    expect(events).toEqual([
+      { kind: "updated", taskIds: ["task-1"] },
+      { kind: "created", taskIds: ["task-new"] },
+    ]);
+  });
+  test("keeps internal plan affected ids out of the MCP response", async () => {
+    const taskService = createTaskService({
+      listTasks: () => Effect.succeed([taskCard({ id: "epic-1", issueType: "epic" })]),
+      setPlan: () =>
+        Effect.succeed({
+          document: {
+            markdown: "# Plan",
+            revision: 2,
+            updatedAt: "2026-07-22T00:00:00.000Z",
+          },
+          changes: { taskIds: ["epic-1", "old-child"], removedTaskIds: ["old-child"] },
+        }),
+    });
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService,
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const result = await Effect.runPromise(
+      service.invoke("odt_set_plan", {
+        workspaceId: "repo",
+        taskId: "epic-1",
+        markdown: "# Plan",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      task: { id: "epic-1" },
+      document: { markdown: "# Plan", revision: 2 },
+      createdSubtaskIds: [],
+    });
+    expect(result).not.toHaveProperty("affectedTaskIds");
+    if (!("document" in result)) {
+      throw new Error("expected odt_set_plan document response");
+    }
+    expect(result.document).not.toHaveProperty("affectedTaskIds");
+  });
+  test("creates through the host-owned task service facade", async () => {
     const taskService = createTaskService({
       createTask(input: unknown) {
         return Effect.tryPromise({
@@ -232,13 +332,6 @@ describe("createOdtMcpBridgeService", () => {
     });
     const service = createOdtMcpBridgeServiceForTest({
       taskService,
-      taskSyncService: {
-        publishExternalTaskCreated(repoPath, taskId) {
-          return Effect.sync(() => {
-            events.push({ repoPath, taskId });
-          });
-        },
-      },
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
     await expect(
@@ -254,7 +347,6 @@ describe("createOdtMcpBridgeService", () => {
         }),
       ),
     ).resolves.toMatchObject({ task: { id: "task-new", title: "New task" } });
-    expect(events).toEqual([{ repoPath: "/repo", taskId: "task-new" }]);
   });
   test("orders task search results by recent activity before applying the result limit", async () => {
     const taskService = createTaskService({

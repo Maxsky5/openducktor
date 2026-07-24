@@ -28,6 +28,12 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import {
+  routeTaskEventHttpRequest,
+  TASK_EVENT_STREAM_TOKEN_HEADER,
+  writeTaskFrameSseEvent,
+} from "./task-event-http-server";
+import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import { createBunPtyPort } from "./terminals/bun-pty-adapter";
 import {
   type TerminalWebSocketData,
@@ -52,6 +58,20 @@ export type TypescriptHostBackendOptions = {
   onBackgroundFailure(failure: unknown): void;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
+};
+
+const scheduleNonFatalWebEventFailure = (
+  logger: WebLogger,
+  message: string,
+  cause: unknown,
+): void => {
+  void runWebBoundary(
+    writeWebLogEffect(logger, "error", `${message} ${errorMessage(cause)}`),
+  ).catch((loggingCause: unknown) => {
+    console.error(
+      `OpenDucktor web non-fatal event delivery reporting failed: ${errorMessage(loggingCause)}`,
+    );
+  });
 };
 
 export type TypescriptHostBackend = {
@@ -209,8 +229,9 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
         LAST_EVENT_ID_HEADER,
         CONTROL_TOKEN_HEADER,
         APP_TOKEN_HEADER,
+        TASK_EVENT_STREAM_TOKEN_HEADER,
       ].join(", "),
-      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-methods": "DELETE, GET, POST, OPTIONS",
       "access-control-max-age": "600",
     },
   });
@@ -372,28 +393,42 @@ const createSseResponse = (
   stream: BufferedHostEventStream,
   lastEventId: number | null,
   corsHeaders: HeadersInit,
+  reportDeliveryFailure: (cause: unknown) => void,
 ): Response => {
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      controller.enqueue(encoder.encode(SSE_READY_COMMENT));
+      const enqueue = (payload: string): boolean => {
+        try {
+          controller.enqueue(encoder.encode(payload));
+          return true;
+        } catch (cause) {
+          reportDeliveryFailure(cause);
+          return false;
+        }
+      };
+      if (!enqueue(SSE_READY_COMMENT)) return;
       const replay = stream.replayAfterWithDiagnostics(lastEventId);
-      if (replay.skippedEventCount > 0) {
-        controller.enqueue(
-          encoder.encode(
-            writeSseNamedEvent(
-              "stream-warning",
-              skippedReplayWarningMessage(replay.skippedEventCount),
-            ),
+      if (
+        replay.skippedEventCount > 0 &&
+        !enqueue(
+          writeSseNamedEvent(
+            "stream-warning",
+            skippedReplayWarningMessage(replay.skippedEventCount),
           ),
-        );
+        )
+      ) {
+        return;
       }
       for (const event of replay.events) {
-        controller.enqueue(encoder.encode(writeSseEvent(event)));
+        if (!enqueue(writeSseEvent(event))) return;
       }
       unsubscribe = stream.subscribe((event) => {
-        controller.enqueue(encoder.encode(writeSseEvent(event)));
+        if (!enqueue(writeSseEvent(event))) {
+          unsubscribe?.();
+          unsubscribe = null;
+        }
       });
     },
     cancel() {
@@ -551,6 +586,7 @@ const routeCorsRequest = ({
   corsHeaders,
   eventBus,
   hostCommandRouter,
+  taskEventLeaseManager,
   localAttachments,
   logger,
   request,
@@ -564,6 +600,7 @@ const routeCorsRequest = ({
   corsHeaders: HeadersInit;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
+  taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
   request: Request;
@@ -609,6 +646,22 @@ const routeCorsRequest = ({
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
     }
 
+    const taskEventResponse = yield* routeTaskEventHttpRequest({
+      appToken,
+      controlToken,
+      corsHeaders,
+      parseJsonObjectBody,
+      request,
+      requestTimeouts,
+      shutdownStarted,
+      ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
+      validateAppCookieOrHeader,
+      validateAppSessionCookie,
+    });
+    if (taskEventResponse) {
+      return taskEventResponse;
+    }
+
     if (requestUrl.pathname === `/${HOST_EVENT_STREAM_PATH}` && request.method === "GET") {
       yield* validateAppCookieOrHeader(request, appToken);
       if (shutdownStarted) {
@@ -618,7 +671,13 @@ const routeCorsRequest = ({
         );
       }
       requestTimeouts?.timeout(request, 0);
-      return createSseResponse(eventBus.stream(), yield* parseLastEventId(request), corsHeaders);
+      return createSseResponse(
+        eventBus.stream(),
+        yield* parseLastEventId(request),
+        corsHeaders,
+        (cause) =>
+          scheduleNonFatalWebEventFailure(logger, "Failed to enqueue an SSE host event.", cause),
+      );
     }
 
     if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
@@ -670,6 +729,7 @@ export const handleTypescriptHostBackendRequest = ({
   controlToken,
   eventBus,
   hostCommandRouter,
+  taskEventLeaseManager,
   localAttachments,
   logger,
   request,
@@ -683,6 +743,7 @@ export const handleTypescriptHostBackendRequest = ({
   controlToken: string;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
+  taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
   request: Request;
@@ -707,6 +768,7 @@ export const handleTypescriptHostBackendRequest = ({
       corsHeaders,
       eventBus,
       hostCommandRouter,
+      ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
       localAttachments,
       logger,
       request,
@@ -735,7 +797,14 @@ export const startTypescriptHostBackendEffect = ({
       Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
     );
     const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
-    const eventBus = new BufferedHostEventBus();
+    const eventBus = new BufferedHostEventBus({
+      report: ({ channel, cause }) =>
+        scheduleNonFatalWebEventFailure(
+          logger,
+          `OpenDucktor host event delivery failed for channel '${channel}'.`,
+          cause,
+        ),
+    });
     const localAttachments = createLocalAttachmentAdapter();
     let shutdownStarted = false;
     const beginShutdown = (): void => {
@@ -762,9 +831,29 @@ export const startTypescriptHostBackendEffect = ({
           rejectExited(failure);
           onBackgroundFailure(failure);
         }),
+      taskEventPublicationReporter: {
+        report: (failure) =>
+          Effect.sync(() =>
+            scheduleNonFatalWebEventFailure(
+              logger,
+              `OpenDucktor task event publication failed during '${failure.operation}' for '${failure.repoPath}'.`,
+              failure.cause,
+            ),
+          ),
+      },
       ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
       terminalPty: createBunPtyPort(),
+    });
+    const taskEventLeaseManager = createTaskEventLeaseManager({
+      encodeFrame: writeTaskFrameSseEvent,
+      reportDeliveryFailure: ({ cause, subscriptionId }) =>
+        scheduleNonFatalWebEventFailure(
+          logger,
+          `Failed to enqueue task event stream frame for subscription '${subscriptionId}'.`,
+          cause,
+        ),
+      taskEventStream: hostCommandRouter.taskEventStream,
     });
 
     const stop = async (): Promise<void> => {
@@ -772,6 +861,7 @@ export const startTypescriptHostBackendEffect = ({
         return stopPromise;
       }
       beginShutdown();
+      taskEventLeaseManager.dispose();
       stopPromise = stopTypescriptHostBackendServices({
         disposeHost: () => hostCommandRouter.dispose(),
         logger,
@@ -783,6 +873,7 @@ export const startTypescriptHostBackendEffect = ({
 
     const cleanupStartedServerEffect = (): Effect.Effect<void> =>
       Effect.gen(function* () {
+        yield* Effect.sync(() => taskEventLeaseManager.dispose());
         const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
         yield* Effect.sync(() => server.stop(true));
         if (disposeExit._tag === "Failure") {
@@ -830,6 +921,7 @@ export const startTypescriptHostBackendEffect = ({
                     controlToken,
                     eventBus,
                     hostCommandRouter,
+                    taskEventLeaseManager,
                     localAttachments,
                     logger,
                     request,

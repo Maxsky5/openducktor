@@ -46,11 +46,7 @@ type SessionActionsDependencies = {
   liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   persistSessionRecord: StopAgentSessionDependencies["persistSessionRecord"];
   deleteSessionRecord: SessionDependencies["deleteSessionRecord"];
   invalidateSessionStopQueries: StopAgentSessionDependencies["invalidateSessionStopQueries"];

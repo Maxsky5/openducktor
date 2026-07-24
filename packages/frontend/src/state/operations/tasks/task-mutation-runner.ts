@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { refreshRepoTaskViewsAfterMutation } from "@/state/queries/task-view-sync";
+import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
 import { requireActiveRepo } from "./task-operations-model";
 import type { TaskMutationRefreshStrategy } from "./task-operations-types";
 
@@ -30,44 +30,49 @@ export function useTaskMutationRunner({
   activeRepoPath,
 }: UseTaskMutationRunnerArgs): TaskMutationRunner {
   const queryClient = useQueryClient();
+  const taskViewSync = useMemo(() => getProductionTaskViewSync(queryClient), [queryClient]);
 
   const refreshTaskMutationViews = useCallback(
     async (repoPath: string, strategy: TaskMutationRefreshStrategy): Promise<void> => {
       if (strategy.kind === "task") {
-        await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
-          forceFreshTaskList: true,
-          taskDocumentStrategy: "refresh",
+        await taskViewSync.refreshAfterLocalMutation(repoPath, {
+          kind: "refresh-documents",
           taskIds: [strategy.taskId],
         });
         return;
       }
 
       if (strategy.kind === "remove-task") {
-        await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
-          forceFreshTaskList: true,
-          taskDocumentStrategy: "remove",
+        await taskViewSync.refreshAfterLocalMutation(repoPath, {
+          kind: "remove-documents",
           taskIds: strategy.taskIds,
         });
         return;
       }
 
-      await refreshRepoTaskViewsAfterMutation(queryClient, repoPath, {
-        forceFreshTaskList: true,
-      });
+      await taskViewSync.refreshAfterLocalMutation(repoPath, { kind: "task-list-only" });
     },
-    [queryClient],
+    [taskViewSync],
   );
 
   const runTaskMutation = useCallback(
     async (options: RunTaskMutationOptions): Promise<void> => {
+      let mutationCompleted = false;
       try {
         const repoPath = requireActiveRepo(activeRepoPath);
         await options.run(repoPath);
+        mutationCompleted = true;
         await refreshTaskMutationViews(repoPath, options.refreshStrategy);
         if (options.successTitle) {
           toast.success(options.successTitle, { description: options.successDescription });
         }
       } catch (error) {
+        if (mutationCompleted) {
+          toast.error("Mutation succeeded, local views failed to refresh", {
+            description: errorMessage(error),
+          });
+          return;
+        }
         toast.error(options.failureTitle, { description: errorMessage(error) });
         throw error;
       }

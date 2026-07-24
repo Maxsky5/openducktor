@@ -71,7 +71,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -127,7 +126,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -228,7 +226,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -306,7 +303,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       updateSessionTodos: todosRecorder.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -357,7 +353,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       updateSessionTodos: todosRecorder.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     sessionsRef.current = createSessionsRef([]).current;
@@ -452,7 +447,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];
@@ -519,7 +513,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
     });
 
     const handleEvent = handlers[0];

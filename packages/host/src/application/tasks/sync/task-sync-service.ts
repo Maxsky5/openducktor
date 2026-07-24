@@ -1,14 +1,18 @@
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
+import {
+  type ExternalTaskSyncEvent,
+  externalTaskSyncEventSchema,
+  type TaskChangeSet,
+} from "@openducktor/contracts";
 import { type Cause, Deferred, Effect, Exit, Fiber, Ref } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
-import type { HostEventBusPort } from "../../../events/host-event-bus";
+import type { TaskEventStreamPort } from "../../../events/task-event-stream";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
-import type { TaskService, TaskServiceError } from "../task-service";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import type { RepoPullRequestSyncResult, TaskService, TaskServiceError } from "../task-service";
 
-const TASK_EVENT_CHANNEL = "openducktor://task-event";
 const DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 export type TaskSyncLifecycleLogger = {
   error(message: string): Effect.Effect<void, unknown>;
@@ -21,31 +25,43 @@ export type TaskSyncLoopHandle = {
   stop(): Effect.Effect<void, HostOperationError>;
 };
 export type TaskSyncService = {
-  publishExternalTaskCreated(
+  publishExternalTaskCreated(repoPath: string, taskId: string): Effect.Effect<void>;
+  publishTasksUpdated(
     repoPath: string,
-    taskId: string,
-  ): Effect.Effect<void, HostOperationError>;
-  publishTasksUpdated(repoPath: string, taskIds: string[]): Effect.Effect<void, HostOperationError>;
+    changes: TaskChangeSet,
+    operation: string,
+  ): Effect.Effect<void>;
+  syncRepoPullRequests(
+    repoPath: string,
+  ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
   syncActiveWorkspacePullRequests(): Effect.Effect<void, TaskSyncError>;
   startPullRequestSyncLoop(): Effect.Effect<TaskSyncLoopHandle, never>;
 };
 export type TaskSyncError = HostOperationError | TaskServiceError | WorkspaceSettingsError;
+export type TaskEventPublicationFailure = {
+  operation: string;
+  repoPath: string;
+  changes: TaskChangeSet;
+  event: ExternalTaskSyncEvent;
+  stage: "acceptance";
+  cause: unknown;
+};
+export type TaskEventPublicationReporter = {
+  report(failure: TaskEventPublicationFailure): Effect.Effect<void, never>;
+};
 export type CreateTaskSyncServiceInput = {
-  eventBus: HostEventBusPort;
   eventIdFactory?: () => string;
   intervalMs?: number;
   logger?: TaskSyncLifecycleLogger;
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
+  publicationReporter: TaskEventPublicationReporter;
+  taskEventStream: TaskEventStreamPort;
   taskService: Pick<TaskService, "repoPullRequestSyncDetailed">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "listWorkspaces">;
 };
 const defaultTaskSyncLifecycleLogger: TaskSyncLifecycleLogger = {
   error: (message) => Effect.sync(() => console.error(message)),
 };
-type PullRequestSyncResult = {
-  changedTaskIds: string[];
-  repoPath: string;
-} | null;
 type TaskSyncLoopState = {
   activeLog: Deferred.Deferred<void, HostOperationError> | null;
   stopped: boolean;
@@ -66,73 +82,105 @@ const buildExternalTaskCreatedEvent = (
 const buildTasksUpdatedEvent = (
   eventIdFactory: () => string,
   repoPath: string,
-  taskIds: string[],
+  changes: TaskChangeSet,
 ): ExternalTaskSyncEvent => ({
   eventId: eventIdFactory(),
   kind: "tasks_updated",
   repoPath,
-  taskIds,
+  ...changes,
   emittedAt: nowIso(),
 });
 export const createTaskSyncService = ({
-  eventBus,
   eventIdFactory = () => crypto.randomUUID(),
   intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
   logger = defaultTaskSyncLifecycleLogger,
   onBackgroundFailure,
+  publicationReporter,
+  taskEventStream,
   taskService,
   workspaceSettingsService,
 }: CreateTaskSyncServiceInput): TaskSyncService => {
-  const publish = (event: ExternalTaskSyncEvent): Effect.Effect<void, HostOperationError> =>
-    Effect.try({
-      try: () => eventBus.publish(TASK_EVENT_CHANNEL, event),
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "task-sync.publish-event",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-          details: { channel: TASK_EVENT_CHANNEL, eventKind: event.kind },
+  const publish = (
+    event: ExternalTaskSyncEvent,
+    operation: string,
+    repoPath: string,
+    changes: TaskChangeSet,
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const eventValidation = externalTaskSyncEventSchema.safeParse(event);
+      if (!eventValidation.success) {
+        yield* publicationReporter.report({
+          operation,
+          repoPath,
+          changes,
+          event,
+          stage: "acceptance",
+          cause: eventValidation.error,
+        });
+        return;
+      }
+      const result = yield* Effect.either(
+        Effect.try({
+          try: () => taskEventStream.publish(event),
+          catch: (cause) => cause,
         }),
+      );
+      if (result._tag === "Left") {
+        yield* publicationReporter.report({
+          operation,
+          repoPath,
+          changes,
+          event,
+          stage: "acceptance",
+          cause: result.left,
+        });
+      }
     });
-  const readActiveWorkspacePullRequestSync = (): Effect.Effect<
-    PullRequestSyncResult,
-    TaskSyncError
-  > =>
+  const publishExternalTaskCreated = (repoPath: string, taskId: string) =>
+    publish(
+      buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskId),
+      "create-task",
+      repoPath,
+      { taskIds: [taskId], removedTaskIds: [] },
+    );
+  const publishTasksUpdated = (repoPath: string, changes: TaskChangeSet, operation: string) => {
+    return publish(
+      buildTasksUpdatedEvent(eventIdFactory, repoPath, changes),
+      operation,
+      repoPath,
+      changes,
+    );
+  };
+  const syncRepoPullRequests = (
+    repoPath: string,
+  ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> =>
+    Effect.gen(function* () {
+      const syncResult = yield* Effect.either(
+        taskService.repoPullRequestSyncDetailed({ repoPath }),
+      );
+      if (syncResult._tag === "Right") {
+        const changes = { taskIds: syncResult.right.changedTaskIds, removedTaskIds: [] };
+        if (changes.taskIds.length > 0) {
+          yield* publishTasksUpdated(repoPath, changes, "repo-pull-request-sync");
+        }
+        return syncResult.right;
+      }
+      if (syncResult.left instanceof TaskMutationProgressFailure) {
+        yield* publishTasksUpdated(repoPath, syncResult.left.changes, syncResult.left.operation);
+        return yield* Effect.fail(syncResult.left.failure);
+      }
+      return yield* Effect.fail(syncResult.left);
+    });
+  const syncActiveWorkspacePullRequests = (): Effect.Effect<void, TaskSyncError> =>
     Effect.gen(function* () {
       const activeWorkspace = (yield* workspaceSettingsService.listWorkspaces()).find(
         (workspace) => workspace.isActive,
       );
       if (!activeWorkspace) {
-        return null;
+        return;
       }
-      const result = yield* taskService.repoPullRequestSyncDetailed({
-        repoPath: activeWorkspace.repoPath,
-      });
-      return {
-        changedTaskIds: result.changedTaskIds,
-        repoPath: activeWorkspace.repoPath,
-      };
+      yield* syncRepoPullRequests(activeWorkspace.repoPath);
     });
-  const publishPullRequestSyncResult = (
-    result: PullRequestSyncResult,
-  ): Effect.Effect<void, HostOperationError> => {
-    if (!result || result.changedTaskIds.length === 0) {
-      return Effect.void;
-    }
-    return publish(buildTasksUpdatedEvent(eventIdFactory, result.repoPath, result.changedTaskIds));
-  };
-  const publishPullRequestSyncResultIfRunning = (
-    state: Ref.Ref<TaskSyncLoopState>,
-    result: PullRequestSyncResult,
-  ): Effect.Effect<void, HostOperationError> => {
-    return Ref.get(state).pipe(
-      Effect.flatMap(({ stopped }) =>
-        stopped ? Effect.void : publishPullRequestSyncResult(result),
-      ),
-    );
-  };
-  const syncActiveWorkspacePullRequests = () =>
-    readActiveWorkspacePullRequestSync().pipe(Effect.flatMap(publishPullRequestSyncResult));
   const writePullRequestSyncIterationFailure = (
     state: Ref.Ref<TaskSyncLoopState>,
     error: TaskSyncError,
@@ -179,8 +227,7 @@ export const createTaskSyncService = ({
       }),
     );
   const runPullRequestSyncLoopIteration = (state: Ref.Ref<TaskSyncLoopState>) =>
-    readActiveWorkspacePullRequestSync().pipe(
-      Effect.flatMap((result) => publishPullRequestSyncResultIfRunning(state, result)),
+    syncActiveWorkspacePullRequests().pipe(
       Effect.catchAll((error) => writePullRequestSyncIterationFailure(state, error)),
     );
   const runPullRequestSyncLoop = (state: Ref.Ref<TaskSyncLoopState>) =>
@@ -190,15 +237,9 @@ export const createTaskSyncService = ({
       ),
     );
   return {
-    publishExternalTaskCreated(repoPath, taskId) {
-      return publish(buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskId));
-    },
-    publishTasksUpdated(repoPath, taskIds) {
-      if (taskIds.length === 0) {
-        return Effect.void;
-      }
-      return publish(buildTasksUpdatedEvent(eventIdFactory, repoPath, taskIds));
-    },
+    publishExternalTaskCreated,
+    publishTasksUpdated,
+    syncRepoPullRequests,
     syncActiveWorkspacePullRequests,
     startPullRequestSyncLoop() {
       return Effect.gen(function* () {

@@ -14,7 +14,8 @@ import {
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { taskListWithCurrent } from "../support/task-workflow-helpers";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import type { CreateTaskServiceInput, TaskService, TaskServiceError } from "../task-service";
 
 export const createTaskPullRequestSyncUseCases = ({
   devServerService,
@@ -30,95 +31,118 @@ export const createTaskPullRequestSyncUseCases = ({
   TaskService,
   "repoPullRequestSync" | "repoPullRequestSyncDetailed"
 > => {
-  const repoPullRequestSyncDetailed: TaskService["repoPullRequestSyncDetailed"] = (input) =>
-    Effect.gen(function* () {
-      const { repoPath } = input;
-      const dependencies = yield* requireDependencies(() =>
-        requirePullRequestSyncDependencies({
-          githubDependencies,
-          workspaceSettingsService,
-        }),
-      );
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
-      const policy = yield* githubPullRequestSyncPolicy(dependencies, repoConfig);
-      if (!policy.available) {
-        return { ran: false, changedTaskIds: [] };
-      }
-
-      const tasks = yield* taskStore.listPullRequestSyncCandidates({
-        repoPath: effectiveRepoPath,
-      });
-      const changedTaskIds: string[] = [];
-      for (const task of tasks) {
-        const pullRequest = task.pullRequest;
-        if (!pullRequest) {
-          continue;
-        }
-
-        const updated = yield* fetchLinkedPullRequest(
-          dependencies,
-          effectiveRepoPath,
-          policy,
-          pullRequest,
+  const repoPullRequestSyncDetailed: TaskService["repoPullRequestSyncDetailed"] = (input) => {
+    const changedTaskIds = new Set<string>();
+    const sync: Effect.Effect<{ ran: boolean; changedTaskIds: string[] }, TaskServiceError> =
+      Effect.gen(function* () {
+        const { repoPath } = input;
+        const dependencies = yield* requireDependencies(() =>
+          requirePullRequestSyncDependencies({
+            githubDependencies,
+            workspaceSettingsService,
+          }),
         );
-        if (!updated) {
-          continue;
+        const repoConfig =
+          yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+        const effectiveRepoPath = repoConfig.repoPath;
+        const policy = yield* githubPullRequestSyncPolicy(dependencies, repoConfig);
+        if (!policy.available) {
+          return { ran: false, changedTaskIds: [] };
         }
 
-        if (updated.record.state === "merged" && task.status !== "closed") {
-          const cleanupDependencies = yield* requireDependencies(() =>
-            requireMergedBuilderCleanupDependencies(
-              { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService },
-              "repo_pull_request_sync",
-            ),
-          );
-          yield* taskStore.setPullRequest({
-            repoPath: effectiveRepoPath,
-            taskId: task.id,
-            pullRequest: updated.record,
-          });
-          const { current, currentTasks } = yield* taskListWithCurrent(
-            taskStore,
+        const tasks = yield* taskStore.listPullRequestSyncCandidates({
+          repoPath: effectiveRepoPath,
+        });
+        for (const task of tasks) {
+          const pullRequest = task.pullRequest;
+          if (!pullRequest) {
+            continue;
+          }
+
+          const updated = yield* fetchLinkedPullRequest(
+            dependencies,
             effectiveRepoPath,
-            task.id,
+            policy,
+            pullRequest,
           );
-          yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-          yield* completeTaskClosure({
-            cleanup: cleanupMergedBuilderState(
-              cleanupDependencies,
+          if (!updated) {
+            continue;
+          }
+
+          if (updated.record.state === "merged" && task.status !== "closed") {
+            const cleanupDependencies = yield* requireDependencies(() =>
+              requireMergedBuilderCleanupDependencies(
+                { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService },
+                "repo_pull_request_sync",
+              ),
+            );
+            yield* taskStore.setPullRequest({
+              repoPath: effectiveRepoPath,
+              taskId: task.id,
+              pullRequest: updated.record,
+            });
+            changedTaskIds.add(task.id);
+            const { current, currentTasks } = yield* taskListWithCurrent(
               taskStore,
               effectiveRepoPath,
               task.id,
-              updated.sourceBranch,
-              updated.targetBranch,
-            ),
-            gitPort: cleanupDependencies.gitPort,
-            operation: "sync merged pull request",
-            repoPath: effectiveRepoPath,
-            taskId: task.id,
-            taskSessionBootstrapCoordinator,
-            taskStore,
-          });
-          changedTaskIds.push(task.id);
-        } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {
-          yield* taskStore.setPullRequest({
-            repoPath: effectiveRepoPath,
-            taskId: task.id,
-            pullRequest: updated.record,
-          });
-          changedTaskIds.push(task.id);
+            );
+            yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
+            yield* completeTaskClosure({
+              cleanup: cleanupMergedBuilderState(
+                cleanupDependencies,
+                taskStore,
+                effectiveRepoPath,
+                task.id,
+                updated.sourceBranch,
+                updated.targetBranch,
+              ),
+              gitPort: cleanupDependencies.gitPort,
+              operation: "sync merged pull request",
+              repoPath: effectiveRepoPath,
+              taskId: task.id,
+              taskSessionBootstrapCoordinator,
+              taskStore,
+            });
+          } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {
+            yield* taskStore.setPullRequest({
+              repoPath: effectiveRepoPath,
+              taskId: task.id,
+              pullRequest: updated.record,
+            });
+            changedTaskIds.add(task.id);
+          }
         }
-      }
 
-      return { ran: true, changedTaskIds };
+        return { ran: true, changedTaskIds: [...changedTaskIds] };
+      });
+    return Effect.gen(function* () {
+      const result = yield* Effect.either(sync);
+      if (result._tag === "Right") {
+        return result.right;
+      }
+      const failure = result.left;
+      if (changedTaskIds.size === 0) {
+        return yield* Effect.fail(failure);
+      }
+      return yield* Effect.fail(
+        new TaskMutationProgressFailure({
+          operation: "repo-pull-request-sync",
+          changes: { taskIds: [...changedTaskIds], removedTaskIds: [] },
+          failure,
+        }),
+      );
     });
+  };
 
   return {
     repoPullRequestSync(input) {
       return Effect.gen(function* () {
-        const result = yield* repoPullRequestSyncDetailed(input);
+        const result = yield* repoPullRequestSyncDetailed(input).pipe(
+          Effect.catchTag("TaskMutationProgressFailure", (partialFailure) =>
+            Effect.fail(partialFailure.failure),
+          ),
+        );
         return { ok: result.ran };
       });
     },

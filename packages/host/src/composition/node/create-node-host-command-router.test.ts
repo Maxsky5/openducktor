@@ -67,6 +67,7 @@ const createRouter = (input: {
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
+    taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution,
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
     taskStore: {} as TaskStorePort,
@@ -87,6 +88,7 @@ describe("createNodeEffectHostCommandRouter", () => {
       },
       runtimeDistribution,
       runtimeRegistry: createRuntimeRegistry(),
+      taskEventPublicationReporter: { report: () => Effect.void },
       taskStore: {} as TaskStorePort,
       terminalPty,
     });

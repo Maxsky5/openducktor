@@ -2,6 +2,7 @@ import {
   type AgentSessionIdentity,
   type AgentSessionRecord,
   agentSessionRecordSchema,
+  type ExternalTaskSyncEvent,
   type PlanSubtaskInput,
   type TaskAgentSessions,
   type TaskCard,
@@ -102,6 +103,18 @@ export class HostTaskClient {
 
   private invalidateTaskMetadata(repoPath: string, taskId: string): void {
     this.metadataCache.invalidate(repoPath, taskId);
+  }
+
+  reconcileExternalTaskSyncEvent(event: ExternalTaskSyncEvent): void {
+    const taskIds = event.kind === "external_task_created" ? [event.taskId] : event.taskIds;
+
+    for (const taskId of taskIds) {
+      this.invalidateTaskMetadata(event.repoPath, taskId);
+    }
+  }
+
+  invalidateAllTaskMetadata(): void {
+    this.metadataCache.invalidateAll();
   }
 
   private requireRepoPath(repoPath: string | undefined, documentType: "spec" | "plan"): string {

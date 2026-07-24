@@ -1,8 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
-import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
-import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
+import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
+import type { TaskRefreshOptions } from "@/state/app-state-contexts";
+import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
+import { getTaskReadLoadingState } from "./task-read-loading-state";
 import { useTaskQueryReadModel } from "./use-task-query-read-model";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 
@@ -19,48 +20,32 @@ export type UseTaskReadFlowResult = {
   isLoadingTasks: boolean;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskReadState: () => void;
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: TaskDataRefreshOptions,
-  ) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
 };
 
 export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTaskReadFlowResult {
   const queryClient = useQueryClient();
+  const taskViewSync = useMemo(() => getProductionTaskViewSync(queryClient), [queryClient]);
   const lastTaskRefreshToastRef = useRef<{ repoPath: string; description: string } | null>(null);
   const lastTaskLoadErrorToastRef = useRef<{ repoPath: string; description: string } | null>(null);
 
   const refreshTaskData = useCallback(
-    async (repoPath: string, taskIdOrIds?: string | string[], options?: TaskDataRefreshOptions) => {
+    async (repoPath: string, taskIdOrIds?: string | string[]) => {
       const taskIds = toTaskIds(taskIdOrIds);
-      if (options?.source === "external-sync") {
-        await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
-          forceFreshTaskList: true,
-          ancillaryFailureMode: "best-effort",
-          ignorePrimaryCancellation: true,
-          refreshInactiveViews: false,
-          ...(taskIds
-            ? { taskDocumentStrategy: "invalidate", taskIds }
-            : { taskDocumentStrategy: "none" }),
+      if (taskIds) {
+        await taskViewSync.refreshAfterLocalMutation(repoPath, {
+          kind: "refresh-documents",
+          taskIds,
         });
         return;
       }
 
-      await refreshRepoTaskViewsFromQuery(
-        queryClient,
-        repoPath,
-        taskIds
-          ? { taskDocumentStrategy: "refresh", taskIds }
-          : {
-              forceFreshTaskList: options?.forceFreshTaskList ?? true,
-              taskDocumentStrategy: "none",
-            },
-      );
+      await taskViewSync.refreshManually(repoPath);
     },
-    [queryClient],
+    [taskViewSync],
   );
 
   const refreshFlow = useTaskRefreshFlow({
@@ -84,21 +69,21 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
     lastTaskRefreshToastRef.current = null;
   }, [refreshFlow.resetManualLoading]);
 
-  const isForegroundLoadingTasks =
-    refreshFlow.isManualLoadingTasks ||
-    readModel.isSettingsLoadingForActiveRepo ||
-    readModel.isTaskQueryLoadingForActiveRepo;
-  const isRefreshingTasksInBackground =
-    readModel.isTaskQueryFetchingForActiveRepo && !isForegroundLoadingTasks;
+  const loadingState = getTaskReadLoadingState({
+    activeRepoPath,
+    isManualLoadingTasks: refreshFlow.isManualLoadingTasks,
+    isSettingsLoadingForActiveRepo: readModel.isSettingsLoadingForActiveRepo,
+    isTaskQueryLoadingForActiveRepo: readModel.isTaskQueryLoadingForActiveRepo,
+    isTaskQueryFetchingForActiveRepo: readModel.isTaskQueryFetchingForActiveRepo,
+  });
 
   return {
     tasks: readModel.tasks,
-    isForegroundLoadingTasks,
-    isRefreshingTasksInBackground,
-    isLoadingTasks: isForegroundLoadingTasks,
+    ...loadingState,
     setIsLoadingTasks: refreshFlow.setIsLoadingTasks,
     clearTaskReadState,
     refreshTaskData,
+    loadWorkspaceTasks: taskViewSync.loadWorkspace,
     refreshTasksWithOptions: refreshFlow.refreshTasksWithOptions,
     refreshTasks: refreshFlow.refreshTasks,
   };

@@ -1,4 +1,3 @@
-import type { AgentToolName } from "@openducktor/contracts";
 import type {
   AgentEvent,
   AgentRole,
@@ -33,9 +32,6 @@ export type ResolveTurnDuration = (
 
 export type RecordTurnTimestamp = (sessionKey: string, timestamp: string | number) => void;
 export type BuildReadOnlyApprovalRejectionMessage = (role: AgentRole) => Promise<string>;
-export type WorkflowToolAliasesByCanonical = {
-  [ToolName in AgentToolName]?: string[] | undefined;
-};
 export type UpdateSessionTodos = (
   session: SessionRef,
   updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
@@ -75,21 +71,11 @@ export type SessionApprovalContext = {
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
 };
 
-export type SessionRefreshContext = {
-  refreshTaskData: (
-    repoPath: string,
-    taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
-  ) => Promise<void>;
-  workflowToolAliasesByCanonical: WorkflowToolAliasesByCanonical | undefined;
-};
-
 export type SessionEventContext = {
   session: SessionEventSessionContext;
   store: SessionStoreContext;
   turn: SessionTurnContext;
   approvals: SessionApprovalContext;
-  refresh: SessionRefreshContext;
   todos: SessionTodosContext;
 };
 
@@ -100,15 +86,15 @@ export type SessionLifecycleEventContext = Pick<
 
 export type SessionTranscriptEventContext = Pick<
   SessionEventContext,
-  "session" | "store" | "turn" | "refresh" | "todos"
+  "session" | "store" | "turn" | "todos"
 >;
 
 export type SessionPartEventContext = Pick<
   SessionEventContext,
-  "session" | "store" | "turn" | "refresh" | "todos"
+  "session" | "store" | "turn" | "todos"
 >;
 
 export type SessionToolPartEventContext = Pick<
   SessionPartEventContext,
-  "session" | "store" | "refresh" | "todos"
+  "session" | "store" | "todos"
 >;

@@ -23,6 +23,7 @@ import type { WorkspaceSettingsService } from "../../workspaces/workspace-settin
 import {
   type CreateTaskServiceInput,
   createTaskService as createRealTaskService,
+  createTaskServiceWithMutationProgress as createRealTaskServiceWithMutationProgress,
 } from "../task-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 
@@ -213,6 +214,30 @@ const createTaskService = (
 ) => {
   const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
   return createRealTaskService({
+    ...rest,
+    terminalService:
+      rest.terminalService ??
+      ({
+        acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+      } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
+    toolDiscovery:
+      toolDiscovery ??
+      createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
+    workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
+    ...(taskActivityGuard
+      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
+      : {}),
+    taskStore: createTaskStorePort(taskStore),
+  } as CreateTaskServiceInput);
+};
+const createTaskServiceWithMutationProgress = (
+  input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
+    taskActivityGuard?: TaskActivityGuardPort;
+    taskStore: TaskStorePort;
+  },
+) => {
+  const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
+  return createRealTaskServiceWithMutationProgress({
     ...rest,
     terminalService:
       rest.terminalService ??
@@ -959,6 +984,7 @@ export {
   createRuntimeDefinitionsService,
   createSystemCommandPort,
   createTaskService,
+  createTaskServiceWithMutationProgress,
   extendGitPort,
   extendSettingsConfigPort,
   githubPullListPayload,
