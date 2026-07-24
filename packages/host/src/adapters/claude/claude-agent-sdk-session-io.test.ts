@@ -4,6 +4,7 @@ import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
 import {
   claudeQueryWithMessages,
   createClaudeSession,
+  ignoreClaudeBackgroundFailure,
   openClaudeQueryWithMessages,
   waitForTimers,
 } from "./claude-agent-sdk-session-io.test-support";
@@ -34,6 +35,7 @@ describe("sendClaudeUserMessage", () => {
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
       sessionStore: {
         get: (externalSessionId) =>
           !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
@@ -92,6 +94,7 @@ describe("sendClaudeUserMessage", () => {
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
       sessionStore: {
         get: (externalSessionId) =>
           !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
@@ -152,6 +155,7 @@ describe("sendClaudeUserMessage", () => {
         session,
         now: () => "2026-06-25T20:01:00.000Z",
         emit: (_session, event) => events.push(event),
+        onBackgroundFailure: ignoreClaudeBackgroundFailure,
         sessionStore: {
           get: (externalSessionId) =>
             !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
@@ -209,6 +213,7 @@ describe("sendClaudeUserMessage", () => {
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
       sessionStore: {
         get: (externalSessionId) =>
           !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
@@ -267,6 +272,7 @@ describe("sendClaudeUserMessage", () => {
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
       sessionStore: {
         get: (externalSessionId) =>
           !closed.value && externalSessionId === session.externalSessionId ? session : undefined,

@@ -111,6 +111,7 @@ export const createClaudeAgentSdkSession = async ({
     sessionStore,
     now,
     emit,
+    onBackgroundFailure: serviceInput.onBackgroundFailure,
   });
   try {
     await withTimeout(

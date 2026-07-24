@@ -1,8 +1,11 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { Effect } from "effect";
+import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type {
   ClaudeAgentSdkEvent,
   ClaudeAgentSdkEventEmitter,
   ClaudeSession,
+  CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import { contextUsageFromClaudeControlResponse } from "./claude-agent-sdk-usage";
 import { withTimeout } from "./claude-agent-sdk-utils";
@@ -25,6 +28,7 @@ type EmitContextUsageInput = {
 
 type LiveContextUsageRefreshInput = {
   emit: ClaudeAgentSdkEventEmitter;
+  onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   session: ClaudeSession;
   timestamp: string;
 };
@@ -103,7 +107,7 @@ const refreshClaudeLiveContextUsage = async ({
   emit,
   session,
   timestamp,
-}: LiveContextUsageRefreshInput): Promise<void> => {
+}: Pick<LiveContextUsageRefreshInput, "emit" | "session" | "timestamp">): Promise<void> => {
   await emitClaudeContextUsageFromQuery({
     externalSessionId: session.externalSessionId,
     query: session.query,
@@ -112,8 +116,26 @@ const refreshClaudeLiveContextUsage = async ({
   });
 };
 
+const reportContextRefreshFailure = (
+  cause: unknown,
+  session: ClaudeSession,
+  onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"],
+): void => {
+  Effect.runFork(
+    onBackgroundFailure(
+      new HostOperationError({
+        operation: "claudeRuntime.refreshLiveContextUsage",
+        message: `Failed to publish Claude context refresh failure for session '${session.externalSessionId}': ${errorMessage(cause)}`,
+        cause,
+        details: { externalSessionId: session.externalSessionId },
+      }),
+    ),
+  );
+};
+
 export const scheduleClaudeLiveContextUsageRefresh = ({
   emit,
+  onBackgroundFailure,
   session,
   timestamp,
 }: LiveContextUsageRefreshInput): void => {
@@ -147,7 +169,9 @@ export const scheduleClaudeLiveContextUsageRefresh = ({
     state.inFlight = false;
     refreshStates.delete(session);
   });
-  void state.promise;
+  void state.promise.catch((cause) => {
+    reportContextRefreshFailure(cause, session, onBackgroundFailure);
+  });
 };
 
 export const flushClaudeLiveContextUsageRefresh = async (session: ClaudeSession): Promise<void> => {

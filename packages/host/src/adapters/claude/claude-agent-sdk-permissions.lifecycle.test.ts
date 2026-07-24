@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import {
   createClaudeCanUseTool,
@@ -71,6 +71,34 @@ describe("Claude permission request lifecycle", () => {
     });
     expect(session.pendingApprovals.size).toBe(0);
     expect(events).toEqual([]);
+  });
+
+  test("cleans up pending approvals when approval event publication fails", async () => {
+    const session = createSession("build");
+    const publicationError = new Error("Claude live-session adapter was released.");
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: () => {
+        throw publicationError;
+      },
+    });
+    const abortController = new AbortController();
+    const removeEventListener = spyOn(abortController.signal, "removeEventListener");
+
+    const resultPromise = canUseTool(
+      "Bash",
+      { command: "cat /etc/passwd" },
+      {
+        signal: abortController.signal,
+        toolUseID: "tool-use-1",
+      },
+    );
+
+    await expect(resultPromise).rejects.toBe(publicationError);
+    expect(session.pendingApprovals.size).toBe(0);
+    expect(removeEventListener).toHaveBeenCalledWith("abort", expect.any(Function));
   });
 
   test("delegates shell path access to Claude permissions for read-only roles", async () => {

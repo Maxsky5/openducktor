@@ -23,6 +23,7 @@ import type {
   ClaudeAgentSdkEventEmitter,
   ClaudeSession,
   ClaudeSessionStore,
+  CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import { modelSelection } from "./claude-agent-sdk-utils";
 
@@ -209,10 +210,11 @@ const assertClaudeSessionModelUpdateSupported = (
 export const consumeClaudeSession = async (input: {
   emit: ClaudeAgentSdkEventEmitter;
   now: () => string;
+  onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   session: ClaudeSession;
   sessionStore: Pick<ClaudeSessionStore, "close" | "get">;
 }): Promise<void> => {
-  const { emit, now, session, sessionStore } = input;
+  const { emit, now, onBackgroundFailure, session, sessionStore } = input;
   const isLiveSession = (): boolean => sessionStore.get(session.externalSessionId) === session;
   const closeLiveSession = (): void => {
     if (isLiveSession()) {
@@ -244,7 +246,7 @@ export const consumeClaudeSession = async (input: {
       });
       const shouldRefreshContextUsage = shouldRefreshClaudeContextUsageForMessage(message);
       if (shouldRefreshContextUsage) {
-        scheduleClaudeLiveContextUsageRefresh({ emit, session, timestamp });
+        scheduleClaudeLiveContextUsageRefresh({ emit, onBackgroundFailure, session, timestamp });
       }
       const shouldFlushQueuedMessage =
         (message.type === "system" &&

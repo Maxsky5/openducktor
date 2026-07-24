@@ -382,7 +382,13 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
           onAbort();
           return;
         }
-        emitClaudePendingInputEvent({ emit, event, session });
+        try {
+          emitClaudePendingInputEvent({ emit, event, session });
+        } catch (error) {
+          options.signal.removeEventListener("abort", onAbort);
+          session.pendingApprovals.delete(requestId);
+          throw error;
+        }
       });
     };
 

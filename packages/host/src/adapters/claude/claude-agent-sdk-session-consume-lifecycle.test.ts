@@ -7,6 +7,7 @@ import {
   claudeQueryWithMessages,
   createClaudeSession,
   emptyClaudeQuery,
+  ignoreClaudeBackgroundFailure,
   openClaudeQueryWithMessages,
   throwingClaudeQuery,
   waitForTimers,
@@ -44,6 +45,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
     await waitForTimers();
 
@@ -149,6 +151,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
 
     expect(pushed).toEqual([queuedMessage]);
@@ -207,6 +210,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
 
     await waitForTimers();
@@ -295,6 +299,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
 
     await waitForTimers();
@@ -333,6 +338,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
 
     expect(session.activity).toBe("stopped");
@@ -361,6 +367,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
       emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
 
     expect(session.activity).toBe("stopped");

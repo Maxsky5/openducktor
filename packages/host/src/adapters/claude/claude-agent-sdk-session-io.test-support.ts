@@ -1,7 +1,11 @@
 import { mock } from "bun:test";
 import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { Effect } from "effect";
+import type { HostOperationError } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
+
+export const ignoreClaudeBackgroundFailure = (_failure: HostOperationError) => Effect.void;
 
 export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
   acceptedUserMessages: [],
