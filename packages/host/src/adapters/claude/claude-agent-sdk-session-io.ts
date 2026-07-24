@@ -42,6 +42,8 @@ const canPushSdkUserMessageNow = (session: ClaudeSession): boolean =>
   session.queuedSdkMessages.length === 0 &&
   session.sdkState !== "running";
 
+const isClaudeSessionStopped = (session: ClaudeSession): boolean => session.activity === "stopped";
+
 const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
   if (session.activity !== "stopped") {
     return;
@@ -118,7 +120,7 @@ export const applyClaudeSessionModel = async (
       assertClaudeSessionAcceptingMessages(session);
     }
   } catch (cause) {
-    if (session.activity === "stopped") {
+    if (isClaudeSessionStopped(session)) {
       throw cause;
     }
     const rollbackFailures: string[] = [];
@@ -335,6 +337,9 @@ export const sendClaudeUserMessage = async (input: {
       session.queuedSdkMessages.push(sdkMessage);
     }
   } catch (cause) {
+    if (isClaudeSessionStopped(session)) {
+      throw cause;
+    }
     session.acceptedUserMessages.pop();
     session.pendingUserTurnCount = previousPendingUserTurnCount;
     session.activity = previousActivity;
@@ -429,6 +434,7 @@ export const flushQueuedClaudeUserMessage = (input: {
       }
     })
     .then(() => {
+      assertClaudeSessionAcceptingMessages(session);
       if (acceptedMessage && !acceptedMessage.isManualCompaction) {
         emit(session, {
           type: "user_message",
