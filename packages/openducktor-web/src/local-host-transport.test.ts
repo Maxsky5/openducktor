@@ -830,6 +830,81 @@ describe("local host SSE subscriptions", () => {
     ]);
   });
 
+  test("rejects and cleans up when the task stream closes after opening but before setup returns", async () => {
+    const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
+    const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
+    const fetchMock = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/subscriptions")) {
+        return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
+          status: 201,
+        });
+      }
+      return new Response(null, { status: 204 });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    const onTerminalFailure = mock(() => {});
+
+    const setup = subscribeLocalHostTaskStream(
+      { cursor: null },
+      mock(() => {}),
+      onTerminalFailure,
+    );
+    const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, "open");
+    eventSource.emit("open", "");
+    eventSource.readyState = FakeEventSource.CLOSED;
+    eventSource.emit("error", "terminal failure");
+
+    await expect(setup).rejects.toThrow("closed after initial readiness");
+    expect(onTerminalFailure).not.toHaveBeenCalled();
+    expect(eventSource.closed).toBe(true);
+    expect(eventSource.hasListener("task-frame")).toBe(false);
+    expect(eventSource.hasListener("open")).toBe(false);
+    expect(eventSource.hasListener("error")).toBe(false);
+    expect(fetchMock.mock.calls.map(([url]) => url.toString())).toEqual([
+      "http://127.0.0.1:14327/session",
+      "http://127.0.0.1:14327/task-events/subscriptions",
+      `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}`,
+    ]);
+  });
+
+  test("rejects and cleans up when a task frame is malformed after opening but before setup returns", async () => {
+    const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
+    const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
+    const fetchMock = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/subscriptions")) {
+        return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
+          status: 201,
+        });
+      }
+      return new Response(null, { status: 204 });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    const onTerminalFailure = mock(() => {});
+
+    const setup = subscribeLocalHostTaskStream(
+      { cursor: null },
+      mock(() => {}),
+      onTerminalFailure,
+    );
+    const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, "open");
+    eventSource.emit("open", "");
+    eventSource.emit("task-frame", "not-json");
+
+    await expect(setup).rejects.toThrow("invalid JSON");
+    expect(onTerminalFailure).not.toHaveBeenCalled();
+    expect(eventSource.closed).toBe(true);
+    expect(eventSource.hasListener("task-frame")).toBe(false);
+    expect(eventSource.hasListener("open")).toBe(false);
+    expect(eventSource.hasListener("error")).toBe(false);
+    expect(fetchMock.mock.calls.map(([url]) => url.toString())).toEqual([
+      "http://127.0.0.1:14327/session",
+      "http://127.0.0.1:14327/task-events/subscriptions",
+      `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}`,
+    ]);
+  });
+
   test("leaves reconnects to the native EventSource after task stream readiness", async () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
     const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";

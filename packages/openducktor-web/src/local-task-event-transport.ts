@@ -144,6 +144,7 @@ export const subscribeLocalTaskEventStreamEffect = (
     let resolveInitialReadiness: () => void = () => {};
     let rejectInitialReadiness: (cause: WebDependencyError) => void = () => {};
     let hasInitialReadiness = false;
+    let setupFailure: WebDependencyError | null = null;
     const initialReadiness = new Promise<void>((resolve, reject) => {
       resolveInitialReadiness = resolve;
       rejectInitialReadiness = reject;
@@ -158,37 +159,40 @@ export const subscribeLocalTaskEventStreamEffect = (
     const handleOpen = (): void => {
       markInitialReadiness();
     };
-    const handleError = (): void => {
-      if (!hasInitialReadiness) {
-        if (eventSource.readyState === EventSource.CLOSED) {
-          rejectInitialReadiness(
-            new WebDependencyError({
-              dependency: "event-source",
-              operation: "task-event-stream.await-ready",
-              message: "Task event stream closed before its initial connection was ready.",
-              details: { path: streamUrl.pathname },
-            }),
-          );
-        }
-        return;
-      }
-      if (eventSource.readyState === EventSource.CLOSED) {
-        reportTerminalFailure(
-          new WebDependencyError({
-            dependency: "event-source",
-            operation: "task-event-stream.terminal",
-            message: "Task event stream closed after initial readiness.",
-            details: { path: streamUrl.pathname },
-          }),
-        );
-      }
-    };
     const reportTerminalFailure = (failure: unknown): void => {
       if (unsubscribed || terminalFailureReported) {
         return;
       }
       terminalFailureReported = true;
       onTerminalFailure?.(failure);
+    };
+    const failSetupOrReportTerminalFailure = (failure: WebDependencyError): void => {
+      if (subscriptionReady) {
+        reportTerminalFailure(failure);
+        return;
+      }
+      if (setupFailure) {
+        return;
+      }
+      setupFailure = failure;
+      rejectInitialReadiness(failure);
+    };
+    const handleError = (): void => {
+      if (eventSource.readyState !== EventSource.CLOSED) {
+        return;
+      }
+      failSetupOrReportTerminalFailure(
+        new WebDependencyError({
+          dependency: "event-source",
+          operation: hasInitialReadiness
+            ? "task-event-stream.terminal"
+            : "task-event-stream.await-ready",
+          message: hasInitialReadiness
+            ? "Task event stream closed after initial readiness."
+            : "Task event stream closed before its initial connection was ready.",
+          details: { path: streamUrl.pathname },
+        }),
+      );
     };
     const handleFrame = (event: MessageEvent<string>): void => {
       if (closed) return;
@@ -202,11 +206,7 @@ export const subscribeLocalTaskEventStreamEffect = (
           message: `OpenDucktor task event stream received invalid JSON: ${errorMessage(cause)}`,
           cause,
         });
-        if (!hasInitialReadiness) {
-          rejectInitialReadiness(failure);
-        } else {
-          reportTerminalFailure(failure);
-        }
+        failSetupOrReportTerminalFailure(failure);
         return;
       }
       const parsed = taskEventStreamFrameSchema.safeParse(raw);
@@ -217,11 +217,7 @@ export const subscribeLocalTaskEventStreamEffect = (
           message: "OpenDucktor task event stream received an invalid frame.",
           cause: parsed.error,
         });
-        if (!hasInitialReadiness) {
-          rejectInitialReadiness(failure);
-        } else {
-          reportTerminalFailure(failure);
-        }
+        failSetupOrReportTerminalFailure(failure);
         return;
       }
       if (!subscriptionReady) {
@@ -273,6 +269,16 @@ export const subscribeLocalTaskEventStreamEffect = (
               }),
       }),
     );
+    const setupFailureBeforeReturn = setupFailure;
+    if (setupFailureBeforeReturn) {
+      closed = true;
+      eventSource.removeEventListener("task-frame", handleFrame as EventListener);
+      eventSource.removeEventListener("open", handleOpen as EventListener);
+      eventSource.removeEventListener("error", handleError as EventListener);
+      eventSource.close();
+      yield* Effect.promise(deleteLeaseBestEffort);
+      return yield* Effect.fail(setupFailureBeforeReturn);
+    }
     if (initialReadyExit._tag === "Failure") {
       closed = true;
       eventSource.removeEventListener("task-frame", handleFrame as EventListener);
