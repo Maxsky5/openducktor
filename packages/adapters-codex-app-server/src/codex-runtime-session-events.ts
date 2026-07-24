@@ -154,6 +154,7 @@ export class CodexRuntimeSessionEvents {
   private readonly startedItemTimestampsByKey = new Map<string, number>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly runtimeEventProcessingByRuntimeId = new Map<string, Promise<void>>();
+  private readonly runtimeEventGenerationByRuntimeId = new Map<string, symbol>();
   private readonly activeMutationByRuntimeId = new Map<string, CodexRuntimeLiveSessionMutation>();
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
@@ -184,8 +185,13 @@ export class CodexRuntimeSessionEvents {
         `Cannot observe Codex runtime '${runtimeId}' because live event subscription is unavailable.`,
       );
     }
+    let generation = this.runtimeEventGenerationByRuntimeId.get(runtimeId);
+    if (!generation) {
+      generation = Symbol(runtimeId);
+      this.runtimeEventGenerationByRuntimeId.set(runtimeId, generation);
+    }
     return this.runtimeEventSubscriptions.ensure(runtimeId, (event) => {
-      this.enqueueRuntimeStreamEvent(event, onRuntimeEventQueueFailure);
+      this.enqueueRuntimeStreamEvent(event, generation, onRuntimeEventQueueFailure);
     });
   }
 
@@ -198,6 +204,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearRuntime(runtimeId: string): void {
+    this.runtimeEventGenerationByRuntimeId.delete(runtimeId);
     try {
       this.stopRuntimeEventSubscription(runtimeId);
     } finally {
@@ -237,11 +244,17 @@ export class CodexRuntimeSessionEvents {
 
   private enqueueRuntimeStreamEvent(
     event: CodexRuntimeStreamEvent,
+    generation: symbol,
     onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler,
   ): void {
     const previous =
       this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) ?? Promise.resolve();
-    const processing = previous.then(() => this.processRuntimeStreamEventMutation(event));
+    const processing = previous.then(() => {
+      if (this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation) {
+        return;
+      }
+      return this.processRuntimeStreamEventMutation(event);
+    });
     const cleanup = processing.then(
       () => undefined,
       (error) => {

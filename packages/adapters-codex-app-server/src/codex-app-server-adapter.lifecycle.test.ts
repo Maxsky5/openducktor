@@ -8,6 +8,7 @@ import {
   createAdapterWithTransport,
   createDeferred,
   createHarness,
+  createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   defaultCodexRuntimeConfig,
   flushCodexAdapterWork,
@@ -453,6 +454,81 @@ describe("CodexAppServerAdapter lifecycle", () => {
     } finally {
       unsubscribe();
     }
+  });
+
+  test("drops queued runtime events from a released runtime generation", async () => {
+    const mutationStarted = createDeferred<void>();
+    const allowMutation = createDeferred<void>();
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    let mutationCount = 0;
+    const { adapter } = createHarness({
+      subscribeEvents,
+      onLiveSessionMutation: async () => {
+        mutationCount += 1;
+        mutationStarted.resolve();
+        await allowMutation.promise;
+      },
+    });
+    const threadInventory = (
+      adapter as unknown as {
+        threadInventory: CodexThreadInventoryReader;
+      }
+    ).threadInventory;
+    const statusOverridesByRuntimeId = (
+      threadInventory as unknown as {
+        statusOverridesByRuntimeId: Map<string, Map<string, CodexThreadStatusSnapshot>>;
+      }
+    ).statusOverridesByRuntimeId;
+
+    await adapter.startSession(codexStartSessionInput());
+    emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "active", activeFlags: [] },
+      },
+    });
+    await mutationStarted.promise;
+    emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "idle" },
+      },
+    });
+
+    adapter.releaseRuntime("runtime-live");
+    await adapter.startSession(codexStartSessionInput());
+    allowMutation.resolve();
+    await flushCodexAdapterWork();
+
+    expect(mutationCount).toBe(1);
+    expect(statusOverridesByRuntimeId.size).toBe(0);
+    expect(statusOverridesByRuntimeId.get("runtime-live")?.size ?? 0).toBe(0);
+
+    const client = {
+      threadLoadedList: async () => ({
+        data: ["thread/start-runtime-live"],
+        nextCursor: null,
+      }),
+      threadList: async () => ({
+        data: [
+          {
+            id: "thread/start-runtime-live",
+            cwd: "/repo",
+            createdAt: 1,
+            updatedAt: 2,
+            preview: "Replacement active session",
+            status: { type: "active", activeFlags: [] },
+          },
+        ],
+        nextCursor: null,
+      }),
+    } as unknown as CodexAppServerClient;
+    const freshInventory = await threadInventory.read(client, "runtime-live");
+    expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
+      classification: "running",
+    });
   });
 
   test("supports read-only construction without renderer-owned live event plumbing", async () => {
