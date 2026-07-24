@@ -61,6 +61,55 @@ class RejectableTurnTransport extends RecordingTransport {
   }
 }
 
+class DeferredSteerTransport extends RecordingTransport {
+  readonly turnStartRequested = createDeferred<void>();
+  readonly steerRequested = createDeferred<void>();
+  private resolveTurnStart: (response: unknown) => void = () => undefined;
+  private resolveSteer: (response: unknown) => void = () => undefined;
+  private rejectSteer: (error: Error) => void = () => undefined;
+  private readonly turnStartResponse = new Promise<unknown>((resolve) => {
+    this.resolveTurnStart = resolve;
+  });
+  private readonly steerResponse = new Promise<unknown>((resolve, reject) => {
+    this.resolveSteer = resolve;
+    this.rejectSteer = reject;
+  });
+
+  constructor() {
+    super("runtime-live", false);
+  }
+
+  completeTurnStart(): void {
+    this.resolveTurnStart({
+      turn: { id: "turn-active", status: "inProgress" },
+    });
+  }
+
+  completeSteer(): void {
+    this.resolveSteer({ turnId: "turn-active" });
+  }
+
+  failSteer(error: Error): void {
+    this.rejectSteer(error);
+  }
+
+  async request<Response>(
+    request: Parameters<RecordingTransport["request"]>[0],
+  ): Promise<Response> {
+    if (request.method === "turn/start") {
+      this.calls.push(request);
+      this.turnStartRequested.resolve();
+      return (await this.turnStartResponse) as Response;
+    }
+    if (request.method === "turn/steer") {
+      this.calls.push(request);
+      this.steerRequested.resolve();
+      return (await this.steerResponse) as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
 const localSessions = (
   adapter: CodexAppServerAdapter,
 ): { has(externalSessionId: string): boolean } =>
@@ -451,6 +500,83 @@ describe("CodexAppServerAdapter lifecycle", () => {
           message: "current turn failed",
         }),
       );
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("rejects a known-turn steer after its retained owner is released", async () => {
+    const transport = new DeferredSteerTransport();
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "first" }],
+      }),
+    );
+    await transport.turnStartRequested.promise;
+    transport.completeTurnStart();
+    await flushCodexAdapterWork();
+
+    const oldSend = adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "second" }],
+      }),
+    );
+    await transport.steerRequested.promise;
+    adapter.releaseRuntime("runtime-live");
+    await adapter.startSession(codexStartSessionInput());
+
+    const replacementEvents: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => replacementEvents.push(event),
+    );
+    try {
+      transport.completeSteer();
+      await expect(oldSend).rejects.toThrow(
+        "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
+      );
+      await flushCodexAdapterWork();
+
+      expect(replacementEvents).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("does not report a late queued-steer failure to a replacement session", async () => {
+    const transport = new DeferredSteerTransport();
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexStartSessionInput());
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "first" }],
+      }),
+    );
+    await transport.turnStartRequested.promise;
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        parts: [{ kind: "text", text: "queued" }],
+      }),
+    );
+    transport.completeTurnStart();
+    await transport.steerRequested.promise;
+
+    adapter.releaseRuntime("runtime-live");
+    await adapter.startSession(codexStartSessionInput());
+    const replacementEvents: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => replacementEvents.push(event),
+    );
+    try {
+      transport.failSteer(new Error("old queued steer failed"));
+      await flushCodexAdapterWork();
+
+      expect(replacementEvents).toEqual([]);
     } finally {
       unsubscribe();
     }

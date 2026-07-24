@@ -396,6 +396,9 @@ export class CodexRuntimeSessionEvents {
     try {
       await activeTurn.turnStartPromise;
     } catch (error) {
+      if (this.deps.sessions.get(activeTurn.session.threadId) !== activeTurn.session) {
+        return;
+      }
       this.emitSessionError(activeTurn.session.threadId, error);
     }
   }

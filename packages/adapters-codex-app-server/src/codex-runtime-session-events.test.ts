@@ -130,6 +130,49 @@ describe("CodexRuntimeSessionEvents", () => {
     void asyncHandler;
   });
 
+  test("reports pending-input continuation failures only to their retained owner", async () => {
+    const threadId = "thread-reused";
+    const releasedSession = createSession(threadId);
+    const replacementSession = createSession(threadId);
+    const sessions = new Map([[threadId, releasedSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const replacementEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(replacementSession), (event) =>
+      replacementEvents.push(event),
+    );
+    let rejectTurnStart: (error: Error) => void = () => undefined;
+    const turnStartPromise = new Promise<never>((_resolve, reject) => {
+      rejectTurnStart = reject;
+    });
+    const runtimeEvents = createRuntimeEvents({ sessions, sessionEvents });
+    const activeTurn = {
+      ...createActiveTurn(threadId),
+      session: releasedSession,
+      turnStartPromise,
+    };
+
+    const continuation = runtimeEvents.continueTurnAfterPendingInput(activeTurn);
+    sessions.set(threadId, replacementSession);
+    rejectTurnStart(new Error("old pending-input continuation failed"));
+    await continuation;
+
+    expect(replacementEvents).toEqual([]);
+
+    await runtimeEvents.continueTurnAfterPendingInput({
+      ...createActiveTurn(threadId),
+      session: replacementSession,
+      turnStartPromise: Promise.reject(new Error("current pending-input continuation failed")),
+    });
+
+    expect(replacementEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        externalSessionId: threadId,
+        message: "current pending-input continuation failed",
+      }),
+    );
+  });
+
   test("normalizes Codex skill catalog invalidation without exposing its raw method", async () => {
     let listener: RuntimeListener | null = null;
     const invalidations: unknown[] = [];
