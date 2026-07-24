@@ -395,23 +395,29 @@ describe("buildClaudeAgentSdkOptions", () => {
       const options = await buildOptions(session);
       const sourcePath = join(repoPath, "src", "index.ts");
 
-      expect(
-        await preToolUseHook(options, {
-          permissionMode: "bypassPermissions",
-          toolName: "Write",
-          toolInput: { file_path: sourcePath, content: "export {};" },
-        }),
-      ).toMatchObject({
+      const hookOutput = await preToolUseHook(options, {
+        permissionMode: "bypassPermissions",
+        toolName: "Write",
+        toolInput: { file_path: sourcePath, content: "export {};" },
+      });
+
+      expect(hookOutput).toMatchObject({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "allow",
           permissionDecisionReason: "OpenDucktor routed the tool input to the session worktree.",
           updatedInput: {
-            file_path: normalizePathForComparison(join(workingDirectory, "src", "index.ts")),
             content: "export {};",
           },
         },
       });
+      const hookSpecificOutput = (
+        hookOutput as { hookSpecificOutput?: { updatedInput?: Record<string, unknown> } }
+      ).hookSpecificOutput;
+      const updatedInput = hookSpecificOutput?.updatedInput;
+      expect(normalizePathForComparison(String(updatedInput?.file_path))).toBe(
+        normalizePathForComparison(join(workingDirectory, "src", "index.ts")),
+      );
     } finally {
       session.abortController.abort();
       await rm(root, { recursive: true, force: true });
