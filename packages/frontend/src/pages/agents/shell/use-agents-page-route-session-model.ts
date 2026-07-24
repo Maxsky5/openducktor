@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect } from "react";
-import { useNavigationType, useSearchParams } from "react-router-dom";
+import { useNavigationType, useSearchParams } from "react-router";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";

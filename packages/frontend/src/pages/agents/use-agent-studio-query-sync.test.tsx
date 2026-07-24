@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
-import type { SetURLSearchParams } from "react-router-dom";
+import type { SetURLSearchParams } from "react-router";
 import {
   createMemoryStorage,
   seedWorkspaceNavigationContexts,

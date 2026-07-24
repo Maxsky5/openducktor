@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SetURLSearchParams } from "react-router-dom";
+import type { SetURLSearchParams } from "react-router";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,

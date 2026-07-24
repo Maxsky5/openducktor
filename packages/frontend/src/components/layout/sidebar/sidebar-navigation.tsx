@@ -1,6 +1,6 @@
 import { Bot, Columns3 } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router";
 import { preloadAgentsPage, preloadKanbanPage } from "@/pages";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 

@@ -41,6 +41,7 @@
     "effect": "^3.22.0",
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
+    "electron-builder-squirrel-windows": "26.15.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "vite": "^8.1.5",

@@ -49,7 +49,7 @@
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4",
-    "react-router-dom": "^7.18.1",
+    "react-router": "^8.3.0",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
