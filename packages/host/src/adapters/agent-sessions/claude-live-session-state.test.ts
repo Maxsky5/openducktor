@@ -253,6 +253,65 @@ describe("Claude host live-session state", () => {
     ]);
   });
 
+  test("ignores late context refresh errors after session removal", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    state.removeSession(ref);
+
+    expect(
+      state.applyEvent(session, {
+        type: "session_context_error",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:03:03.000Z",
+        message: "Context refresh was interrupted.",
+      }),
+    ).toEqual([]);
+  });
+
+  test("keeps a no-message session idle when its start event arrives", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+
+    expect(
+      state.applyEvent(session, {
+        type: "session_started",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:03:04.000Z",
+        message: "Started build session",
+      }),
+    ).toEqual([
+      {
+        type: "transcript_event",
+        event: expect.objectContaining({ type: "session_started" }),
+      },
+    ]);
+    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
+  });
+
+  test("removes retained session state after a terminal stream error", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary({ ...summary, status: "running" });
+
+    expect(
+      state.applyEvent(session, {
+        type: "session_error",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:03:05.000Z",
+        message: "Claude stream failed.",
+      }),
+    ).toEqual([
+      {
+        type: "transcript_event",
+        event: expect.objectContaining({ type: "session_error" }),
+      },
+      { type: "session_removed", ref },
+    ]);
+    expect(state.readRetainedSnapshot(ref)).toEqual({ type: "missing", ref });
+  });
+
   test("replaces stale retained context when no newer context update arrives", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary(summary);

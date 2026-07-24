@@ -14,12 +14,15 @@ import {
 import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { errorMessage } from "@/lib/errors";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 
@@ -90,6 +93,17 @@ const FEATURE_FIELDS: CodexPolicyField[] = [
 ];
 
 const INHERIT_ROLE_OVERRIDE_VALUE = "__inherit__";
+const CLAUDE_INSTALLATION_URL = "https://docs.anthropic.com/en/docs/claude-code/getting-started";
+const CLAUDE_PLAN_POLICY_URL =
+  "https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan";
+
+const openClaudeSetupUrl = (url: string): void => {
+  void openExternalUrl(url).catch((error) => {
+    toast.error("Failed to open Claude setup link", {
+      description: errorMessage(error),
+    });
+  });
+};
 
 const defaultValuesForField = <Field extends CodexPolicyField>(
   field: Field,
@@ -269,23 +283,21 @@ function ClaudeSetup({ runtimeCheck }: { runtimeCheck: RuntimeCheck | null }): R
         </ol>
 
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <a
-              href="https://docs.anthropic.com/en/docs/claude-code/getting-started"
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              Installation and authentication
-            </a>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openClaudeSetupUrl(CLAUDE_INSTALLATION_URL)}
+          >
+            Installation and authentication
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <a
-              href="https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan"
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              Current Agent SDK plan policy
-            </a>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openClaudeSetupUrl(CLAUDE_PLAN_POLICY_URL)}
+          >
+            Current Agent SDK plan policy
           </Button>
         </div>
       </CardContent>

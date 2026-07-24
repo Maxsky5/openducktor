@@ -135,4 +135,29 @@ describe("agent-chat-attachments", () => {
         "The selected model supports image attachments only as image/jpeg, image/png, image/gif, image/webp.",
     });
   });
+
+  test("uses supported filename extensions when platforms report generic or alias MIME types", () => {
+    const genericPng = buildComposerAttachmentFromFile(
+      new File(["image"], "photo.png", { type: "application/octet-stream" }),
+    );
+    const aliasJpeg = buildComposerAttachmentFromFile(
+      new File(["image"], "photo.jpg", { type: "image/jpg" }),
+    );
+    if (!genericPng || !aliasJpeg) {
+      throw new Error("Expected extension-recognized image attachments");
+    }
+
+    expect(
+      validateComposerAttachments([genericPng, aliasJpeg], {
+        pdf: true,
+        image: true,
+        audio: false,
+        video: false,
+        mimeTypes: {
+          image: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          pdf: ["application/pdf"],
+        },
+      }),
+    ).toEqual({});
+  });
 });

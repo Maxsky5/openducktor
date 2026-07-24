@@ -265,6 +265,11 @@ export const createClaudeLiveSessionState = ({
         },
       ];
     }
+    const ref = eventRef(session, event);
+    const key = refKey(ref);
+    if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(key)) {
+      return [];
+    }
     if (event.type === "session_context_error") {
       return [
         {
@@ -272,14 +277,9 @@ export const createClaudeLiveSessionState = ({
           repoPath: runtime.repoPath,
           operation: "claude-live-session.load-context",
           message: event.message,
-          ref: eventRef(session, event),
+          ref,
         },
       ];
-    }
-    const ref = eventRef(session, event);
-    const key = refKey(ref);
-    if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(key)) {
-      return [];
     }
     if (
       event.type === "approval_required" ||
@@ -323,8 +323,6 @@ export const createClaudeLiveSessionState = ({
           activity: pendingActivity === "running" ? "idle" : pendingActivity,
         }),
       );
-    } else if (event.type === "session_started") {
-      changes.push(...commitSnapshot({ ...snapshot, activity: "running" }));
     } else if (event.type === "assistant_part") {
       changes.push(...applySubagentPart(session, event));
     }
@@ -335,7 +333,7 @@ export const createClaudeLiveSessionState = ({
         event: agentSessionTranscriptEventSchema.parse({ ...event, sessionRef: ref }),
       });
     }
-    if (event.type === "session_finished") {
+    if (event.type === "session_finished" || event.type === "session_error") {
       changes.push(...removeSessionTree(rootRef(session)));
     }
     return changes;

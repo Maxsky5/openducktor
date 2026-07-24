@@ -224,11 +224,6 @@ describe("Claude host live-session adapter", () => {
           timestamp: "2026-07-17T10:01:00.000Z",
           message: "Started build session",
         });
-        harness.eventHub.emit(session, {
-          type: "session_idle",
-          externalSessionId: "session-1",
-          timestamp: "2026-07-17T10:01:01.000Z",
-        });
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
         return summary;
       }),
@@ -254,7 +249,7 @@ describe("Claude host live-session adapter", () => {
       type: "live",
       session: { activity: "idle" },
     });
-    expect(transcriptEventTypes(harness.changes)).toEqual(["session_started", "session_idle"]);
+    expect(transcriptEventTypes(harness.changes)).toEqual(["session_started"]);
   });
 
   test("publishes accepted input before draining its runtime response", async () => {

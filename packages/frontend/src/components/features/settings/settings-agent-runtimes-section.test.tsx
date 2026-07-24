@@ -6,8 +6,9 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
+import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 
@@ -69,7 +70,15 @@ describe("AgentRuntimesSection", () => {
     }
   });
 
-  test("shows Claude installation, authentication, and current billing guidance", () => {
+  test("shows Claude setup guidance and opens its links through the shell bridge", async () => {
+    const originalShellBridge = getShellBridge();
+    const openedUrls: string[] = [];
+    configureShellBridge({
+      ...originalShellBridge,
+      openExternalUrl: async (url) => {
+        openedUrls.push(url);
+      },
+    });
     const renderer = render(
       createElement(AgentRuntimesSection, {
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
@@ -97,11 +106,17 @@ describe("AgentRuntimesSection", () => {
       expect(renderer.container.textContent).toContain("Ready (2.1.0)");
       expect(renderer.container.textContent).toContain("Verified when a Claude session starts");
       expect(renderer.container.textContent).toContain("ANTHROPIC_API_KEY");
-      expect(
-        screen.getByRole("link", { name: "Current Agent SDK plan policy" }).getAttribute("href"),
-      ).toContain("15036540");
+      fireEvent.click(screen.getByRole("button", { name: "Installation and authentication" }));
+      fireEvent.click(screen.getByRole("button", { name: "Current Agent SDK plan policy" }));
+      await waitFor(() => {
+        expect(openedUrls).toEqual([
+          "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+          "https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan",
+        ]);
+      });
     } finally {
       renderer.unmount();
+      configureShellBridge(originalShellBridge);
     }
   });
 

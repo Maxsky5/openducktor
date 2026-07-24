@@ -211,7 +211,7 @@ export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean 
 };
 
 const readAttachmentValidationError = (
-  attachment: Pick<AgentChatComposerAttachment, "kind" | "mime">,
+  attachment: Pick<AgentChatComposerAttachment, "kind" | "mime" | "name">,
   support: AgentModelAttachmentSupport | null | undefined,
 ): string | null => {
   if (!support) {
@@ -229,6 +229,11 @@ const readAttachmentValidationError = (
 
   const mime = attachment.mime?.trim().toLowerCase();
   if (mime && supportedMimeTypes.includes(mime)) {
+    return null;
+  }
+
+  const inferredMime = ATTACHMENT_EXTENSION_MIME[readFileExtension(attachment.name)];
+  if (inferredMime && supportedMimeTypes.includes(inferredMime)) {
     return null;
   }
 
