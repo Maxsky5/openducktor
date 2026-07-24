@@ -284,7 +284,7 @@ export class CodexAppServerAdapter
     cleanup("pending input", () => this.pendingInput.clearRuntime(runtimeId));
     cleanup("subagents", () => this.subagents.clearRuntime(runtimeId));
     cleanup("runtime events", () => this.runtimeEvents.clearRuntime(runtimeId));
-    cleanup("thread inventory", () => this.clearThreadInventory(runtimeId));
+    cleanup("thread inventory", () => this.disposeThreadInventory(runtimeId));
 
     if (failures.length > 0) {
       const details = failures
@@ -314,6 +314,10 @@ export class CodexAppServerAdapter
 
   private clearThreadInventory(runtimeId: string): void {
     this.threadInventory.clearInventory(runtimeId);
+  }
+
+  private disposeThreadInventory(runtimeId: string): void {
+    this.threadInventory.disposeRuntime(runtimeId);
   }
 
   private recordInventorySubagentRoutes(

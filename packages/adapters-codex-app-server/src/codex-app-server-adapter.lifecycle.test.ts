@@ -12,8 +12,14 @@ import {
   makeRuntimeSummary,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
+import {
+  type CodexThreadStatusSnapshot,
+  codexThreadStatusSnapshot,
+} from "./codex-app-server-threads";
 import { codexSandboxPolicy } from "./codex-session-policy";
+import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { CodexAppServerAdapter } from "./index";
+import type { CodexAppServerClient } from "./types";
 
 class NameFailingTransport extends RecordingTransport {
   async request<Response>(
@@ -81,7 +87,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       pendingInput: { clearRuntime(runtimeId: string): void };
       subagents: { clearRuntime(runtimeId: string): void };
       runtimeEvents: { clearRuntime(runtimeId: string): void };
-      clearThreadInventory(runtimeId: string): void;
+      disposeThreadInventory(runtimeId: string): void;
     };
     internals.localSessions.releaseRuntime = (runtimeId) => {
       cleanupCalls.push(`sessions:${runtimeId}`);
@@ -96,7 +102,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     internals.runtimeEvents.clearRuntime = (runtimeId) => {
       cleanupCalls.push(`events:${runtimeId}`);
     };
-    internals.clearThreadInventory = (runtimeId) => {
+    internals.disposeThreadInventory = (runtimeId) => {
       cleanupCalls.push(`inventory:${runtimeId}`);
     };
 
@@ -107,6 +113,87 @@ describe("CodexAppServerAdapter lifecycle", () => {
       "subagents:runtime-live",
       "events:runtime-live",
       "inventory:runtime-live",
+    ]);
+  });
+
+  test("releases thread status overrides when a runtime is disposed", async () => {
+    const { adapter } = createHarness();
+    const threadInventory = (adapter as unknown as { threadInventory: CodexThreadInventoryReader })
+      .threadInventory;
+    const statusOverridesByRuntimeId = (
+      threadInventory as unknown as {
+        statusOverridesByRuntimeId: Map<string, Map<string, CodexThreadStatusSnapshot>>;
+      }
+    ).statusOverridesByRuntimeId;
+    const inventoryCalls: string[] = [];
+    const client = {
+      threadLoadedList: async () => {
+        inventoryCalls.push("thread/loaded/list");
+        return { data: ["thread-1", "thread-2"], nextCursor: null };
+      },
+      threadList: async () => {
+        inventoryCalls.push("thread/list");
+        return {
+          data: [
+            {
+              id: "thread-1",
+              cwd: "/repo",
+              createdAt: 1,
+              updatedAt: 2,
+              preview: "First thread",
+              status: { type: "active", activeFlags: [] },
+            },
+            {
+              id: "thread-2",
+              cwd: "/repo",
+              createdAt: 1,
+              updatedAt: 2,
+              preview: "Second thread",
+              status: { type: "active", activeFlags: [] },
+            },
+          ],
+          nextCursor: null,
+        };
+      },
+    } as unknown as CodexAppServerClient;
+
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      threadInventory.updateThreadStatus(
+        "runtime-reused",
+        "thread-1",
+        codexThreadStatusSnapshot("idle"),
+      );
+      threadInventory.updateThreadStatus(
+        "runtime-reused",
+        "thread-2",
+        codexThreadStatusSnapshot({
+          type: "active",
+          activeFlags: ["waitingOnApproval"],
+        }),
+      );
+
+      expect(statusOverridesByRuntimeId.size).toBe(1);
+      expect(statusOverridesByRuntimeId.get("runtime-reused")?.size).toBe(2);
+
+      adapter.releaseRuntime("runtime-reused");
+
+      expect(statusOverridesByRuntimeId.size).toBe(0);
+      const freshInventory = await threadInventory.read(client, "runtime-reused");
+      expect(freshInventory.threadsById.get("thread-1")?.status).toEqual({
+        classification: "running",
+      });
+      expect(freshInventory.threadsById.get("thread-2")?.status).toEqual({
+        classification: "running",
+      });
+    }
+
+    expect(inventoryCalls).toEqual([
+      "thread/loaded/list",
+      "thread/list",
+      "thread/loaded/list",
+      "thread/list",
+      "thread/loaded/list",
+      "thread/list",
     ]);
   });
 
