@@ -640,6 +640,7 @@ describe("Claude session I/O queued messages", () => {
     ).rejects.toThrow("session stopped during delivery");
 
     expect(session.activity).toBe("stopped");
+    expect(session.acceptedUserMessages).toEqual([]);
     expect(events).toEqual([]);
   });
 

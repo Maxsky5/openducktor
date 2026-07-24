@@ -337,10 +337,10 @@ export const sendClaudeUserMessage = async (input: {
       session.queuedSdkMessages.push(sdkMessage);
     }
   } catch (cause) {
+    session.acceptedUserMessages.pop();
     if (isClaudeSessionStopped(session)) {
       throw cause;
     }
-    session.acceptedUserMessages.pop();
     session.pendingUserTurnCount = previousPendingUserTurnCount;
     session.activity = previousActivity;
     if (previousSdkState === undefined) {
