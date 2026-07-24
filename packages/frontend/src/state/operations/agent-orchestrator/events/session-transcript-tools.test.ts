@@ -406,5 +406,4 @@ describe("agent-orchestrator session transcript events", () => {
       expect(getSessionMessages(sessionsRef)).toEqual([]);
     });
   });
-
 });

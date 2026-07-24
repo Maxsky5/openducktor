@@ -356,13 +356,16 @@ export const createClaudeLiveSessionAdapterPreparer =
                   Effect.flatMap((event) =>
                     requireSessionContext(input.externalSessionId).pipe(
                       Effect.flatMap((session) =>
-                        commit("claude-live-session.publish-user-message", () => ({
-                          value: event,
-                          changes: state.applyEvent(
-                            session,
-                            toClaudeRuntimeUserMessageEvent(event),
-                          ),
-                        })),
+                        commit("claude-live-session.publish-user-message", () => {
+                          state.reactivateSession(input);
+                          return {
+                            value: event,
+                            changes: state.applyEvent(
+                              session,
+                              toClaudeRuntimeUserMessageEvent(event),
+                            ),
+                          };
+                        }),
                       ),
                     ),
                   ),

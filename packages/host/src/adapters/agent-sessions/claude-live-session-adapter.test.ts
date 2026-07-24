@@ -141,6 +141,7 @@ const createHarness = async () => {
     ) => sendUserMessageImpl(input, runtimeId),
     updateSessionModel: (input: Parameters<ClaudeAgentSdkService["updateSessionModel"]>[0]) =>
       updateSessionModelImpl(input),
+    stopSession: () => Effect.void,
     releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
       releaseSessionImpl(input),
   } as unknown as ClaudeAgentSdkService;
@@ -298,6 +299,90 @@ describe("Claude host live-session adapter", () => {
       "assistant_message",
       "session_idle",
     ]);
+  });
+
+  test("reattaches live events when sending to a stopped session", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    await Effect.runPromise(
+      harness.adapter.stopSession({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+    harness.changes.splice(0);
+    harness.setSendUserMessage((input) =>
+      Effect.promise(async () => {
+        harness.eventHub.emit(session, {
+          type: "session_started",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:00.000Z",
+          message: "Resumed build session",
+        });
+        harness.eventHub.emit(session, {
+          type: "session_status",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:01.000Z",
+          status: { type: "busy", message: null },
+        });
+        harness.eventHub.emit(session, {
+          type: "assistant_message",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:02.000Z",
+          messageId: "assistant-1",
+          message: "Done",
+        });
+        harness.eventHub.emit(session, {
+          type: "session_idle",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:03.000Z",
+        });
+        return {
+          type: "user_message" as const,
+          externalSessionId: input.externalSessionId,
+          timestamp: "2026-07-17T10:01:59.000Z",
+          messageId: "user-1",
+          message: "Resume",
+          parts: [{ kind: "text" as const, text: "Resume" }],
+          state: "read" as const,
+        };
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.sendUserMessage({
+        ...startInput,
+        externalSessionId: "session-1",
+        parts: [{ kind: "text", text: "Resume" }],
+      }),
+    );
+
+    expect(harness.changes[0]).toMatchObject({
+      type: "transcript_event",
+      event: { type: "user_message" },
+    });
+    expect(transcriptEventTypes(harness.changes)).toEqual([
+      "user_message",
+      "session_started",
+      "session_status",
+      "assistant_message",
+      "session_idle",
+    ]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
   });
 
   test("keeps pending activity when an already-retained session is resumed", async () => {

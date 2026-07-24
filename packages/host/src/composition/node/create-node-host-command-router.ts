@@ -97,6 +97,7 @@ import {
   type CreateNodeHostDefaultPortsInput,
   createNodeHostDefaultPorts,
 } from "./node-host-default-ports";
+import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
 export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
   clientVersion?: string;
@@ -245,24 +246,11 @@ export const createNodeEffectHostCommandRouter = (
       runtimeDistribution,
       ...(clientVersion ? { clientVersion } : {}),
       resolveMcpBridgeConnection: (runtimeInput) =>
-        resolvedMcpHostBridge
-          ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new HostOperationError({
-                    operation: "codex-workspace-runtime.resolve-mcp-bridge",
-                    message: cause.message,
-                    cause,
-                  }),
-              ),
-            )
-          : Effect.fail(
-              new HostResourceError({
-                message: "Codex workspace startup requires an initialized MCP host bridge.",
-                resource: "mcp-host-bridge",
-                operation: "codex-workspace-runtime.start",
-              }),
-            ),
+        resolveWorkspaceRuntimeMcpBridgeConnection(
+          resolvedMcpHostBridge,
+          "codex",
+          runtimeInput.repoPath,
+        ),
     }),
     opencode: createOpenCodeWorkspaceRuntimeStarter({
       toolDiscovery,
@@ -273,24 +261,11 @@ export const createNodeEffectHostCommandRouter = (
         liveSessionLifecycle: agentSessionLiveStateService,
       }),
       resolveMcpBridgeConnection: (runtimeInput) =>
-        resolvedMcpHostBridge
-          ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new HostOperationError({
-                    operation: "opencode-workspace-runtime.resolve-mcp-bridge",
-                    message: cause.message,
-                    cause,
-                  }),
-              ),
-            )
-          : Effect.fail(
-              new HostResourceError({
-                message: "OpenCode workspace startup requires an initialized MCP host bridge.",
-                resource: "mcp-host-bridge",
-                operation: "opencode-workspace-runtime.start",
-              }),
-            ),
+        resolveWorkspaceRuntimeMcpBridgeConnection(
+          resolvedMcpHostBridge,
+          "opencode",
+          runtimeInput.repoPath,
+        ),
     }),
   });
   const effectiveRuntimeRegistry =

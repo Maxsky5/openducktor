@@ -370,7 +370,6 @@ export const createClaudeLiveSessionState = ({
     },
     contextRevision: (ref: AgentSessionLiveRef): number =>
       contextRevisionsByRef.get(refKey(ref)) ?? 0,
-    hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
     listRetainedSnapshots: (repoPath: string): AgentSessionLiveSnapshot[] =>
       repoPath === runtime.repoPath ? [...snapshotsByRef.values()].map(cloneSnapshot) : [],
     matches: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
@@ -387,6 +386,9 @@ export const createClaudeLiveSessionState = ({
       retiredSessionKeys.clear();
       startupLeases.clear();
       return refs;
+    },
+    reactivateSession: (ref: AgentSessionLiveRef): void => {
+      retiredSessionKeys.delete(refKey(ref));
     },
     removeSession: removeSessionTree,
     retainControlSummary: (
