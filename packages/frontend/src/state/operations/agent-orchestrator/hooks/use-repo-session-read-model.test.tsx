@@ -545,6 +545,51 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("replaces the slash-command cache from the authoritative ordered stream payload", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const catalog = {
+      commands: [
+        {
+          id: "review",
+          trigger: "review",
+          title: "review",
+          source: "command" as const,
+          hints: [],
+        },
+      ],
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(async () => {
+        state.emit({
+          type: "slash_command_catalog_updated",
+          scope: {
+            repoPath: "/repo",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree",
+          },
+          catalog,
+        } as AgentSessionLiveEnvelope);
+      });
+
+      expect(
+        state.queryClient.getQueryData<typeof catalog>([
+          "runtime-catalog",
+          "slash-commands",
+          "/repo",
+          "claude",
+          "/repo/worktree",
+        ]),
+      ).toEqual(catalog);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("recovers loaded transcripts when the live stream reports a replay gap", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });

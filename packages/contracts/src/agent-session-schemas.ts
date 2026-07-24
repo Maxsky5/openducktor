@@ -1,14 +1,18 @@
 import { z } from "zod";
-import { type RuntimeKind, runtimeKindSchema } from "./agent-runtime-schemas";
+import { type RuntimeKind, repoRuntimeRefSchema, runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
-export const agentSessionLiveRefSchema = z
-  .object({
-    repoPath: nonEmptyStringSchema,
-    runtimeKind: runtimeKindSchema,
+export const runtimeWorkingDirectoryRefSchema = repoRuntimeRefSchema
+  .extend({
     workingDirectory: nonEmptyStringSchema,
+  })
+  .strict();
+export type RuntimeWorkingDirectoryRef = z.infer<typeof runtimeWorkingDirectoryRefSchema>;
+
+export const agentSessionLiveRefSchema = runtimeWorkingDirectoryRefSchema
+  .extend({
     externalSessionId: nonEmptyStringSchema,
   })
   .strict();

@@ -77,6 +77,7 @@ export type AgentChatMessageMeta =
       kind: "subagent";
       partId: string;
       correlationKey: string;
+      sourceMessageId?: string;
       status: AgentSubagentStatus;
       agent?: string;
       prompt?: string;
@@ -170,6 +171,7 @@ export type AgentSessionContextUsage = {
 };
 
 export type AgentSessionHistoryLoadState = "not_requested" | "loading" | "loaded" | "failed";
+export type AgentSessionRuntimeAvailability = "runtime" | "missing";
 
 export type AgentSessionState = {
   externalSessionId: string;
@@ -184,9 +186,11 @@ export type AgentSessionState = {
   historyLoadState: AgentSessionHistoryLoadState;
   messages: AgentSessionMessages;
   contextUsage?: AgentSessionContextUsage | null;
+  contextUsageError?: string | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
   selectedModel: AgentModelSelection | null;
+  runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;
   stopRequestedAt?: string | null;
 };

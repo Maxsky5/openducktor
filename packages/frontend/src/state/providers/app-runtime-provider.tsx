@@ -26,7 +26,9 @@ import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 type AppRuntimeProviderProps = PropsWithChildren<{
   loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  loadRepoRuntimeSlashCommands: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
+  loadRepoRuntimeSlashCommands: (
+    runtimeRef: RuntimeWorkingDirectoryRef,
+  ) => Promise<AgentSlashCommandCatalog>;
   loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
   loadRepoRuntimeSubagents: (
     runtimeRef: RuntimeWorkingDirectoryRef,

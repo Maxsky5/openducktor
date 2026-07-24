@@ -4,6 +4,7 @@ const runtimeSupportsPromptInput = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeKind: RuntimeKind | null,
   capability:
+    | "supportsAttachments"
     | "supportsSlashCommands"
     | "supportsFileSearch"
     | "supportsSkillReferences"
@@ -25,12 +26,18 @@ export const resolveRuntimePromptInputSupport = ({
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeKind: RuntimeKind | null;
 }): {
+  supportsAttachments: boolean;
   runtimeSupportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
   supportsSubagentReferences: boolean;
 } => {
   return {
+    supportsAttachments: runtimeSupportsPromptInput(
+      runtimeDefinitions,
+      runtimeKind,
+      "supportsAttachments",
+    ),
     runtimeSupportsSlashCommands: runtimeSupportsPromptInput(
       runtimeDefinitions,
       runtimeKind,

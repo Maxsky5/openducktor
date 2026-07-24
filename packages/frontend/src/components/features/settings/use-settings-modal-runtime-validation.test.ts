@@ -15,6 +15,7 @@ const createSnapshot = (): SettingsSnapshot =>
     agentRuntimes: {
       opencode: { enabled: true },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
+      claude: { enabled: false },
     },
     workspaces: {
       repo: {
@@ -75,6 +76,7 @@ describe("settings runtime availability validation", () => {
     snapshotDraft.agentRuntimes = {
       opencode: { enabled: false },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
+      claude: { enabled: false },
     };
     const repoConfig = snapshotDraft.workspaces.repo;
     if (!repoConfig) {

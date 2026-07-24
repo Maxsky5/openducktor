@@ -351,7 +351,7 @@ describe("model-selection-preferences", () => {
     ).toEqual({
       selectionCatalog: CATALOG,
       selectedModelSelection: roleDefaultSelection,
-      selectionForNewSession: draftSelection,
+      selectionForNewSession: roleDefaultSelection,
       sessionModelRepairCommand: {
         key: "session-1|opencode|%2Frepo\u001fopencode\u001fanthropic\u001fclaude-sonnet\u001f\u001f",
         session: sessionIdentity,
@@ -387,10 +387,78 @@ describe("model-selection-preferences", () => {
     ).toEqual({
       selectionCatalog: CATALOG,
       selectedModelSelection: null,
-      selectionForNewSession: roleDefaultSelection,
+      selectionForNewSession: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      },
       sessionModelRepairCommand: null,
       isSelectedSessionModelSendable: true,
     });
+  });
+
+  test("uses the loaded-session model as the next new-session seed", () => {
+    const selectedSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+    const roleDefaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          sessionIdentity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode" as const,
+            workingDirectory: "/repo",
+          },
+          sessionRuntimeKind: "opencode",
+          modelCatalog: CATALOG,
+          selectedSessionModel,
+          draftSelection: null,
+        },
+        roleDefaultSelection,
+      }).selectionForNewSession,
+    ).toEqual(selectedSessionModel);
+  });
+
+  test("ignores stale draft selections while a session is selected", () => {
+    const selectedSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          sessionIdentity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode" as const,
+            workingDirectory: "/repo",
+          },
+          sessionRuntimeKind: "opencode",
+          modelCatalog: CATALOG,
+          selectedSessionModel,
+          draftSelection: {
+            runtimeKind: "codex" as const,
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+        },
+        roleDefaultSelection: null,
+      }).selectionForNewSession,
+    ).toEqual(selectedSessionModel);
   });
 
   test("resolves chat composer selections for a new session from draft, defaults, then catalog", () => {

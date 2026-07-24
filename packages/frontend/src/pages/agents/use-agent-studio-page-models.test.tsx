@@ -257,6 +257,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const modelSelection: HookArgs["modelSelection"] = {
     selectedModelSelection: null,
     isSelectionCatalogLoading: false,
+    supportsAttachments: true,
     supportsSlashCommands: true,
     supportsFileSearch: true,
     supportsSkillReferences: false,
@@ -431,7 +432,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("keeps selected-session facts authoritative for the chat thread", async () => {
+  test("does not project stale loaded messages from another runtime identity", async () => {
     const selectedSession = createSession("session-shared", {
       runtimeKind: "codex",
       workingDirectory: "/repo/selected-worktree",
@@ -484,16 +485,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const chatModel = harness.getLatest().agentChatModel;
-    expect(chatModel.thread.session).toMatchObject({
-      externalSessionId: "session-shared",
-      runtimeKind: "codex",
-      workingDirectory: "/repo/selected-worktree",
-      activityState: "running",
-    });
-    expect(chatModel.thread.session?.messages.items[0]?.content).toContain(
-      "Loaded messages still belong to the live transcript.",
-    );
-    expect(chatModel.thread.isSessionWorking).toBe(true);
+    expect(chatModel.thread.session).toBeNull();
+    expect(chatModel.thread.isSessionWorking).toBe(false);
     expect(chatModel.thread.sessionAccentColor).toBe("#0ea5e9");
     expect(chatModel.composer.accentColor).toBe("#0ea5e9");
 

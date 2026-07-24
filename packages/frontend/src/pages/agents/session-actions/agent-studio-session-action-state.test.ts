@@ -60,6 +60,42 @@ describe("deriveAgentStudioSessionActionState", () => {
     });
   });
 
+  test("prefers current runtime definitions over stale loaded session descriptors", () => {
+    const staleOpenCodeDescriptor = {
+      ...RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      capabilities: {
+        ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities,
+        sessionLifecycle: {
+          ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities.sessionLifecycle,
+          supportsQueuedUserMessages: false,
+        },
+      },
+    };
+
+    const state = deriveAgentStudioSessionActionState({
+      selectedSession: createSelectedSession({
+        identity: {
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
+        activityState: "running",
+        runtimeData: {
+          ...EMPTY_SELECTED_SESSION_RUNTIME_DATA,
+          modelCatalog: {
+            runtime: staleOpenCodeDescriptor,
+            models: [],
+            defaultModelsByProvider: {},
+          },
+        },
+      }),
+      runtimeDefinitions: [RUNTIME_DESCRIPTORS_BY_KIND.opencode],
+    });
+
+    expect(state.canQueueBusyFollowups).toBe(true);
+    expect(state.busySendBlockedReason).toBeNull();
+  });
+
   test("treats a selected session without activity evidence as not working", () => {
     const state = deriveAgentStudioSessionActionState({
       selectedSession: createSelectedSession(),

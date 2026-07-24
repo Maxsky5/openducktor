@@ -115,6 +115,7 @@ const createBaseArgs = (): HookArgs => ({
   reusablePrompts: [],
   isStarting: false,
   selectedModelDescriptor,
+  supportsAttachments: true,
   sendAgentMessage: async () => {},
   startSession: async () => sessionWorkflowResult("session-new"),
 });
@@ -171,6 +172,33 @@ describe("useAgentStudioSendAction", () => {
 
     expect(startSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
+    await harness.unmount();
+  });
+
+  test("sends system compaction to an existing Claude session", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const claudeSession = {
+      externalSessionId: "claude-session",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktrees/claude-session",
+    };
+    const harness = createHookHarness(useAgentStudioSendAction, {
+      ...createBaseArgs(),
+      selectedSessionIdentity: claudeSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createCompactionDraft())).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith(claudeSession, [
+      {
+        kind: "slash_command",
+        command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      },
+    ]);
     await harness.unmount();
   });
 

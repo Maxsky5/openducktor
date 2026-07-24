@@ -1,4 +1,8 @@
 import type {
+  AgentDescriptor as ContractsAgentDescriptor,
+  AgentModelAttachmentSupport as ContractsAgentModelAttachmentSupport,
+  AgentModelCatalog as ContractsAgentModelCatalog,
+  AgentModelDescriptor as ContractsAgentModelDescriptor,
   AgentRole as ContractsAgentRole,
   AgentRuntimeEvent as ContractsAgentRuntimeEvent,
   AgentSessionActivity as ContractsAgentSessionActivity,
@@ -69,35 +73,9 @@ export type AgentToolName = ContractsAgentToolName;
 
 export type AgentModelSelection = ContractsAgentTranscriptModelSelection;
 
-export type AgentModelDescriptor = {
-  id: string;
-  providerId: string;
-  providerName: string;
-  modelId: string;
-  modelName: string;
-  variants: string[];
-  contextWindow?: number;
-  outputLimit?: number;
-  attachmentSupport?: AgentModelAttachmentSupport;
-};
-
-export type AgentDescriptor = {
-  id?: string;
-  label?: string;
-  name?: string;
-  description?: string;
-  mode: "subagent" | "primary" | "all";
-  hidden?: boolean;
-  native?: boolean;
-  color?: string;
-};
-
-export type AgentModelCatalog = {
-  runtime?: RuntimeDescriptor;
-  models: AgentModelDescriptor[];
-  defaultModelsByProvider: Record<string, string>;
-  profiles?: AgentDescriptor[];
-};
+export type AgentModelDescriptor = ContractsAgentModelDescriptor;
+export type AgentDescriptor = ContractsAgentDescriptor;
+export type AgentModelCatalog = ContractsAgentModelCatalog;
 
 export type AgentRuntimeCapabilities = RuntimeCapabilities;
 export type AgentRuntimeDefinition = RuntimeDescriptor;
@@ -136,12 +114,7 @@ export type AgentFileSearchResult = AgentFileReference;
 
 export type AgentAttachmentKind = "image" | "audio" | "video" | "pdf";
 
-export type AgentModelAttachmentSupport = {
-  image: boolean;
-  audio: boolean;
-  video: boolean;
-  pdf: boolean;
-};
+export type AgentModelAttachmentSupport = ContractsAgentModelAttachmentSupport;
 
 export type AgentAttachmentReference = {
   id: string;

@@ -68,6 +68,52 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     ]);
   });
 
+  test("inserts unmatched current subagent messages by timestamp during hydration", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "history-user",
+          role: "user",
+          content: "Start",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+        {
+          id: "history-assistant",
+          role: "assistant",
+          content: "Done",
+          timestamp: "2026-03-01T09:00:10.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:task-1",
+          role: "system",
+          content: "Subagent (general-purpose): Run affected web tests",
+          timestamp: "2026-03-01T09:00:04.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "claude-subagent:task-1",
+            correlationKey: "task-1",
+            status: "completed",
+            agent: "general-purpose",
+            description: "Run affected web tests",
+          },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "history-user",
+      "subagent:task-1",
+      "history-assistant",
+    ]);
+  });
+
   test("prefers history final assistant messages while preserving current metadata", () => {
     const merged = mergedMessages(
       [

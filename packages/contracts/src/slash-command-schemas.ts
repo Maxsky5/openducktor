@@ -5,8 +5,9 @@ export const slashCommandSourceSchema = z.enum(slashCommandSourceValues);
 export type SlashCommandSource = z.infer<typeof slashCommandSourceSchema>;
 
 const slashCommandTextSchema = z.string().trim().min(1);
-const slashCommandTriggerSchema = slashCommandTextSchema.regex(/^[^\s/]+$/, {
-  message: "Trigger must be a single token without a leading slash",
+const slashCommandTriggerSchema = slashCommandTextSchema.regex(/^[^/]+$/, {
+  error: (issue) =>
+    `Invalid slash command trigger ${JSON.stringify(issue.input)}: must contain no slashes`,
 });
 
 export const slashCommandDescriptorSchema = z.object({

@@ -47,9 +47,12 @@ describe("agent-chat-attachments", () => {
   });
 
   test("preserves existing non-empty filenames verbatim", () => {
-    expect(readAttachmentFileName({ name: " report .pdf ", mime: "application/pdf" })).toBe(
-      " report .pdf ",
-    );
+    expect(
+      readAttachmentFileName({
+        name: " report .pdf ",
+        mime: "application/pdf",
+      }),
+    ).toBe(" report .pdf ");
   });
 
   test("rehydrates uncommon supported extensions from their path", () => {
@@ -106,6 +109,30 @@ describe("agent-chat-attachments", () => {
       }),
     ).toEqual({
       [imageAttachment.id]: "The selected model does not support image attachments.",
+    });
+  });
+
+  test("validates staged attachments against model MIME constraints", () => {
+    const heicAttachment = buildComposerAttachmentFromPath("/tmp/photo.heic");
+    const pngAttachment = buildComposerAttachmentFromPath("/tmp/photo.png");
+    if (!heicAttachment || !pngAttachment) {
+      throw new Error("Expected fixture attachments to classify");
+    }
+
+    expect(
+      validateComposerAttachments([heicAttachment, pngAttachment], {
+        pdf: true,
+        image: true,
+        audio: false,
+        video: false,
+        mimeTypes: {
+          image: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          pdf: ["application/pdf"],
+        },
+      }),
+    ).toEqual({
+      [heicAttachment.id]:
+        "The selected model supports image attachments only as image/jpeg, image/png, image/gif, image/webp.",
     });
   });
 });

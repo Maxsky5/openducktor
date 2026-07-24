@@ -36,6 +36,7 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   runtimeOptions: [{ value: "opencode", label: "OpenCode" }],
   supportsProfiles: true,
   supportsVariants: true,
+  selectionCatalogError: null,
   isSelectionCatalogLoading: false,
   agentOptions: [{ value: "builder", label: "Builder" }],
   modelOptions: [{ value: "openai/gpt-5.4", label: "GPT-5.4" }],
@@ -188,6 +189,28 @@ describe("SessionStartModal", () => {
       screen.getByText("Reuse mode keeps the previous session agent/model/variant."),
     ).toBeTruthy();
     expect(screen.queryByText("Loading agents for the selected runtime.")).toBeNull();
+
+    unmount();
+  });
+
+  test("shows catalog load errors and blocks fresh-session confirm", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          selectionCatalogError: "Claude auth failed",
+          selectedModelSelection: null,
+          modelOptions: [],
+          variantOptions: [],
+        }),
+      }),
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Failed to load runtime catalog: Claude auth failed",
+    );
+    expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
+      true,
+    );
 
     unmount();
   });

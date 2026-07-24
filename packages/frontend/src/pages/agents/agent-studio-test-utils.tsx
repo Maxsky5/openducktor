@@ -13,7 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
-import { QueryProvider } from "@/lib/query-provider";
+import { createQueryClient } from "@/lib/query-client";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   ChecksOperationsContext,
@@ -22,8 +22,10 @@ import {
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  createSettingsSnapshotFixture,
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
   createRepoRuntimeHealthFixture as createSharedRepoRuntimeHealthFixture,
@@ -58,6 +60,7 @@ type HookHarnessOptions = {
   checksStateContextRef?: { current: ChecksStateContextValue };
   repoRuntimeHealthContext?: RepoRuntimeHealthContextValue;
   repoRuntimeHealthContextRef?: { current: RepoRuntimeHealthContextValue };
+  seedSettingsSnapshot?: boolean;
   wrapper?: (props: PropsWithChildren) => ReactElement;
 };
 
@@ -261,13 +264,16 @@ export const createHookHarness = <Props, State>(
   const repoRuntimeHealthContextRef = options?.repoRuntimeHealthContextRef ?? {
     current: options?.repoRuntimeHealthContext ?? createRepoRuntimeHealthContextValue(),
   };
+  const queryClient = options?.queryClient ?? createQueryClient();
+  if (options?.seedSettingsSnapshot !== false) {
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+  }
 
   const renderQueryProvider = (children: ReactElement): ReactElement => {
-    if (options?.queryClient) {
-      return createElement(QueryClientProvider, { client: options.queryClient }, children);
-    }
-
-    return createElement(QueryProvider, { useIsolatedClient: true }, children);
+    return createElement(QueryClientProvider, { client: queryClient }, children);
   };
   const renderOwnerProviders = (children: ReactNode): ReactNode => {
     if (!options?.wrapper) {

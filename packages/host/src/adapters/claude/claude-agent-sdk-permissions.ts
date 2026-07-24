@@ -1,0 +1,400 @@
+import { realpath } from "node:fs/promises";
+import { isAbsolute, relative } from "node:path";
+import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
+import {
+  normalizePathForComparison,
+  pathStartsWith,
+  resolveAgainstWorkingDirectory,
+  toProjectRelativePath,
+} from "@openducktor/path-support";
+import {
+  claudeSubagentPendingInputRoute,
+  emitClaudePendingInputEvent,
+} from "./claude-agent-sdk-pending-input-routing";
+import {
+  isClaudeAskUserQuestionTool,
+  requestClaudeAskUserQuestion,
+} from "./claude-agent-sdk-questions";
+import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+import {
+  canonicalOdtToolName,
+  claudeWorkflowRole,
+  isReadOnlyWorkflowRole,
+  mutationForTool,
+  permissionRequestTypeForTool,
+  readStringProp,
+} from "./claude-agent-sdk-utils";
+
+type CreateClaudeCanUseToolInput = {
+  session: ClaudeSessionContext;
+  now: () => string;
+  randomId: () => string;
+  emit: (session: ClaudeSessionContext, event: AgentEvent) => void;
+  canonicalizePath?: (path: string) => Promise<string>;
+};
+
+export type ClaudeToolUseAuthorization =
+  | {
+      behavior: "allow";
+      autoApprove: boolean;
+      toolInput: Record<string, unknown>;
+    }
+  | {
+      behavior: "deny";
+      message: string;
+    };
+
+type AuthorizeClaudeToolUseInput = {
+  session: ClaudeSessionContext;
+  toolInput: Record<string, unknown>;
+  toolName: string;
+  blockedPath?: string;
+  canonicalizePath?: (path: string) => Promise<string>;
+};
+
+const withAllowedToolInput = (
+  result: PermissionResult,
+  toolInput: Record<string, unknown>,
+): PermissionResult =>
+  result.behavior === "allow"
+    ? {
+        ...result,
+        updatedInput: result.updatedInput ?? toolInput,
+      }
+    : result;
+
+const denyReadOnlyPolicy = (message: string): PermissionResult => ({
+  behavior: "deny",
+  decisionClassification: "user_reject",
+  message,
+});
+
+const SESSION_PATH_INPUT_KEYS = [
+  "file_path",
+  "path",
+  "repo",
+  "notebook_path",
+  "target_file",
+] as const;
+
+const rewriteSessionPath = (session: ClaudeSessionContext, value: string): string => {
+  const { repoPath, workingDirectory } = session.input;
+  if (normalizePathForComparison(repoPath) === normalizePathForComparison(workingDirectory)) {
+    return value;
+  }
+  if (normalizePathForComparison(value) === normalizePathForComparison(repoPath)) {
+    return workingDirectory;
+  }
+  if (pathStartsWith(value, repoPath)) {
+    return resolveAgainstWorkingDirectory(workingDirectory, toProjectRelativePath(value, repoPath));
+  }
+  return value;
+};
+
+const normalizeToolInputForSession = (
+  session: ClaudeSessionContext,
+  _toolName: string,
+  toolInput: Record<string, unknown>,
+): Record<string, unknown> => {
+  const nextInput = { ...toolInput };
+  let changed = false;
+
+  for (const key of SESSION_PATH_INPUT_KEYS) {
+    const value = nextInput[key];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const rewritten = rewriteSessionPath(session, value);
+    if (rewritten !== value) {
+      nextInput[key] = rewritten;
+      changed = true;
+    }
+  }
+
+  return changed ? nextInput : toolInput;
+};
+
+const readOnlyToolPathValues = (
+  session: ClaudeSessionContext,
+  toolInput: Record<string, unknown>,
+  blockedPath: string | undefined,
+): string[] => {
+  const paths: string[] = [];
+  if (blockedPath) {
+    paths.push(rewriteSessionPath(session, blockedPath));
+  }
+
+  for (const key of SESSION_PATH_INPUT_KEYS) {
+    const value = toolInput[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      paths.push(value);
+    }
+  }
+
+  return paths;
+};
+
+const isInsideCanonicalWorkingDirectory = (
+  canonicalWorkingDirectory: string,
+  canonicalCandidate: string,
+): boolean => {
+  const relativePath = relative(canonicalWorkingDirectory, canonicalCandidate);
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+};
+
+const canonicalReadPathViolation = async (
+  session: ClaudeSessionContext,
+  rawPath: string,
+  canonicalizePath: (path: string) => Promise<string>,
+): Promise<string | null> => {
+  const candidate = rawPath.trim();
+  if (!candidate || candidate.startsWith("~")) {
+    return rawPath;
+  }
+  const resolvedPath = resolveAgainstWorkingDirectory(session.input.workingDirectory, candidate);
+  try {
+    const [canonicalWorkingDirectory, canonicalCandidate] = await Promise.all([
+      canonicalizePath(session.input.workingDirectory),
+      canonicalizePath(resolvedPath),
+    ]);
+    return isInsideCanonicalWorkingDirectory(canonicalWorkingDirectory, canonicalCandidate)
+      ? null
+      : rawPath;
+  } catch {
+    return `${rawPath} (path could not be resolved canonically)`;
+  }
+};
+
+const findReadOnlyPathPolicyViolation = async (
+  session: ClaudeSessionContext,
+  toolInput: Record<string, unknown>,
+  blockedPath: string | undefined,
+  canonicalizePath: (path: string) => Promise<string>,
+): Promise<string | null> => {
+  const paths = readOnlyToolPathValues(session, toolInput, blockedPath);
+  for (const path of paths) {
+    const violation = await canonicalReadPathViolation(session, path, canonicalizePath);
+    if (violation) {
+      return violation;
+    }
+  }
+  return null;
+};
+
+export const authorizeClaudeToolUse = ({
+  blockedPath,
+  canonicalizePath = realpath,
+  session,
+  toolInput,
+  toolName,
+}: AuthorizeClaudeToolUseInput):
+  | ClaudeToolUseAuthorization
+  | Promise<ClaudeToolUseAuthorization> => {
+  const effectiveToolInput = normalizeToolInputForSession(session, toolName, toolInput);
+  if (isClaudeAskUserQuestionTool(toolName)) {
+    return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+  }
+
+  const role = claudeWorkflowRole(session.input);
+  const odtToolName = canonicalOdtToolName(toolName);
+  if (odtToolName && role) {
+    if (!(AGENT_ROLE_TOOL_POLICY[role] as readonly string[]).includes(odtToolName)) {
+      return {
+        behavior: "deny",
+        message: `Tool ${odtToolName} is not allowed for ${role} sessions.`,
+      };
+    }
+    return { behavior: "allow", autoApprove: true, toolInput: effectiveToolInput };
+  }
+
+  const mutation = mutationForTool(toolName, effectiveToolInput);
+  if (isReadOnlyWorkflowRole(role)) {
+    if (
+      CLAUDE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools.some(
+        (blockedTool) => blockedTool.toLowerCase() === toolName.toLowerCase(),
+      )
+    ) {
+      return {
+        behavior: "deny",
+        message: `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
+      };
+    }
+    if (mutation === "mutating") {
+      return {
+        behavior: "deny",
+        message: `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
+      };
+    }
+    if (mutation === "unknown") {
+      return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+    }
+    return findReadOnlyPathPolicyViolation(
+      session,
+      effectiveToolInput,
+      blockedPath,
+      canonicalizePath,
+    ).then((pathViolation): ClaudeToolUseAuthorization => {
+      if (pathViolation) {
+        return {
+          behavior: "deny",
+          message: `Tool ${toolName} attempted to read outside the session working directory: ${pathViolation}`,
+        };
+      }
+      return { behavior: "allow", autoApprove: true, toolInput: effectiveToolInput };
+    });
+  }
+
+  if (mutation === "read_only") {
+    return findReadOnlyPathPolicyViolation(
+      session,
+      effectiveToolInput,
+      blockedPath,
+      canonicalizePath,
+    ).then(
+      (pathViolation): ClaudeToolUseAuthorization => ({
+        behavior: "allow",
+        autoApprove: !pathViolation,
+        toolInput: effectiveToolInput,
+      }),
+    );
+  }
+
+  return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+};
+
+export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanUseTool => {
+  const { canonicalizePath = realpath, emit, now, randomId, session } = input;
+  return async (toolName, toolInput, options) => {
+    const handleAuthorization = (
+      authorization: ClaudeToolUseAuthorization,
+    ): PermissionResult | Promise<PermissionResult> => {
+      if (authorization.behavior === "deny") {
+        return denyReadOnlyPolicy(authorization.message);
+      }
+      const effectiveToolInput = authorization.toolInput;
+      if (isClaudeAskUserQuestionTool(toolName)) {
+        if (options.signal.aborted) {
+          return {
+            behavior: "deny",
+            message: "Claude question request was aborted.",
+            interrupt: true,
+          };
+        }
+        return requestClaudeAskUserQuestion({
+          emit,
+          now,
+          randomId,
+          session,
+          signal: options.signal,
+          toolInput: effectiveToolInput,
+          toolUseID: options.toolUseID,
+          agentID: options.agentID,
+        }).then((result): PermissionResult => {
+          if (!result) {
+            return {
+              behavior: "deny",
+              message: "Claude question request was aborted.",
+              interrupt: true,
+            };
+          }
+          return withAllowedToolInput(
+            {
+              behavior: "allow",
+              updatedInput: {
+                ...effectiveToolInput,
+                answers: result.answers,
+              },
+            },
+            effectiveToolInput,
+          );
+        });
+      }
+
+      if (authorization.autoApprove) {
+        return withAllowedToolInput({ behavior: "allow" }, effectiveToolInput);
+      }
+      const mutation = mutationForTool(toolName, effectiveToolInput);
+
+      if (options.signal.aborted) {
+        return {
+          behavior: "deny",
+          message: "Claude permission request was aborted.",
+          interrupt: true,
+        };
+      }
+
+      const requestId = randomId();
+      const command = readStringProp(effectiveToolInput, "command");
+      const blockedPath = options.blockedPath
+        ? rewriteSessionPath(session, options.blockedPath)
+        : undefined;
+      const event: Extract<AgentEvent, { type: "approval_required" }> = {
+        type: "approval_required",
+        externalSessionId: session.externalSessionId,
+        timestamp: now(),
+        requestId,
+        requestType: permissionRequestTypeForTool(toolName),
+        title: options.title ?? options.displayName ?? `Approve ${toolName}`,
+        ...(options.description ? { summary: options.description } : {}),
+        ...(options.decisionReason ? { details: options.decisionReason } : {}),
+        ...(blockedPath ? { affectedPaths: [blockedPath] } : {}),
+        ...(command
+          ? {
+              command: {
+                command,
+                workingDirectory: session.input.workingDirectory,
+              },
+            }
+          : {}),
+        tool: {
+          name: toolName,
+          ...(options.displayName ? { title: options.displayName } : {}),
+          input: effectiveToolInput,
+        },
+        mutation,
+        supportedReplyOutcomes: ["approve_once", "reject"],
+        metadata: {
+          runtime: "claude",
+          ...(options.agentID ? { agentId: options.agentID } : {}),
+        },
+        ...claudeSubagentPendingInputRoute(session.externalSessionId, options.agentID),
+      };
+      return new Promise<PermissionResult>((resolveResult) => {
+        const onAbort = () => {
+          session.pendingApprovals.delete(requestId);
+          resolveResult({
+            behavior: "deny",
+            message: "Claude permission request was aborted.",
+            interrupt: true,
+          });
+        };
+        options.signal.addEventListener("abort", onAbort, { once: true });
+        session.pendingApprovals.set(requestId, {
+          event,
+          resolve: (result) => {
+            options.signal.removeEventListener("abort", onAbort);
+            resolveResult(withAllowedToolInput(result, effectiveToolInput));
+          },
+        });
+        if (options.signal.aborted) {
+          onAbort();
+          return;
+        }
+        emitClaudePendingInputEvent({ emit, event, session });
+      });
+    };
+
+    const authorization = authorizeClaudeToolUse({
+      session,
+      toolName,
+      toolInput,
+      ...(options.blockedPath ? { blockedPath: options.blockedPath } : {}),
+      canonicalizePath,
+    });
+    return authorization instanceof Promise
+      ? authorization.then(handleAuthorization)
+      : handleAuthorization(authorization);
+  };
+};

@@ -11,6 +11,7 @@ const baseProps = {
   sessionIdentity: {
     runtimeKind: "opencode" as const,
     workingDirectory: "/repo",
+    externalSessionId: "session-1",
     taskId: "task-1",
     role: "spec" as const,
   },
@@ -65,7 +66,10 @@ describe("AgentChatThreadRow", () => {
       renderToStaticMarkup(
         createElement(AgentChatThreadRow, {
           ...baseProps,
-          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatTranscriptRow,
+          row: {
+            kind: "unexpected",
+            key: "broken",
+          } as unknown as AgentChatTranscriptRow,
         }),
       );
 

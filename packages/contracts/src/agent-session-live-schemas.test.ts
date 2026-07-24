@@ -161,6 +161,25 @@ describe("agent-session live contracts", () => {
         },
       },
       {
+        type: "slash_command_catalog_updated",
+        scope: {
+          repoPath: ref.repoPath,
+          runtimeKind: "claude",
+          workingDirectory: ref.workingDirectory,
+        },
+        catalog: {
+          commands: [
+            {
+              id: "review",
+              trigger: "review",
+              title: "review",
+              source: "command",
+              hints: [],
+            },
+          ],
+        },
+      },
+      {
         type: "transcript_gap",
         repoPath: ref.repoPath,
         message: "Host event replay skipped transcript events.",

@@ -75,7 +75,7 @@ const sessionIdentity = (externalSessionId: string) => ({
 
 const startAgentSessionMock = mock(async () => sessionIdentity("session-1"));
 const sendAgentMessageMock = mock(async () => {});
-const updateAgentSessionModelMock = mock(() => {});
+const updateAgentSessionModelMock = mock(async () => {});
 const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
@@ -171,7 +171,10 @@ let currentPendingMergedPullRequest: PendingMergedPullRequestFixture | null = nu
 let currentLinkingMergedPullRequestTaskId: string | null = null;
 const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
 
-let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
+let currentTaskFixture = createTaskCardFixture({
+  id: "TASK-123",
+  status: "open",
+});
 let currentRepoConfigFixture = createRepoConfigFixture();
 let currentSettingsSnapshotFixture = createSettingsSnapshotFixture();
 let currentSessionsFixture: AgentSessionState[] = [
@@ -518,11 +521,15 @@ const renderPage = async (
               <RepoRuntimeHealthContext.Provider
                 value={{
                   runtimeHealthByRuntime: {
-                    opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+                    opencode: createRepoRuntimeHealthFixture({
+                      status: "ready",
+                    }),
                   },
                   isLoadingRepoRuntimeHealth: false,
                   refreshRepoRuntimeHealth: async () => ({
-                    opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+                    opencode: createRepoRuntimeHealthFixture({
+                      status: "ready",
+                    }),
                   }),
                 }}
               >
@@ -737,7 +744,10 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   beforeEach(async () => {
-    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
+    currentTaskFixture = createTaskCardFixture({
+      id: "TASK-123",
+      status: "open",
+    });
     currentRepoConfigFixture = createRepoConfigFixture();
     currentSettingsSnapshotFixture = createSettingsSnapshotFixture();
     currentSessionsFixture = [
@@ -1183,7 +1193,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "continue spec action navigates to latest spec session without opening modal",
     async () => {
-      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "spec_ready" });
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "spec_ready",
+      });
       const renderer = await renderPage();
 
       await act(async () => {
@@ -1225,7 +1238,10 @@ describe("KanbanPage session start modal flow", () => {
   );
 
   kanbanTest("human request changes opens dedicated feedback modal before mutating", async () => {
-    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+    currentTaskFixture = createTaskCardFixture({
+      id: "TASK-123",
+      status: "human_review",
+    });
     const renderer = await renderPage();
 
     await act(async () => {
@@ -1247,7 +1263,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "human request changes opens the shared start modal with reuse selected by default",
     async () => {
-      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "human_review",
+      });
       const renderer = await renderPage();
 
       await act(async () => {
@@ -1295,10 +1314,14 @@ describe("KanbanPage session start modal flow", () => {
       );
       expect(renderer.getSessionStartModalModel()?.existingSessionOptions).toEqual([
         expect.objectContaining({
-          sourceSession: expect.objectContaining({ externalSessionId: "session-build-latest" }),
+          sourceSession: expect.objectContaining({
+            externalSessionId: "session-build-latest",
+          }),
         }),
         expect.objectContaining({
-          sourceSession: expect.objectContaining({ externalSessionId: "session-build-older" }),
+          sourceSession: expect.objectContaining({
+            externalSessionId: "session-build-older",
+          }),
         }),
       ]);
 
@@ -1311,7 +1334,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "human request changes opens the shared start modal in fresh mode when no builder session exists",
     async () => {
-      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "human_review",
+      });
       const [specSession] = currentSessionsFixture;
       expect(specSession).toBeDefined();
       currentSessionsFixture = specSession ? [specSession] : [];
@@ -1360,7 +1386,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "canceling request-changes session selection restores the feedback draft",
     async () => {
-      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "human_review",
+      });
       const renderer = await renderPage();
 
       await act(async () => {
@@ -1766,7 +1795,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "build action for a QA-rejected task navigates to the QA follow-up builder launch action",
     async () => {
-      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "in_progress" });
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "in_progress",
+      });
       currentTaskFixture.documentSummary.qaReport = {
         has: true,
         updatedAt: "2026-03-09T10:00:00.000Z",
@@ -1793,7 +1825,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "build action for a human-review task navigates to the human-feedback builder launch action",
     async () => {
-      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "human_review",
+      });
       const renderer = await renderPage();
 
       await act(async () => {
@@ -1813,7 +1848,10 @@ describe("KanbanPage session start modal flow", () => {
   );
 
   kanbanTest("open qa navigates directly to the QA review launch action", async () => {
-    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "in_progress" });
+    currentTaskFixture = createTaskCardFixture({
+      id: "TASK-123",
+      status: "in_progress",
+    });
     const renderer = await renderPage();
 
     await act(async () => {
@@ -1889,7 +1927,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "build action routes human review tasks into the human-changes builder launch action",
     async () => {
-      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "human_review",
+      });
       const renderer = await renderPage();
 
       await act(async () => {

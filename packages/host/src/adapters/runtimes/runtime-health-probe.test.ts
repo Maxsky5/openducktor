@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPathOptions } from "../system/tool-discovery";
@@ -33,7 +36,10 @@ const createMissingProbe = (options: ToolDiscoveryPathOptions = {}) =>
 
 describe("createRuntimeHealthProbe", () => {
   test("reports actionable missing OpenCode diagnostics", async () => {
-    const probe = createMissingProbe({ homeDir: "/missing/home", platform: "linux" });
+    const probe = createMissingProbe({
+      homeDir: "/missing/home",
+      platform: "linux",
+    });
 
     const health = await Effect.runPromise(probe.getRuntimeHealth("opencode"));
 
@@ -109,5 +115,57 @@ describe("createRuntimeHealthProbe", () => {
     );
     expect(health.error).toContain("PATH");
     expect(health.error).toContain("Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.");
+  });
+
+  test("probes Claude Code through tool discovery", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "openducktor-claude-health-"));
+    const executablePath = join(tempDir, "claude");
+    const calls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
+    const systemCommands: SystemCommandPort = {
+      ...missingSystemCommands,
+      resolveCommandPath(command, options) {
+        if (options?.searchPath) {
+          return Effect.succeed(null);
+        }
+        if (command === "claude") {
+          return Effect.succeed(executablePath);
+        }
+        return Effect.succeed(null);
+      },
+      versionCommand(...input) {
+        calls.push(input);
+        return Effect.succeed("0.3.191");
+      },
+    };
+    try {
+      await writeFile(executablePath, "claude-sdk-binary");
+      const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+
+      const health = await Effect.runPromise(probe.getRuntimeHealth("claude"));
+
+      expect(health).toEqual({
+        kind: "claude",
+        enabled: true,
+        ok: true,
+        version: `0.3.191 (${executablePath})`,
+        error: null,
+      });
+      expect(calls).toEqual([[executablePath, ["--version"], { timeoutMs: 2_000 }]]);
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("reports missing Claude Code executable through tool discovery", async () => {
+    const probe = createRuntimeHealthProbe(
+      missingSystemCommands,
+      createToolDiscovery(missingSystemCommands),
+    );
+
+    const health = await Effect.runPromise(probe.getRuntimeHealth("claude"));
+
+    expect(health.ok).toBe(false);
+    expect(health.error).toContain("claude not found. Checked OPENDUCKTOR_CLAUDE_BINARY");
+    expect(health.error).toContain("Install Claude Code");
   });
 });

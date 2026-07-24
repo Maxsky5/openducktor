@@ -811,7 +811,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
             hostUrl: "http://127.0.0.1:14327",
             hostToken: "token-1",
           }),
-        startupTimeoutMs: 100,
+        startupTimeoutMs: 1_000,
         retryDelayMs: 5,
         portAllocator: () => Effect.succeed(43123),
         readinessProbe: () =>

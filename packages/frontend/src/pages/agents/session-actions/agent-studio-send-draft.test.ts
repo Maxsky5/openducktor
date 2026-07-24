@@ -39,8 +39,18 @@ const textDraft = (text: string): AgentChatComposerDraft => ({
   attachments: [],
 });
 
-const resolveParts = (input: Parameters<typeof resolveAgentStudioSendDraftParts>[0]) =>
-  Promise.resolve(resolveAgentStudioSendDraftParts(input));
+type ResolvePartsInput = Parameters<typeof resolveAgentStudioSendDraftParts>[0];
+
+const resolveParts = (
+  input: Omit<ResolvePartsInput, "supportsAttachments"> &
+    Partial<Pick<ResolvePartsInput, "supportsAttachments">>,
+) =>
+  Promise.resolve(
+    resolveAgentStudioSendDraftParts({
+      supportsAttachments: true,
+      ...input,
+    }),
+  );
 
 describe("resolveAgentStudioSendDraftParts", () => {
   test("returns text message parts for a normal draft", async () => {
@@ -112,6 +122,33 @@ describe("resolveAgentStudioSendDraftParts", () => {
         },
         reusablePrompts: [],
         selectedModelDescriptor,
+        stageAttachment,
+      }),
+    ).resolves.toBeNull();
+    expect(stageAttachment).not.toHaveBeenCalled();
+  });
+
+  test("rejects attachments when the runtime cannot encode them", async () => {
+    const stageAttachment = mock(async () => "/tmp/brief.pdf");
+    await expect(
+      resolveParts({
+        draft: {
+          segments: [createTextSegment("review")],
+          attachments: [
+            createComposerAttachment(
+              {
+                name: "brief.pdf",
+                kind: "pdf",
+                mime: "application/pdf",
+                path: "/tmp/brief.pdf",
+              },
+              "attachment-1",
+            ),
+          ],
+        },
+        reusablePrompts: [],
+        selectedModelDescriptor,
+        supportsAttachments: false,
         stageAttachment,
       }),
     ).resolves.toBeNull();

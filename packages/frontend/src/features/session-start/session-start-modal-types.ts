@@ -1,4 +1,4 @@
-import type { GitTargetBranch } from "@openducktor/contracts";
+import type { GitTargetBranch, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
@@ -20,6 +20,7 @@ export type SessionStartModalIntent = {
   initialTargetBranchError?: string | null;
   postStartAction: SessionStartPostAction;
   message?: string;
+  requestedRuntimeKind?: RuntimeKind | null;
   selectedModel?: AgentModelSelection | null;
   title: string;
   description?: string;

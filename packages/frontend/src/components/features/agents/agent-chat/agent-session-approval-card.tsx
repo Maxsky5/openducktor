@@ -28,6 +28,8 @@ const getApprovalOutcomeButtonVariant = (
 const AFFECTED_PATH_CODE_CLASS_NAME =
   "rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
 
+const formatToolInput = (input: Record<string, unknown>): string => JSON.stringify(input, null, 2);
+
 type AgentSessionApprovalCardProps = {
   request: AgentApprovalRequest;
   runtimeSupportedReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
@@ -67,6 +69,8 @@ export function AgentSessionApprovalCard({
     ? "This runtime does not support any declared approval outcomes for this request."
     : "Runtime approval capabilities are unavailable for this request. Refresh runtime checks or open the session again, then try again.";
   const sourceLabel = request.source?.kind === "subagent" ? "Subagent request" : null;
+  const toolInputText =
+    request.tool?.input && !request.command ? formatToolInput(request.tool.input) : null;
 
   return (
     <section className="rounded-xl border border-warning-border bg-warning-surface shadow-sm">
@@ -114,6 +118,14 @@ export function AgentSessionApprovalCard({
           ) : null}
           {request.tool ? (
             <p className="text-xs text-foreground">Tool: {request.tool.name}</p>
+          ) : null}
+          {toolInputText ? (
+            <div className="space-y-1">
+              <p className="text-xs text-foreground">Tool input:</p>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted p-2 font-mono text-[11px] leading-relaxed text-foreground">
+                {toolInputText}
+              </pre>
+            </div>
           ) : null}
         </div>
 

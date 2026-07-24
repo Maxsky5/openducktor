@@ -134,6 +134,7 @@ const baseArgs: BuildArgs = {
     selectedModelSelection: null,
     selectedModelDescriptor: null,
     isSelectionCatalogLoading: false,
+    supportsAttachments: true,
     supportsSlashCommands: true,
     supportsFileSearch: true,
     supportsSkillReferences: false,

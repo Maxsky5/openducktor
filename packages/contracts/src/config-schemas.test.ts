@@ -235,6 +235,7 @@ describe("config-schemas", () => {
 
     expect(snapshot.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
     expect(globalConfig.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
+    expect(DEFAULT_AGENT_RUNTIMES.claude).toEqual({ enabled: false });
   });
 
   test("defaults missing and enabled-only codex runtime config", () => {
@@ -681,7 +682,12 @@ describe("config-schemas", () => {
     expect(() =>
       reusablePromptsSchema.parse([
         { id: "prompt-1", name: "review", description: "", content: "Body" },
-        { id: " prompt-1 ", name: "summarize", description: "", content: "Body" },
+        {
+          id: " prompt-1 ",
+          name: "summarize",
+          description: "",
+          content: "Body",
+        },
       ]),
     ).toThrow("Duplicate reusable prompt id: prompt-1");
   });
@@ -703,7 +709,10 @@ describe("config-schemas", () => {
 
   test("rejects invalid kanban empty-column display modes", () => {
     expect(() =>
-      kanbanSettingsSchema.parse({ doneVisibleDays: 1, emptyColumnDisplay: "compact" }),
+      kanbanSettingsSchema.parse({
+        doneVisibleDays: 1,
+        emptyColumnDisplay: "compact",
+      }),
     ).toThrow();
   });
 
@@ -762,7 +771,10 @@ describe("config-schemas", () => {
       { eventId: "taskProgressedToReadyForDev", actionIds: [] },
       { eventId: "taskProgressedToAiReview", actionIds: [] },
       { eventId: "taskRejectedByQa", actionIds: [] },
-      { eventId: "taskProgressedToHumanReview", actionIds: ["startGeneratePullRequest"] },
+      {
+        eventId: "taskProgressedToHumanReview",
+        actionIds: ["startGeneratePullRequest"],
+      },
     ]);
   });
 

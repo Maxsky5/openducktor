@@ -7,6 +7,7 @@ import {
   agentSessionRecordSchema,
   agentSessionStopTargetSchema,
   buildSessionBootstrapSchema,
+  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   formatRuntimeDescriptorSchemaIssue,
   gitBranchSchema,
@@ -169,6 +170,7 @@ describe("runtime schemas", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).not.toContain(
       "subagent_reference",
     );
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsAttachments).toBe(true);
   });
 
   test("Codex descriptor advertises its system slash command input", () => {
@@ -176,6 +178,40 @@ describe("runtime schemas", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).toContain(
       "slash_command",
     );
+  });
+
+  test("Claude descriptor parses with SDK-native prompt and subagent capabilities", () => {
+    const parsed = runtimeDescriptorSchema.parse(CLAUDE_RUNTIME_DESCRIPTOR);
+
+    expect(parsed).toEqual(CLAUDE_RUNTIME_DESCRIPTOR);
+    expect(parsed.capabilities.sessionLifecycle.supportsQueuedUserMessages).toBe(true);
+    expect(parsed.capabilities.promptInput).toMatchObject({
+      supportsAttachments: true,
+      supportsSlashCommands: true,
+      supportsFileSearch: true,
+      supportsSkillReferences: true,
+      supportsSubagentReferences: false,
+    });
+    expect(parsed.capabilities.promptInput.supportedParts).toEqual(
+      expect.arrayContaining([
+        "text",
+        "slash_command",
+        "skill_mention",
+        "file_reference",
+        "folder_reference",
+      ]),
+    );
+    expect(parsed.capabilities.promptInput.supportedParts).not.toContain("subagent_reference");
+    expect(parsed.workflowToolAliasesByCanonical.odt_read_task).toContain(
+      "mcp__openducktor__odt_read_task",
+    );
+    expect(parsed.capabilities.optionalSurfaces).toMatchObject({
+      supportsProfiles: false,
+      supportsVariants: true,
+      supportsTodos: true,
+      supportsSubagents: true,
+      supportedSubagentExecutionModes: ["foreground", "background"],
+    });
   });
 
   test("runtime ref identifies a concrete running runtime", () => {
@@ -226,10 +262,30 @@ describe("runtime schemas", () => {
     expect(parsed.documentSummary.qaReport.has).toBe(false);
     expect(parsed.documentSummary.qaReport.verdict).toBe("not_reviewed");
     expect(parsed.agentWorkflows).toEqual({
-      spec: { required: false, canSkip: true, available: false, completed: false },
-      planner: { required: false, canSkip: true, available: false, completed: false },
-      builder: { required: true, canSkip: false, available: false, completed: false },
-      qa: { required: false, canSkip: true, available: false, completed: false },
+      spec: {
+        required: false,
+        canSkip: true,
+        available: false,
+        completed: false,
+      },
+      planner: {
+        required: false,
+        canSkip: true,
+        available: false,
+        completed: false,
+      },
+      builder: {
+        required: true,
+        canSkip: false,
+        available: false,
+        completed: false,
+      },
+      qa: {
+        required: false,
+        canSkip: true,
+        available: false,
+        completed: false,
+      },
     });
   });
 
@@ -267,10 +323,30 @@ describe("runtime schemas", () => {
         },
       },
       agentWorkflows: {
-        spec: { required: true, canSkip: false, available: true, completed: true },
-        planner: { required: true, canSkip: false, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        spec: {
+          required: true,
+          canSkip: false,
+          available: true,
+          completed: true,
+        },
+        planner: {
+          required: true,
+          canSkip: false,
+          available: true,
+          completed: false,
+        },
+        builder: {
+          required: true,
+          canSkip: false,
+          available: true,
+          completed: false,
+        },
+        qa: {
+          required: true,
+          canSkip: false,
+          available: false,
+          completed: false,
+        },
       },
       updatedAt: "2026-02-20T13:00:00.000Z",
       createdAt: "2026-02-20T12:00:00.000Z",
@@ -1140,6 +1216,25 @@ describe("runtime schemas", () => {
     });
   });
 
+  test("runtime route schemas represent host-owned services without a fake transport", () => {
+    expect(
+      runtimeInstanceSummarySchema.parse({
+        kind: "claude",
+        runtimeId: "runtime-claude",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: {
+          type: "host_service",
+          identity: " runtime-claude ",
+        },
+        startedAt: "2026-01-01T00:00:00.000Z",
+        descriptor: CLAUDE_RUNTIME_DESCRIPTOR,
+      }).runtimeRoute,
+    ).toEqual({ type: "host_service", identity: "runtime-claude" });
+  });
+
   test("runtime route schema rejects malformed stdio payloads", () => {
     const baseSummary = {
       kind: "opencode",
@@ -1334,6 +1429,7 @@ describe("runtime schemas", () => {
             "plugin_mention",
             "runtime_specific",
           ],
+          supportsAttachments: true,
           supportsSlashCommands: true,
           supportsFileSearch: true,
           supportsSkillReferences: true,
@@ -1535,19 +1631,41 @@ describe("runtime schemas", () => {
     ]);
   });
 
-  test("slash command catalog rejects malformed triggers", () => {
-    expect(() =>
+  test("slash command catalog accepts runtime command names with whitespace", () => {
+    expect(
       slashCommandCatalogSchema.parse({
         commands: [
           {
-            id: "review",
-            trigger: "/review now",
-            title: "review",
-            hints: [],
+            id: "gitnexus:detect_impact (MCP)",
+            trigger: "gitnexus:detect_impact (MCP)",
+            title: "gitnexus:detect_impact (MCP)",
+            source: "command",
+            hints: ["scope", "base_ref"],
           },
         ],
-      }),
-    ).toThrow("Trigger must be a single token without a leading slash");
+      }).commands[0]?.trigger,
+    ).toBe("gitnexus:detect_impact (MCP)");
+  });
+
+  test("slash command catalog rejects malformed triggers", () => {
+    const result = slashCommandCatalogSchema.safeParse({
+      commands: [
+        {
+          id: "review",
+          trigger: "review/now",
+          title: "review",
+          hints: [],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("Expected malformed slash command trigger to be rejected");
+    }
+    expect(result.error.issues[0]?.message).toBe(
+      'Invalid slash command trigger "review/now": must contain no slashes',
+    );
   });
 
   test("slash command catalog rejects duplicate ids and triggers", () => {

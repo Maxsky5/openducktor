@@ -356,6 +356,7 @@ describe("agent-runtime capability policies", () => {
         agentRuntimes: {
           opencode: { enabled: false },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true },
+          claude: { enabled: false },
         },
       }).map((definition) => definition.kind),
     ).toEqual(["codex"]);
@@ -366,6 +367,7 @@ describe("agent-runtime capability policies", () => {
         agentRuntimes: {
           opencode: { enabled: true },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
+          claude: { enabled: false },
         },
         startMode: "fresh",
       }).map((definition) => definition.kind),
@@ -377,6 +379,7 @@ describe("agent-runtime capability policies", () => {
         agentRuntimes: {
           opencode: { enabled: false },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
+          claude: { enabled: false },
         },
       }).map((definition) => definition.kind),
     ).toEqual([]);

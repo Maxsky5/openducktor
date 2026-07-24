@@ -21,6 +21,7 @@ import {
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
+import { reportModelUpdateError } from "@/features/agent-chat-composer/model-selection/model-update-error";
 import { useAgentStudioDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import {
@@ -54,9 +55,9 @@ type UseAgentStudioChatComposerArgs = {
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
-  ) => void;
+  ) => Promise<void> | void;
   loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  loadSlashCommands?: (runtimeRef: RepoRuntimeRef) => Promise<AgentSlashCommandCatalog>;
+  loadSlashCommands?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSlashCommandCatalog>;
   loadSkills?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
   loadSubagents?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSubagentCatalog>;
   loadFileSearch?: (
@@ -72,6 +73,7 @@ type AgentStudioChatComposerState = {
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
+  supportsAttachments: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
@@ -160,7 +162,11 @@ export function useAgentStudioChatComposer({
     isAwaitingRepoSettingsForWorkspaceRepoPath,
     applyDraftSelection,
     syncDraftSelection,
-  } = useAgentStudioDraftModelSelectionState({ workspaceRepoPath, repoSettings, role });
+  } = useAgentStudioDraftModelSelectionState({
+    workspaceRepoPath,
+    repoSettings,
+    role,
+  });
   const selectedRuntimeKind = useMemo(
     () =>
       resolveChatComposerSelectedRuntimeKind({
@@ -211,6 +217,7 @@ export function useAgentStudioChatComposer({
       ? promptInputRuntime.runtimeRef.runtimeKind
       : promptInputRuntime.runtimeKind;
   const {
+    supportsAttachments,
     runtimeSupportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
@@ -319,7 +326,12 @@ export function useAgentStudioChatComposer({
       return;
     }
     lastSessionModelRepairKeyRef.current = sessionModelRepairCommand.key;
-    updateAgentSessionModel(sessionModelRepairCommand.session, sessionModelRepairCommand.selection);
+    void Promise.resolve(
+      updateAgentSessionModel(
+        sessionModelRepairCommand.session,
+        sessionModelRepairCommand.selection,
+      ),
+    ).catch(reportModelUpdateError);
   }, [sessionModelRepairCommand, updateAgentSessionModel]);
 
   const searchFiles = useMemo(
@@ -344,8 +356,13 @@ export function useAgentStudioChatComposer({
     variantOptions,
     agentAccentColorsByProfileId,
   } = useMemo(
-    () => resolveModelSelectionOptions({ selectionCatalog, selectedModelSelection }),
-    [selectedModelSelection, selectionCatalog],
+    () =>
+      resolveModelSelectionOptions({
+        liveSession: hasSessionTarget,
+        selectionCatalog,
+        selectedModelSelection,
+      }),
+    [hasSessionTarget, selectedModelSelection, selectionCatalog],
   );
 
   const selectedSessionContextUsage = useSelectedSessionContextUsage({
@@ -361,7 +378,7 @@ export function useAgentStudioChatComposer({
       applyDraftSelection,
       selectedModelSelection,
       selectionCatalog,
-      selectedRuntimeKind,
+      selectedRuntimeKind: selectedTargetRuntimeKind,
     });
 
   return {
@@ -371,6 +388,7 @@ export function useAgentStudioChatComposer({
     selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
     supportsProfiles,
+    supportsAttachments,
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,

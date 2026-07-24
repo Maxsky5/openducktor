@@ -220,6 +220,7 @@ export function useSessionStartModalRunner({
     runtimeOptions,
     supportsProfiles,
     supportsVariants,
+    catalogError,
     isCatalogLoading,
     agentOptions,
     modelOptions,
@@ -385,6 +386,7 @@ export function useSessionStartModalRunner({
       runtimeOptions,
       supportsProfiles,
       supportsVariants,
+      selectionCatalogError: catalogError,
       isSelectionCatalogLoading: isCatalogLoading,
       agentOptions,
       modelOptions,
@@ -420,6 +422,7 @@ export function useSessionStartModalRunner({
   }, [
     agentOptions,
     availableStartModes,
+    catalogError,
     confirmModal,
     existingSessionOptions,
     handleSelectAgent,

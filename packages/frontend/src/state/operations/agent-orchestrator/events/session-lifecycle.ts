@@ -1,8 +1,10 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import {
   appendSessionMessage,
+  createSessionMessagesState,
+  sessionMessageBelongsToSourceMessage,
   upsertSessionMessage,
   upsertUserSessionMessage,
 } from "../support/messages";
@@ -90,18 +92,12 @@ const resolveFinalAssistantSnapshot = ({
 
 export const handleSessionStarted = (
   context: Pick<SessionLifecycleEventContext, "session" | "store">,
-  event: Extract<SessionEvent, { type: "session_started" }>,
+  _event: Extract<SessionEvent, { type: "session_started" }>,
 ): void => {
   context.store.updateSession(context.session.identity, (current) => ({
     ...current,
     status: "running",
     runtimeStatusMessage: null,
-    messages: appendSessionMessage(current, {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: event.message,
-      timestamp: event.timestamp,
-    }),
   }));
 };
 
@@ -111,12 +107,14 @@ export const handleAssistantMessage = (
 ): void => {
   context.store.updateSession(context.session.identity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
-    const durationMs = context.turn.resolveTurnDurationMs(
-      context.session.key,
-      context.session.identity.externalSessionId,
-      event.timestamp,
-      settledMessages,
-    );
+    const durationMs =
+      event.durationMs ??
+      context.turn.resolveTurnDurationMs(
+        context.session.key,
+        context.session.identity.externalSessionId,
+        event.timestamp,
+        settledMessages,
+      );
     const shouldPreserveContextUsage =
       nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
       current.contextUsage !== null;
@@ -142,6 +140,29 @@ export const handleAssistantMessage = (
   });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
+};
+
+export const handleTranscriptRetracted = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+  event: Extract<SessionEvent, { type: "transcript_retracted" }>,
+): void => {
+  const retractedMessageIds = new Set(event.messageIds);
+  const belongsToRetractedMessage = (message: AgentChatMessage): boolean => {
+    for (const retractedMessageId of retractedMessageIds) {
+      if (sessionMessageBelongsToSourceMessage(message, retractedMessageId)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    messages: createSessionMessagesState(
+      current.externalSessionId,
+      current.messages.items.filter((message) => !belongsToRetractedMessage(message)),
+      current.messages.version + 1,
+    ),
+  }));
 };
 
 export const handleUserMessage = (

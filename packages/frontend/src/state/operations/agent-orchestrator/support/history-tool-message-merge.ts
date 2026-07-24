@@ -150,6 +150,12 @@ export const matchesLoadedTool = (
     return false;
   }
 
+  const loadedCallId = trimToolCallId(loadedMessage.meta.callId);
+  const candidateCallId = trimToolCallId(candidate.meta.callId);
+  if (loadedCallId.length > 0 && candidateCallId.length > 0) {
+    return loadedCallId === candidateCallId;
+  }
+
   const loadedScopedId = parseToolScopedPartId(loadedMessage.id);
   const candidateScopedId = parseToolScopedPartId(candidate.id);
   if (
@@ -158,12 +164,6 @@ export const matchesLoadedTool = (
     loadedScopedId.messageId !== candidateScopedId.messageId
   ) {
     return false;
-  }
-
-  const loadedCallId = trimToolCallId(loadedMessage.meta.callId);
-  const candidateCallId = trimToolCallId(candidate.meta.callId);
-  if (loadedCallId.length > 0 && candidateCallId.length > 0) {
-    return loadedCallId === candidateCallId;
   }
 
   return loadedMessage.meta.partId === candidate.meta.partId;

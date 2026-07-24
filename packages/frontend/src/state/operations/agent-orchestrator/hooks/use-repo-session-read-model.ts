@@ -355,17 +355,38 @@ export const useRepoSessionReadModel = ({
                 runtimeKind: envelope.scope.runtimeKind,
                 workingDirectory: envelope.scope.workingDirectory,
               };
-        runOrchestratorSideEffect(
-          "agent-session-live-invalidate-skills",
+        const invalidations = [
           queryClient.invalidateQueries({
             queryKey: runtimeCatalogQueryKeys.repoSkillsScope(catalogScope),
           }),
+        ];
+        if (envelope.scope.workingDirectory !== undefined) {
+          invalidations.push(
+            queryClient.invalidateQueries({
+              queryKey: runtimeCatalogQueryKeys.repoSlashCommands({
+                repoPath: envelope.scope.repoPath,
+                runtimeKind: envelope.scope.runtimeKind,
+                workingDirectory: envelope.scope.workingDirectory,
+              }),
+            }),
+          );
+        }
+        runOrchestratorSideEffect(
+          "agent-session-live-invalidate-catalog",
+          Promise.all(invalidations),
           {
             tags: {
               repoPath: envelope.scope.repoPath,
               runtimeKind: envelope.scope.runtimeKind,
             },
           },
+        );
+        return;
+      }
+      if (envelope.type === "slash_command_catalog_updated") {
+        queryClient.setQueryData(
+          runtimeCatalogQueryKeys.repoSlashCommands(envelope.scope),
+          envelope.catalog,
         );
         return;
       }

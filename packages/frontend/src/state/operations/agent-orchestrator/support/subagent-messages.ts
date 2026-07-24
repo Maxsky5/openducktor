@@ -241,11 +241,13 @@ const mergeSubagentMeta = (
   }
   const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
   const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
+  const sourceMessageId = incomingMeta.sourceMessageId ?? existingMeta?.sourceMessageId;
 
   return {
     kind: "subagent",
     partId: incomingMeta.partId,
     correlationKey: incomingMeta.correlationKey,
+    ...(sourceMessageId ? { sourceMessageId } : {}),
     status,
     ...(typeof agent === "string" ? { agent } : {}),
     ...(typeof prompt === "string" ? { prompt } : {}),

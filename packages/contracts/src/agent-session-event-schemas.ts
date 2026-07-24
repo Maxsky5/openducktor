@@ -18,6 +18,7 @@ import {
 } from "./agent-session-schemas";
 import { type FileContent, type FileDiff, fileContentSchema, fileDiffSchema } from "./git-schemas";
 import { type SkillDescriptor, skillDescriptorSchema } from "./skill-schemas";
+import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { type SubagentDescriptor, subagentDescriptorSchema } from "./subagent-schemas";
 
 const isoTimestampSchema = z.string().datetime({ offset: true });
@@ -38,7 +39,7 @@ type ExactOptional<T> = T extends SkillDescriptor | SubagentDescriptor
         }
       : T;
 
-const agentFileReferenceSchema = z
+export const agentFileReferenceSchema = z
   .object({
     id: z.string(),
     path: z.string(),
@@ -47,13 +48,14 @@ const agentFileReferenceSchema = z
   })
   .strict();
 
-const agentAttachmentReferenceSchema = z
+export const agentAttachmentReferenceSchema = z
   .object({
     id: z.string(),
     path: z.string(),
     name: z.string(),
     kind: z.enum(["image", "audio", "video", "pdf"]),
     mime: z.string().optional(),
+    localPreviewAvailable: z.boolean().optional(),
   })
   .strict();
 
@@ -78,6 +80,7 @@ type AgentTranscriptAttachmentReference = {
   name: string;
   kind: "image" | "audio" | "video" | "pdf";
   mime?: string;
+  localPreviewAvailable?: boolean;
 };
 
 type AgentTranscriptUserMessageSourceText = {
@@ -141,10 +144,10 @@ const inferredAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-const agentUserMessageDisplayPartSchema =
+export const agentUserMessageDisplayPartSchema =
   inferredAgentUserMessageDisplayPartSchema as unknown as z.ZodType<AgentTranscriptUserMessageDisplayPart>;
 
-const agentSessionTodoItemSchema = z
+export const agentSessionTodoItemSchema = z
   .object({
     id: z.string(),
     content: z.string(),
@@ -307,7 +310,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-const agentStreamPartSchema: z.ZodType<AgentTranscriptStreamPart> =
+export const agentStreamPartSchema: z.ZodType<AgentTranscriptStreamPart> =
   inferredAgentStreamPartSchema as unknown as z.ZodType<AgentTranscriptStreamPart>;
 
 const agentSessionStatusSchema = z.discriminatedUnion("type", [
@@ -418,14 +421,23 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
     type: z.literal("assistant_message"),
     messageId: z.string(),
     message: z.string(),
+    durationMs: finiteNonNegativeNumberSchema.optional(),
     totalTokens: finiteNonNegativeNumberSchema.optional(),
     contextWindow: finiteNonNegativeNumberSchema.optional(),
     model: agentModelSelectionSchema.optional(),
   }),
   transcriptEventSchema({
+    type: z.literal("transcript_retracted"),
+    messageIds: z.array(z.string()),
+  }),
+  transcriptEventSchema({
     type: z.literal("session_context_updated"),
     totalTokens: finiteNonNegativeNumberSchema,
     contextWindow: finiteNonNegativeNumberSchema.optional(),
+  }),
+  transcriptEventSchema({
+    type: z.literal("session_context_error"),
+    message: z.string(),
   }),
   transcriptEventSchema({
     type: z.literal("user_message"),
@@ -442,6 +454,10 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
   transcriptEventSchema({
     type: z.literal("session_todos_updated"),
     todos: z.array(agentSessionTodoItemSchema),
+  }),
+  transcriptEventSchema({
+    type: z.literal("runtime_slash_commands_changed"),
+    catalog: slashCommandCatalogSchema,
   }),
   transcriptEventSchema({
     type: z.literal("session_compaction_started"),
@@ -512,6 +528,7 @@ export type AgentSessionTranscriptEventType =
   | "session_started"
   | "assistant_delta"
   | "assistant_message"
+  | "transcript_retracted"
   | "user_message"
   | "assistant_part"
   | "session_todos_updated"
@@ -527,6 +544,7 @@ const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventT
   "session_started",
   "assistant_delta",
   "assistant_message",
+  "transcript_retracted",
   "user_message",
   "assistant_part",
   "session_todos_updated",

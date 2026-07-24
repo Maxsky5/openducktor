@@ -74,6 +74,7 @@ export const fromPersistedSessionRecord = ({
     historyLoadState: "not_requested",
     messages: createSessionMessagesState(identity.externalSessionId),
     contextUsage: null,
+    contextUsageError: null,
     pendingApprovals: [],
     pendingQuestions: [],
     selectedModel: record.selectedModel

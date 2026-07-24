@@ -1,0 +1,642 @@
+import { describe, expect, test } from "bun:test";
+import {
+  type AgentSessionControlSummary,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+} from "@openducktor/contracts";
+import { Effect } from "effect";
+import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
+import type {
+  AgentSessionLiveAdapterChange,
+  AgentSessionRuntimeAdapterPort,
+} from "../../ports/agent-session-live-adapter-port";
+import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
+import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
+import type { ClaudeSessionContext, ClaudeSessionStore } from "../claude/claude-agent-sdk-types";
+import {
+  createClaudeAgentSdkEventHub,
+  createClaudeLiveSessionAdapterPreparer,
+} from "./claude-live-session-adapter";
+
+const runtime = {
+  kind: "claude" as const,
+  runtimeId: "runtime-1",
+  repoPath: "/repo",
+  taskId: null,
+  role: "workspace" as const,
+  workingDirectory: "/repo",
+  runtimeRoute: { type: "host_service" as const, identity: "runtime-1" },
+  startedAt: "2026-07-17T10:00:00.000Z",
+  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+};
+
+const summary = {
+  externalSessionId: "session-1",
+  runtimeKind: "claude",
+  workingDirectory: "/repo/worktree",
+  title: "Claude build",
+  role: "build",
+  startedAt: "2026-07-17T10:01:00.000Z",
+  status: "idle",
+} as const satisfies AgentSessionControlSummary;
+
+const session: ClaudeSessionContext = {
+  acceptedUserMessages: [],
+  activeSdkUserTurnCount: 0,
+  abortController: new AbortController(),
+  activity: "idle",
+  externalSessionId: "session-1",
+  input: {
+    repoPath: "/repo",
+    runtimeKind: "claude",
+    workingDirectory: "/repo/worktree",
+    runtimePolicy: { kind: "claude" },
+    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    systemPrompt: "Build",
+  },
+  model: undefined,
+  pendingApprovals: new Map(),
+  pendingQuestions: new Map(),
+  queuedSdkMessages: [],
+  pendingUserTurnCount: 0,
+  queue: new AsyncInputQueue(),
+  runtimeId: "runtime-1",
+  startedAt: summary.startedAt,
+  summary,
+  streamAssistantMessageOrdinal: 0,
+  streamAssistantMessageIdsByBlockIndex: new Map(),
+  subagentMessageIdsByTaskId: new Map(),
+  subagentTaskIdsByToolUseId: new Map(),
+  toolEndedAtMsByCallId: new Map(),
+  toolInputsByCallId: new Map(),
+  toolMessageIdsByCallId: new Map(),
+  toolNamesByCallId: new Map(),
+  toolStartedAtMsByCallId: new Map(),
+  todosById: new Map(),
+};
+
+const startInput = {
+  repoPath: "/repo",
+  runtimeKind: "claude" as const,
+  workingDirectory: "/repo/worktree",
+  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  systemPrompt: "Build",
+};
+
+const deferred = <Value>() => {
+  let resolve!: (value: Value) => void;
+  const promise = new Promise<Value>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
+
+const createHarness = async () => {
+  const changes: AgentSessionLiveAdapterChange[] = [];
+  const eventHub = createClaudeAgentSdkEventHub();
+  let startSessionImpl: ClaudeAgentSdkService["startSession"] = () =>
+    Effect.die("startSession was not configured");
+  let resumeSessionImpl: ClaudeAgentSdkService["resumeSession"] = () => Effect.succeed(summary);
+  let loadSessionContextUsageImpl: ClaudeAgentSdkService["loadSessionContextUsage"] = () =>
+    Effect.die("loadSessionContextUsage was not configured");
+  let sendUserMessageImpl: ClaudeAgentSdkService["sendUserMessage"] = () =>
+    Effect.die("sendUserMessage was not configured");
+  let updateSessionModelImpl: ClaudeAgentSdkService["updateSessionModel"] = () =>
+    Effect.die("updateSessionModel was not configured");
+  let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
+  let mutationBarrier:
+    | {
+        entered: ReturnType<typeof deferred<void>>;
+        release: ReturnType<typeof deferred<void>>;
+      }
+    | undefined;
+  startSessionImpl = () => {
+    eventHub.emit(session, {
+      type: "session_started",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:00.000Z",
+      message: "Started build session",
+    });
+    eventHub.emit(session, {
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:01.000Z",
+    });
+    return Effect.succeed(summary);
+  };
+  const service = {
+    startSession: (
+      input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
+      runtimeId: string,
+    ) => startSessionImpl(input, runtimeId),
+    resumeSession: (
+      input: Parameters<ClaudeAgentSdkService["resumeSession"]>[0],
+      runtimeId: string,
+    ) => resumeSessionImpl(input, runtimeId),
+    loadSessionContextUsage: (
+      input: Parameters<ClaudeAgentSdkService["loadSessionContextUsage"]>[0],
+    ) => loadSessionContextUsageImpl(input),
+    sendUserMessage: (
+      input: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0],
+      runtimeId: string,
+    ) => sendUserMessageImpl(input, runtimeId),
+    updateSessionModel: (input: Parameters<ClaudeAgentSdkService["updateSessionModel"]>[0]) =>
+      updateSessionModelImpl(input),
+    releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
+      releaseSessionImpl(input),
+  } as unknown as ClaudeAgentSdkService;
+  const liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation"> = {
+    runAdapterMutation: (mutation) => {
+      const barrier = mutationBarrier;
+      mutationBarrier = undefined;
+      const waitForBarrier = barrier
+        ? Effect.promise(async () => {
+            barrier.entered.resolve();
+            await barrier.release.promise;
+          })
+        : Effect.void;
+      return waitForBarrier.pipe(
+        Effect.zipRight(
+          Effect.map(mutation, ({ value, changes: mutationChanges }) => {
+            changes.push(...mutationChanges);
+            return value;
+          }),
+        ),
+      );
+    },
+  };
+  const prepare = createClaudeLiveSessionAdapterPreparer({
+    eventHub,
+    liveSessionLifecycle,
+    service,
+    sessionStore: {
+      get: (externalSessionId) =>
+        externalSessionId === session.externalSessionId
+          ? (session as unknown as ReturnType<ClaudeSessionStore["get"]>)
+          : undefined,
+    } as ClaudeSessionStore,
+  });
+  const prepared = await Effect.runPromise(prepare(runtime));
+  await Effect.runPromise(prepared.startForwarding());
+  return {
+    adapter: prepared.adapter as AgentSessionRuntimeAdapterPort,
+    changes,
+    eventHub,
+    setStartSession: (implementation: ClaudeAgentSdkService["startSession"]) => {
+      startSessionImpl = implementation;
+    },
+    setResumeSession: (implementation: ClaudeAgentSdkService["resumeSession"]) => {
+      resumeSessionImpl = implementation;
+    },
+    setLoadSessionContextUsage: (
+      implementation: ClaudeAgentSdkService["loadSessionContextUsage"],
+    ) => {
+      loadSessionContextUsageImpl = implementation;
+    },
+    pauseNextMutation: () => {
+      const barrier = { entered: deferred<void>(), release: deferred<void>() };
+      mutationBarrier = barrier;
+      return barrier;
+    },
+    setSendUserMessage: (implementation: ClaudeAgentSdkService["sendUserMessage"]) => {
+      sendUserMessageImpl = implementation;
+    },
+    setUpdateSessionModel: (implementation: ClaudeAgentSdkService["updateSessionModel"]) => {
+      updateSessionModelImpl = implementation;
+    },
+    setReleaseSession: (implementation: ClaudeAgentSdkService["releaseSession"]) => {
+      releaseSessionImpl = implementation;
+    },
+  };
+};
+
+const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[]): string[] =>
+  changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
+
+describe("Claude host live-session adapter", () => {
+  test("publishes the running start snapshot before suppressing SDK initialization idle", async () => {
+    const harness = await createHarness();
+    harness.setStartSession(() =>
+      Effect.promise(async () => {
+        harness.eventHub.emit(session, {
+          type: "session_started",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:01:00.000Z",
+          message: "Started build session",
+        });
+        harness.eventHub.emit(session, {
+          type: "session_idle",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:01:01.000Z",
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        return summary;
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(harness.adapter.startSession(startInput)),
+    ).resolves.toMatchObject({
+      externalSessionId: "session-1",
+      status: "running",
+    });
+
+    expect(harness.changes[0]).toMatchObject({
+      type: "session_upsert",
+      snapshot: { activity: "running" },
+    });
+    expect(transcriptEventTypes(harness.changes)).toEqual(["session_started"]);
+  });
+
+  test("publishes accepted input before draining its runtime response", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.changes.splice(0);
+    harness.setSendUserMessage((input) =>
+      Effect.promise(async () => {
+        harness.eventHub.emit(session, {
+          type: "session_status",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:00.000Z",
+          status: { type: "busy", message: null },
+        });
+        harness.eventHub.emit(session, {
+          type: "assistant_message",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:01.000Z",
+          messageId: "assistant-1",
+          message: "Done",
+        });
+        harness.eventHub.emit(session, {
+          type: "session_idle",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:02:02.000Z",
+        });
+        await Promise.resolve();
+        return {
+          type: "user_message" as const,
+          externalSessionId: input.externalSessionId,
+          timestamp: "2026-07-17T10:01:59.000Z",
+          messageId: "user-1",
+          message: "Start",
+          parts: [{ kind: "text" as const, text: "Start" }],
+          state: "read" as const,
+        };
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.sendUserMessage({
+        ...startInput,
+        externalSessionId: "session-1",
+        parts: [{ kind: "text", text: "Start" }],
+      }),
+    );
+
+    expect(transcriptEventTypes(harness.changes)).toEqual([
+      "user_message",
+      "session_status",
+      "assistant_message",
+      "session_idle",
+    ]);
+  });
+
+  test("keeps pending activity when an already-retained session is resumed", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "approval_required",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      requestId: "approval-1",
+      requestType: "command_execution",
+      title: "Approve command",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    });
+
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        externalSessionId: "session-1",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: {
+        activity: "waiting_for_permission",
+        pendingApprovals: [{ requestId: "approval-1" }],
+      },
+    });
+  });
+
+  test("keeps a retained running session running when it is resumed", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        externalSessionId: "session-1",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "running" },
+    });
+  });
+
+  test("keeps a retained pending question intact when it is resumed", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "question_required",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      requestId: "question-1",
+      questions: [
+        {
+          question: "Proceed?",
+          header: "Decision",
+          options: [{ label: "Yes", description: "Continue." }],
+          multiple: false,
+          custom: true,
+        },
+      ],
+    });
+
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        externalSessionId: "session-1",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: {
+        activity: "waiting_for_question",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ question: "Proceed?", header: "Decision" }],
+          },
+        ],
+      },
+    });
+  });
+
+  test("uses the SDK summary when resuming a session that is not retained", async () => {
+    const harness = await createHarness();
+    harness.setResumeSession(() => Effect.succeed(summary));
+
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        externalSessionId: "session-1",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
+  });
+
+  test("lets a direct context read replace an older event queued before the read", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setLoadSessionContextUsage(() =>
+      Effect.succeed({ totalTokens: 120, contextWindow: 200 }),
+    );
+    const eventMutation = harness.pauseNextMutation();
+    harness.eventHub.emit(session, {
+      type: "session_context_updated",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:02:00.000Z",
+      totalTokens: 99,
+      contextWindow: 200,
+    });
+    await eventMutation.entered.promise;
+
+    const loadPromise = Effect.runPromise(
+      harness.adapter.loadContext({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+    eventMutation.release.resolve();
+
+    await expect(loadPromise).resolves.toEqual({ totalTokens: 120, contextWindow: 200 });
+  });
+
+  test("keeps a context event that arrives during a direct read", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    const readStarted = deferred<void>();
+    const directRead = deferred<{ totalTokens: number; contextWindow: number }>();
+    harness.setLoadSessionContextUsage(() =>
+      Effect.promise(async () => {
+        readStarted.resolve();
+        return directRead.promise;
+      }),
+    );
+
+    const loadPromise = Effect.runPromise(
+      harness.adapter.loadContext({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+    await readStarted.promise;
+    harness.eventHub.emit(session, {
+      type: "session_context_updated",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:02:00.000Z",
+      totalTokens: 130,
+      contextWindow: 200,
+    });
+    directRead.resolve({ totalTokens: 120, contextWindow: 200 });
+
+    await expect(loadPromise).resolves.toEqual({ totalTokens: 130, contextWindow: 200 });
+  });
+
+  test("keeps an equal-valued context event that arrives during a direct read", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setLoadSessionContextUsage(() =>
+      Effect.succeed({ totalTokens: 100, contextWindow: 200 }),
+    );
+    await Effect.runPromise(
+      harness.adapter.loadContext({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+
+    const readStarted = deferred<void>();
+    const directRead = deferred<{ totalTokens: number; contextWindow: number }>();
+    harness.setLoadSessionContextUsage(() =>
+      Effect.promise(async () => {
+        readStarted.resolve();
+        return directRead.promise;
+      }),
+    );
+
+    const loadPromise = Effect.runPromise(
+      harness.adapter.loadContext({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+    await readStarted.promise;
+    harness.eventHub.emit(session, {
+      type: "session_context_updated",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:02:00.000Z",
+      totalTokens: 100,
+      contextWindow: 200,
+    });
+    directRead.resolve({ totalTokens: 120, contextWindow: 200 });
+
+    await expect(loadPromise).resolves.toEqual({ totalTokens: 100, contextWindow: 200 });
+  });
+
+  test("does not recreate a released session from runtime events buffered during release", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.changes.splice(0);
+    harness.setReleaseSession(() =>
+      Effect.sync(() => {
+        harness.eventHub.emit(session, {
+          type: "session_status",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:03:00.000Z",
+          status: { type: "busy", message: null },
+        });
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.releaseSession({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+
+    expect(harness.changes).toEqual([
+      {
+        type: "session_removed",
+        ref: {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+      },
+    ]);
+  });
+
+  test("serializes live model updates in selection order", async () => {
+    const harness = await createHarness();
+    const startedModels: string[] = [];
+    let releaseFirstUpdate: (() => void) | undefined;
+    const firstUpdateReleased = new Promise<void>((resolve) => {
+      releaseFirstUpdate = resolve;
+    });
+    let markFirstUpdateStarted: (() => void) | undefined;
+    const firstUpdateStarted = new Promise<void>((resolve) => {
+      markFirstUpdateStarted = resolve;
+    });
+    harness.setUpdateSessionModel((input) =>
+      Effect.promise(async () => {
+        startedModels.push(input.model?.modelId ?? "default");
+        if (startedModels.length === 1) {
+          markFirstUpdateStarted?.();
+          await firstUpdateReleased;
+        }
+      }),
+    );
+    const controlRef = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+
+    const firstUpdate = Effect.runPromise(
+      harness.adapter.updateSessionModel({
+        ...controlRef,
+        model: {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-a",
+        },
+      }),
+    );
+    await firstUpdateStarted;
+    const secondUpdate = Effect.runPromise(
+      harness.adapter.updateSessionModel({
+        ...controlRef,
+        model: {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-b",
+        },
+      }),
+    );
+    await Promise.resolve();
+
+    expect(startedModels).toEqual(["claude-a"]);
+
+    releaseFirstUpdate?.();
+    await Promise.all([firstUpdate, secondUpdate]);
+    expect(startedModels).toEqual(["claude-a", "claude-b"]);
+  });
+});

@@ -78,6 +78,7 @@ const toModelOptionsWithSelectedFallback = (
 const toVariantOptions = (
   selectedModelEntry: AgentModelCatalog["models"][number] | null,
   selectedModelSelection: AgentModelSelection | null,
+  liveSession: boolean,
 ): ComboboxOption[] => {
   if (!selectedModelEntry) {
     const selectedVariant = selectedModelSelection?.variant;
@@ -91,7 +92,20 @@ const toVariantOptions = (
     }
     return [];
   }
-  return selectedModelEntry.variants.map((variant) => ({
+  let variants = selectedModelEntry.variants;
+  if (liveSession && selectedModelEntry.liveSessionUpdates?.variants) {
+    const liveSessionVariants = new Set(selectedModelEntry.liveSessionUpdates.variants);
+    variants = selectedModelEntry.variants.filter((variant) => liveSessionVariants.has(variant));
+    const selectedVariant = selectedModelSelection?.variant;
+    if (
+      selectedVariant &&
+      selectedModelEntry.variants.includes(selectedVariant) &&
+      !variants.includes(selectedVariant)
+    ) {
+      variants = [selectedVariant, ...variants];
+    }
+  }
+  return variants.map((variant) => ({
     value: variant,
     label: variant,
   }));
@@ -119,9 +133,11 @@ const toAgentAccentColorsByProfileId = (
 };
 
 export const resolveModelSelectionOptions = ({
+  liveSession = false,
   selectionCatalog,
   selectedModelSelection,
 }: {
+  liveSession?: boolean;
   selectionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
 }): ModelSelectionOptions => {
@@ -134,7 +150,7 @@ export const resolveModelSelectionOptions = ({
     ),
     modelOptions: toModelOptionsWithSelectedFallback(selectionCatalog, selectedModelSelection),
     modelGroups: toModelGroupsByProvider(selectionCatalog),
-    variantOptions: toVariantOptions(selectedModelEntry, selectedModelSelection),
+    variantOptions: toVariantOptions(selectedModelEntry, selectedModelSelection, liveSession),
     agentAccentColorsByProfileId: toAgentAccentColorsByProfileId(selectionCatalog),
   };
 };

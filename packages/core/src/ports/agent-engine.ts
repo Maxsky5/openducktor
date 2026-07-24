@@ -4,6 +4,7 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   CodexEffectivePolicy,
+  AgentSessionHistoryMessage as ContractsAgentSessionHistoryMessage,
   FileDiff,
   FileStatus,
   RuntimeApprovalReplyOutcome,
@@ -31,11 +32,8 @@ import type {
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
-  AgentStreamPart,
   AgentSubagentCatalog,
-  AgentUserMessageDisplayPart,
   AgentUserMessagePart,
-  AgentUserMessageState,
   ExternalSessionId,
   RepoRuntimeRef,
   RuntimeHistoryAnchor,
@@ -50,12 +48,14 @@ export type AgentSessionScope = AgentSessionWorkflowScope;
 export type WorkflowSessionRef = SessionRef & { sessionScope: AgentSessionWorkflowScope };
 export type AgentSessionRuntimePolicy =
   | { kind: "opencode" }
+  | { kind: "claude" }
   | { kind: "codex"; policy: CodexEffectivePolicy };
 export type AgentRuntimePolicyBinding =
   | {
       runtimeKind: "opencode";
       runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "opencode" }>;
     }
+  | { runtimeKind: "claude"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "claude" }> }
   | { runtimeKind: "codex"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "codex" }> };
 
 export const workflowAgentSessionScope = (
@@ -143,7 +143,7 @@ export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
 export type ListAgentModelsInput = RepoRuntimeRef;
 
-export type ListAgentSlashCommandsInput = RepoRuntimeRef;
+export type ListAgentSlashCommandsInput = RuntimeWorkingDirectoryRef;
 
 export type ListAgentSkillsInput = RuntimeWorkingDirectoryRef;
 
@@ -168,59 +168,7 @@ export type LoadAgentFileStatusInput = RuntimeWorkingDirectoryRef;
 
 export const AGENT_SESSION_SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
 
-export type AgentSessionHistoryMessage =
-  | {
-      messageId: RuntimeHistoryAnchor;
-      role: "user";
-      timestamp: string;
-      /** The timestamp is an ordering anchor and must not be displayed as an exact clock time. */
-      timestampIsApproximate?: true;
-      text: string;
-      displayParts: AgentUserMessageDisplayPart[];
-      state: AgentUserMessageState;
-      model?: AgentModelSelection;
-      parts: AgentStreamPart[];
-    }
-  | {
-      messageId: RuntimeHistoryAnchor;
-      role: "assistant";
-      timestamp: string;
-      /** The timestamp is an ordering anchor and must not be displayed as an exact clock time. */
-      timestampIsApproximate?: true;
-      text: string;
-      durationMs?: number;
-      totalTokens?: number;
-      contextWindow?: number;
-      model?: AgentModelSelection;
-      parts: AgentStreamPart[];
-    }
-  | {
-      messageId: RuntimeHistoryAnchor;
-      role: "system";
-      timestamp: string;
-      /** The timestamp is an ordering anchor and must not be displayed as an exact clock time. */
-      timestampIsApproximate?: true;
-      text: string;
-      /**
-       * Runtime adapters use system messages only for system/developer context
-       * exposed by the runtime-owned history source or supplied as transient
-       * history-read context. Adapters must not read OpenDucktor persistence to
-       * synthesize missing prompt text.
-       */
-      notice?:
-        | {
-            tone: "info";
-            reason: "session_compacted";
-            title: string;
-          }
-        | {
-            tone: "info";
-            reason: "session_forked";
-            title: string;
-            parentExternalSessionId: ExternalSessionId;
-          };
-      parts: [];
-    };
+export type AgentSessionHistoryMessage = ContractsAgentSessionHistoryMessage;
 
 export type AgentSessionRuntimeSnapshotAvailability = "runtime" | "missing";
 

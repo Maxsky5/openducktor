@@ -1,3 +1,4 @@
+export * from "./agent-engine-schemas";
 export * from "./agent-runtime-schemas";
 export * from "./agent-session-control-schemas";
 export * from "./agent-session-event-schemas";
@@ -5,6 +6,7 @@ export * from "./agent-session-live-schemas";
 export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
+export * from "./claude-runtime-command-contracts";
 export * from "./codex-app-server-protocol";
 export * from "./config-schemas";
 export * from "./dev-server-schemas";

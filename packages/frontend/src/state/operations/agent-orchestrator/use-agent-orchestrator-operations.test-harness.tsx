@@ -255,6 +255,7 @@ export const createHookHarness = (args: {
     agentEngine: args.agentEngine ?? (new OpencodeSdkAdapter() as AgentEnginePort),
     dependencies,
   };
+  const runtimeDefinitionsContextValue = createRuntimeDefinitionsContextValue();
 
   const Harness = () => {
     latest = useAgentOrchestratorOperations(currentArgs);
@@ -263,7 +264,7 @@ export const createHookHarness = (args: {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       RuntimeDefinitionsContext.Provider,
-      { value: createRuntimeDefinitionsContextValue() },
+      { value: runtimeDefinitionsContextValue },
       createElement(
         RepoRuntimeHealthContext.Provider,
         { value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime) },

@@ -360,7 +360,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     });
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
-    expect(getSessionMessages(sessionsRef).length).toBeGreaterThan(0);
+    expect(getSessionMessages(sessionsRef)).toEqual([]);
 
     handleEvent({
       type: "assistant_part",

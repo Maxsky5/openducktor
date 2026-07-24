@@ -318,7 +318,11 @@ describe("TypeScript web host backend", () => {
         body: JSON.stringify({}),
       });
       expect(invoke.status).toBe(200);
-      expect(await invoke.json()).toMatchObject([{ kind: "opencode" }, { kind: "codex" }]);
+      expect(await invoke.json()).toMatchObject([
+        { kind: "opencode" },
+        { kind: "codex" },
+        { kind: "claude" },
+      ]);
 
       const theme = await Bun.fetch(`${backendUrl}/invoke/set_theme`, {
         method: "POST",

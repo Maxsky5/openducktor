@@ -39,6 +39,7 @@ type UseAgentStudioSendActionArgs = {
   reusablePrompts: ReusablePrompt[];
   isStarting: boolean;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
+  supportsAttachments: boolean;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   startSession: StartSessionForMessage;
 };
@@ -57,6 +58,7 @@ export function useAgentStudioSendAction({
   reusablePrompts,
   isStarting,
   selectedModelDescriptor,
+  supportsAttachments,
   sendAgentMessage,
   startSession,
 }: UseAgentStudioSendActionArgs): {
@@ -107,6 +109,7 @@ export function useAgentStudioSendAction({
         draft,
         reusablePrompts,
         selectedModelDescriptor,
+        supportsAttachments,
       });
       if (!messagePartsResult || !taskId) {
         return false;
@@ -122,7 +125,8 @@ export function useAgentStudioSendAction({
           }
           if (
             selectedSessionIdentity.runtimeKind !== "opencode" &&
-            selectedSessionIdentity.runtimeKind !== "codex"
+            selectedSessionIdentity.runtimeKind !== "codex" &&
+            selectedSessionIdentity.runtimeKind !== "claude"
           ) {
             throw new Error(
               `/compact is unavailable for ${selectedSessionIdentity.runtimeKind} sessions.`,
@@ -164,6 +168,7 @@ export function useAgentStudioSendAction({
       isSelectedSessionModelSendable,
       role,
       selectedModelDescriptor,
+      supportsAttachments,
       selectedSessionModel,
       sendAgentMessage,
       startSession,

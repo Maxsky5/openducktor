@@ -23,6 +23,7 @@ const buildModel = () => ({
   isModelSelectionPending: false,
   selectedModelSelection: buildModelSelection(),
   isSelectionCatalogLoading: false,
+  supportsAttachments: true,
   supportsSlashCommands: true,
   supportsFileSearch: true,
   supportsSkillReferences: false,

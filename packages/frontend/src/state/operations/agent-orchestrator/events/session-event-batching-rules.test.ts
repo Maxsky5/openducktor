@@ -178,6 +178,62 @@ describe("agent-orchestrator session event batching rules", () => {
     ]);
   });
 
+  test("preserves launch metadata when coalescing sparse subagent updates", () => {
+    const batcher = createSessionEventBatcher();
+    const prepared = prepareQueuedEvents(batcher, [
+      {
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        part: {
+          kind: "subagent",
+          messageId: "assistant-1",
+          partId: "claude-subagent:task-1",
+          correlationKey: "task-1",
+          status: "running",
+          agent: "Explore",
+          prompt: "Inspect authentication",
+          description: "Explore auth and project guidance",
+          executionMode: "foreground",
+          startedAtMs: 100,
+        },
+      },
+      {
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        part: {
+          kind: "subagent",
+          messageId: "assistant-1",
+          partId: "claude-subagent:task-1",
+          correlationKey: "task-1",
+          status: "running",
+          agent: "Explore",
+        },
+      },
+    ] satisfies QueuedSessionEvent[]);
+
+    expect(prepared.readyEvents).toEqual([
+      {
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        part: {
+          kind: "subagent",
+          messageId: "assistant-1",
+          partId: "claude-subagent:task-1",
+          correlationKey: "task-1",
+          status: "running",
+          agent: "Explore",
+          prompt: "Inspect authentication",
+          description: "Explore auth and project guidance",
+          executionMode: "foreground",
+          startedAtMs: 100,
+        },
+      },
+    ]);
+  });
+
   test("defers repeated final assistant message snapshots within the emit gate", async () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({

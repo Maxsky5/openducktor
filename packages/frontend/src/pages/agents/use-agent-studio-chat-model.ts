@@ -38,6 +38,7 @@ export type AgentStudioChatModelSelectionContext = {
   selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
+  supportsAttachments: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
@@ -239,6 +240,7 @@ export function useAgentStudioChatModel({
       selectedModelDescriptor: modelSelection.selectedModelDescriptor,
       isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
       supportsProfiles: modelSelection.supportsProfiles ?? true,
+      supportsAttachments: modelSelection.supportsAttachments,
       supportsSlashCommands: modelSelection.supportsSlashCommands,
       supportsFileSearch: modelSelection.supportsFileSearch,
       supportsSkillReferences: modelSelection.supportsSkillReferences,
@@ -291,6 +293,7 @@ export function useAgentStudioChatModel({
       modelSelection.subagents,
       modelSelection.subagentsError,
       modelSelection.supportsFileSearch,
+      modelSelection.supportsAttachments,
       modelSelection.supportsProfiles,
       modelSelection.supportsSkillReferences,
       modelSelection.supportsSlashCommands,

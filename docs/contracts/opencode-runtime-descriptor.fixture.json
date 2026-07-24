@@ -80,6 +80,7 @@
         "folder_reference",
         "subagent_reference"
       ],
+      "supportsAttachments": true,
       "supportsSlashCommands": true,
       "supportsFileSearch": true,
       "supportsSkillReferences": false,

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
-import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
+import { buildDiagnosticsPanelModel as buildDiagnosticsPanelModelBase } from "./diagnostics-panel-model";
 import {
   makeBuiltInRuntimeDefinitions,
   makeBuiltInRuntimeDiagnostics,
@@ -10,6 +14,15 @@ import {
   makeTaskStoreCheck,
   makeWorkspace,
 } from "./diagnostics-panel-model-test-fixtures";
+
+const buildDiagnosticsPanelModel = (input: Parameters<typeof buildDiagnosticsPanelModelBase>[0]) =>
+  buildDiagnosticsPanelModelBase({
+    ...input,
+    runtimeHealthByRuntime: {
+      claude: buildDisabledRuntimeHealth(CLAUDE_RUNTIME_DESCRIPTOR),
+      ...input.runtimeHealthByRuntime,
+    },
+  });
 
 describe("buildDiagnosticsPanelModel", () => {
   test("returns no-repository summary and empty-state messages when no repository is selected", () => {
@@ -187,7 +200,11 @@ describe("buildDiagnosticsPanelModel", () => {
   });
 
   test("reports disabled runtimes without leaving diagnostics stuck checking", () => {
-    const disabledRuntimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
+    const disabledRuntimeDefinitions = [
+      OPENCODE_RUNTIME_DESCRIPTOR,
+      CODEX_RUNTIME_DESCRIPTOR,
+      CLAUDE_RUNTIME_DESCRIPTOR,
+    ];
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -211,6 +228,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({ runtime: { instance: makeRuntimeDiagnosticInstance() } }),
         codex: buildDisabledRuntimeHealth(CODEX_RUNTIME_DESCRIPTOR),
+        claude: buildDisabledRuntimeHealth(CLAUDE_RUNTIME_DESCRIPTOR),
       },
       isLoadingChecks: false,
     });
@@ -225,6 +243,7 @@ describe("buildDiagnosticsPanelModel", () => {
       { label: "GitHub CLI", value: "gh version 2.73.0" },
       { label: "OpenCode", value: "1.2.9", breakAll: true },
       { label: "Codex", value: "missing (runtime disabled)", breakAll: true },
+      { label: "Claude", value: "missing (runtime disabled)", breakAll: true },
     ]);
     expect(codexRuntimeSection?.badge.label).toBe("Disabled");
     expect(codexRuntimeSection?.rows).toContainEqual(
