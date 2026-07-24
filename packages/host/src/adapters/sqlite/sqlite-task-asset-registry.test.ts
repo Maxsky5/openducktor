@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import { createSqliteTaskAssetRegistry } from "./sqlite-task-asset-registry";
@@ -13,6 +14,58 @@ afterEach(async () => {
 });
 
 describe("SQLite task asset registry", () => {
+  test("rolls back a new task and its asset rows when file preparation fails", async () => {
+    const harness = await createSqliteTaskStoreHarness();
+    cleanups.add(harness.cleanup);
+    const registry = createSqliteTaskAssetRegistry({
+      resolveDatabasePath: ({ workspaceId }) =>
+        resolveSqliteTaskStoreDatabasePath({ configDir: harness.configDir, workspaceId }),
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const failure = new HostOperationError({
+      operation: "taskAsset.prepareFiles",
+      message: "Injected file preparation failure.",
+    });
+    let preparedTaskId: string | null = null;
+
+    const exit = await Effect.runPromiseExit(
+      registry.createTaskWithDescriptionAssets({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Atomic asset create",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![diagram](odt-asset:${assetId})`,
+        },
+        assets: [
+          {
+            id: assetId,
+            scope: "description",
+            originalName: "diagram.png",
+            mediaType: "image/png",
+            byteSize: 10,
+            createdAt: new Date("2026-07-22T10:00:00Z"),
+          },
+        ],
+        prepareFiles: (taskId) => {
+          preparedTaskId = taskId;
+          return Effect.fail(failure);
+        },
+      }),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(preparedTaskId).not.toBeNull();
+    expect(
+      await Effect.runPromise(harness.store.listTasks({ repoPath: harness.repoPath })),
+    ).toEqual([]);
+    expect(
+      await Effect.runPromise(registry.assetIdExists({ repoPath: harness.repoPath, assetId })),
+    ).toBe(false);
+  });
+
   test("registers exact ownership and updates description rows in one transaction", async () => {
     const harness = await createSqliteTaskStoreHarness();
     cleanups.add(harness.cleanup);

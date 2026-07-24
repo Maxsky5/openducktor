@@ -1,8 +1,6 @@
-import type { TaskCreateInput } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import { encodeJson, normalizeLabels } from "./sqlite-json-codecs";
 import {
   clearAgentSessionsByRoles,
   deleteAgentSession,
@@ -10,6 +8,7 @@ import {
   upsertAgentSession,
 } from "./sqlite-task-agent-sessions";
 import { getTaskCard, listTasksInDatabase } from "./sqlite-task-card-read-model";
+import { insertTaskFromCreateInput } from "./sqlite-task-create";
 import {
   clearQaReportDocuments,
   clearWorkflowDocuments,
@@ -18,12 +17,6 @@ import {
   qaReportSourceTool,
   specSourceTool,
 } from "./sqlite-task-document-writes";
-import {
-  firstTaskIdHashLength,
-  taskIdCandidates,
-  taskIdExhaustedError,
-  taskIdPrefixForWorkspaceId,
-} from "./sqlite-task-ids";
 import { taskMetadata } from "./sqlite-task-metadata-read-model";
 import { listPullRequestSyncCandidatesInDatabase } from "./sqlite-task-pull-request-read-model";
 import { descendantTaskIds, requireTaskRow } from "./sqlite-task-queries";
@@ -32,11 +25,9 @@ import {
   type ResolveSqliteTaskStorePath,
   type ResolveWorkspaceIdForRepoPath,
 } from "./sqlite-task-repository-context";
-import type { TaskInsert } from "./sqlite-task-store-schema";
 import {
   applyTaskPatch,
   deleteTasks,
-  insertTaskIfAbsent,
   setDirectMergeRecord,
   setPullRequestRecord,
   updateTaskStatus,
@@ -56,28 +47,6 @@ const blockingTaskStoreHealth = (detail: string) => ({
   isReady: false,
   detail,
   databasePath: null,
-});
-
-const taskInsertFromCreateInput = (
-  task: TaskCreateInput,
-  taskId: string,
-  createdAt: Date,
-): TaskInsert => ({
-  agentSessionsJson: encodeJson([]),
-  createdAt,
-  description: task.description ?? null,
-  directMergeJson: null,
-  id: taskId,
-  issueType: task.issueType ?? "task",
-  labelsJson: encodeJson(normalizeLabels(task.labels ?? [])),
-  parentId: task.parentId ?? null,
-  priority: task.priority ?? 2,
-  pullRequestJson: null,
-  qaRequired: task.aiReviewEnabled === false ? 0 : 1,
-  status: "open",
-  targetBranchJson: null,
-  title: task.title,
-  updatedAt: createdAt,
 });
 
 export type CreateSqliteTaskRepositoryInput = {
@@ -145,22 +114,13 @@ export const createSqliteTaskRepository = ({
           session.transaction("sqliteTaskRepository.createTask", (transaction) =>
             Effect.gen(function* () {
               const createdAt = now();
-              const prefix = taskIdPrefixForWorkspaceId(workspaceId);
-              const firstLength = yield* firstTaskIdHashLength(transaction, prefix);
-              const candidates = taskIdCandidates({
+              const taskId = yield* insertTaskFromCreateInput({
                 createdAt,
-                description: input.task.description,
-                firstLength,
-                prefix,
-                title: input.task.title,
+                session: transaction,
+                task: input.task,
+                workspaceId,
               });
-              for (const taskId of candidates) {
-                const task = taskInsertFromCreateInput(input.task, taskId, createdAt);
-                if (yield* insertTaskIfAbsent(transaction, task)) {
-                  return yield* getTaskCard(transaction, taskId, input.repoPath);
-                }
-              }
-              return yield* taskIdExhaustedError(prefix);
+              return yield* getTaskCard(transaction, taskId, input.repoPath);
             }),
           ),
       );

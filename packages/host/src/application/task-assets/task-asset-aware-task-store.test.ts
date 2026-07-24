@@ -354,6 +354,62 @@ describe("asset-aware task store", () => {
     ).toBeNull();
   });
 
+  test("keeps an existing asset when its image changes to reference syntax", async () => {
+    const { filePort, registry, repoPath, staging, store } = await createHarness();
+    const staged = await Effect.runPromise(
+      staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "diagram.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    const task = await Effect.runPromise(
+      store.createTask({
+        repoPath,
+        task: {
+          title: "Referenced image",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![Architecture](odt-asset:${staged.assetId})`,
+        },
+        descriptionAssets: { stagedAssetIds: [staged.assetId] },
+      }),
+    );
+    const referencedDescription = [
+      "![Architecture][diagram]",
+      "",
+      `[diagram]: odt-asset:${staged.assetId}`,
+    ].join("\n");
+
+    const updated = await Effect.runPromise(
+      store.updateTask({
+        repoPath,
+        taskId: task.id,
+        patch: { description: referencedDescription },
+        descriptionAssets: { stagedAssetIds: [] },
+      }),
+    );
+
+    expect(updated.description).toBe(referencedDescription);
+    expect(
+      await Effect.runPromise(
+        registry.listAssets({ repoPath, taskId: task.id, scope: "description" }),
+      ),
+    ).toEqual([expect.objectContaining({ id: staged.assetId })]);
+    expect(
+      await Effect.runPromise(
+        filePort.readDurable({
+          workspaceId: "fairnest",
+          taskId: task.id,
+          assetId: staged.assetId,
+        }),
+      ),
+    ).not.toBeNull();
+  });
+
   test("rejects unbacked and foreign-task logical references", async () => {
     const { repoPath, staging, store } = await createHarness();
     const forged = "550e8400-e29b-41d4-a716-446655440000";
@@ -532,6 +588,7 @@ describe("asset-aware task store", () => {
       inner: harness.innerStore,
       registry: harness.registry,
       persistence: {
+        ...harness.registry,
         updateTaskWithDescriptionAssets: () =>
           Effect.fail(
             injectedTaskAssetError({
@@ -663,20 +720,25 @@ describe("asset-aware task store", () => {
     let resolverCalls = 0;
     const store = createTaskAssetAwareTaskStore({
       inner: harness.innerStore,
-      registry: {
+      registry: harness.registry,
+      persistence: {
         ...harness.registry,
-        registerAssets: (input) =>
-          Effect.fail(
-            injectedTaskAssetError({
-              operation: "create",
-              code: "database",
-              failedPhase: "register_assets",
-              taskId: input.taskId,
-              assetIds: input.assets.map((asset) => asset.id),
-            }),
-          ),
+        createTaskWithDescriptionAssets: (input) =>
+          harness.registry.createTaskWithDescriptionAssets({
+            ...input,
+            prepareFiles: (taskId) =>
+              Effect.gen(function* () {
+                yield* input.prepareFiles(taskId);
+                return yield* injectedTaskAssetError({
+                  operation: "create",
+                  code: "database",
+                  failedPhase: "register_assets",
+                  taskId,
+                  assetIds: input.assets.map((asset) => asset.id),
+                });
+              }),
+          }),
       },
-      persistence: harness.registry,
       staging: harness.staging,
       filePort: harness.filePort,
       resolveWorkspaceIdForRepoPath: () => {
@@ -740,6 +802,7 @@ describe("asset-aware task store", () => {
       inner: harness.innerStore,
       registry: harness.registry,
       persistence: {
+        ...harness.registry,
         updateTaskWithDescriptionAssets: () =>
           Effect.fail(
             injectedTaskAssetError({
@@ -804,7 +867,7 @@ describe("asset-aware task store", () => {
     ).toBeNull();
   });
 
-  test("returns created_partial with the created task and asset IDs when create compensation fails", async () => {
+  test("returns created_partial with task and asset IDs when rollback file cleanup fails", async () => {
     const harness = await createHarness();
     const staged = await Effect.runPromise(
       harness.staging.stage({
@@ -815,37 +878,28 @@ describe("asset-aware task store", () => {
         bytesBase64: PNG_BASE64,
       }),
     );
-    let deleteAttempts = 0;
     let removeAttempts = 0;
     const store = createTaskAssetAwareTaskStore({
-      inner: {
-        ...harness.innerStore,
-        deleteTask: (input) => {
-          deleteAttempts += 1;
-          return Effect.fail(
-            injectedTaskAssetError({
-              operation: "delete",
-              code: "database",
-              failedPhase: "delete_created_task",
-              taskId: input.taskId,
-            }),
-          );
-        },
-      },
-      registry: {
+      inner: harness.innerStore,
+      registry: harness.registry,
+      persistence: {
         ...harness.registry,
-        registerAssets: (input) =>
-          Effect.fail(
-            injectedTaskAssetError({
-              operation: "create",
-              code: "database",
-              failedPhase: "register_assets",
-              taskId: input.taskId,
-              assetIds: input.assets.map((asset) => asset.id),
-            }),
-          ),
+        createTaskWithDescriptionAssets: (input) =>
+          harness.registry.createTaskWithDescriptionAssets({
+            ...input,
+            prepareFiles: (taskId) =>
+              Effect.gen(function* () {
+                yield* input.prepareFiles(taskId);
+                return yield* injectedTaskAssetError({
+                  operation: "create",
+                  code: "database",
+                  failedPhase: "register_assets",
+                  taskId,
+                  assetIds: input.assets.map((asset) => asset.id),
+                });
+              }),
+          }),
       },
-      persistence: harness.registry,
       staging: harness.staging,
       filePort: {
         ...harness.filePort,
@@ -883,7 +937,6 @@ describe("asset-aware task store", () => {
     expect(error.retryAllowed).toBe(false);
     expect(error.taskId).toBeTruthy();
     expect(error.assetIds).toEqual([staged.assetId]);
-    expect(deleteAttempts).toBe(1);
     expect(removeAttempts).toBe(1);
   });
 

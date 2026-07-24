@@ -69,7 +69,7 @@ export const createTaskAssetAwareTaskStore = ({
       if (referencedAssetIds.size === 0) {
         return yield* inner.createTask({ repoPath: input.repoPath, task: input.task });
       }
-      if (!persistence && referencedAssetIds.size > 0) {
+      if (!persistence) {
         return yield* new TaskAssetError({
           operation: "create",
           code: "validation",
@@ -81,9 +81,11 @@ export const createTaskAssetAwareTaskStore = ({
             "Task description assets require a task store composed with shared asset persistence.",
         });
       }
-      workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
+      const assetPersistence = persistence;
+      const resolvedWorkspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
+      workspaceId = resolvedWorkspaceId;
       const stagedAssets = yield* staging.getStagedAssets({
-        workspaceId,
+        workspaceId: resolvedWorkspaceId,
         assetIds: Array.from(suppliedAssetIds),
       });
       for (const asset of stagedAssets) {
@@ -99,48 +101,50 @@ export const createTaskAssetAwareTaskStore = ({
           });
         }
       }
-      const created = yield* inner.createTask({ repoPath: input.repoPath, task: input.task });
-      createdTaskId = created.id;
-      recoveryId = yield* filePort.quarantineAssets({
-        workspaceId,
-        taskId: created.id,
-        assetIds: [],
-        promotedAssetIds: stagedAssets.map((asset) => asset.assetId),
-        operation: "create",
-      });
-
-      for (const asset of stagedAssets) {
-        if (
-          yield* filePort.durableExists({
-            workspaceId,
-            taskId: created.id,
-            assetId: asset.assetId,
-            operation: "create",
-          })
-        ) {
-          return yield* new TaskAssetError({
-            operation: "create",
-            code: "validation",
-            taskId: created.id,
-            assetIds: [asset.assetId],
-            failedPhase: "check_destination",
-            durableState: "created_partial",
-            retryAllowed: false,
-            message: `Task asset destination ${asset.assetId} already exists.`,
-          });
-        }
-        yield* filePort.promote({
-          workspaceId,
-          taskId: created.id,
-          assetId: asset.assetId,
-          operation: "create",
-        });
-        promotedAssetIds.push(asset.assetId);
-      }
-      yield* registry.registerAssets({
+      const created = yield* assetPersistence.createTaskWithDescriptionAssets({
         repoPath: input.repoPath,
-        taskId: created.id,
+        task: input.task,
         assets: toNewTaskAssetRecords(stagedAssets),
+        prepareFiles: (taskId) =>
+          Effect.gen(function* () {
+            createdTaskId = taskId;
+            recoveryId = yield* filePort.quarantineAssets({
+              workspaceId: resolvedWorkspaceId,
+              taskId,
+              assetIds: [],
+              promotedAssetIds: stagedAssets.map((asset) => asset.assetId),
+              operation: "create",
+            });
+
+            for (const asset of stagedAssets) {
+              if (
+                yield* filePort.durableExists({
+                  workspaceId: resolvedWorkspaceId,
+                  taskId,
+                  assetId: asset.assetId,
+                  operation: "create",
+                })
+              ) {
+                return yield* new TaskAssetError({
+                  operation: "create",
+                  code: "validation",
+                  taskId,
+                  assetIds: [asset.assetId],
+                  failedPhase: "check_destination",
+                  durableState: "created_partial",
+                  retryAllowed: false,
+                  message: `Task asset destination ${asset.assetId} already exists.`,
+                });
+              }
+              yield* filePort.promote({
+                workspaceId: resolvedWorkspaceId,
+                taskId,
+                assetId: asset.assetId,
+                operation: "create",
+              });
+              promotedAssetIds.push(asset.assetId);
+            }
+          }),
       });
       committed = true;
       if (recoveryId) {
@@ -158,6 +162,13 @@ export const createTaskAssetAwareTaskStore = ({
 
     return create.pipe(
       Effect.catchAll((cause) => {
+        if (
+          referencedAssetIds.size === 0 &&
+          suppliedAssetIds.size === 0 &&
+          createdTaskId === undefined
+        ) {
+          return Effect.fail(cause);
+        }
         const error = asTaskAssetError({
           cause,
           operation: "create",
@@ -198,9 +209,6 @@ export const createTaskAssetAwareTaskStore = ({
           );
         }
         return Effect.gen(function* () {
-          const deleteExit = yield* Effect.exit(
-            inner.deleteTask({ repoPath: input.repoPath, taskId, deleteSubtasks: true }),
-          );
           const removeExit = yield* Effect.exit(
             promotedAssetIds.length > 0
               ? filePort.removeDurable({
@@ -214,11 +222,7 @@ export const createTaskAssetAwareTaskStore = ({
           const recoveryExit = yield* Effect.exit(
             recoveryId ? filePort.purgeQuarantine(recoveryId) : Effect.void,
           );
-          if (
-            Exit.isFailure(deleteExit) ||
-            Exit.isFailure(removeExit) ||
-            Exit.isFailure(recoveryExit)
-          ) {
+          if (Exit.isFailure(removeExit) || Exit.isFailure(recoveryExit)) {
             return yield* taskAssetPartialStateError({
               operation: "create",
               phase: "compensate_create",
@@ -226,7 +230,7 @@ export const createTaskAssetAwareTaskStore = ({
               assetIds: promotedAssetIds,
               durableState: "created_partial",
               message:
-                "Task creation failed and cleanup was incomplete. Refresh before continuing.",
+                "Task creation rolled back, but file cleanup was incomplete. Refresh before continuing.",
             });
           }
           return yield* error;

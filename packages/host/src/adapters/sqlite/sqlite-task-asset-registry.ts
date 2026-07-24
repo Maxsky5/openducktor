@@ -8,6 +8,7 @@ import type {
 } from "../../ports/task-asset-registry-port";
 import type { TaskDescriptionAssetPersistencePort } from "../../ports/task-description-asset-persistence-port";
 import { getTaskCard } from "./sqlite-task-card-read-model";
+import { insertTaskFromCreateInput } from "./sqlite-task-create";
 import { requireTaskRow } from "./sqlite-task-queries";
 import {
   createSqliteTaskRepositoryContextProvider,
@@ -152,6 +153,28 @@ export const createSqliteTaskAssetRegistry = ({
             yield* insertAssets(transaction, input.taskId, input.assets);
           }),
         ),
+      );
+    },
+    createTaskWithDescriptionAssets(input) {
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
+        ({ session, workspaceId }) =>
+          session.transaction(
+            "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
+            (transaction) =>
+              Effect.gen(function* () {
+                const taskId = yield* insertTaskFromCreateInput({
+                  createdAt: now(),
+                  session: transaction,
+                  task: input.task,
+                  workspaceId,
+                });
+                yield* input.prepareFiles(taskId);
+                yield* insertAssets(transaction, taskId, input.assets);
+                return yield* getTaskCard(transaction, taskId, input.repoPath);
+              }),
+          ),
       );
     },
     updateTaskWithDescriptionAssets(input) {

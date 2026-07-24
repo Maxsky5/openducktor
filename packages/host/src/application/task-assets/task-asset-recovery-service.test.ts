@@ -115,4 +115,83 @@ describe("task asset recovery service", () => {
     expect(removed).toEqual([createQuarantine.promotedAssetIds]);
     expect(purged).toEqual([createQuarantine.id]);
   });
+
+  test("removes promoted files after an interrupted create transaction rolls back", async () => {
+    const createQuarantine: TaskAssetQuarantine = {
+      id: "550e8400-e29b-41d4-a716-446655440006",
+      workspaceId: "fairnest",
+      taskId: "task-4",
+      operation: "create",
+      assetIds: [],
+      promotedAssetIds: ["550e8400-e29b-41d4-a716-446655440007"],
+    };
+    const deleted: string[] = [];
+    const removed: string[][] = [];
+    const purged: string[] = [];
+    const service = createTaskAssetRecoveryService({
+      filePort: {
+        durableExists: () => Effect.succeed(true),
+        listQuarantines: () => Effect.succeed([createQuarantine]),
+        removeDurable: (input) => Effect.sync(() => removed.push(input.assetIds)),
+        restoreQuarantine: () => Effect.die("Create recovery must not restore a quarantine."),
+        purgeQuarantine: (id) => Effect.sync(() => purged.push(id)),
+      },
+      registry: {
+        listAssets: () => Effect.succeed([]),
+        taskExists: () => Effect.succeed(false),
+      },
+      taskStore: {
+        deleteTask: (input) => Effect.sync(() => deleted.push(input.taskId)).pipe(Effect.as(true)),
+      },
+      resolveRepoPath: () => Effect.succeed("/repo"),
+    });
+
+    expect(await Effect.runPromise(service.startupSweep())).toBe(1);
+    expect(deleted).toEqual([]);
+    expect(removed).toEqual([createQuarantine.promotedAssetIds]);
+    expect(purged).toEqual([createQuarantine.id]);
+  });
+
+  test("purges an interrupted create manifest after its transaction commits", async () => {
+    const createQuarantine: TaskAssetQuarantine = {
+      id: "550e8400-e29b-41d4-a716-446655440008",
+      workspaceId: "fairnest",
+      taskId: "task-5",
+      operation: "create",
+      assetIds: [],
+      promotedAssetIds: ["550e8400-e29b-41d4-a716-446655440009"],
+    };
+    const purged: string[] = [];
+    const service = createTaskAssetRecoveryService({
+      filePort: {
+        durableExists: () => Effect.die("Committed create recovery must not inspect files."),
+        listQuarantines: () => Effect.succeed([createQuarantine]),
+        removeDurable: () => Effect.die("Committed create recovery must not remove files."),
+        restoreQuarantine: () => Effect.die("Committed create recovery must not restore files."),
+        purgeQuarantine: (id) => Effect.sync(() => purged.push(id)),
+      },
+      registry: {
+        listAssets: () =>
+          Effect.succeed(
+            createQuarantine.promotedAssetIds.map((id) => ({
+              id,
+              taskId: createQuarantine.taskId,
+              scope: "description" as const,
+              originalName: `${id}.png`,
+              mediaType: "image/png",
+              byteSize: 1,
+              createdAt: new Date(0),
+            })),
+          ),
+        taskExists: () => Effect.die("Committed create recovery must not inspect the task row."),
+      },
+      taskStore: {
+        deleteTask: () => Effect.die("Committed create recovery must not delete the task."),
+      },
+      resolveRepoPath: () => Effect.succeed("/repo"),
+    });
+
+    expect(await Effect.runPromise(service.startupSweep())).toBe(1);
+    expect(purged).toEqual([createQuarantine.id]);
+  });
 });

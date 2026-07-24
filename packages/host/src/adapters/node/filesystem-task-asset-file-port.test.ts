@@ -24,19 +24,32 @@ const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
   roots.push(configDir);
   const aliveProcessIds = new Set([10_001]);
-  const createPort = (instanceId: string, processId: number) =>
-    createNodeTaskAssetFilePort(
+  const processStartedAtMs = new Map([[10_001, 10_001]]);
+  const createPort = (instanceId: string, processId: number) => {
+    if (!processStartedAtMs.has(processId)) {
+      processStartedAtMs.set(processId, processId);
+    }
+    return createNodeTaskAssetFilePort(
       { configDir },
       {
         owner: { version: 1, instanceId, processId, startedAtMs: processId },
         processIsAlive: (candidate) => aliveProcessIds.has(candidate),
+        processStartedAtMs: (candidate) => {
+          const startedAtMs = processStartedAtMs.get(candidate);
+          if (startedAtMs === undefined) {
+            return Promise.reject(new Error(`Missing process start time for ${candidate}.`));
+          }
+          return Promise.resolve(startedAtMs);
+        },
       },
     );
+  };
   return {
     aliveProcessIds,
     configDir,
     createPort,
     port: createPort("10000000-0000-4000-8000-000000000001", 10_001),
+    processStartedAtMs,
   };
 };
 
@@ -298,6 +311,52 @@ describe("node task asset file port", () => {
 
     expect(await readdir(path.join(configDir, "task-asset-owners"))).toEqual([]);
     expect(await readdir(path.join(configDir, "task-asset-staging", "instances"))).toEqual([]);
+  });
+
+  test("clears staging when a live process has reused a dead owner's PID", async () => {
+    const { aliveProcessIds, configDir, createPort, port, processStartedAtMs } =
+      await createHarness();
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+
+    processStartedAtMs.set(10_001, 20_001);
+    aliveProcessIds.add(10_002);
+    const recoveryPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
+
+    expect(await Effect.runPromise(recoveryPort.clearStaging())).toBe(1);
+    expect(await readdir(path.join(configDir, "task-asset-owners"))).not.toContain(
+      "10000000-0000-4000-8000-000000000001.json",
+    );
+  });
+
+  test("reads the current process start time when checking owner identity", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
+    roots.push(configDir);
+    const staleInstanceId = "10000000-0000-4000-8000-000000000003";
+    const ownersRoot = path.join(configDir, "task-asset-owners");
+    const staleStagingRoot = path.join(
+      configDir,
+      "task-asset-staging",
+      "instances",
+      staleInstanceId,
+      workspaceId,
+    );
+    await mkdir(ownersRoot, { recursive: true });
+    await mkdir(staleStagingRoot, { recursive: true });
+    await writeFile(
+      path.join(ownersRoot, `${staleInstanceId}.json`),
+      JSON.stringify({
+        version: 1,
+        instanceId: staleInstanceId,
+        processId: process.pid,
+        startedAtMs: 0,
+      }),
+    );
+    await writeFile(path.join(staleStagingRoot, assetId), Buffer.from([1]));
+    const port = createNodeTaskAssetFilePort({ configDir });
+
+    expect(await Effect.runPromise(port.clearStaging())).toBe(1);
+    expect(await readdir(ownersRoot)).not.toContain(`${staleInstanceId}.json`);
+    await Effect.runPromise(port.cleanupCurrentOwner());
   });
 
   test("recovers legacy ownerless quarantine data and clears legacy staging", async () => {

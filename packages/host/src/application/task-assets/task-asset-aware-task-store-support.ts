@@ -42,6 +42,7 @@ export const asTaskAssetError = (input: {
     durableState: "unchanged",
     retryAllowed: true,
     message: input.message,
+    cause: input.cause,
   });
 };
 

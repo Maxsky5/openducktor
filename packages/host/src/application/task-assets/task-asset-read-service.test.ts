@@ -71,6 +71,39 @@ describe("task asset read service", () => {
     expect(readDisk).toBe(false);
   });
 
+  test("rejects invalid registered byte sizes before reading a durable file", async () => {
+    let readDisk = false;
+    const service = createTaskAssetReadService({
+      resolveRepoPath: () => Effect.succeed("/repo"),
+      registry: {
+        getAsset: () =>
+          Effect.succeed({
+            id: context.assetId,
+            taskId: context.taskId,
+            scope: "description",
+            originalName: "oversized.png",
+            mediaType: "image/png",
+            byteSize: TASK_ASSET_MAX_FILE_BYTES + 1,
+            createdAt: new Date(0),
+          }),
+      },
+      filePort: {
+        readDurable: () => {
+          readDisk = true;
+          return Effect.succeed(new Uint8Array());
+        },
+      },
+    });
+
+    const result = await Effect.runPromise(Effect.either(service.read(context)));
+
+    expect(result).toMatchObject({
+      _tag: "Left",
+      left: { failedPhase: "validate_registered_byte_size" },
+    });
+    expect(readDisk).toBe(false);
+  });
+
   test("rejects an oversized batch before reading any durable files", async () => {
     const secondAssetId = "96d20c03-a470-47f6-9472-1a1d34cd23df";
     const thirdAssetId = "2ee9b455-b45d-485b-862b-70909b1c58bd";

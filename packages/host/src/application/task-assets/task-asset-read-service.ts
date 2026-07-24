@@ -100,11 +100,51 @@ const responseHeaders = (
   "X-Content-Type-Options": "nosniff",
 });
 
+const validateRegisteredAsset = (context: TaskAssetRenderContext, record: TaskAssetRecord) =>
+  Effect.gen(function* () {
+    const mediaType = taskAssetMediaTypeSchema.safeParse(record.mediaType);
+    if (!mediaType.success) {
+      return yield* serveError(
+        "validate_registered_media_type",
+        "Task asset has an unsupported registered media type.",
+        context,
+        "database",
+      );
+    }
+    if (
+      !Number.isSafeInteger(record.byteSize) ||
+      record.byteSize < 0 ||
+      record.byteSize > TASK_ASSET_MAX_FILE_BYTES
+    ) {
+      return yield* serveError(
+        "validate_registered_byte_size",
+        "Task asset registry entry has an invalid byte size.",
+        context,
+        "database",
+      );
+    }
+    return { context, record, mediaType: mediaType.data };
+  });
+
 export const createTaskAssetReadService = (input: {
   filePort: Pick<TaskAssetFilePort, "readDurable">;
   registry: Pick<TaskAssetRegistryPort, "getAsset">;
   resolveRepoPath(workspaceId: string): Effect.Effect<string, unknown>;
 }): TaskAssetReadService => {
+  const getRegisteredAsset = (repoPath: string, context: TaskAssetRenderContext) =>
+    input.registry
+      .getAsset({
+        repoPath,
+        taskId: context.taskId,
+        scope: context.scope,
+        assetId: context.assetId,
+      })
+      .pipe(
+        Effect.mapError(() =>
+          serveError("read_registry", "Task asset could not be read.", context, "database"),
+        ),
+      );
+
   const readRegisteredAsset = (
     context: TaskAssetRenderContext,
     record: TaskAssetRecord,
@@ -152,31 +192,12 @@ export const createTaskAssetReadService = (input: {
               serveError("resolve_workspace", "Task asset was not found.", parsed.data),
             ),
           );
-        const record = yield* input.registry
-          .getAsset({
-            repoPath,
-            taskId: parsed.data.taskId,
-            scope: parsed.data.scope,
-            assetId: parsed.data.assetId,
-          })
-          .pipe(
-            Effect.mapError(() =>
-              serveError("read_registry", "Task asset could not be read.", parsed.data, "database"),
-            ),
-          );
+        const record = yield* getRegisteredAsset(repoPath, parsed.data);
         if (!record) {
           return null;
         }
-        const mediaType = taskAssetMediaTypeSchema.safeParse(record.mediaType);
-        if (!mediaType.success) {
-          return yield* serveError(
-            "validate_registered_media_type",
-            "Task asset has an unsupported registered media type.",
-            parsed.data,
-            "database",
-          );
-        }
-        return yield* readRegisteredAsset(parsed.data, record, mediaType.data);
+        const validated = yield* validateRegisteredAsset(parsed.data, record);
+        return yield* readRegisteredAsset(validated.context, validated.record, validated.mediaType);
       });
     },
     readBatch(rawInput) {
@@ -211,19 +232,9 @@ export const createTaskAssetReadService = (input: {
         );
         const registeredAssets = yield* Effect.forEach(assetIds, (assetId) => {
           const context = { ...renderContext, assetId };
-          return input.registry
-            .getAsset({
-              repoPath,
-              taskId: context.taskId,
-              scope: context.scope,
-              assetId,
-            })
-            .pipe(
-              Effect.map((record) => ({ assetId, context, record })),
-              Effect.mapError(() =>
-                serveError("read_registry", "Task asset could not be read.", context, "database"),
-              ),
-            );
+          return getRegisteredAsset(repoPath, context).pipe(
+            Effect.map((record) => ({ assetId, context, record })),
+          );
         });
         const missingAssetIds = registeredAssets
           .filter((entry) => entry.record === null)
@@ -242,28 +253,10 @@ export const createTaskAssetReadService = (input: {
                 "database",
               );
             }
-            const mediaType = taskAssetMediaTypeSchema.safeParse(record.mediaType);
-            if (!mediaType.success) {
-              return yield* serveError(
-                "validate_registered_media_type",
-                "Task asset has an unsupported registered media type.",
-                entry.context,
-                "database",
-              );
-            }
-            if (
-              !Number.isSafeInteger(record.byteSize) ||
-              record.byteSize < 0 ||
-              record.byteSize > TASK_ASSET_MAX_FILE_BYTES
-            ) {
-              return yield* serveError(
-                "validate_registered_byte_size",
-                "Task asset registry entry has an invalid byte size.",
-                entry.context,
-                "database",
-              );
-            }
-            return { ...entry, record, mediaType: mediaType.data };
+            return {
+              assetId: entry.assetId,
+              ...(yield* validateRegisteredAsset(entry.context, record)),
+            };
           }),
         );
         const requestedBytes = validatedAssets.reduce(

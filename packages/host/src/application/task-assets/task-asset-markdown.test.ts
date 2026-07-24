@@ -21,6 +21,18 @@ describe("task description asset references", () => {
     expect(collectTaskDescriptionAssetIds(markdown)).toEqual(new Set([first, second]));
   });
 
+  test("collects logical IDs from referenced image definitions", () => {
+    const markdown = [
+      "![Architecture][diagram]",
+      "",
+      `[diagram]: odt-asset:${first} "Current architecture"`,
+      "",
+      `[ordinary link][diagram]`,
+    ].join("\n");
+
+    expect(collectTaskDescriptionAssetIds(markdown)).toEqual(new Set([first]));
+  });
+
   test("rejects malformed logical image destinations", () => {
     expect(() => collectTaskDescriptionAssetIds("![bad](odt-asset:../foreign)")).toThrow(
       "invalid odt-asset image destination",

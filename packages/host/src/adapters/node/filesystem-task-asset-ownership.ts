@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
@@ -14,6 +16,32 @@ export type TaskAssetFileOwner = {
 export type TaskAssetFileOwnershipDependencies = {
   owner: TaskAssetFileOwner;
   processIsAlive(processId: number): boolean;
+  processStartedAtMs(processId: number): Promise<number>;
+};
+
+const execFileAsync = promisify(execFile);
+
+const readProcessStartedAtMs = async (processId: number): Promise<number> => {
+  const { stdout } =
+    process.platform === "win32"
+      ? await execFileAsync(
+          "powershell.exe",
+          [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `(Get-Process -Id ${processId} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`,
+          ],
+          { windowsHide: true },
+        )
+      : await execFileAsync("ps", ["-p", processId.toString(), "-o", "lstart="], {
+          env: { ...process.env, LC_ALL: "C" },
+        });
+  const startedAtMs = Date.parse(stdout.trim());
+  if (!Number.isFinite(startedAtMs)) {
+    throw new Error(`Could not read the start time for process ${processId}.`);
+  }
+  return startedAtMs;
 };
 
 const isMissing = (cause: unknown): boolean =>
@@ -56,6 +84,7 @@ const defaultOwnership = (): TaskAssetFileOwnershipDependencies => ({
     startedAtMs: Date.now(),
   },
   processIsAlive,
+  processStartedAtMs: readProcessStartedAtMs,
 });
 
 export const createTaskAssetFileOwnership = (
@@ -154,12 +183,31 @@ export const createTaskAssetFileOwnership = (
     return owners;
   };
 
-  const listDead = async (): Promise<TaskAssetFileOwner[]> =>
-    (await listAll()).filter(
-      (owner) =>
-        owner.instanceId !== dependencies.owner.instanceId &&
-        !dependencies.processIsAlive(owner.processId),
-    );
+  const listDead = async (): Promise<TaskAssetFileOwner[]> => {
+    const deadOwners: TaskAssetFileOwner[] = [];
+    for (const owner of await listAll()) {
+      if (owner.instanceId === dependencies.owner.instanceId) {
+        continue;
+      }
+      if (!dependencies.processIsAlive(owner.processId)) {
+        deadOwners.push(owner);
+        continue;
+      }
+      try {
+        const processStartedAtMs = await dependencies.processStartedAtMs(owner.processId);
+        if (processStartedAtMs > owner.startedAtMs) {
+          deadOwners.push(owner);
+        }
+      } catch (cause) {
+        if (!dependencies.processIsAlive(owner.processId)) {
+          deadOwners.push(owner);
+          continue;
+        }
+        throw cause;
+      }
+    }
+    return deadOwners;
+  };
 
   const clearExpiredStaging = async (): Promise<number> => {
     const deadOwners = await listDead();

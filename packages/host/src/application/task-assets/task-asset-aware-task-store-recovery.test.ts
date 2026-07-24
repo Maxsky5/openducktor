@@ -3,6 +3,7 @@ import { Cause, Deferred, Effect, Exit } from "effect";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
@@ -109,6 +110,85 @@ describe("asset-aware task store", () => {
     expect(workspaceResolutionRequested).toBe(false);
   });
 
+  test("preserves an asset-free create failure from the inner task store", async () => {
+    const harness = await createHarness();
+    const failure = new HostOperationError({
+      operation: "sqliteTaskRepository.createTask",
+      message: "The task database is unavailable.",
+    });
+    const store = createTaskAssetAwareTaskStore({
+      inner: {
+        ...harness.innerStore,
+        createTask: () => Effect.fail(failure),
+      },
+      filePort: harness.filePort,
+      registry: harness.registry,
+      staging: harness.staging,
+      persistence: null,
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+
+    const result = await Effect.runPromise(
+      Effect.flip(
+        store.createTask({
+          repoPath: harness.repoPath,
+          task: {
+            title: "Asset-free failure",
+            issueType: "task",
+            aiReviewEnabled: true,
+            priority: 2,
+          },
+        }),
+      ),
+    );
+
+    expect(result).toBe(failure);
+  });
+
+  test("retains the original cause when an asset create wraps a task-store failure", async () => {
+    const harness = await createHarness();
+    const staged = await Effect.runPromise(
+      harness.staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "diagram.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    const failure = new HostOperationError({
+      operation: "sqliteTaskRepository.createTask",
+      message: "The task database is unavailable.",
+    });
+    const store = createTaskAssetAwareTaskStore({
+      inner: harness.innerStore,
+      filePort: harness.filePort,
+      registry: harness.registry,
+      staging: harness.staging,
+      persistence: {
+        ...harness.registry,
+        createTaskWithDescriptionAssets: () => Effect.fail(failure),
+      },
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+
+    const result = await captureTaskAssetError(
+      store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Asset failure",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![Architecture](odt-asset:${staged.assetId})`,
+        },
+        descriptionAssets: { stagedAssetIds: [staged.assetId] },
+      }),
+    );
+
+    expect(result.cause).toBe(failure);
+  });
+
   test("rejects asset mutations when shared asset persistence is unavailable", async () => {
     const harness = await createHarness();
     const staged = await Effect.runPromise(
@@ -185,6 +265,7 @@ describe("asset-aware task store", () => {
       staging: harness.staging,
       registry: harness.registry,
       persistence: {
+        ...harness.registry,
         updateTaskWithDescriptionAssets: () =>
           Effect.fail(
             new TaskAssetError({
