@@ -151,7 +151,10 @@ export class CodexRuntimeSessionEvents {
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
-  private readonly startedItemTimestampsByKey = new Map<string, number>();
+  private readonly startedItemTimestampsByRuntimeId = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly runtimeEventProcessingByRuntimeId = new Map<string, Promise<void>>();
   private readonly runtimeEventGenerationByRuntimeId = new Map<string, symbol>();
@@ -210,6 +213,7 @@ export class CodexRuntimeSessionEvents {
       this.stopRuntimeEventSubscription(runtimeId);
     } finally {
       this.subagentLifecycle.clearRuntime(runtimeId);
+      this.clearStartedItemTimestampsForRuntime(runtimeId);
       this.handledStreamRequestKeysByRuntimeId.delete(runtimeId);
       this.activeMutationByRuntimeId.delete(runtimeId);
     }
@@ -353,6 +357,9 @@ export class CodexRuntimeSessionEvents {
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
     this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
+    if (runtimeId !== undefined) {
+      this.clearStartedItemTimestampsForSession(runtimeId, externalSessionId);
+    }
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
@@ -814,13 +821,16 @@ export class CodexRuntimeSessionEvents {
   private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {
     return {
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
-      startedItemTimestampsByKey: this.startedItemTimestampsByKey,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,
       modelByTurnKey: this.modelByTurnKey,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
+      recordStartedItemTimestamp: (runtimeId, threadId, itemId, startedAtMs) =>
+        this.recordStartedItemTimestamp(runtimeId, threadId, itemId, startedAtMs),
+      takeStartedItemTimestamp: (runtimeId, threadId, itemId) =>
+        this.takeStartedItemTimestamp(runtimeId, threadId, itemId),
       emitSessionEvent: (externalSessionId, event) => {
         if (scopedSession?.threadId === externalSessionId) {
           this.emitSessionEventForSession(scopedSession, event);
@@ -836,6 +846,57 @@ export class CodexRuntimeSessionEvents {
       failUnlinkedSubagentSpawns: (parentThreadId, runtimeId, error) =>
         this.deps.subagents.failUnlinkedSpawnsForParent(parentThreadId, runtimeId, error),
     };
+  }
+
+  private recordStartedItemTimestamp(
+    runtimeId: string,
+    threadId: string,
+    itemId: string,
+    startedAtMs: number,
+  ): void {
+    let timestampsByThreadId = this.startedItemTimestampsByRuntimeId.get(runtimeId);
+    if (!timestampsByThreadId) {
+      timestampsByThreadId = new Map();
+      this.startedItemTimestampsByRuntimeId.set(runtimeId, timestampsByThreadId);
+    }
+    let timestampsByItemId = timestampsByThreadId.get(threadId);
+    if (!timestampsByItemId) {
+      timestampsByItemId = new Map();
+      timestampsByThreadId.set(threadId, timestampsByItemId);
+    }
+    timestampsByItemId.set(itemId, startedAtMs);
+  }
+
+  private takeStartedItemTimestamp(
+    runtimeId: string,
+    threadId: string,
+    itemId: string,
+  ): number | undefined {
+    const timestampsByThreadId = this.startedItemTimestampsByRuntimeId.get(runtimeId);
+    const timestampsByItemId = timestampsByThreadId?.get(threadId);
+    const startedAtMs = timestampsByItemId?.get(itemId);
+    if (!timestampsByItemId?.delete(itemId)) {
+      return undefined;
+    }
+    if (timestampsByItemId.size === 0) {
+      timestampsByThreadId?.delete(threadId);
+    }
+    if (timestampsByThreadId?.size === 0) {
+      this.startedItemTimestampsByRuntimeId.delete(runtimeId);
+    }
+    return startedAtMs;
+  }
+
+  private clearStartedItemTimestampsForSession(runtimeId: string, threadId: string): void {
+    const timestampsByThreadId = this.startedItemTimestampsByRuntimeId.get(runtimeId);
+    timestampsByThreadId?.delete(threadId);
+    if (timestampsByThreadId?.size === 0) {
+      this.startedItemTimestampsByRuntimeId.delete(runtimeId);
+    }
+  }
+
+  private clearStartedItemTimestampsForRuntime(runtimeId: string): void {
+    this.startedItemTimestampsByRuntimeId.delete(runtimeId);
   }
 
   private async handleServerRequest(

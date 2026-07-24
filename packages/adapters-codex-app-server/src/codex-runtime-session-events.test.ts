@@ -64,6 +64,93 @@ const createRuntimeEvents = (
   });
 };
 
+type StartedItemTimestampState = Map<string, Map<string, Map<string, number>>>;
+
+const startedItemTimestampState = (
+  runtimeEvents: CodexRuntimeSessionEvents,
+): StartedItemTimestampState =>
+  (
+    runtimeEvents as unknown as {
+      startedItemTimestampsByRuntimeId: StartedItemTimestampState;
+    }
+  ).startedItemTimestampsByRuntimeId;
+
+type ItemLifecycleMethod = "item/started" | "item/completed";
+
+const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => {
+  const listenersByRuntimeId = new Map<string, RuntimeListener>();
+  const sessions = new Map(initialSessions.map((session) => [session.threadId, session]));
+  const sessionEvents = new CodexSessionEventBus();
+  const emittedEvents: unknown[] = [];
+  const observedThreadIds = new Set<string>();
+  for (const session of initialSessions) {
+    if (observedThreadIds.has(session.threadId)) {
+      continue;
+    }
+    observedThreadIds.add(session.threadId);
+    sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
+  }
+  const runtimeEvents = createRuntimeEvents({
+    subscribeEvents: (runtimeId, next) => {
+      listenersByRuntimeId.set(runtimeId, (event) => next(withRuntimeReceivedAt(event)));
+      return () => {
+        listenersByRuntimeId.delete(runtimeId);
+      };
+    },
+    sessions,
+    sessionEvents,
+  });
+
+  return {
+    emittedEvents,
+    runtimeEvents,
+    async subscribe(...runtimeIds: string[]): Promise<void> {
+      for (const runtimeId of runtimeIds) {
+        await runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+      }
+    },
+    emitItem(
+      session: CodexSessionState,
+      method: ItemLifecycleMethod,
+      timestampMs: number,
+      itemId: string,
+      itemOverrides: Record<string, unknown> = {},
+    ): void {
+      const listener = listenersByRuntimeId.get(session.runtimeId);
+      if (!listener) {
+        throw new Error(`Runtime '${session.runtimeId}' is not subscribed in the test harness.`);
+      }
+      const isStarted = method === "item/started";
+      const timing = isStarted ? { startedAtMs: timestampMs } : { completedAtMs: timestampMs };
+      const completionFields = isStarted ? {} : { exitCode: 0 };
+      sessions.set(session.threadId, session);
+      listener({
+        runtimeId: session.runtimeId,
+        kind: "notification",
+        message: {
+          method,
+          params: {
+            threadId: session.threadId,
+            turnId: `${session.runtimeId}-turn`,
+            ...timing,
+            item: {
+              type: "commandExecution",
+              id: itemId,
+              command: "true",
+              cwd: "/repo",
+              status: isStarted ? "inProgress" : "completed",
+              commandActions: [],
+              aggregatedOutput: "",
+              ...completionFields,
+              ...itemOverrides,
+            },
+          },
+        },
+      });
+    },
+  };
+};
+
 const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
 
 const createSession = (threadId: string): CodexSessionState => ({
@@ -864,6 +951,168 @@ describe("CodexRuntimeSessionEvents", () => {
       totalTokens: 200,
       contextWindow: 200_000,
     });
+  });
+
+  test("drops an unmatched item start when its session is released", async () => {
+    const session = createSession("thread/reused");
+    const harness = createItemLifecycleHarness(session);
+    await harness.subscribe(session.runtimeId);
+    harness.emitItem(session, "item/started", 1_783_109_994_000, "reused-item");
+    await flushRuntimeEvents();
+
+    harness.runtimeEvents.clearSession(session.threadId, session.runtimeId);
+    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
+    harness.emittedEvents.length = 0;
+
+    harness.emitItem(session, "item/completed", 1_783_109_995_000, "reused-item");
+    await flushRuntimeEvents();
+
+    expect(harness.emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "reused-item",
+          endedAtMs: 1_783_109_995_000,
+        }),
+      }),
+    );
+    expect(harness.emittedEvents).not.toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "reused-item",
+          startedAtMs: 1_783_109_994_000,
+        }),
+      }),
+    );
+  });
+
+  test("takes matched item starts and prunes empty parent maps", async () => {
+    const session = createSession("thread/matched");
+    const harness = createItemLifecycleHarness(session);
+    await harness.subscribe(session.runtimeId);
+    harness.emitItem(session, "item/started", 1_783_109_996_000, "matched-item");
+    await flushRuntimeEvents();
+
+    expect(
+      startedItemTimestampState(harness.runtimeEvents)
+        .get(session.runtimeId)
+        ?.get(session.threadId),
+    ).toEqual(new Map([["matched-item", 1_783_109_996_000]]));
+
+    harness.emitItem(session, "item/completed", 1_783_109_997_000, "matched-item");
+    await flushRuntimeEvents();
+
+    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
+    expect(harness.emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "matched-item",
+          startedAtMs: 1_783_109_996_000,
+          endedAtMs: 1_783_109_997_000,
+        }),
+      }),
+    );
+  });
+
+  test("isolates identical item IDs by runtime and clears runtime-owned state", async () => {
+    const threadId = "thread/shared";
+    const runtimeOneSession = createSessionForRuntime(threadId, "runtime-1");
+    const runtimeTwoSession = createSessionForRuntime(threadId, "runtime-2");
+    const harness = createItemLifecycleHarness(runtimeOneSession, runtimeTwoSession);
+    await harness.subscribe(runtimeOneSession.runtimeId, runtimeTwoSession.runtimeId);
+    for (const [session, startedAtMs] of [
+      [runtimeOneSession, 1_783_109_998_000],
+      [runtimeTwoSession, 1_783_109_999_000],
+    ] as const) {
+      harness.emitItem(session, "item/started", startedAtMs, "shared-item");
+      await flushRuntimeEvents();
+    }
+
+    expect(
+      startedItemTimestampState(harness.runtimeEvents).get("runtime-1")?.get(threadId),
+    ).toEqual(new Map([["shared-item", 1_783_109_998_000]]));
+    expect(
+      startedItemTimestampState(harness.runtimeEvents).get("runtime-2")?.get(threadId),
+    ).toEqual(new Map([["shared-item", 1_783_109_999_000]]));
+
+    harness.runtimeEvents.clearRuntime("runtime-1");
+    expect(startedItemTimestampState(harness.runtimeEvents).has("runtime-1")).toBe(false);
+    expect(
+      startedItemTimestampState(harness.runtimeEvents).get("runtime-2")?.get(threadId),
+    ).toEqual(new Map([["shared-item", 1_783_109_999_000]]));
+
+    harness.emitItem(runtimeTwoSession, "item/completed", 1_783_110_000_000, "shared-item");
+    await flushRuntimeEvents();
+
+    expect(harness.emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "shared-item",
+          startedAtMs: 1_783_109_999_000,
+          endedAtMs: 1_783_110_000_000,
+        }),
+      }),
+    );
+    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
+
+    harness.emitItem(runtimeTwoSession, "item/started", 1_783_110_001_000, "orphaned-item");
+    await flushRuntimeEvents();
+    harness.runtimeEvents.clearRuntime("runtime-2");
+
+    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
+  });
+
+  test("reuses item IDs and preserves runtime-supplied completion timing", async () => {
+    const session = createSession("thread/restarted-item");
+    const harness = createItemLifecycleHarness(session);
+    await harness.subscribe(session.runtimeId);
+    harness.emitItem(session, "item/started", 1_783_110_001_000, "restarted-item");
+    harness.emitItem(session, "item/completed", 1_783_110_002_000, "restarted-item");
+    await flushRuntimeEvents();
+
+    harness.emittedEvents.length = 0;
+    harness.emitItem(session, "item/started", 1_783_110_003_000, "restarted-item");
+    harness.emitItem(session, "item/completed", 1_783_110_004_000, "restarted-item");
+    await flushRuntimeEvents();
+
+    expect(harness.emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "restarted-item",
+          startedAtMs: 1_783_110_003_000,
+          endedAtMs: 1_783_110_004_000,
+        }),
+      }),
+    );
+
+    harness.emittedEvents.length = 0;
+    harness.emitItem(session, "item/started", 1_783_110_005_000, "restarted-item");
+    harness.emitItem(session, "item/completed", 1_783_110_006_000, "restarted-item", {
+      startedAtMs: 1_783_110_005_500,
+    });
+    await flushRuntimeEvents();
+
+    expect(harness.emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "restarted-item",
+          startedAtMs: 1_783_110_005_500,
+          endedAtMs: 1_783_110_006_000,
+        }),
+      }),
+    );
+    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
   });
 
   test("returns null after a successful resume with no retained usage", async () => {
