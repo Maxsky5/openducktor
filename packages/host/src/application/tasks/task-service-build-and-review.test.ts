@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createBuildSettingsConfig,
   createBuildStartGitPort,
@@ -10,6 +11,7 @@ import {
   createDirectMergeDevServerService,
   createRuntimeDefinitionsService,
   createTaskService,
+  createTaskServiceWithMutationProgress,
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
@@ -1172,6 +1174,40 @@ describe("createTaskService build and review", () => {
         input: { repoPath: "/repo", taskId: "task-1", status: "blocked" },
       },
     ]);
+  });
+  test("reports blocked build completion as partial progress", async () => {
+    const transitions: string[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks: () =>
+        Effect.succeed([task({ id: "task-1", status: "in_progress", aiReviewEnabled: false })]),
+      transitionTask: (input) => {
+        transitions.push(input.status);
+        return Effect.succeed(task({ id: "task-1", status: input.status }));
+      },
+    };
+
+    const result = await Effect.runPromise(
+      createTaskServiceWithMutationProgress({
+        taskStore,
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        systemCommands: createBuildSystemCommands([], false),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: ["sh -lc 'exit 1'"] },
+        }),
+      })
+        .buildCompleted({ repoPath: "/repo", taskId: "task-1" })
+        .pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(transitions).toEqual(["blocked"]);
+    expect(result.operation).toBe("build-completed");
+    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
+    expect(result.failure.message).toContain("Worktree cleanup script command failed");
   });
   test("returns review tasks unchanged from duplicate build completion", async () => {
     const taskStore: TaskStorePort = {

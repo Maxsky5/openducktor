@@ -29,12 +29,16 @@ export const createEventPublishingTaskService = ({
     operation: string,
     repoPath: string,
     changes: TaskChangeSet,
-    mutation: Effect.Effect<A, TaskServiceError>,
+    mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
     successChanges: (result: A) => TaskChangeSet = () => changes,
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
       const result = yield* Effect.either(mutation);
       if (result._tag === "Left") {
+        if (result.left instanceof TaskMutationProgressFailure) {
+          yield* taskSyncService.publishTasksUpdated(repoPath, result.left.changes, operation);
+          return yield* Effect.fail(result.left.failure);
+        }
         return yield* Effect.fail(result.left);
       }
       yield* taskSyncService.publishTasksUpdated(repoPath, successChanges(result.right), operation);
@@ -45,12 +49,16 @@ export const createEventPublishingTaskService = ({
     operation: string,
     repoPath: string,
     changes: TaskChangeSet,
-    mutation: Effect.Effect<A, TaskServiceError>,
+    mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
     mutated: (result: A) => boolean,
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
       const result = yield* Effect.either(mutation);
       if (result._tag === "Left") {
+        if (result.left instanceof TaskMutationProgressFailure) {
+          yield* taskSyncService.publishTasksUpdated(repoPath, result.left.changes, operation);
+          return yield* Effect.fail(result.left.failure);
+        }
         return yield* Effect.fail(result.left);
       }
       if (!mutated(result.right)) {

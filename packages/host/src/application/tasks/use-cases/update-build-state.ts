@@ -12,6 +12,7 @@ import {
   taskListWithCurrent,
 } from "../support/task-workflow-helpers";
 import { runHookCommandsAllowFailure } from "../support/workflow-hooks";
+import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskBuildStateUseCases = ({
@@ -19,11 +20,8 @@ export const createTaskBuildStateUseCases = ({
   settingsConfig,
   systemCommands,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<
-  TaskService,
-  "buildBlocked" | "buildResumed" | "buildCompleted"
-> => ({
-  buildBlocked(input) {
+}: CreateTaskServiceInput) => ({
+  buildBlocked(input: Parameters<TaskService["buildBlocked"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId, reason } = input;
       if (!reason.trim()) {
@@ -58,7 +56,7 @@ export const createTaskBuildStateUseCases = ({
     });
   },
 
-  buildResumed(input) {
+  buildResumed(input: Parameters<TaskService["buildResumed"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask({ repoPath, taskId });
@@ -73,7 +71,7 @@ export const createTaskBuildStateUseCases = ({
     });
   },
 
-  buildCompleted(input) {
+  buildCompleted(input: Parameters<TaskService["buildCompleted"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
@@ -111,7 +109,9 @@ export const createTaskBuildStateUseCases = ({
         );
         if (worktreePathResult._tag === "Left") {
           yield* blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
-          return yield* Effect.fail(worktreePathResult.left);
+          return yield* Effect.fail(
+            createTaskMutationProgressFailure("build-completed", taskId, worktreePathResult.left),
+          );
         }
         const worktreePath = worktreePathResult.right;
 
@@ -124,11 +124,15 @@ export const createTaskBuildStateUseCases = ({
           const message = `Worktree cleanup script command failed: ${failure.hook}\n${failure.stderr}`;
           yield* blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
           return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message,
-              details: { repoPath, taskId, hook: failure.hook },
-            }),
+            createTaskMutationProgressFailure(
+              "build-completed",
+              taskId,
+              new HostValidationError({
+                field: "taskId",
+                message,
+                details: { repoPath, taskId, hook: failure.hook },
+              }),
+            ),
           );
         }
       }

@@ -12,9 +12,11 @@ import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
   ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL,
+  ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
   ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL,
   electronTaskStreamFrameEnvelopeSchema,
   electronTaskStreamSubscriptionSchema,
+  electronTaskStreamTerminalFailureEnvelopeSchema,
   electronTaskStreamUnsubscribeSchema,
 } from "../shared/electron-bridge-contract";
 
@@ -219,6 +221,24 @@ export const registerElectronTaskStreamIpc = ({
       }
       unsubscribeHost();
     };
+    const notifyTerminalFailure = (message: string): void => {
+      if (
+        owner.sender.isDestroyed() ||
+        owner.senderFrame.isDestroyed() ||
+        owner.senderFrame.processId !== ownerProcessId ||
+        owner.senderFrame.routingId !== ownerRoutingId
+      ) {
+        return;
+      }
+      try {
+        owner.senderFrame.send(
+          ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
+          electronTaskStreamTerminalFailureEnvelopeSchema.parse({ message, subscriptionId }),
+        );
+      } catch {
+        // The renderer frame stopped accepting messages before terminal delivery.
+      }
+    };
     const deliverFrame = (frame: TaskEventStreamFrame): void => {
       if (cleanedUp) return;
       if (!subscriptionId) {
@@ -236,6 +256,7 @@ export const registerElectronTaskStreamIpc = ({
           ),
           subscriptionId,
         });
+        notifyTerminalFailure("Task stream produced an invalid frame.");
         cleanup();
         return;
       }

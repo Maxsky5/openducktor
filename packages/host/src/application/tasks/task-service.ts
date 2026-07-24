@@ -196,7 +196,31 @@ export type TaskSetPlanResult = {
   document: TaskMetadataDocument;
   changes: TaskChangeSet;
 };
-export type TaskServiceWithMutationProgress = Omit<TaskService, "setPlan" | "setSpec"> & {
+export type TaskServiceWithMutationProgress = Omit<
+  TaskService,
+  | "buildCompleted"
+  | "directMerge"
+  | "linkMergedPullRequest"
+  | "resetImplementation"
+  | "resetTask"
+  | "setPlan"
+  | "setSpec"
+> & {
+  buildCompleted(
+    input: BuildCompletedInput,
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
+  directMerge(
+    input: DirectMergeInput,
+  ): Effect.Effect<TaskDirectMergeResult, TaskServiceError | TaskMutationProgressFailure>;
+  linkMergedPullRequest(
+    input: PullRequestLinkMergedInput,
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
+  resetImplementation(
+    input: TaskIdInput,
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
+  resetTask(
+    input: TaskIdInput,
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
   setSpec(
     input: MarkdownDocumentInput,
   ): Effect.Effect<TaskMetadataDocument, TaskServiceError | TaskMutationProgressFailure>;
@@ -336,7 +360,7 @@ const createTaskServiceImplementation = (
       mapTaskServiceErrors(service.agentSessionsListForTasks(input)),
     agentSessionUpsert: (input) => mapTaskServiceErrors(service.agentSessionUpsert(input)),
     buildBlocked: (input) => mapTaskServiceErrors(service.buildBlocked(input)),
-    buildCompleted: (input) => mapTaskServiceErrors(service.buildCompleted(input)),
+    buildCompleted: (input) => mapTaskMutationProgressErrors(service.buildCompleted(input)),
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
     taskSessionBootstrapPrepare: (input) =>
@@ -356,12 +380,13 @@ const createTaskServiceImplementation = (
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),
     deleteTask: (input) => mapTaskServiceErrors(service.deleteTask(input)),
     detectPullRequest: (input) => mapTaskServiceErrors(service.detectPullRequest(input)),
-    directMerge: (input) => mapTaskServiceErrors(service.directMerge(input)),
+    directMerge: (input) => mapTaskMutationProgressErrors(service.directMerge(input)),
     getApprovalContext: (input) => mapTaskServiceErrors(service.getApprovalContext(input)),
     getTaskMetadata: (input) => mapTaskServiceErrors(service.getTaskMetadata(input)),
     humanApprove: (input) => mapTaskServiceErrors(service.humanApprove(input)),
     humanRequestChanges: (input) => mapTaskServiceErrors(service.humanRequestChanges(input)),
-    linkMergedPullRequest: (input) => mapTaskServiceErrors(service.linkMergedPullRequest(input)),
+    linkMergedPullRequest: (input) =>
+      mapTaskMutationProgressErrors(service.linkMergedPullRequest(input)),
     linkPullRequest: (input) => mapTaskServiceErrors(service.linkPullRequest(input)),
     listTasks: (input) => mapTaskServiceErrors(service.listTasks(input)),
     planGet: (input) => mapTaskServiceErrors(service.planGet(input)),
@@ -371,8 +396,9 @@ const createTaskServiceImplementation = (
     repoPullRequestSync: (input) => mapTaskServiceErrors(service.repoPullRequestSync(input)),
     repoPullRequestSyncDetailed: (input) =>
       mapRepoPullRequestSyncDetailedErrors(service.repoPullRequestSyncDetailed(input)),
-    resetImplementation: (input) => mapTaskServiceErrors(service.resetImplementation(input)),
-    resetTask: (input) => mapTaskServiceErrors(service.resetTask(input)),
+    resetImplementation: (input) =>
+      mapTaskMutationProgressErrors(service.resetImplementation(input)),
+    resetTask: (input) => mapTaskMutationProgressErrors(service.resetTask(input)),
     savePlanDocument: (input) => mapTaskServiceErrors(service.savePlanDocument(input)),
     saveSpecDocument: (input) => mapTaskServiceErrors(service.saveSpecDocument(input)),
     setPlan: (input) => mapTaskMutationProgressErrors(service.setPlan(input)),
@@ -392,6 +418,46 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
 const withoutTaskMutationProgress = (taskService: TaskServiceWithMutationProgress): TaskService => {
   return {
     ...taskService,
+    buildCompleted: (buildCompletedInput) =>
+      taskService
+        .buildCompleted(buildCompletedInput)
+        .pipe(
+          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
+            Effect.fail(progressFailure.failure),
+          ),
+        ),
+    directMerge: (directMergeInput) =>
+      taskService
+        .directMerge(directMergeInput)
+        .pipe(
+          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
+            Effect.fail(progressFailure.failure),
+          ),
+        ),
+    linkMergedPullRequest: (linkMergedPullRequestInput) =>
+      taskService
+        .linkMergedPullRequest(linkMergedPullRequestInput)
+        .pipe(
+          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
+            Effect.fail(progressFailure.failure),
+          ),
+        ),
+    resetImplementation: (resetImplementationInput) =>
+      taskService
+        .resetImplementation(resetImplementationInput)
+        .pipe(
+          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
+            Effect.fail(progressFailure.failure),
+          ),
+        ),
+    resetTask: (resetTaskInput) =>
+      taskService
+        .resetTask(resetTaskInput)
+        .pipe(
+          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
+            Effect.fail(progressFailure.failure),
+          ),
+        ),
     setSpec: (setSpecInput) =>
       taskService
         .setSpec(setSpecInput)

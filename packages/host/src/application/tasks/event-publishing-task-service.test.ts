@@ -153,6 +153,79 @@ describe("createEventPublishingTaskService", () => {
     ).resolves.toBe(failure);
     expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: [] } }]);
   });
+  test("publishes generic mutation partial progress and preserves the original failure", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "link-merged-pull-request",
+      message: "closure failed",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        linkMergedPullRequest: () =>
+          Effect.fail(
+            new TaskMutationProgressFailure({
+              operation: "link-merged-pull-request",
+              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+              failure,
+            }),
+          ),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .linkMergedPullRequest({
+            repoPath: "/repo",
+            taskId: "task-1",
+            pullRequest: {
+              providerId: "pr-1",
+              number: 1,
+              url: "https://example.test/pull/1",
+              state: "merged",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: [] } }]);
+  });
+  test("publishes conditional mutation partial progress and preserves the original failure", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const failure = new HostOperationError({
+      operation: "direct-merge",
+      message: "closure failed",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        directMerge: () =>
+          Effect.fail(
+            new TaskMutationProgressFailure({
+              operation: "direct-merge",
+              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+              failure,
+            }),
+          ),
+      }),
+      taskSyncService: sync(events),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .directMerge({
+            repoPath: "/repo",
+            taskId: "task-1",
+            input: { mergeMethod: "merge_commit" },
+          })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: [] } }]);
+  });
   test("does not publish an update when the task is missing", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({

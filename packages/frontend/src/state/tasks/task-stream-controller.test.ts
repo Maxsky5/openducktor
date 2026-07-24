@@ -238,6 +238,32 @@ describe("task stream controller recovery", () => {
     expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  test("keeps a terminal recovery acquisition failure in the degraded episode", async () => {
+    const terminalFailure = new Error("stream ended");
+    const recoveryFailure = new Error("replacement unavailable");
+    const harness = createHarness({
+      onSubscribe: async (record, index) => {
+        if (index === 1) throw recoveryFailure;
+        return {
+          subscriptionId: "initial",
+          acknowledge: record.acknowledge,
+          unsubscribe: record.unsubscribe,
+        };
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("zero") });
+    await flush();
+    harness.failTerminally(0, terminalFailure);
+    await flush();
+    await flush();
+
+    expect(harness.transport.subscribeTaskStream).toHaveBeenCalledTimes(2);
+    expect(harness.records[0]?.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(harness.onDegraded).toHaveBeenCalledWith(terminalFailure);
+  });
+
   test("drains a replay delivered before the replacement terminal subscription resolves", async () => {
     const harness = createHarness({
       onSubscribe: async (record, index) => {

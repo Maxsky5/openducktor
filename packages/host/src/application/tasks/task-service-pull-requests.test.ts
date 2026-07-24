@@ -14,6 +14,7 @@ import {
   createPullRequestUpsertSystemCommands,
   createSystemCommandPort,
   createTaskService,
+  createTaskServiceWithMutationProgress,
   extendGitPort,
   extendSettingsConfigPort,
   githubPullListPayload,
@@ -3391,6 +3392,64 @@ describe("createTaskService pull requests", () => {
         input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
       },
     ]);
+  });
+  test("reports merged pull request closure failures as partial progress", async () => {
+    const failure = new HostOperationError({
+      operation: "task-store.transition-task",
+      message: "closure failed",
+    });
+    let pullRequestWritten = false;
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ status: "human_review" })]),
+      getTaskMetadata: () =>
+        Effect.succeed({
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        }),
+      setPullRequest: () =>
+        Effect.sync(() => {
+          pullRequestWritten = true;
+          return true;
+        }),
+      transitionTask: () => Effect.fail(failure),
+    };
+    const service = createTaskServiceWithMutationProgress({
+      devServerService: createDirectMergeDevServerService([]),
+      gitPort: createDirectMergeGitPort({
+        calls: [],
+        currentBranches: { "/worktrees/repo/task-1": { name: "odt/task-1", detached: false } },
+        branches: {
+          "/repo": [
+            { name: "main", isCurrent: true, isRemote: false },
+            { name: "odt/task-1", isCurrent: false, isRemote: false },
+          ],
+        },
+        ancestorResults: { "/repo|odt/task-1|main": true },
+      }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const result = await Effect.runPromise(
+      service
+        .linkMergedPullRequest({ repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() })
+        .pipe(Effect.flip),
+    );
+
+    if (!(result instanceof TaskMutationProgressFailure)) {
+      throw new Error("Expected a TaskMutationProgressFailure");
+    }
+    expect(pullRequestWritten).toBe(true);
+    expect(result.operation).toBe("link-merged-pull-request");
+    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
+    expect(result.failure).toBe(failure);
   });
   test("linkMergedPullRequest preserves task policy errors for invalid workflow statuses", async () => {
     const calls: unknown[] = [];

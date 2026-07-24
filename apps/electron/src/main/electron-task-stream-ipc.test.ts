@@ -4,6 +4,7 @@ import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
   ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL,
+  ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
   ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL,
 } from "../shared/electron-bridge-contract";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
@@ -278,6 +279,27 @@ describe("electron task stream IPC", () => {
 
     expect(harness.reportDeliveryFailure).toHaveBeenCalledWith({
       cause: sendFailure,
+      subscriptionId,
+    });
+    expect(harness.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test("notifies the owning renderer when an outbound frame is invalid", () => {
+    const harness = createHarness();
+    const owner = createSender(1);
+    harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), { cursor: null });
+
+    harness.sink()?.({ type: "change" } as unknown as TaskEventStreamFrame);
+
+    expect(owner.mainFrame.send).toHaveBeenCalledWith(
+      ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
+      {
+        message: "Task stream produced an invalid frame.",
+        subscriptionId,
+      },
+    );
+    expect(harness.reportDeliveryFailure).toHaveBeenCalledWith({
+      cause: expect.objectContaining({ operation: "electron.task-stream.delivery.validate" }),
       subscriptionId,
     });
     expect(harness.unsubscribe).toHaveBeenCalledTimes(1);

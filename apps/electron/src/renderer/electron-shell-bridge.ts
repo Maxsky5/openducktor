@@ -84,7 +84,8 @@ export const createElectronShellBridge = (): ShellBridge => {
       }
       return unsubscribe;
     },
-    subscribeTaskStream: (input, onFrame) => electronApi.taskStream.subscribe(input, onFrame),
+    subscribeTaskStream: (input, onFrame, onTerminalFailure) =>
+      electronApi.taskStream.subscribe(input, onFrame, onTerminalFailure),
     appUpdates: {
       getState: async () => readAppUpdateState(await electronApi.appUpdates.getState()),
       check: async (input) => readAppUpdateCommandResult(await electronApi.appUpdates.check(input)),

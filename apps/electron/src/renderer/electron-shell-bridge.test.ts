@@ -144,13 +144,18 @@ describe("electron shell bridge", () => {
 
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
+    const onTerminalFailure = mock((_error: unknown) => {});
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
     const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
     const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
       { repoPath: "/repo" },
       listener,
     );
-    const taskStreamSubscription = await bridge.subscribeTaskStream({ cursor: null }, listener);
+    const taskStreamSubscription = await bridge.subscribeTaskStream(
+      { cursor: null },
+      listener,
+      onTerminalFailure,
+    );
 
     expect(bridge.capabilities).toEqual({
       canOpenExternalUrls: true,
@@ -158,7 +163,11 @@ describe("electron shell bridge", () => {
     });
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://run-event", listener);
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://dev-server-event", listener);
-    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith({ cursor: null }, listener);
+    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
+      { cursor: null },
+      listener,
+      onTerminalFailure,
+    );
     expect(electronApi.subscribe).toHaveBeenCalledWith(
       "openducktor://agent-session-live-event",
       expect.any(Function),
@@ -185,7 +194,11 @@ describe("electron shell bridge", () => {
 
     await bridge.subscribeTaskStream({ cursor: null }, listener);
 
-    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith({ cursor: null }, listener);
+    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
+      { cursor: null },
+      listener,
+      undefined,
+    );
     expect(reconcile).not.toHaveBeenCalled();
   });
 

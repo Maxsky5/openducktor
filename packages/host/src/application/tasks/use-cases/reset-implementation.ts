@@ -24,6 +24,7 @@ import {
   runTaskLocalCleanup,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
+import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskImplementationResetUseCase = ({
   devServerService,
@@ -35,8 +36,8 @@ export const createTaskImplementationResetUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
-}: CreateTaskServiceInput): Pick<TaskService, "resetImplementation"> => ({
-  resetImplementation(input) {
+}: CreateTaskServiceInput) => ({
+  resetImplementation(input: Parameters<TaskService["resetImplementation"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
@@ -84,22 +85,18 @@ export const createTaskImplementationResetUseCase = ({
       const managedWorktreeBasePath = repoConfig.worktreeBasePath
         ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
         : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-      const canonicalWorktreePath = dependencies.settingsConfig.join(
-        managedWorktreeBasePath,
-        taskId,
+      const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+      const canonicalSessionState = yield* collectSessionsUsingCanonicalWorktree(
+        dependencies.gitPort,
+        dependencies.settingsConfig,
+        currentSessions,
+        canonicalWorktree,
       );
-      const { canonicalExists: canonicalWorktreeExists, guarded: guardedSessions } =
-        yield* collectSessionsUsingCanonicalWorktree(
-          dependencies.gitPort,
-          dependencies.settingsConfig,
-          currentSessions,
-          canonicalWorktreePath,
-        );
       yield* ensureNoActiveImplementationResetActivity(
         taskActivityGuard,
         effectiveRepoPath,
         taskId,
-        guardedSessions,
+        canonicalSessionState.guarded,
       );
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const rollbackStatus = resetImplementationRollbackStatus(current);
@@ -119,13 +116,13 @@ export const createTaskImplementationResetUseCase = ({
         branchPrefix,
         [taskId],
       );
-      const canonicalTarget = canonicalWorktreeExists
+      const canonicalTarget = canonicalSessionState.canonicalExists
         ? yield* resolveCanonicalImplementationResetTarget(
             dependencies.gitPort,
             dependencies.workspaceSettingsService,
             current,
             effectiveRepoPath,
-            canonicalWorktreePath,
+            canonicalWorktree,
           )
         : null;
       const cleanupTargets = excludeCanonicalImplementationTargets(
@@ -134,6 +131,7 @@ export const createTaskImplementationResetUseCase = ({
         canonicalTarget,
       );
       const cleanupProgress = createTaskCleanupProgressState();
+      let taskStoreWriteCompleted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           branchNames: cleanupTargets.branchNames,
@@ -155,7 +153,7 @@ export const createTaskImplementationResetUseCase = ({
             canonicalTarget.restoreReference,
           );
           cleanupProgress.completedSteps.push(
-            `Restored canonical worktree ${canonicalWorktreePath} to ${canonicalTarget.restoreReference}.`,
+            `Restored canonical worktree ${canonicalWorktree} to ${canonicalTarget.restoreReference}.`,
           );
         }
         yield* storeDependencies.clearAgentSessionsByRoles({
@@ -163,6 +161,7 @@ export const createTaskImplementationResetUseCase = ({
           taskId,
           roles: [...implementationSessionRoleNames],
         });
+        taskStoreWriteCompleted = true;
         cleanupProgress.completedSteps.push("Cleared Builder and QA session records.");
         yield* storeDependencies.clearQaReports({ repoPath: effectiveRepoPath, taskId });
         cleanupProgress.completedSteps.push("Cleared QA reports.");
@@ -185,9 +184,13 @@ export const createTaskImplementationResetUseCase = ({
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(appendImplementationResetCleanupProgress(error, cleanupProgress)),
-        ),
+        Effect.catchAll((error) => {
+          const decoratedFailure = appendImplementationResetCleanupProgress(error, cleanupProgress);
+          const failure = taskStoreWriteCompleted
+            ? createTaskMutationProgressFailure("reset-implementation", taskId, decoratedFailure)
+            : decoratedFailure;
+          return Effect.fail(failure);
+        }),
       );
     }).pipe(Effect.scoped);
   },
