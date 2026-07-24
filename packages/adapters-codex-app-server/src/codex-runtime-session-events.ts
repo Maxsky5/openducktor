@@ -205,6 +205,7 @@ export class CodexRuntimeSessionEvents {
 
   clearRuntime(runtimeId: string): void {
     this.runtimeEventGenerationByRuntimeId.delete(runtimeId);
+    this.runtimeEventProcessingByRuntimeId.delete(runtimeId);
     try {
       this.stopRuntimeEventSubscription(runtimeId);
     } finally {

@@ -459,16 +459,30 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("drops queued runtime events from a released runtime generation", async () => {
     const mutationStarted = createDeferred<void>();
     const allowMutation = createDeferred<void>();
-    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const {
+      subscribeEvents,
+      emitNotification,
+      emitNotificationForSubscription,
+      subscriptionCount,
+    } = createRuntimeStreamSubscription();
     let mutationCount = 0;
     const { adapter } = createHarness({
       subscribeEvents,
       onLiveSessionMutation: async () => {
         mutationCount += 1;
-        mutationStarted.resolve();
-        await allowMutation.promise;
+        if (mutationCount === 1) {
+          mutationStarted.resolve();
+          await allowMutation.promise;
+        }
       },
     });
+    const runtimeEvents = (
+      adapter as unknown as {
+        runtimeEvents: {
+          runtimeEventProcessingByRuntimeId: Map<string, Promise<void>>;
+        };
+      }
+    ).runtimeEvents;
     const threadInventory = (
       adapter as unknown as {
         threadInventory: CodexThreadInventoryReader;
@@ -499,12 +513,14 @@ describe("CodexAppServerAdapter lifecycle", () => {
 
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
-    allowMutation.resolve();
-    await flushCodexAdapterWork();
-
-    expect(mutationCount).toBe(1);
-    expect(statusOverridesByRuntimeId.size).toBe(0);
-    expect(statusOverridesByRuntimeId.get("runtime-live")?.size ?? 0).toBe(0);
+    expect(subscriptionCount()).toBe(2);
+    emitNotificationForSubscription(1, {
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "active", activeFlags: [] },
+      },
+    });
 
     const client = {
       threadLoadedList: async () => ({
@@ -519,16 +535,31 @@ describe("CodexAppServerAdapter lifecycle", () => {
             createdAt: 1,
             updatedAt: 2,
             preview: "Replacement active session",
-            status: { type: "active", activeFlags: [] },
+            status: { type: "idle" },
           },
         ],
         nextCursor: null,
       }),
     } as unknown as CodexAppServerClient;
-    const freshInventory = await threadInventory.read(client, "runtime-live");
-    expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
-      classification: "running",
-    });
+    try {
+      await flushCodexAdapterWork();
+      expect(mutationCount).toBe(2);
+      expect(statusOverridesByRuntimeId.size).toBe(1);
+      expect(statusOverridesByRuntimeId.get("runtime-live")?.size).toBe(1);
+      expect(runtimeEvents.runtimeEventProcessingByRuntimeId.size).toBe(0);
+      const freshInventory = await threadInventory.read(client, "runtime-live");
+      expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
+        classification: "running",
+      });
+    } finally {
+      allowMutation.resolve();
+      await flushCodexAdapterWork();
+    }
+
+    expect(mutationCount).toBe(2);
+    expect(runtimeEvents.runtimeEventProcessingByRuntimeId.size).toBe(0);
+    expect(statusOverridesByRuntimeId.size).toBe(1);
+    expect(statusOverridesByRuntimeId.get("runtime-live")?.size).toBe(1);
   });
 
   test("supports read-only construction without renderer-owned live event plumbing", async () => {

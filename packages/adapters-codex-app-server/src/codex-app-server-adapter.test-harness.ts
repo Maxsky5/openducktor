@@ -95,11 +95,12 @@ export const createRuntimeStreamSubscription = () => {
     return () => {};
   });
   const emitEvent = (
+    subscriptionIndex: number,
     kind: "notification" | "server_request",
     message: unknown,
     receivedAt = new Date().toISOString(),
   ) => {
-    const listener = streamListeners[0];
+    const listener = streamListeners[subscriptionIndex];
     expect(listener).toBeDefined();
     listener?.({
       runtimeId: "runtime-live",
@@ -109,10 +110,21 @@ export const createRuntimeStreamSubscription = () => {
     });
   };
   const emitNotification = (message: unknown, receivedAt?: string) =>
-    emitEvent("notification", message, receivedAt);
+    emitEvent(0, "notification", message, receivedAt);
+  const emitNotificationForSubscription = (
+    subscriptionIndex: number,
+    message: unknown,
+    receivedAt?: string,
+  ) => emitEvent(subscriptionIndex, "notification", message, receivedAt);
   const emitServerRequest = (message: unknown, receivedAt?: string) =>
-    emitEvent("server_request", message, receivedAt);
-  return { subscribeEvents, emitNotification, emitServerRequest };
+    emitEvent(0, "server_request", message, receivedAt);
+  return {
+    subscribeEvents,
+    emitNotification,
+    emitNotificationForSubscription,
+    emitServerRequest,
+    subscriptionCount: () => streamListeners.length,
+  };
 };
 
 export const createDeferred = <T>() => {
