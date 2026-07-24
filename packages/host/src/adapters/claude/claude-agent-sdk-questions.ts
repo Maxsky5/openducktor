@@ -181,10 +181,15 @@ export const requestClaudeAskUserQuestion = async ({
     questions: payload.eventQuestions,
     ...claudeSubagentPendingInputRoute(session.externalSessionId, agentID),
   };
-  const answers = await new Promise<string[][]>((resolve, reject) => {
+  const answers = await new Promise<string[][] | null>((resolve, reject) => {
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+      session.abortController.signal.removeEventListener("abort", onAbort);
+    };
     const onAbort = () => {
       session.pendingQuestions.delete(requestId);
-      reject(new Error("Claude question request was aborted."));
+      cleanup();
+      resolve(null);
     };
     if (signal.aborted || session.abortController.signal.aborted) {
       onAbort();
@@ -197,8 +202,7 @@ export const requestClaudeAskUserQuestion = async ({
     session.pendingQuestions.set(requestId, {
       event,
       resolve: (nextAnswers) => {
-        signal.removeEventListener("abort", onAbort);
-        session.abortController.signal.removeEventListener("abort", onAbort);
+        cleanup();
         resolve(nextAnswers);
       },
     });
@@ -206,8 +210,14 @@ export const requestClaudeAskUserQuestion = async ({
       onAbort();
       return;
     }
-    emitClaudePendingInputEvent({ emit, event, session });
-  }).catch(() => null);
+    try {
+      emitClaudePendingInputEvent({ emit, event, session });
+    } catch (error) {
+      session.pendingQuestions.delete(requestId);
+      cleanup();
+      reject(error);
+    }
+  });
 
   if (!answers) {
     return null;

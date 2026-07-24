@@ -171,6 +171,31 @@ describe("createClaudeUserDialogHandler", () => {
     ]);
   });
 
+  test("propagates question event delivery failures", async () => {
+    const session = createSession();
+    const deliveryError = new Error("question event delivery failed");
+    const handler = createClaudeUserDialogHandler({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: () => {
+        throw deliveryError;
+      },
+    });
+
+    await expect(
+      handler(
+        {
+          dialogKind: "permission_ask_user_question",
+          payload: createQuestionPayload(),
+          toolUseID: "tool-use-1",
+        },
+        { signal: new AbortController().signal },
+      ),
+    ).rejects.toBe(deliveryError);
+    expect(session.pendingQuestions.has("request-1")).toBe(false);
+  });
+
   test("cancels unrecognized dialog kinds", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();

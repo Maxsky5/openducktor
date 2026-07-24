@@ -451,6 +451,18 @@ export const useRepoSessionReadModel = ({
           runtimeCatalogQueryKeys.repoSlashCommands(envelope.scope),
           envelope.catalog,
         );
+        runOrchestratorSideEffect(
+          "agent-session-live-invalidate-skills",
+          queryClient.invalidateQueries({
+            queryKey: runtimeCatalogQueryKeys.repoSkillsScope(envelope.scope),
+          }),
+          {
+            tags: {
+              repoPath: envelope.scope.repoPath,
+              runtimeKind: envelope.scope.runtimeKind,
+            },
+          },
+        );
         return;
       }
     };

@@ -97,4 +97,91 @@ describe("createClaudeAgentSdkSession", () => {
       mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
     }
   });
+
+  test("fails creation when the requested Claude session rename fails", async () => {
+    const streamFinished = deferred<void>();
+    const fakeQuery = {
+      close: () => streamFinished.resolve(),
+      initializationResult: async () => ({
+        account: {},
+        agents: [],
+        available_output_styles: [],
+        commands: [],
+        models: [],
+        output_style: "default",
+      }),
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          await streamFinished.promise;
+          return { done: true, value: undefined };
+        },
+      }),
+    } as unknown as realClaudeSdk.Query;
+    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
+      ...realClaudeSdk,
+      query: () => fakeQuery,
+      renameSession: async () => {
+        throw new Error("rename unavailable");
+      },
+    }));
+
+    try {
+      const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
+      const events: AgentEvent[] = [];
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        onBackgroundFailure: () => Effect.void,
+        resolveMcpBridgeConnection: () => Effect.die("unused"),
+        runtimeDistribution: createArtifactRuntimeDistribution({
+          mcpLauncher: { kind: "executable", executablePath: process.execPath },
+        }),
+        sessionStore,
+        toolDiscovery: {
+          resolveTool: () => Effect.die("unused"),
+          resolveToolPath: () => Effect.succeed(process.execPath),
+        },
+      };
+
+      await expect(
+        createClaudeAgentSdkSession({
+          emit: (_session, event) => events.push(event),
+          input: {
+            repoPath: process.cwd(),
+            runtimeKind: "claude",
+            workingDirectory: process.cwd(),
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: "Build",
+          },
+          initialTodos: [],
+          now: () => "2026-06-25T20:00:00.000Z",
+          randomId: () => "id",
+          resolvedDependencies: {
+            claudeExecutablePath: process.execPath,
+            mcpBridgeConnection: {
+              workspaceId: "workspace-1",
+              hostUrl: "http://127.0.0.1:1",
+              hostToken: "bridge-secret-value",
+            },
+            mcpCommand: [process.execPath],
+          },
+          runtimeId: "runtime-1",
+          serviceInput,
+          sessionInput: {
+            externalSessionId: "session-1",
+            options: {},
+            startedMessage: "Started build session",
+            title: "Builder",
+          },
+          sessionStore,
+        }),
+      ).rejects.toThrow("rename unavailable");
+
+      expect(events.some((event) => event.type === "session_started")).toBe(false);
+      expect(sessionStore.get("session-1")).toBeUndefined();
+    } finally {
+      streamFinished.resolve();
+      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+    }
+  });
 });

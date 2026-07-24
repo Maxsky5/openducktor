@@ -557,6 +557,9 @@ describe("useRepoSessionReadModel", () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
+    const invalidateQueries = mock(async () => undefined);
+    state.queryClient.invalidateQueries =
+      invalidateQueries as typeof state.queryClient.invalidateQueries;
     const catalog = {
       commands: [
         {
@@ -593,6 +596,9 @@ describe("useRepoSessionReadModel", () => {
           "/repo/worktree",
         ]),
       ).toEqual(catalog);
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["runtime-catalog", "skills", "/repo", "claude", "/repo/worktree"],
+      });
     } finally {
       await state.harness.unmount();
     }

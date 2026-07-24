@@ -1,6 +1,6 @@
 import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionSummary, AgentSessionTodoItem } from "@openducktor/core";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
   type ClaudeAgentSdkOptionsDependencies,
@@ -118,16 +118,10 @@ export const createClaudeAgentSdkSession = async ({
       INIT_TIMEOUT_MS,
       "Claude Agent SDK session initialization timed out. Check Claude authentication and network connectivity.",
     );
-    try {
-      await renameClaudeSessionIfNeeded({
-        session,
-        title: sessionInput.title,
-      });
-    } catch (error) {
-      console.warn(
-        `Failed to rename Claude session '${session.externalSessionId}': ${errorMessage(error)}`,
-      );
-    }
+    await renameClaudeSessionIfNeeded({
+      session,
+      title: sessionInput.title,
+    });
   } catch (error) {
     if (sessionStore.get(session.externalSessionId) === session) {
       sessionStore.close(session);
