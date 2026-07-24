@@ -70,17 +70,8 @@ const processRuntimeSessionLineage = (
   event: Event,
 ): void => {
   const eventType = String(event.type);
-  if (eventType === "session.deleted") {
-    const deletedExternalSessionId = readEventSessionId(event);
-    if (deletedExternalSessionId) {
-      eventTransport.parentExternalSessionIdByChildExternalSessionId.delete(
-        deletedExternalSessionId,
-      );
-    }
-    return;
-  }
-
-  if (eventType !== "session.created" && eventType !== "session.updated") {
+  const isDeleted = eventType === "session.deleted";
+  if (eventType !== "session.created" && eventType !== "session.updated" && !isDeleted) {
     return;
   }
 
@@ -104,6 +95,11 @@ const processRuntimeSessionLineage = (
     throw new Error(
       `OpenCode ${eventType} event for child session '${childExternalSessionId}' is missing authoritative info.parentID lineage; update the runtime or adapter to a supported event contract.`,
     );
+  }
+
+  if (isDeleted) {
+    eventTransport.parentExternalSessionIdByChildExternalSessionId.delete(childExternalSessionId);
+    return;
   }
 
   eventTransport.parentExternalSessionIdByChildExternalSessionId.set(

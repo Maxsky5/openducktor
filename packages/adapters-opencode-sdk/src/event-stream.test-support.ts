@@ -1,4 +1,4 @@
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
@@ -13,11 +13,13 @@ type RunEventStreamOptions = {
   logEvent?: OpencodeEventLogger;
 };
 
-export const makeClientWithEvents = (events: Event[]): OpencodeClient => {
+type GlobalEventPayload = GlobalEvent["payload"];
+
+export const makeClientWithEvents = (events: GlobalEventPayload[]): OpencodeClient => {
   return {
     global: {
       event: async () => {
-        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+        async function* iterator(): AsyncGenerator<GlobalEvent> {
           for (const event of events) {
             const directory =
               (event as Event & { properties?: { directory?: string } }).properties?.directory ??
@@ -80,7 +82,7 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
 });
 
 export const runEventStreamWithSession = async (
-  events: Event[],
+  events: GlobalEventPayload[],
   configureSession?: (sessionRecord: SessionRecord) => void,
   options: RunEventStreamOptions = {},
 ): Promise<{ emitted: AgentEvent[]; sessionRecord: SessionRecord }> => {
@@ -114,6 +116,6 @@ export const runEventStreamWithSession = async (
   return { emitted, sessionRecord };
 };
 
-export const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
+export const runEventStream = async (events: GlobalEventPayload[]): Promise<AgentEvent[]> => {
   return (await runEventStreamWithSession(events)).emitted;
 };

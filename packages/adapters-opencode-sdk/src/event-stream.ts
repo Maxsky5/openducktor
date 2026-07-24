@@ -55,6 +55,8 @@ type GlobalEventStream = {
   stream: AsyncIterable<GlobalEvent>;
 };
 
+type GlobalEventPayload = GlobalEvent["payload"];
+
 type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
 };
@@ -95,25 +97,34 @@ const resolveGlobalEventStream = async (
   throw new Error("OpenCode SDK global event stream must expose a stream async iterator.");
 };
 
-const normalizeGlobalEventPayload = (payload: Event): Event => {
+const normalizeGlobalEventPayload = (payload: GlobalEventPayload): Event => {
   const payloadRecord = asUnknownRecord(payload);
   if (payloadRecord?.type !== "sync") {
-    return payload;
+    return payload as Event;
   }
 
   const syncEvent = asUnknownRecord(payloadRecord.syncEvent);
   if (!syncEvent) {
-    return payload;
+    throw new Error(
+      "OpenCode sync event is missing its syncEvent envelope; update the runtime or adapter to a supported event contract.",
+    );
   }
   const syncEventType = syncEvent.type;
   if (typeof syncEventType !== "string") {
-    return payload;
+    throw new Error(
+      "OpenCode sync event is missing syncEvent.type; update the runtime or adapter to a supported event contract.",
+    );
   }
 
   const eventType = SYNC_EVENT_TYPE_BY_NAME[syncEventType as keyof typeof SYNC_EVENT_TYPE_BY_NAME];
+  if (!eventType) {
+    return payload as unknown as Event;
+  }
   const data = asUnknownRecord(syncEvent.data);
-  if (!eventType || !data) {
-    return payload;
+  if (!data) {
+    throw new Error(
+      `OpenCode ${syncEventType} event is missing object syncEvent.data; update the runtime or adapter to a supported event contract.`,
+    );
   }
 
   return {
@@ -125,7 +136,7 @@ const normalizeGlobalEventPayload = (payload: Event): Event => {
 };
 
 const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
-  const payload = normalizeGlobalEventPayload(event.payload as Event) as Event & {
+  const payload = normalizeGlobalEventPayload(event.payload) as Event & {
     properties?: Record<string, unknown>;
   };
   return {
