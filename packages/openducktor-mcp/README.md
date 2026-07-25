@@ -82,8 +82,6 @@ Startup behavior:
 - When both a startup default and a tool-input `workspaceId` are present, the tool input wins.
 - Workspace-scoped tools fail fast with an explicit error when neither a startup default nor a tool-input `workspaceId` is available.
 
-[Recorded process benchmark results](../../docs/benchmarks/mcp-startup-health-probe.md) compare startup against the prior `/health` flow.
-
 OpenDucktor-managed OpenCode and Codex sessions receive explicit host URL and token values. Their routing does not use `OPENDUCKTOR_CHANNEL`.
 
 The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
