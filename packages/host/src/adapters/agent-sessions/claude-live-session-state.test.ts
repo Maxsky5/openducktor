@@ -72,43 +72,6 @@ const ref = {
 };
 
 describe("Claude host live-session state", () => {
-  test("holds a new session running until its first user message is accepted", () => {
-    const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary, { forceRunning: true });
-
-    expect(
-      state.applyEvent(session, {
-        type: "session_idle",
-        externalSessionId: "session-1",
-        timestamp: "2026-07-17T10:01:01.000Z",
-      }),
-    ).toEqual([]);
-    expect(state.readRetainedSnapshot(ref)).toMatchObject({
-      type: "live",
-      session: { activity: "running" },
-    });
-
-    state.applyEvent(session, {
-      type: "user_message",
-      externalSessionId: "session-1",
-      timestamp: "2026-07-17T10:01:02.000Z",
-      messageId: "user-1",
-      message: "Start",
-      parts: [{ kind: "text", text: "Start" }],
-      state: "read",
-    });
-    state.applyEvent(session, {
-      type: "session_idle",
-      externalSessionId: "session-1",
-      timestamp: "2026-07-17T10:01:03.000Z",
-    });
-
-    expect(state.readRetainedSnapshot(ref)).toMatchObject({
-      type: "live",
-      session: { activity: "idle" },
-    });
-  });
-
   test("retains a subagent permission only on the child snapshot", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary(summary);
@@ -291,7 +254,7 @@ describe("Claude host live-session state", () => {
     });
   });
 
-  test("removes retained session state after a terminal stream error", () => {
+  test("keeps retained session state after a recoverable turn error", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary({ ...summary, status: "running" });
 
@@ -300,12 +263,40 @@ describe("Claude host live-session state", () => {
         type: "session_error",
         externalSessionId: "session-1",
         timestamp: "2026-07-17T10:03:05.000Z",
-        message: "Claude stream failed.",
+        message: "Claude turn failed.",
       }),
     ).toEqual([
       {
         type: "transcript_event",
         event: expect.objectContaining({ type: "session_error" }),
+      },
+    ]);
+    state.applyEvent(session, {
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:03:06.000Z",
+    });
+    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
+  });
+
+  test("removes retained session state after a terminal stream finish", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary({ ...summary, status: "running" });
+
+    expect(
+      state.applyEvent(session, {
+        type: "session_finished",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:03:05.000Z",
+        message: "Claude stream failed.",
+      }),
+    ).toEqual([
+      {
+        type: "transcript_event",
+        event: expect.objectContaining({ type: "session_finished" }),
       },
       { type: "session_removed", ref },
     ]);

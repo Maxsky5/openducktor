@@ -95,6 +95,8 @@ const createHarness = async () => {
   const eventHub = createClaudeAgentSdkEventHub();
   let startSessionImpl: ClaudeAgentSdkService["startSession"] = () =>
     Effect.die("startSession was not configured");
+  let forkSessionImpl: ClaudeAgentSdkService["forkSession"] = () =>
+    Effect.die("forkSession was not configured");
   let resumeSessionImpl: ClaudeAgentSdkService["resumeSession"] = () => Effect.succeed(summary);
   let loadSessionContextUsageImpl: ClaudeAgentSdkService["loadSessionContextUsage"] = () =>
     Effect.die("loadSessionContextUsage was not configured");
@@ -128,6 +130,8 @@ const createHarness = async () => {
       input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
       runtimeId: string,
     ) => startSessionImpl(input, runtimeId),
+    forkSession: (input: Parameters<ClaudeAgentSdkService["forkSession"]>[0], runtimeId: string) =>
+      forkSessionImpl(input, runtimeId),
     resumeSession: (
       input: Parameters<ClaudeAgentSdkService["resumeSession"]>[0],
       runtimeId: string,
@@ -184,6 +188,9 @@ const createHarness = async () => {
     eventHub,
     setStartSession: (implementation: ClaudeAgentSdkService["startSession"]) => {
       startSessionImpl = implementation;
+    },
+    setForkSession: (implementation: ClaudeAgentSdkService["forkSession"]) => {
+      forkSessionImpl = implementation;
     },
     setResumeSession: (implementation: ClaudeAgentSdkService["resumeSession"]) => {
       resumeSessionImpl = implementation;
@@ -250,6 +257,55 @@ describe("Claude host live-session adapter", () => {
       session: { activity: "idle" },
     });
     expect(transcriptEventTypes(harness.changes)).toEqual(["session_started"]);
+  });
+
+  test("keeps a no-message fork idle after SDK initialization settles", async () => {
+    const harness = await createHarness();
+    harness.setForkSession(() =>
+      Effect.promise(async () => {
+        harness.eventHub.emit(session, {
+          type: "session_started",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:01:00.000Z",
+          message: "Forked build session",
+        });
+        harness.eventHub.emit(session, {
+          type: "session_idle",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:01:01.000Z",
+        });
+        return summary;
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.forkSession({
+          ...startInput,
+          parentExternalSessionId: "parent-session",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      externalSessionId: "session-1",
+      status: "idle",
+    });
+
+    expect(
+      await Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).toMatchObject({
+      type: "live",
+      session: {
+        activity: "idle",
+        parentExternalSessionId: "parent-session",
+      },
+    });
   });
 
   test("publishes accepted input before draining its runtime response", async () => {

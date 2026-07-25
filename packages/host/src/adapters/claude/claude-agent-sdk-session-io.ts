@@ -17,6 +17,7 @@ import {
   shouldRefreshClaudeContextUsageForMessage,
 } from "./claude-agent-sdk-context-usage";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
+import { emitClaudeTerminalSessionFailure } from "./claude-agent-sdk-lifecycle";
 import { encodeClaudePromptText, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
 import type {
@@ -226,9 +227,9 @@ export const consumeClaudeSession = async (input: {
       return;
     }
     const timestamp = now();
-    emit(session, {
-      type: "session_error",
-      externalSessionId: session.externalSessionId,
+    emitClaudeTerminalSessionFailure({
+      emit: (event) => emit(session, event),
+      session,
       timestamp,
       message: errorMessage(error),
     });

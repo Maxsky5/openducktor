@@ -194,7 +194,6 @@ export const createClaudeLiveSessionAdapterPreparer =
         operation: string,
         run: () => Effect.Effect<unknown, HostError>,
         options: {
-          readonly forceRunning?: boolean;
           readonly parentExternalSessionId?: string;
           readonly preserveRetainedActivity?: boolean;
         } = {},
@@ -206,7 +205,7 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
             Effect.flatMap((summary) =>
               commit(`${operation}.retain-summary`, () => ({
-                value: options.forceRunning ? { ...summary, status: "running" as const } : summary,
+                value: summary,
                 changes: state.retainControlSummary(summary, options),
               })),
             ),
@@ -330,7 +329,6 @@ export const createClaudeLiveSessionAdapterPreparer =
                 "claude-live-session.fork-session",
                 () => service.forkSession(toClaudeForkInput(input), runtime.runtimeId),
                 {
-                  forceRunning: true,
                   parentExternalSessionId: input.parentExternalSessionId,
                 },
               ),

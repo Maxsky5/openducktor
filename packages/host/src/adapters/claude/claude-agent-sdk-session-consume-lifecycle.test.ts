@@ -379,6 +379,12 @@ describe("consumeClaudeSession lifecycle", () => {
         timestamp: "2026-06-25T20:00:00.000Z",
         message: "transport crashed",
       },
+      {
+        type: "session_finished",
+        externalSessionId: "session-1",
+        timestamp: "2026-06-25T20:00:00.000Z",
+        message: "Claude Agent SDK session stream stopped after an error.",
+      },
     ]);
 
     await expect(

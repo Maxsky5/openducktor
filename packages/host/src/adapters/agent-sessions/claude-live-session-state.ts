@@ -118,7 +118,6 @@ export const createClaudeLiveSessionState = ({
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
   const contextRevisionsByRef = new Map<string, number>();
   const retiredSessionKeys = new Set<string>();
-  const startupLeases = new Set<string>();
 
   const readSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveSnapshot | undefined =>
     snapshotsByRef.get(refKey(ref));
@@ -158,7 +157,6 @@ export const createClaudeLiveSessionState = ({
   const removeSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
     const key = refKey(ref);
     retiredSessionKeys.add(key);
-    startupLeases.delete(key);
     contextRevisionsByRef.delete(key);
     if (!snapshotsByRef.delete(key)) {
       return [];
@@ -289,16 +287,6 @@ export const createClaudeLiveSessionState = ({
     ) {
       return applyPendingEvent(session, event);
     }
-    if (
-      startupLeases.has(key) &&
-      (event.type === "session_idle" ||
-        (event.type === "session_status" && event.status.type === "idle"))
-    ) {
-      return [];
-    }
-    if (event.type === "user_message") {
-      startupLeases.delete(key);
-    }
     const snapshot = ensureSnapshot(session, ref, event.timestamp);
     const changes: AgentSessionLiveAdapterChange[] = [];
     if (event.type === "session_context_updated") {
@@ -333,7 +321,7 @@ export const createClaudeLiveSessionState = ({
         event: agentSessionTranscriptEventSchema.parse({ ...event, sessionRef: ref }),
       });
     }
-    if (event.type === "session_finished" || event.type === "session_error") {
+    if (event.type === "session_finished") {
       changes.push(...removeSessionTree(rootRef(session)));
     }
     return changes;
@@ -383,7 +371,6 @@ export const createClaudeLiveSessionState = ({
       snapshotsByRef.clear();
       contextRevisionsByRef.clear();
       retiredSessionKeys.clear();
-      startupLeases.clear();
       return refs;
     },
     reactivateSession: (ref: AgentSessionLiveRef): void => {
@@ -393,7 +380,6 @@ export const createClaudeLiveSessionState = ({
     retainControlSummary: (
       summary: AgentSessionControlSummary,
       options: {
-        readonly forceRunning?: boolean;
         readonly parentExternalSessionId?: string;
         readonly preserveRetainedActivity?: boolean;
       } = {},
@@ -407,13 +393,8 @@ export const createClaudeLiveSessionState = ({
       const key = refKey(ref);
       retiredSessionKeys.delete(key);
       const current = readSnapshot(ref);
-      if (options.forceRunning) {
-        startupLeases.add(key);
-      }
       let activity = activityForSummary(summary.status);
-      if (options.forceRunning) {
-        activity = "running";
-      } else if (options.preserveRetainedActivity && current) {
+      if (options.preserveRetainedActivity && current) {
         activity = current.activity;
       }
       return commitSnapshot({
