@@ -70,6 +70,13 @@ const linkedCorrelationKey = (parentThreadId: string, childThreadId: string): st
 const provisionalCorrelationKey = (parentThreadId: string, itemId: string): string =>
   `codex-subagent:${parentThreadId}:${itemId}`;
 
+const defaultCorrelationKey = (input: CodexSubagentLinkInput): string => {
+  if (!input.childThreadId || input.preferItemCorrelationKey) {
+    return provisionalCorrelationKey(input.parentThreadId, input.itemId);
+  }
+  return linkedCorrelationKey(input.parentThreadId, input.childThreadId);
+};
+
 const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
   pending: 0,
   running: 1,
@@ -258,11 +265,7 @@ export class CodexSubagentLinkState {
     const correlationKey =
       existingLinked?.correlationKey ??
       existingProvisional?.correlationKey ??
-      (input.childThreadId
-        ? input.preferItemCorrelationKey
-          ? provisionalCorrelationKey(input.parentThreadId, input.itemId)
-          : linkedCorrelationKey(input.parentThreadId, input.childThreadId)
-        : provisionalCorrelationKey(input.parentThreadId, input.itemId));
+      defaultCorrelationKey(input);
     const existing =
       existingLinked ??
       existingProvisional ??
