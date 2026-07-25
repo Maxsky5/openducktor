@@ -1,43 +1,31 @@
 import { describe, expect, test } from "bun:test";
 import type {
   Event,
-  EventSessionCreated,
   EventSessionDeleted,
   GlobalEvent,
   OpencodeClient,
-  Session,
   SyncEventMessagePartUpdated,
-  SyncEventSessionCreated,
   SyncEventSessionDeleted,
   SyncEventSessionUpdated,
 } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import {
+  childSessionCreatedEvent,
+  childSessionCreatedEventWithParentAlias,
+  childSessionInfo,
   makeClientWithEvents,
   makeSessionInput,
+  runtimeSourceSyncChildSessionCreatedEvent,
+  runtimeSourceSyncChildSessionCreatedEventWithParentAlias,
+  syncChildSessionCreatedEvent,
   type TestGlobalEventPayload,
 } from "./event-stream.test-support";
 import { observeRuntimeEvents, registerSession } from "./session-registry";
 import type { RuntimeEventTransportRecord, SessionRecord } from "./types";
 
 type GlobalEventPayload = TestGlobalEventPayload;
-type RuntimeSourceSyncEventSessionCreated = Omit<SyncEventSessionCreated, "id">;
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
-
-const childSessionInfo = (childSessionId: string, parentID?: string): Session => ({
-  id: childSessionId,
-  slug: childSessionId,
-  projectID: "project-1",
-  directory: "/repo",
-  ...(parentID ? { parentID } : {}),
-  title: "Subagent",
-  version: "1.0.0",
-  time: {
-    created: Date.parse("2026-02-22T12:00:10.000Z"),
-    updated: Date.parse("2026-02-22T12:00:10.000Z"),
-  },
-});
 
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
@@ -164,90 +152,6 @@ const syncAssistantSubtaskEvent = (input: {
       },
     },
   }) satisfies SyncEventMessagePartUpdated;
-
-const childSessionCreatedEvent = (childSessionId: string): EventSessionCreated =>
-  ({
-    id: `event-created-${childSessionId}`,
-    type: "session.created",
-    properties: {
-      sessionID: childSessionId,
-      info: childSessionInfo(childSessionId, "external-session-1"),
-    },
-  }) satisfies EventSessionCreated;
-
-const childSessionCreatedEventWithParentAlias = (
-  childSessionId: string,
-  parentAlias: "parentId" | "parent_id",
-): EventSessionCreated => {
-  const info = {
-    ...childSessionInfo(childSessionId),
-    [parentAlias]: "external-session-1",
-  };
-  return {
-    id: `event-created-${childSessionId}-${parentAlias}`,
-    type: "session.created",
-    properties: {
-      sessionID: childSessionId,
-      info,
-    },
-  } satisfies EventSessionCreated;
-};
-
-const syncChildSessionCreatedEvent = (childSessionId: string): SyncEventSessionCreated =>
-  ({
-    type: "sync",
-    id: `sync-${childSessionId}`,
-    syncEvent: {
-      type: "session.created.1",
-      id: `sync-event-${childSessionId}`,
-      seq: 2,
-      aggregateID: childSessionId,
-      data: {
-        sessionID: childSessionId,
-        info: childSessionInfo(childSessionId, "external-session-1"),
-      },
-    },
-  }) satisfies SyncEventSessionCreated;
-
-const runtimeSourceSyncChildSessionCreatedEvent = (
-  childSessionId: string,
-): RuntimeSourceSyncEventSessionCreated =>
-  ({
-    type: "sync",
-    syncEvent: {
-      type: "session.created.1",
-      id: `sync-event-runtime-source-${childSessionId}`,
-      seq: 2,
-      aggregateID: childSessionId,
-      data: {
-        sessionID: childSessionId,
-        info: childSessionInfo(childSessionId, "external-session-1"),
-      },
-    },
-  }) satisfies RuntimeSourceSyncEventSessionCreated;
-
-const runtimeSourceSyncChildSessionCreatedEventWithParentAlias = (
-  childSessionId: string,
-  parentAlias: "parentId" | "parent_id",
-): RuntimeSourceSyncEventSessionCreated => {
-  const info = {
-    ...childSessionInfo(childSessionId),
-    [parentAlias]: "external-session-1",
-  };
-  return {
-    type: "sync",
-    syncEvent: {
-      type: "session.created.1",
-      id: `sync-event-runtime-source-${childSessionId}-${parentAlias}`,
-      seq: 2,
-      aggregateID: childSessionId,
-      data: {
-        sessionID: childSessionId,
-        info,
-      },
-    },
-  } satisfies RuntimeSourceSyncEventSessionCreated;
-};
 
 const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): GlobalEventPayload => {
   return {

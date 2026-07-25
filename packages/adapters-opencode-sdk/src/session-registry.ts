@@ -8,11 +8,9 @@ import {
   processOpencodeEvent,
   subscribeGlobalEvents,
 } from "./event-stream";
-import { readEventInfo, readEventProperties } from "./event-stream/schemas";
 import {
   readEventParentExternalSessionId,
-  readEventSessionId,
-  readLifecycleParentExternalSessionId,
+  readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
 import type {
@@ -70,22 +68,24 @@ const processRuntimeSessionLineage = (
   eventTransport: RuntimeEventTransportRecord,
   event: Event,
 ): void => {
-  const eventType = String(event.type);
-  const isDeleted = eventType === "session.deleted";
-  if (eventType !== "session.created" && eventType !== "session.updated" && !isDeleted) {
+  const lifecycleEvent = readSessionLifecycleEvent(event);
+  if (!lifecycleEvent) {
     return;
   }
 
-  const properties = readEventProperties(event);
-  const info = readEventInfo(properties);
-  const childExternalSessionId = readEventSessionId(event);
+  const {
+    type: eventType,
+    properties,
+    info,
+    externalSessionId: childExternalSessionId,
+    parentExternalSessionId,
+  } = lifecycleEvent;
   if (!childExternalSessionId || !info) {
     throw new Error(
       `OpenCode ${eventType} event is missing its session id or info payload; update the runtime or adapter to a supported event contract.`,
     );
   }
 
-  const parentExternalSessionId = readLifecycleParentExternalSessionId(info);
   if (!parentExternalSessionId) {
     const hasNonAuthoritativeParent = Boolean(readEventParentExternalSessionId(properties));
     const isConfirmedChild =
@@ -98,7 +98,7 @@ const processRuntimeSessionLineage = (
     );
   }
 
-  if (isDeleted) {
+  if (eventType === "session.deleted") {
     eventTransport.parentExternalSessionIdByChildExternalSessionId.delete(childExternalSessionId);
     return;
   }
