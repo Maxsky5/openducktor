@@ -93,7 +93,7 @@ Startup contract:
 
 Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it. Workspace resolution is request-scoped for workspace-bound tools: tool-input `workspaceId` wins over any startup default, and missing both sources is an error.
 
-[Recorded process benchmark results and reproduction steps](benchmarks/mcp-startup-health-probe.md) compare startup against the prior `/health` flow.
+[Recorded process benchmark results](benchmarks/mcp-startup-health-probe.md) compare startup against the prior `/health` flow.
 
 OpenDucktor-managed OpenCode and Codex sessions receive explicit `ODT_HOST_URL` and `ODT_HOST_TOKEN` values. They do not depend on discovery files or `OPENDUCKTOR_CHANNEL`.
 

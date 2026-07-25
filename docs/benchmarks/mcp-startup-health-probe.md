@@ -20,13 +20,3 @@ Environment: macOS arm64, Bun 1.3.10, 2026-07-25.
 Without a workspace, current p95 changed by +0.34 ms (+0.52%). With a workspace, current p95 changed by -0.03 ms (-0.05%). Process startup noise dominates loopback request time, so this run shows no material process-level latency change. It does prove the required request reduction from two calls to one without a workspace and from three sequential calls to two concurrent calls with a workspace.
 
 The result does not meet the 5 ms and 5% gate for a broader readiness/workspace contract redesign, which remains out of scope.
-
-## Reproduce
-
-Build `packages/openducktor-mcp/dist/index.js` from each ref in separate checkouts, then run:
-
-```sh
-bun run --filter @openducktor/mcp benchmark:startup -- --baseline /absolute/path/to/main/packages/openducktor-mcp/dist/index.js --current /absolute/path/to/current/packages/openducktor-mcp/dist/index.js --samples 100
-```
-
-The command prints JSON with the sample count, exact request paths and bodies, p50, p95, and the absolute and percentage p95 change for both workspace modes.
