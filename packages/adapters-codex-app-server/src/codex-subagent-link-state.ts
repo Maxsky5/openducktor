@@ -495,9 +495,18 @@ export class CodexSubagentLinkState {
     const parentKey = parentThreadKey(link.runtimeId, link.parentThreadId);
     const provisionalLinks =
       this.provisionalByParentKey.get(parentKey) ?? new Map<string, CodexStoredSubagentLink>();
-    const hadProvisionalBridge = provisionalLinks.has(parentItemKey);
+    const displacedProvisional = provisionalLinks.get(parentItemKey);
+    if (displacedProvisional && displacedProvisional.correlationKey !== link.correlationKey) {
+      const displacedCorrelationKey = scopedKey(
+        displacedProvisional.runtimeId,
+        displacedProvisional.correlationKey,
+      );
+      if (this.linksByCorrelationKey.get(displacedCorrelationKey) === displacedProvisional) {
+        this.linksByCorrelationKey.delete(displacedCorrelationKey);
+      }
+    }
     this.linksByCorrelationKey.set(scopedKey(link.runtimeId, link.correlationKey), link);
-    if (!link.childThreadId || hadProvisionalBridge) {
+    if (!link.childThreadId || displacedProvisional) {
       provisionalLinks.set(parentItemKey, link);
       this.provisionalByParentKey.set(parentKey, provisionalLinks);
     }

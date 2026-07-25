@@ -327,6 +327,67 @@ describe("CodexSubagentLinkState", () => {
     ).toHaveLength(1);
   });
 
+  test("clears a displaced provisional correlation before its item id is reused", () => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "spawn-1",
+      status: "pending",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "spawn-2",
+      status: "running",
+      prompt: "stale prompt",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-2",
+      status: "running",
+    });
+
+    subagents.clearSession("parent-thread", "runtime-1");
+
+    const indexes = subagents as unknown as {
+      linksByCorrelationKey: Map<string, unknown>;
+      linksByParentKey: Map<string, unknown>;
+      linksByChildThreadId: Map<string, unknown>;
+      provisionalByParentKey: Map<string, unknown>;
+    };
+    const clearedIndexSizes = {
+      correlations: indexes.linksByCorrelationKey.size,
+      parents: indexes.linksByParentKey.size,
+      children: indexes.linksByChildThreadId.size,
+      provisionals: indexes.provisionalByParentKey.size,
+    };
+    const reused = subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "spawn-2",
+      status: "pending",
+    });
+
+    expect(reused.status).toBe("pending");
+    expect(reused).not.toHaveProperty("prompt");
+    expect(clearedIndexSizes).toEqual({
+      correlations: 0,
+      parents: 0,
+      children: 0,
+      provisionals: 0,
+    });
+  });
+
   test("ignores an explicit restart older than the terminal lifecycle", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({
