@@ -243,14 +243,8 @@ describe("CodexRuntimeSessionEvents", () => {
 
   test("reports an admitted mutation failure after release while dropping queued work", async () => {
     let listener: RuntimeListener | null = null;
-    let markMutationStarted: () => void = () => undefined;
-    let rejectMutation: (error: Error) => void = () => undefined;
-    const mutationStarted = new Promise<void>((resolve) => {
-      markMutationStarted = resolve;
-    });
-    const blockedMutation = new Promise<void>((_resolve, reject) => {
-      rejectMutation = reject;
-    });
+    const mutationStarted = Promise.withResolvers<void>();
+    const blockedMutation = Promise.withResolvers<void>();
     const deliveryFailure = new Error("admitted mutation failed after release");
     const failures: Array<{ runtimeId: string; error: unknown }> = [];
     let mutationCount = 0;
@@ -262,8 +256,8 @@ describe("CodexRuntimeSessionEvents", () => {
       onLiveSessionMutation: async () => {
         mutationCount += 1;
         if (mutationCount === 1) {
-          markMutationStarted();
-          await blockedMutation;
+          mutationStarted.resolve();
+          await blockedMutation.promise;
         }
       },
       onRuntimeEventQueueFailure: (failure) => {
@@ -278,7 +272,7 @@ describe("CodexRuntimeSessionEvents", () => {
       kind: "notification",
       message: { method: "skills/changed", params: { cwd: "/repo" } },
     });
-    await mutationStarted;
+    await mutationStarted.promise;
     listener?.({
       runtimeId: "runtime-1",
       kind: "notification",
@@ -286,7 +280,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
 
     runtimeEvents.clearRuntime("runtime-1");
-    rejectMutation(deliveryFailure);
+    blockedMutation.reject(deliveryFailure);
     await flushRuntimeEvents();
 
     expect(mutationCount).toBe(1);

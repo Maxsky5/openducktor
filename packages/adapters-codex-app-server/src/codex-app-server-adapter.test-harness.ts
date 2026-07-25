@@ -128,18 +128,7 @@ export const createRuntimeStreamSubscription = () => {
   };
 };
 
-export const createDeferred = <T>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return {
-    promise,
-    resolve: (value: T) => {
-      resolve?.(value);
-    },
-  };
-};
+export const createDeferred = <T>(): PromiseWithResolvers<T> => Promise.withResolvers<T>();
 
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
@@ -560,10 +549,16 @@ export const codexThreadInventoryForTest = (
 ): CodexThreadInventoryReader =>
   (adapter as unknown as { threadInventory: CodexThreadInventoryReader }).threadInventory;
 
+type CodexRuntimeTeardownCounts = {
+  statusOverrideRuntimeCount: number;
+  statusOverrideThreadCount: number;
+  runtimeEventQueueRuntimeCount: number;
+};
+
 export const codexRuntimeTeardownCountsForTest = (
   adapter: CodexAppServerAdapter,
   runtimeId: string,
-) => {
+): CodexRuntimeTeardownCounts => {
   const threadInventory = codexThreadInventoryForTest(adapter);
   const statusOverridesByRuntimeId = (
     threadInventory as unknown as {

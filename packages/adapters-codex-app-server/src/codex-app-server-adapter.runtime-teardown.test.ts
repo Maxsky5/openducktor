@@ -16,17 +16,14 @@ import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexAppServerClient } from "./types";
 
 class RejectableTurnTransport extends RecordingTransport {
-  private rejectTurnStart: (error: Error) => void = () => undefined;
-  private readonly turnStartFailure = new Promise<never>((_resolve, reject) => {
-    this.rejectTurnStart = reject;
-  });
+  private readonly turnStartFailure = createDeferred<never>();
 
   constructor() {
     super("runtime-live", false);
   }
 
   failTurnStart(error: Error): void {
-    this.rejectTurnStart(error);
+    this.turnStartFailure.reject(error);
   }
 
   async request<Response>(
@@ -34,7 +31,7 @@ class RejectableTurnTransport extends RecordingTransport {
   ): Promise<Response> {
     if (request.method === "turn/start") {
       this.calls.push(request);
-      return (await this.turnStartFailure) as Response;
+      return (await this.turnStartFailure.promise) as Response;
     }
     return super.request<Response>(request);
   }
@@ -43,33 +40,25 @@ class RejectableTurnTransport extends RecordingTransport {
 class DeferredSteerTransport extends RecordingTransport {
   readonly turnStartRequested = createDeferred<void>();
   readonly steerRequested = createDeferred<void>();
-  private resolveTurnStart: (response: unknown) => void = () => undefined;
-  private resolveSteer: (response: unknown) => void = () => undefined;
-  private rejectSteer: (error: Error) => void = () => undefined;
-  private readonly turnStartResponse = new Promise<unknown>((resolve) => {
-    this.resolveTurnStart = resolve;
-  });
-  private readonly steerResponse = new Promise<unknown>((resolve, reject) => {
-    this.resolveSteer = resolve;
-    this.rejectSteer = reject;
-  });
+  private readonly turnStartResponse = createDeferred<unknown>();
+  private readonly steerResponse = createDeferred<unknown>();
 
   constructor() {
     super("runtime-live", false);
   }
 
   completeTurnStart(): void {
-    this.resolveTurnStart({
+    this.turnStartResponse.resolve({
       turn: { id: "turn-active", status: "inProgress" },
     });
   }
 
   completeSteer(): void {
-    this.resolveSteer({ turnId: "turn-active" });
+    this.steerResponse.resolve({ turnId: "turn-active" });
   }
 
   failSteer(error: Error): void {
-    this.rejectSteer(error);
+    this.steerResponse.reject(error);
   }
 
   async request<Response>(
@@ -78,12 +67,12 @@ class DeferredSteerTransport extends RecordingTransport {
     if (request.method === "turn/start") {
       this.calls.push(request);
       this.turnStartRequested.resolve();
-      return (await this.turnStartResponse) as Response;
+      return (await this.turnStartResponse.promise) as Response;
     }
     if (request.method === "turn/steer") {
       this.calls.push(request);
       this.steerRequested.resolve();
-      return (await this.steerResponse) as Response;
+      return (await this.steerResponse.promise) as Response;
     }
     return super.request<Response>(request);
   }
