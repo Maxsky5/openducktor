@@ -31,6 +31,8 @@ type TaskCreateModalProps = {
   task?: TaskCard | null;
 };
 
+type TaskCreateModalController = ReturnType<typeof useTaskCreateModalController>;
+
 function TaskDocumentEditorFallback(): ReactElement {
   return (
     <div className="space-y-3">
@@ -63,6 +65,102 @@ function TaskDocumentEditorFallback(): ReactElement {
         </div>
       </div>
     </div>
+  );
+}
+
+function TaskCreateModalFooterActions({
+  controller,
+}: {
+  controller: TaskCreateModalController;
+}): ReactElement {
+  if (controller.mode === "create" && controller.step === "type") {
+    return <span />;
+  }
+
+  if (controller.isEditingDocument) {
+    const isSaving = controller.isSavingDocument === controller.activeDocumentSection;
+    let saveLabel = "Save Plan";
+    if (isSaving) {
+      saveLabel = "Saving...";
+    } else if (controller.activeDocumentSection === "spec") {
+      saveLabel = "Save Spec";
+    }
+
+    return (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          className="cursor-pointer"
+          onClick={controller.discardCurrentDocumentDraft}
+          disabled={controller.isFormDisabled || !controller.isActiveDocumentDirty}
+        >
+          <RotateCcw className="size-4" />
+          Revert
+        </Button>
+        <Button
+          type="button"
+          className="cursor-pointer"
+          onClick={() => void controller.saveActiveDocument()}
+          disabled={
+            controller.isFormDisabled ||
+            !controller.taskId ||
+            !controller.activeDocument ||
+            !controller.activeDocument.loaded ||
+            controller.activeDocument.isLoading ||
+            controller.activeDraft.trim().length === 0 ||
+            !controller.isActiveDocumentDirty
+          }
+        >
+          {isSaving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <WandSparkles className="size-4" />
+          )}
+          {saveLabel}
+        </Button>
+      </>
+    );
+  }
+
+  const SubmitIcon = controller.mode === "create" ? Flag : WandSparkles;
+  let submitLabel = controller.mode === "create" ? "Create Task" : "Save Changes";
+  if (controller.isSubmitting) {
+    submitLabel = controller.mode === "create" ? "Creating..." : "Saving...";
+  }
+
+  return (
+    <>
+      {controller.mode === "create" && controller.step === "details" ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="cursor-pointer"
+          onClick={() => controller.setStep("type")}
+          disabled={controller.isFormDisabled}
+        >
+          <ArrowLeft className="size-4" />
+          Back
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        className="cursor-pointer"
+        onClick={() => void controller.submit()}
+        disabled={
+          controller.isFormDisabled ||
+          controller.hasExternalTaskConflict ||
+          !controller.state.title.trim()
+        }
+      >
+        {controller.isSubmitting ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <SubmitIcon className="size-4" />
+        )}
+        {submitLabel}
+      </Button>
+    </>
   );
 }
 
@@ -203,83 +301,7 @@ export function TaskCreateModal({
                 <p className="text-sm text-destructive-muted">{controller.footerError}</p>
               ) : null}
 
-              {controller.mode === "create" && controller.step === "type" ? (
-                <span />
-              ) : controller.isEditingDocument ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="cursor-pointer"
-                    onClick={controller.discardCurrentDocumentDraft}
-                    disabled={controller.isFormDisabled || !controller.isActiveDocumentDirty}
-                  >
-                    <RotateCcw className="size-4" />
-                    Revert
-                  </Button>
-                  <Button
-                    type="button"
-                    className="cursor-pointer"
-                    onClick={() => void controller.saveActiveDocument()}
-                    disabled={
-                      controller.isFormDisabled ||
-                      !controller.taskId ||
-                      !controller.activeDocument ||
-                      !controller.activeDocument.loaded ||
-                      controller.activeDocument.isLoading ||
-                      controller.activeDraft.trim().length === 0 ||
-                      !controller.isActiveDocumentDirty
-                    }
-                  >
-                    {controller.isSavingDocument === controller.activeDocumentSection ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <WandSparkles className="size-4" />
-                    )}
-                    {controller.isSavingDocument === controller.activeDocumentSection
-                      ? "Saving..."
-                      : controller.activeDocumentSection === "spec"
-                        ? "Save Spec"
-                        : "Save Plan"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {controller.mode === "create" && controller.step === "details" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer"
-                      onClick={() => controller.setStep("type")}
-                      disabled={controller.isFormDisabled}
-                    >
-                      <ArrowLeft className="size-4" />
-                      Back
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    className="cursor-pointer"
-                    onClick={() => void controller.submit()}
-                    disabled={controller.isFormDisabled || !controller.state.title.trim()}
-                  >
-                    {controller.isSubmitting ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : controller.mode === "create" ? (
-                      <Flag className="size-4" />
-                    ) : (
-                      <WandSparkles className="size-4" />
-                    )}
-                    {controller.isSubmitting
-                      ? controller.mode === "create"
-                        ? "Creating..."
-                        : "Saving..."
-                      : controller.mode === "create"
-                        ? "Create Task"
-                        : "Save Changes"}
-                  </Button>
-                </>
-              )}
+              <TaskCreateModalFooterActions controller={controller} />
             </div>
           </DialogFooter>
         </DialogContent>

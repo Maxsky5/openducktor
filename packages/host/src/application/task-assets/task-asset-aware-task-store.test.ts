@@ -785,6 +785,177 @@ describe("asset-aware task store", () => {
     ).toBeNull();
   });
 
+  test("reports unchanged state after a destination collision rolls back the task", async () => {
+    const harness = await createHarness();
+    const staged = await Effect.runPromise(
+      harness.staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "collision.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    const store = createTaskAssetAwareTaskStore({
+      inner: harness.innerStore,
+      registry: harness.registry,
+      persistence: {
+        ...harness.registry,
+        createTaskWithDescriptionAssets: (input) =>
+          harness.registry.createTaskWithDescriptionAssets({
+            ...input,
+            prepareFiles: (taskId) =>
+              Effect.gen(function* () {
+                yield* harness.filePort.promote({
+                  workspaceId: "fairnest",
+                  taskId,
+                  assetId: staged.assetId,
+                  operation: "create",
+                });
+                return yield* input.prepareFiles(taskId);
+              }),
+          }),
+      },
+      staging: harness.staging,
+      filePort: harness.filePort,
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+
+    const error = await captureTaskAssetError(
+      store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Destination collision",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![image](odt-asset:${staged.assetId})`,
+        },
+        descriptionAssets: { stagedAssetIds: [staged.assetId] },
+      }),
+    );
+
+    expect(error.failedPhase).toBe("check_destination");
+    expect(error.durableState).toBe("unchanged");
+    expect(error.retryAllowed).toBe(false);
+    if (!error.taskId) {
+      throw new Error("Expected the rolled-back task ID.");
+    }
+    expect(
+      await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
+    ).toEqual([]);
+    expect(
+      await Effect.runPromise(
+        harness.filePort.readDurable({
+          workspaceId: "fairnest",
+          taskId: error.taskId,
+          assetId: staged.assetId,
+        }),
+      ),
+    ).not.toBeNull();
+  });
+
+  test("reports quarantine purge as the failed create cleanup phase", async () => {
+    const harness = await createHarness();
+    const staged = await Effect.runPromise(
+      harness.staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "purge.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    const store = createTaskAssetAwareTaskStore({
+      inner: harness.innerStore,
+      registry: harness.registry,
+      persistence: harness.registry,
+      staging: harness.staging,
+      filePort: {
+        ...harness.filePort,
+        purgeQuarantine: () =>
+          Effect.fail(
+            injectedTaskAssetError({
+              operation: "create",
+              code: "purge",
+              failedPhase: "purge_quarantine",
+              assetIds: [staged.assetId],
+            }),
+          ),
+      },
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+
+    const error = await captureTaskAssetError(
+      store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Purge failure",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![image](odt-asset:${staged.assetId})`,
+        },
+        descriptionAssets: { stagedAssetIds: [staged.assetId] },
+      }),
+    );
+
+    expect(error.failedPhase).toBe("purge_create_quarantine");
+    expect(error.durableState).toBe("committed_cleanup_pending");
+  });
+
+  test("reports staging discard as the failed create cleanup phase", async () => {
+    const harness = await createHarness();
+    const staged = await Effect.runPromise(
+      harness.staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "discard.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    const store = createTaskAssetAwareTaskStore({
+      inner: harness.innerStore,
+      registry: harness.registry,
+      persistence: harness.registry,
+      staging: {
+        ...harness.staging,
+        discard: () =>
+          Effect.fail(
+            new TaskAssetError({
+              operation: "stage",
+              code: "purge",
+              assetIds: [staged.assetId],
+              failedPhase: "discard_staging",
+              durableState: "unchanged",
+              retryAllowed: true,
+              message: "Injected staging discard failure.",
+            }),
+          ),
+      },
+      filePort: harness.filePort,
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+
+    const error = await captureTaskAssetError(
+      store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Discard failure",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![image](odt-asset:${staged.assetId})`,
+        },
+        descriptionAssets: { stagedAssetIds: [staged.assetId] },
+      }),
+    );
+
+    expect(error.failedPhase).toBe("discard_committed_staging");
+    expect(error.durableState).toBe("committed_cleanup_pending");
+  });
+
   test("reuses the resolved workspace while compensating a failed update", async () => {
     const harness = await createHarness();
     const { staged: obsolete, task, description } = await createTaskWithAsset(harness);

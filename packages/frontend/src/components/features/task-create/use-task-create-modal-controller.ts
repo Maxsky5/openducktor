@@ -9,7 +9,7 @@ import {
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
-import { collectTaskDescriptionAssetIds } from "@/components/features/task-description-editor/task-description-assets";
+import { collectTaskDescriptionAssetsForSubmit } from "@/components/features/task-description-editor/task-description-assets";
 import { stageTaskDescriptionImage } from "@/components/features/task-description-editor/task-description-upload";
 import { useTaskDescriptionAssetDraft } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { errorMessage } from "@/lib/errors";
@@ -57,10 +57,13 @@ type TaskCreateModalState = {
   isSavingDocument: DocumentSection | null;
   pendingDiscardIntent: PendingDiscardIntent | null;
   taskAssetFailure: TaskAssetFailure | null;
+  hasExternalTaskConflict: boolean;
 };
 
 type TaskCreateModalAction =
   | { type: "resetForOpenTask"; task: TaskCard | null }
+  | { type: "externalTaskApplied"; composer: ComposerState }
+  | { type: "externalTaskConflictDetected" }
   | { type: "composerPatched"; patch: Partial<ComposerState> }
   | { type: "issueTypeSelected"; issueType: IssueType }
   | { type: "stepChanged"; step: ComposerStep }
@@ -87,7 +90,20 @@ const initialTaskCreateModalState = (task: TaskCard | null): TaskCreateModalStat
   isSavingDocument: null,
   pendingDiscardIntent: null,
   taskAssetFailure: null,
+  hasExternalTaskConflict: false,
 });
+
+const areComposerStatesEqual = (left: ComposerState, right: ComposerState): boolean =>
+  left.issueType === right.issueType &&
+  left.aiReviewEnabled === right.aiReviewEnabled &&
+  left.title === right.title &&
+  left.priority === right.priority &&
+  left.description === right.description &&
+  left.labels.length === right.labels.length &&
+  left.labels.every((label, index) => label === right.labels[index]);
+
+const EXTERNAL_TASK_CONFLICT_MESSAGE =
+  "This task changed while you were editing. Close and reopen it to load the latest version before saving.";
 
 const taskCreateModalReducer = (
   state: TaskCreateModalState,
@@ -96,6 +112,17 @@ const taskCreateModalReducer = (
   switch (action.type) {
     case "resetForOpenTask":
       return initialTaskCreateModalState(action.task);
+    case "externalTaskApplied":
+      return {
+        ...state,
+        composer: action.composer,
+        selectedCreateIssueType: action.composer.issueType,
+        error: null,
+        taskAssetFailure: null,
+        hasExternalTaskConflict: false,
+      };
+    case "externalTaskConflictDetected":
+      return { ...state, hasExternalTaskConflict: true };
     case "composerPatched":
       return { ...state, composer: { ...state.composer, ...action.patch } };
     case "issueTypeSelected":
@@ -182,9 +209,11 @@ export function useTaskCreateModalController({
     isSavingDocument,
     pendingDiscardIntent,
     taskAssetFailure,
+    hasExternalTaskConflict,
   } = modalState;
 
   const previousModalContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
+  const serverComposer = useRef<ComposerState | null>(null);
   const activeDocumentSection =
     mode === "edit" && isDocumentSection(editSection) ? editSection : null;
 
@@ -205,20 +234,40 @@ export function useTaskCreateModalController({
   });
 
   useEffect(() => {
+    const nextServerComposer = toComposerState(task);
     const contextChanged =
       previousModalContext.current?.open !== open ||
       previousModalContext.current?.taskId !== taskId;
-    if (!contextChanged) {
+    if (contextChanged) {
+      previousModalContext.current = { open, taskId };
+      serverComposer.current = nextServerComposer;
+      if (open) {
+        dispatch({ type: "resetForOpenTask", task });
+      }
       return;
     }
-
-    previousModalContext.current = { open, taskId };
     if (!open) {
       return;
     }
 
-    dispatch({ type: "resetForOpenTask", task });
-  }, [open, task, taskId]);
+    const previousServerComposer = serverComposer.current;
+    if (
+      previousServerComposer === null ||
+      areComposerStatesEqual(previousServerComposer, nextServerComposer)
+    ) {
+      return;
+    }
+
+    serverComposer.current = nextServerComposer;
+    const draftWasUntouched = areComposerStatesEqual(composer, previousServerComposer);
+    const draftMatchesReplacement = areComposerStatesEqual(composer, nextServerComposer);
+    if (draftWasUntouched || draftMatchesReplacement) {
+      dispatch({ type: "externalTaskApplied", composer: nextServerComposer });
+      return;
+    }
+
+    dispatch({ type: "externalTaskConflictDetected" });
+  }, [composer, open, task, taskId]);
 
   const stageDescriptionImageForDraft = useCallback(
     async (file: File) => {
@@ -271,7 +320,12 @@ export function useTaskCreateModalController({
   const isFormDisabled = isBusy || isRecoveryBlocked;
   const isTypeStepVisible = mode === "create" && step === "type";
   const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
-  const footerError = isEditingDocument ? documentError : error;
+  let footerError = error;
+  if (isEditingDocument) {
+    footerError = documentError;
+  } else if (hasExternalTaskConflict) {
+    footerError = EXTERNAL_TASK_CONFLICT_MESSAGE;
+  }
   const isActiveDocumentDirty =
     activeDocumentSection === "spec"
       ? isSpecDirty
@@ -330,7 +384,7 @@ export function useTaskCreateModalController({
   };
 
   const submit = async (): Promise<void> => {
-    if (isRecoveryBlocked) {
+    if (isRecoveryBlocked || hasExternalTaskConflict) {
       return;
     }
     if (descriptionAssetDraft.isUploading) {
@@ -351,10 +405,11 @@ export function useTaskCreateModalController({
 
     dispatch({ type: "submitStarted" });
     try {
-      const referencedAssetIds = collectTaskDescriptionAssetIds(composer.description);
-      const suppliedAssetIds = descriptionAssetDraft
-        .stagedAssetIds()
-        .filter((assetId) => referencedAssetIds.has(assetId));
+      const { referencedAssetIds, stagedAssetIds: suppliedAssetIds } =
+        collectTaskDescriptionAssetsForSubmit(
+          composer.description,
+          descriptionAssetDraft.stagedAssetIds(),
+        );
       const descriptionAssets =
         suppliedAssetIds.length > 0 ? { stagedAssetIds: suppliedAssetIds } : undefined;
       if (mode === "create") {
@@ -469,6 +524,7 @@ export function useTaskCreateModalController({
     isBusy,
     isFormDisabled,
     isRecoveryBlocked,
+    hasExternalTaskConflict,
     isTypeStepVisible,
     isEditingDocument,
     footerError,

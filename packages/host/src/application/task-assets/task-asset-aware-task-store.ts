@@ -38,6 +38,8 @@ export const createTaskAssetAwareTaskStore = ({
     let createdTaskId: string | undefined;
     let workspaceId: string | undefined;
     let committed = false;
+    let committedCleanupPhase: "purge_create_quarantine" | "discard_committed_staging" =
+      "discard_committed_staging";
     let recoveryId: string | null = null;
     const promotedAssetIds: string[] = [];
     let referencedAssetIds = new Set<string>();
@@ -131,7 +133,7 @@ export const createTaskAssetAwareTaskStore = ({
                   taskId,
                   assetIds: [asset.assetId],
                   failedPhase: "check_destination",
-                  durableState: "created_partial",
+                  durableState: "unchanged",
                   retryAllowed: false,
                   message: `Task asset destination ${asset.assetId} already exists.`,
                 });
@@ -148,10 +150,12 @@ export const createTaskAssetAwareTaskStore = ({
       });
       committed = true;
       if (recoveryId) {
+        committedCleanupPhase = "purge_create_quarantine";
         yield* filePort.purgeQuarantine(recoveryId);
         recoveryId = null;
       }
       if (stagedAssets.length > 0) {
+        committedCleanupPhase = "discard_committed_staging";
         yield* staging.discard({
           workspaceId,
           assetIds: stagedAssets.map((asset) => asset.assetId),
@@ -182,15 +186,20 @@ export const createTaskAssetAwareTaskStore = ({
         }
         const taskId = createdTaskId;
         if (committed) {
+          let message =
+            "The task was created, but staged-file cleanup failed. Refresh before continuing.";
+          if (committedCleanupPhase === "purge_create_quarantine") {
+            message =
+              "The task was created, but its asset quarantine could not be removed. Refresh before continuing.";
+          }
           return Effect.fail(
             taskAssetPartialStateError({
               operation: "create",
-              phase: "discard_committed_staging",
+              phase: committedCleanupPhase,
               taskId,
               assetIds: promotedAssetIds,
               durableState: "committed_cleanup_pending",
-              message:
-                "The task was created, but staged-file cleanup failed. Refresh before continuing.",
+              message,
             }),
           );
         }

@@ -13,6 +13,7 @@ const controllerMock = {
   isBusy: false,
   isFormDisabled: false,
   isRecoveryBlocked: false,
+  hasExternalTaskConflict: false,
   step: "details" as const,
   setStep: (_step: "type" | "details") => {},
   editSection: "spec" as const,
@@ -142,6 +143,35 @@ describe("TaskCreateModal", () => {
     } finally {
       controllerMock.isRecoveryBlocked = false;
       controllerMock.isFormDisabled = false;
+      controllerMock.isEditingDocument = true;
+      controllerMock.footerError = null;
+    }
+  });
+
+  test("blocks task save but keeps the local draft available after an external change", async () => {
+    controllerMock.hasExternalTaskConflict = true;
+    controllerMock.isEditingDocument = false;
+    controllerMock.footerError =
+      "This task changed while you were editing. Close and reopen it to load the latest version before saving.";
+    const task = { id: "TASK-123" } as TaskCard;
+
+    try {
+      const rendered = render(
+        createElement(TaskCreateModal, {
+          open: true,
+          onOpenChange: () => {},
+          tasks: [task],
+          task,
+        }),
+      );
+
+      expect(await screen.findByText(/changed while you were editing/)).toBeTruthy();
+      expect(
+        (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      await act(async () => rendered.unmount());
+    } finally {
+      controllerMock.hasExternalTaskConflict = false;
       controllerMock.isEditingDocument = true;
       controllerMock.footerError = null;
     }
