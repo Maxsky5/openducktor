@@ -241,6 +241,58 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(emittedEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
   });
 
+  test("reports an admitted mutation failure after release while dropping queued work", async () => {
+    let listener: RuntimeListener | null = null;
+    let markMutationStarted: () => void = () => undefined;
+    let rejectMutation: (error: Error) => void = () => undefined;
+    const mutationStarted = new Promise<void>((resolve) => {
+      markMutationStarted = resolve;
+    });
+    const blockedMutation = new Promise<void>((_resolve, reject) => {
+      rejectMutation = reject;
+    });
+    const deliveryFailure = new Error("admitted mutation failed after release");
+    const failures: Array<{ runtimeId: string; error: unknown }> = [];
+    let mutationCount = 0;
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      onLiveSessionMutation: async () => {
+        mutationCount += 1;
+        if (mutationCount === 1) {
+          markMutationStarted();
+          await blockedMutation;
+        }
+      },
+      onRuntimeEventQueueFailure: (failure) => {
+        failures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "skills/changed", params: { cwd: "/repo" } },
+    });
+    await mutationStarted;
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "skills/changed", params: { cwd: "/repo" } },
+    });
+
+    runtimeEvents.clearRuntime("runtime-1");
+    rejectMutation(deliveryFailure);
+    await flushRuntimeEvents();
+
+    expect(mutationCount).toBe(1);
+    expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
+  });
+
   test("reports rejected catalog invalidation delivery without converting it into a session error", async () => {
     let listener: RuntimeListener | null = null;
     const session = createSession("thread-catalog");

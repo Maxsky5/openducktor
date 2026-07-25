@@ -12,6 +12,7 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
+import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -551,6 +552,36 @@ export const createHarness = (
     transportFactory,
     requireRepoRuntime,
     respondServerRequest,
+  };
+};
+
+export const codexThreadInventoryForTest = (
+  adapter: CodexAppServerAdapter,
+): CodexThreadInventoryReader =>
+  (adapter as unknown as { threadInventory: CodexThreadInventoryReader }).threadInventory;
+
+export const codexRuntimeTeardownCountsForTest = (
+  adapter: CodexAppServerAdapter,
+  runtimeId: string,
+) => {
+  const threadInventory = codexThreadInventoryForTest(adapter);
+  const statusOverridesByRuntimeId = (
+    threadInventory as unknown as {
+      statusOverridesByRuntimeId: Map<string, Map<string, unknown>>;
+    }
+  ).statusOverridesByRuntimeId;
+  const runtimeEventProcessingByRuntimeId = (
+    adapter as unknown as {
+      runtimeEvents: {
+        runtimeEventProcessingByRuntimeId: Map<string, Promise<void>>;
+      };
+    }
+  ).runtimeEvents.runtimeEventProcessingByRuntimeId;
+
+  return {
+    statusOverrideRuntimeCount: statusOverridesByRuntimeId.size,
+    statusOverrideThreadCount: statusOverridesByRuntimeId.get(runtimeId)?.size ?? 0,
+    runtimeEventQueueRuntimeCount: runtimeEventProcessingByRuntimeId.size,
   };
 };
 
