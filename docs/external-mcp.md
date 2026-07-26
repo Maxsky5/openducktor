@@ -58,11 +58,13 @@ Optional arguments:
 
 - `--workspace-id <workspace-id>` optional default workspace for later workspace-scoped calls
 - `--host-url <url>`
+- `--host-token <token>` matching token for `--host-url`
 
 Equivalent environment variables:
 
 - `ODT_WORKSPACE_ID` optional default workspace
 - `ODT_HOST_URL` optional override
+- `ODT_HOST_TOKEN` matching token for `ODT_HOST_URL`
 - `OPENDUCKTOR_CHANNEL=dev` selects development host discovery; leave it unset for production
 
 Automatic discovery:
@@ -82,7 +84,7 @@ OPENDUCKTOR_CHANNEL=dev bunx @openducktor/mcp@latest
 Startup contract:
 
 1. Resolve an optional startup default workspace from `--workspace-id` or `ODT_WORKSPACE_ID`.
-2. Use `ODT_HOST_URL` or `--host-url` first when provided.
+2. Use `ODT_HOST_URL` or `--host-url` first when provided, with the matching token from `ODT_HOST_TOKEN` or `--host-token`.
 3. Otherwise read the local discovery file for the current host bridge URL and token.
 4. Validate the discovered host bridge before serving tools.
 5. Call authenticated `odt_mcp_ready` through the loopback host API.
