@@ -62,7 +62,7 @@ type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
 };
 
-const SYNC_EVENT_TYPE_BY_NAME = {
+const NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE = {
   "message.updated.1": "message.updated",
   "message.part.updated.1": "message.part.updated",
   "message.part.removed.1": "message.part.removed",
@@ -117,7 +117,10 @@ const normalizeGlobalEventPayload = (payload: GlobalEventPayload): Event => {
     );
   }
 
-  const eventType = SYNC_EVENT_TYPE_BY_NAME[syncEventType as keyof typeof SYNC_EVENT_TYPE_BY_NAME];
+  const eventType =
+    NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[
+      syncEventType as keyof typeof NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE
+    ];
   if (!eventType) {
     return payload as unknown as Event;
   }
@@ -264,12 +267,8 @@ export const isRelevantSubscriberEvent = (
       ? lifecycleEvent.parentExternalSessionId
       : readEventParentExternalSessionId(properties);
 
-    if (eventType === "question.asked" && parentExternalSessionId) {
+    if (parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;
-    }
-
-    if (parentExternalSessionId === subscriber.externalSessionId) {
-      return true;
     }
 
     if (

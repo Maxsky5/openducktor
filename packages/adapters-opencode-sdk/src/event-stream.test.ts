@@ -2136,6 +2136,48 @@ describe("event-stream", () => {
     ).toBe(false);
   });
 
+  test("prefers explicit pending-input parents over conflicting confirmed lineage", () => {
+    const confirmedParentSubscriber = {
+      externalSessionId: "external-confirmed-parent",
+      input: makeSessionInput(),
+    };
+    const explicitParentSubscriber = {
+      externalSessionId: "external-explicit-parent",
+      input: makeSessionInput(),
+    };
+    const resolveConfirmedParent = (externalSessionId: string) =>
+      externalSessionId === "external-child-session"
+        ? confirmedParentSubscriber.externalSessionId
+        : undefined;
+
+    for (const eventType of [
+      "permission.asked",
+      "permission.v2.asked",
+      "permission.replied",
+      "question.asked",
+      "question.replied",
+    ] as const) {
+      const event = {
+        type: eventType,
+        properties: {
+          sessionID: "external-child-session",
+          parentID: explicitParentSubscriber.externalSessionId,
+        },
+      } as unknown as Event;
+
+      expect(
+        isRelevantSubscriberEvent(confirmedParentSubscriber, event, {
+          resolveParentExternalSessionId: resolveConfirmedParent,
+        }),
+      ).toBe(false);
+      expect(
+        isRelevantSubscriberEvent(explicitParentSubscriber, event, {
+          resolveParentExternalSessionId: resolveConfirmedParent,
+        }),
+      ).toBe(true);
+    }
+  });
+
   test("does not treat a top-level lifecycle parent id as authoritative", () => {
     const childSessionCreatedEvent = {
       type: "session.created",
