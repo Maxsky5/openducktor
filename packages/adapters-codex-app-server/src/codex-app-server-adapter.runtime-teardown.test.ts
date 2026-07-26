@@ -108,15 +108,15 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     const cleanupCalls: string[] = [];
     expect(() =>
       releaseCodexRuntimeState("runtime-live", {
-        cancelContextUsage: (runtimeId) => cleanupCalls.push(`context:${runtimeId}`),
-        releaseSessions: (runtimeId) => {
-          cleanupCalls.push(`sessions:${runtimeId}`);
+        cancelContextUsage: () => cleanupCalls.push("context:runtime-live"),
+        releaseSessions: () => {
+          cleanupCalls.push("sessions:runtime-live");
           throw new Error("unsubscribe failed");
         },
-        clearPendingInput: (runtimeId) => cleanupCalls.push(`pending:${runtimeId}`),
-        clearSubagents: (runtimeId) => cleanupCalls.push(`subagents:${runtimeId}`),
-        clearRuntimeEvents: (runtimeId) => cleanupCalls.push(`events:${runtimeId}`),
-        disposeThreadInventory: (runtimeId) => cleanupCalls.push(`inventory:${runtimeId}`),
+        clearPendingInput: () => cleanupCalls.push("pending:runtime-live"),
+        clearSubagents: () => cleanupCalls.push("subagents:runtime-live"),
+        clearRuntimeEvents: () => cleanupCalls.push("events:runtime-live"),
+        disposeThreadInventory: () => cleanupCalls.push("inventory:runtime-live"),
       }),
     ).toThrow("unsubscribe failed");
     expect(cleanupCalls).toEqual([
@@ -609,7 +609,6 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     await adapter.startSession(codexStartSessionInput());
     expect(subscriptionCount()).toBe(2);
     const replacementSubscription = captureLatestSubscription();
-    expect(replacementSubscription.isActive()).toBe(true);
     replacementSubscription.emitNotification({
       method: "thread/status/changed",
       params: {

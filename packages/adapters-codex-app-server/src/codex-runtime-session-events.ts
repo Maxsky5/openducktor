@@ -289,25 +289,17 @@ export class CodexRuntimeSessionEvents {
           await this.processRuntimeStreamEventForSession(owner, event);
         }
       } catch (error) {
-        if (this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation) {
+        if (!this.runtimeStreamEventCanDeliver(event.runtimeId, generation, owner)) {
           return;
         }
-        const retainedOwner = owner
-          ? this.retainedRuntimeStreamEventOwner(owner)
-          : this.runtimeStreamEventSessionOwner(event);
-        if (owner && !retainedOwner) {
-          return;
-        }
+        const retainedOwner = owner ?? this.runtimeStreamEventSessionOwner(event);
         Object.assign(mutation, {
           fault: this.errorMessage(error),
           ...(retainedOwner ? { faultRef: codexSessionRef(retainedOwner.targetSession) } : {}),
         });
         this.emitRuntimeStreamEventError(event, error, retainedOwner);
       }
-      if (
-        this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation ||
-        (owner && !this.retainedRuntimeStreamEventOwner(owner))
-      ) {
+      if (!this.runtimeStreamEventCanDeliver(event.runtimeId, generation, owner)) {
         return;
       }
       const deliveries: Array<{ label: string; run: () => void | Promise<void> }> = [];
@@ -646,6 +638,17 @@ export class CodexRuntimeSessionEvents {
     return this.deps.sessions.get(owner.retainedSession.threadId) === owner.retainedSession
       ? owner
       : undefined;
+  }
+
+  private runtimeStreamEventCanDeliver(
+    runtimeId: string,
+    generation: symbol,
+    owner: CodexRuntimeStreamEventSessionOwner | undefined,
+  ): boolean {
+    if (this.runtimeEventGenerationByRuntimeId.get(runtimeId) !== generation) {
+      return false;
+    }
+    return !owner || this.retainedRuntimeStreamEventOwner(owner) !== undefined;
   }
 
   private resolveRuntimeStreamEventSessionOwner(

@@ -272,14 +272,12 @@ export class CodexAppServerAdapter
 
   releaseRuntime(runtimeId: string): void {
     releaseCodexRuntimeState(runtimeId, {
-      cancelContextUsage: (currentRuntimeId) =>
-        this.contextUsageLoader.cancelRuntime(currentRuntimeId),
-      releaseSessions: (currentRuntimeId) => this.localSessions.releaseRuntime(currentRuntimeId),
-      clearPendingInput: (currentRuntimeId) => this.pendingInput.clearRuntime(currentRuntimeId),
-      clearSubagents: (currentRuntimeId) => this.subagents.clearRuntime(currentRuntimeId),
-      clearRuntimeEvents: (currentRuntimeId) => this.runtimeEvents.clearRuntime(currentRuntimeId),
-      disposeThreadInventory: (currentRuntimeId) =>
-        this.threadInventory.disposeRuntime(currentRuntimeId),
+      cancelContextUsage: () => this.contextUsageLoader.cancelRuntime(runtimeId),
+      releaseSessions: () => this.localSessions.releaseRuntime(runtimeId),
+      clearPendingInput: () => this.pendingInput.clearRuntime(runtimeId),
+      clearSubagents: () => this.subagents.clearRuntime(runtimeId),
+      clearRuntimeEvents: () => this.runtimeEvents.clearRuntime(runtimeId),
+      disposeThreadInventory: () => this.threadInventory.disposeRuntime(runtimeId),
     });
   }
 

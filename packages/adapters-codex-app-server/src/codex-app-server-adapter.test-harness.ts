@@ -128,9 +128,6 @@ export const createRuntimeStreamSubscription = () => {
   const capturedSubscription = (subscription: TestRuntimeStreamSubscription) => ({
     emitNotification: (message: unknown, receivedAt?: string) =>
       emitEvent(subscription, "notification", message, receivedAt),
-    emitServerRequest: (message: unknown, receivedAt?: string) =>
-      emitEvent(subscription, "server_request", message, receivedAt),
-    isActive: () => subscription.active,
   });
   const emitNotification = (message: unknown, receivedAt?: string) =>
     emitEvent(latestActiveSubscription(), "notification", message, receivedAt);

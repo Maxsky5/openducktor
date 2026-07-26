@@ -1,15 +1,15 @@
-type CodexRuntimeCleanupDeps = {
-  cancelContextUsage(runtimeId: string): void;
-  releaseSessions(runtimeId: string): void;
-  clearPendingInput(runtimeId: string): void;
-  clearSubagents(runtimeId: string): void;
-  clearRuntimeEvents(runtimeId: string): void;
-  disposeThreadInventory(runtimeId: string): void;
+type CodexRuntimeCleanupPlan = {
+  cancelContextUsage(): void;
+  releaseSessions(): void;
+  clearPendingInput(): void;
+  clearSubagents(): void;
+  clearRuntimeEvents(): void;
+  disposeThreadInventory(): void;
 };
 
 export const releaseCodexRuntimeState = (
   runtimeId: string,
-  deps: CodexRuntimeCleanupDeps,
+  plan: CodexRuntimeCleanupPlan,
 ): void => {
   const failures: Array<{ label: string; cause: unknown }> = [];
   const cleanup = (label: string, operation: () => void): void => {
@@ -20,12 +20,12 @@ export const releaseCodexRuntimeState = (
     }
   };
 
-  cleanup("context usage", () => deps.cancelContextUsage(runtimeId));
-  cleanup("sessions", () => deps.releaseSessions(runtimeId));
-  cleanup("pending input", () => deps.clearPendingInput(runtimeId));
-  cleanup("subagents", () => deps.clearSubagents(runtimeId));
-  cleanup("runtime events", () => deps.clearRuntimeEvents(runtimeId));
-  cleanup("thread inventory", () => deps.disposeThreadInventory(runtimeId));
+  cleanup("context usage", plan.cancelContextUsage);
+  cleanup("sessions", plan.releaseSessions);
+  cleanup("pending input", plan.clearPendingInput);
+  cleanup("subagents", plan.clearSubagents);
+  cleanup("runtime events", plan.clearRuntimeEvents);
+  cleanup("thread inventory", plan.disposeThreadInventory);
 
   if (failures.length === 0) {
     return;
