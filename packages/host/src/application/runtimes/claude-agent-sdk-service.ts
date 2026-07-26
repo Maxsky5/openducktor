@@ -1,6 +1,7 @@
 import type { AgentSessionContextUsage, FileDiff, FileStatus } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
+  AgentEvent,
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentSessionHistoryMessage,
@@ -31,6 +32,11 @@ import type { Effect } from "effect";
 import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
 
 export type ClaudeAgentSdkServiceError = HostOperationError | HostValidationError;
+
+export type ClaudePendingInputResolution = {
+  readonly event: Extract<AgentEvent, { type: "approval_resolved" | "question_resolved" }>;
+  readonly complete: () => void;
+};
 
 export type ClaudeAgentSdkService = {
   startSession(
@@ -77,8 +83,12 @@ export type ClaudeAgentSdkService = {
     input: SendAgentUserMessageInput,
     runtimeId: string,
   ): Effect.Effect<AcceptedAgentUserMessage, ClaudeAgentSdkServiceError>;
-  replyApproval(input: ReplyApprovalInput): Effect.Effect<void, ClaudeAgentSdkServiceError>;
-  replyQuestion(input: ReplyQuestionInput): Effect.Effect<void, ClaudeAgentSdkServiceError>;
+  prepareApprovalReply(
+    input: ReplyApprovalInput,
+  ): Effect.Effect<ClaudePendingInputResolution, ClaudeAgentSdkServiceError>;
+  prepareQuestionReply(
+    input: ReplyQuestionInput,
+  ): Effect.Effect<ClaudePendingInputResolution, ClaudeAgentSdkServiceError>;
   stopSession(input: SessionRef): Effect.Effect<void, ClaudeAgentSdkServiceError>;
   probeSessionStatus(input: SessionRef): Effect.Effect<
     {

@@ -6,7 +6,10 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
+import type {
+  ClaudeAgentSdkService,
+  ClaudePendingInputResolution,
+} from "../../application/runtimes/claude-agent-sdk-service";
 import {
   type HostError,
   HostValidationError,
@@ -190,6 +193,46 @@ export const createClaudeLiveSessionAdapterPreparer =
                 }),
         });
 
+      const resolvePendingInput = (
+        operation: string,
+        externalSessionId: string,
+        prepare: Effect.Effect<ClaudePendingInputResolution, HostError>,
+      ): Effect.Effect<void, HostError> =>
+        eventCoordinator.runControlMutation(
+          prepare.pipe(
+            Effect.mapError(sessionError(operation, externalSessionId)),
+            Effect.flatMap((resolution) => {
+              const rootExternalSessionId =
+                resolution.event.parentExternalSessionId ?? resolution.event.externalSessionId;
+              return requireSessionContext(rootExternalSessionId).pipe(
+                Effect.flatMap((session) => {
+                  let rollback = () => {};
+                  return commit(`${operation}.publish`, () => {
+                    const applied = state.applyPendingResolution(session, resolution.event);
+                    rollback = applied.rollback;
+                    return {
+                      value: resolution.complete,
+                      changes: applied.changes,
+                    };
+                  }).pipe(
+                    Effect.tapError(() => Effect.sync(rollback)),
+                    Effect.flatMap((complete) =>
+                      Effect.try({
+                        try: complete,
+                        catch: (cause) =>
+                          toHostOperationError(cause, `${operation}.complete`, {
+                            runtimeId: runtime.runtimeId,
+                            externalSessionId,
+                          }),
+                      }),
+                    ),
+                  );
+                }),
+              );
+            }),
+          ),
+        );
+
       const runSummary = (
         operation: string,
         run: () => Effect.Effect<unknown, HostError>,
@@ -252,28 +295,20 @@ export const createClaudeLiveSessionAdapterPreparer =
         replyApproval: (input) =>
           requireClaudePolicy(input.runtimeKind, "reply-approval").pipe(
             Effect.flatMap(() =>
-              eventCoordinator.runControlMutation(
-                service
-                  .replyApproval(toClaudeReplyApprovalInput(input))
-                  .pipe(
-                    Effect.mapError(
-                      sessionError("claude-live-session.reply-approval", input.externalSessionId),
-                    ),
-                  ),
+              resolvePendingInput(
+                "claude-live-session.reply-approval",
+                input.externalSessionId,
+                service.prepareApprovalReply(toClaudeReplyApprovalInput(input)),
               ),
             ),
           ),
         replyQuestion: (input) =>
           requireClaudePolicy(input.runtimeKind, "reply-question").pipe(
             Effect.flatMap(() =>
-              eventCoordinator.runControlMutation(
-                service
-                  .replyQuestion(toClaudeReplyQuestionInput(input))
-                  .pipe(
-                    Effect.mapError(
-                      sessionError("claude-live-session.reply-question", input.externalSessionId),
-                    ),
-                  ),
+              resolvePendingInput(
+                "claude-live-session.reply-question",
+                input.externalSessionId,
+                service.prepareQuestionReply(toClaudeReplyQuestionInput(input)),
               ),
             ),
           ),

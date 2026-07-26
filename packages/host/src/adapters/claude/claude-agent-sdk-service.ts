@@ -33,7 +33,10 @@ import {
 } from "./claude-agent-sdk-catalog";
 import { readClaudeContextUsageFromQuery } from "./claude-agent-sdk-context-usage";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
-import { replyClaudeApproval, replyClaudeQuestion } from "./claude-agent-sdk-pending-input";
+import {
+  prepareClaudeApprovalReply,
+  prepareClaudeQuestionReply,
+} from "./claude-agent-sdk-pending-input";
 import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { createClaudeAgentSdkSession } from "./claude-agent-sdk-session-factory";
 import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
@@ -258,8 +261,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  replyApproval(input: ReplyApprovalInput) {
-    return fromPromise("claudeRuntime.replyApproval", async () => {
+  prepareApprovalReply(input: ReplyApprovalInput) {
+    return fromPromise("claudeRuntime.prepareApprovalReply", async () => {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
       const session = this.requireSession(target.sessionId);
       assertClaudeSessionRef(
@@ -267,8 +270,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         { ...input, externalSessionId: session.externalSessionId },
         "reply to approval",
       );
-      replyClaudeApproval({
-        emit: this.emit.bind(this),
+      return prepareClaudeApprovalReply({
         input,
         now: this.now,
         session,
@@ -276,8 +278,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  replyQuestion(input: ReplyQuestionInput) {
-    return fromPromise("claudeRuntime.replyQuestion", async () => {
+  prepareQuestionReply(input: ReplyQuestionInput) {
+    return fromPromise("claudeRuntime.prepareQuestionReply", async () => {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
       const session = this.requireSession(target.sessionId);
       assertClaudeSessionRef(
@@ -285,8 +287,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         { ...input, externalSessionId: session.externalSessionId },
         "reply to question",
       );
-      replyClaudeQuestion({
-        emit: this.emit.bind(this),
+      return prepareClaudeQuestionReply({
         input,
         now: this.now,
         session,

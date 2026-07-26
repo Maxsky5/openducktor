@@ -427,7 +427,7 @@ describe("createClaudeAgentSdkService", () => {
     expect(session.model?.variant).toBe("xhigh");
   });
 
-  test("resolves live Claude question replies", async () => {
+  test("prepares live Claude question replies before completing them", async () => {
     const resolvedAnswers: string[][][] = [];
     const session = createSession({
       pendingQuestions: new Map([
@@ -465,26 +465,34 @@ describe("createClaudeAgentSdkService", () => {
     });
     const service = createService(session);
 
-    await expect(
-      Effect.runPromise(
-        service.replyQuestion({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
-          runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          requestId: "question-1",
-          answers: [["Require email"]],
-        }),
-      ),
-    ).resolves.toBeUndefined();
+    const resolution = await Effect.runPromise(
+      service.prepareQuestionReply({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        requestId: "question-1",
+        answers: [["Require email"]],
+      }),
+    );
+
+    expect(session.pendingQuestions.size).toBe(1);
+    expect(resolvedAnswers).toEqual([]);
+    expect(resolution.event).toMatchObject({
+      externalSessionId: "session-1",
+      type: "question_resolved",
+      requestId: "question-1",
+    });
+
+    resolution.complete();
 
     expect(session.pendingQuestions.size).toBe(0);
     expect(resolvedAnswers).toEqual([[["Require email"]]]);
   });
 
-  test("resolves live Claude approval replies and emits resolution events", async () => {
+  test("prepares live Claude approval replies before completing them", async () => {
     const resolvedResults: unknown[] = [];
     const session = createSession({
       pendingApprovals: new Map([
@@ -506,39 +514,36 @@ describe("createClaudeAgentSdkService", () => {
         ],
       ]),
     });
-    const emitted: unknown[] = [];
-    const service = createService(session, (_eventSession, event) => {
-      emitted.push(event);
+    const service = createService(session);
+    const resolution = await Effect.runPromise(
+      service.prepareApprovalReply({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        requestId: "approval-1",
+        outcome: "approve_once",
+      }),
+    );
+
+    expect(session.pendingApprovals.size).toBe(1);
+    expect(resolvedResults).toEqual([]);
+    expect(resolution.event).toMatchObject({
+      externalSessionId: "session-1",
+      type: "approval_resolved",
+      requestId: "approval-1",
+      timestamp: "2026-06-25T20:00:00.000Z",
     });
 
-    await expect(
-      Effect.runPromise(
-        service.replyApproval({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
-          runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          requestId: "approval-1",
-          outcome: "approve_once",
-        }),
-      ),
-    ).resolves.toBeUndefined();
+    resolution.complete();
 
     expect(session.pendingApprovals.size).toBe(0);
     expect(resolvedResults).toEqual([{ behavior: "allow" }]);
-    expect(emitted).toEqual([
-      expect.objectContaining({
-        externalSessionId: "session-1",
-        type: "approval_resolved",
-        requestId: "approval-1",
-        timestamp: "2026-06-25T20:00:00.000Z",
-      }),
-    ]);
   });
 
-  test("resolves subagent approval replies through the child live-session route", async () => {
+  test("prepares subagent approval replies for the child live-session route", async () => {
     const childExternalSessionId = "session-1::claude-subagent::agent-child-1";
     const resolvedResults: unknown[] = [];
     const session = createSession({
@@ -564,37 +569,34 @@ describe("createClaudeAgentSdkService", () => {
         ],
       ]),
     });
-    const emitted: unknown[] = [];
-    const service = createService(session, (_eventSession, event) => {
-      emitted.push(event);
+    const service = createService(session);
+    const resolution = await Effect.runPromise(
+      service.prepareApprovalReply({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: childExternalSessionId,
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        requestId: "approval-child-1",
+        outcome: "approve_once",
+      }),
+    );
+
+    expect(session.pendingApprovals.size).toBe(1);
+    expect(resolvedResults).toEqual([]);
+    expect(resolution.event).toMatchObject({
+      type: "approval_resolved",
+      externalSessionId: childExternalSessionId,
+      parentExternalSessionId: "session-1",
+      childExternalSessionId,
+      subagentCorrelationKey: "agent-child-1",
     });
 
-    await expect(
-      Effect.runPromise(
-        service.replyApproval({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: childExternalSessionId,
-          runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          requestId: "approval-child-1",
-          outcome: "approve_once",
-        }),
-      ),
-    ).resolves.toBeUndefined();
+    resolution.complete();
 
     expect(session.pendingApprovals.size).toBe(0);
     expect(resolvedResults).toEqual([{ behavior: "allow" }]);
-    expect(emitted).toEqual([
-      expect.objectContaining({
-        type: "approval_resolved",
-        externalSessionId: childExternalSessionId,
-        parentExternalSessionId: "session-1",
-        childExternalSessionId,
-        subagentCorrelationKey: "agent-child-1",
-      }),
-    ]);
   });
 
   test("rejects session-scoped approval outcomes without consuming the pending request", async () => {
@@ -621,7 +623,7 @@ describe("createClaudeAgentSdkService", () => {
 
     await expect(
       Effect.runPromise(
-        service.replyApproval({
+        service.prepareApprovalReply({
           repoPath: "/repo/",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree/",
@@ -635,5 +637,65 @@ describe("createClaudeAgentSdkService", () => {
     ).rejects.toThrow("Claude approval replies support only approve_once or reject");
 
     expect(session.pendingApprovals.has("approval-1")).toBe(true);
+  });
+
+  test("rejects malformed question answers without consuming the pending request", async () => {
+    const session = createSession({
+      pendingQuestions: new Map([
+        [
+          "question-1",
+          {
+            event: {
+              type: "question_required",
+              externalSessionId: "session-1",
+              timestamp: "2026-06-25T20:00:00.000Z",
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Decision",
+                  question: "Proceed?",
+                  options: [
+                    { label: "Yes", description: "Continue." },
+                    { label: "No", description: "Stop." },
+                  ],
+                  multiple: false,
+                  custom: true,
+                },
+              ],
+            },
+            resolve: () => {
+              throw new Error("Malformed answers must not resolve the SDK request.");
+            },
+          },
+        ],
+      ]),
+    });
+    const service = createService(session);
+    const input = {
+      repoPath: "/repo/",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree/",
+      externalSessionId: "session-1",
+      runtimePolicy: { kind: "claude" as const },
+      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      requestId: "question-1",
+    };
+    const invalidAnswers = [
+      { answers: [], message: "exactly 1 answer group" },
+      { answers: [[]], message: "at least one answer" },
+      { answers: [["Yes", "No"]], message: "only one answer" },
+    ];
+
+    for (const invalid of invalidAnswers) {
+      await expect(
+        Effect.runPromise(
+          service.prepareQuestionReply({
+            ...input,
+            answers: invalid.answers,
+          }),
+        ),
+      ).rejects.toThrow(invalid.message);
+      expect(session.pendingQuestions.has("question-1")).toBe(true);
+    }
   });
 });

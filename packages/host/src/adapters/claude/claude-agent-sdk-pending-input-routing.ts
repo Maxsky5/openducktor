@@ -32,13 +32,15 @@ export const emitClaudePendingInputEvent = <Session extends ClaudeSessionContext
   event: ClaudePendingInputEvent;
   session: Session;
 }): void => {
-  emit(
-    session,
-    event.childExternalSessionId && event.childExternalSessionId !== event.externalSessionId
-      ? { ...event, externalSessionId: event.childExternalSessionId }
-      : event,
-  );
+  emit(session, routeClaudePendingInputEvent(event));
 };
+
+export const routeClaudePendingInputEvent = <Event extends ClaudePendingInputEvent>(
+  event: Event,
+): Event =>
+  event.childExternalSessionId && event.childExternalSessionId !== event.externalSessionId
+    ? { ...event, externalSessionId: event.childExternalSessionId }
+    : event;
 
 export const claudePendingInputResolutionRoute = (
   event: Extract<AgentEvent, { type: "approval_required" | "question_required" }>,

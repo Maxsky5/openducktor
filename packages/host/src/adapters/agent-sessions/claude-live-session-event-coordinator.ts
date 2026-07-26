@@ -104,6 +104,8 @@ export const createClaudeLiveSessionEventCoordinator = ({
     operationSemaphore.withPermits(1)(
       Effect.gen(function* () {
         yield* takeForwardingFailure();
+        yield* drainQueuedEvents;
+        yield* takeForwardingFailure();
         const result = yield* Effect.either(effect);
         yield* drainQueuedEvents;
         yield* takeForwardingFailure();

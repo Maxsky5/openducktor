@@ -355,6 +355,28 @@ export const createClaudeLiveSessionState = ({
 
   return {
     applyEvent,
+    applyPendingResolution: (
+      session: ClaudeSessionContext,
+      event: Extract<AgentEvent, { type: "approval_resolved" | "question_resolved" }>,
+    ): {
+      changes: AgentSessionLiveAdapterChange[];
+      rollback: () => void;
+    } => {
+      const ref = eventRef(session, event);
+      const key = refKey(ref);
+      const previous = readSnapshot(ref);
+      const changes = applyPendingEvent(session, event);
+      return {
+        changes,
+        rollback: () => {
+          if (previous) {
+            snapshotsByRef.set(key, previous);
+          } else {
+            snapshotsByRef.delete(key);
+          }
+        },
+      };
+    },
     applyLoadedContext: (
       ref: AgentSessionLiveRef,
       contextUsage: AgentSessionContextUsage | null,

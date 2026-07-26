@@ -4,7 +4,11 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
+import type {
+  ClaudeAgentSdkService,
+  ClaudePendingInputResolution,
+} from "../../application/runtimes/claude-agent-sdk-service";
+import { HostOperationError } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionRuntimeAdapterPort,
@@ -102,9 +106,14 @@ const createHarness = async () => {
     Effect.die("loadSessionContextUsage was not configured");
   let sendUserMessageImpl: ClaudeAgentSdkService["sendUserMessage"] = () =>
     Effect.die("sendUserMessage was not configured");
+  let prepareApprovalReplyImpl: ClaudeAgentSdkService["prepareApprovalReply"] = () =>
+    Effect.die("prepareApprovalReply was not configured");
+  let prepareQuestionReplyImpl: ClaudeAgentSdkService["prepareQuestionReply"] = () =>
+    Effect.die("prepareQuestionReply was not configured");
   let updateSessionModelImpl: ClaudeAgentSdkService["updateSessionModel"] = () =>
     Effect.die("updateSessionModel was not configured");
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
+  let failNextMutationAfterApply = false;
   let mutationBarrier:
     | {
         entered: ReturnType<typeof deferred<void>>;
@@ -143,6 +152,10 @@ const createHarness = async () => {
       input: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0],
       runtimeId: string,
     ) => sendUserMessageImpl(input, runtimeId),
+    prepareApprovalReply: (input: Parameters<ClaudeAgentSdkService["prepareApprovalReply"]>[0]) =>
+      prepareApprovalReplyImpl(input),
+    prepareQuestionReply: (input: Parameters<ClaudeAgentSdkService["prepareQuestionReply"]>[0]) =>
+      prepareQuestionReplyImpl(input),
     updateSessionModel: (input: Parameters<ClaudeAgentSdkService["updateSessionModel"]>[0]) =>
       updateSessionModelImpl(input),
     stopSession: () => Effect.void,
@@ -161,9 +174,18 @@ const createHarness = async () => {
         : Effect.void;
       return waitForBarrier.pipe(
         Effect.zipRight(
-          Effect.map(mutation, ({ value, changes: mutationChanges }) => {
+          Effect.flatMap(mutation, ({ value, changes: mutationChanges }) => {
+            if (failNextMutationAfterApply) {
+              failNextMutationAfterApply = false;
+              return Effect.fail(
+                new HostOperationError({
+                  operation: "test.publish",
+                  message: "Publication failed.",
+                }),
+              );
+            }
             changes.push(...mutationChanges);
-            return value;
+            return Effect.succeed(value);
           }),
         ),
       );
@@ -204,6 +226,15 @@ const createHarness = async () => {
       const barrier = { entered: deferred<void>(), release: deferred<void>() };
       mutationBarrier = barrier;
       return barrier;
+    },
+    failNextMutationAfterStateApply: () => {
+      failNextMutationAfterApply = true;
+    },
+    setPrepareApprovalReply: (implementation: ClaudeAgentSdkService["prepareApprovalReply"]) => {
+      prepareApprovalReplyImpl = implementation;
+    },
+    setPrepareQuestionReply: (implementation: ClaudeAgentSdkService["prepareQuestionReply"]) => {
+      prepareQuestionReplyImpl = implementation;
     },
     setSendUserMessage: (implementation: ClaudeAgentSdkService["sendUserMessage"]) => {
       sendUserMessageImpl = implementation;
@@ -561,6 +592,170 @@ describe("Claude host live-session adapter", () => {
           },
         ],
       },
+    });
+  });
+
+  test("does not release an approval until its live resolution is published", async () => {
+    const harness = await createHarness();
+    const completed: string[] = [];
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "approval_required",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      requestId: "approval-1",
+      requestType: "command_execution",
+      title: "Approve command",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    });
+    const resolution = {
+      event: {
+        type: "approval_resolved",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:01:31.000Z",
+        requestId: "approval-1",
+      },
+      complete: () => completed.push("approval-1"),
+    } satisfies ClaudePendingInputResolution;
+    harness.setPrepareApprovalReply(() => Effect.succeed(resolution));
+    harness.failNextMutationAfterStateApply();
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.replyApproval({
+          ...startInput,
+          externalSessionId: "session-1",
+          requestId: "approval-1",
+          outcome: "approve_once",
+        }),
+      ),
+    ).rejects.toThrow("Publication failed.");
+
+    expect(completed).toEqual([]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: {
+        activity: "waiting_for_permission",
+        pendingApprovals: [{ requestId: "approval-1" }],
+      },
+    });
+
+    await Effect.runPromise(
+      harness.adapter.replyApproval({
+        ...startInput,
+        externalSessionId: "session-1",
+        requestId: "approval-1",
+        outcome: "approve_once",
+      }),
+    );
+
+    expect(completed).toEqual(["approval-1"]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { pendingApprovals: [] },
+    });
+  });
+
+  test("does not release a question until its live resolution is published", async () => {
+    const harness = await createHarness();
+    const completed: string[] = [];
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "question_required",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      requestId: "question-1",
+      questions: [
+        {
+          question: "Proceed?",
+          header: "Decision",
+          options: [{ label: "Yes", description: "Continue." }],
+          multiple: false,
+          custom: true,
+        },
+      ],
+    });
+    const resolution = {
+      event: {
+        type: "question_resolved",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:01:31.000Z",
+        requestId: "question-1",
+      },
+      complete: () => completed.push("question-1"),
+    } satisfies ClaudePendingInputResolution;
+    harness.setPrepareQuestionReply(() => Effect.succeed(resolution));
+    harness.failNextMutationAfterStateApply();
+
+    await expect(
+      Effect.runPromise(
+        harness.adapter.replyQuestion({
+          ...startInput,
+          externalSessionId: "session-1",
+          requestId: "question-1",
+          answers: [["Yes"]],
+        }),
+      ),
+    ).rejects.toThrow("Publication failed.");
+
+    expect(completed).toEqual([]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: {
+        activity: "waiting_for_question",
+        pendingQuestions: [{ requestId: "question-1" }],
+      },
+    });
+
+    await Effect.runPromise(
+      harness.adapter.replyQuestion({
+        ...startInput,
+        externalSessionId: "session-1",
+        requestId: "question-1",
+        answers: [["Yes"]],
+      }),
+    );
+
+    expect(completed).toEqual(["question-1"]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { pendingQuestions: [] },
     });
   });
 

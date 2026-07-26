@@ -337,7 +337,7 @@ const handleAssistantMessage = ({
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
   if (assistantModel) {
-    session.model = assistantModel;
+    session.model = { ...session.model, ...assistantModel };
   }
   const content = (message.message as { content?: unknown }).content;
   const text = textFromContentBlocks(content);
