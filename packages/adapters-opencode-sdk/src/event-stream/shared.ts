@@ -106,7 +106,16 @@ export const readEventParentExternalSessionId = (properties: unknown): string | 
 };
 
 const readLifecycleParentExternalSessionId = (info: unknown): string | undefined => {
-  return readStringProp(info, ["parentID"]);
+  const parentExternalSessionId = readStringProp(info, ["parentID"]);
+  if (parentExternalSessionId?.trim()) {
+    return parentExternalSessionId;
+  }
+  if (typeof asUnknownRecord(info)?.parentID === "string") {
+    throw new Error(
+      "OpenCode session lifecycle event has malformed info.parentID lineage; expected a non-blank string.",
+    );
+  }
+  return undefined;
 };
 
 export const flushPendingSubagentInputEventsForSession = (

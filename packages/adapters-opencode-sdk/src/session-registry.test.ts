@@ -427,6 +427,50 @@ describe("session registry runtime event transport", () => {
     );
   });
 
+  test("rejects whitespace-only direct child lineage without recording it", async () => {
+    let transport: RuntimeEventTransportRecord | undefined;
+    const emitted = await runRuntimeEventTransport(
+      [childSessionCreatedEvent("external-child-session", "   ")],
+      {
+        onTransport: (record) => {
+          transport = record;
+        },
+      },
+    );
+
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        message: expect.stringContaining("info.parentID"),
+      }),
+    );
+    expect(
+      transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
+    ).toBe(false);
+  });
+
+  test("rejects whitespace-only nested sync child lineage without recording it", async () => {
+    let transport: RuntimeEventTransportRecord | undefined;
+    const emitted = await runRuntimeEventTransport(
+      [runtimeSourceSyncChildSessionCreatedEvent("external-child-session", "   ")],
+      {
+        onTransport: (record) => {
+          transport = record;
+        },
+      },
+    );
+
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        message: expect.stringContaining("info.parentID"),
+      }),
+    );
+    expect(
+      transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
+    ).toBe(false);
+  });
+
   test("rejects direct child lifecycle parentId aliases without recording lineage", async () => {
     let transport: RuntimeEventTransportRecord | undefined;
     const emitted = await runRuntimeEventTransport(
