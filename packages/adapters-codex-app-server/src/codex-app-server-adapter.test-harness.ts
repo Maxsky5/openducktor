@@ -89,42 +89,60 @@ type TestRuntimeStreamListener = (event: {
   message: unknown;
 }) => void;
 
+type TestRuntimeStreamSubscription = {
+  runtimeId: string;
+  listener: TestRuntimeStreamListener;
+  active: boolean;
+};
+
 export const createRuntimeStreamSubscription = () => {
-  const streamListeners: TestRuntimeStreamListener[] = [];
-  const subscribeEvents = mock((_runtimeId: string, listener: TestRuntimeStreamListener) => {
-    streamListeners.push(listener);
-    return () => {};
+  const subscriptions: TestRuntimeStreamSubscription[] = [];
+  const subscribeEvents = mock((runtimeId: string, listener: TestRuntimeStreamListener) => {
+    const subscription = { runtimeId, listener, active: true };
+    subscriptions.push(subscription);
+    return () => {
+      subscription.active = false;
+    };
   });
   const emitEvent = (
-    subscriptionIndex: number,
+    subscription: TestRuntimeStreamSubscription,
     kind: "notification" | "server_request",
     message: unknown,
     receivedAt = new Date().toISOString(),
   ) => {
-    const listener = streamListeners[subscriptionIndex];
-    expect(listener).toBeDefined();
-    listener?.({
-      runtimeId: "runtime-live",
+    subscription.listener({
+      runtimeId: subscription.runtimeId,
       kind,
       receivedAt,
       message,
     });
   };
+  const latestActiveSubscription = (): TestRuntimeStreamSubscription => {
+    const subscription = subscriptions.findLast(({ active }) => active);
+    expect(subscription).toBeDefined();
+    if (!subscription) {
+      throw new Error("Expected an active runtime stream subscription.");
+    }
+    return subscription;
+  };
+  const capturedSubscription = (subscription: TestRuntimeStreamSubscription) => ({
+    emitNotification: (message: unknown, receivedAt?: string) =>
+      emitEvent(subscription, "notification", message, receivedAt),
+    emitServerRequest: (message: unknown, receivedAt?: string) =>
+      emitEvent(subscription, "server_request", message, receivedAt),
+    isActive: () => subscription.active,
+  });
   const emitNotification = (message: unknown, receivedAt?: string) =>
-    emitEvent(0, "notification", message, receivedAt);
-  const emitNotificationForSubscription = (
-    subscriptionIndex: number,
-    message: unknown,
-    receivedAt?: string,
-  ) => emitEvent(subscriptionIndex, "notification", message, receivedAt);
+    emitEvent(latestActiveSubscription(), "notification", message, receivedAt);
   const emitServerRequest = (message: unknown, receivedAt?: string) =>
-    emitEvent(0, "server_request", message, receivedAt);
+    emitEvent(latestActiveSubscription(), "server_request", message, receivedAt);
+  const captureLatestSubscription = () => capturedSubscription(latestActiveSubscription());
   return {
     subscribeEvents,
     emitNotification,
-    emitNotificationForSubscription,
     emitServerRequest,
-    subscriptionCount: () => streamListeners.length,
+    captureLatestSubscription,
+    subscriptionCount: () => subscriptions.length,
   };
 };
 

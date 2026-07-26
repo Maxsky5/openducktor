@@ -13,6 +13,7 @@ import {
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
+import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import type { CodexAppServerClient } from "./types";
 
 class RejectableTurnTransport extends RecordingTransport {
@@ -104,34 +105,22 @@ const freshInventoryClient = (
 
 describe("CodexAppServerAdapter runtime teardown", () => {
   test("attempts every runtime-state cleanup when one component fails", () => {
-    const { adapter } = createHarness();
     const cleanupCalls: string[] = [];
-    const internals = adapter as unknown as {
-      localSessions: { releaseRuntime(runtimeId: string): void };
-      pendingInput: { clearRuntime(runtimeId: string): void };
-      subagents: { clearRuntime(runtimeId: string): void };
-      runtimeEvents: { clearRuntime(runtimeId: string): void };
-      disposeThreadInventory(runtimeId: string): void;
-    };
-    internals.localSessions.releaseRuntime = (runtimeId) => {
-      cleanupCalls.push(`sessions:${runtimeId}`);
-      throw new Error("unsubscribe failed");
-    };
-    internals.pendingInput.clearRuntime = (runtimeId) => {
-      cleanupCalls.push(`pending:${runtimeId}`);
-    };
-    internals.subagents.clearRuntime = (runtimeId) => {
-      cleanupCalls.push(`subagents:${runtimeId}`);
-    };
-    internals.runtimeEvents.clearRuntime = (runtimeId) => {
-      cleanupCalls.push(`events:${runtimeId}`);
-    };
-    internals.disposeThreadInventory = (runtimeId) => {
-      cleanupCalls.push(`inventory:${runtimeId}`);
-    };
-
-    expect(() => adapter.releaseRuntime("runtime-live")).toThrow("unsubscribe failed");
+    expect(() =>
+      releaseCodexRuntimeState("runtime-live", {
+        cancelContextUsage: (runtimeId) => cleanupCalls.push(`context:${runtimeId}`),
+        releaseSessions: (runtimeId) => {
+          cleanupCalls.push(`sessions:${runtimeId}`);
+          throw new Error("unsubscribe failed");
+        },
+        clearPendingInput: (runtimeId) => cleanupCalls.push(`pending:${runtimeId}`),
+        clearSubagents: (runtimeId) => cleanupCalls.push(`subagents:${runtimeId}`),
+        clearRuntimeEvents: (runtimeId) => cleanupCalls.push(`events:${runtimeId}`),
+        disposeThreadInventory: (runtimeId) => cleanupCalls.push(`inventory:${runtimeId}`),
+      }),
+    ).toThrow("unsubscribe failed");
     expect(cleanupCalls).toEqual([
+      "context:runtime-live",
       "sessions:runtime-live",
       "pending:runtime-live",
       "subagents:runtime-live",
@@ -382,6 +371,96 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     }
   });
 
+  test("does not report a late dynamic-tool rejection to a replacement session", async () => {
+    const responseStarted = createDeferred<void>();
+    const responseCompleted = createDeferred<void>();
+    const { subscribeEvents, emitServerRequest } = createRuntimeStreamSubscription();
+    const liveMutations: unknown[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      respondServerRequest: async () => {
+        responseStarted.resolve();
+        await responseCompleted.promise;
+      },
+      onLiveSessionMutation: (mutation) => {
+        liveMutations.push(mutation);
+      },
+    });
+
+    await adapter.startSession(codexStartSessionInput());
+    emitServerRequest({
+      id: "late-dynamic-tool",
+      method: "item/tool/call",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "old-turn",
+      },
+    });
+    await responseStarted.promise;
+
+    adapter.releaseRuntime("runtime-live");
+    await adapter.startSession(codexStartSessionInput());
+    const replacementEvents: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => replacementEvents.push(event),
+    );
+    try {
+      responseCompleted.resolve();
+      await flushCodexAdapterWork();
+
+      expect(replacementEvents).toEqual([]);
+      expect(liveMutations).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("does not report a late server-request response failure to a replacement session", async () => {
+    const responseStarted = createDeferred<void>();
+    const responseCompleted = createDeferred<void>();
+    const { subscribeEvents, emitServerRequest } = createRuntimeStreamSubscription();
+    const liveMutations: unknown[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      respondServerRequest: async () => {
+        responseStarted.resolve();
+        await responseCompleted.promise;
+      },
+      onLiveSessionMutation: (mutation) => {
+        liveMutations.push(mutation);
+      },
+    });
+
+    await adapter.startSession(codexStartSessionInput());
+    emitServerRequest({
+      id: "failed-dynamic-tool",
+      method: "item/tool/call",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "old-turn",
+      },
+    });
+    await responseStarted.promise;
+
+    adapter.releaseRuntime("runtime-live");
+    await adapter.startSession(codexStartSessionInput());
+    const replacementEvents: unknown[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => replacementEvents.push(event),
+    );
+    try {
+      responseCompleted.reject(new Error("old server-request response failed"));
+      await flushCodexAdapterWork();
+
+      expect(replacementEvents).toEqual([]);
+      expect(liveMutations).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("reports a rejected turn to its current retained session", async () => {
     const transport = new RejectableTurnTransport();
     const adapter = createAdapterWithTransport(transport);
@@ -494,12 +573,8 @@ describe("CodexAppServerAdapter runtime teardown", () => {
   test("drops queued runtime events from a released runtime generation", async () => {
     const mutationStarted = createDeferred<void>();
     const allowMutation = createDeferred<void>();
-    const {
-      subscribeEvents,
-      emitNotification,
-      emitNotificationForSubscription,
-      subscriptionCount,
-    } = createRuntimeStreamSubscription();
+    const { subscribeEvents, emitNotification, captureLatestSubscription, subscriptionCount } =
+      createRuntimeStreamSubscription();
     let mutationCount = 0;
     const { adapter } = createHarness({
       subscribeEvents,
@@ -533,7 +608,9 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
     expect(subscriptionCount()).toBe(2);
-    emitNotificationForSubscription(1, {
+    const replacementSubscription = captureLatestSubscription();
+    expect(replacementSubscription.isActive()).toBe(true);
+    replacementSubscription.emitNotification({
       method: "thread/status/changed",
       params: {
         threadId: "thread/start-runtime-live",

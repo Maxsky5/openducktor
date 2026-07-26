@@ -254,7 +254,7 @@ export class CodexRuntimeSessionEvents {
       if (this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation) {
         return;
       }
-      return this.processRuntimeStreamEventMutation(event);
+      return this.processRuntimeStreamEventMutation(event, generation);
     });
     const cleanup = processing.then(
       () => undefined,
@@ -271,23 +271,44 @@ export class CodexRuntimeSessionEvents {
     });
   }
 
-  private async processRuntimeStreamEventMutation(event: CodexRuntimeStreamEvent): Promise<void> {
+  private async processRuntimeStreamEventMutation(
+    event: CodexRuntimeStreamEvent,
+    generation: symbol,
+  ): Promise<void> {
     const mutation: CodexRuntimeLiveSessionMutation = {
       runtimeId: event.runtimeId,
       transcriptEvents: [],
       catalogInvalidated: false,
     };
     this.activeMutationByRuntimeId.set(event.runtimeId, mutation);
+    let owner: CodexRuntimeStreamEventSessionOwner | undefined;
     try {
       try {
-        await this.handleRuntimeStreamEvent(event);
+        owner = this.prepareRuntimeStreamEvent(event);
+        if (owner) {
+          await this.processRuntimeStreamEventForSession(owner, event);
+        }
       } catch (error) {
-        const owner = this.runtimeStreamEventSessionOwner(event);
+        if (this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation) {
+          return;
+        }
+        const retainedOwner = owner
+          ? this.retainedRuntimeStreamEventOwner(owner)
+          : this.runtimeStreamEventSessionOwner(event);
+        if (owner && !retainedOwner) {
+          return;
+        }
         Object.assign(mutation, {
           fault: this.errorMessage(error),
-          ...(owner ? { faultRef: codexSessionRef(owner.targetSession) } : {}),
+          ...(retainedOwner ? { faultRef: codexSessionRef(retainedOwner.targetSession) } : {}),
         });
-        this.emitRuntimeStreamEventError(event, error);
+        this.emitRuntimeStreamEventError(event, error, retainedOwner);
+      }
+      if (
+        this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation ||
+        (owner && !this.retainedRuntimeStreamEventOwner(owner))
+      ) {
+        return;
       }
       const deliveries: Array<{ label: string; run: () => void | Promise<void> }> = [];
       if (mutation.catalogInvalidated && this.deps.onCatalogInvalidated) {
@@ -473,7 +494,9 @@ export class CodexRuntimeSessionEvents {
     this.emitSessionError(externalSessionId, error);
   }
 
-  private async handleRuntimeStreamEvent(event: CodexRuntimeStreamEvent): Promise<void> {
+  private prepareRuntimeStreamEvent(
+    event: CodexRuntimeStreamEvent,
+  ): CodexRuntimeStreamEventSessionOwner | undefined {
     this.assertRuntimeStreamEventReceivedAt(event);
     if (event.kind === "notification") {
       this.observeCatalogInvalidation(event.runtimeId, event.message);
@@ -517,7 +540,7 @@ export class CodexRuntimeSessionEvents {
       }
       return;
     }
-    await this.processRuntimeStreamEventForSession(owner, event);
+    return owner;
   }
 
   private handleServerRequestResolvedNotification(
@@ -590,7 +613,11 @@ export class CodexRuntimeSessionEvents {
     return null;
   }
 
-  private emitRuntimeStreamEventError(event: CodexRuntimeStreamEvent, error: unknown): void {
+  private emitRuntimeStreamEventError(
+    event: CodexRuntimeStreamEvent,
+    error: unknown,
+    owner: CodexRuntimeStreamEventSessionOwner | undefined,
+  ): void {
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
       if (event.kind === "server_request") {
@@ -598,7 +625,6 @@ export class CodexRuntimeSessionEvents {
       }
       return;
     }
-    const owner = this.runtimeStreamEventSessionOwner(event);
     if (owner) {
       this.emitSessionErrorForSession(owner.targetSession, error);
     }
@@ -612,6 +638,14 @@ export class CodexRuntimeSessionEvents {
       return undefined;
     }
     return this.resolveRuntimeStreamEventSessionOwner(threadId, event.runtimeId);
+  }
+
+  private retainedRuntimeStreamEventOwner(
+    owner: CodexRuntimeStreamEventSessionOwner,
+  ): CodexRuntimeStreamEventSessionOwner | undefined {
+    return this.deps.sessions.get(owner.retainedSession.threadId) === owner.retainedSession
+      ? owner
+      : undefined;
   }
 
   private resolveRuntimeStreamEventSessionOwner(
@@ -837,6 +871,11 @@ export class CodexRuntimeSessionEvents {
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
+      emitRetainedSessionEvent: (session, event) => {
+        if (this.deps.sessions.get(session.threadId) === session) {
+          this.emitSessionEventForSession(session, event);
+        }
+      },
       emitRoutedRequestEvent: (eventTargetSession, event) =>
         this.emitRoutedRequestEvent(eventTargetSession, event),
     };

@@ -58,6 +58,11 @@ const createRequestContext = ({
       ...(event as Record<string, unknown>),
       emittedExternalSessionId: externalSessionId,
     }),
+  emitRetainedSessionEvent: (session, event) =>
+    events.push({
+      ...event,
+      emittedExternalSessionId: session.threadId,
+    }),
 });
 
 const mcpToolApprovalRequest = ({
@@ -141,7 +146,7 @@ describe("handleCodexServerRequest", () => {
       respondServerRequest,
       sessions: new Map([[session.threadId, session]]),
     });
-    context.emitSessionEvent = () => {
+    context.emitRetainedSessionEvent = () => {
       throw new Error("simulated post-response delivery failure");
     };
     const request = mcpToolApprovalRequest({
