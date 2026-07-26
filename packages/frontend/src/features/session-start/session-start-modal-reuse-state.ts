@@ -22,13 +22,22 @@ const EMPTY_EXISTING_SESSION_OPTIONS: SessionStartExistingSessionOption[] = [];
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
   sourceSessionValue: string,
-): AgentModelSelection | null => {
+): {
+  runtimeKind: RuntimeKind;
+  selectedModel: AgentModelSelection | null;
+} | null => {
   if (!sourceSessionValue) {
     return null;
   }
 
   const selectedOption = options.find((option) => option.value === sourceSessionValue);
-  return selectedOption?.selectedModel ?? null;
+  if (!selectedOption) {
+    return null;
+  }
+  return {
+    runtimeKind: selectedOption.sourceSession.runtimeKind,
+    selectedModel: selectedOption.selectedModel ?? null,
+  };
 };
 
 const firstSourceSessionValue = (options: SessionStartExistingSessionOption[]): string =>
@@ -128,7 +137,7 @@ const buildSourceSelectionDraft = ({
     requestedRuntimeKind: sourceSelection?.runtimeKind ?? null,
   });
 
-  if (!sourceSelection || !runtimeKind) {
+  if (!sourceSelection?.selectedModel || !runtimeKind) {
     return {
       runtimeKind,
       selection: null,
@@ -138,10 +147,10 @@ const buildSourceSelectionDraft = ({
   return {
     runtimeKind,
     selection: coerceVisibleSelectionToCatalog(catalog, {
-      ...sourceSelection,
+      ...sourceSelection.selectedModel,
       runtimeKind,
     }) ?? {
-      ...sourceSelection,
+      ...sourceSelection.selectedModel,
       runtimeKind,
     },
   };

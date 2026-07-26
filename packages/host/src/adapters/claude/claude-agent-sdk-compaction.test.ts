@@ -238,6 +238,53 @@ describe("Claude manual compaction", () => {
     ]);
   });
 
+  test("hydrates a live manual compact boundary with the accepted message id", () => {
+    const history = toClaudeHistoryMessages(
+      claudeHistoryMessageFixtures([
+        {
+          type: "system",
+          subtype: "local_command",
+          uuid: "sdk-compact-command",
+          session_id: "session-1",
+          timestamp: "2026-07-23T10:00:00.000Z",
+          content:
+            "<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args></command-args>",
+        },
+        {
+          type: "system",
+          subtype: "compact_boundary",
+          uuid: "compact-boundary-1",
+          session_id: "session-1",
+          timestamp: "2026-07-23T10:00:02.000Z",
+          compact_metadata: { trigger: "manual", pre_tokens: 12_000, post_tokens: 2_000 },
+        },
+      ]),
+      () => "2026-07-23T11:00:00.000Z",
+      [
+        {
+          messageId: "accepted-compact-request",
+          text: "/compact",
+          timestamp: "2026-07-23T10:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(history).toEqual([
+      {
+        messageId: "accepted-compact-request",
+        role: "system",
+        timestamp: "2026-07-23T10:00:02.000Z",
+        text: "Session compacted.",
+        notice: {
+          tone: "info",
+          reason: "session_compacted",
+          title: "Compacted",
+        },
+        parts: [],
+      },
+    ]);
+  });
+
   test("hides Claude's compact summary and hook output after hydration", () => {
     const history = toClaudeHistoryMessages(
       claudeHistoryMessageFixtures([

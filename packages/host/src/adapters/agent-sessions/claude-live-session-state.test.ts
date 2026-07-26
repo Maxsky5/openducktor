@@ -105,6 +105,53 @@ describe("Claude host live-session state", () => {
     });
   });
 
+  test("retains nested subagent ancestry from the emitting transcript", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
+
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:02:00.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "root-assistant",
+        partId: "claude-subagent:child-1",
+        correlationKey: "child-1",
+        status: "running",
+        externalSessionId: childExternalSessionId,
+      },
+    });
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:02:01.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "child-assistant",
+        partId: "claude-subagent:grandchild-1",
+        correlationKey: "grandchild-1",
+        status: "running",
+        externalSessionId: grandchildExternalSessionId,
+      },
+    });
+
+    expect(
+      state.readRetainedSnapshot({ ...ref, externalSessionId: childExternalSessionId }),
+    ).toMatchObject({
+      type: "live",
+      session: { parentExternalSessionId: "session-1" },
+    });
+    expect(
+      state.readRetainedSnapshot({ ...ref, externalSessionId: grandchildExternalSessionId }),
+    ).toMatchObject({
+      type: "live",
+      session: { parentExternalSessionId: childExternalSessionId },
+    });
+  });
+
   test("drops late root and subagent events after release until an explicit resume", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary(summary);

@@ -251,7 +251,7 @@ export const createClaudeLiveSessionState = ({
       activity: running ? activityForPending(current) : "idle",
       title: event.part.agent ?? event.part.description ?? current.title,
       startedAt: subagentStartedAt(event.part, current.startedAt),
-      parentExternalSessionId: session.externalSessionId,
+      parentExternalSessionId: event.externalSessionId,
     });
     subagentOwnersByRef.set(refKey(ref), {
       messageId: event.part.messageId,

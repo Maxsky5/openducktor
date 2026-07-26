@@ -86,7 +86,10 @@ export const createClaudeHistoryInputProjector = (options: {
           pendingQueuedPrompt = null;
           return {
             handled: true,
-            manualCompaction: { messageId, timestamp: commandTimestamp },
+            manualCompaction: {
+              messageId: resolveLiveUserMessageId(messageId, text, commandTimestamp),
+              timestamp: commandTimestamp,
+            },
           };
         }
         const message = createUserMessage({
@@ -147,7 +150,10 @@ export const createClaudeHistoryInputProjector = (options: {
       pendingQueuedPrompt = null;
       return {
         handled: true,
-        manualCompaction: { messageId: entry.uuid, timestamp: commandTimestamp },
+        manualCompaction: {
+          messageId: resolveLiveUserMessageId(entry.uuid, text, commandTimestamp),
+          timestamp: commandTimestamp,
+        },
       };
     }
     const message = createUserMessage({
