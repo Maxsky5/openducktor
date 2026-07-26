@@ -299,6 +299,78 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         externalSessionId: "session-1::claude-subagent::failed-agent-1",
       }),
     );
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:04.000Z",
+      modelSelection,
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "assistant-2",
+        session_id: "session-1",
+        message: {
+          role: "assistant",
+          model: "claude-opus-4-8",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_agent_failed_without_reason",
+              name: "Agent",
+              input: {
+                subagent_type: "Explore",
+                prompt: "Locate callback.mjs",
+              },
+            },
+          ],
+          stop_reason: "tool_use",
+        },
+      }),
+    });
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:05.000Z",
+      modelSelection,
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "tool-result-2",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_agent_failed_without_reason",
+            },
+          ],
+        },
+        tool_use_result: {
+          status: "failed",
+          prompt: "Locate callback.mjs",
+          agentId: "failed-agent-2",
+          agentType: "Explore",
+        },
+      }),
+    });
+
+    const fallbackSubagentPart = events.find(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part" &&
+        event.part.kind === "subagent" &&
+        event.part.externalSessionId === "session-1::claude-subagent::failed-agent-2",
+    )?.part;
+
+    expect(fallbackSubagentPart).toEqual(
+      expect.objectContaining({
+        kind: "subagent",
+        status: "error",
+        error: "Claude subagent failed-agent-2 failed.",
+        externalSessionId: "session-1::claude-subagent::failed-agent-2",
+      }),
+    );
   });
 
   test("maps Claude async Agent launches as running background subagents", () => {

@@ -380,6 +380,11 @@ export const toClaudeHistoryMessages = (
             role: "system",
             timestamp,
             text: failedResultText(entry),
+            notice: {
+              tone: "error",
+              reason: "session_error",
+              title: "Error",
+            },
             parts: [],
           });
         } else if (!manualCompactionBoundaryReceived) {

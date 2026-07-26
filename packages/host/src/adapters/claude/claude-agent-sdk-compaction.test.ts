@@ -455,6 +455,11 @@ describe("Claude manual compaction", () => {
         role: "system",
         timestamp: "2026-07-23T10:00:02.100Z",
         text: "Compaction failed.",
+        notice: {
+          tone: "error",
+          reason: "session_error",
+          title: "Error",
+        },
         parts: [],
       },
     ]);

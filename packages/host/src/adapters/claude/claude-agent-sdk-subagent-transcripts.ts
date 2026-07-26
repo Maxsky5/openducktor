@@ -16,20 +16,16 @@ export const claudeSubagentExternalSessionId = (
 ): string => `${parentExternalSessionId}${CLAUDE_SUBAGENT_TRANSCRIPT_SEPARATOR}${taskId}`;
 
 export const parseClaudeTranscriptTarget = (externalSessionId: string): ClaudeTranscriptTarget => {
-  const separatorIndex = externalSessionId.indexOf(CLAUDE_SUBAGENT_TRANSCRIPT_SEPARATOR);
-  if (separatorIndex === -1) {
+  const [sessionId, ...taskIds] = externalSessionId.split(CLAUDE_SUBAGENT_TRANSCRIPT_SEPARATOR);
+  if (taskIds.length === 0) {
     return { sessionId: externalSessionId };
   }
-  const sessionId = externalSessionId.slice(0, separatorIndex);
-  const taskId = externalSessionId.slice(
-    separatorIndex + CLAUDE_SUBAGENT_TRANSCRIPT_SEPARATOR.length,
-  );
-  if (!sessionId || !taskId) {
+  if (!sessionId || taskIds.some((taskId) => !taskId)) {
     return { sessionId: externalSessionId };
   }
   return {
     sessionId,
-    subpath: claudeSubagentSubpath(taskId),
+    subpath: taskIds.map(claudeSubagentSubpath).join("/"),
   };
 };
 

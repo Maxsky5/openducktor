@@ -213,7 +213,11 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   const description = taskId ? undefined : readStringProp(input, "description");
   const error =
     status === "error"
-      ? (readFailedTaskErrorReason(structuredResult) ?? resultText ?? description)
+      ? (firstNonEmptyString(
+          readFailedTaskErrorReason(structuredResult),
+          resultText,
+          description,
+        ) ?? `Claude subagent ${agentId} failed.`)
       : undefined;
   const endedAtMs = timestampMs(timestamp);
   const totalDurationMs =

@@ -275,6 +275,49 @@ describe("claude-agent-sdk-history subagents", () => {
             totalDurationMs: 23,
           },
         }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-2",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:04:14.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_agent_failed_without_reason",
+                name: "Agent",
+                input: {
+                  subagent_type: "Explore",
+                  prompt: "Locate callback.mjs",
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-result-failed-without-reason",
+          sessionId: "session-1",
+          timestamp: "2026-06-26T11:04:15.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_agent_failed_without_reason",
+              },
+            ],
+          },
+          toolUseResult: {
+            status: "failed",
+            prompt: "Locate callback.mjs",
+            agentId: "failed-agent-2",
+            agentType: "Explore",
+          },
+        }),
       ],
       () => "2026-06-26T12:00:00.000Z",
     );
@@ -289,6 +332,12 @@ describe("claude-agent-sdk-history subagents", () => {
         error: "Tool permission request failed",
         description: "Locate callback.mjs absolute path",
         externalSessionId: "session-1::claude-subagent::failed-agent-1",
+      }),
+      expect.objectContaining({
+        kind: "subagent",
+        status: "error",
+        error: "Claude subagent failed-agent-2 failed.",
+        externalSessionId: "session-1::claude-subagent::failed-agent-2",
       }),
     ]);
   });
