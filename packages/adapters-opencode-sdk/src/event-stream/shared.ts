@@ -105,9 +105,8 @@ export const readEventParentExternalSessionId = (properties: unknown): string | 
   );
 };
 
-export const readLifecycleParentExternalSessionId = (info: unknown): string | undefined => {
-  const parentID = readStringProp(info, ["parentID"]);
-  return parentID && parentID.trim().length > 0 ? parentID : undefined;
+const readLifecycleParentExternalSessionId = (info: unknown): string | undefined => {
+  return readStringProp(info, ["parentID"]);
 };
 
 export const flushPendingSubagentInputEventsForSession = (

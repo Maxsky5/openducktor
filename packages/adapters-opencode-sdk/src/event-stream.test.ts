@@ -22,6 +22,7 @@ import {
   makeSessionRecord,
   runEventStream,
   runEventStreamWithSession,
+  runtimeSourceSyncChildSessionCreatedEvent,
 } from "./event-stream.test-support";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -90,6 +91,33 @@ test("global event observation becomes ready only after the lazy SSE stream conn
   connect?.();
   await observation;
   expect(order).toEqual(["server.connected", "ready"]);
+});
+
+test("global event observation drops the raw envelope after normalizing sync events", async () => {
+  const client = makeClientWithEvents([
+    runtimeSourceSyncChildSessionCreatedEvent("external-child-session"),
+  ]);
+  const events: Event[] = [];
+
+  await subscribeGlobalEvents({
+    client,
+    controller: new AbortController(),
+    onEvent: (event) => {
+      events.push(event);
+    },
+  });
+
+  expect(events).toHaveLength(1);
+  expect(events[0]).not.toHaveProperty("syncEvent");
+  expect(events[0]).toEqual({
+    id: "sync-event-runtime-source-external-child-session",
+    type: "session.created",
+    properties: {
+      sessionID: "external-child-session",
+      info: childSessionInfo("external-child-session", "external-session-1"),
+      directory: "/repo",
+    },
+  });
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {

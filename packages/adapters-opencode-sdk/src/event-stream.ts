@@ -132,7 +132,6 @@ const normalizeGlobalEventPayload = (payload: GlobalEventPayload): Event => {
   }
 
   return {
-    ...payloadRecord,
     ...(typeof syncEvent.id === "string" ? { id: syncEvent.id } : {}),
     type: eventType,
     properties: data,

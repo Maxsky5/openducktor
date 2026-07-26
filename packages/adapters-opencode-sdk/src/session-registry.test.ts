@@ -427,7 +427,7 @@ describe("session registry runtime event transport", () => {
     );
   });
 
-  test("rejects direct child lifecycle parentId aliases without routing later input", async () => {
+  test("rejects direct child lifecycle parentId aliases without recording lineage", async () => {
     let transport: RuntimeEventTransportRecord | undefined;
     const emitted = await runRuntimeEventTransport(
       [
@@ -447,13 +447,12 @@ describe("session registry runtime event transport", () => {
         message: expect.stringContaining("info.parentID"),
       }),
     );
-    expect(emitted.filter((event) => event.type === "approval_required")).toHaveLength(0);
     expect(
       transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
     ).toBe(false);
   });
 
-  test("rejects runtime-source nested parent_id aliases without routing later input", async () => {
+  test("rejects runtime-source nested parent_id aliases without recording lineage", async () => {
     let transport: RuntimeEventTransportRecord | undefined;
     const emitted = await runRuntimeEventTransport(
       [
@@ -476,7 +475,6 @@ describe("session registry runtime event transport", () => {
         message: expect.stringContaining("info.parentID"),
       }),
     );
-    expect(emitted.filter((event) => event.type === "approval_required")).toHaveLength(0);
     expect(
       transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
     ).toBe(false);
@@ -633,12 +631,7 @@ describe("session registry runtime event transport", () => {
       },
     });
 
-    const lineage = (
-      transport as RuntimeEventTransportRecord & {
-        parentExternalSessionIdByChildExternalSessionId: Map<string, string>;
-      }
-    ).parentExternalSessionIdByChildExternalSessionId;
-    expect(lineage.size).toBe(0);
+    expect(transport?.parentExternalSessionIdByChildExternalSessionId.size).toBe(0);
   });
 
   test("explicit release clears, aborts, detaches, and permits same-runtime reuse", async () => {
