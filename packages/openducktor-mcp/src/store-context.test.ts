@@ -90,12 +90,21 @@ afterEach(async () => {
 });
 
 describe("resolveStoreContext", () => {
-  test("validates an explicit host bridge override before startup", async () => {
-    globalThis.fetch = (async (input) => {
+  test("validates readiness and the configured workspace concurrently", async () => {
+    const requests: Array<{ url: string; body: unknown }> = [];
+    let releaseResponses = (): void => {
+      throw new Error("Response barrier was not initialized.");
+    };
+    const responseBarrier = new Promise<void>((resolve) => {
+      releaseResponses = resolve;
+    });
+    globalThis.fetch = (async (input, init) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
-      }
+      requests.push({
+        url,
+        body: JSON.parse(String(init?.body ?? "{}")) as unknown,
+      });
+      await responseBarrier;
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
@@ -125,18 +134,34 @@ describe("resolveStoreContext", () => {
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
     process.env.OPENDUCKTOR_CHANNEL = "preview";
 
-    await expect(resolveStoreContext({})).resolves.toEqual({
+    const contextPromise = resolveStoreContext({});
+    const requestsBeforeRelease = [...requests];
+    releaseResponses();
+
+    await expect(contextPromise).resolves.toEqual({
       workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
     });
+    expect(requestsBeforeRelease).toEqual([
+      {
+        url: "http://127.0.0.1:14327/invoke/odt_mcp_ready",
+        body: {},
+      },
+      {
+        url: "http://127.0.0.1:14327/invoke/odt_get_workspaces",
+        body: {},
+      },
+    ]);
   });
 
-  test("starts without a workspace default when the host bridge is healthy", async () => {
-    globalThis.fetch = (async (input) => {
+  test("starts without a workspace default after one authenticated readiness request", async () => {
+    const requests: Array<{ url: string; body: unknown }> = [];
+    globalThis.fetch = (async (input, init) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
-      }
+      requests.push({
+        url,
+        body: JSON.parse(String(init?.body ?? "{}")) as unknown,
+      });
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
@@ -151,14 +176,17 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       hostUrl: "http://127.0.0.1:14327",
     });
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:14327/invoke/odt_mcp_ready",
+        body: {},
+      },
+    ]);
   });
 
   test("reads workspaceId-forbidden mode from the environment", async () => {
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
-      }
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
@@ -198,9 +226,6 @@ describe("resolveStoreContext", () => {
   test("preserves explicit false for workspaceId-forbidden mode", async () => {
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
-      }
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
@@ -228,10 +253,10 @@ describe("resolveStoreContext", () => {
     );
   });
 
-  test("fails fast when the host health check fails", async () => {
+  test("fails fast when authenticated readiness fails", async () => {
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
+      if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse(
           {
             ok: false,
@@ -246,7 +271,6 @@ describe("resolveStoreContext", () => {
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
 
-    process.env.ODT_WORKSPACE_ID = "repo";
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
 
     await expect(resolveStoreContext({})).rejects.toThrow("host down");
@@ -263,9 +287,6 @@ describe("resolveStoreContext", () => {
 
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
-      if (url === "http://127.0.0.1:14327/health") {
-        return jsonResponse({ ok: true });
-      }
       if (url === "http://127.0.0.1:14327/invoke/odt_mcp_ready") {
         observedHostTokens.push(
           (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
@@ -328,9 +349,6 @@ describe("resolveStoreContext", () => {
 
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url === "http://127.0.0.1:24327/health") {
-        return jsonResponse({ ok: true });
-      }
       if (url === "http://127.0.0.1:24327/invoke/odt_mcp_ready") {
         return jsonResponse({
           bridgeVersion: 1,
@@ -380,12 +398,73 @@ describe("resolveStoreContext", () => {
     );
   });
 
-  test("fails fast when the configured default workspace does not exist", async () => {
+  test("keeps discovery context when the discovered host URL is invalid", async () => {
+    const configDir = await createDiscoveryFile({ hostUrl: "not-a-url" });
+    const discoveryPath = join(configDir, "runtime", "mcp-bridge.json");
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+
+    try {
+      await resolveStoreContext({});
+      throw new Error("Expected resolveStoreContext() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toStartWith(
+        `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. not-a-url: `,
+      );
+      expect((error as Error).message).toEndWith(" Provide ODT_HOST_URL to override discovery.");
+    }
+  });
+
+  test("prioritizes a delayed readiness failure over a missing configured workspace", async () => {
+    const configDir = await createDiscoveryFile();
+    const discoveryPath = join(configDir, "runtime", "mcp-bridge.json");
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+    process.env.ODT_WORKSPACE_ID = "missing-repo";
+
+    let releaseReadiness = (): void => {
+      throw new Error("Readiness barrier was not initialized.");
+    };
+    const readinessBarrier = new Promise<void>((resolve) => {
+      releaseReadiness = resolve;
+    });
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
+      if (url.endsWith("/invoke/odt_mcp_ready")) {
+        await readinessBarrier;
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: ["odt_mcp_ready"],
+        });
       }
+      if (url.endsWith("/invoke/odt_get_workspaces")) {
+        return jsonResponse({ workspaces: [] });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const contextOutcome = resolveStoreContext({}).then(
+      () => ({ status: "fulfilled" as const }),
+      (error: unknown) => ({ status: "rejected" as const, error }),
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    releaseReadiness();
+
+    const outcome = await contextOutcome;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status !== "rejected") {
+      throw new Error("Expected resolveStoreContext() to reject.");
+    }
+    expect(outcome.error).toBeInstanceOf(Error);
+    expect((outcome.error as Error).message).toStartWith(
+      `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. http://127.0.0.1:14327: OpenDucktor host bridge is missing required MCP tools:`,
+    );
+  });
+
+  test("preserves the exact unknown-workspace error during host discovery", async () => {
+    const configDir = await createDiscoveryFile();
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
@@ -412,10 +491,10 @@ describe("resolveStoreContext", () => {
     }) as typeof fetch;
 
     process.env.ODT_WORKSPACE_ID = "missing-repo";
-    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
 
-    await expect(resolveStoreContext({})).rejects.toThrow(
-      "Configured default workspace 'missing-repo' was not found",
-    );
+    await expect(resolveStoreContext({})).rejects.toMatchObject({
+      message:
+        "Configured default workspace 'missing-repo' was not found on the running OpenDucktor host. Start @openducktor/mcp with a valid --workspace-id or omit it and provide workspaceId per tool call.",
+    });
   });
 });

@@ -58,11 +58,13 @@ Optional arguments:
 
 - `--workspace-id <workspace-id>` optional default workspace for later workspace-scoped calls
 - `--host-url <url>`
+- `--host-token <token>` matching token for `--host-url`
 
 Equivalent environment variables:
 
 - `ODT_WORKSPACE_ID` optional default workspace
 - `ODT_HOST_URL` optional override
+- `ODT_HOST_TOKEN` matching token for `ODT_HOST_URL`
 - `OPENDUCKTOR_CHANNEL=dev` selects development host discovery; leave it unset for production
 
 Automatic discovery:
@@ -82,13 +84,14 @@ OPENDUCKTOR_CHANNEL=dev bunx @openducktor/mcp@latest
 Startup contract:
 
 1. Resolve an optional startup default workspace from `--workspace-id` or `ODT_WORKSPACE_ID`.
-2. Use `ODT_HOST_URL` or `--host-url` first when provided.
+2. Use `ODT_HOST_URL` or `--host-url` first when provided, with the matching token from `ODT_HOST_TOKEN` or `--host-token`.
 3. Otherwise read the local discovery file for the current host bridge URL and token.
 4. Validate the discovered host bridge before serving tools.
-5. Call the host bridge `/health` endpoint.
-6. Call `odt_mcp_ready` through the loopback host API.
+5. Call authenticated `odt_mcp_ready` through the loopback host API.
+6. When a default workspace is configured, call `odt_get_workspaces` alongside readiness and require both calls to succeed.
 7. Refuse startup if any required ODT tool name is missing.
-8. Do not implicitly choose a workspace. Workspace-scoped tool calls must resolve a workspace from tool input `workspaceId` first, then the startup default.
+8. Keep `/health` available as an unauthenticated diagnostic endpoint; MCP startup does not call it.
+9. Do not implicitly choose a workspace. Workspace-scoped tool calls must resolve a workspace from tool input `workspaceId` first, then the startup default.
 
 Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it. Workspace resolution is request-scoped for workspace-bound tools: tool-input `workspaceId` wins over any startup default, and missing both sources is an error.
 

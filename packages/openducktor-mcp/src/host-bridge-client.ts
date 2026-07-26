@@ -157,7 +157,6 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   }
 
   async ready(): Promise<OdtHostBridgeReady> {
-    await this.checkHealth();
     const payload = await this.invokeJson(READY_TOOL_NAME, {});
     const ready = parseHostResponse(odtHostBridgeReadySchema, payload, READY_TOOL_NAME);
     assertToolCoverage(ready);
@@ -187,23 +186,6 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
       payload,
       toolName,
     ) as ToolOutput<Name>;
-  }
-
-  private async checkHealth(): Promise<void> {
-    const url = new URL("/health", this.baseUrl);
-    const response = await this.fetchBridge(
-      url.toString(),
-      {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-      },
-      "host health check",
-    );
-
-    if (!response.ok) {
-      throw await createBridgeHttpError(response, "host health check");
-    }
   }
 
   private async invokeJson(command: string, input: Record<string, unknown>): Promise<unknown> {

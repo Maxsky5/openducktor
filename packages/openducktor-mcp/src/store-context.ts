@@ -5,6 +5,8 @@ import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-ut
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
 
+class ConfiguredWorkspaceNotFoundError extends Error {}
+
 export type OdtStoreOptions = {
   workspaceId?: string;
   hostUrl: string;
@@ -24,14 +26,19 @@ type DiscoveredHostConnection = {
   hostToken: string;
 };
 
-const validateExplicitHostUrl = async (hostUrl: string, hostToken?: string): Promise<string> => {
+const validateExplicitHostUrl = async (
+  hostUrl: string,
+  workspaceId?: string,
+  hostToken?: string,
+): Promise<string> => {
   try {
     new URL(hostUrl);
   } catch {
     throw new Error(`Invalid ODT_HOST_URL for OpenDucktor MCP: ${hostUrl}`);
   }
 
-  await new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: hostToken }).ready();
+  const client = new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: hostToken });
+  await validateHostConnection(client, workspaceId);
   return hostUrl;
 };
 
@@ -51,21 +58,38 @@ const readBooleanEnv = (name: string): boolean | undefined => {
 };
 
 const validateConfiguredWorkspace = async (
-  hostUrl: string,
+  client: OdtHostBridgeClient,
   workspaceId: string,
-  hostToken?: string,
 ): Promise<void> => {
-  const workspaces = await new OdtHostBridgeClient({
-    baseUrl: hostUrl,
-    appToken: hostToken,
-  }).getWorkspaces();
+  const workspaces = await client.getWorkspaces();
   if (workspaces.workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
     return;
   }
 
-  throw new Error(
+  throw new ConfiguredWorkspaceNotFoundError(
     `Configured default workspace '${workspaceId}' was not found on the running OpenDucktor host. Start @openducktor/mcp with a valid --workspace-id or omit it and provide workspaceId per tool call.`,
   );
+};
+
+const validateHostConnection = async (
+  client: OdtHostBridgeClient,
+  workspaceId?: string,
+): Promise<void> => {
+  if (!workspaceId) {
+    await client.ready();
+    return;
+  }
+
+  const [readinessResult, workspaceResult] = await Promise.allSettled([
+    client.ready(),
+    validateConfiguredWorkspace(client, workspaceId),
+  ]);
+  if (readinessResult.status === "rejected") {
+    throw readinessResult.reason;
+  }
+  if (workspaceResult.status === "rejected") {
+    throw workspaceResult.reason;
+  }
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -139,19 +163,20 @@ const discoverHostConnection = async (
 
   const discovered = parseDiscoveryFile(discoveryPayload, discoveryPath);
   const candidateHostToken = hostToken ?? discovered.hostToken;
+  const client = new OdtHostBridgeClient({
+    baseUrl: discovered.hostUrl,
+    appToken: candidateHostToken,
+  });
   try {
-    await new OdtHostBridgeClient({
-      baseUrl: discovered.hostUrl,
-      appToken: candidateHostToken,
-    }).ready();
-    if (workspaceId) {
-      await validateConfiguredWorkspace(discovered.hostUrl, workspaceId, candidateHostToken);
-    }
+    await validateHostConnection(client, workspaceId);
     return {
       hostToken: candidateHostToken,
       hostUrl: discovered.hostUrl,
     };
   } catch (error) {
+    if (error instanceof ConfiguredWorkspaceNotFoundError) {
+      throw error;
+    }
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
       `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. ${discovered.hostUrl}: ${reason} Provide ODT_HOST_URL to override discovery.`,
@@ -173,7 +198,7 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     normalizeOptionalInput(process.env[HOST_TOKEN_ENV]);
   let hostUrl: string;
   if (explicitHostUrl) {
-    hostUrl = await validateExplicitHostUrl(explicitHostUrl, resolvedHostToken);
+    hostUrl = await validateExplicitHostUrl(explicitHostUrl, workspaceId, resolvedHostToken);
   } else {
     const discovered = await discoverHostConnection(workspaceId, resolvedHostToken);
     hostUrl = discovered.hostUrl;
@@ -188,10 +213,6 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
       ...(resolvedHostToken ? { hostToken: resolvedHostToken } : {}),
       ...workspaceIdInputMode,
     };
-  }
-
-  if (explicitHostUrl) {
-    await validateConfiguredWorkspace(hostUrl, workspaceId, resolvedHostToken);
   }
 
   return {

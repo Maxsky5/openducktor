@@ -55,6 +55,7 @@ const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
 
 const writeJson = (response: ServerResponse, payload: unknown, statusCode = 200): void => {
   response.statusCode = statusCode;
+  response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Content-Type", "application/json");
   response.end(JSON.stringify(payload));
 };
@@ -85,7 +86,18 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
   const server = createServer(async (request, response) => {
     const url = request.url ?? "/";
 
+    // Bun's test fetch applies browser CORS rules to concurrent loopback JSON requests.
+    if (request.method === "OPTIONS") {
+      response.statusCode = 204;
+      response.setHeader("Access-Control-Allow-Headers", "content-type");
+      response.setHeader("Access-Control-Allow-Methods", "POST");
+      response.setHeader("Access-Control-Allow-Origin", "*");
+      response.end();
+      return;
+    }
+
     if (url === "/health") {
+      requests.push({ url, body: await readJsonBody(request) });
       writeJson(response, { ok: true });
       return;
     }
