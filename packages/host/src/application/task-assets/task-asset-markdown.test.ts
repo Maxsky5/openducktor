@@ -33,6 +33,17 @@ describe("task description asset references", () => {
     expect(collectTaskDescriptionAssetIds(markdown)).toEqual(new Set([first]));
   });
 
+  test("uses the first definition when an image reference identifier is duplicated", () => {
+    const markdown = [
+      "![Architecture][diagram]",
+      "",
+      `[diagram]: odt-asset:${first}`,
+      `[diagram]: odt-asset:${second}`,
+    ].join("\n");
+
+    expect(collectTaskDescriptionAssetIds(markdown)).toEqual(new Set([first]));
+  });
+
   test("rejects malformed logical image destinations", () => {
     expect(() => collectTaskDescriptionAssetIds("![bad](odt-asset:../foreign)")).toThrow(
       "invalid odt-asset image destination",

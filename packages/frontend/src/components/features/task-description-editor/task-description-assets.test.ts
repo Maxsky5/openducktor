@@ -40,6 +40,19 @@ describe("task description asset references", () => {
     expect(Array.from(collectTaskDescriptionAssetIds(markdown))).toEqual([assetId]);
   });
 
+  test("uses the first definition when an image reference identifier is duplicated", () => {
+    const first = "550e8400-e29b-41d4-a716-446655440000";
+    const second = "750e8400-e29b-41d4-a716-446655440001";
+    const markdown = [
+      "![Architecture][diagram]",
+      "",
+      `[diagram]: odt-asset:${first}`,
+      `[diagram]: odt-asset:${second}`,
+    ].join("\n");
+
+    expect(Array.from(collectTaskDescriptionAssetIds(markdown))).toEqual([first]);
+  });
+
   test("supplies a staged asset referenced through an image definition", () => {
     const referenced = "550e8400-e29b-41d4-a716-446655440000";
     const unreferenced = "750e8400-e29b-41d4-a716-446655440001";

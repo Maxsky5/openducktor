@@ -351,6 +351,47 @@ describe("rich task description rendering", () => {
     });
   }, 4000);
 
+  test("resolves the first definition when an image reference identifier is duplicated", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const first = "550e8400-e29b-41d4-a716-446655440000";
+    const second = "750e8400-e29b-41d4-a716-446655440001";
+    const markdown = [
+      "![Architecture][diagram]",
+      "",
+      `[diagram]: odt-asset:${first}`,
+      `[diagram]: odt-asset:${second}`,
+    ].join("\n");
+    const view = render(
+      <MarkdownRenderer
+        markdown={markdown}
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+
+    await waitFor(
+      () =>
+        expect(view.getByRole("img", { name: "Architecture" }).getAttribute("src")).toBe(
+          "openducktor-task-asset://asset/resolved",
+        ),
+      { timeout: 3000 },
+    );
+    expect(resolveTaskAssetSrc).toHaveBeenCalledTimes(1);
+    expect(resolveTaskAssetSrc).toHaveBeenCalledWith({
+      workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+      taskId: "task-1",
+      scope: "description",
+      assetId: first,
+    });
+  }, 4000);
+
   test("does not request a logical task asset without task context", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
     configureShellBridge({

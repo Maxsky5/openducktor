@@ -28,7 +28,9 @@ export const collectTaskDescriptionAssetIds = (markdown: string): Set<string> =>
   };
 
   visit(tree, "definition", (node) => {
-    definitions.set(node.identifier, node.url);
+    if (!definitions.has(node.identifier)) {
+      definitions.set(node.identifier, node.url);
+    }
   });
   visit(tree, "image", (node) => {
     collectUrl(node.url);

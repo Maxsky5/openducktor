@@ -10,16 +10,15 @@ import {
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
 import { collectTaskDescriptionAssetsForSubmit } from "@/components/features/task-description-editor/task-description-assets";
-import { stageTaskDescriptionImage } from "@/components/features/task-description-editor/task-description-upload";
 import { useTaskDescriptionAssetDraft } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { errorMessage } from "@/lib/errors";
-import { hostClient } from "@/lib/host-client";
 import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
 import {
   formatTaskAssetFailure,
   taskAssetFailureFromError,
   taskAssetFailureRequiresLock,
 } from "@/state/operations/tasks/task-asset-failure-recovery";
+import { useTaskDescriptionAssetOperations } from "@/state/operations/tasks/use-task-description-asset-operations";
 import type {
   ComposerMode,
   ComposerState,
@@ -189,6 +188,7 @@ export function useTaskCreateModalController({
   const workspaceId = activeWorkspace?.workspaceId ?? null;
   const { createTask, updateTask } = useTasksState();
   const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
+  const descriptionAssetOperations = useTaskDescriptionAssetOperations(workspaceId);
 
   const mode: ComposerMode = task ? "edit" : "create";
   const taskId = task?.id ?? null;
@@ -269,23 +269,6 @@ export function useTaskCreateModalController({
     dispatch({ type: "externalTaskConflictDetected" });
   }, [composer, open, task, taskId]);
 
-  const stageDescriptionImageForDraft = useCallback(
-    async (file: File) => {
-      if (!workspaceId) {
-        throw new Error("Select a workspace before adding task images.");
-      }
-      return stageTaskDescriptionImage(hostClient, workspaceId, file);
-    },
-    [workspaceId],
-  );
-
-  const discardDescriptionAssets = useCallback(
-    async (assetWorkspaceId: string, assetIds: string[]): Promise<void> => {
-      await hostClient.taskAssetDiscardStaged({ workspaceId: assetWorkspaceId, assetIds });
-    },
-    [],
-  );
-
   const reportDescriptionAssetDiscardError = useCallback((cause: unknown): void => {
     toast.error("Temporary image cleanup failed", {
       description: `${errorMessage(cause)} Refresh before continuing.`,
@@ -296,8 +279,8 @@ export function useTaskCreateModalController({
     active: open,
     draftKey: taskId ?? "new-task",
     workspaceId,
-    stageImage: stageDescriptionImageForDraft,
-    discardStaged: discardDescriptionAssets,
+    stageImage: descriptionAssetOperations.stageImage,
+    discardStaged: descriptionAssetOperations.discardStaged,
     onDiscardError: reportDescriptionAssetDiscardError,
   });
 
