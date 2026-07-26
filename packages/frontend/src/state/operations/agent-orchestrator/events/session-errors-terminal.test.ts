@@ -43,12 +43,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
     handleEvent({
       type: "turn_error",
       externalSessionId: "session-1",
+      messageId: "result-error-1",
       message: "Attachment could not be processed.",
       timestamp: "2026-02-22T08:00:10.000Z",
     });
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
     expect(getLastSessionMessage(sessionsRef)).toMatchObject({
+      id: "result-error-1",
       content: "Attachment could not be processed.",
       meta: {
         kind: "session_notice",

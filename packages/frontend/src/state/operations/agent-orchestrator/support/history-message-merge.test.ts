@@ -33,6 +33,23 @@ const mergedMessageState = (
 };
 
 describe("agent-orchestrator/support/history-message-merge", () => {
+  test("deduplicates a live turn failure when hydration returns the same result", () => {
+    const errorNotice = {
+      id: "result-error-1",
+      role: "system" as const,
+      content: "Attachment could not be processed.",
+      timestamp: "2026-03-01T09:00:02.000Z",
+      meta: {
+        kind: "session_notice" as const,
+        tone: "error" as const,
+        reason: "session_error" as const,
+        title: "Error",
+      },
+    };
+
+    expect(mergedMessages([errorNotice], [errorNotice])).toEqual([errorNotice]);
+  });
+
   test("commits loaded history as one transcript revision", () => {
     const merged = mergedMessageState(
       [

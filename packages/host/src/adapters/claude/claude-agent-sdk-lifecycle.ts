@@ -130,13 +130,7 @@ const applySdkStateLifecycleEvent = (
     input.session.activity = "running";
     return;
   }
-  input.emit({
-    type: "session_error",
-    externalSessionId: input.session.externalSessionId,
-    timestamp: input.timestamp,
-    message: "Claude requires action, but no pending approval or question is available.",
-  });
-  emitSessionIdle(input);
+  input.session.activity = "running";
 };
 
 const applyResultLifecycleEvent = (

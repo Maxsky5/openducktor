@@ -512,6 +512,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("turn_error"),
+    messageId: z.string().optional(),
     message: z.string(),
   }),
   transcriptEventSchema({

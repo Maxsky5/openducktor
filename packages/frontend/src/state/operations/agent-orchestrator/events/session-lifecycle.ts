@@ -369,7 +369,7 @@ export const handleTurnError = (
           }),
         ),
       },
-      buildSessionErrorNoticeMessage(event.timestamp, message),
+      buildSessionErrorNoticeMessage(event.timestamp, message, event.messageId),
     ),
   }));
 };

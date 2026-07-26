@@ -140,11 +140,17 @@ export const createClaudeAgentSdkSession = async ({
     });
   }
   summary.status = "idle";
+  const timestamp = now();
   emit(session, {
     type: "session_started",
     externalSessionId: session.externalSessionId,
-    timestamp: now(),
+    timestamp,
     message: sessionInput.startedMessage,
+  });
+  emit(session, {
+    type: "session_idle",
+    externalSessionId: session.externalSessionId,
+    timestamp,
   });
   return summary;
 };

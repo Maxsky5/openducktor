@@ -117,7 +117,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
     expect(events).toEqual([]);
   });
 
-  test("surfaces requires_action without pending input as an actionable error", () => {
+  test("keeps requires_action running while pending input registration catches up", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
 
@@ -139,16 +139,9 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
       }),
     });
 
-    expect(session.activity).toBe("idle");
-    expect(events).toEqual([
-      expect.objectContaining({
-        type: "session_error",
-        message: "Claude requires action, but no pending approval or question is available.",
-      }),
-      expect.objectContaining({
-        type: "session_idle",
-      }),
-    ]);
+    expect(session.activity).toBe("running");
+    expect(session.sdkState).toBe("requires_action");
+    expect(events).toEqual([]);
   });
 
   test("keeps the turn active when Claude requires pending approval input", () => {

@@ -79,6 +79,7 @@ export const handleClaudeResultMessage = ({
       type: "turn_error",
       externalSessionId: session.externalSessionId,
       timestamp,
+      messageId: message.uuid,
       message:
         errors.length > 0
           ? errors.join("\n")
