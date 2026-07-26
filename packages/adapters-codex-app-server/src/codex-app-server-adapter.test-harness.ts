@@ -12,6 +12,7 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
+import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -88,45 +89,61 @@ type TestRuntimeStreamListener = (event: {
   message: unknown;
 }) => void;
 
+type TestRuntimeStreamSubscription = {
+  runtimeId: string;
+  listener: TestRuntimeStreamListener;
+  active: boolean;
+};
+
 export const createRuntimeStreamSubscription = () => {
-  const streamListeners: TestRuntimeStreamListener[] = [];
-  const subscribeEvents = mock((_runtimeId: string, listener: TestRuntimeStreamListener) => {
-    streamListeners.push(listener);
-    return () => {};
+  const subscriptions: TestRuntimeStreamSubscription[] = [];
+  const subscribeEvents = mock((runtimeId: string, listener: TestRuntimeStreamListener) => {
+    const subscription = { runtimeId, listener, active: true };
+    subscriptions.push(subscription);
+    return () => {
+      subscription.active = false;
+    };
   });
   const emitEvent = (
+    subscription: TestRuntimeStreamSubscription,
     kind: "notification" | "server_request",
     message: unknown,
     receivedAt = new Date().toISOString(),
   ) => {
-    const listener = streamListeners[0];
-    expect(listener).toBeDefined();
-    listener?.({
-      runtimeId: "runtime-live",
+    subscription.listener({
+      runtimeId: subscription.runtimeId,
       kind,
       receivedAt,
       message,
     });
   };
-  const emitNotification = (message: unknown, receivedAt?: string) =>
-    emitEvent("notification", message, receivedAt);
-  const emitServerRequest = (message: unknown, receivedAt?: string) =>
-    emitEvent("server_request", message, receivedAt);
-  return { subscribeEvents, emitNotification, emitServerRequest };
-};
-
-export const createDeferred = <T>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
+  const latestActiveSubscription = (): TestRuntimeStreamSubscription => {
+    const subscription = subscriptions.findLast(({ active }) => active);
+    expect(subscription).toBeDefined();
+    if (!subscription) {
+      throw new Error("Expected an active runtime stream subscription.");
+    }
+    return subscription;
+  };
+  const capturedSubscription = (subscription: TestRuntimeStreamSubscription) => ({
+    emitNotification: (message: unknown, receivedAt?: string) =>
+      emitEvent(subscription, "notification", message, receivedAt),
   });
+  const emitNotification = (message: unknown, receivedAt?: string) =>
+    emitEvent(latestActiveSubscription(), "notification", message, receivedAt);
+  const emitServerRequest = (message: unknown, receivedAt?: string) =>
+    emitEvent(latestActiveSubscription(), "server_request", message, receivedAt);
+  const captureLatestSubscription = () => capturedSubscription(latestActiveSubscription());
   return {
-    promise,
-    resolve: (value: T) => {
-      resolve?.(value);
-    },
+    subscribeEvents,
+    emitNotification,
+    emitServerRequest,
+    captureLatestSubscription,
+    subscriptionCount: () => subscriptions.length,
   };
 };
+
+export const createDeferred = <T>(): PromiseWithResolvers<T> => Promise.withResolvers<T>();
 
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
@@ -539,6 +556,42 @@ export const createHarness = (
     transportFactory,
     requireRepoRuntime,
     respondServerRequest,
+  };
+};
+
+export const codexThreadInventoryForTest = (
+  adapter: CodexAppServerAdapter,
+): CodexThreadInventoryReader =>
+  (adapter as unknown as { threadInventory: CodexThreadInventoryReader }).threadInventory;
+
+type CodexRuntimeTeardownCounts = {
+  statusOverrideRuntimeCount: number;
+  statusOverrideThreadCount: number;
+  runtimeEventQueueRuntimeCount: number;
+};
+
+export const codexRuntimeTeardownCountsForTest = (
+  adapter: CodexAppServerAdapter,
+  runtimeId: string,
+): CodexRuntimeTeardownCounts => {
+  const threadInventory = codexThreadInventoryForTest(adapter);
+  const statusOverridesByRuntimeId = (
+    threadInventory as unknown as {
+      statusOverridesByRuntimeId: Map<string, Map<string, unknown>>;
+    }
+  ).statusOverridesByRuntimeId;
+  const runtimeEventProcessingByRuntimeId = (
+    adapter as unknown as {
+      runtimeEvents: {
+        runtimeEventProcessingByRuntimeId: Map<string, Promise<void>>;
+      };
+    }
+  ).runtimeEvents.runtimeEventProcessingByRuntimeId;
+
+  return {
+    statusOverrideRuntimeCount: statusOverridesByRuntimeId.size,
+    statusOverrideThreadCount: statusOverridesByRuntimeId.get(runtimeId)?.size ?? 0,
+    runtimeEventQueueRuntimeCount: runtimeEventProcessingByRuntimeId.size,
   };
 };
 

@@ -63,6 +63,7 @@ import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { toFileDiffs } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
+import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
@@ -270,31 +271,14 @@ export class CodexAppServerAdapter
   }
 
   releaseRuntime(runtimeId: string): void {
-    this.contextUsageLoader.cancelRuntime(runtimeId);
-    const failures: Array<{ label: string; cause: unknown }> = [];
-    const cleanup = (label: string, operation: () => void): void => {
-      try {
-        operation();
-      } catch (cause) {
-        failures.push({ label, cause });
-      }
-    };
-
-    cleanup("sessions", () => this.localSessions.releaseRuntime(runtimeId));
-    cleanup("pending input", () => this.pendingInput.clearRuntime(runtimeId));
-    cleanup("subagents", () => this.subagents.clearRuntime(runtimeId));
-    cleanup("runtime events", () => this.runtimeEvents.clearRuntime(runtimeId));
-    cleanup("thread inventory", () => this.clearThreadInventory(runtimeId));
-
-    if (failures.length > 0) {
-      const details = failures
-        .map(({ label, cause }) => `${label}: ${cause instanceof Error ? cause.message : cause}`)
-        .join("\n");
-      throw new AggregateError(
-        failures.map(({ cause }) => cause),
-        `Failed to release Codex runtime '${runtimeId}':\n${details}`,
-      );
-    }
+    releaseCodexRuntimeState(runtimeId, {
+      cancelContextUsage: () => this.contextUsageLoader.cancelRuntime(runtimeId),
+      releaseSessions: () => this.localSessions.releaseRuntime(runtimeId),
+      clearPendingInput: () => this.pendingInput.clearRuntime(runtimeId),
+      clearSubagents: () => this.subagents.clearRuntime(runtimeId),
+      clearRuntimeEvents: () => this.runtimeEvents.clearRuntime(runtimeId),
+      disposeThreadInventory: () => this.threadInventory.disposeRuntime(runtimeId),
+    });
   }
 
   private requireServerRequestResponder(runtimeId: string): CodexServerRequestResponder {

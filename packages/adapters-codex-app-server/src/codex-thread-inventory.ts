@@ -45,6 +45,11 @@ export class CodexThreadInventoryReader {
     }
   }
 
+  disposeRuntime(runtimeId: string): void {
+    this.clearInventory(runtimeId);
+    this.statusOverridesByRuntimeId.delete(runtimeId);
+  }
+
   async read(client: CodexAppServerClient, runtimeId: string): Promise<CodexThreadInventory> {
     const existing = this.inventoryByRuntimeId.get(runtimeId);
     if (existing) {

@@ -44,6 +44,40 @@ export type CodexTurnLifecycleContext = {
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 
+const sessionIsRetained = (
+  context: CodexTurnLifecycleContext,
+  session: CodexSessionState,
+): boolean => context.sessions.get(session.threadId) === session;
+
+const requireRetainedTurnSession = (
+  context: CodexTurnLifecycleContext,
+  session: CodexSessionState,
+): void => {
+  if (!sessionIsRetained(context, session)) {
+    throw new Error(
+      `Cannot continue Codex turn for session '${session.threadId}' because its retained owner was released or replaced.`,
+    );
+  }
+};
+
+const steerRetainedTurn = async (
+  context: CodexTurnLifecycleContext,
+  activeTurn: ActiveCodexTurn,
+  input: ReturnType<typeof toCodexTurnInputList>,
+  turnId: string,
+): Promise<void> => {
+  requireRetainedTurnSession(context, activeTurn.session);
+  try {
+    await context.clientForRuntime(activeTurn.session.runtimeId).turnSteer({
+      threadId: activeTurn.session.threadId,
+      input,
+      expectedTurnId: turnId,
+    });
+  } finally {
+    requireRetainedTurnSession(context, activeTurn.session);
+  }
+};
+
 const flushQueuedUserMessages = async (
   context: CodexTurnLifecycleContext,
   activeTurn: ActiveCodexTurn,
@@ -56,11 +90,7 @@ const flushQueuedUserMessages = async (
     if (!queued) {
       continue;
     }
-    await context.clientForRuntime(activeTurn.session.runtimeId).turnSteer({
-      threadId: activeTurn.session.threadId,
-      input: queued,
-      expectedTurnId: activeTurn.turnId,
-    });
+    await steerRetainedTurn(context, activeTurn, queued, activeTurn.turnId);
   }
 };
 
@@ -77,6 +107,9 @@ export const flushQueuedUserMessagesLater = (
   activeTurn: ActiveCodexTurn,
 ): void => {
   void flushQueuedUserMessages(context, activeTurn).catch((error) => {
+    if (!sessionIsRetained(context, activeTurn.session)) {
+      return;
+    }
     context.emitSessionEvent(activeTurn.session.threadId, {
       type: "session_error",
       externalSessionId: activeTurn.session.threadId,
@@ -100,11 +133,7 @@ const steerActiveTurn = async (
     activeTurn.queuedUserMessages.push(input);
     return emitAcceptedUserMessage(context, acceptedUserMessage, parts);
   }
-  await context.clientForRuntime(activeTurn.session.runtimeId).turnSteer({
-    threadId: activeTurn.session.threadId,
-    input,
-    expectedTurnId: activeTurn.turnId,
-  });
+  await steerRetainedTurn(context, activeTurn, input, activeTurn.turnId);
   return emitAcceptedUserMessage(context, acceptedUserMessage, parts);
 };
 
@@ -114,6 +143,9 @@ const emitTurnStartErrorLater = (
   turnStartPromise: Promise<unknown>,
 ): void => {
   void turnStartPromise.catch((error) => {
+    if (!sessionIsRetained(context, session)) {
+      return;
+    }
     context.emitSessionEvent(session.threadId, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -135,6 +167,7 @@ export const startCodexTurnForSession = async (
     throw new Error(`Unknown Codex session '${externalSessionId}'.`);
   }
   await context.ensureRuntimeEventSubscription(session.runtimeId);
+  requireRetainedTurnSession(context, session);
   const input = toCodexTurnInputList(parts);
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
@@ -192,9 +225,9 @@ export const startCodexTurnForSession = async (
   }
   try {
     await context.validateModel(client, session.runtimeId, model);
+    requireRetainedTurnSession(context, session);
   } catch (error) {
-    turnSettled = true;
-    context.activeTurnsBySessionId.delete(session.threadId);
+    activeTurnState.markTurnSettled();
     throw error;
   }
 
@@ -221,6 +254,10 @@ export const startCodexTurnForSession = async (
       effort: toTransportModelSelection(model).effort,
     })
     .then((result) => {
+      if (!sessionIsRetained(context, session)) {
+        activeTurnState.markTurnSettled();
+        return result;
+      }
       const turnStartedAtMs = Date.now();
       const turnId = extractTurnId(result);
       if (turnId) {

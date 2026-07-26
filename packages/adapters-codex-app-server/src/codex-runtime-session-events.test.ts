@@ -130,6 +130,49 @@ describe("CodexRuntimeSessionEvents", () => {
     void asyncHandler;
   });
 
+  test("reports pending-input continuation failures only to their retained owner", async () => {
+    const threadId = "thread-reused";
+    const releasedSession = createSession(threadId);
+    const replacementSession = createSession(threadId);
+    const sessions = new Map([[threadId, releasedSession]]);
+    const sessionEvents = new CodexSessionEventBus();
+    const replacementEvents: unknown[] = [];
+    sessionEvents.subscribe(codexSessionRef(replacementSession), (event) =>
+      replacementEvents.push(event),
+    );
+    let rejectTurnStart: (error: Error) => void = () => undefined;
+    const turnStartPromise = new Promise<never>((_resolve, reject) => {
+      rejectTurnStart = reject;
+    });
+    const runtimeEvents = createRuntimeEvents({ sessions, sessionEvents });
+    const activeTurn = {
+      ...createActiveTurn(threadId),
+      session: releasedSession,
+      turnStartPromise,
+    };
+
+    const continuation = runtimeEvents.continueTurnAfterPendingInput(activeTurn);
+    sessions.set(threadId, replacementSession);
+    rejectTurnStart(new Error("old pending-input continuation failed"));
+    await continuation;
+
+    expect(replacementEvents).toEqual([]);
+
+    await runtimeEvents.continueTurnAfterPendingInput({
+      ...createActiveTurn(threadId),
+      session: replacementSession,
+      turnStartPromise: Promise.reject(new Error("current pending-input continuation failed")),
+    });
+
+    expect(replacementEvents).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        externalSessionId: threadId,
+        message: "current pending-input continuation failed",
+      }),
+    );
+  });
+
   test("normalizes Codex skill catalog invalidation without exposing its raw method", async () => {
     let listener: RuntimeListener | null = null;
     const invalidations: unknown[] = [];
@@ -196,6 +239,52 @@ describe("CodexRuntimeSessionEvents", () => {
 
     expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
     expect(emittedEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
+  });
+
+  test("reports an admitted mutation failure after release while dropping queued work", async () => {
+    let listener: RuntimeListener | null = null;
+    const mutationStarted = Promise.withResolvers<void>();
+    const blockedMutation = Promise.withResolvers<void>();
+    const deliveryFailure = new Error("admitted mutation failed after release");
+    const failures: Array<{ runtimeId: string; error: unknown }> = [];
+    let mutationCount = 0;
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      onLiveSessionMutation: async () => {
+        mutationCount += 1;
+        if (mutationCount === 1) {
+          mutationStarted.resolve();
+          await blockedMutation.promise;
+        }
+      },
+      onRuntimeEventQueueFailure: (failure) => {
+        failures.push(failure);
+        return undefined;
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "skills/changed", params: { cwd: "/repo" } },
+    });
+    await mutationStarted.promise;
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: { method: "skills/changed", params: { cwd: "/repo" } },
+    });
+
+    runtimeEvents.clearRuntime("runtime-1");
+    blockedMutation.reject(deliveryFailure);
+    await flushRuntimeEvents();
+
+    expect(mutationCount).toBe(1);
+    expect(failures).toEqual([{ runtimeId: "runtime-1", error: deliveryFailure }]);
   });
 
   test("reports rejected catalog invalidation delivery without converting it into a session error", async () => {

@@ -73,43 +73,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
     );
   });
 
-  test("attempts every runtime-state cleanup when one component fails", () => {
-    const { adapter } = createHarness();
-    const cleanupCalls: string[] = [];
-    const internals = adapter as unknown as {
-      localSessions: { releaseRuntime(runtimeId: string): void };
-      pendingInput: { clearRuntime(runtimeId: string): void };
-      subagents: { clearRuntime(runtimeId: string): void };
-      runtimeEvents: { clearRuntime(runtimeId: string): void };
-      clearThreadInventory(runtimeId: string): void;
-    };
-    internals.localSessions.releaseRuntime = (runtimeId) => {
-      cleanupCalls.push(`sessions:${runtimeId}`);
-      throw new Error("unsubscribe failed");
-    };
-    internals.pendingInput.clearRuntime = (runtimeId) => {
-      cleanupCalls.push(`pending:${runtimeId}`);
-    };
-    internals.subagents.clearRuntime = (runtimeId) => {
-      cleanupCalls.push(`subagents:${runtimeId}`);
-    };
-    internals.runtimeEvents.clearRuntime = (runtimeId) => {
-      cleanupCalls.push(`events:${runtimeId}`);
-    };
-    internals.clearThreadInventory = (runtimeId) => {
-      cleanupCalls.push(`inventory:${runtimeId}`);
-    };
-
-    expect(() => adapter.releaseRuntime("runtime-live")).toThrow("unsubscribe failed");
-    expect(cleanupCalls).toEqual([
-      "sessions:runtime-live",
-      "pending:runtime-live",
-      "subagents:runtime-live",
-      "events:runtime-live",
-      "inventory:runtime-live",
-    ]);
-  });
-
   test("supports read-only construction without renderer-owned live event plumbing", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({

@@ -64,6 +64,7 @@ export type CodexServerRequestHandlerContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
+  emitRetainedSessionEvent(session: CodexSessionState, event: AgentEvent): void;
   emitRoutedRequestEvent?(targetSession: CodexSessionState, event: AgentEvent): void;
 };
 
@@ -234,7 +235,7 @@ export const handleCodexServerRequest = async (
         forgetHandled();
         throw error;
       }
-      context.emitSessionEvent(routeContext.policySession.threadId, {
+      context.emitRetainedSessionEvent(routeContext.policySession, {
         type: "session_error",
         externalSessionId: routeContext.policySession.threadId,
         timestamp: new Date().toISOString(),
@@ -451,7 +452,7 @@ export const handleCodexServerRequest = async (
     forgetHandled();
     throw error;
   }
-  context.emitSessionEvent(routeContext.policySession.threadId, {
+  context.emitRetainedSessionEvent(routeContext.policySession, {
     type: "session_error",
     externalSessionId: routeContext.policySession.threadId,
     timestamp: new Date().toISOString(),
