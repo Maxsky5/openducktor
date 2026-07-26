@@ -187,9 +187,6 @@ describe("resolveStoreContext", () => {
   test("reads workspaceId-forbidden mode from the environment", async () => {
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
-      }
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
@@ -229,9 +226,6 @@ describe("resolveStoreContext", () => {
   test("preserves explicit false for workspaceId-forbidden mode", async () => {
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url.endsWith("/health")) {
-        return jsonResponse({ ok: true });
-      }
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
@@ -293,9 +287,6 @@ describe("resolveStoreContext", () => {
 
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
-      if (url === "http://127.0.0.1:14327/health") {
-        return jsonResponse({ ok: true });
-      }
       if (url === "http://127.0.0.1:14327/invoke/odt_mcp_ready") {
         observedHostTokens.push(
           (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
@@ -358,9 +349,6 @@ describe("resolveStoreContext", () => {
 
     globalThis.fetch = (async (input) => {
       const url = String(input);
-      if (url === "http://127.0.0.1:24327/health") {
-        return jsonResponse({ ok: true });
-      }
       if (url === "http://127.0.0.1:24327/invoke/odt_mcp_ready") {
         return jsonResponse({
           bridgeVersion: 1,
