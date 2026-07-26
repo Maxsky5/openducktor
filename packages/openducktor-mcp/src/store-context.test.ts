@@ -415,6 +415,51 @@ describe("resolveStoreContext", () => {
     }
   });
 
+  test("prioritizes a delayed readiness failure over a missing configured workspace", async () => {
+    const configDir = await createDiscoveryFile();
+    const discoveryPath = join(configDir, "runtime", "mcp-bridge.json");
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+    process.env.ODT_WORKSPACE_ID = "missing-repo";
+
+    let releaseReadiness = (): void => {
+      throw new Error("Readiness barrier was not initialized.");
+    };
+    const readinessBarrier = new Promise<void>((resolve) => {
+      releaseReadiness = resolve;
+    });
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url.endsWith("/invoke/odt_mcp_ready")) {
+        await readinessBarrier;
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: ["odt_mcp_ready"],
+        });
+      }
+      if (url.endsWith("/invoke/odt_get_workspaces")) {
+        return jsonResponse({ workspaces: [] });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const contextOutcome = resolveStoreContext({}).then(
+      () => ({ status: "fulfilled" as const }),
+      (error: unknown) => ({ status: "rejected" as const, error }),
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    releaseReadiness();
+
+    const outcome = await contextOutcome;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status !== "rejected") {
+      throw new Error("Expected resolveStoreContext() to reject.");
+    }
+    expect(outcome.error).toBeInstanceOf(Error);
+    expect((outcome.error as Error).message).toStartWith(
+      `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. http://127.0.0.1:14327: OpenDucktor host bridge is missing required MCP tools:`,
+    );
+  });
+
   test("preserves the exact unknown-workspace error during host discovery", async () => {
     const configDir = await createDiscoveryFile();
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;

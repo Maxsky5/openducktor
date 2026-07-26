@@ -80,7 +80,16 @@ const validateHostConnection = async (
     return;
   }
 
-  await Promise.all([client.ready(), validateConfiguredWorkspace(client, workspaceId)]);
+  const [readinessResult, workspaceResult] = await Promise.allSettled([
+    client.ready(),
+    validateConfiguredWorkspace(client, workspaceId),
+  ]);
+  if (readinessResult.status === "rejected") {
+    throw readinessResult.reason;
+  }
+  if (workspaceResult.status === "rejected") {
+    throw workspaceResult.reason;
+  }
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
