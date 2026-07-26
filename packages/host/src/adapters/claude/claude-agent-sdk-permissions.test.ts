@@ -156,12 +156,13 @@ describe("createClaudeCanUseTool", () => {
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
     });
+    const abortController = new AbortController();
 
     const resultPromise = canUseTool(
       "Bash",
       { command: "git status" },
       {
-        signal: new AbortController().signal,
+        signal: abortController.signal,
         toolUseID: "tool-use-1",
         agentID: "agent-child-1",
       },
@@ -184,8 +185,16 @@ describe("createClaudeCanUseTool", () => {
       subagentCorrelationKey: "agent-child-1",
     });
 
-    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
-    await expect(resultPromise).resolves.toMatchObject({ behavior: "allow" });
+    abortController.abort();
+    await expect(resultPromise).resolves.toMatchObject({ behavior: "deny" });
+    expect(events[1]).toMatchObject({
+      type: "approval_resolved",
+      externalSessionId: childExternalSessionId,
+      parentExternalSessionId: "session-1",
+      childExternalSessionId,
+      subagentCorrelationKey: "agent-child-1",
+      requestId: "request-1",
+    });
   });
 
   test("publishes subagent questions only to the child transcript", async () => {
@@ -197,6 +206,7 @@ describe("createClaudeCanUseTool", () => {
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
     });
+    const abortController = new AbortController();
 
     const resultPromise = canUseTool(
       "AskUserQuestion",
@@ -211,7 +221,7 @@ describe("createClaudeCanUseTool", () => {
         ],
       },
       {
-        signal: new AbortController().signal,
+        signal: abortController.signal,
         toolUseID: "question-child-1",
         agentID: "agent-child-1",
       },
@@ -229,7 +239,15 @@ describe("createClaudeCanUseTool", () => {
       }),
     ]);
 
-    session.pendingQuestions.get("request-1")?.resolve([["Direct"]]);
-    await expect(resultPromise).resolves.toMatchObject({ behavior: "allow" });
+    abortController.abort();
+    await expect(resultPromise).resolves.toMatchObject({ behavior: "deny" });
+    expect(events[1]).toMatchObject({
+      type: "question_resolved",
+      externalSessionId: childExternalSessionId,
+      parentExternalSessionId: "session-1",
+      childExternalSessionId,
+      subagentCorrelationKey: "agent-child-1",
+      requestId: "request-1",
+    });
   });
 });

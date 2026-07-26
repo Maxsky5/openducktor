@@ -2,7 +2,6 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
 import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claude-agent-sdk-types";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeEventSession = {
   acceptedUserMessages?: readonly unknown[];
@@ -107,38 +106,6 @@ export const streamAssistantMessageId = (
   )}:${session.streamAssistantMessageOrdinal}:${blockIndex}`;
   session.streamAssistantMessageIdsByBlockIndex.set(blockIndex, messageId);
   return messageId;
-};
-
-export const streamedTextMessageIdForBlock = (
-  session: ClaudeEventSession,
-  fallbackMessageId: string,
-  blockIndex: number,
-): string => session.streamAssistantMessageIdsByBlockIndex.get(blockIndex) ?? fallbackMessageId;
-
-export const streamedTextMessageIdsForContent = (
-  session: ClaudeEventSession,
-  content: unknown,
-): string[] => {
-  if (!Array.isArray(content)) {
-    return [];
-  }
-  return content
-    .map((block, index) =>
-      isRecord(block) && readStringProp(block, "type") === "text" ? index : null,
-    )
-    .filter((index): index is number => index !== null)
-    .flatMap((index) => {
-      const messageId = session.streamAssistantMessageIdsByBlockIndex.get(index);
-      return messageId ? [messageId] : [];
-    });
-};
-
-export const finalAssistantTextMessageId = (
-  session: ClaudeEventSession,
-  fallbackMessageId: string,
-  content: unknown,
-): string => {
-  return streamedTextMessageIdsForContent(session, content)[0] ?? fallbackMessageId;
 };
 
 export const advanceStreamAssistantMessageIdentity = (session: ClaudeEventSession): void => {

@@ -40,6 +40,10 @@ describe("Claude permission request lifecycle", () => {
         type: "approval_required",
         requestId: "request-1",
       }),
+      expect.objectContaining({
+        type: "approval_resolved",
+        requestId: "request-1",
+      }),
     ]);
   });
 

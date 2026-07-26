@@ -448,10 +448,14 @@ describe("handleClaudeSdkMessage result events", () => {
         delta: "Now let me write and persist the spec.",
       }),
       expect.objectContaining({
+        type: "transcript_retracted",
+        messageIds: ["claude-stream:session-1:1:1:0"],
+      }),
+      expect.objectContaining({
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "text",
-          messageId: "claude-stream:session-1:1:1:0",
+          messageId: "assistant-tool-use",
           text: "Now let me write and persist the spec.",
           completed: true,
         }),

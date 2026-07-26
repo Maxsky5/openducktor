@@ -3,7 +3,6 @@ import type { AgentEvent } from "@openducktor/core";
 import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
-  streamedTextMessageIdsForContent,
 } from "./claude-agent-sdk-event-session";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
 import { isRecord } from "./claude-agent-sdk-utils";
@@ -45,25 +44,21 @@ const emitTranscriptRetraction = ({
 
 export const settleClaudeStreamedAssistantText = ({
   emit,
-  content,
   session,
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  content: unknown;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
-  const streamedMessageIds = streamedTextMessageIdsForContent(session, content);
-  if (streamedMessageIds.length > 1) {
+  const streamedMessageIds = [...session.streamAssistantMessageIdsByBlockIndex.values()];
+  if (streamedMessageIds.length > 0) {
     emitTranscriptRetraction({
       emit,
       session,
       timestamp,
-      messageIds: streamedMessageIds.slice(1),
+      messageIds: streamedMessageIds,
     });
-  }
-  if (streamedMessageIds.length > 0) {
     advanceStreamAssistantMessageIdentity(session);
   }
 };

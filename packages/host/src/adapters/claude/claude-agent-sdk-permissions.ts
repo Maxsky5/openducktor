@@ -10,6 +10,7 @@ import {
   toProjectRelativePath,
 } from "@openducktor/path-support";
 import {
+  claudePendingInputResolutionRoute,
   claudeSubagentPendingInputRoute,
   emitClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
@@ -361,9 +362,30 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         },
         ...claudeSubagentPendingInputRoute(session.externalSessionId, options.agentID),
       };
-      return new Promise<PermissionResult>((resolveResult) => {
+      return new Promise<PermissionResult>((resolveResult, rejectResult) => {
+        let requestPublished = false;
         const onAbort = () => {
-          session.pendingApprovals.delete(requestId);
+          if (!session.pendingApprovals.delete(requestId)) {
+            return;
+          }
+          if (requestPublished) {
+            try {
+              emitClaudePendingInputEvent({
+                emit,
+                session,
+                event: {
+                  type: "approval_resolved",
+                  externalSessionId: session.externalSessionId,
+                  timestamp: now(),
+                  requestId,
+                  ...claudePendingInputResolutionRoute(event),
+                },
+              });
+            } catch (error) {
+              rejectResult(error);
+              return;
+            }
+          }
           resolveResult({
             behavior: "deny",
             message: "Claude permission request was aborted.",
@@ -384,6 +406,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         }
         try {
           emitClaudePendingInputEvent({ emit, event, session });
+          requestPublished = true;
         } catch (error) {
           options.signal.removeEventListener("abort", onAbort);
           session.pendingApprovals.delete(requestId);

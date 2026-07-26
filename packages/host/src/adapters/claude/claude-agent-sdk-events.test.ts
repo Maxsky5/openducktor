@@ -333,7 +333,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     ]);
   });
 
-  test("finalizes streamed assistant text with the stream message id", () => {
+  test("replaces streamed assistant text with the authoritative assistant message id", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     session.acceptedUserMessages.push({});
@@ -386,8 +386,12 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         messageId: "claude-stream:session-1:1:1:0",
       }),
       expect.objectContaining({
+        type: "transcript_retracted",
+        messageIds: ["claude-stream:session-1:1:1:0"],
+      }),
+      expect.objectContaining({
         type: "assistant_message",
-        messageId: "claude-stream:session-1:1:1:0",
+        messageId: "assistant-final",
         message: "Final answer",
       }),
     ]);
@@ -542,9 +546,9 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     expect(assistantTextMessageIds).toEqual([
       "claude-stream:session-1:1:1:0",
-      "claude-stream:session-1:1:1:0",
-      "claude-stream:session-1:1:2:0",
-      "claude-stream:session-1:1:2:0",
+      "assistant-tool-use-1",
+      "claude-stream:session-1:1:3:0",
+      "assistant-final-2",
     ]);
   });
 
@@ -638,9 +642,9 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     expect(assistantTextMessageIds).toEqual([
       "claude-stream:session-1:1:1:0",
-      "claude-stream:session-1:1:1:0",
+      "assistant-tool-use-1",
       "claude-stream:session-1:1:2:0",
-      "claude-stream:session-1:1:2:0",
+      "assistant-final-2",
     ]);
   });
 
@@ -730,11 +734,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
       expect.objectContaining({
         type: "transcript_retracted",
-        messageIds: ["claude-stream:session-1:1:1:1"],
+        messageIds: ["claude-stream:session-1:1:1:0", "claude-stream:session-1:1:1:1"],
       }),
       expect.objectContaining({
         type: "assistant_message",
-        messageId: "claude-stream:session-1:1:1:0",
+        messageId: "assistant-final",
         message: "First block\nSecond block",
       }),
     ]);

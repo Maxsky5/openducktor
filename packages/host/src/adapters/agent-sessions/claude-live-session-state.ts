@@ -171,18 +171,28 @@ export const createClaudeLiveSessionState = ({
   };
 
   const removeSessionTree = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
-    const changes = removeSnapshot(ref);
-    for (const snapshot of [...snapshotsByRef.values()]) {
-      if (
-        snapshot.ref.repoPath === ref.repoPath &&
-        snapshot.ref.runtimeKind === ref.runtimeKind &&
-        snapshot.parentExternalSessionId === ref.externalSessionId &&
-        isClaudeSubagentTranscriptTarget(snapshot.ref.externalSessionId)
-      ) {
-        changes.push(...removeSnapshot(snapshot.ref));
+    const refs = [ref];
+    const queuedKeys = new Set([refKey(ref)]);
+    for (let index = 0; index < refs.length; index += 1) {
+      const parent = refs[index];
+      if (!parent) {
+        continue;
+      }
+      for (const snapshot of snapshotsByRef.values()) {
+        const key = refKey(snapshot.ref);
+        if (
+          !queuedKeys.has(key) &&
+          snapshot.ref.repoPath === parent.repoPath &&
+          snapshot.ref.runtimeKind === parent.runtimeKind &&
+          snapshot.parentExternalSessionId === parent.externalSessionId &&
+          isClaudeSubagentTranscriptTarget(snapshot.ref.externalSessionId)
+        ) {
+          queuedKeys.add(key);
+          refs.push(snapshot.ref);
+        }
       }
     }
-    return changes;
+    return refs.flatMap(removeSnapshot);
   };
 
   const applyPendingEvent = (

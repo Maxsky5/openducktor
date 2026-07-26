@@ -2,6 +2,7 @@ import type { OnUserDialog, UserDialogResult } from "@anthropic-ai/claude-agent-
 import type { AgentEvent } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import {
+  claudePendingInputResolutionRoute,
   claudeSubagentPendingInputRoute,
   emitClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
@@ -182,13 +183,34 @@ export const requestClaudeAskUserQuestion = async ({
     ...claudeSubagentPendingInputRoute(session.externalSessionId, agentID),
   };
   const answers = await new Promise<string[][] | null>((resolve, reject) => {
+    let requestPublished = false;
     const cleanup = () => {
       signal.removeEventListener("abort", onAbort);
       session.abortController.signal.removeEventListener("abort", onAbort);
     };
     const onAbort = () => {
-      session.pendingQuestions.delete(requestId);
+      if (!session.pendingQuestions.delete(requestId)) {
+        return;
+      }
       cleanup();
+      if (requestPublished) {
+        try {
+          emitClaudePendingInputEvent({
+            emit,
+            session,
+            event: {
+              type: "question_resolved",
+              externalSessionId: session.externalSessionId,
+              timestamp: now(),
+              requestId,
+              ...claudePendingInputResolutionRoute(event),
+            },
+          });
+        } catch (error) {
+          reject(error);
+          return;
+        }
+      }
       resolve(null);
     };
     if (signal.aborted || session.abortController.signal.aborted) {
@@ -212,6 +234,7 @@ export const requestClaudeAskUserQuestion = async ({
     }
     try {
       emitClaudePendingInputEvent({ emit, event, session });
+      requestPublished = true;
     } catch (error) {
       session.pendingQuestions.delete(requestId);
       cleanup();

@@ -188,6 +188,10 @@ describe("Claude permission questions", () => {
         type: "question_required",
         requestId: "request-1",
       }),
+      expect.objectContaining({
+        type: "question_resolved",
+        requestId: "request-1",
+      }),
     ]);
   });
 

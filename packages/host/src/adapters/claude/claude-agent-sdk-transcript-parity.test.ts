@@ -39,6 +39,66 @@ const retainedLiveAssistantMessageIds = (events: AgentEvent[]): string[] => {
 };
 
 describe("Claude live and hydrated transcript parity", () => {
+  test("reconciles streamed assistant text to the hydrated SDK message id", () => {
+    const sdkMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-final",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: "Final answer" }],
+        stop_reason: "end_turn",
+      },
+    });
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    liveSession.acceptedUserMessages.push({});
+    liveSession.pendingUserTurnCount = 1;
+
+    handleClaudeSdkMessage({
+      emit: (event) => liveEvents.push(event),
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "assistant-stream",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Final answer" },
+        },
+      }),
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit: (event) => liveEvents.push(event),
+      message: sdkMessage,
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      session: liveSession,
+      timestamp,
+    });
+
+    const hydratedIds = toClaudeHistoryMessages(
+      [claudeSessionMessageFixture(sdkMessage)],
+      () => timestamp,
+    ).map((message) => message.messageId);
+    expect(retainedLiveAssistantMessageIds(liveEvents)).toEqual(hydratedIds);
+    expect(hydratedIds).toEqual(["assistant-final"]);
+  });
+
   test("projects assistant content blocks through the same canonical parts", () => {
     const content = [
       { type: "thinking", thinking: "Inspecting" },

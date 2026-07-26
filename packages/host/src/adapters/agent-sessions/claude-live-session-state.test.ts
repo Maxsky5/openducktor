@@ -150,6 +150,24 @@ describe("Claude host live-session state", () => {
       type: "live",
       session: { parentExternalSessionId: childExternalSessionId },
     });
+
+    expect(state.removeSession(ref)).toEqual([
+      { type: "session_removed", ref },
+      {
+        type: "session_removed",
+        ref: { ...ref, externalSessionId: childExternalSessionId },
+      },
+      {
+        type: "session_removed",
+        ref: { ...ref, externalSessionId: grandchildExternalSessionId },
+      },
+    ]);
+    expect(
+      state.readRetainedSnapshot({ ...ref, externalSessionId: grandchildExternalSessionId }),
+    ).toEqual({
+      type: "missing",
+      ref: { ...ref, externalSessionId: grandchildExternalSessionId },
+    });
   });
 
   test("drops late root and subagent events after release until an explicit resume", () => {
