@@ -12,6 +12,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 
 type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
@@ -170,7 +171,8 @@ export const createClaudeLiveSessionState = ({
       if (
         snapshot.ref.repoPath === ref.repoPath &&
         snapshot.ref.runtimeKind === ref.runtimeKind &&
-        snapshot.parentExternalSessionId === ref.externalSessionId
+        snapshot.parentExternalSessionId === ref.externalSessionId &&
+        isClaudeSubagentTranscriptTarget(snapshot.ref.externalSessionId)
       ) {
         changes.push(...removeSnapshot(snapshot.ref));
       }

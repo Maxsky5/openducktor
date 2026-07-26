@@ -234,21 +234,29 @@ export const historyToChatMessages = (
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
       } else if (message.role === "system" && message.notice) {
-        meta =
-          message.notice.reason === "session_forked"
-            ? {
-                kind: "session_notice",
-                tone: message.notice.tone,
-                reason: message.notice.reason,
-                title: message.notice.title,
-                parentExternalSessionId: message.notice.parentExternalSessionId,
-              }
-            : {
-                kind: "session_notice",
-                tone: message.notice.tone,
-                reason: message.notice.reason,
-                title: message.notice.title,
-              };
+        if (message.notice.reason === "session_forked") {
+          meta = {
+            kind: "session_notice",
+            tone: message.notice.tone,
+            reason: message.notice.reason,
+            title: message.notice.title,
+            parentExternalSessionId: message.notice.parentExternalSessionId,
+          };
+        } else if (message.notice.reason === "session_error") {
+          meta = {
+            kind: "session_notice",
+            tone: message.notice.tone,
+            reason: message.notice.reason,
+            title: message.notice.title,
+          };
+        } else {
+          meta = {
+            kind: "session_notice",
+            tone: message.notice.tone,
+            reason: message.notice.reason,
+            title: message.notice.title,
+          };
+        }
       }
 
       next.push({

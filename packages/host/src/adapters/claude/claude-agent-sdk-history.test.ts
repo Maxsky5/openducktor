@@ -85,6 +85,40 @@ describe("claude-agent-sdk-history", () => {
     });
   });
 
+  test("hydrates failed Claude results as session errors", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        {
+          type: "result",
+          subtype: "error_during_execution",
+          uuid: "result-error-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:03:16.287Z",
+          is_error: true,
+          errors: ["Permission denied for Bash."],
+          result: "Fallback failure text",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    expect(history).toEqual([
+      {
+        messageId: "result-error-1",
+        role: "system",
+        timestamp: "2026-06-26T11:03:16.287Z",
+        text: "Permission denied for Bash.",
+        notice: {
+          tone: "error",
+          reason: "session_error",
+          title: "Error",
+        },
+        parts: [],
+      },
+    ]);
+  });
+
   test("does not hydrate current context usage from Claude result totals", () => {
     const history = toClaudeHistoryMessages(
       [

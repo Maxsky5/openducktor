@@ -303,6 +303,61 @@ describe("Claude host live-session state", () => {
     expect(state.readRetainedSnapshot(ref)).toEqual({ type: "missing", ref });
   });
 
+  test("keeps an independent fork when its source session finishes", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    const forkExternalSessionId = "session-fork";
+    const forkRef = { ...ref, externalSessionId: forkExternalSessionId };
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const childRef = { ...ref, externalSessionId: childExternalSessionId };
+    const forkSummary = { ...summary, externalSessionId: forkExternalSessionId };
+    const forkSession: ClaudeSessionContext = {
+      ...session,
+      externalSessionId: forkExternalSessionId,
+      summary: forkSummary,
+    };
+
+    state.retainControlSummary(summary);
+    state.retainControlSummary(forkSummary, { parentExternalSessionId: "session-1" });
+    state.applyEvent(session, {
+      type: "approval_required",
+      externalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:02:00.000Z",
+      requestId: "child-approval",
+      requestType: "command_execution",
+      title: "Approve Bash",
+      parentExternalSessionId: "session-1",
+      childExternalSessionId,
+      subagentCorrelationKey: "child-1",
+    });
+
+    const changes = state.applyEvent(session, {
+      type: "session_finished",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:03:05.000Z",
+      message: "Source session finished.",
+    });
+
+    expect(changes).toContainEqual({ type: "session_removed", ref });
+    expect(changes).toContainEqual({ type: "session_removed", ref: childRef });
+    expect(changes).not.toContainEqual({ type: "session_removed", ref: forkRef });
+    expect(state.readRetainedSnapshot(forkRef)).toMatchObject({
+      type: "live",
+      session: { parentExternalSessionId: "session-1" },
+    });
+    expect(
+      state.applyEvent(forkSession, {
+        type: "assistant_message",
+        externalSessionId: forkExternalSessionId,
+        timestamp: "2026-07-17T10:03:06.000Z",
+        messageId: "fork-assistant",
+        message: "Fork is still live.",
+      }),
+    ).toContainEqual({
+      type: "transcript_event",
+      event: expect.objectContaining({ messageId: "fork-assistant" }),
+    });
+  });
+
   test("replaces stale retained context when no newer context update arrives", () => {
     const state = createClaudeLiveSessionState({ runtime });
     state.retainControlSummary(summary);

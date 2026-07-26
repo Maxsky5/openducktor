@@ -90,6 +90,41 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     ]);
   });
 
+  test("maps hydrated session errors to chat notice messages", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "result-error-1",
+          role: "system",
+          timestamp: "2026-06-26T11:03:16.287Z",
+          text: "Permission denied for Bash.",
+          notice: {
+            tone: "error",
+            reason: "session_error",
+            title: "Error",
+          },
+          parts: [],
+        },
+      ],
+      { role: "build" },
+    );
+
+    expect(messages).toEqual([
+      {
+        id: "result-error-1",
+        role: "system",
+        content: "Permission denied for Bash.",
+        timestamp: "2026-06-26T11:03:16.287Z",
+        meta: {
+          kind: "session_notice",
+          tone: "error",
+          reason: "session_error",
+          title: "Error",
+        },
+      },
+    ]);
+  });
+
   test("maps fork boundaries to transient transcript notice metadata", () => {
     const messages = historyToChatMessages(
       [

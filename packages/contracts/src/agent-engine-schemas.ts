@@ -90,6 +90,13 @@ const sessionHistoryNoticeSchema = z.discriminatedUnion("reason", [
       parentExternalSessionId: nonEmptyStringSchema,
     })
     .strict(),
+  z
+    .object({
+      tone: z.literal("error"),
+      reason: z.literal("session_error"),
+      title: nonEmptyStringSchema,
+    })
+    .strict(),
 ]);
 
 const sessionHistoryMessageShape = {

@@ -86,4 +86,27 @@ describe("Claude runtime command contracts", () => {
     expect(claudeAgentStreamPartSchema).toBe(agentStreamPartSchema);
     expect(claudeAgentUserMessageDisplayPartSchema).toBe(agentUserMessageDisplayPartSchema);
   });
+
+  test("accepts hydrated session error notices", () => {
+    expect(
+      agentSessionHistoryMessageSchema.parse({
+        messageId: "result-error-1",
+        role: "system",
+        timestamp: "2026-06-26T11:03:16.287Z",
+        text: "Permission denied for Bash.",
+        notice: {
+          tone: "error",
+          reason: "session_error",
+          title: "Error",
+        },
+        parts: [],
+      }),
+    ).toMatchObject({
+      notice: {
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      },
+    });
+  });
 });

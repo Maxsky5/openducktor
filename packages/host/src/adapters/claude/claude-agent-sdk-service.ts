@@ -202,6 +202,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     const service = this;
     return Effect.gen(function* () {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
+      if (target.subpath) {
+        return null;
+      }
       const session = service.sessionStore.get(target.sessionId);
       if (session) {
         return yield* fromPromise("claudeRuntime.loadSessionContextUsage", async () => {

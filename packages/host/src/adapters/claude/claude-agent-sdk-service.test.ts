@@ -103,7 +103,7 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
 };
 
 describe("createClaudeAgentSdkService", () => {
-  test("loads context usage through the detached SDK path when the session is not live", async () => {
+  test("loads detached root context usage but not parent usage for a subagent", async () => {
     const loadDetachedSessionContextUsage = mock(
       async (_input: {
         claudeExecutablePath: string;
@@ -154,6 +154,21 @@ describe("createClaudeAgentSdkService", () => {
           sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         }),
       ),
+    ).resolves.toBeNull();
+
+    expect(loadDetachedSessionContextUsage).not.toHaveBeenCalled();
+
+    await expect(
+      Effect.runPromise(
+        service.loadSessionContextUsage({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ),
     ).resolves.toEqual({ totalTokens: 176_005, contextWindow: 272_000 });
 
     expect(loadDetachedSessionContextUsage).toHaveBeenCalledTimes(1);
@@ -163,6 +178,39 @@ describe("createClaudeAgentSdkService", () => {
       processEnv: { HOME: "/home/user" },
       workingDirectory: "/repo/worktree/",
     });
+  });
+
+  test("does not report live parent context usage for a Claude subagent", async () => {
+    const getContextUsage = mock(
+      async () =>
+        ({
+          totalTokens: 176_005,
+          maxTokens: 272_000,
+        }) as Awaited<ReturnType<Query["getContextUsage"]>>,
+    );
+    const service = createService(
+      createSession({
+        query: {
+          close: mock(() => {}),
+          getContextUsage,
+        } as unknown as ClaudeSession["query"],
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        service.loadSessionContextUsage({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1::claude-subagent::task-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ),
+    ).resolves.toBeNull();
+
+    expect(getContextUsage).not.toHaveBeenCalled();
   });
 
   test("reads context usage from an idle live Claude session without resuming it", async () => {

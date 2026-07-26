@@ -400,6 +400,21 @@ export const toClaudeHistoryMessages = (
         manualCompactionBoundaryReceived = false;
         continue;
       }
+      if (isFailedClaudeResult(entry)) {
+        history.push({
+          messageId: entry.uuid ?? `claude-result-error:${history.length}`,
+          role: "system",
+          timestamp,
+          text: failedResultText(entry),
+          notice: {
+            tone: "error",
+            reason: "session_error",
+            title: "Error",
+          },
+          parts: [],
+        });
+        continue;
+      }
       const resultText = successfulResultText(entry);
       const durationMs = readClaudeResultDurationMs(entry);
       const lastMatchingAssistantTextMessage =
