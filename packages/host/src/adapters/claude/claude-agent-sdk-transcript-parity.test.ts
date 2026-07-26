@@ -161,6 +161,83 @@ describe("Claude live and hydrated transcript parity", () => {
     }
   });
 
+  test("projects every tool result block through the live and hydrated paths", () => {
+    const toolUses = [
+      {
+        id: "tool-read",
+        name: "Read",
+        input: { file_path: "/repo/file.ts" },
+        result: "file contents",
+      },
+      {
+        id: "tool-bash",
+        name: "Bash",
+        input: { command: "pwd" },
+        result: "/repo",
+      },
+    ] as const;
+    const assistantMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-parallel-tools",
+      session_id: "session-1",
+      timestamp,
+      message: {
+        role: "assistant",
+        content: toolUses.map((toolUse) => ({
+          type: "tool_use",
+          id: toolUse.id,
+          name: toolUse.name,
+          input: toolUse.input,
+        })),
+        stop_reason: "tool_use",
+      },
+      parent_tool_use_id: null,
+    });
+    const resultMessage = claudeSdkMessageFixture({
+      type: "user",
+      uuid: "result-parallel-tools",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp: resultTimestamp,
+      message: {
+        role: "user",
+        content: toolUses.map((toolUse) => ({
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: toolUse.result,
+          is_error: false,
+        })),
+      },
+    });
+    const history = toClaudeHistoryMessages(
+      [claudeSessionMessageFixture(assistantMessage), claudeSessionMessageFixture(resultMessage)],
+      () => resultTimestamp,
+    );
+    const hydratedToolParts =
+      history
+        .find((message) => message.role === "assistant")
+        ?.parts.filter((part) => part.kind === "tool") ?? [];
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    for (const toolUse of toolUses) {
+      liveSession.toolInputsByCallId.set(toolUse.id, toolUse.input);
+      liveSession.toolMessageIdsByCallId.set(toolUse.id, "assistant-parallel-tools");
+      liveSession.toolNamesByCallId.set(toolUse.id, toolUse.name);
+    }
+
+    handleClaudeUserToolResultMessage({
+      emit: (event) => liveEvents.push(event),
+      message: resultMessage,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(assistantParts(liveEvents)).toEqual(hydratedToolParts);
+    expect(
+      assistantParts(liveEvents).flatMap((part) => (part.kind === "tool" ? [part.callId] : [])),
+    ).toEqual(["tool-read", "tool-bash"]);
+  });
+
   test("preserves structured user display parts across live send and hydrated history", async () => {
     const parts: AgentUserMessagePart[] = [
       { kind: "text", text: "Explain " },

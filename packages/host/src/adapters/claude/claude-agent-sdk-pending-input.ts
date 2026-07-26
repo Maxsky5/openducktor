@@ -91,6 +91,17 @@ const validateQuestionAnswers = (pending: PendingQuestion, input: ReplyQuestionI
         },
       });
     }
+    if (answers.some((answer) => answer.trim().length === 0)) {
+      throw new HostValidationError({
+        field: "answers",
+        message: `Claude question '${input.requestId}' answer group ${index + 1} requires non-blank answers.`,
+        details: {
+          externalSessionId: input.externalSessionId,
+          requestId: input.requestId,
+          questionIndex: index,
+        },
+      });
+    }
     if (!question.multiple && answers.length > 1) {
       throw new HostValidationError({
         field: "answers",

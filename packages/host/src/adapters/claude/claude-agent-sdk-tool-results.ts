@@ -42,24 +42,28 @@ const mergeTopLevelToolUseResult = (
   };
 };
 
-const readToolUseResult = (message: Extract<SDKMessage, { type: "user" }>) => {
+const readToolUseResults = (
+  message: Extract<SDKMessage, { type: "user" }>,
+): ClaudeDecodedToolResult[] => {
   const direct = decodeClaudeToolResultValue(message.tool_use_result, message.parent_tool_use_id, {
     allowNonToolResultType: true,
   });
   if (direct) {
-    return mergeTopLevelToolUseResult(direct, message);
+    return [mergeTopLevelToolUseResult(direct, message)];
   }
 
   const content = (message.message as { content?: unknown }).content;
   if (Array.isArray(content)) {
+    const results: ClaudeDecodedToolResult[] = [];
     for (const block of content) {
       const result = decodeClaudeToolResultValue(block, message.parent_tool_use_id);
       if (result) {
-        return mergeTopLevelToolUseResult(result, message);
+        results.push(mergeTopLevelToolUseResult(result, message));
       }
     }
+    return results;
   }
-  return null;
+  return [];
 };
 
 export const handleClaudeUserToolResultMessage = ({
@@ -73,58 +77,57 @@ export const handleClaudeUserToolResultMessage = ({
   session: ClaudeToolResultSession;
   timestamp: string;
 }): void => {
-  const result = readToolUseResult(message);
-  if (!result) {
-    return;
-  }
-  if (isClaudeToolUseRetracted(session, result.toolUseId)) {
-    return;
-  }
-  const tool = session.toolNamesByCallId.get(result.toolUseId) ?? result.toolName;
-  if (!tool) {
-    return;
-  }
-  const input = session.toolInputsByCallId.get(result.toolUseId);
-  const messageId =
-    session.toolMessageIdsByCallId.get(result.toolUseId) ?? message.uuid ?? result.toolUseId;
-  const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
-  const endedAtMs = session.toolEndedAtMsByCallId?.get(result.toolUseId) ?? timestampMs(timestamp);
-  const { part, todos } = projectClaudeCompletedToolResult({
-    callId: result.toolUseId,
-    endedAtMs,
-    ...(input ? { input } : {}),
-    isError: result.isError,
-    messageId,
-    raw: result.raw,
-    resultText: result.text,
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-    state: session.todosById,
-    tool,
-  });
-  emit({
-    type: "assistant_part",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-    part,
-  });
-  if (todos) {
+  for (const result of readToolUseResults(message)) {
+    if (isClaudeToolUseRetracted(session, result.toolUseId)) {
+      continue;
+    }
+    const tool = session.toolNamesByCallId.get(result.toolUseId) ?? result.toolName;
+    if (!tool) {
+      continue;
+    }
+    const input = session.toolInputsByCallId.get(result.toolUseId);
+    const messageId =
+      session.toolMessageIdsByCallId.get(result.toolUseId) ?? message.uuid ?? result.toolUseId;
+    const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
+    const endedAtMs =
+      session.toolEndedAtMsByCallId?.get(result.toolUseId) ?? timestampMs(timestamp);
+    const { part, todos } = projectClaudeCompletedToolResult({
+      callId: result.toolUseId,
+      endedAtMs,
+      ...(input ? { input } : {}),
+      isError: result.isError,
+      messageId,
+      raw: result.raw,
+      resultText: result.text,
+      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+      state: session.todosById,
+      tool,
+    });
     emit({
-      type: "session_todos_updated",
+      type: "assistant_part",
       externalSessionId: session.externalSessionId,
       timestamp,
-      todos,
+      part,
     });
-  }
-  if (tool === "Agent") {
-    emitClaudeAgentToolResultSubagentPart({
-      emit,
-      isError: result.isError,
-      resultRaw: result.raw,
-      resultText: result.text,
-      session,
-      timestamp,
-      toolUseId: result.toolUseId,
-      ...(input ? { input } : {}),
-    });
+    if (todos) {
+      emit({
+        type: "session_todos_updated",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+        todos,
+      });
+    }
+    if (tool === "Agent") {
+      emitClaudeAgentToolResultSubagentPart({
+        emit,
+        isError: result.isError,
+        resultRaw: result.raw,
+        resultText: result.text,
+        session,
+        timestamp,
+        toolUseId: result.toolUseId,
+        ...(input ? { input } : {}),
+      });
+    }
   }
 };

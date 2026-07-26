@@ -683,6 +683,7 @@ describe("createClaudeAgentSdkService", () => {
     const invalidAnswers = [
       { answers: [], message: "exactly 1 answer group" },
       { answers: [[]], message: "at least one answer" },
+      { answers: [["   "]], message: "non-blank answers" },
       { answers: [["Yes", "No"]], message: "only one answer" },
     ];
 

@@ -362,10 +362,12 @@ export const handleTurnError = (
     messages: appendSessionMessage(
       {
         externalSessionId: current.externalSessionId,
-        messages: settleTerminalMessages(current, event.timestamp, {
-          outcome: "error",
-          errorMessage: message,
-        }),
+        messages: removeRunningSessionCompactionNotices(
+          settleTerminalMessages(current, event.timestamp, {
+            outcome: "error",
+            errorMessage: message,
+          }),
+        ),
       },
       buildSessionErrorNoticeMessage(event.timestamp, message),
     ),
