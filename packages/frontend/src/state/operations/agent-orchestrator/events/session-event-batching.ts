@@ -13,6 +13,7 @@ const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
   "session_context_updated",
   "session_context_error",
   "runtime_slash_commands_changed",
+  "turn_error",
   "session_error",
   "session_idle",
   "session_finished",

@@ -119,6 +119,10 @@ export const createClaudeLiveSessionState = ({
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
   const contextRevisionsByRef = new Map<string, number>();
   const retiredSessionKeys = new Set<string>();
+  const subagentOwnersByRef = new Map<
+    string,
+    { readonly messageId: string; readonly parentRefKey: string }
+  >();
 
   const readSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveSnapshot | undefined =>
     snapshotsByRef.get(refKey(ref));
@@ -159,6 +163,7 @@ export const createClaudeLiveSessionState = ({
     const key = refKey(ref);
     retiredSessionKeys.add(key);
     contextRevisionsByRef.delete(key);
+    subagentOwnersByRef.delete(key);
     if (!snapshotsByRef.delete(key)) {
       return [];
     }
@@ -241,13 +246,18 @@ export const createClaudeLiveSessionState = ({
     const ref = eventRef(session, { externalSessionId: event.part.externalSessionId });
     const current = ensureSnapshot(session, ref, event.timestamp);
     const running = event.part.status === "pending" || event.part.status === "running";
-    return commitSnapshot({
+    const changes = commitSnapshot({
       ...current,
       activity: running ? activityForPending(current) : "idle",
       title: event.part.agent ?? event.part.description ?? current.title,
       startedAt: subagentStartedAt(event.part, current.startedAt),
       parentExternalSessionId: session.externalSessionId,
     });
+    subagentOwnersByRef.set(refKey(ref), {
+      messageId: event.part.messageId,
+      parentRefKey: refKey(eventRef(session, event)),
+    });
+    return changes;
   };
 
   const applyEvent = (
@@ -323,6 +333,20 @@ export const createClaudeLiveSessionState = ({
         event: agentSessionTranscriptEventSchema.parse({ ...event, sessionRef: ref }),
       });
     }
+    if (event.type === "transcript_retracted") {
+      const messageIds = new Set(event.messageIds);
+      for (const [childRefKey, owner] of subagentOwnersByRef) {
+        if (owner.parentRefKey !== key || !messageIds.has(owner.messageId)) {
+          continue;
+        }
+        const childSnapshot = snapshotsByRef.get(childRefKey);
+        if (childSnapshot) {
+          changes.push(...removeSnapshot(childSnapshot.ref));
+        } else {
+          subagentOwnersByRef.delete(childRefKey);
+        }
+      }
+    }
     if (event.type === "session_finished") {
       changes.push(...removeSessionTree(rootRef(session)));
     }
@@ -373,6 +397,7 @@ export const createClaudeLiveSessionState = ({
       snapshotsByRef.clear();
       contextRevisionsByRef.clear();
       retiredSessionKeys.clear();
+      subagentOwnersByRef.clear();
       return refs;
     },
     reactivateSession: (ref: AgentSessionLiveRef): void => {

@@ -260,7 +260,7 @@ describe("Claude host live-session state", () => {
 
     expect(
       state.applyEvent(session, {
-        type: "session_error",
+        type: "turn_error",
         externalSessionId: "session-1",
         timestamp: "2026-07-17T10:03:05.000Z",
         message: "Claude turn failed.",
@@ -268,7 +268,7 @@ describe("Claude host live-session state", () => {
     ).toEqual([
       {
         type: "transcript_event",
-        event: expect.objectContaining({ type: "session_error" }),
+        event: expect.objectContaining({ type: "turn_error" }),
       },
     ]);
     state.applyEvent(session, {
@@ -280,6 +280,64 @@ describe("Claude host live-session state", () => {
       type: "live",
       session: { activity: "idle" },
     });
+  });
+
+  test("removes subagent snapshots owned by a retracted assistant message", () => {
+    const state = createClaudeLiveSessionState({ runtime });
+    state.retainControlSummary(summary);
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const childRef = { ...ref, externalSessionId: childExternalSessionId };
+    const retainedChildExternalSessionId = "session-1::claude-subagent::child-2";
+    const retainedChildRef = { ...ref, externalSessionId: retainedChildExternalSessionId };
+
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:03:05.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-with-subagent",
+        partId: "claude-subagent:child-1",
+        correlationKey: "child-1",
+        status: "running",
+        externalSessionId: childExternalSessionId,
+      },
+    });
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-07-17T10:03:05.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "unrelated-assistant",
+        partId: "claude-subagent:child-2",
+        correlationKey: "child-2",
+        status: "running",
+        externalSessionId: retainedChildExternalSessionId,
+      },
+    });
+    expect(state.readRetainedSnapshot(childRef)).toMatchObject({ type: "live" });
+
+    expect(
+      state.applyEvent(session, {
+        type: "transcript_retracted",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-17T10:03:06.000Z",
+        messageIds: ["assistant-with-subagent"],
+      }),
+    ).toEqual([
+      {
+        type: "transcript_event",
+        event: expect.objectContaining({
+          type: "transcript_retracted",
+          messageIds: ["assistant-with-subagent"],
+        }),
+      },
+      { type: "session_removed", ref: childRef },
+    ]);
+    expect(state.readRetainedSnapshot(ref)).toMatchObject({ type: "live" });
+    expect(state.readRetainedSnapshot(childRef)).toEqual({ type: "missing", ref: childRef });
+    expect(state.readRetainedSnapshot(retainedChildRef)).toMatchObject({ type: "live" });
   });
 
   test("removes retained session state after a terminal stream finish", () => {

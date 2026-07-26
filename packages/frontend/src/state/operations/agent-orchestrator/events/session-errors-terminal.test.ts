@@ -13,6 +13,59 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session errors and terminal state", () => {
+  test("shows a recoverable turn error and accepts the following idle event", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "turn_error",
+      externalSessionId: "session-1",
+      message: "Attachment could not be processed.",
+      timestamp: "2026-02-22T08:00:10.000Z",
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
+    expect(getLastSessionMessage(sessionsRef)).toMatchObject({
+      content: "Attachment could not be processed.",
+      meta: {
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      },
+    });
+
+    handleEvent({
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:11.000Z",
+    });
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+  });
+
   test("records session_error as an error notice and clears pending requests", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

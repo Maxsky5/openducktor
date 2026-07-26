@@ -350,6 +350,28 @@ export const handleSessionError = (
   clearTurnTracking(context);
 };
 
+export const handleTurnError = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+  event: Extract<SessionEvent, { type: "turn_error" }>,
+): void => {
+  const message = normalizeSessionErrorMessage(event.message);
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    pendingUserMessageStartedAt: undefined,
+    runtimeStatusMessage: null,
+    messages: appendSessionMessage(
+      {
+        externalSessionId: current.externalSessionId,
+        messages: settleTerminalMessages(current, event.timestamp, {
+          outcome: "error",
+          errorMessage: message,
+        }),
+      },
+      buildSessionErrorNoticeMessage(event.timestamp, message),
+    ),
+  }));
+};
+
 export const handleSessionIdle = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_idle" }>,

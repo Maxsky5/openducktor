@@ -511,6 +511,10 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
     errorDetails: z.string().optional(),
   }),
   transcriptEventSchema({
+    type: z.literal("turn_error"),
+    message: z.string(),
+  }),
+  transcriptEventSchema({
     type: z.literal("session_error"),
     message: z.string(),
   }),
@@ -536,6 +540,7 @@ export type AgentSessionTranscriptEventType =
   | "session_compacted"
   | "mcp_reconnect_started"
   | "session_status"
+  | "turn_error"
   | "session_error"
   | "session_idle"
   | "session_finished";
@@ -552,6 +557,7 @@ const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventT
   "session_compacted",
   "mcp_reconnect_started",
   "session_status",
+  "turn_error",
   "session_error",
   "session_idle",
   "session_finished",

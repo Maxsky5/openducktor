@@ -31,7 +31,7 @@ describe("handleClaudeSdkMessage failed results", () => {
     expect(session.activity).toBe("idle");
     expect(events).toEqual([
       expect.objectContaining({
-        type: "session_error",
+        type: "turn_error",
         message: "API Error: an image in the conversation could not be processed.",
       }),
       expect.objectContaining({
@@ -61,7 +61,7 @@ describe("handleClaudeSdkMessage failed results", () => {
     expect(session.activity).toBe("idle");
     expect(events).toEqual([
       expect.objectContaining({
-        type: "session_error",
+        type: "turn_error",
         message: "API Error: an image in the conversation could not be processed.",
       }),
       expect.objectContaining({
@@ -98,7 +98,7 @@ describe("handleClaudeSdkMessage failed results", () => {
     expect(session.activity).toBe("idle");
     expect(events).toEqual([
       expect.objectContaining({
-        type: "session_error",
+        type: "turn_error",
         message: "API Error: an image in the conversation could not be processed and was removed.",
       }),
       expect.objectContaining({
@@ -128,7 +128,7 @@ describe("handleClaudeSdkMessage failed results", () => {
     expect(session.activity).toBe("idle");
     expect(events).toEqual([
       expect.objectContaining({
-        type: "session_error",
+        type: "turn_error",
         message: "API Error: an image in the conversation could not be processed and was removed.",
       }),
       expect.objectContaining({

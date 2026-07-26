@@ -76,7 +76,7 @@ export const handleClaudeResultMessage = ({
         ? message.terminal_reason
         : undefined;
     emit({
-      type: "session_error",
+      type: "turn_error",
       externalSessionId: session.externalSessionId,
       timestamp,
       message:

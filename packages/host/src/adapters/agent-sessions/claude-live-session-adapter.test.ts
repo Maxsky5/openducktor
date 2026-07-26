@@ -290,22 +290,22 @@ describe("Claude host live-session adapter", () => {
       status: "idle",
     });
 
-    expect(
-      await Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
-          repoPath: "/repo",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "session-1",
-        }),
-      ),
-    ).toMatchObject({
+    const retained = await Effect.runPromise(
+      harness.adapter.readRetainedSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+    expect(retained).toMatchObject({
       type: "live",
-      session: {
-        activity: "idle",
-        parentExternalSessionId: "parent-session",
-      },
+      session: { activity: "idle" },
     });
+    if (retained.type !== "live") {
+      throw new Error("Expected retained fork snapshot.");
+    }
+    expect(retained.session.parentExternalSessionId).toBeUndefined();
   });
 
   test("publishes accepted input before draining its runtime response", async () => {

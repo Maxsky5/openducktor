@@ -63,6 +63,7 @@ import {
   handleSessionStatus,
   handleSessionTodosUpdated,
   handleTranscriptRetracted,
+  handleTurnError,
   handleUserMessage,
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
@@ -112,6 +113,9 @@ const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): 
       return;
     case "session_compacted":
       handleSessionCompacted(context, event);
+      return;
+    case "turn_error":
+      handleTurnError(context, event);
       return;
     case "session_error":
       handleSessionError(context, event);

@@ -325,12 +325,8 @@ export const createClaudeLiveSessionAdapterPreparer =
         forkSession: (input) =>
           requireClaudePolicy(input.runtimeKind, "fork-session").pipe(
             Effect.flatMap(() =>
-              runSummary(
-                "claude-live-session.fork-session",
-                () => service.forkSession(toClaudeForkInput(input), runtime.runtimeId),
-                {
-                  parentExternalSessionId: input.parentExternalSessionId,
-                },
+              runSummary("claude-live-session.fork-session", () =>
+                service.forkSession(toClaudeForkInput(input), runtime.runtimeId),
               ),
             ),
           ),
