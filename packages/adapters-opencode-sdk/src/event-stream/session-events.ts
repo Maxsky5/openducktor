@@ -9,7 +9,6 @@ import {
   parsePermissionAsked,
   parseQuestionAsked,
   parseSessionStatus,
-  readEventInfo,
   readEventProperties,
   readSessionErrorMessage,
   readTodoPayload,
@@ -25,6 +24,7 @@ import {
   readEventDirectory,
   readEventParentExternalSessionId,
   readEventSessionId,
+  readSessionLifecycleEvent,
   removePendingSubagentCorrelationKey,
 } from "./shared";
 
@@ -404,14 +404,16 @@ const handleTodoUpdatedEvent = (event: Event, runtime: EventStreamRuntime): bool
 };
 
 const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime): boolean => {
-  if (event.type !== "session.created" && event.type !== "session.updated") {
+  const lifecycleEvent = readSessionLifecycleEvent(event);
+  if (!lifecycleEvent || lifecycleEvent.type === "session.deleted") {
     return false;
   }
 
-  const properties = readEventProperties(event);
-  const info = readEventInfo(properties);
-  const childExternalSessionId = readEventSessionId(event);
-  const parentExternalSessionId = readEventParentExternalSessionId(properties);
+  const {
+    info,
+    externalSessionId: childExternalSessionId,
+    parentExternalSessionId,
+  } = lifecycleEvent;
 
   if (
     !childExternalSessionId ||

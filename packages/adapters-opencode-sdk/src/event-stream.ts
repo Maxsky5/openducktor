@@ -9,6 +9,7 @@ import {
   readEventDirectory,
   readEventParentExternalSessionId,
   readEventSessionId,
+  readSessionLifecycleEvent,
 } from "./event-stream/shared";
 import { asUnknownRecord } from "./guards";
 import type {
@@ -48,23 +49,26 @@ type LogEventInput = {
 };
 
 type RelevantSubscriberEventOptions = {
-  isKnownChildExternalSessionId?: (externalSessionId: string) => boolean;
+  resolveParentExternalSessionId?: (childExternalSessionId: string) => string | undefined;
 };
 
 type GlobalEventStream = {
   stream: AsyncIterable<GlobalEvent>;
 };
 
+type GlobalEventPayload = GlobalEvent["payload"];
+
 type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
 };
 
-const SYNC_EVENT_TYPE_BY_NAME = {
+const NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE = {
   "message.updated.1": "message.updated",
   "message.part.updated.1": "message.part.updated",
   "message.part.removed.1": "message.part.removed",
   "session.created.1": "session.created",
   "session.updated.1": "session.updated",
+  "session.deleted.1": "session.deleted",
 } as const;
 
 const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
@@ -94,32 +98,48 @@ const resolveGlobalEventStream = async (
   throw new Error("OpenCode SDK global event stream must expose a stream async iterator.");
 };
 
-const normalizeGlobalEventPayload = (payload: Event): Event => {
+const normalizeGlobalEventPayload = (payload: GlobalEventPayload): Event => {
   const payloadRecord = asUnknownRecord(payload);
   if (payloadRecord?.type !== "sync") {
-    return payload;
+    return payload as Event;
   }
 
-  const name = payloadRecord.name;
-  if (typeof name !== "string") {
-    return payload;
+  const syncEvent = asUnknownRecord(payloadRecord.syncEvent);
+  if (!syncEvent) {
+    throw new Error(
+      "OpenCode sync event is missing its syncEvent envelope; update the runtime or adapter to a supported event contract.",
+    );
+  }
+  const syncEventType = syncEvent.type;
+  if (typeof syncEventType !== "string") {
+    throw new Error(
+      "OpenCode sync event is missing syncEvent.type; update the runtime or adapter to a supported event contract.",
+    );
   }
 
-  const eventType = SYNC_EVENT_TYPE_BY_NAME[name as keyof typeof SYNC_EVENT_TYPE_BY_NAME];
-  const data = asUnknownRecord(payloadRecord.data);
-  if (!eventType || !data) {
-    return payload;
+  const eventType =
+    NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[
+      syncEventType as keyof typeof NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE
+    ];
+  if (!eventType) {
+    return payload as unknown as Event;
+  }
+  const data = asUnknownRecord(syncEvent.data);
+  if (!data) {
+    throw new Error(
+      `OpenCode ${syncEventType} event is missing object syncEvent.data; update the runtime or adapter to a supported event contract.`,
+    );
   }
 
   return {
-    ...payloadRecord,
+    ...(typeof syncEvent.id === "string" ? { id: syncEvent.id } : {}),
     type: eventType,
     properties: data,
   } as unknown as Event;
 };
 
 const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
-  const payload = normalizeGlobalEventPayload(event.payload as Event) as Event & {
+  const payload = normalizeGlobalEventPayload(event.payload) as Event & {
     properties?: Record<string, unknown>;
   };
   return {
@@ -235,18 +255,19 @@ export const isRelevantSubscriberEvent = (
     return true;
   }
 
-  const eventExternalSessionId = readEventSessionId(event);
+  const lifecycleEvent = readSessionLifecycleEvent(event);
+  const eventExternalSessionId = lifecycleEvent
+    ? lifecycleEvent.externalSessionId
+    : readEventSessionId(event);
   if (eventExternalSessionId) {
-    const eventType = String(event.type);
+    const eventType = lifecycleEvent?.type ?? String(event.type);
     const properties = "properties" in event ? event.properties : undefined;
-    const parentExternalSessionId = readEventParentExternalSessionId(properties);
+    const parentExternalSessionId = lifecycleEvent
+      ? lifecycleEvent.parentExternalSessionId
+      : readEventParentExternalSessionId(properties);
 
-    if (eventType === "question.asked" && parentExternalSessionId) {
+    if (parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;
-    }
-
-    if (parentExternalSessionId === subscriber.externalSessionId) {
-      return true;
     }
 
     if (
@@ -255,7 +276,8 @@ export const isRelevantSubscriberEvent = (
         eventType === "permission.replied" ||
         eventType === "question.asked" ||
         eventType === "question.replied") &&
-      options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
+      options?.resolveParentExternalSessionId?.(eventExternalSessionId) ===
+        subscriber.externalSessionId
     ) {
       return true;
     }

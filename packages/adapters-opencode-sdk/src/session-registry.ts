@@ -1,7 +1,6 @@
-import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
+import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
-import { unwrapData } from "./data-utils";
 import {
   assertGlobalEventSupport,
   isRelevantSubscriberEvent,
@@ -10,14 +9,12 @@ import {
   subscribeGlobalEvents,
 } from "./event-stream";
 import {
-  readEventDirectory,
   readEventParentExternalSessionId,
-  readEventSessionId,
+  readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
 import type {
   ClientFactory,
-  EventStreamSubscriber,
   OpencodeEventLogger,
   RuntimeEventTransportRecord,
   SessionInput,
@@ -67,111 +64,54 @@ const resolveSubagentSessionLink = (
   return matches.length === 1 ? matches[0] : undefined;
 };
 
-const PARENT_CHILD_LOOKUP_EVENT_TYPES = new Set([
-  "session.created",
-  "session.updated",
-  "permission.asked",
-  "permission.v2.asked",
-  "permission.replied",
-  "question.asked",
-  "question.replied",
-]);
-
-const shouldResolveParentlessChildEvent = (
-  subscriber: EventStreamSubscriber,
+const processRuntimeSessionLineage = (
+  eventTransport: RuntimeEventTransportRecord,
   event: Event,
-): string | null => {
-  if (!PARENT_CHILD_LOOKUP_EVENT_TYPES.has(event.type)) {
-    return null;
+): void => {
+  const lifecycleEvent = readSessionLifecycleEvent(event);
+  if (!lifecycleEvent) {
+    return;
   }
 
-  const childExternalSessionId = readEventSessionId(event);
-  if (
-    !childExternalSessionId ||
-    childExternalSessionId === subscriber.externalSessionId ||
-    readEventParentExternalSessionId("properties" in event ? event.properties : undefined)
-  ) {
-    return null;
-  }
-
-  const eventDirectory = readEventDirectory(event);
-  if (eventDirectory && eventDirectory !== subscriber.input.workingDirectory) {
-    return null;
-  }
-
-  return childExternalSessionId;
-};
-
-const listChildSessions = async (
-  client: OpencodeClient,
-  subscriber: EventStreamSubscriber,
-): Promise<Session[]> => {
-  const childrenApi = (client as OpencodeClient & { session?: { children?: unknown } }).session
-    ?.children;
-  if (typeof childrenApi !== "function") {
+  const {
+    type: eventType,
+    properties,
+    info,
+    externalSessionId: childExternalSessionId,
+    parentExternalSessionId,
+  } = lifecycleEvent;
+  if (!childExternalSessionId || !info) {
     throw new Error(
-      "OpenCode SDK does not expose session.children(); cannot resolve parentless child session events.",
+      `OpenCode ${eventType} event is missing its session id or info payload; update the runtime or adapter to a supported event contract.`,
     );
   }
 
-  const response = await client.session.children({
-    directory: subscriber.input.workingDirectory,
-    sessionID: subscriber.externalSessionId,
-  });
-  return unwrapData(response, `list child sessions for ${subscriber.externalSessionId}`);
-};
+  if (!parentExternalSessionId) {
+    const hasNonAuthoritativeParent = Boolean(readEventParentExternalSessionId(properties));
+    const isConfirmedChild =
+      eventTransport.parentExternalSessionIdByChildExternalSessionId.has(childExternalSessionId);
+    if (!hasNonAuthoritativeParent && !isConfirmedChild) {
+      return;
+    }
+    throw new Error(
+      `OpenCode ${eventType} event for child session '${childExternalSessionId}' is missing authoritative info.parentID lineage; update the runtime or adapter to a supported event contract.`,
+    );
+  }
 
-const hasConfirmedChildSession = (
-  children: Session[],
-  subscriber: EventStreamSubscriber,
-  childExternalSessionId: string,
-): boolean => {
-  return children.some(
-    (child) =>
-      child.id === childExternalSessionId &&
-      readEventParentExternalSessionId(child) === subscriber.externalSessionId,
+  if (eventType === "session.deleted") {
+    eventTransport.parentExternalSessionIdByChildExternalSessionId.delete(childExternalSessionId);
+    return;
+  }
+
+  eventTransport.parentExternalSessionIdByChildExternalSessionId.set(
+    childExternalSessionId,
+    parentExternalSessionId,
   );
 };
 
-const withParentExternalSessionId = (event: Event, parentExternalSessionId: string): Event => {
-  const properties =
-    "properties" in event && event.properties && typeof event.properties === "object"
-      ? (event.properties as Record<string, unknown>)
-      : {};
-  const info =
-    properties.info && typeof properties.info === "object"
-      ? (properties.info as Record<string, unknown>)
-      : {};
-
-  return {
-    ...event,
-    properties: {
-      ...properties,
-      parentID: parentExternalSessionId,
-      info: {
-        ...info,
-        parentID: parentExternalSessionId,
-      },
-    },
-  } as Event;
-};
-
-const resolveParentlessChildEvent = async (input: {
-  client: OpencodeClient;
-  subscriber: EventStreamSubscriber;
-  event: Event;
-}): Promise<Event | null> => {
-  const childExternalSessionId = shouldResolveParentlessChildEvent(input.subscriber, input.event);
-  if (!childExternalSessionId) {
-    return null;
-  }
-
-  const children = await listChildSessions(input.client, input.subscriber);
-  if (!hasConfirmedChildSession(children, input.subscriber, childExternalSessionId)) {
-    return null;
-  }
-
-  return withParentExternalSessionId(input.event, input.subscriber.externalSessionId);
+const abortRuntimeEventTransport = (eventTransport: RuntimeEventTransportRecord): void => {
+  eventTransport.parentExternalSessionIdByChildExternalSessionId.clear();
+  eventTransport.controller.abort();
 };
 
 const ensureRuntimeEventTransport = (input: {
@@ -211,29 +151,14 @@ const ensureRuntimeEventTransport = (input: {
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
     dispatch: async (event) => {
+      processRuntimeSessionLineage(streamRecord, event);
       for (const subscriber of streamRecord.subscribers.values()) {
-        let eventForSubscriber = event;
-        let relevant = isRelevantSubscriberEvent(subscriber, event, {
-          isKnownChildExternalSessionId: (externalSessionId) => {
-            const session = input.sessions.get(subscriber.externalSessionId);
-            return (
-              (session?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ??
-                false) ||
-              (session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId) ?? false)
-            );
-          },
+        const relevant = isRelevantSubscriberEvent(subscriber, event, {
+          resolveParentExternalSessionId: (childExternalSessionId) =>
+            streamRecord.parentExternalSessionIdByChildExternalSessionId.get(
+              childExternalSessionId,
+            ),
         });
-        if (!relevant) {
-          const parentLinkedEvent = await resolveParentlessChildEvent({
-            client: streamClient,
-            subscriber,
-            event,
-          });
-          if (parentLinkedEvent) {
-            eventForSubscriber = parentLinkedEvent;
-            relevant = true;
-          }
-        }
         logStreamEvent({
           subscriber,
           event,
@@ -248,7 +173,7 @@ const ensureRuntimeEventTransport = (input: {
             externalSessionId: subscriber.externalSessionId,
             input: subscriber.input,
           },
-          event: eventForSubscriber,
+          event,
           now: input.now,
           emit: input.emit,
           getSession: (sessionId) => input.sessions.get(sessionId),
@@ -262,6 +187,7 @@ const ensureRuntimeEventTransport = (input: {
     subscribers: new Map(),
     observers: new Set(),
     terminalObservers: new Set(),
+    parentExternalSessionIdByChildExternalSessionId: new Map(),
   };
   streamRecord.streamDone = subscribeGlobalEvents({
     client: streamClient,
@@ -301,6 +227,7 @@ const ensureRuntimeEventTransport = (input: {
       }
     })
     .finally(() => {
+      streamRecord.parentExternalSessionIdByChildExternalSessionId.clear();
       if (input.runtimeEventTransports.get(input.runtimeId) === streamRecord) {
         input.runtimeEventTransports.delete(input.runtimeId);
       }
@@ -320,7 +247,7 @@ const releaseRuntimeEventTransportIfUnused = async (
   ) {
     return;
   }
-  eventTransport.controller.abort();
+  abortRuntimeEventTransport(eventTransport);
   await eventTransport.streamDone.catch(() => undefined);
 };
 
@@ -383,7 +310,7 @@ export const observeRuntimeEvents = async (input: {
         if (input.runtimeEventTransports.get(input.runtimeId) === eventTransport) {
           input.runtimeEventTransports.delete(input.runtimeId);
         }
-        eventTransport.controller.abort();
+        abortRuntimeEventTransport(eventTransport);
       }
     },
   };

@@ -1,6 +1,6 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
-import { asUnknownRecord, readRecordProp, readStringProp } from "../guards";
+import { asUnknownRecord, readRecordProp, readStringProp, type UnknownRecord } from "../guards";
 import {
   clearAwaitingRuntimeTurnStart,
   isAwaitingRuntimeTurnStart,
@@ -9,7 +9,7 @@ import {
   markStreamTurnIdle,
 } from "../session-activity";
 import type { SessionInput, SessionRecord } from "../types";
-import { readEventProperties } from "./schemas";
+import { readEventInfo, readEventProperties } from "./schemas";
 
 export type PendingPartDelta = {
   field: string;
@@ -34,6 +34,14 @@ export type PendingBackgroundTaskResult = {
 export type PendingSubagentSessionBinding = {
   createdAtMs?: number;
   arrivalOrder: number;
+};
+
+type SessionLifecycleEvent = {
+  type: "session.created" | "session.updated" | "session.deleted";
+  properties: UnknownRecord | undefined;
+  info: UnknownRecord | undefined;
+  externalSessionId: string | undefined;
+  parentExternalSessionId: string | undefined;
 };
 
 export type EventStreamContext = {
@@ -95,6 +103,19 @@ export const readEventParentExternalSessionId = (properties: unknown): string | 
     readParentExternalSessionIdFromRecord(readRecordProp(properties, "info")) ??
     readParentExternalSessionIdFromRecord(properties)
   );
+};
+
+const readLifecycleParentExternalSessionId = (info: unknown): string | undefined => {
+  const parentExternalSessionId = readStringProp(info, ["parentID"]);
+  if (parentExternalSessionId?.trim()) {
+    return parentExternalSessionId;
+  }
+  if (typeof asUnknownRecord(info)?.parentID === "string") {
+    throw new Error(
+      "OpenCode session lifecycle event has malformed info.parentID lineage; expected a non-blank string.",
+    );
+  }
+  return undefined;
 };
 
 export const flushPendingSubagentInputEventsForSession = (
@@ -303,6 +324,27 @@ export const readEventSessionId = (event: Event): string | undefined => {
   }
 
   return undefined;
+};
+
+export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent | undefined => {
+  const eventType = String(event.type);
+  if (
+    eventType !== "session.created" &&
+    eventType !== "session.updated" &&
+    eventType !== "session.deleted"
+  ) {
+    return undefined;
+  }
+
+  const properties = readEventProperties(event);
+  const info = readEventInfo(properties);
+  return {
+    type: eventType,
+    properties,
+    info,
+    externalSessionId: readEventSessionId(event),
+    parentExternalSessionId: readLifecycleParentExternalSessionId(info),
+  };
 };
 
 export const readEventDirectory = (event: Event): string | undefined => {
