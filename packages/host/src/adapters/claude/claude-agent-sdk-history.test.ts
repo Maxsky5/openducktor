@@ -201,15 +201,26 @@ describe("claude-agent-sdk-history", () => {
     expect(history).toEqual([]);
   });
 
-  test("reuses live accepted user ids when hydrating matching Claude user turns", () => {
+  test("matches repeated user text to the live turn with the same timestamp", () => {
     const history = toClaudeHistoryMessages(
       [
+        toSessionMessage({
+          type: "user",
+          uuid: "older-user",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:13.804Z",
+          message: {
+            role: "user",
+            content: "Start with the task.",
+          },
+        }),
         toSessionMessage({
           type: "user",
           uuid: "sdk-user-1",
           session_id: "session-1",
           parent_tool_use_id: null,
-          timestamp: "2026-06-26T11:03:13.804Z",
+          timestamp: "2026-06-26T11:04:13.804Z",
           message: {
             role: "user",
             content: "Start with the task.",
@@ -221,19 +232,40 @@ describe("claude-agent-sdk-history", () => {
         {
           messageId: "live-user-1",
           text: "Start with the task.",
+          timestamp: "2026-06-26T11:04:13.804Z",
         },
       ],
     );
 
-    expect(history[0]?.messageId).toBe("live-user-1");
+    expect(history.map((message) => message.messageId)).toEqual(["older-user", "live-user-1"]);
   });
 
-  test("hydrates Claude user attachment blocks as display parts", () => {
+  test("matches attachment-only turns by their live UUID instead of empty text", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
           type: "user",
-          uuid: "user-image-1",
+          uuid: "older-image",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:02:13.804Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/png",
+                  data: "older-base64-data",
+                },
+              },
+            ],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "live-image",
           session_id: "session-1",
           parent_tool_use_id: null,
           timestamp: "2026-06-26T11:03:13.804Z",
@@ -253,19 +285,27 @@ describe("claude-agent-sdk-history", () => {
         }),
       ],
       () => "2026-06-26T12:00:00.000Z",
+      [
+        {
+          messageId: "live-image",
+          text: "",
+          timestamp: "2026-06-26T11:03:13.804Z",
+        },
+      ],
     );
 
-    expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({
-      messageId: "user-image-1",
+    expect(history).toHaveLength(2);
+    expect(history.map((message) => message.messageId)).toEqual(["older-image", "live-image"]);
+    expect(history[1]).toMatchObject({
+      messageId: "live-image",
       role: "user",
       text: "",
       displayParts: [
         {
           kind: "attachment",
           attachment: {
-            id: "user-image-1:attachment:0",
-            path: "claude-history://attachment/user-image-1/0",
+            id: "live-image:attachment:0",
+            path: "claude-history://attachment/live-image/0",
             name: "Claude image attachment.png",
             kind: "image",
             mime: "image/png",

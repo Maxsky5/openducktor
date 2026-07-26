@@ -12,6 +12,7 @@ import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-uti
 export type ClaudeLiveUserMessage = {
   messageId: string;
   text: string;
+  timestamp: string;
 };
 
 type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "assistant" }>;
@@ -214,19 +215,31 @@ export const createLiveUserMessageIdResolver = (
   liveUserMessages: readonly ClaudeLiveUserMessage[],
 ) => {
   const consumedIndexes = new Set<number>();
-  return (fallbackMessageId: string, text: string): string => {
+  const findUnconsumedIndex = (predicate: (message: ClaudeLiveUserMessage) => boolean): number => {
     for (let index = 0; index < liveUserMessages.length; index += 1) {
       if (consumedIndexes.has(index)) {
         continue;
       }
       const liveUserMessage = liveUserMessages[index];
-      if (!liveUserMessage || liveUserMessage.text !== text) {
-        continue;
+      if (liveUserMessage && predicate(liveUserMessage)) {
+        return index;
       }
-      consumedIndexes.add(index);
-      return liveUserMessage.messageId;
     }
-    return fallbackMessageId;
+    return -1;
+  };
+  return (fallbackMessageId: string, text: string, timestamp: string): string => {
+    let matchingIndex = findUnconsumedIndex((message) => message.messageId === fallbackMessageId);
+    if (matchingIndex < 0) {
+      matchingIndex = findUnconsumedIndex(
+        (message) => message.text === text && message.timestamp === timestamp,
+      );
+    }
+    const liveUserMessage = liveUserMessages[matchingIndex];
+    if (matchingIndex < 0 || !liveUserMessage) {
+      return fallbackMessageId;
+    }
+    consumedIndexes.add(matchingIndex);
+    return liveUserMessage.messageId;
   };
 };
 

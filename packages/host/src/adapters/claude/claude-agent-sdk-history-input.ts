@@ -54,7 +54,7 @@ export const createClaudeHistoryInputProjector = (options: {
       return undefined;
     }
     return {
-      messageId: resolveLiveUserMessageId(input.fallbackMessageId, input.text),
+      messageId: resolveLiveUserMessageId(input.fallbackMessageId, input.text, input.timestamp),
       role: "user",
       timestamp: input.timestamp,
       text: input.text,

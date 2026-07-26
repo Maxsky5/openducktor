@@ -18,6 +18,14 @@ describe("Claude local slash commands", () => {
     const hydrated = toClaudeHistoryMessages(
       claudeHistoryMessageFixtures([
         {
+          type: "user",
+          uuid: "older-context-command",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-25T19:00:00.000Z",
+          message: { role: "user", content: "/context" },
+        },
+        {
           type: "queue-operation",
           operation: "enqueue",
           timestamp,
@@ -90,11 +98,21 @@ describe("Claude local slash commands", () => {
         {
           messageId: "accepted-context-command",
           text: "/context",
+          timestamp,
         },
       ],
     );
 
     expect(hydrated).toEqual([
+      {
+        messageId: "older-context-command",
+        role: "user",
+        timestamp: "2026-06-25T19:00:00.000Z",
+        text: "/context",
+        displayParts: [{ kind: "text", text: "/context" }],
+        state: "read",
+        parts: [],
+      },
       {
         messageId: "accepted-context-command",
         role: "user",
