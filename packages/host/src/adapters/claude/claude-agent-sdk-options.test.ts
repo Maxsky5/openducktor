@@ -88,6 +88,7 @@ const createServiceInput = (events?: {
     GITHUB_TOKEN: "secret",
     HOME: "/Users/openducktor-test",
     ODT_HOST_TOKEN: "host-control-secret",
+    ODT_HOST_TOKEN_FILE: "/tmp/inherited-host-token",
     OPENDUCKTOR_APP_TOKEN: "app-control-secret",
     PATH: "/usr/bin",
     VITE_ODT_BROWSER_AUTH_TOKEN: "browser-control-secret",
@@ -214,6 +215,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       HOME: "/Users/openducktor-test",
     });
     expect(options.env).not.toHaveProperty("ODT_HOST_TOKEN");
+    expect(options.env).not.toHaveProperty("ODT_HOST_TOKEN_FILE");
     expect(options.env).not.toHaveProperty("OPENDUCKTOR_APP_TOKEN");
     expect(options.env).not.toHaveProperty("VITE_ODT_BROWSER_AUTH_TOKEN");
     expect(options.pathToClaudeCodeExecutable).toBe(process.execPath);
