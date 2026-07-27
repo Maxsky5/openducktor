@@ -27,7 +27,7 @@
     "@openducktor/host-client": "workspace:*",
     "@openducktor/path-support": "workspace:*",
     "@pierre/diffs": "^1.2.12",
-    "@pierre/trees": "1.0.0-beta.5",
+    "@pierre/trees": "1.0.0-beta.6",
     "@radix-ui/react-collapsible": "^1.1.17",
     "@radix-ui/react-dialog": "^1.1.20",
     "@radix-ui/react-dismissable-layer": "^1.1.11",
