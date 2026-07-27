@@ -1,3 +1,4 @@
+import { pathStartsWith, toProjectRelativePath } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -22,35 +23,36 @@ const managedWorktreeBasePath = (settingsConfig: SettingsConfigPort, canonicalRe
       ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
       : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId),
   );
-const resolveForcedFilesystemCleanup = (
+const resolveFilesystemCleanup = (
   { settingsConfig, worktreeFiles }: RemoveWorktreeAndFilesystemPathDependencies,
   input: Pick<
     RemoveWorktreeAndFilesystemPathInput,
     "managedWorktreeBasePath" | "missingOutsideManagedRootPathPolicy" | "repoPath"
   >,
   effectiveWorktreePath: string,
-  cause: unknown,
+  cause?: unknown,
 ) =>
   Effect.gen(function* () {
     const managedBase =
       input.managedWorktreeBasePath ??
       (yield* managedWorktreeBasePath(settingsConfig, input.repoPath));
-    const insideManagedBase = yield* worktreeFiles.pathIsWithinRoot(
-      managedBase,
-      effectiveWorktreePath,
-    );
+    const targetExists = yield* settingsConfig.pathExists(effectiveWorktreePath);
+    const insideManagedBase = targetExists
+      ? yield* worktreeFiles.pathIsWithinRoot(managedBase, effectiveWorktreePath)
+      : pathStartsWith(effectiveWorktreePath, managedBase);
     if (insideManagedBase) {
-      return "cleanup-filesystem-path" as const;
+      return {
+        kind: "cleanup-filesystem-path" as const,
+        managedBase,
+        targetExists,
+      };
     }
-    if (
-      input.missingOutsideManagedRootPathPolicy === "skip" &&
-      !(yield* settingsConfig.pathExists(effectiveWorktreePath))
-    ) {
-      return "skip-filesystem-cleanup" as const;
+    if (input.missingOutsideManagedRootPathPolicy === "skip" && !targetExists) {
+      return { kind: "skip-filesystem-cleanup" as const };
     }
     return yield* Effect.fail(
       new HostValidationError({
-        message: `Refusing forced worktree cleanup outside managed roots for ${effectiveWorktreePath}`,
+        message: `Refusing worktree cleanup outside managed roots for ${effectiveWorktreePath}`,
         cause,
       }),
     );
@@ -60,7 +62,7 @@ export const removeWorktreeAndFilesystemPath = (
   input: RemoveWorktreeAndFilesystemPathInput,
 ) =>
   Effect.gen(function* () {
-    const { gitPort, worktreeFiles } = dependencies;
+    const { gitPort, settingsConfig, worktreeFiles } = dependencies;
     const { repoPath, worktreePath, force } = input;
     const effectiveWorktreePath = worktreeFiles.resolveWorktreePath(repoPath, worktreePath);
     if (yield* worktreeFiles.pathIsWithinRoot(effectiveWorktreePath, repoPath)) {
@@ -73,29 +75,43 @@ export const removeWorktreeAndFilesystemPath = (
     const removalResult = yield* Effect.either(
       gitPort.removeWorktree(repoPath, worktreePath, force),
     );
-    if (removalResult._tag === "Left") {
-      if (!force) {
-        return yield* Effect.fail(removalResult.left);
-      }
-      const forcedFilesystemCleanup = yield* Effect.either(
-        resolveForcedFilesystemCleanup(
-          dependencies,
-          input,
-          effectiveWorktreePath,
-          removalResult.left,
-        ),
-      );
-      if (forcedFilesystemCleanup._tag === "Left") {
+    if (removalResult._tag === "Left" && !force) {
+      return yield* Effect.fail(removalResult.left);
+    }
+    const filesystemCleanup = yield* Effect.either(
+      resolveFilesystemCleanup(
+        dependencies,
+        input,
+        effectiveWorktreePath,
+        removalResult._tag === "Left" ? removalResult.left : undefined,
+      ),
+    );
+    if (filesystemCleanup._tag === "Left") {
+      if (removalResult._tag === "Left") {
         const registered = yield* gitPort.isRegisteredWorktree(repoPath, effectiveWorktreePath);
         if (registered) {
           return yield* Effect.fail(removalResult.left);
         }
-        return yield* Effect.fail(forcedFilesystemCleanup.left);
       }
-      if (forcedFilesystemCleanup.right === "skip-filesystem-cleanup") {
-        return;
-      }
-      const canonicalWorktreePath = yield* gitPort.canonicalizePath(effectiveWorktreePath);
+      return yield* Effect.fail(filesystemCleanup.left);
+    }
+    if (filesystemCleanup.right.kind === "skip-filesystem-cleanup") {
+      return;
+    }
+    if (removalResult._tag === "Left") {
+      const { managedBase, targetExists } = filesystemCleanup.right;
+      const canonicalWorktreePath = targetExists
+        ? yield* gitPort.canonicalizePath(effectiveWorktreePath)
+        : yield* gitPort
+            .canonicalizePath(managedBase)
+            .pipe(
+              Effect.map((canonicalManagedBase) =>
+                settingsConfig.join(
+                  canonicalManagedBase,
+                  toProjectRelativePath(effectiveWorktreePath, managedBase),
+                ),
+              ),
+            );
       const registered = yield* gitPort.isRegisteredWorktree(repoPath, canonicalWorktreePath);
       if (registered) {
         return yield* Effect.fail(removalResult.left);

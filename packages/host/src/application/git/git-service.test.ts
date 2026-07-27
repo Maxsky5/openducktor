@@ -1135,6 +1135,29 @@ describe("createGitService", () => {
       "removePathIfPresent:/managed/repo/task-1",
     ]);
   });
+  test("refuses filesystem cleanup outside managed roots after Git removes the worktree", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+      }),
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: "/outside/recreated-data",
+          force: true,
+        }),
+      ),
+    ).rejects.toThrow("outside managed roots");
+    expect(calls).toEqual(["removeWorktree:/canonical/repo|/outside/recreated-data|true"]);
+  });
   test("fails remove worktree through the Effect channel when settings config is missing", async () => {
     const calls: string[] = [];
     const service = createGitService({
@@ -1267,19 +1290,35 @@ describe("createGitService", () => {
       `isRegisteredWorktree:/canonical/repo|${canonicalWorktreePath}`,
     ]);
   });
-  test("does not clean managed residue when its canonical identity cannot be resolved", async () => {
+  test("inspects Git registration and completes cleanup when the managed leaf is missing", async () => {
     const calls: string[] = [];
     const configuredWorktreePath = "/managed/repo/task-1";
+    const canonicalWorktreePath = "/real/worktrees/task-1";
+    const baseGitPort = createFakeGitPort({
+      canonicalPaths: {
+        "/repo": "/canonical/repo",
+        "/managed/repo": "/real/worktrees",
+      },
+      gitRepositories: ["/canonical/repo"],
+      calls,
+      removeWorktreeErrors: {
+        [`/canonical/repo|${configuredWorktreePath}|true`]: new Error("worktree removal race"),
+      },
+    });
     const service = createGitService({
-      gitPort: createFakeGitPort({
-        canonicalPaths: { "/repo": "/canonical/repo" },
-        gitRepositories: ["/canonical/repo"],
-        calls,
-        removeWorktreeErrors: {
-          [`/canonical/repo|${configuredWorktreePath}|true`]: new Error("worktree removal race"),
+      gitPort: {
+        ...baseGitPort,
+        isRegisteredWorktree(repoPath, worktreePath) {
+          return Effect.sync(() => {
+            calls.push(`isRegisteredWorktree:${repoPath}|${worktreePath}`);
+            return false;
+          });
         },
-      }),
-      settingsConfig: createFakeSettingsConfig(createConfig()),
+      },
+      settingsConfig: createFakeSettingsConfig(
+        createConfig(),
+        new Set(["/canonical/repo", "/managed/repo"]),
+      ),
       worktreeFiles: createFakeWorktreeFiles(calls),
     });
 
@@ -1291,8 +1330,12 @@ describe("createGitService", () => {
           force: true,
         }),
       ),
-    ).rejects.toThrow(`missing path fixture: ${configuredWorktreePath}`);
-    expect(calls).toEqual([`removeWorktree:/canonical/repo|${configuredWorktreePath}|true`]);
+    ).resolves.toEqual({ ok: true });
+    expect(calls).toEqual([
+      `removeWorktree:/canonical/repo|${configuredWorktreePath}|true`,
+      `isRegisteredWorktree:/canonical/repo|${canonicalWorktreePath}`,
+      `removePathIfPresent:${configuredWorktreePath}`,
+    ]);
   });
   test("keeps the final filesystem cleanup error after Git unregisters the worktree", async () => {
     const calls: string[] = [];
