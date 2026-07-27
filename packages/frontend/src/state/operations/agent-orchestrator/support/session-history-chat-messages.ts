@@ -181,8 +181,18 @@ export const historyToChatMessages = (
 
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
+    let primaryMessageInsertionIndex: number | undefined;
 
     for (const part of message.parts as SessionHistoryPart[]) {
+      if (
+        message.role === "assistant" &&
+        part.kind === "text" &&
+        !part.synthetic &&
+        part.text.trim().length > 0 &&
+        primaryMessageInsertionIndex === undefined
+      ) {
+        primaryMessageInsertionIndex = next.length;
+      }
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
         if (isSubagentMessage(partMessage)) {
@@ -261,14 +271,19 @@ export const historyToChatMessages = (
         }
       }
 
-      next.push({
+      const primaryMessage: AgentChatMessage = {
         id: message.messageId,
         role: message.role,
         content,
         timestamp: message.timestamp,
         ...(message.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
         ...(meta ? { meta } : {}),
-      });
+      };
+      if (primaryMessageInsertionIndex === undefined) {
+        next.push(primaryMessage);
+      } else {
+        next.splice(primaryMessageInsertionIndex, 0, primaryMessage);
+      }
     }
 
     if (message.role === "user" && (content.length > 0 || userDisplayParts.length > 0)) {

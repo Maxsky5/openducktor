@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   createSessionMessagesFixture,
   findSessionMessageForTest,
@@ -306,6 +307,41 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
         text: "Please implement this",
       },
     ]);
+  });
+
+  test("preserves assistant text ordering around hydrated tools", () => {
+    const textPart = {
+      kind: "text",
+      messageId: "m-assistant",
+      partId: "p-text",
+      text: "I will inspect the task.",
+      completed: true,
+    } satisfies AgentSessionHistoryMessage["parts"][number];
+    const toolPart = {
+      kind: "tool",
+      messageId: "m-assistant",
+      partId: "p-tool",
+      callId: "call-1",
+      tool: "read",
+      toolType: "read",
+      status: "completed",
+    } satisfies AgentSessionHistoryMessage["parts"][number];
+    const projectRoles = (parts: AgentSessionHistoryMessage["parts"]): AgentChatMessage["role"][] =>
+      historyToChatMessages(
+        [
+          {
+            messageId: "m-assistant",
+            role: "assistant",
+            timestamp: "2026-02-22T08:00:02.000Z",
+            text: "I will inspect the task.",
+            parts,
+          },
+        ],
+        { role: "build" },
+      ).map((message) => message.role);
+
+    expect(projectRoles([textPart, toolPart])).toEqual(["assistant", "tool"]);
+    expect(projectRoles([toolPart, textPart])).toEqual(["tool", "assistant"]);
   });
 
   test("uses part ids for history-loaded tool messages without call ids", () => {
