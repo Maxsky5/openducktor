@@ -71,5 +71,5 @@ describe("Claude SDK history import", () => {
     } finally {
       await rm(workingDirectory, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 });

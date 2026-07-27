@@ -144,15 +144,13 @@ const buildSourceSelectionDraft = ({
     };
   }
 
+  const sourceModel = {
+    ...sourceSelection.selectedModel,
+    runtimeKind,
+  };
   return {
     runtimeKind,
-    selection: coerceVisibleSelectionToCatalog(catalog, {
-      ...sourceSelection.selectedModel,
-      runtimeKind,
-    }) ?? {
-      ...sourceSelection.selectedModel,
-      runtimeKind,
-    },
+    selection: catalog ? coerceVisibleSelectionToCatalog(catalog, sourceModel) : sourceModel,
   };
 };
 

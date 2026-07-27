@@ -2,6 +2,7 @@ import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import { isRecord } from "./claude-agent-sdk-utils";
 
 type ToolStreamEntry = {
+  blockIndex: number;
   partialInputJson: string;
   toolUse: ClaudeDecodedToolUse;
   lastEmittedInputFingerprint?: string;
@@ -50,6 +51,7 @@ export const rememberClaudeStreamToolStart = (
   toolUse: ClaudeDecodedToolUse,
 ): void => {
   const entry: ToolStreamEntry = {
+    blockIndex,
     partialInputJson: "",
     toolUse,
     ...(toolUse.input ? { lastEmittedInputFingerprint: toolInputFingerprint(toolUse.input) } : {}),
@@ -88,11 +90,17 @@ export const appendClaudeStreamToolInputJson = (
   return entry.toolUse;
 };
 
-export const hasClaudeStreamEmittedToolInput = (
+export const consumeClaudeStreamEmittedToolInput = (
   session: object,
   callId: string,
   input: Record<string, unknown>,
 ): boolean => {
-  const entry = toolStreamStateFor(session).toolsByCallId.get(callId);
-  return entry?.lastEmittedInputFingerprint === toolInputFingerprint(input);
+  const state = toolStreamStateFor(session);
+  const entry = state.toolsByCallId.get(callId);
+  if (!entry) {
+    return false;
+  }
+  state.toolsByCallId.delete(callId);
+  state.toolsByBlockIndex.delete(entry.blockIndex);
+  return entry.lastEmittedInputFingerprint === toolInputFingerprint(input);
 };

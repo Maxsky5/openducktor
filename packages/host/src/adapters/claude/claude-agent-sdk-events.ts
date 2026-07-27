@@ -24,7 +24,7 @@ import {
 } from "./claude-agent-sdk-stream-events";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
-import { hasClaudeStreamEmittedToolInput } from "./claude-agent-sdk-tool-input-stream";
+import { consumeClaudeStreamEmittedToolInput } from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
 import {
   decodeClaudeToolUseBlock,
@@ -274,7 +274,7 @@ const handleAssistantMessage = ({
       if (toolUse) {
         if (
           toolUse.input &&
-          hasClaudeStreamEmittedToolInput(session, toolUse.callId, toolUse.input)
+          consumeClaudeStreamEmittedToolInput(session, toolUse.callId, toolUse.input)
         ) {
           continue;
         }

@@ -1767,6 +1767,68 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("revalidates a fork source model when its catalog loads", async () => {
+    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const loadCatalog = mock(async () => catalogDeferred.promise);
+    const props = createBaseProps({ loadCatalog });
+    delete props.initialCatalog;
+    const harness = createHookHarness(props);
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-10-STALE-FORK-MODEL",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        initialStartMode: "fork",
+        existingSessionOptions: [
+          {
+            value: "session-with-stale-model",
+            sourceSession: {
+              externalSessionId: "session-with-stale-model",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
+            label: "Builder session with stale model",
+            description: "Session whose model is no longer available",
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "retired-model",
+              variant: "legacy",
+            },
+          },
+        ],
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "retired-model",
+      variant: "legacy",
+    });
+
+    await harness.run(() => {
+      catalogDeferred.resolve(CATALOG);
+    });
+    await harness.waitFor((state) => state.selection?.modelId === "claude-sonnet");
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+      variant: "default",
+      profileId: "build-agent",
+    });
+
+    await harness.unmount();
+  });
+
   test("normalizes a stale source session id back to the first valid option in reuse mode", async () => {
     const harness = createHookHarness(createBaseProps());
 
