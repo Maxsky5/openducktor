@@ -73,25 +73,33 @@ export const removeWorktreeAndFilesystemPath = (
     const removalResult = yield* Effect.either(
       gitPort.removeWorktree(repoPath, worktreePath, force),
     );
-    let filesystemCleanup: "cleanup-filesystem-path" | "skip-filesystem-cleanup" =
-      "cleanup-filesystem-path";
     if (removalResult._tag === "Left") {
       if (!force) {
         return yield* Effect.fail(removalResult.left);
       }
-      const registered = yield* gitPort.isRegisteredWorktree(repoPath, effectiveWorktreePath);
+      const forcedFilesystemCleanup = yield* Effect.either(
+        resolveForcedFilesystemCleanup(
+          dependencies,
+          input,
+          effectiveWorktreePath,
+          removalResult.left,
+        ),
+      );
+      if (forcedFilesystemCleanup._tag === "Left") {
+        const registered = yield* gitPort.isRegisteredWorktree(repoPath, effectiveWorktreePath);
+        if (registered) {
+          return yield* Effect.fail(removalResult.left);
+        }
+        return yield* Effect.fail(forcedFilesystemCleanup.left);
+      }
+      if (forcedFilesystemCleanup.right === "skip-filesystem-cleanup") {
+        return;
+      }
+      const canonicalWorktreePath = yield* gitPort.canonicalizePath(effectiveWorktreePath);
+      const registered = yield* gitPort.isRegisteredWorktree(repoPath, canonicalWorktreePath);
       if (registered) {
         return yield* Effect.fail(removalResult.left);
       }
-      filesystemCleanup = yield* resolveForcedFilesystemCleanup(
-        dependencies,
-        input,
-        effectiveWorktreePath,
-        removalResult.left,
-      );
-    }
-    if (filesystemCleanup === "skip-filesystem-cleanup") {
-      return;
     }
     yield* worktreeFiles.removePathIfPresent(effectiveWorktreePath).pipe(
       Effect.mapError(
