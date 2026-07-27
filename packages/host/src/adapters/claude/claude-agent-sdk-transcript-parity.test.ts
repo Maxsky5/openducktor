@@ -298,19 +298,9 @@ describe("Claude live and hydrated transcript parity", () => {
     ).toEqual(["tool-read", "tool-bash"]);
   });
 
-  test("preserves structured user display parts across live send and hydrated history", async () => {
+  test("preserves file-reference display parts across live send and hydrated history", async () => {
     const parts: AgentUserMessagePart[] = [
-      { kind: "text", text: "Explain " },
-      {
-        kind: "skill_mention",
-        skill: {
-          id: "effect-ts",
-          name: "effect-ts",
-          path: "effect-ts",
-          title: "effect-ts",
-        },
-      },
-      { kind: "text", text: " and inspect " },
+      { kind: "text", text: "Inspect " },
       {
         kind: "file_reference",
         file: {
@@ -348,17 +338,6 @@ describe("Claude live and hydrated transcript parity", () => {
         }),
       ],
       () => timestamp,
-      [],
-      {
-        skills: [
-          {
-            id: "effect-ts",
-            name: "effect-ts",
-            path: "effect-ts",
-            title: "effect-ts",
-          },
-        ],
-      },
     );
     const hydratedUserMessage = hydrated.find((message) => message.role === "user");
     if (hydratedUserMessage?.role !== "user") {

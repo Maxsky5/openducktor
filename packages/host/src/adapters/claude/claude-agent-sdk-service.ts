@@ -169,24 +169,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
-    const service = this;
-    return Effect.gen(function* () {
-      const session = service.sessionStore.get(input.externalSessionId);
-      const claudeExecutablePath = yield* resolveClaudeExecutable(
-        service.input,
-        "claudeRuntime.loadSessionHistory",
-      );
-      return yield* fromPromise("claudeRuntime.loadSessionHistory", () =>
-        loadClaudeHistory(input, service.now, session?.acceptedUserMessages, async () => {
-          const catalog = await listClaudeSkills(
-            input,
-            service.input.processEnv,
-            claudeExecutablePath,
-          );
-          return catalog.skills;
-        }),
-      );
-    });
+    const session = this.sessionStore.get(input.externalSessionId);
+    return fromPromise("claudeRuntime.loadSessionHistory", () =>
+      loadClaudeHistory(input, this.now, session?.acceptedUserMessages),
+    );
   }
 
   loadSessionTodos(input: LoadAgentSessionTodosInput) {

@@ -1,9 +1,14 @@
-import type { AgentSessionHistoryMessage, PolicyBoundSessionRef } from "@openducktor/core";
+import type {
+  AgentSessionHistoryMessage,
+  AgentSkillCatalog,
+  PolicyBoundSessionRef,
+} from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
 import {
   type AgentSessionTranscriptEmptyReason,
@@ -15,6 +20,10 @@ import {
   SESSION_HISTORY_STALE_TIME_MS,
   sessionHistoryQueryOptions,
 } from "@/state/queries/agent-session-history";
+import {
+  RUNTIME_CATALOG_STALE_TIME_MS,
+  repoRuntimeSkillsQueryOptions,
+} from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -22,6 +31,7 @@ import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
+import { withClaudeSkillMentions } from "../claude-skill-mentions";
 import {
   createReadonlyTranscriptSession,
   mergeReadonlyRuntimeHistory,
@@ -56,6 +66,11 @@ const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSess
   refetchOnWindowFocus: false,
 });
 
+const skippedTranscriptSkillsQueryOptions = skippedQueryOptions<AgentSkillCatalog>({
+  queryKey: ["runtime-transcript-skills", "skipped"] as const,
+  staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+});
+
 export function useRuntimeTranscriptSessionHistory({
   isOpen,
   repoPath,
@@ -64,6 +79,7 @@ export function useRuntimeTranscriptSessionHistory({
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
+  const { loadRepoRuntimeSkills } = useRuntimeDefinitionsContext();
   const queryClient = useQueryClient();
   const targetExternalSessionId = target?.externalSessionId ?? null;
   const targetRuntimeKind = target?.runtimeKind ?? null;
@@ -154,19 +170,32 @@ export function useRuntimeTranscriptSessionHistory({
       ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
+  const skillsQuery = useQuery(
+    emptyReason === null &&
+      repoReadinessState === "ready" &&
+      targetRuntimeKind === "claude" &&
+      runtimeSessionRef !== null
+      ? repoRuntimeSkillsQueryOptions(runtimeSessionRef, loadRepoRuntimeSkills)
+      : skippedTranscriptSkillsQueryOptions,
+  );
   const session = useMemo(() => {
+    let threadSession: AgentChatThreadSession | null = null;
     if (matchingSession !== null) {
-      return toAgentChatThreadSession(
+      threadSession = toAgentChatThreadSession(
         historyQuery.data
           ? mergeReadonlyRuntimeHistory(matchingSession, historyQuery.data)
           : matchingSession,
       );
+    } else if (shouldLoadHistory && historyQuery.data && stableTarget !== null) {
+      threadSession = createReadonlyTranscriptSession({
+        ...stableTarget,
+        history: historyQuery.data,
+      });
     }
-    if (!shouldLoadHistory || !historyQuery.data || stableTarget === null) {
-      return null;
-    }
-    return createReadonlyTranscriptSession({ ...stableTarget, history: historyQuery.data });
-  }, [historyQuery.data, matchingSession, shouldLoadHistory, stableTarget]);
+    return threadSession
+      ? withClaudeSkillMentions(threadSession, skillsQuery.data?.skills ?? [])
+      : null;
+  }, [historyQuery.data, matchingSession, shouldLoadHistory, skillsQuery.data, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (session !== null) {
       return { kind: "visible" };

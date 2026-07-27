@@ -1,4 +1,4 @@
-import type { AgentSessionHistoryMessage, AgentSkillReference } from "@openducktor/core";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import {
   type ClaudeLiveUserMessage,
@@ -33,7 +33,6 @@ const handledWithoutMessage: ClaudeHistoryInputProjection = { handled: true };
 
 export const createClaudeHistoryInputProjector = (options: {
   liveUserMessages: readonly ClaudeLiveUserMessage[];
-  skills?: readonly AgentSkillReference[];
 }) => {
   const resolveLiveUserMessageId = createLiveUserMessageIdResolver(options.liveUserMessages);
   const compactPromptIds = new Set<string>();
@@ -45,11 +44,7 @@ export const createClaudeHistoryInputProjector = (options: {
     text: string;
     timestamp: string;
   }): ClaudeVisibleHistoryMessage | undefined => {
-    const displayParts = readClaudeHistoryDisplayParts(
-      input.fallbackMessageId,
-      input.message,
-      options.skills,
-    );
+    const displayParts = readClaudeHistoryDisplayParts(input.fallbackMessageId, input.message);
     if (input.text.trim().length === 0 && displayParts.length === 0) {
       return undefined;
     }

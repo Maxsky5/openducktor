@@ -316,7 +316,7 @@ describe("claude-agent-sdk-history", () => {
     });
   });
 
-  test("preserves skill and file-reference display parts across the SDK history round trip", async () => {
+  test("preserves file-reference display parts across the SDK history round trip", async () => {
     const sdkMessage = await toClaudeMessageFromParts([
       { kind: "text", text: "Explain " },
       {
@@ -349,17 +349,6 @@ describe("claude-agent-sdk-history", () => {
         }),
       ],
       () => "2026-06-26T12:00:00.000Z",
-      [],
-      {
-        skills: [
-          {
-            id: "effect-ts",
-            name: "effect-ts",
-            path: "effect-ts",
-            title: "effect-ts",
-          },
-        ],
-      },
     );
 
     const userMessage = history[0];
@@ -367,22 +356,7 @@ describe("claude-agent-sdk-history", () => {
       throw new Error("Expected structured Claude history to hydrate as a user message");
     }
     expect(userMessage.displayParts).toEqual([
-      { kind: "text", text: "Explain " },
-      {
-        kind: "skill_mention",
-        skill: {
-          id: "effect-ts",
-          name: "effect-ts",
-          path: "effect-ts",
-          title: "effect-ts",
-        },
-        sourceText: {
-          value: "/effect-ts",
-          start: 8,
-          end: 18,
-        },
-      },
-      { kind: "text", text: " and inspect " },
+      { kind: "text", text: "Explain /effect-ts and inspect " },
       {
         kind: "file_reference",
         file: {
@@ -415,10 +389,6 @@ describe("claude-agent-sdk-history", () => {
         }),
       ],
       () => "2026-06-26T12:00:00.000Z",
-      [],
-      {
-        skills: [{ id: "effect-ts", name: "effect-ts", path: "effect-ts" }],
-      },
     );
 
     expect(history[0]).toMatchObject({
@@ -427,7 +397,7 @@ describe("claude-agent-sdk-history", () => {
     });
   });
 
-  test("hydrates Claude skill commands as source-mapped skill chips", () => {
+  test("keeps skill-looking commands as text until the separate catalog projection", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -442,90 +412,12 @@ describe("claude-agent-sdk-history", () => {
         }),
       ],
       () => "2026-06-26T12:00:00.000Z",
-      [],
-      {
-        skills: [
-          {
-            id: "grill-me",
-            name: "grill-me",
-            path: "grill-me",
-            title: "grill-me",
-            description: "Grill a plan",
-          },
-        ],
-      },
     );
 
     expect(history[0]).toMatchObject({
       role: "user",
       text: "/grill-me",
-      displayParts: [
-        {
-          kind: "skill_mention",
-          skill: {
-            id: "grill-me",
-            name: "grill-me",
-            path: "grill-me",
-            title: "grill-me",
-            description: "Grill a plan",
-          },
-          sourceText: {
-            value: "/grill-me",
-            start: 0,
-            end: 9,
-          },
-        },
-      ],
-    });
-  });
-
-  test("hydrates exact Claude skill names containing spaces as one chip", () => {
-    const history = toClaudeHistoryMessages(
-      [
-        toSessionMessage({
-          type: "user",
-          uuid: "user-spaced-skill-command",
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          message: {
-            role: "user",
-            content: "/gitnexus:generate_map (MCP)",
-          },
-        }),
-      ],
-      () => "2026-06-26T12:00:00.000Z",
-      [],
-      {
-        skills: [
-          {
-            id: "gitnexus:generate_map (MCP)",
-            name: "gitnexus:generate_map (MCP)",
-            path: "gitnexus:generate_map (MCP)",
-            title: "Generate architecture map",
-          },
-        ],
-      },
-    );
-
-    expect(history[0]).toMatchObject({
-      role: "user",
-      text: "/gitnexus:generate_map (MCP)",
-      displayParts: [
-        {
-          kind: "skill_mention",
-          skill: {
-            id: "gitnexus:generate_map (MCP)",
-            name: "gitnexus:generate_map (MCP)",
-            path: "gitnexus:generate_map (MCP)",
-            title: "Generate architecture map",
-          },
-          sourceText: {
-            value: "/gitnexus:generate_map (MCP)",
-            start: 0,
-            end: 28,
-          },
-        },
-      ],
+      displayParts: [{ kind: "text", text: "/grill-me" }],
     });
   });
 });

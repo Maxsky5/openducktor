@@ -216,7 +216,7 @@ export const requestClaudeAskUserQuestion = async ({
       resolve(null);
     };
     if (signal.aborted || session.abortController.signal.aborted) {
-      onAbort();
+      resolve(null);
       return;
     }
     signal.addEventListener("abort", onAbort, { once: true });

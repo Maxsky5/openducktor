@@ -175,6 +175,32 @@ describe("createClaudeUserDialogHandler", () => {
     ]);
   });
 
+  test("cancels a Claude question dialog whose signal is already aborted", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    const abortController = new AbortController();
+    abortController.abort();
+    const handler = createClaudeUserDialogHandler({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    await expect(
+      handler(
+        {
+          dialogKind: "permission_ask_user_question",
+          payload: createQuestionPayload(),
+          toolUseID: "tool-use-1",
+        },
+        { signal: abortController.signal },
+      ),
+    ).resolves.toEqual({ behavior: "cancelled" });
+    expect(session.pendingQuestions.size).toBe(0);
+    expect(events).toEqual([]);
+  });
+
   test("propagates question event delivery failures", async () => {
     const session = createSession();
     const deliveryError = new Error("question event delivery failed");

@@ -3,7 +3,6 @@ import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentFileReference,
   AgentSessionHistoryMessage,
-  AgentSkillReference,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
@@ -36,19 +35,15 @@ const claudeHistoryAttachmentPath = (messageId: string, index: number): string =
 type ClaudeHistoryReferenceRange = {
   start: number;
   end: number;
-  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>;
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }>;
 };
 
 const CLAUDE_FILE_TOKEN_PATTERN = /@([^\s]+)/gu;
 const CLAUDE_FILE_TRAILING_PUNCTUATION_PATTERN = /[,.;!?)}\]]+$/u;
 const CLAUDE_REFERENCE_BOUNDARY_PATTERN = /[\s([{"']/u;
-const CLAUDE_REFERENCE_END_BOUNDARY_PATTERN = /[\s,.;!?)}\]}"']/u;
 
 const hasClaudeReferenceBoundary = (text: string, start: number): boolean =>
   start === 0 || CLAUDE_REFERENCE_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
-
-const hasClaudeReferenceEndBoundary = (text: string, end: number): boolean =>
-  end === text.length || CLAUDE_REFERENCE_END_BOUNDARY_PATTERN.test(text[end] ?? "");
 
 const claudeFileReference = (path: string): AgentFileReference => ({
   id: path,
@@ -57,41 +52,8 @@ const claudeFileReference = (path: string): AgentFileReference => ({
   kind: detectFileKind(path, false) as AgentFileReference["kind"],
 });
 
-const readClaudeHistoryReferenceRanges = (
-  text: string,
-  skillsByName: ReadonlyMap<string, AgentSkillReference>,
-): ClaudeHistoryReferenceRange[] => {
+const readClaudeHistoryReferenceRanges = (text: string): ClaudeHistoryReferenceRange[] => {
   const ranges: ClaudeHistoryReferenceRange[] = [];
-  const skillTokens = [...skillsByName.values()]
-    .map((skill) => ({ skill, token: `/${skill.name}` }))
-    .sort((left, right) => right.token.length - left.token.length);
-  for (let start = 0; start < text.length; start += 1) {
-    if (text[start] !== "/" || !hasClaudeReferenceBoundary(text, start)) {
-      continue;
-    }
-    const match = skillTokens.find(({ token }) => {
-      const end = start + token.length;
-      return text.startsWith(token, start) && hasClaudeReferenceEndBoundary(text, end);
-    });
-    if (!match) {
-      continue;
-    }
-    const end = start + match.token.length;
-    ranges.push({
-      start,
-      end,
-      part: {
-        kind: "skill_mention",
-        skill: match.skill,
-        sourceText: {
-          value: match.token,
-          start,
-          end,
-        },
-      },
-    });
-    start = end - 1;
-  }
   for (const match of text.matchAll(CLAUDE_FILE_TOKEN_PATTERN)) {
     const start = match.index;
     if (!hasClaudeReferenceBoundary(text, start)) {
@@ -118,11 +80,8 @@ const readClaudeHistoryReferenceRanges = (
   return ranges.sort((left, right) => left.start - right.start);
 };
 
-const readClaudeHistoryTextDisplayParts = (
-  text: string,
-  skillsByName: ReadonlyMap<string, AgentSkillReference>,
-): AgentUserMessageDisplayPart[] => {
-  const ranges = readClaudeHistoryReferenceRanges(text, skillsByName);
+const readClaudeHistoryTextDisplayParts = (text: string): AgentUserMessageDisplayPart[] => {
+  const ranges = readClaudeHistoryReferenceRanges(text);
   if (ranges.length === 0) {
     return text.length > 0 ? [{ kind: "text", text }] : [];
   }
@@ -148,15 +107,13 @@ const readClaudeHistoryTextDisplayParts = (
 export const readClaudeHistoryDisplayParts = (
   messageId: string,
   message: unknown,
-  skills: readonly AgentSkillReference[] = [],
 ): AgentUserMessageDisplayPart[] => {
   if (!isRecord(message)) {
     return [];
   }
-  const skillsByName = new Map(skills.map((skill) => [skill.name, skill]));
   const content = message.content;
   if (typeof content === "string" && content.length > 0) {
-    return readClaudeHistoryTextDisplayParts(content, skillsByName);
+    return readClaudeHistoryTextDisplayParts(content);
   }
   if (!Array.isArray(content)) {
     return [];
@@ -171,7 +128,7 @@ export const readClaudeHistoryDisplayParts = (
     if (type === "text") {
       const text = readStringProp(block, "text");
       if (text) {
-        parts.push(...readClaudeHistoryTextDisplayParts(text, skillsByName));
+        parts.push(...readClaudeHistoryTextDisplayParts(text));
       }
       continue;
     }

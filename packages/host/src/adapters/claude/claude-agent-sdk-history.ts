@@ -1,9 +1,4 @@
-import type {
-  AgentEvent,
-  AgentSessionHistoryMessage,
-  AgentSkillReference,
-  AgentStreamPart,
-} from "@openducktor/core";
+import type { AgentEvent, AgentSessionHistoryMessage, AgentStreamPart } from "@openducktor/core";
 import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import {
@@ -75,7 +70,6 @@ export const toClaudeHistoryMessages = (
   liveUserMessages: readonly ClaudeLiveUserMessage[] = [],
   options: {
     includeNestedEntries?: boolean;
-    skills?: readonly AgentSkillReference[];
     transcriptExternalSessionId?: string;
   } = {},
 ): AgentSessionHistoryMessage[] => {
@@ -99,10 +93,7 @@ export const toClaudeHistoryMessages = (
     toolMessageIdsByCallId,
     toolNamesByCallId,
   };
-  const projectHistoryInput = createClaudeHistoryInputProjector({
-    liveUserMessages,
-    ...(options.skills ? { skills: options.skills } : {}),
-  });
+  const projectHistoryInput = createClaudeHistoryInputProjector({ liveUserMessages });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;
   let lastAssistantText: string | undefined;

@@ -1,8 +1,4 @@
-import type {
-  AgentSessionHistoryMessage,
-  AgentSkillReference,
-  LoadAgentSessionHistoryInput,
-} from "@openducktor/core";
+import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { loadClaudeRawHistoryMessages } from "./claude-agent-sdk-history-import";
@@ -35,12 +31,10 @@ export const loadClaudeHistory = async (
   input: LoadAgentSessionHistoryInput,
   now: () => string,
   liveUserMessages: readonly ClaudeLiveUserMessage[] = [],
-  loadSkills: () => Promise<readonly AgentSkillReference[]>,
 ): Promise<AgentSessionHistoryMessage[]> => {
-  const [messages, skills] = await Promise.all([loadClaudeRawHistoryMessages(input), loadSkills()]);
+  const messages = await loadClaudeRawHistoryMessages(input);
   const history = toClaudeHistoryMessages(messages, now, liveUserMessages, {
     includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
-    skills,
     transcriptExternalSessionId: input.externalSessionId,
   });
   return finalizeClaudeHistory(input, history);
