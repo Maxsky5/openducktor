@@ -150,7 +150,7 @@ describe("createRuntimeHealthProbe", () => {
         version: `0.3.191 (${executablePath})`,
         error: null,
       });
-      expect(calls).toEqual([[executablePath, ["--version"], { timeoutMs: 2_000 }]]);
+      expect(calls).toEqual([[executablePath, ["--version"], { timeoutMs: 10_000 }]]);
     } finally {
       await rm(tempDir, { force: true, recursive: true });
     }

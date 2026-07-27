@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { getAgentSession } from "@/state/agent-session-collection";
+import { applyAgentSessionLiveDelta } from "../session-read-model/agent-session-live-projection";
 import { createSessionTurnState } from "../support/session-turn-state";
 import {
   buildSession,
@@ -127,4 +128,66 @@ describe("agent session transcript event consumer", () => {
       consumer.close();
     });
   }
+
+  test("keeps the final Claude child output and tool timing when live removal wins the race", () => {
+    const childRef = {
+      ...sessionRef,
+      runtimeKind: "claude" as const,
+      externalSessionId: "child-thread",
+    };
+    const child = buildSession({
+      externalSessionId: "child-thread",
+      role: null,
+      runtimeKind: "claude",
+      status: "running",
+    });
+    const { consumer, sessionsRef } = createConsumerHarness(60_000, child);
+
+    consumer.handle({
+      type: "assistant_part",
+      externalSessionId: "child-thread",
+      timestamp: "2026-07-17T08:00:01.000Z",
+      sessionRef: childRef,
+      part: {
+        kind: "tool",
+        messageId: "assistant-child-1",
+        partId: "read-1",
+        callId: "read-1",
+        tool: "Read",
+        toolType: "read",
+        status: "completed",
+        startedAtMs: 100,
+        endedAtMs: 160,
+      },
+    });
+    consumer.handle({
+      type: "assistant_message",
+      externalSessionId: "child-thread",
+      messageId: "assistant-child-final",
+      message: "Child result",
+      timestamp: "2026-07-17T08:00:02.000Z",
+      sessionRef: childRef,
+    });
+    sessionsRef.current = applyAgentSessionLiveDelta({
+      current: sessionsRef.current,
+      taskSessionRecords: { taskIds: [], records: [] },
+      envelope: { type: "session_removed", ref: childRef },
+    });
+    consumer.handle({
+      type: "session_finished",
+      externalSessionId: "child-thread",
+      message: "Session finished",
+      timestamp: "2026-07-17T08:00:03.000Z",
+      sessionRef: childRef,
+    });
+
+    expect(getSessionMessages(sessionsRef, "child-thread")).toEqual([
+      expect.objectContaining({
+        role: "tool",
+        meta: expect.objectContaining({ startedAtMs: 100, endedAtMs: 160 }),
+      }),
+      expect.objectContaining({ role: "assistant", content: "Child result" }),
+    ]);
+    consumer.close();
+  });
 });

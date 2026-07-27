@@ -56,6 +56,16 @@ type ClaudeHistoryAssistantProjection = {
   stopReason: string | undefined;
 };
 
+const claudeAssistantResponseId = (entry: ClaudeHistoryMessage | undefined): string | undefined =>
+  entry?.type === "assistant" && isRecord(entry.message)
+    ? readStringProp(entry.message, "id")
+    : undefined;
+
+const claudeAssistantContent = (entry: ClaudeHistoryMessage | undefined): unknown[] =>
+  entry?.type === "assistant" && isRecord(entry.message) && Array.isArray(entry.message.content)
+    ? entry.message.content
+    : [];
+
 export const projectClaudeHistoryAssistantMessage = ({
   entry,
   entryIndex,
@@ -72,12 +82,40 @@ export const projectClaudeHistoryAssistantMessage = ({
   if (isClaudeSyntheticAssistantMessage(entry)) {
     return null;
   }
-  const text = historyMessageText(entry.message);
+  const responseId = claudeAssistantResponseId(entry);
+  const nextEntry = messages[entryIndex + 1];
+  const entryText = historyMessageText(entry.message);
+  if (
+    responseId !== undefined &&
+    entryText.trim().length === 0 &&
+    claudeAssistantResponseId(nextEntry) === responseId
+  ) {
+    return null;
+  }
+  const previousEntry = messages[entryIndex - 1];
+  const includesPreviousFragment =
+    responseId !== undefined &&
+    claudeAssistantResponseId(previousEntry) === responseId &&
+    previousEntry?.type === "assistant" &&
+    historyMessageText(previousEntry.message).trim().length === 0;
+  const content = includesPreviousFragment
+    ? [...claudeAssistantContent(previousEntry), ...claudeAssistantContent(entry)]
+    : claudeAssistantContent(entry);
+  const projectedMessage =
+    includesPreviousFragment && isRecord(entry.message)
+      ? { ...entry.message, content }
+      : entry.message;
+  const text = historyMessageText(projectedMessage);
   const parts: AgentStreamPart[] = [];
-  const content = isRecord(entry.message) ? entry.message.content : undefined;
-  const stopReason = isRecord(entry.message)
-    ? readStringProp(entry.message, "stop_reason")
+  const stopReason = isRecord(projectedMessage)
+    ? readStringProp(projectedMessage, "stop_reason")
     : undefined;
+  const isForwardedSubagentFinal =
+    options.includeNestedEntries === true && !stopReason && text.trim().length > 0;
+  const messageId =
+    (isLiveFinalAssistantStopReason(stopReason) || isForwardedSubagentFinal) && responseId
+      ? responseId
+      : entry.uuid;
   const preservesBlockOrder =
     stopReason === "tool_use" &&
     Array.isArray(content) &&
@@ -94,8 +132,8 @@ export const projectClaudeHistoryAssistantMessage = ({
         if (!emittedBlockOrderText && blockText?.trim() && text.trim().length > 0) {
           parts.push(
             createClaudeAssistantTextPart({
-              messageId: entry.uuid,
-              partId: `${entry.uuid}:text:${index}`,
+              messageId,
+              partId: `${messageId}:text:${index}`,
               text,
             }),
           );
@@ -124,8 +162,8 @@ export const projectClaudeHistoryAssistantMessage = ({
         if (thinkingText) {
           parts.push(
             createClaudeAssistantReasoningPart({
-              messageId: entry.uuid,
-              partId: `${entry.uuid}:thinking:${index}`,
+              messageId,
+              partId: `${messageId}:thinking:${index}`,
               text: thinkingText,
             }),
           );
@@ -146,7 +184,7 @@ export const projectClaudeHistoryAssistantMessage = ({
   }
   const model = readHistoryAssistantModel(entry);
   const assistantMessage: MutableAssistantHistoryMessage = {
-    messageId: entry.uuid,
+    messageId,
     role: "assistant",
     timestamp,
     text,

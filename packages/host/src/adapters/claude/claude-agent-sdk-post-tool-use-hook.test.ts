@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 
@@ -73,6 +74,44 @@ describe("createClaudePostToolUseHook", () => {
     );
     expect(timedSession.toolEndedAtMsByCallId.get("tool-bash-1")).toBe(
       Date.parse("2026-06-25T20:00:02.000Z"),
+    );
+  });
+
+  test("records subagent tool timing on the nested transcript", async () => {
+    const session = createClaudeSession();
+    session.subagentTaskIdsByToolUseId.set("agent-tool-1", "agent-1");
+    const childSession = claudeSubagentEventSession(session, "agent-tool-1");
+    expect(childSession).not.toBeNull();
+    const hook = createClaudePostToolUseHook({
+      session,
+      now: () => "2026-06-25T20:00:01.000Z",
+      emit: () => {},
+    });
+
+    await hook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "session-1",
+        transcript_path: "/home/test/.claude/projects/repo/session-1.jsonl",
+        cwd: "/repo",
+        agent_id: "agent-1",
+        tool_name: "Read",
+        tool_use_id: "inner-read-1",
+        tool_input: { file_path: "/repo/README.md" },
+        tool_response: { file: "/repo/README.md" },
+        duration_ms: 250,
+      },
+      "inner-read-1",
+      { signal: new AbortController().signal },
+    );
+
+    expect(session.toolStartedAtMsByCallId.has("inner-read-1")).toBe(false);
+    expect(session.toolEndedAtMsByCallId.has("inner-read-1")).toBe(false);
+    expect(childSession?.toolStartedAtMsByCallId.get("inner-read-1")).toBe(
+      Date.parse("2026-06-25T20:00:00.750Z"),
+    );
+    expect(childSession?.toolEndedAtMsByCallId?.get("inner-read-1")).toBe(
+      Date.parse("2026-06-25T20:00:01.000Z"),
     );
   });
 

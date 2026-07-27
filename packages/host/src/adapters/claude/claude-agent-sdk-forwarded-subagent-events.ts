@@ -68,7 +68,8 @@ export const emitClaudeSubagentUserMessage = ({
 }): void => {
   if (
     !isClaudeSubagentTranscriptTarget(session.externalSessionId) ||
-    isClaudeToolResultUserMessage(message)
+    isClaudeToolResultUserMessage(message) ||
+    message.isSynthetic === true
   ) {
     return;
   }

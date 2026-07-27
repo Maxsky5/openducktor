@@ -6,7 +6,6 @@ import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
   rememberAssistantTextForCurrentTurn,
-  streamAssistantMessageId,
 } from "./claude-agent-sdk-event-session";
 import {
   emitClaudeSubagentUserMessage,
@@ -19,16 +18,15 @@ import {
   handleClaudeResultMessage,
 } from "./claude-agent-sdk-result-events";
 import { emitClaudeRunningToolPart } from "./claude-agent-sdk-running-tool";
-import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
 import {
-  appendClaudeStreamToolInputJson,
-  hasClaudeStreamEmittedToolInput,
-  rememberClaudeStreamToolStart,
-} from "./claude-agent-sdk-tool-input-stream";
+  emitClaudePendingToolPart,
+  handleClaudeStreamEvent,
+} from "./claude-agent-sdk-stream-events";
+import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
+import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
+import { hasClaudeStreamEmittedToolInput } from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
 import {
-  type ClaudeDecodedToolUse,
-  createClaudePendingToolPart,
   decodeClaudeToolUseBlock,
   isClaudeToolUseBlockType,
   timestampMs,
@@ -96,7 +94,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "stream_event") {
-    handleStreamEvent({ emit, message, session, timestamp });
+    handleClaudeStreamEvent({ emit, message, session, timestamp });
     return;
   }
   if (message.type === "result") {
@@ -182,128 +180,6 @@ export const handleClaudeSdkMessage = ({
   }
 };
 
-const rememberToolInput = (
-  session: Pick<ClaudeEventSession, "toolInputsByCallId">,
-  callId: string,
-  input: Record<string, unknown>,
-): void => {
-  session.toolInputsByCallId.set(callId, input);
-};
-
-const emitClaudePendingToolPart = ({
-  emit,
-  fallbackMessageId,
-  session,
-  timestamp,
-  toolUse,
-}: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  fallbackMessageId: string;
-  toolUse: ClaudeDecodedToolUse;
-}): void => {
-  const messageId = session.toolMessageIdsByCallId.get(toolUse.callId) ?? fallbackMessageId;
-  session.toolMessageIdsByCallId.set(toolUse.callId, messageId);
-  session.toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
-  if (toolUse.input) {
-    rememberToolInput(session, toolUse.callId, toolUse.input);
-  }
-  emit({
-    type: "assistant_part",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-    part: createClaudePendingToolPart({ messageId, toolUse }),
-  });
-};
-
-const handleStreamEvent = ({
-  emit,
-  message,
-  session,
-  timestamp,
-}: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  message: Extract<SDKMessage, { type: "stream_event" }>;
-}): void => {
-  const event = message.event;
-  if (!isRecord(event)) {
-    return;
-  }
-
-  const eventType = readStringProp(event, "type");
-  if (eventType === "message_start") {
-    session.streamAssistantMessageIdsByBlockIndex.clear();
-    session.streamAssistantMessageOrdinal += 1;
-    return;
-  }
-  if (eventType === "content_block_start") {
-    const index = typeof event.index === "number" ? event.index : null;
-    const block = isRecord(event.content_block) ? event.content_block : null;
-    if (index === null || !block) {
-      return;
-    }
-    const toolUse = decodeClaudeToolUseBlock({
-      block,
-      fallbackMessageId: message.uuid,
-      index,
-    });
-    if (!toolUse) {
-      return;
-    }
-
-    rememberClaudeStreamToolStart(session, index, toolUse);
-    emitClaudePendingToolPart({
-      emit,
-      fallbackMessageId: toolUse.callId,
-      session,
-      timestamp,
-      toolUse,
-    });
-    return;
-  }
-
-  if (eventType !== "content_block_delta") {
-    return;
-  }
-
-  const index = typeof event.index === "number" ? event.index : null;
-  const delta = isRecord(event.delta) ? event.delta : null;
-  if (index === null || !delta) {
-    return;
-  }
-  const deltaType = readStringProp(delta, "type");
-  if (deltaType === "text_delta") {
-    const text = typeof delta.text === "string" ? delta.text : "";
-    if (text.length === 0) {
-      return;
-    }
-    emit({
-      type: "assistant_delta",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-      channel: "text",
-      messageId: streamAssistantMessageId(session, index),
-      delta: text,
-    });
-    return;
-  }
-  if (deltaType !== "input_json_delta") {
-    return;
-  }
-  const partialJson = delta.partial_json;
-  if (typeof partialJson !== "string" || partialJson.length === 0) {
-    return;
-  }
-  const toolUse = appendClaudeStreamToolInputJson(session, index, partialJson);
-  if (!toolUse) {
-    return;
-  }
-  emitClaudePendingToolPart({
-    emit,
-    fallbackMessageId: toolUse.callId,
-    session,
-    timestamp,
-    toolUse,
-  });
-};
-
 const handleSessionStateChanged = ({
   emit,
   message,
@@ -344,8 +220,27 @@ const handleAssistantMessage = ({
     content.some(
       (block) => isRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
     );
+  const stopReason = readStringProp(message.message, "stop_reason");
+  const isForwardedSubagentText = isClaudeSubagentTranscriptTarget(session.externalSessionId);
+  const isFinalAssistantText =
+    text.length > 0 &&
+    !hasToolUse &&
+    (stopReason === "end_turn" ||
+      stopReason === "stop_sequence" ||
+      (!stopReason && isForwardedSubagentText));
+  const responseId = readStringProp(message.message, "id");
+  const usesResponseIdentity =
+    stopReason === "end_turn" ||
+    stopReason === "stop_sequence" ||
+    (!stopReason && isForwardedSubagentText && isFinalAssistantText);
+  const assistantMessageId = usesResponseIdentity && responseId ? responseId : message.uuid;
+  if (!hasToolUse && !stopReason && !isForwardedSubagentText) {
+    return;
+  }
   let emittedToolUseText = false;
-  settleClaudeStreamedAssistantText({ emit, session, timestamp });
+  if ((text.length > 0 || hasToolUse) && !isFinalAssistantText) {
+    settleClaudeStreamedAssistantText({ emit, session, timestamp });
+  }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
       if (!isRecord(block)) {
@@ -399,8 +294,8 @@ const handleAssistantMessage = ({
             externalSessionId: session.externalSessionId,
             timestamp,
             part: createClaudeAssistantReasoningPart({
-              messageId: message.uuid,
-              partId: `${message.uuid}:thinking:${index}`,
+              messageId: assistantMessageId,
+              partId: `${assistantMessageId}:thinking:${index}`,
               text: thinkingText,
             }),
           });
@@ -409,15 +304,18 @@ const handleAssistantMessage = ({
     }
   }
   if (text.length > 0) {
-    const stopReason = readStringProp(message.message, "stop_reason");
     if (hasToolUse) {
       return;
     }
-    if (!stopReason) {
+    if (!stopReason && !isForwardedSubagentText) {
       return;
     }
-    if (stopReason === "end_turn" || stopReason === "stop_sequence") {
-      const messageId = message.uuid;
+    if (
+      stopReason === "end_turn" ||
+      stopReason === "stop_sequence" ||
+      (!stopReason && isForwardedSubagentText)
+    ) {
+      const messageId = assistantMessageId;
       rememberAssistantTextForCurrentTurn(session, text, messageId);
       emit({
         type: "assistant_message",
@@ -426,6 +324,12 @@ const handleAssistantMessage = ({
         messageId,
         message: text,
         ...(assistantModel ? { model: assistantModel } : {}),
+      });
+      settleClaudeStreamedAssistantText({
+        emit,
+        preserveMessageId: messageId,
+        session,
+        timestamp,
       });
       return;
     }

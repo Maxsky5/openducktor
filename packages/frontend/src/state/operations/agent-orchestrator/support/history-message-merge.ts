@@ -85,14 +85,10 @@ const userMessageTimestampMs = (timestamp: string): number | null => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
-const insertSubagentMessageByTimestamp = (
+const insertMessageByTimestamp = (
   messages: AgentChatMessage[],
   message: AgentChatMessage,
 ): void => {
-  if (!isSubagentMessage(message)) {
-    messages.push(message);
-    return;
-  }
   const insertIndex = sessionMessageTimestampInsertionIndex(messages, message);
   messages.splice(insertIndex, 0, message);
 };
@@ -316,7 +312,7 @@ export const mergeHistoryMessages = (
     if (isSessionSystemPromptMessage(message)) {
       return;
     }
-    insertSubagentMessageByTimestamp(mergedMessages, message);
+    insertMessageByTimestamp(mergedMessages, message);
   });
 
   return createSessionMessagesState(externalSessionId, mergedMessages, currentMessages.version + 1);

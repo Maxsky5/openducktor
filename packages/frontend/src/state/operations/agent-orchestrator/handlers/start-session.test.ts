@@ -436,9 +436,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "planner-external" }));
 
       expect(getSession(sessionCollection, "planner-external")?.status).toBe("starting");
-      expect(getSession(sessionCollection, "planner-external")?.historyLoadState).toBe(
-        "not_requested",
-      );
+      expect(getSession(sessionCollection, "planner-external")?.historyLoadState).toBe("loaded");
       expect(lifecycleEvents).not.toContain("status:idle");
     } finally {
       adapter.startSession = originalStartSession;
@@ -1333,7 +1331,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(getSession(sessionsRef.current, "external-created")).toBeDefined();
       const createdSession = getSession(sessionsRef.current, "external-created");
       expect(createdSession).toBeDefined();
-      expect(createdSession?.historyLoadState).toBe("not_requested");
+      expect(createdSession?.historyLoadState).toBe("loaded");
       const createdHeaderMessage = createdSession ? sessionMessageAt(createdSession, 0) : undefined;
       expect(createdHeaderMessage).toEqual({
         id: "history:system-prompt:external-created",

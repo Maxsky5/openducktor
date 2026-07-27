@@ -104,9 +104,9 @@ export const createClaudeAgentSdkSession = async ({
     queue.close();
     throw error;
   }
-  const session: ClaudeSession = { ...sessionContext, query: sdkQuery };
+  const session: ClaudeSession = Object.assign(sessionContext, { query: sdkQuery });
   sessionStore.set(session);
-  void consumeClaudeSession({
+  const consumption = consumeClaudeSession({
     session,
     sessionStore,
     now,
@@ -119,14 +119,18 @@ export const createClaudeAgentSdkSession = async ({
       INIT_TIMEOUT_MS,
       "Claude Agent SDK session initialization timed out. Check Claude authentication and network connectivity.",
     );
-    await renameClaudeSessionIfNeeded({
-      session,
-      title: sessionInput.title,
-    });
+    if (sessionInput.options.resume && !sessionInput.options.forkSession) {
+      await renameClaudeSessionIfNeeded({
+        session,
+        title: sessionInput.title,
+      });
+    }
   } catch (error) {
     if (sessionStore.get(session.externalSessionId) === session) {
       sessionStore.close(session);
     }
+    await sdkQuery.return();
+    await consumption;
     throw error;
   }
   if (sessionStore.get(session.externalSessionId) !== session) {

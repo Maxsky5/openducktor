@@ -30,7 +30,7 @@ export const buildInitialSession = ({
   runtimeStatusMessage: null,
   startedAt: startedCtx.summary.startedAt,
   workingDirectory: startedCtx.summary.workingDirectory,
-  historyLoadState: initialMessages ? "loaded" : "not_requested",
+  historyLoadState: "loaded",
   messages:
     initialMessages ??
     createSessionMessagesState(

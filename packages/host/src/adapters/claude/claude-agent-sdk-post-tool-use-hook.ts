@@ -4,20 +4,17 @@ import type {
   PostToolUseHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
+import {
+  type ClaudeEventSession,
+  claudeSubagentEventSession,
+} from "./claude-agent-sdk-event-session";
 import { isClaudeFileEditTool } from "./claude-agent-sdk-file-edits";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
-type ClaudePostToolUseSession = Pick<
-  ClaudeSession,
-  | "externalSessionId"
-  | "toolEndedAtMsByCallId"
-  | "toolInputsByCallId"
-  | "toolMessageIdsByCallId"
-  | "toolStartedAtMsByCallId"
->;
+type ClaudePostToolUseSession = ClaudeEventSession & Pick<ClaudeSession, "toolEndedAtMsByCallId">;
 
 type ClaudePostToolHookInput = PostToolUseHookInput | PostToolUseFailureHookInput;
 
@@ -78,12 +75,27 @@ const recordClaudeToolExecutionTiming = (
   ) {
     return;
   }
+  let timingSession: ClaudeEventSession = session;
+  if (input.agent_id) {
+    const parentToolUseId = [...session.subagentTaskIdsByToolUseId].find(
+      ([, taskId]) => taskId === input.agent_id,
+    )?.[0];
+    if (!parentToolUseId) {
+      return;
+    }
+    const childSession = claudeSubagentEventSession(session, parentToolUseId);
+    if (!childSession) {
+      return;
+    }
+    timingSession = childSession;
+  }
   const endedAtMs = timestampMs(timestamp);
-  session.toolStartedAtMsByCallId.set(
+  timingSession.toolStartedAtMsByCallId.set(
     input.tool_use_id,
     Math.max(0, endedAtMs - input.duration_ms),
   );
-  session.toolEndedAtMsByCallId.set(input.tool_use_id, endedAtMs);
+  timingSession.toolEndedAtMsByCallId ??= new Map();
+  timingSession.toolEndedAtMsByCallId.set(input.tool_use_id, endedAtMs);
 };
 
 export const createClaudePostToolUseHook =

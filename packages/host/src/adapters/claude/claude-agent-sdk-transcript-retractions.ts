@@ -44,14 +44,18 @@ const emitTranscriptRetraction = ({
 
 export const settleClaudeStreamedAssistantText = ({
   emit,
+  preserveMessageId,
   session,
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
+  preserveMessageId?: string;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
-  const streamedMessageIds = [...session.streamAssistantMessageIdsByBlockIndex.values()];
+  const streamedMessageIds = [
+    ...new Set(session.streamAssistantMessageIdsByBlockIndex.values()),
+  ].filter((messageId) => messageId !== preserveMessageId);
   if (streamedMessageIds.length > 0) {
     emitTranscriptRetraction({
       emit,
@@ -59,8 +63,8 @@ export const settleClaudeStreamedAssistantText = ({
       timestamp,
       messageIds: streamedMessageIds,
     });
-    advanceStreamAssistantMessageIdentity(session);
   }
+  advanceStreamAssistantMessageIdentity(session);
 };
 
 export const emitSupersededTranscriptMessage = ({

@@ -440,9 +440,7 @@ export const applyAgentSessionLiveDelta = ({
   const identity = toSessionIdentity(envelope.ref);
   let collection = current;
   const directSession = getAgentSession(collection, identity);
-  if (directSession?.role === null) {
-    collection = removeAgentSession(collection, identity);
-  } else if (directSession) {
+  if (directSession) {
     collection = replaceAgentSession(collection, settleRemovedDirectSession(directSession));
   } else if (!persistedRecordKeys(taskSessionRecords).has(agentSessionIdentityKey(identity))) {
     collection = removeAgentSession(collection, identity);

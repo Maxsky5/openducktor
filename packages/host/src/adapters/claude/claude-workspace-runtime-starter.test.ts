@@ -136,6 +136,29 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
     expect(liveSession.calls.released).toBe(1);
   });
 
+  test("uses the normal command timeout when reading the Claude version", async () => {
+    const liveSession = createLiveSessionDependencies();
+    const timeoutCalls: Array<number | undefined> = [];
+    const starter = createClaudeWorkspaceRuntimeStarter({
+      liveSessionLifecycle: liveSession.liveSessionLifecycle,
+      prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
+      runtimeId: () => "runtime-claude",
+      systemCommands: {
+        ...createSystemCommands(),
+        versionCommand(_command, _args, options) {
+          timeoutCalls.push(options?.timeoutMs);
+          return Effect.succeed(options?.timeoutMs === 10_000 ? "2.1.220" : null);
+        },
+      },
+      toolDiscovery: createToolDiscovery(),
+    });
+
+    const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
+
+    expect(timeoutCalls).toEqual([10_000]);
+    await Effect.runPromise(handle.stop());
+  });
+
   test("retries adapter cleanup after a registered release fails", async () => {
     const liveSession = createLiveSessionDependencies({ releaseFailures: 1 });
     const starter = createClaudeWorkspaceRuntimeStarter({

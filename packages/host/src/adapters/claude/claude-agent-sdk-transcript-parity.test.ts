@@ -39,6 +39,473 @@ const retainedLiveAssistantMessageIds = (events: AgentEvent[]): string[] => {
 };
 
 describe("Claude live and hydrated transcript parity", () => {
+  test("does not expose Claude synthetic messages in live subagent transcripts", () => {
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    liveSession.subagentTaskIdsByToolUseId.set("agent-tool", "agent-task");
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+
+    for (const message of [
+      claudeSdkMessageFixture({
+        type: "user",
+        uuid: "subagent-prompt",
+        session_id: "session-1",
+        parent_tool_use_id: "agent-tool",
+        message: { role: "user", content: "Inspect the authentication flow." },
+      }),
+      claudeSdkMessageFixture({
+        type: "user",
+        uuid: "subagent-skill-context",
+        session_id: "session-1",
+        parent_tool_use_id: "agent-tool",
+        isSynthetic: true,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Base directory for this skill: /Users/example/.claude/skills/explore",
+            },
+          ],
+        },
+      }),
+    ]) {
+      handleClaudeSdkMessage({
+        emit,
+        message,
+        modelSelection,
+        session: liveSession,
+        timestamp,
+      });
+    }
+
+    expect(
+      liveEvents.flatMap((event) => (event.type === "user_message" ? [event.message] : [])),
+    ).toEqual(["Inspect the authentication flow."]);
+  });
+
+  test("keeps the streamed response identity when the SDK assistant snapshot precedes message stop", () => {
+    const responseId = "response-final";
+    const assistantUuid = "assistant-final";
+    const finalText = "Complete final answer";
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    liveSession.acceptedUserMessages.push({});
+    liveSession.pendingUserTurnCount = 1;
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "assistant-stream-start",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "message_start",
+          message: {
+            id: responseId,
+            type: "message",
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: {
+              input_tokens: 0,
+              output_tokens: 0,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+            },
+          },
+        },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "assistant-stream-delta",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: finalText },
+        },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: assistantUuid,
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          id: responseId,
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [{ type: "text", text: finalText }],
+          stop_reason: null,
+        },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(liveEvents.some((event) => event.type === "transcript_retracted")).toBe(false);
+
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "result-final",
+        session_id: "session-1",
+        is_error: false,
+        result: finalText,
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 0, output_tokens: 0 },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(
+      liveEvents
+        .filter((event) => event.type === "assistant_delta" || event.type === "assistant_message")
+        .map((event) => event.messageId),
+    ).toEqual([responseId, responseId]);
+    expect(retainedLiveAssistantMessageIds(liveEvents)).toEqual([responseId]);
+
+    const storedAssistantMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: assistantUuid,
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: finalText }],
+        stop_reason: "end_turn",
+      },
+    });
+    const hydratedAssistantMessages = toClaudeHistoryMessages(
+      [claudeSessionMessageFixture(storedAssistantMessage)],
+      () => resultTimestamp,
+    ).filter((message) => message.role === "assistant");
+    expect(hydratedAssistantMessages).toHaveLength(1);
+    expect(hydratedAssistantMessages[0]).toMatchObject({
+      messageId: responseId,
+      text: finalText,
+    });
+  });
+
+  test("keeps one response identity for streamed subagent finals without a stop reason", () => {
+    const responseId = "subagent-response-final";
+    const assistantUuid = "subagent-assistant-final";
+    const parentToolUseId = "agent-tool";
+    const finalText = "Complete child response";
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    liveSession.subagentTaskIdsByToolUseId.set(parentToolUseId, "agent-task");
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+
+    for (const message of [
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "subagent-stream-start",
+        session_id: "session-1",
+        parent_tool_use_id: parentToolUseId,
+        event: {
+          type: "message_start",
+          message: { id: responseId },
+        },
+      }),
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "subagent-stream-delta",
+        session_id: "session-1",
+        parent_tool_use_id: parentToolUseId,
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: finalText },
+        },
+      }),
+      claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: assistantUuid,
+        session_id: "session-1",
+        parent_tool_use_id: parentToolUseId,
+        message: {
+          id: responseId,
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [{ type: "text", text: finalText }],
+          stop_reason: null,
+        },
+      }),
+    ]) {
+      handleClaudeSdkMessage({
+        emit,
+        message,
+        modelSelection,
+        session: liveSession,
+        timestamp: resultTimestamp,
+      });
+    }
+
+    expect(
+      liveEvents
+        .filter((event) => event.type === "assistant_delta" || event.type === "assistant_message")
+        .map((event) => event.messageId),
+    ).toEqual([responseId, responseId]);
+    expect(liveEvents.some((event) => event.type === "transcript_retracted")).toBe(false);
+
+    const hydratedAssistantMessages = toClaudeHistoryMessages(
+      [
+        claudeSessionMessageFixture(
+          claudeSdkMessageFixture({
+            type: "assistant",
+            uuid: assistantUuid,
+            session_id: "session-1",
+            parent_tool_use_id: parentToolUseId,
+            message: {
+              id: responseId,
+              role: "assistant",
+              model: "claude-sonnet-4-6",
+              content: [{ type: "text", text: finalText }],
+              stop_reason: null,
+            },
+          }),
+        ),
+      ],
+      () => resultTimestamp,
+      [],
+      {
+        includeNestedEntries: true,
+        transcriptExternalSessionId: "session-1::claude-subagent::agent-task",
+      },
+    ).filter((message) => message.role === "assistant");
+
+    expect(hydratedAssistantMessages).toHaveLength(1);
+    expect(hydratedAssistantMessages[0]).toMatchObject({
+      messageId: responseId,
+      text: finalText,
+    });
+  });
+
+  test("keeps one transcript identity across streamed and split completed assistant messages", () => {
+    const responseId = "response-final";
+    const reasoningMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-reasoning",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "thinking", thinking: "Short thought" }],
+        stop_reason: "end_turn",
+      },
+    });
+    const finalMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-final",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp: resultTimestamp,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: "Complete final answer" }],
+        stop_reason: "end_turn",
+      },
+    });
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    liveSession.acceptedUserMessages.push({});
+    liveSession.pendingUserTurnCount = 1;
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "assistant-stream-start",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "message_start",
+          message: {
+            id: responseId,
+            type: "message",
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: {
+              input_tokens: 0,
+              output_tokens: 0,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+            },
+          },
+        },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "assistant-thinking-stream",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "Short thought" },
+        },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "assistant-thinking-stop",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_stop",
+          index: 0,
+        },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "assistant-stream",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 1,
+          delta: { type: "text_delta", text: "Complete final answer" },
+        },
+      }),
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: reasoningMessage,
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+
+    expect(
+      liveEvents.flatMap<{ type: string; messageId: string }>((event) => {
+        if (event.type === "assistant_part" && event.part.kind === "reasoning") {
+          return [{ type: event.type, messageId: event.part.messageId }];
+        }
+        if (event.type === "assistant_delta") {
+          return [{ type: event.type, messageId: event.messageId ?? "" }];
+        }
+        return [];
+      }),
+    ).toEqual([
+      { type: "assistant_part", messageId: responseId },
+      { type: "assistant_delta", messageId: responseId },
+      { type: "assistant_part", messageId: responseId },
+    ]);
+    expect(liveEvents.some((event) => event.type === "transcript_retracted")).toBe(false);
+
+    handleClaudeSdkMessage({
+      emit,
+      message: finalMessage,
+      modelSelection,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(
+      liveEvents
+        .filter((event) => event.type === "assistant_delta" || event.type === "assistant_message")
+        .map((event) => event.messageId),
+    ).toEqual([responseId, responseId]);
+    expect(
+      liveEvents
+        .filter(
+          (event) => event.type === "assistant_message" || event.type === "transcript_retracted",
+        )
+        .map((event) => event.type),
+    ).toEqual(["assistant_message"]);
+    expect(retainedLiveAssistantMessageIds(liveEvents)).toEqual([responseId]);
+
+    const hydratedAssistantMessages = toClaudeHistoryMessages(
+      claudeHistoryMessageFixtures([reasoningMessage, finalMessage]),
+      () => resultTimestamp,
+    ).filter((message) => message.role === "assistant");
+    expect(hydratedAssistantMessages).toHaveLength(1);
+    expect(hydratedAssistantMessages[0]).toMatchObject({
+      messageId: responseId,
+      text: "Complete final answer",
+    });
+    expect(
+      hydratedAssistantMessages[0]?.parts.flatMap((part) =>
+        part.kind === "reasoning" ? [part.text] : [],
+      ),
+    ).toEqual(["Short thought"]);
+  });
+
   test("reconciles streamed assistant text to the hydrated SDK message id", () => {
     const sdkMessage = claudeSdkMessageFixture({
       type: "assistant",

@@ -347,6 +347,106 @@ describe("agent-orchestrator session transcript events", () => {
     expect(assistantMessage?.content).toBe("Final answer");
   });
 
+  test("keeps one Claude final response row from streaming through completion", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "running",
+        role: "build",
+        selectedModel: {
+          providerId: "claude",
+          modelId: "sonnet",
+          runtimeKind: "claude",
+        },
+      }),
+    ]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      eventBatchWindowMs: 25,
+      sessionsRef,
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:00.000Z",
+      part: {
+        kind: "reasoning",
+        messageId: "response-final",
+        partId: "response-final:thinking:0",
+        text: "Checking",
+        completed: true,
+      },
+    });
+    handleEvent({
+      type: "assistant_delta",
+      externalSessionId: "session-1",
+      channel: "text",
+      messageId: "response-final",
+      delta: "Final answer",
+      timestamp: "2026-02-22T08:00:01.000Z",
+    });
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.500Z",
+      part: {
+        kind: "reasoning",
+        messageId: "response-final",
+        partId: "response-final:thinking:0",
+        text: "Checking",
+        completed: true,
+      },
+    });
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "response-final",
+      message: "Final answer",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      model: {
+        providerId: "claude",
+        modelId: "sonnet",
+        runtimeKind: "claude",
+      },
+    });
+    handleEvent({
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+    });
+
+    expect(
+      getSessionMessages(sessionsRef)
+        .filter((message) => message.role === "assistant")
+        .map((message) => ({ id: message.id, content: message.content })),
+    ).toEqual([{ id: "response-final", content: "Final answer" }]);
+    expect(
+      getSessionMessages(sessionsRef)
+        .filter((message) => message.role === "thinking")
+        .map((message) => message.content),
+    ).toEqual(["Checking"]);
+  });
+
   test("preserves Claude streamed tool-use draft text before final result text", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {

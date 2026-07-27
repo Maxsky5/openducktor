@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { finalizeClaudeHistory } from "./claude-agent-sdk-history-loader";
+import { finalizeClaudeHistory, loadClaudeHistory } from "./claude-agent-sdk-history-loader";
 
 const latestProjectedMessage: AgentSessionHistoryMessage = {
   messageId: "assistant-2",
@@ -69,5 +69,35 @@ describe("finalizeClaudeHistory", () => {
         projectedHistory,
       ),
     ).toEqual([latestProjectedMessage]);
+  });
+});
+
+describe("loadClaudeHistory", () => {
+  test("does not import a transcript for a fresh live session without user turns", async () => {
+    await expect(
+      loadClaudeHistory(
+        {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/missing-worktree",
+          externalSessionId: "fresh-session",
+          runtimePolicy: { kind: "claude" },
+          systemPromptContext: {
+            systemPrompt: "Write a spec.",
+            startedAt: "2026-07-17T10:01:00.000Z",
+          },
+        },
+        () => "2026-07-17T10:01:01.000Z",
+        [],
+      ),
+    ).resolves.toEqual([
+      {
+        messageId: "claude-system-prompt:fresh-session",
+        role: "system",
+        timestamp: "2026-07-17T10:01:00.000Z",
+        text: "System prompt:\n\nWrite a spec.",
+        parts: [],
+      },
+    ]);
   });
 });

@@ -19,6 +19,8 @@ export type ClaudeEventSession = {
   lastAssistantText?: string;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
+  streamReasoningByBlockIndex?: Map<number, string>;
+  streamAssistantResponseId?: string;
   streamAssistantMessageOrdinal: number;
   streamAssistantMessageIdsByBlockIndex: Map<number, string>;
   todosById: ClaudeTodoState;
@@ -101,17 +103,20 @@ export const streamAssistantMessageId = (
   if (session.streamAssistantMessageOrdinal <= 0) {
     session.streamAssistantMessageOrdinal = 1;
   }
-  const messageId = `claude-stream:${session.externalSessionId}:${activeAssistantTurnIndex(
-    session,
-  )}:${session.streamAssistantMessageOrdinal}:${blockIndex}`;
+  const messageId =
+    session.streamAssistantResponseId ??
+    `claude-stream:${session.externalSessionId}:${activeAssistantTurnIndex(
+      session,
+    )}:${session.streamAssistantMessageOrdinal}:${blockIndex}`;
   session.streamAssistantMessageIdsByBlockIndex.set(blockIndex, messageId);
   return messageId;
 };
 
 export const advanceStreamAssistantMessageIdentity = (session: ClaudeEventSession): void => {
-  if (session.streamAssistantMessageIdsByBlockIndex.size === 0) {
-    return;
+  if (session.streamAssistantMessageIdsByBlockIndex.size > 0) {
+    session.streamAssistantMessageIdsByBlockIndex.clear();
+    session.streamAssistantMessageOrdinal += 1;
   }
-  session.streamAssistantMessageIdsByBlockIndex.clear();
-  session.streamAssistantMessageOrdinal += 1;
+  delete session.streamAssistantResponseId;
+  session.streamReasoningByBlockIndex?.clear();
 };

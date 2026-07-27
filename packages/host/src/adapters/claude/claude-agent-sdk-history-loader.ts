@@ -30,10 +30,13 @@ export const finalizeClaudeHistory = (
 export const loadClaudeHistory = async (
   input: LoadAgentSessionHistoryInput,
   now: () => string,
-  liveUserMessages: readonly ClaudeLiveUserMessage[] = [],
+  liveUserMessages?: readonly ClaudeLiveUserMessage[],
 ): Promise<AgentSessionHistoryMessage[]> => {
+  if (liveUserMessages?.length === 0) {
+    return finalizeClaudeHistory(input, []);
+  }
   const messages = await loadClaudeRawHistoryMessages(input);
-  const history = toClaudeHistoryMessages(messages, now, liveUserMessages, {
+  const history = toClaudeHistoryMessages(messages, now, liveUserMessages ?? [], {
     includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
     transcriptExternalSessionId: input.externalSessionId,
   });

@@ -387,13 +387,13 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         messageId: "claude-stream:session-1:1:1:0",
       }),
       expect.objectContaining({
-        type: "transcript_retracted",
-        messageIds: ["claude-stream:session-1:1:1:0"],
-      }),
-      expect.objectContaining({
         type: "assistant_message",
         messageId: "assistant-final",
         message: "Final answer",
+      }),
+      expect.objectContaining({
+        type: "transcript_retracted",
+        messageIds: ["claude-stream:session-1:1:1:0"],
       }),
     ]);
   });
@@ -734,13 +734,13 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         delta: "Second block",
       }),
       expect.objectContaining({
-        type: "transcript_retracted",
-        messageIds: ["claude-stream:session-1:1:1:0", "claude-stream:session-1:1:1:1"],
-      }),
-      expect.objectContaining({
         type: "assistant_message",
         messageId: "assistant-final",
         message: "First block\nSecond block",
+      }),
+      expect.objectContaining({
+        type: "transcript_retracted",
+        messageIds: ["claude-stream:session-1:1:1:0", "claude-stream:session-1:1:1:1"],
       }),
     ]);
   });

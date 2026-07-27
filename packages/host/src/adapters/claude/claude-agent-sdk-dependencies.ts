@@ -42,7 +42,7 @@ export const validateClaudeAgentSdkStartupDependencies = ({
       );
     }
     const version = yield* systemCommands.versionCommand(executablePath, ["--version"], {
-      timeoutMs: 2_000,
+      timeoutMs: 10_000,
     });
     if (version === null) {
       return yield* Effect.fail(
