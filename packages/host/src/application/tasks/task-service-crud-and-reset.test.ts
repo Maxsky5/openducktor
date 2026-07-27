@@ -994,8 +994,9 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-  test("deletes tasks when a stale outside-root worktree path is already missing", async () => {
+  test("keeps a task when failed worktree removal leaves missing outside-root identity unproved", async () => {
     const calls: unknown[] = [];
+    const removalError = new Error("worktree removal race");
     const session = createAgentSessionRecord({ workingDirectory: "/legacy/repo/task-1" });
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -1035,10 +1036,14 @@ describe("createTaskService task mutations and reset", () => {
                 "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
               },
               removeWorktreeErrors: {
-                "/repo|/legacy/repo/task-1|true": new Error("worktree removal race"),
+                "/repo|/legacy/repo/task-1|true": removalError,
               },
             }),
-            isRegisteredWorktree: () => Effect.succeed(false),
+            isRegisteredWorktree: (repoPath, worktreePath) =>
+              Effect.sync(() => {
+                calls.push({ type: "isRegisteredWorktree", repoPath, worktreePath });
+                return true;
+              }),
           },
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskActivityGuard,
@@ -1051,7 +1056,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
+    ).rejects.toThrow("worktree removal race");
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -1069,10 +1074,10 @@ describe("createTaskService task mutations and reset", () => {
         worktreePath: "/legacy/repo/task-1",
         force: true,
       },
-      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
-        type: "delete",
-        input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
+        type: "isRegisteredWorktree",
+        repoPath: "/repo",
+        worktreePath: "/legacy/repo/task-1",
       },
     ]);
   });

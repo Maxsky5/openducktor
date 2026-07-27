@@ -30,13 +30,13 @@ const resolveFilesystemCleanup = (
     "managedWorktreeBasePath" | "missingOutsideManagedRootPathPolicy" | "repoPath"
   >,
   effectiveWorktreePath: string,
+  targetExists: boolean,
   cause?: unknown,
 ) =>
   Effect.gen(function* () {
     const managedBase =
       input.managedWorktreeBasePath ??
       (yield* managedWorktreeBasePath(settingsConfig, input.repoPath));
-    const targetExists = yield* settingsConfig.pathExists(effectiveWorktreePath);
     const insideManagedBase = targetExists
       ? yield* worktreeFiles.pathIsWithinRoot(managedBase, effectiveWorktreePath)
       : pathStartsWith(effectiveWorktreePath, managedBase);
@@ -78,44 +78,45 @@ export const removeWorktreeAndFilesystemPath = (
     if (removalResult._tag === "Left" && !force) {
       return yield* Effect.fail(removalResult.left);
     }
+    const targetExists = yield* settingsConfig.pathExists(effectiveWorktreePath);
     const filesystemCleanup = yield* Effect.either(
       resolveFilesystemCleanup(
         dependencies,
         input,
         effectiveWorktreePath,
+        targetExists,
         removalResult._tag === "Left" ? removalResult.left : undefined,
       ),
     );
-    if (filesystemCleanup._tag === "Left") {
-      if (removalResult._tag === "Left") {
-        const registered = yield* gitPort.isRegisteredWorktree(repoPath, effectiveWorktreePath);
-        if (registered) {
-          return yield* Effect.fail(removalResult.left);
-        }
+    if (removalResult._tag === "Left") {
+      let registrationPath = effectiveWorktreePath;
+      let registrationIdentityProved = false;
+      if (targetExists) {
+        registrationPath = yield* gitPort.canonicalizePath(effectiveWorktreePath);
+        registrationIdentityProved = true;
+      } else if (
+        filesystemCleanup._tag === "Right" &&
+        filesystemCleanup.right.kind === "cleanup-filesystem-path"
+      ) {
+        const canonicalManagedBase = yield* gitPort.canonicalizePath(
+          filesystemCleanup.right.managedBase,
+        );
+        registrationPath = settingsConfig.join(
+          canonicalManagedBase,
+          toProjectRelativePath(effectiveWorktreePath, filesystemCleanup.right.managedBase),
+        );
+        registrationIdentityProved = true;
       }
+      const registered = yield* gitPort.isRegisteredWorktree(repoPath, registrationPath);
+      if (registered || !registrationIdentityProved) {
+        return yield* Effect.fail(removalResult.left);
+      }
+    }
+    if (filesystemCleanup._tag === "Left") {
       return yield* Effect.fail(filesystemCleanup.left);
     }
     if (filesystemCleanup.right.kind === "skip-filesystem-cleanup") {
       return;
-    }
-    if (removalResult._tag === "Left") {
-      const { managedBase, targetExists } = filesystemCleanup.right;
-      const canonicalWorktreePath = targetExists
-        ? yield* gitPort.canonicalizePath(effectiveWorktreePath)
-        : yield* gitPort
-            .canonicalizePath(managedBase)
-            .pipe(
-              Effect.map((canonicalManagedBase) =>
-                settingsConfig.join(
-                  canonicalManagedBase,
-                  toProjectRelativePath(effectiveWorktreePath, managedBase),
-                ),
-              ),
-            );
-      const registered = yield* gitPort.isRegisteredWorktree(repoPath, canonicalWorktreePath);
-      if (registered) {
-        return yield* Effect.fail(removalResult.left);
-      }
     }
     yield* worktreeFiles.removePathIfPresent(effectiveWorktreePath).pipe(
       Effect.mapError(

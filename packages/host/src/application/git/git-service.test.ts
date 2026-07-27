@@ -1290,6 +1290,54 @@ describe("createGitService", () => {
       `isRegisteredWorktree:/canonical/repo|${canonicalWorktreePath}`,
     ]);
   });
+  test("propagates a forced removal error when an outside alias resolves to the registered path", async () => {
+    const calls: string[] = [];
+    const configuredWorktreePath = "/outside-alias/task-1";
+    const canonicalWorktreePath = "/real/outside/task-1";
+    const removalError = new Error("worktree removal race");
+    const baseGitPort = createFakeGitPort({
+      canonicalPaths: {
+        "/repo": "/canonical/repo",
+        [configuredWorktreePath]: canonicalWorktreePath,
+      },
+      gitRepositories: ["/canonical/repo"],
+      calls,
+      removeWorktreeErrors: {
+        [`/canonical/repo|${configuredWorktreePath}|true`]: removalError,
+      },
+    });
+    const service = createGitService({
+      gitPort: {
+        ...baseGitPort,
+        isRegisteredWorktree(repoPath, worktreePath) {
+          return Effect.sync(() => {
+            calls.push(`isRegisteredWorktree:${repoPath}|${worktreePath}`);
+            return worktreePath === canonicalWorktreePath;
+          });
+        },
+      },
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: configuredWorktreePath,
+          force: true,
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      message: "worktree removal race",
+      cause: removalError,
+    });
+    expect(calls).toEqual([
+      `removeWorktree:/canonical/repo|${configuredWorktreePath}|true`,
+      `isRegisteredWorktree:/canonical/repo|${canonicalWorktreePath}`,
+    ]);
+  });
   test("inspects Git registration and completes cleanup when the managed leaf is missing", async () => {
     const calls: string[] = [];
     const configuredWorktreePath = "/managed/repo/task-1";
@@ -1384,7 +1432,10 @@ describe("createGitService", () => {
     const calls: string[] = [];
     const service = createGitService({
       gitPort: createFakeGitPort({
-        canonicalPaths: { "/repo": "/canonical/repo" },
+        canonicalPaths: {
+          "/repo": "/canonical/repo",
+          "/outside/task-1": "/outside/task-1",
+        },
         gitRepositories: ["/canonical/repo"],
         calls,
         removeWorktreeErrors: {
@@ -1405,29 +1456,34 @@ describe("createGitService", () => {
     ).rejects.toThrow("outside managed roots");
     expect(calls).toEqual(["removeWorktree:/canonical/repo|/outside/task-1|true"]);
   });
-  test("rejects missing forced stranded worktree cleanup outside managed roots", async () => {
+  test("propagates forced removal failure when a missing outside-root identity is unproved", async () => {
     const calls: string[] = [];
+    const removalError = new Error("worktree removal race");
     const service = createGitService({
       gitPort: createFakeGitPort({
         canonicalPaths: { "/repo": "/canonical/repo" },
         gitRepositories: ["/canonical/repo"],
         calls,
         removeWorktreeErrors: {
-          "/canonical/repo|/legacy/repo/task-1|true": new Error("worktree removal race"),
+          "/canonical/repo|/legacy/repo/task-1|true": removalError,
         },
       }),
       settingsConfig: createFakeSettingsConfig(createConfig(), new Set(["/canonical/repo"])),
       worktreeFiles: createFakeWorktreeFiles(calls),
     });
-    await expect(
-      Effect.runPromise(
+    const error = await Effect.runPromise(
+      Effect.flip(
         service.removeWorktree({
           repoPath: "/repo",
           worktreePath: "/legacy/repo/task-1",
           force: true,
         }),
       ),
-    ).rejects.toThrow("outside managed roots");
+    );
+    expect(error).toMatchObject({
+      message: "worktree removal race",
+      cause: removalError,
+    });
     expect(calls).toEqual(["removeWorktree:/canonical/repo|/legacy/repo/task-1|true"]);
   });
   test("resets a worktree selection after validating the current snapshot", async () => {
