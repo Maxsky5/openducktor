@@ -214,7 +214,7 @@ describe("Claude local slash commands", () => {
     ]);
   });
 
-  test("settles the current SDK success result shape", () => {
+  test("reuses local command output identity and settles the matching result", () => {
     const events: AgentEvent[] = [];
     const session: ClaudeEventSession & {
       sdkState?: "idle" | "requires_action" | "running" | undefined;
@@ -223,6 +223,23 @@ describe("Claude local slash commands", () => {
     session.pendingUserTurnCount = 1;
     session.sdkState = "running";
 
+    handleClaudeSdkMessage({
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "local_command_output",
+        uuid: "local-command-output",
+        session_id: "session-1",
+        content: "Context usage: 42%",
+      }),
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      session,
+      timestamp,
+    });
     handleClaudeSdkMessage({
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
@@ -254,12 +271,22 @@ describe("Claude local slash commands", () => {
         type: "session_idle",
       }),
     );
-    expect(events).toContainEqual(
-      expect.objectContaining({
+    expect(events.filter((event) => event.type === "assistant_message")).toEqual([
+      {
         type: "assistant_message",
+        externalSessionId: "session-1",
+        timestamp,
+        messageId: "local-command-output",
+        message: "Context usage: 42%",
+      },
+      {
+        type: "assistant_message",
+        externalSessionId: "session-1",
+        timestamp,
+        messageId: "local-command-output",
         message: "Context usage: 42%",
         durationMs: 38,
-      }),
-    );
+      },
+    ]);
   });
 });

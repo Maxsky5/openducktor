@@ -110,6 +110,7 @@ export const handleClaudeSdkMessage = ({
   if (message.type === "system" && message.subtype === "local_command_output") {
     const content = message.content.trim();
     if (content.length > 0) {
+      rememberAssistantTextForCurrentTurn(session, content, message.uuid);
       emit({
         type: "assistant_message",
         externalSessionId: session.externalSessionId,
