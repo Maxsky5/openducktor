@@ -44,7 +44,6 @@ const resolveFilesystemCleanup = (
       return {
         kind: "cleanup-filesystem-path" as const,
         managedBase,
-        targetExists,
       };
     }
     if (input.missingOutsideManagedRootPathPolicy === "skip" && !targetExists) {
