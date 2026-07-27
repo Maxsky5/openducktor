@@ -351,7 +351,7 @@ export const handleSessionError = (
 };
 
 export const handleTurnError = (
-  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+  context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
   event: Extract<SessionEvent, { type: "turn_error" }>,
 ): void => {
   const message = normalizeSessionErrorMessage(event.message);
@@ -372,6 +372,8 @@ export const handleTurnError = (
       buildSessionErrorNoticeMessage(event.timestamp, message, event.messageId),
     ),
   }));
+  context.turn.clearTurnDuration(context.session.key, event.timestamp);
+  clearTurnTracking(context);
 };
 
 export const handleSessionIdle = (

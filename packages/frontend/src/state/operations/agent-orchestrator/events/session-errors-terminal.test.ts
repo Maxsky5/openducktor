@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createSessionTurnMetadata } from "../support/session-turn-metadata";
+import { createSessionTurnTiming } from "../support/session-turn-timing";
 import {
   buildSession,
   createRecordingSessionTodosUpdater,
@@ -66,6 +69,81 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:11.000Z",
     });
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+  });
+
+  test("starts queued turn timing after a recoverable turn error", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+    const session = findSession(sessionsRef, "session-1");
+    if (!session) {
+      throw new Error("Expected session");
+    }
+    const sessionKey = agentSessionIdentityKey(session);
+    const turnMetadata = createSessionTurnMetadata();
+    const turnTiming = createSessionTurnTiming();
+    turnMetadata.recordModel(sessionKey, {
+      providerId: "claude",
+      modelId: "sonnet",
+      runtimeKind: "claude",
+    });
+    turnTiming.recordTurnUserMessageTimestamp(sessionKey, "2026-02-22T08:00:00.000Z");
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      turnMetadata,
+      recordTurnUserMessageTimestamp: turnTiming.recordTurnUserMessageTimestamp,
+      resolveTurnDurationMs: turnTiming.resolveTurnDurationMs,
+      clearTurnDuration: turnTiming.clearTurnDuration,
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "turn_error",
+      externalSessionId: "session-1",
+      message: "Attachment could not be processed.",
+      timestamp: "2026-02-22T08:00:10.000Z",
+    });
+    expect(turnMetadata.readModel(sessionKey)).toBeUndefined();
+    handleEvent({
+      type: "user_message",
+      externalSessionId: "session-1",
+      messageId: "queued-user",
+      message: "Continue without it.",
+      timestamp: "2026-02-22T08:00:11.000Z",
+      state: "sent",
+    });
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "queued-answer",
+      message: "Done.",
+      timestamp: "2026-02-22T08:00:13.000Z",
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
+    expect(getLastSessionMessage(sessionsRef)).toMatchObject({
+      id: "queued-answer",
+      meta: {
+        kind: "assistant",
+        durationMs: 2_000,
+      },
+    });
   });
 
   test("removes a running compaction notice when the compact turn fails", async () => {

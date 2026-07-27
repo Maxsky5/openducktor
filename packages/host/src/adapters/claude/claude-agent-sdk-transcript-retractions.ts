@@ -4,6 +4,7 @@ import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
 } from "./claude-agent-sdk-event-session";
+import { retractClaudeTodoToolResults } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
 import { isRecord } from "./claude-agent-sdk-utils";
 
@@ -33,13 +34,22 @@ const emitTranscriptRetraction = ({
   if (uniqueMessageIds.length === 0) {
     return;
   }
-  retractClaudeTranscriptCorrelations(session, uniqueMessageIds);
+  const retracted = retractClaudeTranscriptCorrelations(session, uniqueMessageIds);
+  const todos = retractClaudeTodoToolResults(session, retracted.toolUseIds);
   emit({
     type: "transcript_retracted",
     externalSessionId: session.externalSessionId,
     timestamp,
     messageIds: uniqueMessageIds,
   });
+  if (todos) {
+    emit({
+      type: "session_todos_updated",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      todos,
+    });
+  }
 };
 
 export const settleClaudeStreamedAssistantText = ({

@@ -4,12 +4,31 @@ import {
   type ClaudeHistoryMessage,
   loadClaudeRawHistoryMessages,
 } from "./claude-agent-sdk-history-import";
-import { readHistoryToolResults } from "./claude-agent-sdk-history-support";
+import {
+  readHistoryToolResults,
+  retractedHistoryMessageIds,
+} from "./claude-agent-sdk-history-support";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { decodeClaudeToolUseBlock } from "./claude-agent-sdk-tool-shapes";
+import {
+  isClaudeToolUseRetracted,
+  retractClaudeTranscriptCorrelations,
+} from "./claude-agent-sdk-transcript-correlation";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeTodoState = Map<string, AgentSessionTodoItem>;
+
+type ClaudeTodoToolResult = Omit<ClaudeTaskToolResultInput, "state">;
+
+export type ClaudeTodoProjection = {
+  baselineById: ClaudeTodoState;
+  resultsByCallId: Map<string, ClaudeTodoToolResult>;
+};
+
+export type ClaudeTodoProjectionState = {
+  todoProjection?: ClaudeTodoProjection;
+  todosById: ClaudeTodoState;
+};
 
 export const claudeTodoToolPresentation = (
   todos: readonly AgentSessionTodoItem[],
@@ -152,15 +171,87 @@ export const applyClaudeTaskToolResult = ({
   return changed ? [...state.values()] : null;
 };
 
+const isClaudeTodoTool = (tool: string): boolean =>
+  tool === "TaskCreate" || tool === "TaskUpdate" || tool === "TaskGet" || tool === "TaskList";
+
+export const rememberClaudeTodoToolResult = ({
+  callId,
+  input,
+  isError,
+  raw,
+  state,
+  tool,
+}: ClaudeTodoToolResult & {
+  callId: string;
+  state: ClaudeTodoProjectionState;
+}): void => {
+  if (isError || !isClaudeTodoTool(tool)) {
+    return;
+  }
+  state.todoProjection ??= {
+    baselineById: new Map(state.todosById),
+    resultsByCallId: new Map(),
+  };
+  state.todoProjection.resultsByCallId.set(callId, {
+    input,
+    isError,
+    raw,
+    tool,
+  });
+};
+
+export const retractClaudeTodoToolResults = (
+  state: ClaudeTodoProjectionState,
+  toolUseIds: readonly string[],
+): AgentSessionTodoItem[] | null => {
+  const projection = state.todoProjection;
+  if (!projection) {
+    return null;
+  }
+  let removed = false;
+  for (const toolUseId of toolUseIds) {
+    removed = projection.resultsByCallId.delete(toolUseId) || removed;
+  }
+  if (!removed) {
+    return null;
+  }
+
+  state.todosById.clear();
+  for (const [id, todo] of projection.baselineById) {
+    state.todosById.set(id, todo);
+  }
+  for (const result of projection.resultsByCallId.values()) {
+    applyClaudeTaskToolResult({
+      ...result,
+      state: state.todosById,
+    });
+  }
+  return [...state.todosById.values()];
+};
+
 export const toClaudeTodos = (
   messages: ClaudeHistoryMessage[],
   options: { includeNestedEntries?: boolean } = {},
 ): AgentSessionTodoItem[] => {
-  const state: ClaudeTodoState = new Map();
+  const projectionState: ClaudeTodoProjectionState = { todosById: new Map() };
   const toolInputsByCallId = new Map<string, Record<string, unknown>>();
+  const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
+  const correlationState = {
+    retractedToolUseIds: new Set<string>(),
+    subagentMessageIdsByTaskId: new Map<string, string>(),
+    subagentTaskIdsByToolUseId: new Map<string, string>(),
+    toolInputsByCallId,
+    toolMessageIdsByCallId,
+    toolNamesByCallId,
+  };
 
   for (const entry of messages) {
+    const retracted = retractClaudeTranscriptCorrelations(
+      correlationState,
+      retractedHistoryMessageIds(entry),
+    );
+    retractClaudeTodoToolResults(projectionState, retracted.toolUseIds);
     if (!options.includeNestedEntries && isNestedHistoryEntry(entry)) {
       continue;
     }
@@ -181,6 +272,7 @@ export const toClaudeTodos = (
         if (!toolUse) {
           continue;
         }
+        toolMessageIdsByCallId.set(toolUse.callId, entry.uuid);
         toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
         if (toolUse.input) {
           toolInputsByCallId.set(toolUse.callId, toolUse.input);
@@ -192,20 +284,32 @@ export const toClaudeTodos = (
       continue;
     }
     for (const result of readHistoryToolResults(entry)) {
+      if (isClaudeToolUseRetracted(correlationState, result.toolUseId)) {
+        continue;
+      }
       const tool = toolNamesByCallId.get(result.toolUseId) ?? result.toolName;
       if (!tool) {
         continue;
       }
-      applyClaudeTaskToolResult({
-        input: toolInputsByCallId.get(result.toolUseId),
+      const input = toolInputsByCallId.get(result.toolUseId);
+      rememberClaudeTodoToolResult({
+        callId: result.toolUseId,
+        input,
         isError: result.isError,
         raw: result.raw,
-        state,
+        state: projectionState,
+        tool,
+      });
+      applyClaudeTaskToolResult({
+        input,
+        isError: result.isError,
+        raw: result.raw,
+        state: projectionState.todosById,
         tool,
       });
     }
   }
-  return [...state.values()];
+  return [...projectionState.todosById.values()];
 };
 
 export const loadClaudeTodos = async (

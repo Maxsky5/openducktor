@@ -34,7 +34,12 @@ import {
   emitClaudeAgentToolResultSubagentPart,
   handleClaudeSubagentSystemMessage,
 } from "./claude-agent-sdk-subagents";
-import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
+import {
+  type ClaudeTodoProjectionState,
+  type ClaudeTodoState,
+  rememberClaudeTodoToolResult,
+  retractClaudeTodoToolResults,
+} from "./claude-agent-sdk-todos";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import {
   isClaudeToolUseRetracted,
@@ -84,6 +89,7 @@ export const toClaudeHistoryMessages = (
   const retractedSubagentTaskIds = new Set<string>();
   const retractedToolUseIds = new Set<string>();
   const todosById: ClaudeTodoState = new Map();
+  const todoProjectionState: ClaudeTodoProjectionState = { todosById };
   const correlationState = {
     hiddenSubagentTaskIds,
     retractedSubagentTaskIds,
@@ -130,6 +136,7 @@ export const toClaudeHistoryMessages = (
   const removeRetractedMessages = (messageIds: string[]) => {
     const retractedIds = new Set(messageIds);
     const retractedCorrelations = retractClaudeTranscriptCorrelations(correlationState, messageIds);
+    retractClaudeTodoToolResults(todoProjectionState, retractedCorrelations.toolUseIds);
     for (const toolUseId of retractedCorrelations.toolUseIds) {
       assistantMessagesByToolCallId.delete(toolUseId);
     }
@@ -254,6 +261,14 @@ export const toClaudeHistoryMessages = (
             continue;
           }
           const toolInput = toolInputsByCallId.get(toolResult.toolUseId);
+          rememberClaudeTodoToolResult({
+            callId: toolResult.toolUseId,
+            input: toolInput,
+            isError: toolResult.isError,
+            raw: toolResult.raw,
+            state: todoProjectionState,
+            tool,
+          });
           const { part: completedPart } = projectClaudeCompletedToolResult({
             callId: toolResult.toolUseId,
             endedAtMs: timestampMs(timestamp),

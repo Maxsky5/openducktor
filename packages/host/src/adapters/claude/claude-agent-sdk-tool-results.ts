@@ -2,7 +2,11 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
-import type { ClaudeTodoState } from "./claude-agent-sdk-todos";
+import {
+  type ClaudeTodoProjection,
+  type ClaudeTodoState,
+  rememberClaudeTodoToolResult,
+} from "./claude-agent-sdk-todos";
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
 import { isRecord } from "./claude-agent-sdk-utils";
@@ -18,6 +22,7 @@ type ClaudeToolResultSession = {
   toolNamesByCallId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
   toolStartedAtMsByCallId: Map<string, number>;
+  todoProjection?: ClaudeTodoProjection;
   todosById: ClaudeTodoState;
 };
 
@@ -91,6 +96,14 @@ export const handleClaudeUserToolResultMessage = ({
     const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
     const endedAtMs =
       session.toolEndedAtMsByCallId?.get(result.toolUseId) ?? timestampMs(timestamp);
+    rememberClaudeTodoToolResult({
+      callId: result.toolUseId,
+      input,
+      isError: result.isError,
+      raw: result.raw,
+      state: session,
+      tool,
+    });
     const { part, todos } = projectClaudeCompletedToolResult({
       callId: result.toolUseId,
       endedAtMs,

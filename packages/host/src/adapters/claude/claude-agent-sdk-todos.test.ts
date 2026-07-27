@@ -229,6 +229,129 @@ describe("Claude task tools", () => {
     ]);
   });
 
+  test("rebuilds live and hydrated TODO state when Claude retracts a TaskUpdate", () => {
+    const events: AgentEvent[] = [];
+    const session = createEventTestSession();
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+    const { toolResult, toolUse } = taskCreateMessages();
+    const updateUse = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-update",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-update",
+            name: "TaskUpdate",
+            input: { taskId: "1", status: "completed" },
+          },
+        ],
+        stop_reason: "tool_use",
+      },
+    });
+    const updateResult = claudeSdkMessageFixture({
+      type: "user",
+      uuid: "result-update",
+      session_id: "session-1",
+      parent_tool_use_id: "tool-update",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-update",
+            content: "Updated task #1 status",
+          },
+        ],
+      },
+      tool_use_result: {
+        success: true,
+        taskId: "1",
+        updatedFields: ["status"],
+        statusChange: { from: "pending", to: "completed" },
+      },
+    });
+
+    for (const message of [toolUse, toolResult, updateUse, updateResult]) {
+      handleClaudeSdkMessage({
+        emit: (event) => events.push(event),
+        message,
+        modelSelection,
+        session,
+        timestamp,
+      });
+    }
+    expect([...session.todosById.values()]).toEqual([
+      {
+        id: "1",
+        content: "Implement Facebook auth",
+        status: "completed",
+        priority: "medium",
+      },
+    ]);
+
+    const replacement = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-replacement",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      supersedes: ["assistant-update", "result-update"],
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Continuing without that update." }],
+        stop_reason: "end_turn",
+      },
+    });
+    handleClaudeSdkMessage({
+      emit: (event) => events.push(event),
+      message: replacement,
+      modelSelection,
+      session,
+      timestamp,
+    });
+
+    expect([...session.todosById.values()]).toEqual([
+      {
+        id: "1",
+        content: "Implement Facebook auth",
+        status: "pending",
+        priority: "medium",
+      },
+    ]);
+    expect(events.filter((event) => event.type === "session_todos_updated").at(-1)).toEqual({
+      type: "session_todos_updated",
+      externalSessionId: "session-1",
+      timestamp,
+      todos: [
+        {
+          id: "1",
+          content: "Implement Facebook auth",
+          status: "pending",
+          priority: "medium",
+        },
+      ],
+    });
+    expect(
+      toClaudeTodos(
+        claudeHistoryMessageFixtures([toolUse, toolResult, updateUse, updateResult, replacement]),
+      ),
+    ).toEqual([
+      {
+        id: "1",
+        content: "Implement Facebook auth",
+        status: "pending",
+        priority: "medium",
+      },
+    ]);
+  });
+
   test("rebuilds the same TODO state from SDK-imported history", () => {
     const { toolResult, toolUse } = taskCreateMessages();
     const updateUse = claudeSdkMessageFixture({
