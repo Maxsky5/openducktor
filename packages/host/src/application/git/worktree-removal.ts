@@ -89,10 +89,10 @@ export const removeWorktreeAndFilesystemPath = (
     );
     if (removalResult._tag === "Left") {
       let registrationPath = effectiveWorktreePath;
-      let registrationIdentityProved = false;
+      let registrationPathIsCanonical = false;
       if (targetExists) {
         registrationPath = yield* gitPort.canonicalizePath(effectiveWorktreePath);
-        registrationIdentityProved = true;
+        registrationPathIsCanonical = true;
       } else if (
         filesystemCleanup._tag === "Right" &&
         filesystemCleanup.right.kind === "cleanup-filesystem-path"
@@ -104,10 +104,10 @@ export const removeWorktreeAndFilesystemPath = (
           canonicalManagedBase,
           toProjectRelativePath(effectiveWorktreePath, filesystemCleanup.right.managedBase),
         );
-        registrationIdentityProved = true;
+        registrationPathIsCanonical = true;
       }
       const registered = yield* gitPort.isRegisteredWorktree(repoPath, registrationPath);
-      if (registered || !registrationIdentityProved) {
+      if (registered || !registrationPathIsCanonical) {
         return yield* Effect.fail(removalResult.left);
       }
     }

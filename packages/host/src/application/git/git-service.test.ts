@@ -1242,102 +1242,58 @@ describe("createGitService", () => {
     });
     expect(calls).toEqual(["removeWorktree:/canonical/repo|/managed/repo/task-1|true"]);
   });
-  test("propagates a forced removal error when a managed alias resolves to the registered path", async () => {
-    const calls: string[] = [];
-    const configuredWorktreePath = "/managed/repo/task-1";
-    const canonicalWorktreePath = "/real/worktrees/task-1";
-    const removalError = new Error("worktree removal race");
-    const baseGitPort = createFakeGitPort({
-      canonicalPaths: {
-        "/repo": "/canonical/repo",
-        [configuredWorktreePath]: canonicalWorktreePath,
-      },
-      gitRepositories: ["/canonical/repo"],
-      calls,
-      removeWorktreeErrors: {
-        [`/canonical/repo|${configuredWorktreePath}|true`]: removalError,
-      },
-    });
-    const service = createGitService({
-      gitPort: {
-        ...baseGitPort,
-        isRegisteredWorktree(repoPath, worktreePath) {
-          return Effect.sync(() => {
-            calls.push(`isRegisteredWorktree:${repoPath}|${worktreePath}`);
-            return worktreePath === canonicalWorktreePath;
-          });
+  test.each([
+    ["a managed", "/managed/repo/task-1", "/real/worktrees/task-1"],
+    ["an outside", "/outside-alias/task-1", "/real/outside/task-1"],
+  ] satisfies Array<[string, string, string]>)(
+    "propagates a forced removal error when %s alias resolves to the registered path",
+    async (_aliasDescription, configuredWorktreePath, canonicalWorktreePath) => {
+      const calls: string[] = [];
+      const removalError = new Error("worktree removal race");
+      const baseGitPort = createFakeGitPort({
+        canonicalPaths: {
+          "/repo": "/canonical/repo",
+          [configuredWorktreePath]: canonicalWorktreePath,
         },
-      },
-      settingsConfig: createFakeSettingsConfig(createConfig()),
-      worktreeFiles: createFakeWorktreeFiles(calls),
-    });
-
-    const error = await Effect.runPromise(
-      Effect.flip(
-        service.removeWorktree({
-          repoPath: "/repo",
-          worktreePath: configuredWorktreePath,
-          force: true,
-        }),
-      ),
-    );
-    expect(error).toMatchObject({
-      message: "worktree removal race",
-      cause: removalError,
-    });
-    expect(calls).toEqual([
-      `removeWorktree:/canonical/repo|${configuredWorktreePath}|true`,
-      `isRegisteredWorktree:/canonical/repo|${canonicalWorktreePath}`,
-    ]);
-  });
-  test("propagates a forced removal error when an outside alias resolves to the registered path", async () => {
-    const calls: string[] = [];
-    const configuredWorktreePath = "/outside-alias/task-1";
-    const canonicalWorktreePath = "/real/outside/task-1";
-    const removalError = new Error("worktree removal race");
-    const baseGitPort = createFakeGitPort({
-      canonicalPaths: {
-        "/repo": "/canonical/repo",
-        [configuredWorktreePath]: canonicalWorktreePath,
-      },
-      gitRepositories: ["/canonical/repo"],
-      calls,
-      removeWorktreeErrors: {
-        [`/canonical/repo|${configuredWorktreePath}|true`]: removalError,
-      },
-    });
-    const service = createGitService({
-      gitPort: {
-        ...baseGitPort,
-        isRegisteredWorktree(repoPath, worktreePath) {
-          return Effect.sync(() => {
-            calls.push(`isRegisteredWorktree:${repoPath}|${worktreePath}`);
-            return worktreePath === canonicalWorktreePath;
-          });
+        gitRepositories: ["/canonical/repo"],
+        calls,
+        removeWorktreeErrors: {
+          [`/canonical/repo|${configuredWorktreePath}|true`]: removalError,
         },
-      },
-      settingsConfig: createFakeSettingsConfig(createConfig()),
-      worktreeFiles: createFakeWorktreeFiles(calls),
-    });
+      });
+      const service = createGitService({
+        gitPort: {
+          ...baseGitPort,
+          isRegisteredWorktree(repoPath, worktreePath) {
+            return Effect.sync(() => {
+              calls.push(`isRegisteredWorktree:${repoPath}|${worktreePath}`);
+              return worktreePath === canonicalWorktreePath;
+            });
+          },
+        },
+        settingsConfig: createFakeSettingsConfig(createConfig()),
+        worktreeFiles: createFakeWorktreeFiles(calls),
+      });
 
-    const error = await Effect.runPromise(
-      Effect.flip(
-        service.removeWorktree({
-          repoPath: "/repo",
-          worktreePath: configuredWorktreePath,
-          force: true,
-        }),
-      ),
-    );
-    expect(error).toMatchObject({
-      message: "worktree removal race",
-      cause: removalError,
-    });
-    expect(calls).toEqual([
-      `removeWorktree:/canonical/repo|${configuredWorktreePath}|true`,
-      `isRegisteredWorktree:/canonical/repo|${canonicalWorktreePath}`,
-    ]);
-  });
+      const error = await Effect.runPromise(
+        Effect.flip(
+          service.removeWorktree({
+            repoPath: "/repo",
+            worktreePath: configuredWorktreePath,
+            force: true,
+          }),
+        ),
+      );
+      expect(error).toMatchObject({
+        message: "worktree removal race",
+        cause: removalError,
+      });
+      expect(calls).toEqual([
+        `removeWorktree:/canonical/repo|${configuredWorktreePath}|true`,
+        `isRegisteredWorktree:/canonical/repo|${canonicalWorktreePath}`,
+      ]);
+    },
+  );
   test("inspects Git registration and completes cleanup when the managed leaf is missing", async () => {
     const calls: string[] = [];
     const configuredWorktreePath = "/managed/repo/task-1";

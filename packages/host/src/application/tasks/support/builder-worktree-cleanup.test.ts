@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AgentRole,
-  globalConfigSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   type RuntimeSupportedScope,
@@ -24,7 +23,6 @@ import {
   createDirectMergeTaskWorktreeService,
   createRuntimeDefinitionsService,
   extendGitPort,
-  extendSettingsConfigPort,
   task,
 } from "../test-support/task-workflow-harness";
 import {
@@ -415,27 +413,7 @@ describe("builder worktree cleanup", () => {
           }),
           createRuntimeDefinitionsService(),
           createBuildStartRuntimeRegistry(calls),
-          extendSettingsConfigPort(
-            createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-            {
-              readConfig() {
-                return Effect.succeed(
-                  globalConfigSchema.parse({
-                    version: 2,
-                    workspaces: {
-                      repo: {
-                        workspaceId: "repo",
-                        workspaceName: "Repo",
-                        repoPath: "/repo",
-                        defaultRuntimeKind: "opencode",
-                        worktreeCopyPaths: [],
-                      },
-                    },
-                  }),
-                );
-              },
-            },
-          ),
+          createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           createBuildSystemCommands(calls),
           failingWorktreeFiles,
           createBuildWorkspaceSettingsService({
@@ -448,6 +426,7 @@ describe("builder worktree cleanup", () => {
         "/worktrees/repo/task-1",
         "odt/task-1",
         "refs/remotes/origin/odt/task-1",
+        "/worktrees/repo",
       ),
     );
 
