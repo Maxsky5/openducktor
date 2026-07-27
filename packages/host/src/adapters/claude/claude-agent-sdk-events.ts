@@ -344,6 +344,7 @@ const handleAssistantMessage = ({
     content.some(
       (block) => isRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
     );
+  let emittedToolUseText = false;
   settleClaudeStreamedAssistantText({ emit, session, timestamp });
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
@@ -353,18 +354,19 @@ const handleAssistantMessage = ({
       const type = readStringProp(block, "type");
       if (type === "text" && hasToolUse) {
         const blockText = readStringProp(block, "text");
-        if (blockText) {
+        if (!emittedToolUseText && blockText?.trim() && text.length > 0) {
           const messageId = message.uuid;
-          rememberAssistantTextForCurrentTurn(session, blockText, messageId);
+          rememberAssistantTextForCurrentTurn(session, text, messageId);
           emit(
             claudeAssistantTextPartEvent({
               externalSessionId: session.externalSessionId,
               messageId,
               partId: `${messageId}:text:${index}`,
-              text: blockText,
+              text,
               timestamp,
             }),
           );
+          emittedToolUseText = true;
         }
         continue;
       }

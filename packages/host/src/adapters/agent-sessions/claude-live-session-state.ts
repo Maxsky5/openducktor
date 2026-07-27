@@ -351,7 +351,7 @@ export const createClaudeLiveSessionState = ({
         }
         const childSnapshot = snapshotsByRef.get(childRefKey);
         if (childSnapshot) {
-          changes.push(...removeSnapshot(childSnapshot.ref));
+          changes.push(...removeSessionTree(childSnapshot.ref));
         } else {
           subagentOwnersByRef.delete(childRefKey);
         }

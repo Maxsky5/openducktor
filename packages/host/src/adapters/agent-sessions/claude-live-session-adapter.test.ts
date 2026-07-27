@@ -113,6 +113,8 @@ const createHarness = async () => {
   let updateSessionModelImpl: ClaudeAgentSdkService["updateSessionModel"] = () =>
     Effect.die("updateSessionModel was not configured");
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
+  let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
+    Effect.void;
   let failNextMutationAfterApply = false;
   let mutationBarrier:
     | {
@@ -159,6 +161,7 @@ const createHarness = async () => {
     updateSessionModel: (input: Parameters<ClaudeAgentSdkService["updateSessionModel"]>[0]) =>
       updateSessionModelImpl(input),
     stopSession: () => Effect.void,
+    stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
     releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
       releaseSessionImpl(input),
   } as unknown as ClaudeAgentSdkService;
@@ -244,6 +247,11 @@ const createHarness = async () => {
     },
     setReleaseSession: (implementation: ClaudeAgentSdkService["releaseSession"]) => {
       releaseSessionImpl = implementation;
+    },
+    setStopSessionsForRuntime: (
+      implementation: ClaudeAgentSdkService["stopSessionsForRuntime"],
+    ) => {
+      stopSessionsForRuntimeImpl = implementation;
     },
   };
 };
@@ -927,6 +935,47 @@ describe("Claude host live-session adapter", () => {
         },
       },
     ]);
+  });
+
+  test("retains runtime state when cleanup fails so release can be retried", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    let cleanupAttempts = 0;
+    harness.setStopSessionsForRuntime(() => {
+      cleanupAttempts += 1;
+      return cleanupAttempts === 1
+        ? Effect.fail(
+            new HostOperationError({
+              operation: "test.stop-sessions",
+              message: "Claude cleanup failed.",
+            }),
+          )
+        : Effect.void;
+    });
+
+    await expect(Effect.runPromise(harness.adapter.releaseRuntime())).rejects.toThrow(
+      "Claude cleanup failed.",
+    );
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toMatchObject({ type: "live" });
+
+    await expect(Effect.runPromise(harness.adapter.releaseRuntime())).resolves.toEqual([
+      {
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+    ]);
+    expect(cleanupAttempts).toBe(2);
   });
 
   test("serializes live model updates in selection order", async () => {

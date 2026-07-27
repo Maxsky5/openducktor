@@ -125,15 +125,11 @@ export const createClaudeLiveSessionEventCoordinator = ({
           return yield* Effect.fail(runtimeReleasedError());
         }
         forwarding = false;
-        return yield* effect.pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              released = true;
-              forwardingFailure = null;
-              queuedEvents.splice(0);
-            }),
-          ),
-        );
+        const value = yield* effect;
+        released = true;
+        forwardingFailure = null;
+        queuedEvents.splice(0);
+        return value;
       }),
     );
 

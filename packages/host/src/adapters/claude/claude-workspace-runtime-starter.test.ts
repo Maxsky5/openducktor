@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Cause, Chunk, Effect, Exit } from "effect";
-import { HostDependencyError } from "../../effect/host-errors";
+import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -64,8 +64,13 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E | null
   return failureOption._tag === "Some" ? failureOption.value : null;
 };
 
-const createLiveSessionDependencies = () => {
-  const calls = { forwarded: 0, registered: 0, released: 0 };
+const createLiveSessionDependencies = ({
+  releaseFailures = 0,
+}: {
+  releaseFailures?: number;
+} = {}) => {
+  const calls = { discarded: 0, forwarded: 0, registered: 0, released: 0 };
+  let remainingReleaseFailures = releaseFailures;
   const adapter = {} as AgentSessionLiveAdapterPort;
   const liveSessionLifecycle: RuntimeLiveSessionLifecyclePort = {
     registerRuntimeAdapter: () =>
@@ -73,9 +78,18 @@ const createLiveSessionDependencies = () => {
         calls.registered += 1;
       }),
     releaseRuntime: () =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         calls.released += 1;
-        return [];
+        if (remainingReleaseFailures > 0) {
+          remainingReleaseFailures -= 1;
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.release-runtime",
+              message: "Claude cleanup failed.",
+            }),
+          );
+        }
+        return Effect.succeed([]);
       }),
     runAdapterMutation: (mutation) => Effect.map(mutation, ({ value }) => value),
   };
@@ -86,7 +100,10 @@ const createLiveSessionDependencies = () => {
         Effect.sync(() => {
           calls.forwarded += 1;
         }),
-      discard: () => Effect.void,
+      discard: () =>
+        Effect.sync(() => {
+          calls.discarded += 1;
+        }),
     });
   return { calls, liveSessionLifecycle, prepareLiveSessionAdapter };
 };
@@ -109,9 +126,31 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       runtimeId: "runtime-claude",
       runtimeRoute: { type: "host_service", identity: "runtime-claude" },
     });
-    expect(liveSession.calls).toEqual({ forwarded: 1, registered: 1, released: 0 });
+    expect(liveSession.calls).toEqual({
+      discarded: 0,
+      forwarded: 1,
+      registered: 1,
+      released: 0,
+    });
     await Effect.runPromise(handle.stop());
     expect(liveSession.calls.released).toBe(1);
+  });
+
+  test("retries adapter cleanup after a registered release fails", async () => {
+    const liveSession = createLiveSessionDependencies({ releaseFailures: 1 });
+    const starter = createClaudeWorkspaceRuntimeStarter({
+      liveSessionLifecycle: liveSession.liveSessionLifecycle,
+      prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
+      runtimeId: () => "runtime-claude",
+      systemCommands: createSystemCommands(),
+      toolDiscovery: createToolDiscovery(),
+    });
+    const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
+
+    await expect(Effect.runPromise(handle.stop())).rejects.toThrow("Claude cleanup failed.");
+    expect(handle.isAlive()).toBe(false);
+    await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
+    expect(liveSession.calls).toMatchObject({ discarded: 1, released: 1 });
   });
 
   test("fails readiness before allocating a runtime id when Claude is missing", async () => {
@@ -135,6 +174,11 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       message: "claude unavailable",
     });
     expect(runtimeIdCalls).toBe(0);
-    expect(liveSession.calls).toEqual({ forwarded: 0, registered: 0, released: 0 });
+    expect(liveSession.calls).toEqual({
+      discarded: 0,
+      forwarded: 0,
+      registered: 0,
+      released: 0,
+    });
   });
 });

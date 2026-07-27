@@ -101,4 +101,26 @@ describe("Claude live-session event coordinator", () => {
       coordinator.enqueueEvent(session, statusEvent("2026-07-17T10:03:00.000Z")),
     ).toThrow("already released");
   });
+
+  test("allows cleanup to be retried after shutdown fails", async () => {
+    const failure = new HostOperationError({
+      operation: "test.shutdown",
+      message: "Cleanup failed.",
+    });
+    const coordinator = createClaudeLiveSessionEventCoordinator({
+      runtimeId: "runtime-1",
+      processEvent: () => Effect.void,
+    });
+    await Effect.runPromise(coordinator.startForwarding());
+
+    await expect(Effect.runPromise(coordinator.shutdown(Effect.fail(failure)))).rejects.toThrow(
+      "Cleanup failed.",
+    );
+    expect(coordinator.isReleased()).toBe(false);
+
+    await expect(Effect.runPromise(coordinator.shutdown(Effect.succeed("released")))).resolves.toBe(
+      "released",
+    );
+    expect(coordinator.isReleased()).toBe(true);
+  });
 });

@@ -352,6 +352,8 @@ describe("Claude host live-session state", () => {
     state.retainControlSummary(summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
     const childRef = { ...ref, externalSessionId: childExternalSessionId };
+    const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
+    const grandchildRef = { ...ref, externalSessionId: grandchildExternalSessionId };
     const retainedChildExternalSessionId = "session-1::claude-subagent::child-2";
     const retainedChildRef = { ...ref, externalSessionId: retainedChildExternalSessionId };
 
@@ -366,6 +368,19 @@ describe("Claude host live-session state", () => {
         correlationKey: "child-1",
         status: "running",
         externalSessionId: childExternalSessionId,
+      },
+    });
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:03:05.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "child-assistant",
+        partId: "claude-subagent:grandchild-1",
+        correlationKey: "grandchild-1",
+        status: "running",
+        externalSessionId: grandchildExternalSessionId,
       },
     });
     state.applyEvent(session, {
@@ -399,9 +414,14 @@ describe("Claude host live-session state", () => {
         }),
       },
       { type: "session_removed", ref: childRef },
+      { type: "session_removed", ref: grandchildRef },
     ]);
     expect(state.readRetainedSnapshot(ref)).toMatchObject({ type: "live" });
     expect(state.readRetainedSnapshot(childRef)).toEqual({ type: "missing", ref: childRef });
+    expect(state.readRetainedSnapshot(grandchildRef)).toEqual({
+      type: "missing",
+      ref: grandchildRef,
+    });
     expect(state.readRetainedSnapshot(retainedChildRef)).toMatchObject({ type: "live" });
   });
 

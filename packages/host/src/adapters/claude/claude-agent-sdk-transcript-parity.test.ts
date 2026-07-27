@@ -109,6 +109,7 @@ describe("Claude live and hydrated transcript parity", () => {
         name: "Read",
         input: { file_path: "/repo/file.ts" },
       },
+      { type: "text", text: "Then I will summarize it." },
     ];
     const sdkMessage = claudeSdkMessageFixture({
       type: "assistant",

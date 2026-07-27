@@ -83,7 +83,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     });
   });
 
-  test("does not finalize assistant text when Claude stops to use a tool", () => {
+  test("combines assistant text blocks when Claude stops to use a tool", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
 
@@ -113,6 +113,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
               name: "mcp__openducktor__odt_read_task",
               input: { taskId: "task-1" },
             },
+            { type: "text", text: "Then I will inspect the plan." },
           ],
         },
       }),
@@ -125,7 +126,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           kind: "text",
           messageId: "assistant-1",
           partId: "assistant-1:text:0",
-          text: "I will inspect the task first.",
+          text: "I will inspect the task first.\nThen I will inspect the plan.",
           completed: true,
         }),
       }),

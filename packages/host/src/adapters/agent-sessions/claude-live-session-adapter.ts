@@ -320,7 +320,6 @@ export const createClaudeLiveSessionAdapterPreparer =
             return eventCoordinator
               .shutdown(
                 Effect.gen(function* () {
-                  const refs = state.release();
                   yield* service.stopSessionsForRuntime(runtime.runtimeId).pipe(
                     Effect.mapError((cause) =>
                       toHostOperationError(cause, "claude-live-session.release-runtime", {
@@ -328,11 +327,11 @@ export const createClaudeLiveSessionAdapterPreparer =
                       }),
                     ),
                   );
-                  return refs;
+                  return state.release();
                 }),
               )
               .pipe(
-                Effect.ensuring(
+                Effect.tap(() =>
                   Effect.sync(() => {
                     unsubscribe();
                   }),

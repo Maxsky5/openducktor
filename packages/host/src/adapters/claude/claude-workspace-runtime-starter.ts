@@ -47,6 +47,7 @@ export const createClaudeWorkspaceRuntimeStarter = ({
       scope = runtimeScope;
       const nextRuntimeId = runtimeId();
       let closed = false;
+      let stopping = false;
       const runtime = yield* Effect.try({
         try: () =>
           runtimeInstanceSummarySchema.parse({
@@ -83,11 +84,13 @@ export const createClaudeWorkspaceRuntimeStarter = ({
       );
 
       let liveAdapterRegistered = false;
-      const releaseLiveAdapter = Effect.suspend(() =>
-        liveAdapterRegistered
-          ? liveSessionLifecycle.releaseRuntime(nextRuntimeId).pipe(Effect.asVoid)
-          : preparedLiveSession.discard(),
-      ).pipe(
+      const releaseLiveAdapter = Effect.suspend(() => {
+        if (!liveAdapterRegistered) {
+          return preparedLiveSession.discard();
+        }
+        liveAdapterRegistered = false;
+        return liveSessionLifecycle.releaseRuntime(nextRuntimeId).pipe(Effect.asVoid);
+      }).pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "claudeWorkspaceRuntime.releaseLiveSessionAdapter", {
             runtimeId: nextRuntimeId,
@@ -98,8 +101,9 @@ export const createClaudeWorkspaceRuntimeStarter = ({
         if (closed) {
           return;
         }
-        closed = true;
+        stopping = true;
         yield* releaseLiveAdapter;
+        closed = true;
       });
       yield* Scope.addFinalizer(runtimeScope, closeRuntime.pipe(Effect.ignore));
       yield* liveSessionLifecycle.registerRuntimeAdapter(preparedLiveSession.adapter).pipe(
@@ -121,7 +125,7 @@ export const createClaudeWorkspaceRuntimeStarter = ({
       return {
         runtime,
         isAlive() {
-          return !closed;
+          return !stopping;
         },
         stop() {
           return closeRuntime.pipe(
