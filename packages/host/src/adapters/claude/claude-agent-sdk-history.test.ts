@@ -374,6 +374,54 @@ describe("claude-agent-sdk-history", () => {
     ]);
   });
 
+  test("preserves file references with spaces across the SDK history round trip", async () => {
+    const sdkMessage = await toClaudeMessageFromParts([
+      { kind: "text", text: "Inspect " },
+      {
+        kind: "file_reference",
+        file: {
+          id: "docs/My File.md",
+          path: "docs/My File.md",
+          name: "My File.md",
+          kind: "code",
+        },
+      },
+    ]);
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          ...sdkMessage,
+          uuid: "user-file-with-spaces",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:03:13.804Z",
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    const userMessage = history[0];
+    if (userMessage?.role !== "user") {
+      throw new Error("Expected structured Claude history to hydrate as a user message");
+    }
+    expect(userMessage.displayParts).toEqual([
+      { kind: "text", text: "Inspect " },
+      {
+        kind: "file_reference",
+        file: {
+          id: "docs/My File.md",
+          path: "docs/My File.md",
+          name: "My File.md",
+          kind: "code",
+        },
+        sourceText: {
+          value: '@"docs/My File.md"',
+          start: 8,
+          end: 26,
+        },
+      },
+    ]);
+  });
+
   test("does not reinterpret unrelated slash commands or email addresses as references", () => {
     const history = toClaudeHistoryMessages(
       [

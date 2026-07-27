@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { encodeClaudePromptText, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
+import {
+  encodeClaudePromptText,
+  encodeClaudePromptTextWithSourceRanges,
+  toClaudeMessageFromParts,
+} from "./claude-agent-sdk-messages";
 import { mutationForTool, toolPartType } from "./claude-agent-sdk-utils";
 
 const slashCommand = {
@@ -30,6 +34,33 @@ describe("encodeClaudePromptText", () => {
         { kind: "text", text: " please" },
       ]),
     ).toBe("/review @src/index.ts please");
+  });
+
+  test("quotes file references that contain spaces", () => {
+    const encoded = encodeClaudePromptTextWithSourceRanges([
+      { kind: "text", text: "Inspect " },
+      {
+        kind: "file_reference",
+        file: {
+          id: "docs/My File.md",
+          path: "docs/My File.md",
+          name: "My File.md",
+          kind: "code",
+        },
+      },
+    ]);
+
+    expect(encoded).toEqual({
+      text: 'Inspect @"docs/My File.md"',
+      sourceTextByPartIndex: [
+        undefined,
+        {
+          value: '@"docs/My File.md"',
+          start: 8,
+          end: 26,
+        },
+      ],
+    });
   });
 
   test("preserves whitespace in SDK-native slash command names", () => {

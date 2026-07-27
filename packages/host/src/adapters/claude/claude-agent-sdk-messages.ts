@@ -200,6 +200,15 @@ const shouldInsertSyntheticSpaceBeforeClaudePart = (
   return firstCharacter !== undefined && WORDLIKE_TEXT_START_PATTERN.test(firstCharacter);
 };
 
+const SIMPLE_CLAUDE_FILE_REFERENCE_PATTERN = /^[^\s@"\\]+$/u;
+
+const encodeClaudeFileReference = (path: string): string => {
+  if (SIMPLE_CLAUDE_FILE_REFERENCE_PATTERN.test(path)) {
+    return `@${path}`;
+  }
+  return `@"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+};
+
 export const encodeClaudePromptTextWithSourceRanges = (
   parts: AgentUserMessagePart[],
 ): {
@@ -252,7 +261,7 @@ export const encodeClaudePromptTextWithSourceRanges = (
           details: { partKind: part.kind, subagent: part.subagent.name },
         });
       case "file_reference":
-        text += `@${part.file.path}`;
+        text += encodeClaudeFileReference(part.file.path);
         break;
     }
     if (part.kind !== "text") {
@@ -337,7 +346,7 @@ export const toClaudeMessageFromParts = async (
           details: { partKind: part.kind, subagent: part.subagent.name },
         });
       case "file_reference":
-        text += `@${part.file.path}`;
+        text += encodeClaudeFileReference(part.file.path);
         break;
       case "attachment":
         flushText();

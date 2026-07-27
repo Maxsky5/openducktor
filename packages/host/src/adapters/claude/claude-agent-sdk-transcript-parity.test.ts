@@ -772,9 +772,9 @@ describe("Claude live and hydrated transcript parity", () => {
       {
         kind: "file_reference",
         file: {
-          id: "apps/api/src/routes/groups.ts",
-          path: "apps/api/src/routes/groups.ts",
-          name: "groups.ts",
+          id: "docs/My File.md",
+          path: "docs/My File.md",
+          name: "My File.md",
           kind: "code",
         },
       },

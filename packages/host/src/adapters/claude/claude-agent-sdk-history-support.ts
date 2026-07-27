@@ -38,9 +38,10 @@ type ClaudeHistoryReferenceRange = {
   part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }>;
 };
 
-const CLAUDE_FILE_TOKEN_PATTERN = /@([^\s]+)/gu;
+const CLAUDE_FILE_TOKEN_PATTERN = /@(?:"((?:\\.|[^"\\])*)"|([^\s"]+))/gu;
 const CLAUDE_FILE_TRAILING_PUNCTUATION_PATTERN = /[,.;!?)}\]]+$/u;
 const CLAUDE_REFERENCE_BOUNDARY_PATTERN = /[\s([{"']/u;
+const CLAUDE_QUOTED_FILE_ESCAPE_PATTERN = /\\(.)/gu;
 
 const hasClaudeReferenceBoundary = (text: string, start: number): boolean =>
   start === 0 || CLAUDE_REFERENCE_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
@@ -59,20 +60,25 @@ const readClaudeHistoryReferenceRanges = (text: string): ClaudeHistoryReferenceR
     if (!hasClaudeReferenceBoundary(text, start)) {
       continue;
     }
-    const path = match[1]?.replace(CLAUDE_FILE_TRAILING_PUNCTUATION_PATTERN, "");
+    const quotedPath = match[1];
+    const path =
+      quotedPath === undefined
+        ? match[2]?.replace(CLAUDE_FILE_TRAILING_PUNCTUATION_PATTERN, "")
+        : quotedPath.replace(CLAUDE_QUOTED_FILE_ESCAPE_PATTERN, "$1");
     if (!path) {
       continue;
     }
+    const source = quotedPath === undefined ? `@${path}` : match[0];
     ranges.push({
       start,
-      end: start + path.length + 1,
+      end: start + source.length,
       part: {
         kind: "file_reference",
         file: claudeFileReference(path),
         sourceText: {
-          value: text.slice(start, start + path.length + 1),
+          value: source,
           start,
-          end: start + path.length + 1,
+          end: start + source.length,
         },
       },
     });
