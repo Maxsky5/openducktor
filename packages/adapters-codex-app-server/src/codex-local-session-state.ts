@@ -64,8 +64,8 @@ export class CodexLocalSessionState implements CodexSessionLookup {
     }
     this.deps.activeTurnsBySessionId.delete(externalSessionId);
     this.deps.pendingInput.clearSession(externalSessionId, session?.runtimeId);
-    this.deps.subagents.clearSession(externalSessionId, session?.runtimeId);
     this.deps.runtimeEvents.clearSession(externalSessionId, session?.runtimeId);
+    this.deps.subagents.clearSession(externalSessionId, session?.runtimeId);
     return session;
   }
 }

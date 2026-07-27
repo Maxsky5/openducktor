@@ -204,6 +204,84 @@ describe("CodexSubagentLinkState", () => {
     }
   });
 
+  test("walks only the requested runtime's routed descendant subtree", () => {
+    const subagents = new CodexSubagentLinkState();
+    for (const [runtimeId, parentThreadId, childThreadId] of [
+      ["runtime-1", "parent-thread", "child-thread"],
+      ["runtime-1", "child-thread", "grandchild-thread"],
+      ["runtime-1", "unrelated-parent", "unrelated-child"],
+      ["runtime-2", "parent-thread", "child-thread"],
+      ["runtime-2", "child-thread", "grandchild-thread"],
+    ] as const) {
+      subagents.upsertLink({
+        runtimeId,
+        parentThreadId,
+        childThreadId,
+        itemId: `spawn-${childThreadId}`,
+        status: "running",
+      });
+    }
+
+    const descendants = subagents.descendantRoutesForParent(
+      "parent-thread",
+      "runtime-1",
+      () => true,
+    );
+
+    expect(descendants.map((route) => route.childExternalSessionId)).toEqual([
+      "child-thread",
+      "grandchild-thread",
+    ]);
+  });
+
+  test("stops descendant traversal at a retained child boundary", () => {
+    const subagents = new CodexSubagentLinkState();
+    for (const [parentThreadId, childThreadId] of [
+      ["parent-thread", "retained-child"],
+      ["retained-child", "owned-grandchild"],
+    ] as const) {
+      subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId,
+        childThreadId,
+        itemId: `spawn-${childThreadId}`,
+        status: "running",
+      });
+    }
+
+    const descendants = subagents.descendantRoutesForParent(
+      "parent-thread",
+      "runtime-1",
+      (route) => route.childExternalSessionId !== "retained-child",
+    );
+
+    expect(descendants).toEqual([]);
+  });
+
+  test("terminates descendant traversal when routed links form a cycle", () => {
+    const subagents = new CodexSubagentLinkState();
+    for (const [parentThreadId, childThreadId] of [
+      ["parent-thread", "child-thread"],
+      ["child-thread", "parent-thread"],
+    ] as const) {
+      subagents.upsertLink({
+        runtimeId: "runtime-1",
+        parentThreadId,
+        childThreadId,
+        itemId: `spawn-${childThreadId}`,
+        status: "running",
+      });
+    }
+
+    const descendants = subagents.descendantRoutesForParent(
+      "parent-thread",
+      "runtime-1",
+      () => true,
+    );
+
+    expect(descendants.map((route) => route.childExternalSessionId)).toEqual(["child-thread"]);
+  });
+
   test("clears links for one runtime without deleting matching thread ids in another runtime", () => {
     const subagents = new CodexSubagentLinkState();
     subagents.upsertLink({
@@ -247,6 +325,67 @@ describe("CodexSubagentLinkState", () => {
     expect(
       subagents.failUnlinkedSpawnsForParent("parent-thread", "runtime-2", "Spawn failed"),
     ).toHaveLength(1);
+  });
+
+  test("clears a displaced provisional correlation before its item id is reused", () => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "spawn-1",
+      status: "pending",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "spawn-2",
+      status: "running",
+      prompt: "stale prompt",
+    });
+    subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-2",
+      status: "running",
+    });
+
+    subagents.clearSession("parent-thread", "runtime-1");
+
+    const indexes = subagents as unknown as {
+      linksByCorrelationKey: Map<string, unknown>;
+      linksByParentKey: Map<string, unknown>;
+      linksByChildThreadId: Map<string, unknown>;
+      provisionalByParentKey: Map<string, unknown>;
+    };
+    const clearedIndexSizes = {
+      correlations: indexes.linksByCorrelationKey.size,
+      parents: indexes.linksByParentKey.size,
+      children: indexes.linksByChildThreadId.size,
+      provisionals: indexes.provisionalByParentKey.size,
+    };
+    const reused = subagents.upsertLink({
+      runtimeId: "runtime-1",
+      parentThreadId: "parent-thread",
+      itemId: "spawn-2",
+      status: "pending",
+    });
+
+    expect(reused.status).toBe("pending");
+    expect(reused).not.toHaveProperty("prompt");
+    expect(clearedIndexSizes).toEqual({
+      correlations: 0,
+      parents: 0,
+      children: 0,
+      provisionals: 0,
+    });
   });
 
   test("ignores an explicit restart older than the terminal lifecycle", () => {

@@ -58,11 +58,8 @@ type CodexSubagentRouteListener = (route: CodexSubagentRoute) => void;
 const scopedKey = (runtimeId: string | undefined, ...parts: string[]): string =>
   [runtimeId ?? "", ...parts].join("\u0000");
 
-const subagentKey = (
-  runtimeId: string | undefined,
-  parentThreadId: string,
-  childThreadId: string,
-): string => scopedKey(runtimeId, parentThreadId, childThreadId);
+const parentThreadKey = (runtimeId: string | undefined, parentThreadId: string): string =>
+  scopedKey(runtimeId, parentThreadId);
 
 const childThreadKey = (runtimeId: string | undefined, childThreadId: string): string =>
   scopedKey(runtimeId, childThreadId);
@@ -72,6 +69,13 @@ const linkedCorrelationKey = (parentThreadId: string, childThreadId: string): st
 
 const provisionalCorrelationKey = (parentThreadId: string, itemId: string): string =>
   `codex-subagent:${parentThreadId}:${itemId}`;
+
+const defaultCorrelationKey = (input: CodexSubagentLinkInput): string => {
+  if (!input.childThreadId || input.preferItemCorrelationKey) {
+    return provisionalCorrelationKey(input.parentThreadId, input.itemId);
+  }
+  return linkedCorrelationKey(input.parentThreadId, input.childThreadId);
+};
 
 const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
   pending: 0,
@@ -173,10 +177,10 @@ const sameRoute = (previous: CodexSubagentRoute | null, next: CodexSubagentRoute
   previous?.subagentCorrelationKey === next?.subagentCorrelationKey;
 
 export class CodexSubagentLinkState {
-  private readonly linksByParentChildKey = new Map<string, CodexStoredSubagentLink>();
+  private readonly linksByParentKey = new Map<string, Map<string, CodexStoredSubagentLink>>();
   private readonly linksByChildThreadId = new Map<string, CodexStoredSubagentLink>();
   private readonly linksByCorrelationKey = new Map<string, CodexStoredSubagentLink>();
-  private readonly provisionalByParentItemKey = new Map<string, CodexStoredSubagentLink>();
+  private readonly provisionalByParentKey = new Map<string, Map<string, CodexStoredSubagentLink>>();
   private readonly routeListeners = new Set<CodexSubagentRouteListener>();
 
   onRouteLearned(listener: CodexSubagentRouteListener): () => void {
@@ -240,11 +244,9 @@ export class CodexSubagentLinkState {
     const previousRoute = input.childThreadId
       ? this.routeForChild(input.childThreadId, input.runtimeId)
       : null;
-    const parentItemKey = subagentKey(input.runtimeId, input.parentThreadId, input.itemId);
-    const existingProvisional = this.provisionalByParentItemKey.get(parentItemKey);
-    const parentChildKey = input.childThreadId
-      ? subagentKey(input.runtimeId, input.parentThreadId, input.childThreadId)
-      : null;
+    const parentKey = parentThreadKey(input.runtimeId, input.parentThreadId);
+    const parentItemKey = input.itemId;
+    const existingProvisional = this.provisionalByParentKey.get(parentKey)?.get(parentItemKey);
     const existingByChildThreadId = input.childThreadId
       ? this.linksByChildThreadId.get(childThreadKey(input.runtimeId, input.childThreadId))
       : undefined;
@@ -257,18 +259,13 @@ export class CodexSubagentLinkState {
         `Codex child thread '${input.childThreadId}' is already linked to parent '${existingByChildThreadId.parentThreadId}', not '${input.parentThreadId}'.`,
       );
     }
-    const existingLinked =
-      input.childThreadId && parentChildKey
-        ? (this.linksByParentChildKey.get(parentChildKey) ?? existingByChildThreadId)
-        : undefined;
+    const existingLinked = input.childThreadId
+      ? (this.linksByParentKey.get(parentKey)?.get(input.childThreadId) ?? existingByChildThreadId)
+      : undefined;
     const correlationKey =
       existingLinked?.correlationKey ??
       existingProvisional?.correlationKey ??
-      (input.childThreadId
-        ? input.preferItemCorrelationKey
-          ? provisionalCorrelationKey(input.parentThreadId, input.itemId)
-          : linkedCorrelationKey(input.parentThreadId, input.childThreadId)
-        : provisionalCorrelationKey(input.parentThreadId, input.itemId));
+      defaultCorrelationKey(input);
     const existing =
       existingLinked ??
       existingProvisional ??
@@ -355,9 +352,14 @@ export class CodexSubagentLinkState {
     error: string,
   ): CodexSubagentPart[] {
     const failedParts: CodexSubagentPart[] = [];
-    for (const [parentItemKey, link] of this.provisionalByParentItemKey) {
+    const provisionalLinks = this.provisionalByParentKey.get(
+      parentThreadKey(runtimeId, parentThreadId),
+    );
+    if (!provisionalLinks) {
+      return failedParts;
+    }
+    for (const [parentItemKey, link] of provisionalLinks) {
       if (
-        link.parentThreadId !== parentThreadId ||
         link.runtimeId !== runtimeId ||
         link.childThreadId ||
         link.status === "cancelled" ||
@@ -370,7 +372,7 @@ export class CodexSubagentLinkState {
         status: "error",
         error,
       };
-      this.provisionalByParentItemKey.set(parentItemKey, failedLink);
+      provisionalLinks.set(parentItemKey, failedLink);
       this.linksByCorrelationKey.set(
         scopedKey(failedLink.runtimeId, failedLink.correlationKey),
         failedLink,
@@ -382,29 +384,91 @@ export class CodexSubagentLinkState {
 
   routesForParent(parentThreadId: string, runtimeId?: string): CodexSubagentRoute[] {
     const routes: CodexSubagentRoute[] = [];
-    for (const link of this.linksByChildThreadId.values()) {
-      if (link.parentThreadId !== parentThreadId) {
-        continue;
+    const linkBuckets: Array<Map<string, CodexStoredSubagentLink>> = [];
+    if (runtimeId !== undefined) {
+      const runtimeLinks = this.linksByParentKey.get(parentThreadKey(runtimeId, parentThreadId));
+      const unscopedLinks = this.linksByParentKey.get(parentThreadKey(undefined, parentThreadId));
+      if (runtimeLinks) {
+        linkBuckets.push(runtimeLinks);
       }
-      if (runtimeId && link.runtimeId && link.runtimeId !== runtimeId) {
-        continue;
+      if (unscopedLinks) {
+        linkBuckets.push(unscopedLinks);
       }
-      const route = routeFromLink(link);
-      if (route) {
-        routes.push(route);
+    } else {
+      for (const links of this.linksByParentKey.values()) {
+        const link = links.values().next().value;
+        if (link?.parentThreadId === parentThreadId) {
+          linkBuckets.push(links);
+        }
+      }
+    }
+    for (const links of linkBuckets) {
+      for (const link of links.values()) {
+        const route = routeFromLink(link);
+        if (route) {
+          routes.push(route);
+        }
       }
     }
     return routes;
   }
 
+  descendantRoutesForParent(
+    parentThreadId: string,
+    runtimeId: string,
+    shouldDescend: (route: CodexSubagentRoute) => boolean,
+  ): CodexSubagentRoute[] {
+    const descendants: CodexSubagentRoute[] = [];
+    const pendingParentThreadIds = [parentThreadId];
+    const visitedThreadIds = new Set(pendingParentThreadIds);
+    while (pendingParentThreadIds.length > 0) {
+      const currentParentThreadId = pendingParentThreadIds.pop();
+      if (!currentParentThreadId) {
+        continue;
+      }
+      for (const route of this.routesForParent(currentParentThreadId, runtimeId)) {
+        const childThreadId = route.childExternalSessionId;
+        if (visitedThreadIds.has(childThreadId)) {
+          continue;
+        }
+        visitedThreadIds.add(childThreadId);
+        if (!shouldDescend(route)) {
+          continue;
+        }
+        descendants.push(route);
+        pendingParentThreadIds.push(childThreadId);
+      }
+    }
+    return descendants;
+  }
+
   clearSession(externalSessionId: string, runtimeId?: string): void {
     const linksToClear = new Set<CodexStoredSubagentLink>();
-    for (const link of this.linksByCorrelationKey.values()) {
-      if (
-        (runtimeId === undefined || link.runtimeId === runtimeId) &&
-        (link.parentThreadId === externalSessionId || link.childThreadId === externalSessionId)
-      ) {
+    if (runtimeId !== undefined) {
+      for (const link of this.linksByParentKey
+        .get(parentThreadKey(runtimeId, externalSessionId))
+        ?.values() ?? []) {
         linksToClear.add(link);
+      }
+      for (const link of this.provisionalByParentKey
+        .get(parentThreadKey(runtimeId, externalSessionId))
+        ?.values() ?? []) {
+        linksToClear.add(link);
+      }
+      const childLink = this.linksByChildThreadId.get(childThreadKey(runtimeId, externalSessionId));
+      if (childLink) {
+        linksToClear.add(childLink);
+      }
+    } else {
+      for (const link of this.linksByCorrelationKey.values()) {
+        if (link.parentThreadId === externalSessionId) {
+          linksToClear.add(link);
+        }
+      }
+      for (const link of this.linksByChildThreadId.values()) {
+        if (link.childThreadId === externalSessionId) {
+          linksToClear.add(link);
+        }
       }
     }
     for (const link of linksToClear) {
@@ -431,36 +495,56 @@ export class CodexSubagentLinkState {
   }
 
   private storeLink(link: CodexStoredSubagentLink, parentItemKey: string): void {
-    const hadProvisionalBridge = this.provisionalByParentItemKey.has(parentItemKey);
+    const parentKey = parentThreadKey(link.runtimeId, link.parentThreadId);
+    const provisionalLinks =
+      this.provisionalByParentKey.get(parentKey) ?? new Map<string, CodexStoredSubagentLink>();
+    const displacedProvisional = provisionalLinks.get(parentItemKey);
+    if (displacedProvisional && displacedProvisional.correlationKey !== link.correlationKey) {
+      const displacedCorrelationKey = scopedKey(
+        displacedProvisional.runtimeId,
+        displacedProvisional.correlationKey,
+      );
+      if (this.linksByCorrelationKey.get(displacedCorrelationKey) === displacedProvisional) {
+        this.linksByCorrelationKey.delete(displacedCorrelationKey);
+      }
+    }
     this.linksByCorrelationKey.set(scopedKey(link.runtimeId, link.correlationKey), link);
-    if (!link.childThreadId || hadProvisionalBridge) {
-      this.provisionalByParentItemKey.set(parentItemKey, link);
+    if (!link.childThreadId || displacedProvisional) {
+      provisionalLinks.set(parentItemKey, link);
+      this.provisionalByParentKey.set(parentKey, provisionalLinks);
     }
     if (!link.childThreadId) {
       return;
     }
-    this.linksByParentChildKey.set(
-      subagentKey(link.runtimeId, link.parentThreadId, link.childThreadId),
-      link,
-    );
+    const linkedChildren =
+      this.linksByParentKey.get(parentKey) ?? new Map<string, CodexStoredSubagentLink>();
+    linkedChildren.set(link.childThreadId, link);
+    this.linksByParentKey.set(parentKey, linkedChildren);
     this.linksByChildThreadId.set(childThreadKey(link.runtimeId, link.childThreadId), link);
   }
 
   private deleteLink(link: CodexStoredSubagentLink): void {
+    const parentKey = parentThreadKey(link.runtimeId, link.parentThreadId);
     this.linksByCorrelationKey.delete(scopedKey(link.runtimeId, link.correlationKey));
     if (link.childThreadId) {
-      this.linksByParentChildKey.delete(
-        subagentKey(link.runtimeId, link.parentThreadId, link.childThreadId),
-      );
+      const linkedChildren = this.linksByParentKey.get(parentKey);
+      linkedChildren?.delete(link.childThreadId);
+      if (linkedChildren?.size === 0) {
+        this.linksByParentKey.delete(parentKey);
+      }
       this.linksByChildThreadId.delete(childThreadKey(link.runtimeId, link.childThreadId));
     }
-    for (const [key, provisional] of this.provisionalByParentItemKey) {
+    const provisionalLinks = this.provisionalByParentKey.get(parentKey);
+    for (const [key, provisional] of provisionalLinks ?? []) {
       if (
         provisional.runtimeId === link.runtimeId &&
         provisional.correlationKey === link.correlationKey
       ) {
-        this.provisionalByParentItemKey.delete(key);
+        provisionalLinks?.delete(key);
       }
+    }
+    if (provisionalLinks?.size === 0) {
+      this.provisionalByParentKey.delete(parentKey);
     }
   }
 

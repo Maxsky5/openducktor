@@ -60,13 +60,19 @@ export type CompletedAgentMessage = {
 
 export type CodexStreamingContext = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
-  startedItemTimestampsByKey: Map<string, number>;
   syntheticUserMessageTextsByThreadId: Map<string, string[]>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
   tokenUsageByTurnKey: Map<string, CodexTokenUsageTotals>;
   modelByTurnKey: Map<string, AgentModelSelection>;
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
+  recordStartedItemTimestamp(
+    runtimeId: string,
+    threadId: string,
+    itemId: string,
+    startedAtMs: number,
+  ): void;
+  takeStartedItemTimestamp(runtimeId: string, threadId: string, itemId: string): number | undefined;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
@@ -182,27 +188,19 @@ const withLifecycleTimestamp = (
   return Number.isFinite(timestampMs) ? { ...item, [key]: timestampMs } : item;
 };
 
-const lifecycleItemKey = (
-  session: CodexSessionState,
-  item: Record<string, unknown>,
-): string | null => {
-  const itemId = extractStringField(item, ["id"]);
-  return itemId ? `${session.runtimeId}:${session.threadId}:${itemId}` : null;
-};
-
 const recordStartedItemTimestamp = (
   context: CodexStreamingContext,
   session: CodexSessionState,
   item: Record<string, unknown>,
   timestamp: string,
 ): void => {
-  const itemKey = lifecycleItemKey(session, item);
-  if (!itemKey) {
+  const itemId = extractStringField(item, ["id"]);
+  if (!itemId) {
     return;
   }
   const startedAtMs = Date.parse(timestamp);
   if (Number.isFinite(startedAtMs)) {
-    context.startedItemTimestampsByKey.set(itemKey, startedAtMs);
+    context.recordStartedItemTimestamp(session.runtimeId, session.threadId, itemId, startedAtMs);
   }
 };
 
@@ -211,12 +209,11 @@ const withRecordedStartedItemTimestamp = (
   session: CodexSessionState,
   item: Record<string, unknown>,
 ): Record<string, unknown> => {
-  const itemKey = lifecycleItemKey(session, item);
-  if (!itemKey) {
+  const itemId = extractStringField(item, ["id"]);
+  if (!itemId) {
     return item;
   }
-  const startedAtMs = context.startedItemTimestampsByKey.get(itemKey);
-  context.startedItemTimestampsByKey.delete(itemKey);
+  const startedAtMs = context.takeStartedItemTimestamp(session.runtimeId, session.threadId, itemId);
   if (
     typeof startedAtMs !== "number" ||
     Object.hasOwn(item, "startedAtMs") ||
