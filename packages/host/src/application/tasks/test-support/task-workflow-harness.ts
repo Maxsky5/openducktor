@@ -91,6 +91,7 @@ const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePo
     copyConfiguredPaths: () => Effect.dieMessage("unexpected copy configured paths"),
     removePathIfPresent: () => Effect.dieMessage("unexpected remove path"),
     resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
+    resolvePathWithinRoot: () => Effect.dieMessage("unexpected path resolution"),
     pathIsWithinRoot: () => Effect.dieMessage("unexpected path root check"),
     ...port,
   }) as WorktreeFilePort;
@@ -410,6 +411,15 @@ const createBuildStartWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
     },
     resolveWorktreePath(repoPath, worktreePath) {
       return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
+    },
+    resolvePathWithinRoot(root, candidate) {
+      return Effect.succeed({
+        canonicalPath: candidate,
+        kind:
+          candidate !== root && candidate.startsWith(`${root}/`)
+            ? ("descendant" as const)
+            : ("outside" as const),
+      });
     },
     pathIsWithinRoot(root, candidate) {
       return Effect.sync(() => {

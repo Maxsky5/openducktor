@@ -50,6 +50,15 @@ const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
     resolveWorktreePath(repoPath, worktreePath) {
       return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
     },
+    resolvePathWithinRoot(root, candidate) {
+      return Effect.succeed({
+        canonicalPath: candidate,
+        kind:
+          candidate !== root && candidate.startsWith(`${root}/`)
+            ? ("descendant" as const)
+            : ("outside" as const),
+      });
+    },
     pathIsWithinRoot(root, candidate) {
       return Effect.tryPromise({
         try: async () => {

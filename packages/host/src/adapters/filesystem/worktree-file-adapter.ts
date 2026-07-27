@@ -12,6 +12,28 @@ const metadataDirectoryName = ".git";
 const normalizeMissingPath = (inputPath: string): string => path.resolve(inputPath);
 const hasErrorCode = (error: unknown, code: string): boolean =>
   typeof error === "object" && error !== null && "code" in error && error.code === code;
+const resolvePathThroughExistingAncestor = (
+  inputPath: string,
+  missingSegments: string[] = [],
+): Promise<string> => {
+  const absolutePath = path.resolve(inputPath);
+  return realpath(absolutePath).then(
+    (canonicalAncestor) => path.join(canonicalAncestor, ...missingSegments),
+    (cause: unknown) => {
+      if (!hasErrorCode(cause, "ENOENT")) {
+        throw cause;
+      }
+      const parentPath = path.dirname(absolutePath);
+      if (parentPath === absolutePath) {
+        throw cause;
+      }
+      return resolvePathThroughExistingAncestor(parentPath, [
+        path.basename(absolutePath),
+        ...missingSegments,
+      ]);
+    },
+  );
+};
 const normalizeForComparison = (inputPath: string) =>
   Effect.tryPromise({
     try: () => realpath(inputPath),
@@ -342,6 +364,31 @@ export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
   },
   resolveWorktreePath(repoPath, worktreePath) {
     return path.isAbsolute(worktreePath) ? worktreePath : path.join(repoPath, worktreePath);
+  },
+  resolvePathWithinRoot(root, candidate) {
+    return Effect.tryPromise({
+      try: async () => {
+        const [canonicalRoot, canonicalCandidate] = await Promise.all([
+          resolvePathThroughExistingAncestor(root),
+          resolvePathThroughExistingAncestor(candidate),
+        ]);
+        const relativePath = path.relative(canonicalRoot, canonicalCandidate);
+        const isDescendant =
+          relativePath !== "" &&
+          !path.isAbsolute(relativePath) &&
+          relativePath !== ".." &&
+          !relativePath.startsWith(`..${path.sep}`);
+        return {
+          canonicalPath: canonicalCandidate,
+          kind: isDescendant ? ("descendant" as const) : ("outside" as const),
+        };
+      },
+      catch: (cause) =>
+        toHostOperationError(cause, "worktreeFile.resolvePathWithinRoot", {
+          root,
+          candidate,
+        }),
+    });
   },
   pathIsWithinRoot(root, candidate) {
     return Effect.gen(function* () {

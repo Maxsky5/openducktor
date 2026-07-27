@@ -231,7 +231,7 @@ export const rollbackFailedBuildWorktree = (
   worktreePath: string,
   branch: string,
   createdTrackingRef: string | null,
-  managedWorktreeBasePath?: string,
+  managedWorktreeBasePath: string,
 ) =>
   Effect.gen(function* () {
     const cleanupErrors: string[] = [];
@@ -256,7 +256,7 @@ export const rollbackFailedBuildWorktree = (
           repoPath,
           worktreePath,
           force: true,
-          ...(managedWorktreeBasePath ? { managedWorktreeBasePath } : {}),
+          managedWorktreeBasePath,
           missingOutsideManagedRootPathPolicy: "fail",
         },
       ),
