@@ -102,6 +102,7 @@ export const prepareNewBuildWorktree = (
             worktreePath,
             branch,
             createdTrackingRef,
+            worktreeBase,
           )
         : Effect.succeed("");
     const setupResult = yield* Effect.either(

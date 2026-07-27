@@ -3,7 +3,7 @@ import { HostOperationError, HostValidationError } from "../../effect/host-error
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
-import { findRepoConfigByPath, isDefinitiveNonWorktreeGitError } from "./git-service-inputs";
+import { findRepoConfigByPath } from "./git-service-inputs";
 export type RemoveWorktreeAndFilesystemPathInput = {
   force: boolean;
   managedWorktreeBasePath?: string;
@@ -35,12 +35,11 @@ const resolveForcedFilesystemCleanup = (
     const managedBase =
       input.managedWorktreeBasePath ??
       (yield* managedWorktreeBasePath(settingsConfig, input.repoPath));
-    const insideRepo = yield* worktreeFiles.pathIsWithinRoot(input.repoPath, effectiveWorktreePath);
     const insideManagedBase = yield* worktreeFiles.pathIsWithinRoot(
       managedBase,
       effectiveWorktreePath,
     );
-    if (insideRepo || insideManagedBase) {
+    if (insideManagedBase) {
       return "cleanup-filesystem-path" as const;
     }
     if (
@@ -71,15 +70,26 @@ export const removeWorktreeAndFilesystemPath = (
         }),
       );
     }
-    const filesystemCleanup = yield* gitPort.removeWorktree(repoPath, worktreePath, force).pipe(
-      Effect.as("cleanup-filesystem-path" as const),
-      Effect.catchAll((error) => {
-        if (!force || !isDefinitiveNonWorktreeGitError(error)) {
-          return Effect.fail(error);
-        }
-        return resolveForcedFilesystemCleanup(dependencies, input, effectiveWorktreePath, error);
-      }),
+    const removalResult = yield* Effect.either(
+      gitPort.removeWorktree(repoPath, worktreePath, force),
     );
+    let filesystemCleanup: "cleanup-filesystem-path" | "skip-filesystem-cleanup" =
+      "cleanup-filesystem-path";
+    if (removalResult._tag === "Left") {
+      if (!force) {
+        return yield* Effect.fail(removalResult.left);
+      }
+      const registered = yield* gitPort.isRegisteredWorktree(repoPath, effectiveWorktreePath);
+      if (registered) {
+        return yield* Effect.fail(removalResult.left);
+      }
+      filesystemCleanup = yield* resolveForcedFilesystemCleanup(
+        dependencies,
+        input,
+        effectiveWorktreePath,
+        removalResult.left,
+      );
+    }
     if (filesystemCleanup === "skip-filesystem-cleanup") {
       return;
     }

@@ -945,17 +945,18 @@ describe("createTaskService task mutations and reset", () => {
       Effect.runPromise(
         createTaskService({
           devServerService: createDirectMergeDevServerService(calls),
-          gitPort: createDirectMergeGitPort({
-            calls,
-            branches: {
-              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-            },
-            removeWorktreeErrors: {
-              "/repo|/worktrees/repo/task-1|true": new Error(
-                "fatal: '/worktrees/repo/task-1' is not a working tree",
-              ),
-            },
-          }),
+          gitPort: {
+            ...createDirectMergeGitPort({
+              calls,
+              branches: {
+                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              },
+              removeWorktreeErrors: {
+                "/repo|/worktrees/repo/task-1|true": new Error("worktree removal race"),
+              },
+            }),
+            isRegisteredWorktree: () => Effect.succeed(false),
+          },
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskActivityGuard,
           taskStore,
@@ -1027,17 +1028,18 @@ describe("createTaskService task mutations and reset", () => {
       Effect.runPromise(
         createTaskService({
           devServerService: createDirectMergeDevServerService(calls),
-          gitPort: createDirectMergeGitPort({
-            calls,
-            branches: {
-              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-            },
-            removeWorktreeErrors: {
-              "/repo|/legacy/repo/task-1|true": new Error(
-                "fatal: '/legacy/repo/task-1' is not a working tree",
-              ),
-            },
-          }),
+          gitPort: {
+            ...createDirectMergeGitPort({
+              calls,
+              branches: {
+                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              },
+              removeWorktreeErrors: {
+                "/repo|/legacy/repo/task-1|true": new Error("worktree removal race"),
+              },
+            }),
+            isRegisteredWorktree: () => Effect.succeed(false),
+          },
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskActivityGuard,
           taskStore,

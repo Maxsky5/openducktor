@@ -143,15 +143,6 @@ export const findRepoConfigByPath = (
       }),
     );
   });
-export const isDefinitiveNonWorktreeGitError = (error: unknown): boolean => {
-  const errorText = String(error instanceof Error ? error.message : error).toLowerCase();
-  return [
-    "not a git repository",
-    "not a git worktree",
-    "not a working tree",
-    "is not a working tree",
-  ].some((needle) => errorText.includes(needle));
-};
 export const requireSettingsConfig = (
   settingsConfig: SettingsConfigPort | undefined,
 ): Effect.Effect<SettingsConfigPort, HostDependencyError> => {

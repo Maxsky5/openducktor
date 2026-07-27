@@ -1181,6 +1181,81 @@ describe("createGitService", () => {
     expect(error).toMatchObject({ dependency: "worktreeFiles" });
     expect(calls).toEqual([]);
   });
+  test("propagates a forced removal error while Git still registers the worktree", async () => {
+    const calls: string[] = [];
+    const removalError = new Error("worktree removal race");
+    const gitPort = {
+      ...createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+        removeWorktreeErrors: {
+          "/canonical/repo|/managed/repo/task-1|true": removalError,
+        },
+      }),
+      isRegisteredWorktree: () => Effect.succeed(true),
+    };
+    const service = createGitService({
+      gitPort,
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: "/managed/repo/task-1",
+          force: true,
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      message: "worktree removal race",
+      cause: removalError,
+    });
+    expect(calls).toEqual(["removeWorktree:/canonical/repo|/managed/repo/task-1|true"]);
+  });
+  test("keeps the final filesystem cleanup error after Git unregisters the worktree", async () => {
+    const calls: string[] = [];
+    const finalCleanupError = new HostOperationError({
+      operation: "test.removePathIfPresent",
+      message: "cannot remove runtime-created directory",
+    });
+    const baseWorktreeFiles = createFakeWorktreeFiles(calls);
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+        removeWorktreeErrors: {
+          "/canonical/repo|/managed/repo/task-1|true": new Error("worktree removal race"),
+        },
+      }),
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+      worktreeFiles: {
+        ...baseWorktreeFiles,
+        removePathIfPresent: () => Effect.fail(finalCleanupError),
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: "/managed/repo/task-1",
+          force: true,
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      operation: "git.remove_worktree.cleanup_path",
+      cause: finalCleanupError,
+    });
+    expect(error.message).toContain(
+      "git worktree removal left filesystem path cleanup incomplete for /managed/repo/task-1",
+    );
+  });
   test("rejects forced stranded worktree cleanup outside managed roots", async () => {
     const calls: string[] = [];
     const service = createGitService({
@@ -1189,7 +1264,7 @@ describe("createGitService", () => {
         gitRepositories: ["/canonical/repo"],
         calls,
         removeWorktreeErrors: {
-          "/canonical/repo|/outside/task-1|true": new Error("fatal: is not a working tree"),
+          "/canonical/repo|/outside/task-1|true": new Error("worktree removal race"),
         },
       }),
       settingsConfig: createFakeSettingsConfig(createConfig()),
@@ -1214,7 +1289,7 @@ describe("createGitService", () => {
         gitRepositories: ["/canonical/repo"],
         calls,
         removeWorktreeErrors: {
-          "/canonical/repo|/legacy/repo/task-1|true": new Error("fatal: is not a working tree"),
+          "/canonical/repo|/legacy/repo/task-1|true": new Error("worktree removal race"),
         },
       }),
       settingsConfig: createFakeSettingsConfig(createConfig(), new Set(["/canonical/repo"])),
