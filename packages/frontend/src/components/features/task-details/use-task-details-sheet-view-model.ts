@@ -141,20 +141,6 @@ export function useTaskDetailsSheetViewModel({
     () => collectSingleTaskCleanupImpactTaskIds(task),
     [task],
   );
-  const {
-    hasManagedSessionCleanup: hasManagedDeleteSessionCleanup,
-    managedWorktreeCount: deleteManagedWorktreeCount,
-    impactError: deleteImpactError,
-    isLoadingImpact: isLoadingDeleteImpact,
-    terminalCount: deleteTerminalCount,
-  } = taskCleanupImpactHook(deleteImpactTaskIds, open);
-  const {
-    hasManagedSessionCleanup: hasManagedSingleTaskCleanup,
-    managedWorktreeCount: singleTaskCleanupWorktreeCount,
-    impactError: singleTaskCleanupImpactError,
-    isLoadingImpact: isLoadingSingleTaskCleanupImpact,
-    terminalCount: singleTaskTerminalCount,
-  } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
@@ -203,6 +189,25 @@ export function useTaskDetailsSheetViewModel({
     onOpenChange,
     onCloseTask,
   });
+  const shouldLoadDeleteImpact = open && isDeleteDialogOpen && onDelete !== undefined;
+  const shouldLoadSingleTaskImpact =
+    open &&
+    ((isResetDialogOpen && onResetTask !== undefined) ||
+      (isCloseDialogOpen && onCloseTask !== undefined));
+  const {
+    hasManagedSessionCleanup: hasManagedDeleteSessionCleanup,
+    managedWorktreeCount: deleteManagedWorktreeCount,
+    impactError: deleteImpactError,
+    isLoadingImpact: isLoadingDeleteImpact,
+    terminalCount: deleteTerminalCount,
+  } = taskCleanupImpactHook(deleteImpactTaskIds, shouldLoadDeleteImpact);
+  const {
+    hasManagedSessionCleanup: hasManagedSingleTaskCleanup,
+    managedWorktreeCount: singleTaskCleanupWorktreeCount,
+    impactError: singleTaskCleanupImpactError,
+    isLoadingImpact: isLoadingSingleTaskCleanupImpact,
+    terminalCount: singleTaskTerminalCount,
+  } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, shouldLoadSingleTaskImpact);
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {

@@ -90,7 +90,7 @@ describe("TaskDetailsSheet", () => {
         applyDocumentUpdate: () => {},
       }),
     );
-    const taskCleanupImpactHookMock = mock(() => ({
+    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
       hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
@@ -129,8 +129,91 @@ describe("TaskDetailsSheet", () => {
     try {
       await harness.mount();
       expect(taskDocumentsHookMock).toHaveBeenCalledWith("TASK-1", true, "/repo-a");
-      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], true);
-      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], true);
+      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], false);
+      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads cleanup impact only for an available action's open confirmation", async () => {
+    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const childTask = createTaskCardFixture({ id: "TASK-2", title: "Task 2" });
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      issueType: "epic",
+      subtaskIds: ["TASK-2"],
+    });
+    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
+      hasCanonicalWorktree: false,
+      hasManagedSessionCleanup: false,
+      managedWorktreeCount: 0,
+      legacyWorktreeCount: 0,
+      impactError: null,
+      isLoadingImpact: false,
+      terminalCount: 0,
+    }));
+    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+      activeWorkspace: {
+        workspaceId: "workspace-a",
+        workspaceName: "Workspace A",
+        repoPath: "/repo-a",
+      },
+      task,
+      allTasks: [task, childTask],
+      open: true,
+      onOpenChange: () => {},
+      onPlan: undefined,
+      onQaStart: undefined,
+      onQaOpen: undefined,
+      onBuild: undefined,
+      onOpenSession: undefined,
+      onDelegate: undefined,
+      onHumanApprove: undefined,
+      onHumanRequestChanges: undefined,
+      onResetImplementation: undefined,
+      onResetTask: mock(async () => {}),
+      onCloseTask: mock(async () => {}),
+      onDelete: mock(async () => {}),
+      taskDocumentsHook: () => ({
+        specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+        planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+        qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+        ensureDocumentLoaded: () => false,
+        reloadDocument: () => false,
+        applyDocumentUpdate: () => {},
+      }),
+      taskCleanupImpactHook: taskCleanupImpactHookMock,
+    });
+    const latestImpactCalls = () => taskCleanupImpactHookMock.mock.calls.slice(-2);
+
+    try {
+      await harness.mount();
+      expect(latestImpactCalls()).toEqual([
+        [["TASK-1", "TASK-2"], false],
+        [["TASK-1"], false],
+      ]);
+
+      await harness.run((viewModel) => viewModel.openDeleteDialog());
+      expect(latestImpactCalls()).toEqual([
+        [["TASK-1", "TASK-2"], true],
+        [["TASK-1"], false],
+      ]);
+
+      await harness.run((viewModel) => viewModel.closeDeleteDialog());
+      await harness.run((viewModel) => viewModel.openResetDialog());
+      expect(latestImpactCalls()).toEqual([
+        [["TASK-1", "TASK-2"], false],
+        [["TASK-1"], true],
+      ]);
+
+      await harness.run((viewModel) => viewModel.closeResetDialog());
+      await harness.run((viewModel) => viewModel.openCloseDialog());
+      expect(latestImpactCalls()).toEqual([
+        [["TASK-1", "TASK-2"], false],
+        [["TASK-1"], true],
+      ]);
     } finally {
       await harness.unmount();
     }
@@ -153,7 +236,7 @@ describe("TaskDetailsSheet", () => {
       reloadDocument: () => false,
       applyDocumentUpdate: () => {},
     }));
-    const taskCleanupImpactHookMock = mock(() => ({
+    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
       hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
@@ -219,7 +302,7 @@ describe("TaskDetailsSheet", () => {
       reloadDocument: () => false,
       applyDocumentUpdate: () => {},
     }));
-    const taskCleanupImpactHookMock = mock(() => ({
+    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
       hasCanonicalWorktree: false,
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
