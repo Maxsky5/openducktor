@@ -177,7 +177,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
     });
   });
 
-  test("does not duplicate final assistant text repeated by a successful result", () => {
+  test("does not duplicate normalized final assistant text repeated by a successful result", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -188,7 +188,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           timestamp: "2026-06-26T11:03:16.000Z",
           message: {
             role: "assistant",
-            content: [{ type: "text", text: "Spec persisted." }],
+            content: [{ type: "text", text: "  Spec persisted.\n" }],
             stop_reason: "end_turn",
           },
         }),
@@ -211,7 +211,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
       messageId: "assistant-final",
-      text: "Spec persisted.",
+      text: "  Spec persisted.\n",
       durationMs: 4_000,
     });
     expect(history[0]?.parts.filter((part) => part.kind === "step")).toHaveLength(1);

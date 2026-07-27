@@ -76,6 +76,7 @@ export const toClaudeHistoryMessages = (
   options: {
     includeNestedEntries?: boolean;
     skills?: readonly AgentSkillReference[];
+    transcriptExternalSessionId?: string;
   } = {},
 ): AgentSessionHistoryMessage[] => {
   const history: AgentSessionHistoryMessage[] = [];
@@ -124,13 +125,14 @@ export const toClaudeHistoryMessages = (
         continue;
       }
       lastAssistantMessage = message;
-      if (message.text.trim().length > 0) {
+      const messageText = message.text.trim();
+      if (messageText.length > 0) {
         lastAssistantTextMessage = message;
-        lastAssistantText = message.text;
+        lastAssistantText = messageText;
       }
-      if (message.text.trim().length > 0 && hasFinalStopStep(message)) {
+      if (messageText.length > 0 && hasFinalStopStep(message)) {
         lastFinalAssistantMessage = message;
-        lastFinalAssistantText = message.text;
+        lastFinalAssistantText = messageText;
       }
     }
   };
@@ -183,9 +185,9 @@ export const toClaudeHistoryMessages = (
       }
       lastAssistantMessage = projectedMessage;
       lastAssistantTextMessage = projectedMessage;
-      lastAssistantText = projectedMessage.text;
+      lastAssistantText = projectedMessage.text.trim();
       lastFinalAssistantMessage = projectedMessage;
-      lastFinalAssistantText = projectedMessage.text;
+      lastFinalAssistantText = projectedMessage.text.trim();
       continue;
     }
     if (isClaudeHistoryCompactBoundaryMessage(entry)) {
@@ -217,7 +219,7 @@ export const toClaudeHistoryMessages = (
         emit: (event) => events.push(event),
         message: entry as Parameters<typeof handleClaudeSubagentSystemMessage>[0]["message"],
         session: {
-          externalSessionId: readHistorySessionId(entry),
+          externalSessionId: options.transcriptExternalSessionId ?? readHistorySessionId(entry),
           hiddenSubagentTaskIds,
           subagentMessageIdsByTaskId,
           subagentTaskIdsByToolUseId,
@@ -283,7 +285,8 @@ export const toClaudeHistoryMessages = (
               resultRaw: toolResult.raw,
               resultText: toolResult.text,
               session: {
-                externalSessionId: readHistorySessionId(entry),
+                externalSessionId:
+                  options.transcriptExternalSessionId ?? readHistorySessionId(entry),
                 subagentMessageIdsByTaskId,
                 subagentTaskIdsByToolUseId,
                 toolMessageIdsByCallId,
@@ -357,12 +360,13 @@ export const toClaudeHistoryMessages = (
       const { message: assistantMessage, stopReason } = projection;
       history.push(assistantMessage);
       lastAssistantMessage = assistantMessage;
-      if (assistantMessage.text.trim().length > 0) {
+      const assistantText = assistantMessage.text.trim();
+      if (assistantText.length > 0) {
         lastAssistantTextMessage = assistantMessage;
-        lastAssistantText = assistantMessage.text;
+        lastAssistantText = assistantText;
         if (isLiveFinalAssistantStopReason(stopReason)) {
           lastFinalAssistantMessage = assistantMessage;
-          lastFinalAssistantText = assistantMessage.text;
+          lastFinalAssistantText = assistantText;
         }
       }
       for (const part of assistantMessage.parts) {

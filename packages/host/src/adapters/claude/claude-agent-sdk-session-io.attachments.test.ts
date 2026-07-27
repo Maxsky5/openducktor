@@ -1,8 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
@@ -96,6 +97,32 @@ describe("Claude session I/O attachments and invalid updates", () => {
           },
         },
       ]);
+    } finally {
+      await rm(workspace, { force: true, recursive: true });
+    }
+  });
+
+  test("rejects oversized Claude attachments before reading them", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "openducktor-claude-send-"));
+    try {
+      const imagePath = join(workspace, "large-screenshot.png");
+      await writeFile(imagePath, "");
+      await truncate(imagePath, 32 * 1024 * 1024 + 1);
+
+      await expect(
+        toClaudeMessageFromParts([
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-1",
+              kind: "image",
+              mime: "image/png",
+              name: "large-screenshot.png",
+              path: imagePath,
+            },
+          },
+        ]),
+      ).rejects.toThrow("Claude attachments exceed the 32 MiB input memory budget.");
     } finally {
       await rm(workspace, { force: true, recursive: true });
     }

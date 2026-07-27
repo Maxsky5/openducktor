@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -27,6 +27,7 @@ const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set([
   "image/webp",
 ] as const);
 const SUPPORTED_CLAUDE_PDF_MIME = "application/pdf";
+const CLAUDE_ATTACHMENT_MEMORY_BUDGET_BYTES = 32 * 1024 * 1024;
 
 type ClaudeSupportedImageMime = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
@@ -81,7 +82,11 @@ const inferClaudeAttachmentMime = (
 
 const toClaudeAttachmentBlock = async (
   attachment: Extract<AgentUserMessagePart, { kind: "attachment" }>["attachment"],
-): Promise<ClaudeImageBlock | ClaudeDocumentBlock> => {
+  currentAttachmentBytes: number,
+): Promise<{
+  block: ClaudeImageBlock | ClaudeDocumentBlock;
+  sizeBytes: number;
+}> => {
   if (attachment.kind !== "image" && attachment.kind !== "pdf") {
     throw new HostValidationError({
       field: "parts",
@@ -106,6 +111,26 @@ const toClaudeAttachmentBlock = async (
     });
   }
 
+  const metadata = await stat(attachment.path).catch((cause: unknown) => {
+    throw new HostOperationError({
+      operation: "claude.attachment.stat",
+      message: `Failed to inspect Claude attachment '${attachment.name}' at '${attachment.path}': ${errorMessage(cause)}`,
+      cause,
+    });
+  });
+  const totalBytes = currentAttachmentBytes + metadata.size;
+  if (totalBytes > CLAUDE_ATTACHMENT_MEMORY_BUDGET_BYTES) {
+    throw new HostValidationError({
+      field: "parts",
+      message: "Claude attachments exceed the 32 MiB input memory budget.",
+      details: {
+        attachmentId: attachment.id,
+        totalBytes,
+        limitBytes: CLAUDE_ATTACHMENT_MEMORY_BUDGET_BYTES,
+      },
+    });
+  }
+
   const data = await readFile(attachment.path, "base64").catch((cause: unknown) => {
     throw new HostOperationError({
       operation: "claude.attachment.read",
@@ -116,23 +141,29 @@ const toClaudeAttachmentBlock = async (
 
   if (attachment.kind === "image") {
     return {
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: mime as ClaudeSupportedImageMime,
-        data,
+      block: {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mime as ClaudeSupportedImageMime,
+          data,
+        },
       },
+      sizeBytes: metadata.size,
     };
   }
 
   return {
-    type: "document",
-    title: attachment.name,
-    source: {
-      type: "base64",
-      media_type: SUPPORTED_CLAUDE_PDF_MIME,
-      data,
+    block: {
+      type: "document",
+      title: attachment.name,
+      source: {
+        type: "base64",
+        media_type: SUPPORTED_CLAUDE_PDF_MIME,
+        data,
+      },
     },
+    sizeBytes: metadata.size,
   };
 };
 
@@ -263,6 +294,7 @@ export const toClaudeMessageFromParts = async (
   }
 
   const content: ClaudeMessageContent = [];
+  let attachmentBytes = 0;
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
 
@@ -309,7 +341,11 @@ export const toClaudeMessageFromParts = async (
         break;
       case "attachment":
         flushText();
-        content.push(await toClaudeAttachmentBlock(part.attachment));
+        {
+          const encodedAttachment = await toClaudeAttachmentBlock(part.attachment, attachmentBytes);
+          attachmentBytes += encodedAttachment.sizeBytes;
+          content.push(encodedAttachment.block);
+        }
         break;
     }
     previousPart = part;

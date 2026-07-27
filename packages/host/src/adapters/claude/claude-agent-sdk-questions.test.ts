@@ -247,4 +247,35 @@ describe("createClaudeUserDialogHandler", () => {
     expect(events).toEqual([]);
     expect(session.pendingQuestions.size).toBe(0);
   });
+
+  test("rejects duplicate normalized question texts", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    const handler = createClaudeUserDialogHandler({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+    const question = createQuestionPayload().questions[0];
+    expect(question).toBeDefined();
+    if (!question) {
+      return;
+    }
+
+    await expect(
+      handler(
+        {
+          dialogKind: "permission_ask_user_question",
+          payload: {
+            questions: [question, { ...question, question: ` ${question.question} ` }],
+          },
+          toolUseID: "tool-use-1",
+        },
+        { signal: new AbortController().signal },
+      ),
+    ).rejects.toThrow("Claude AskUserQuestion dialog payload is invalid.");
+    expect(events).toEqual([]);
+    expect(session.pendingQuestions.size).toBe(0);
+  });
 });

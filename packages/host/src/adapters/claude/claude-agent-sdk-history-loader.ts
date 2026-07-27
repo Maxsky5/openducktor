@@ -41,6 +41,7 @@ export const loadClaudeHistory = async (
   const history = toClaudeHistoryMessages(messages, now, liveUserMessages, {
     includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
     skills,
+    transcriptExternalSessionId: input.externalSessionId,
   });
   return finalizeClaudeHistory(input, history);
 };

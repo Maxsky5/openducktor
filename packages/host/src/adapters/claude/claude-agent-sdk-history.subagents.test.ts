@@ -225,6 +225,73 @@ describe("claude-agent-sdk-history subagents", () => {
     ]);
   });
 
+  test("anchors nested Claude Agent results to the selected subagent transcript", () => {
+    const parentExternalSessionId = "session-1::claude-subagent::parent-agent";
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:04:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_agent_1",
+                name: "Agent",
+                input: {
+                  description: "Inspect nested behavior",
+                  subagent_type: "Explore",
+                  prompt: "Inspect nested behavior",
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-result-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:13.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_agent_1",
+                content: [{ type: "text", text: "Nested inspection complete" }],
+              },
+            ],
+          },
+          toolUseResult: {
+            status: "completed",
+            prompt: "Inspect nested behavior",
+            agentId: "child-agent",
+            agentType: "Explore",
+            content: [{ type: "text", text: "Nested inspection complete" }],
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      {
+        includeNestedEntries: true,
+        transcriptExternalSessionId: parentExternalSessionId,
+      },
+    );
+
+    expect(
+      history.flatMap((message) => message.parts).find((part) => part.kind === "subagent"),
+    ).toMatchObject({
+      kind: "subagent",
+      externalSessionId: `${parentExternalSessionId}::claude-subagent::child-agent`,
+    });
+  });
+
   test("hydrates failed Claude Agent tool results with visible error reasons", () => {
     const history = toClaudeHistoryMessages(
       [

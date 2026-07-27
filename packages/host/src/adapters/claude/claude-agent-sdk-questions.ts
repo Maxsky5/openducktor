@@ -85,6 +85,7 @@ const parseClaudeAskUserQuestionInput = (
 
   const sdkQuestions: ClaudeAskUserQuestion[] = [];
   const eventQuestions: Question[] = [];
+  const questionTexts = new Set<string>();
   for (const rawQuestion of rawQuestions) {
     if (!rawQuestion || typeof rawQuestion !== "object") {
       return null;
@@ -93,9 +94,10 @@ const parseClaudeAskUserQuestionInput = (
     const question = readString(record.question);
     const header = readString(record.header);
     const options = readOptions(record.options);
-    if (!question || !header || !options) {
+    if (!question || !header || !options || questionTexts.has(question)) {
       return null;
     }
+    questionTexts.add(question);
     const multiSelect = Boolean(record.multiSelect);
     sdkQuestions.push({
       question,
