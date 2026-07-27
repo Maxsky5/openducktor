@@ -10,32 +10,39 @@ import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 
-const workspaceState = {
-  activeWorkspace: {
-    workspaceId: "workspace-a",
-    workspaceName: "Workspace A",
-    repoPath: "/repo",
-  },
-} as WorkspaceStateContextValue;
+const createWorkspaceState = (): WorkspaceStateContextValue =>
+  ({
+    activeWorkspace: {
+      workspaceId: "workspace-a",
+      workspaceName: "Workspace A",
+      repoPath: "/repo",
+    },
+  }) as WorkspaceStateContextValue;
 
-const Wrapper = ({ children }: PropsWithChildren) => (
-  <QueryProvider useIsolatedClient>
-    <WorkspaceStateContext.Provider value={workspaceState}>
-      {children}
-    </WorkspaceStateContext.Provider>
-  </QueryProvider>
-);
+const createWrapper = () => {
+  const workspaceState = createWorkspaceState();
+  return function Wrapper({ children }: PropsWithChildren) {
+    return (
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider value={workspaceState}>
+          {children}
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>
+    );
+  };
+};
 
-const sessionFixture: AgentSessionRecord = {
+const createSessionFixture = (): AgentSessionRecord => ({
   externalSessionId: "session-1",
   role: "build",
   runtimeKind: "opencode",
   workingDirectory: "/worktrees/task-1",
   startedAt: "2026-07-27T12:00:00.000Z",
   selectedModel: null,
-};
+});
 
 const createReadPorts = () => {
+  const sessionFixture = createSessionFixture();
   const agentSessionsList = mock(async () => [sessionFixture]);
   const agentSessionsListForTasks = mock(async (_repoPath: string, taskIds: string[]) =>
     taskIds.map((taskId) => ({
@@ -60,6 +67,7 @@ const createReadPorts = () => {
       taskWorktrees: { taskWorktreeGet },
       terminals: { terminalList },
     },
+    sessionFixture,
   };
 };
 
@@ -77,7 +85,7 @@ const createHarness = (initialProps: HarnessProps) =>
       return { impact, queryClient };
     },
     initialProps,
-    { wrapper: Wrapper },
+    { wrapper: createWrapper() },
   );
 
 describe("useTaskCleanupImpact", () => {
@@ -124,7 +132,7 @@ describe("useTaskCleanupImpact", () => {
   });
 
   test("reuses warm session and worktree cache entries", async () => {
-    const { calls, readPorts } = createReadPorts();
+    const { calls, readPorts, sessionFixture } = createReadPorts();
     const initialProps = { enabled: false, taskIds: ["task-1"], readPorts };
     const harness = createHarness(initialProps);
 
@@ -152,7 +160,7 @@ describe("useTaskCleanupImpact", () => {
   });
 
   test("refreshes an invalidated session entry through its canonical per-task query", async () => {
-    const { calls, readPorts } = createReadPorts();
+    const { calls, readPorts, sessionFixture } = createReadPorts();
     const initialProps = { enabled: false, taskIds: ["task-1"], readPorts };
     const harness = createHarness(initialProps);
 

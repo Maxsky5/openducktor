@@ -180,7 +180,8 @@ export function useTaskCleanupImpact(
     queryClient,
     ...(readPorts.agentSessions ? { readPort: readPorts.agentSessions } : {}),
   });
-  const taskSessionQueries = useQueries(
+  // Observe canonical per-task state without starting reads here; useAgentSessionLists owns session loading so cold gaps stay batched.
+  const taskSessionObservers = useQueries(
     {
       queries: taskIds.map((taskId) => ({
         ...agentSessionListQueryOptions(queryRepoPath, taskId, readPorts.agentSessions),
@@ -220,7 +221,7 @@ export function useTaskCleanupImpact(
     const sessionImpact = getTaskCleanupImpactFromSessionQueries(
       shouldLoadImpact ? workspaceRepoPath : null,
       taskIds,
-      taskSessionQueries.map((query) => ({
+      taskSessionObservers.map((query) => ({
         ...query,
         error: sessionLists.error ?? query.error,
         isLoading: sessionLists.isPending || query.isLoading,
@@ -253,7 +254,7 @@ export function useTaskCleanupImpact(
     taskIds,
     sessionLists.error,
     sessionLists.isPending,
-    taskSessionQueries,
+    taskSessionObservers,
     taskWorktreeQueries,
     terminalQueries,
   ]);

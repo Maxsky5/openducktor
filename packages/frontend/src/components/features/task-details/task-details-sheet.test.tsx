@@ -55,6 +55,27 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
   </QueryProvider>
 );
 
+const createTaskDocumentsHookMock = () =>
+  mock((_taskId: string | null, _open: boolean, _cacheScope = "") => ({
+    specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+    planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+    qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
+    ensureDocumentLoaded: () => false,
+    reloadDocument: () => false,
+    applyDocumentUpdate: () => {},
+  }));
+
+const createTaskCleanupImpactHookMock = () =>
+  mock((_taskIds: string[], _enabled: boolean) => ({
+    hasCanonicalWorktree: false,
+    hasManagedSessionCleanup: false,
+    managedWorktreeCount: 0,
+    legacyWorktreeCount: 0,
+    impactError: null,
+    isLoadingImpact: false,
+    terminalCount: 0,
+  }));
+
 describe("TaskDetailsSheet", () => {
   test("passes activeWorkspace into task details view model", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
@@ -80,25 +101,8 @@ describe("TaskDetailsSheet", () => {
       },
     });
 
-    const taskDocumentsHookMock = mock(
-      (_taskId: string | null, _open: boolean, _cacheScope = "") => ({
-        specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-        planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-        qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-        ensureDocumentLoaded: () => false,
-        reloadDocument: () => false,
-        applyDocumentUpdate: () => {},
-      }),
-    );
-    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
-      hasCanonicalWorktree: false,
-      hasManagedSessionCleanup: false,
-      managedWorktreeCount: 0,
-      legacyWorktreeCount: 0,
-      impactError: null,
-      isLoadingImpact: false,
-      terminalCount: 0,
-    }));
+    const taskDocumentsHookMock = createTaskDocumentsHookMock();
+    const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
@@ -145,15 +149,7 @@ describe("TaskDetailsSheet", () => {
       issueType: "epic",
       subtaskIds: ["TASK-2"],
     });
-    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
-      hasCanonicalWorktree: false,
-      hasManagedSessionCleanup: false,
-      managedWorktreeCount: 0,
-      legacyWorktreeCount: 0,
-      impactError: null,
-      isLoadingImpact: false,
-      terminalCount: 0,
-    }));
+    const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
         workspaceId: "workspace-a",
@@ -176,14 +172,7 @@ describe("TaskDetailsSheet", () => {
       onResetTask: mock(async () => {}),
       onCloseTask: mock(async () => {}),
       onDelete: mock(async () => {}),
-      taskDocumentsHook: () => ({
-        specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-        planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-        qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-        ensureDocumentLoaded: () => false,
-        reloadDocument: () => false,
-        applyDocumentUpdate: () => {},
-      }),
+      taskDocumentsHook: createTaskDocumentsHookMock(),
       taskCleanupImpactHook: taskCleanupImpactHookMock,
     });
     const latestImpactCalls = () => taskCleanupImpactHookMock.mock.calls.slice(-2);
@@ -228,23 +217,8 @@ describe("TaskDetailsSheet", () => {
     });
     const onCloseTask = mock(async () => {});
     const onOpenChange = mock(() => {});
-    const taskDocumentsHookMock = mock(() => ({
-      specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-      planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-      qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-      ensureDocumentLoaded: () => false,
-      reloadDocument: () => false,
-      applyDocumentUpdate: () => {},
-    }));
-    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
-      hasCanonicalWorktree: false,
-      hasManagedSessionCleanup: false,
-      managedWorktreeCount: 0,
-      legacyWorktreeCount: 0,
-      impactError: null,
-      isLoadingImpact: false,
-      terminalCount: 0,
-    }));
+    const taskDocumentsHookMock = createTaskDocumentsHookMock();
+    const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
@@ -294,23 +268,8 @@ describe("TaskDetailsSheet", () => {
     const onCloseTask = mock(async () => {
       throw new Error("close failed");
     });
-    const taskDocumentsHookMock = mock(() => ({
-      specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-      planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-      qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-      ensureDocumentLoaded: () => false,
-      reloadDocument: () => false,
-      applyDocumentUpdate: () => {},
-    }));
-    const taskCleanupImpactHookMock = mock((_taskIds: string[], _enabled: boolean) => ({
-      hasCanonicalWorktree: false,
-      hasManagedSessionCleanup: false,
-      managedWorktreeCount: 0,
-      legacyWorktreeCount: 0,
-      impactError: null,
-      isLoadingImpact: false,
-      terminalCount: 0,
-    }));
+    const taskDocumentsHookMock = createTaskDocumentsHookMock();
+    const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
