@@ -523,7 +523,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("invalidates the normalized skills query scope from the ordered stream", async () => {
+  test("invalidates repo-scoped skills and slash commands from the ordered stream", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
@@ -540,13 +540,15 @@ describe("useRepoSessionReadModel", () => {
           scope: {
             repoPath: "/repo",
             runtimeKind: "codex",
-            workingDirectory: "/repo/worktree",
           },
         });
       });
 
-      expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: ["runtime-catalog", "skills", "/repo", "codex", "/repo/worktree"],
+      expect(invalidateQueries).toHaveBeenNthCalledWith(1, {
+        queryKey: ["runtime-catalog", "skills", "/repo", "codex"],
+      });
+      expect(invalidateQueries).toHaveBeenNthCalledWith(2, {
+        queryKey: ["runtime-catalog", "slash-commands", "/repo", "codex"],
       });
     } finally {
       await state.harness.unmount();

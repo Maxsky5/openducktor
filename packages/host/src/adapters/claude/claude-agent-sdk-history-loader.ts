@@ -5,6 +5,11 @@ import { loadClaudeRawHistoryMessages } from "./claude-agent-sdk-history-import"
 import type { ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 
+export type ClaudeLiveHistoryContext = {
+  source: "fresh" | "persisted";
+  userMessages: readonly ClaudeLiveUserMessage[];
+};
+
 export const finalizeClaudeHistory = (
   input: LoadAgentSessionHistoryInput,
   history: AgentSessionHistoryMessage[],
@@ -30,13 +35,13 @@ export const finalizeClaudeHistory = (
 export const loadClaudeHistory = async (
   input: LoadAgentSessionHistoryInput,
   now: () => string,
-  liveUserMessages?: readonly ClaudeLiveUserMessage[],
+  liveContext?: ClaudeLiveHistoryContext,
 ): Promise<AgentSessionHistoryMessage[]> => {
-  if (liveUserMessages?.length === 0) {
+  if (liveContext?.source === "fresh" && liveContext.userMessages.length === 0) {
     return finalizeClaudeHistory(input, []);
   }
   const messages = await loadClaudeRawHistoryMessages(input);
-  const history = toClaudeHistoryMessages(messages, now, liveUserMessages ?? [], {
+  const history = toClaudeHistoryMessages(messages, now, liveContext?.userMessages ?? [], {
     includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
     transcriptExternalSessionId: input.externalSessionId,
   });

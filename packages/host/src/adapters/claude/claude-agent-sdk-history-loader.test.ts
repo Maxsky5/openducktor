@@ -88,7 +88,7 @@ describe("loadClaudeHistory", () => {
           },
         },
         () => "2026-07-17T10:01:01.000Z",
-        [],
+        { source: "fresh", userMessages: [] },
       ),
     ).resolves.toEqual([
       {
@@ -99,5 +99,24 @@ describe("loadClaudeHistory", () => {
         parts: [],
       },
     ]);
+  });
+
+  test("imports persisted history for a resumed live session without new user turns", async () => {
+    await expect(
+      loadClaudeHistory(
+        {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/missing-worktree",
+          externalSessionId: "resumed-session",
+          runtimePolicy: { kind: "claude" },
+        },
+        () => "2026-07-17T10:01:01.000Z",
+        { source: "persisted", userMessages: [] },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "HostOperationError",
+      operation: "claude.session.history.import",
+    });
   });
 });

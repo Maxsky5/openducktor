@@ -87,7 +87,10 @@ const createServiceInput = (events?: {
     ANTHROPIC_API_KEY: "secret",
     GITHUB_TOKEN: "secret",
     HOME: "/Users/openducktor-test",
+    ODT_HOST_TOKEN: "host-control-secret",
+    OPENDUCKTOR_APP_TOKEN: "app-control-secret",
     PATH: "/usr/bin",
+    VITE_ODT_BROWSER_AUTH_TOKEN: "browser-control-secret",
   },
   runtimeDistribution: createArtifactRuntimeDistribution({
     mcpLauncher: {
@@ -205,9 +208,14 @@ describe("buildClaudeAgentSdkOptions", () => {
       askUserQuestion: { previewFormat: "markdown" },
     });
     expect(options.env).toMatchObject({
+      ANTHROPIC_API_KEY: "secret",
       CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
+      GITHUB_TOKEN: "secret",
       HOME: "/Users/openducktor-test",
     });
+    expect(options.env).not.toHaveProperty("ODT_HOST_TOKEN");
+    expect(options.env).not.toHaveProperty("OPENDUCKTOR_APP_TOKEN");
+    expect(options.env).not.toHaveProperty("VITE_ODT_BROWSER_AUTH_TOKEN");
     expect(options.pathToClaudeCodeExecutable).toBe(process.execPath);
   });
 

@@ -11,6 +11,7 @@ import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { sanitizeChildProcessEnvironment } from "../../infrastructure/process/process-environment";
 import {
   buildOpenDucktorMcpBridgeEnvironment,
   type OpenDucktorMcpBridgeConnection,
@@ -72,7 +73,7 @@ export const buildClaudeAgentSdkBaseOptions = ({
   const options: Options = {
     cwd,
     env: {
-      ...processEnv,
+      ...sanitizeChildProcessEnvironment(processEnv ?? {}),
       CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
     },
     skills: "all",

@@ -103,6 +103,35 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
 };
 
 describe("createClaudeAgentSdkService", () => {
+  test("loads persisted history for resumed and forked live sessions before a new user turn", async () => {
+    const resumedSession = createSession();
+    const forkedSession = createSession({
+      input: {
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        systemPrompt: "Build",
+        parentExternalSessionId: "parent-session",
+      },
+    });
+
+    for (const session of [resumedSession, forkedSession]) {
+      await expect(
+        Effect.runPromise(
+          createService(session).loadSessionHistory({
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/missing-worktree",
+            externalSessionId: session.externalSessionId,
+            runtimePolicy: { kind: "claude" },
+          }),
+        ),
+      ).rejects.toThrow("Failed to load Claude session");
+    }
+  });
+
   test("loads detached root context usage but not parent usage for a subagent", async () => {
     const loadDetachedSessionContextUsage = mock(
       async (_input: {

@@ -438,6 +438,34 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
+  test("invalidates catalogs at repo scope when Codex reports changed skills", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    await harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: runtime.runtimeId,
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: true,
+    });
+
+    expect(changes).toContainEqual({
+      type: "catalog_invalidated",
+      repoPath: "/repo",
+      runtimeKind: "codex",
+    });
+  });
+
   test("clears the retained projection when controller cleanup fails", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     const harness = createControllerHarness({

@@ -24,14 +24,20 @@ export const runtimeCatalogQueryKeys = {
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
     ] as const,
-  repoSlashCommands: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
+  repoSlashCommandsScope: ({
+    repoPath,
+    runtimeKind,
+    workingDirectory,
+  }: RepoRuntimeRef & { workingDirectory?: string }) =>
     [
       ...runtimeCatalogQueryKeys.all,
       "slash-commands",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
-      normalizeWorkingDirectory(workingDirectory),
+      ...(workingDirectory !== undefined ? [normalizeWorkingDirectory(workingDirectory)] : []),
     ] as const,
+  repoSlashCommands: (runtimeRef: RuntimeWorkingDirectoryRef) =>
+    runtimeCatalogQueryKeys.repoSlashCommandsScope(runtimeRef),
   repoSkillsScope: ({
     repoPath,
     runtimeKind,
