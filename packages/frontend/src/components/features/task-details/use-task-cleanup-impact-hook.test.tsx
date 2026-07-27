@@ -7,6 +7,7 @@ import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 
@@ -161,6 +162,8 @@ describe("useTaskCleanupImpact", () => {
 
   test("refreshes an invalidated session entry through its canonical per-task query", async () => {
     const { calls, readPorts, sessionFixture } = createReadPorts();
+    const refresh = createDeferred<AgentSessionRecord[]>();
+    calls.agentSessionsList.mockImplementation(() => refresh.promise);
     const initialProps = { enabled: false, taskIds: ["task-1"], readPorts };
     const harness = createHarness(initialProps);
 
@@ -176,6 +179,8 @@ describe("useTaskCleanupImpact", () => {
 
       await harness.update({ ...initialProps, enabled: true });
       await harness.waitFor(() => calls.agentSessionsList.mock.calls.length === 1);
+      expect(harness.getLatest().impact.isLoadingImpact).toBe(true);
+      await harness.run(() => refresh.resolve([sessionFixture]));
       await harness.waitFor(({ impact }) => !impact.isLoadingImpact);
       expect(calls.agentSessionsListForTasks).not.toHaveBeenCalled();
       expect(calls.agentSessionsList).toHaveBeenCalledTimes(1);
