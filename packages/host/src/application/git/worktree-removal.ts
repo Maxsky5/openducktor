@@ -51,12 +51,18 @@ const cleanupIdentityChanged = (effectiveWorktreePath: string, cause?: unknown) 
 const canonicalPathPlatform = process.platform === "win32" ? "windows" : "posix";
 const isStableManagedCleanupPath = (
   initial: { canonicalPath: string; cleanupPath: string; kind: "descendant" | "outside" },
-  current: { canonicalPath: string; cleanupPath: string; kind: "descendant" | "outside" },
+  current: {
+    canonicalPath: string;
+    cleanupPath: string;
+    kind: "descendant" | "outside";
+    targetExists: boolean;
+  },
 ) =>
   initial.kind === "descendant" &&
   current.kind === "descendant" &&
-  canonicalPathsEqual(current.canonicalPath, initial.canonicalPath, canonicalPathPlatform) &&
-  canonicalPathsEqual(current.cleanupPath, initial.cleanupPath, canonicalPathPlatform);
+  canonicalPathsEqual(current.cleanupPath, initial.cleanupPath, canonicalPathPlatform) &&
+  (!current.targetExists ||
+    canonicalPathsEqual(current.canonicalPath, initial.canonicalPath, canonicalPathPlatform));
 export const removeWorktreeAndFilesystemPath = (
   dependencies: RemoveWorktreeAndFilesystemPathDependencies,
   input: RemoveWorktreeAndFilesystemPathInput,
@@ -89,6 +95,9 @@ export const removeWorktreeAndFilesystemPath = (
       effectiveWorktreePath,
     );
     const cleanupIdentityIsStable = isStableManagedCleanupPath(initialCleanup, currentCleanup);
+    const missingOutsideCleanup =
+      !currentCleanup.targetExists &&
+      (initialCleanup.kind === "outside" || currentCleanup.kind === "outside");
     if (removalResult._tag === "Left") {
       const registered = yield* gitPort.isRegisteredWorktree(
         repoPath,
@@ -96,6 +105,9 @@ export const removeWorktreeAndFilesystemPath = (
       );
       if (registered) {
         return yield* Effect.fail(removalResult.left);
+      }
+      if (input.missingOutsideManagedRootPathPolicy === "skip" && missingOutsideCleanup) {
+        return;
       }
       if (initialCleanup.kind === "outside") {
         return yield* Effect.fail(
@@ -109,7 +121,7 @@ export const removeWorktreeAndFilesystemPath = (
       }
     }
     if (!cleanupIdentityIsStable) {
-      if (input.missingOutsideManagedRootPathPolicy === "skip" && !currentCleanup.targetExists) {
+      if (input.missingOutsideManagedRootPathPolicy === "skip" && missingOutsideCleanup) {
         return;
       }
       return yield* Effect.fail(
