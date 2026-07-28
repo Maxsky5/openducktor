@@ -20,6 +20,7 @@ import {
 } from "./claude-agent-sdk-history-import";
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
 import {
+  appendUnmatchedLiveUserMessages,
   type ClaudeLiveUserMessage,
   hasFinalStopStep,
   readHistoryToolResults,
@@ -491,5 +492,6 @@ export const toClaudeHistoryMessages = (
       }
     }
   }
+  appendUnmatchedLiveUserMessages(history, liveUserMessages);
   return history;
 };

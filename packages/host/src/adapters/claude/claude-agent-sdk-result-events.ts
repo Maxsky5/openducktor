@@ -22,6 +22,7 @@ type ClaudeResultEventSession = {
   pendingUserTurnCount?: number;
   lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
+  lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
@@ -132,15 +133,18 @@ const resultModelForCompletedTurn = (
     | { model?: AgentModelSelection }
     | undefined;
   const acceptedModel = acceptedMessage?.model;
+  const completedAssistantModel = duplicatesAssistantTextFromSameTurn
+    ? session.lastAssistantTextModel
+    : undefined;
   if (!acceptedModel) {
-    return session.model;
+    return completedAssistantModel ?? session.model;
   }
-  if (!duplicatesAssistantTextFromSameTurn || !session.model) {
+  if (!completedAssistantModel) {
     return acceptedModel;
   }
   return {
     ...acceptedModel,
-    modelId: session.model.modelId,
+    modelId: completedAssistantModel.modelId,
   };
 };
 

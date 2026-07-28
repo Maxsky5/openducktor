@@ -185,7 +185,14 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
               "externalSessionId" in session.input || "parentExternalSessionId" in session.input
                 ? ("persisted" as const)
                 : ("fresh" as const),
-            userMessages: session.acceptedUserMessages,
+            userMessages: session.acceptedUserMessages.map((message) => ({
+              ...message,
+              state: session.queuedSdkMessages.some(
+                (queuedMessage) => queuedMessage.uuid === message.messageId,
+              )
+                ? ("queued" as const)
+                : ("read" as const),
+            })),
           }
         : undefined;
     return fromPromise("claudeRuntime.loadSessionHistory", () =>

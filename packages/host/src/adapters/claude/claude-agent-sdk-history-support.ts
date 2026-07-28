@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentFileReference,
+  AgentModelSelection,
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
@@ -9,9 +10,36 @@ import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeLiveUserMessage = {
+  isManualCompaction?: true;
   messageId: string;
+  model?: AgentModelSelection;
+  parts?: AgentUserMessageDisplayPart[];
+  state?: "queued" | "read";
   text: string;
   timestamp: string;
+};
+
+export const appendUnmatchedLiveUserMessages = (
+  history: AgentSessionHistoryMessage[],
+  liveUserMessages: readonly ClaudeLiveUserMessage[],
+): void => {
+  const projectedMessageIds = new Set(history.map((message) => message.messageId));
+  for (const message of liveUserMessages) {
+    if (message.isManualCompaction || projectedMessageIds.has(message.messageId)) {
+      continue;
+    }
+    history.push({
+      messageId: message.messageId,
+      role: "user",
+      timestamp: message.timestamp,
+      text: message.text,
+      displayParts:
+        message.parts ?? (message.text.length > 0 ? [{ kind: "text", text: message.text }] : []),
+      state: message.state ?? "read",
+      ...(message.model ? { model: message.model } : {}),
+      parts: [],
+    });
+  }
 };
 
 type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "assistant" }>;

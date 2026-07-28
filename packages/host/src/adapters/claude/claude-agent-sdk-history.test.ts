@@ -59,6 +59,77 @@ describe("claude-agent-sdk-history", () => {
     });
   });
 
+  test("appends locally queued live prompts missing from SDK history without duplicating matches", () => {
+    const queuedModel = {
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+      runtimeKind: "claude" as const,
+      variant: "high",
+    };
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "sdk-user-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:13.804Z",
+          message: {
+            role: "user",
+            content: "First prompt",
+          },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:16.287Z",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [{ type: "text", text: "Working" }],
+            stop_reason: "tool_use",
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [
+        {
+          messageId: "live-user-1",
+          parts: [{ kind: "text", text: "First prompt" }],
+          state: "read",
+          text: "First prompt",
+          timestamp: "2026-06-26T11:03:13.804Z",
+        },
+        {
+          messageId: "live-user-2",
+          model: queuedModel,
+          parts: [{ kind: "text", text: "Queued follow-up" }],
+          state: "queued",
+          text: "Queued follow-up",
+          timestamp: "2026-06-26T11:03:17.000Z",
+        },
+      ],
+    );
+
+    expect(history.map((message) => message.messageId)).toEqual([
+      "live-user-1",
+      "assistant-1",
+      "live-user-2",
+    ]);
+    expect(history[2]).toEqual({
+      messageId: "live-user-2",
+      role: "user",
+      timestamp: "2026-06-26T11:03:17.000Z",
+      text: "Queued follow-up",
+      displayParts: [{ kind: "text", text: "Queued follow-up" }],
+      state: "queued",
+      model: queuedModel,
+      parts: [],
+    });
+  });
+
   test("marks the current Claude success result shape final", () => {
     const history = toClaudeHistoryMessages(
       [

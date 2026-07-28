@@ -230,9 +230,6 @@ const handleAssistantMessage = ({
 }): void => {
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
-  if (assistantModel) {
-    session.model = { ...session.model, ...assistantModel };
-  }
   const content = (message.message as { content?: unknown }).content;
   const text = textFromContentBlocks(content);
   const hasToolUse =
@@ -261,7 +258,7 @@ const handleAssistantMessage = ({
     settleClaudeStreamedAssistantText({ emit, session, timestamp });
   }
   if (hasToolUse && text.length > 0) {
-    rememberAssistantTextForCurrentTurn(session, text, message.uuid);
+    rememberAssistantTextForCurrentTurn(session, text, message.uuid, assistantModel);
   }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
@@ -336,7 +333,7 @@ const handleAssistantMessage = ({
       (!stopReason && isForwardedSubagentText)
     ) {
       const messageId = assistantMessageId;
-      rememberAssistantTextForCurrentTurn(session, text, messageId);
+      rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel);
       emit({
         type: "assistant_message",
         externalSessionId: session.externalSessionId,
@@ -354,7 +351,7 @@ const handleAssistantMessage = ({
       return;
     }
     const messageId = message.uuid;
-    rememberAssistantTextForCurrentTurn(session, text, messageId);
+    rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel);
     emit(
       claudeAssistantTextPartEvent({
         externalSessionId: session.externalSessionId,

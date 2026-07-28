@@ -121,15 +121,16 @@ describe("handleClaudeSdkMessage result events", () => {
       variant: "high",
       profileId: "profile-1",
     };
+    const selectedNextModel = {
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+      runtimeKind: "claude" as const,
+      variant: "xhigh",
+      profileId: "profile-1",
+    };
     const session = {
       ...createSession(),
-      model: {
-        providerId: "claude",
-        modelId: "claude-opus-4-6",
-        runtimeKind: "claude" as const,
-        variant: "xhigh",
-        profileId: "profile-1",
-      },
+      model: selectedNextModel,
     };
     session.acceptedUserMessages.push({ model: acceptedTurnModel });
     session.pendingUserTurnCount = 1;
@@ -177,6 +178,7 @@ describe("handleClaudeSdkMessage result events", () => {
       }),
     });
 
+    expect(session.model).toEqual(selectedNextModel);
     expect(events).toContainEqual({
       type: "assistant_message",
       externalSessionId: "session-1",

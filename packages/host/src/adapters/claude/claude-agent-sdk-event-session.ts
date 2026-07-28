@@ -17,6 +17,7 @@ export type ClaudeEventSession = {
   retractedToolUseIds?: Set<string>;
   lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
+  lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   streamReasoningByBlockIndex?: Map<number, string>;
@@ -83,6 +84,7 @@ export const rememberAssistantTextForCurrentTurn = (
   session: ClaudeEventSession,
   text: string,
   messageId: string,
+  model?: AgentModelSelection,
 ): void => {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -90,6 +92,11 @@ export const rememberAssistantTextForCurrentTurn = (
   }
   session.lastAssistantTextMessageId = messageId;
   session.lastAssistantText = trimmed;
+  if (model) {
+    session.lastAssistantTextModel = model;
+  } else {
+    delete session.lastAssistantTextModel;
+  }
   session.lastAssistantTextTurnIndex = activeAssistantTurnIndex(session);
 };
 
