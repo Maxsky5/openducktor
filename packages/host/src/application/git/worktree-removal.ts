@@ -84,6 +84,11 @@ export const removeWorktreeAndFilesystemPath = (
       effectiveWorktreePath,
     );
     if (
+      yield* worktreeFiles.pathIsWithinRoot(effectiveWorktreePath, initialCleanup.managedBasePath)
+    ) {
+      return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
+    }
+    if (
       initialCleanup.kind === "outside" &&
       !canonicalPathsEqual(
         initialCleanup.cleanupPath,
@@ -93,14 +98,7 @@ export const removeWorktreeAndFilesystemPath = (
     ) {
       return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
     }
-    if (
-      initialCleanup.kind === "outside" &&
-      (initialCleanup.targetExists ||
-        (yield* worktreeFiles.pathIsWithinRoot(
-          effectiveWorktreePath,
-          initialCleanup.managedBasePath,
-        )))
-    ) {
+    if (initialCleanup.kind === "outside" && initialCleanup.targetExists) {
       const registered = yield* gitPort.isRegisteredWorktree(
         repoPath,
         initialCleanup.canonicalPath,
