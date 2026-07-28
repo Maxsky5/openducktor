@@ -241,6 +241,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       }
       assertClaudeSessionRef(session, input, "update session model");
       await applyClaudeSessionModel(session, input.model);
+      if (session.modelAfterQueuedTurns !== undefined) {
+        session.modelAfterQueuedTurns = input.model ?? null;
+      }
       session.summary = { ...session.summary };
     });
   }

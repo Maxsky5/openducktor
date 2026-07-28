@@ -470,6 +470,48 @@ describe("createClaudeAgentSdkService", () => {
     expect(session.model?.variant).toBe("xhigh");
   });
 
+  test("keeps the latest live selection as the queued-turn restore model", async () => {
+    const session = createSession({
+      model: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "claude-opus-4-6",
+        variant: "xhigh",
+      },
+      modelAfterQueuedTurns: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "claude-sonnet-4-6",
+        variant: "high",
+      },
+      query: {
+        applyFlagSettings: mock(async (_settings: unknown) => {}),
+        close: mock(() => {}),
+        setModel: mock(async (_model?: string) => {}),
+      } as unknown as ClaudeSession["query"],
+    });
+    const service = createService(session);
+    const latestModel = {
+      runtimeKind: "claude" as const,
+      providerId: "claude",
+      modelId: "claude-haiku-4-5",
+      variant: "low",
+    };
+
+    await Effect.runPromise(
+      service.updateSessionModel({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        model: latestModel,
+      }),
+    );
+
+    expect(session.model).toEqual(latestModel);
+    expect(session.modelAfterQueuedTurns).toEqual(latestModel);
+  });
+
   test("defers model changes for cold Claude sessions", async () => {
     const service = createService(null);
 

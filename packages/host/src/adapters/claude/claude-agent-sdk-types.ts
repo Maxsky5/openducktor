@@ -94,6 +94,7 @@ export type ClaudeSession = {
   lastAssistantText?: string;
   lastAssistantTextTurnIndex?: number;
   model: AgentModelSelection | undefined;
+  modelAfterQueuedTurns?: AgentModelSelection | null;
   parentExternalSessionId?: string;
   pendingApprovals: Map<string, PendingApproval>;
   pendingQuestions: Map<string, PendingQuestion>;

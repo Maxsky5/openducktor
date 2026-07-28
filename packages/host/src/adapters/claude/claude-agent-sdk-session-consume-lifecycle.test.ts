@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import { consumeClaudeSession, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
+import {
+  applyClaudeSessionModel,
+  consumeClaudeSession,
+  flushQueuedClaudeUserMessage,
+  sendClaudeUserMessage,
+} from "./claude-agent-sdk-session-io";
 import {
   claudeQueryWithMessages,
   createClaudeSession,
@@ -322,6 +327,104 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.sessions.delete(session.externalSessionId);
     openQuery.release();
     await consumePromise;
+  });
+
+  test("restores the latest model after a queued turn completes", async () => {
+    const setModelCalls: Array<string | undefined> = [];
+    const pushed: SDKUserMessage[] = [];
+    const queue = new AsyncInputQueue<SDKUserMessage>();
+    queue.push = (message) => {
+      pushed.push(message);
+    };
+    const query = Object.assign(
+      claudeQueryWithMessages([
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: "result-queued",
+          session_id: "session-1",
+          is_error: false,
+          result: "queued turn done",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          usage: { input_tokens: 0, output_tokens: 0 },
+        }),
+      ]),
+      {
+        setModel: async (model?: string) => {
+          setModelCalls.push(model);
+        },
+        applyFlagSettings: async (_settings: unknown) => {},
+      },
+    );
+    const session = createClaudeSession({
+      activeSdkUserTurnCount: 1,
+      activity: "running",
+      model: {
+        providerId: "claude",
+        modelId: "claude-sonnet-4-6",
+        runtimeKind: "claude",
+        variant: "high",
+      },
+      query,
+      queue,
+      sdkState: "running",
+    });
+
+    await sendClaudeUserMessage({
+      session,
+      now: () => "2026-06-25T20:00:00.000Z",
+      randomId: () => "message-queued",
+      emit: () => {},
+      messageInput: {
+        externalSessionId: "session-1",
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        model: {
+          providerId: "claude",
+          modelId: "claude-opus-4-6",
+          runtimeKind: "claude",
+          variant: "xhigh",
+        },
+        parts: [{ kind: "text", text: "use opus for this turn" }],
+      },
+    });
+    await applyClaudeSessionModel(session, {
+      providerId: "claude",
+      modelId: "claude-haiku-4-5",
+      runtimeKind: "claude",
+      variant: "low",
+    });
+
+    session.activeSdkUserTurnCount = 0;
+    session.sdkState = "idle";
+    await flushQueuedClaudeUserMessage({
+      emit: () => {},
+      now: () => "2026-06-25T20:00:01.000Z",
+      session,
+    });
+
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
+    await consumeClaudeSession({
+      session,
+      sessionStore,
+      now: () => "2026-06-25T20:00:02.000Z",
+      emit: () => {},
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+    });
+
+    expect(pushed).toEqual([expect.objectContaining({ uuid: "message-queued" })]);
+    expect(setModelCalls).toEqual(["claude-haiku-4-5", "claude-opus-4-6", "claude-haiku-4-5"]);
+    expect(session.model).toEqual({
+      providerId: "claude",
+      modelId: "claude-haiku-4-5",
+      runtimeKind: "claude",
+      variant: "low",
+    });
   });
 
   test("terminalizes a live session when the SDK iterator completes", async () => {

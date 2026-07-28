@@ -19,6 +19,10 @@ import {
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { emitClaudeTerminalSessionFailure } from "./claude-agent-sdk-lifecycle";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
+import {
+  assertClaudeSessionModelUpdateSupported,
+  assertSupportedClaudeLiveEffort,
+} from "./claude-agent-sdk-session-model";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -27,8 +31,6 @@ import type {
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
-
-const LIVE_CLAUDE_EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh"]);
 
 const hasActiveSdkUserTurn = (session: ClaudeSession): boolean =>
   session.activeSdkUserTurnCount > 0;
@@ -42,9 +44,16 @@ const canFlushQueuedClaudeUserMessage = (session: ClaudeSession): boolean =>
 const canPushSdkUserMessageNow = (session: ClaudeSession): boolean =>
   !hasActiveSdkUserTurn(session) &&
   session.queuedSdkMessages.length === 0 &&
-  session.sdkState !== "running";
+  session.sdkState !== "running" &&
+  session.modelAfterQueuedTurns === undefined;
 
 const isClaudeSessionStopped = (session: ClaudeSession): boolean => session.activity === "stopped";
+
+const canRestoreClaudeSessionModelAfterQueuedTurns = (session: ClaudeSession): boolean =>
+  session.modelAfterQueuedTurns !== undefined &&
+  !hasActiveSdkUserTurn(session) &&
+  session.queuedSdkMessages.length === 0 &&
+  session.sdkState === "idle";
 
 const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
   if (session.activity !== "stopped") {
@@ -78,23 +87,6 @@ const readClaudeSdkMessageTimestamp = (message: SDKMessage, now: () => string): 
     return now();
   }
   return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;
-};
-
-const assertSupportedClaudeLiveEffort = (
-  model: AgentModelSelection,
-  externalSessionId: string,
-): "low" | "medium" | "high" | "xhigh" | null => {
-  if (!model.variant) {
-    return null;
-  }
-  if (LIVE_CLAUDE_EFFORT_LEVELS.has(model.variant)) {
-    return model.variant as "low" | "medium" | "high" | "xhigh";
-  }
-  throw new HostValidationError({
-    field: "model.variant",
-    message: `Claude Agent SDK live effort updates do not support '${model.variant}'.`,
-    details: { externalSessionId, model },
-  });
 };
 
 export const applyClaudeSessionModel = async (
@@ -162,6 +154,15 @@ export const applyClaudeSessionModel = async (
   session.model = nextModel;
 };
 
+const restoreClaudeSessionModelAfterQueuedTurns = async (session: ClaudeSession): Promise<void> => {
+  const model = session.modelAfterQueuedTurns;
+  if (model === undefined) {
+    return;
+  }
+  await applyClaudeSessionModel(session, model);
+  delete session.modelAfterQueuedTurns;
+};
+
 const rollbackClaudeSessionModel = async (input: {
   cause: unknown;
   operation: string;
@@ -181,30 +182,6 @@ const rollbackClaudeSessionModel = async (input: {
         rollbackFailure: errorMessage(rollbackCause),
       },
     });
-  }
-};
-
-const assertClaudeSessionModelUpdateSupported = (
-  session: ClaudeSession,
-  model: AgentModelSelection | null | undefined,
-): void => {
-  const nextModel = model ?? undefined;
-  const previousProfileId = session.model?.profileId ?? null;
-  const nextProfileId = nextModel?.profileId ?? null;
-  if (previousProfileId !== nextProfileId) {
-    throw new HostValidationError({
-      field: "model.profileId",
-      message: "Claude Agent SDK live model updates do not support changing agents.",
-      details: {
-        externalSessionId: session.externalSessionId,
-        model: nextModel,
-        previousProfileId,
-      },
-    });
-  }
-
-  if (session.model?.variant !== nextModel?.variant && nextModel) {
-    assertSupportedClaudeLiveEffort(nextModel, session.externalSessionId);
   }
 };
 
@@ -248,6 +225,9 @@ export const consumeClaudeSession = async (input: {
       const shouldRefreshContextUsage = shouldRefreshClaudeContextUsageForMessage(message);
       if (shouldRefreshContextUsage) {
         scheduleClaudeLiveContextUsageRefresh({ emit, onBackgroundFailure, session, timestamp });
+      }
+      if (canRestoreClaudeSessionModelAfterQueuedTurns(session)) {
+        await restoreClaudeSessionModelAfterQueuedTurns(session);
       }
       const shouldFlushQueuedMessage =
         (message.type === "system" &&
@@ -406,11 +386,15 @@ export const flushQueuedClaudeUserMessage = (input: {
     (message) => message.messageId === nextMessage.uuid,
   );
   const previousModel = session.model;
+  const previousModelAfterQueuedTurns = session.modelAfterQueuedTurns;
   let modelApplied = false;
   let removedFromQueue = false;
   return Promise.resolve()
     .then(async () => {
       if (acceptedMessage?.model) {
+        if (session.modelAfterQueuedTurns === undefined) {
+          session.modelAfterQueuedTurns = previousModel ?? null;
+        }
         await applyClaudeSessionModel(session, acceptedMessage.model);
         modelApplied = true;
       }
@@ -477,6 +461,11 @@ export const flushQueuedClaudeUserMessage = (input: {
         });
       } else {
         session.model = previousModel;
+      }
+      if (previousModelAfterQueuedTurns === undefined) {
+        delete session.modelAfterQueuedTurns;
+      } else {
+        session.modelAfterQueuedTurns = previousModelAfterQueuedTurns;
       }
       throw cause;
     });
