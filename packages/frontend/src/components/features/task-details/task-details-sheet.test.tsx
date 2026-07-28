@@ -208,6 +208,57 @@ describe("TaskDetailsSheet", () => {
     }
   });
 
+  test("stops task document reads while deletion is pending", async () => {
+    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    const taskDocumentsHookMock = createTaskDocumentsHookMock();
+    let finishDelete: () => void = () => {};
+    const deletePending = new Promise<void>((resolve) => {
+      finishDelete = resolve;
+    });
+    const onDelete = mock(() => deletePending);
+    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+      activeWorkspace: {
+        workspaceId: "workspace-a",
+        workspaceName: "Workspace A",
+        repoPath: "/repo-a",
+      },
+      task,
+      allTasks: [task],
+      open: true,
+      onOpenChange: () => {},
+      onPlan: undefined,
+      onQaStart: undefined,
+      onQaOpen: undefined,
+      onBuild: undefined,
+      onOpenSession: undefined,
+      onDelegate: undefined,
+      onHumanApprove: undefined,
+      onHumanRequestChanges: undefined,
+      onResetImplementation: undefined,
+      onResetTask: undefined,
+      onCloseTask: undefined,
+      onDelete,
+      taskDocumentsHook: taskDocumentsHookMock,
+      taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((viewModel) => viewModel.openDeleteDialog());
+      const callsBeforeDelete = taskDocumentsHookMock.mock.calls.length;
+
+      await harness.run((viewModel) => viewModel.confirmDelete());
+
+      expect(onDelete).toHaveBeenCalledWith("TASK-1", { deleteSubtasks: false });
+      expect(harness.getLatest().isDeletePending).toBe(true);
+      expect(taskDocumentsHookMock.mock.calls.slice(callsBeforeDelete).at(-1)?.[1]).toBe(false);
+    } finally {
+      finishDelete();
+      await harness.unmount();
+    }
+  });
+
   test("routes close_task to the confirmation dialog before invoking close", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
     const task = createTaskCardFixture({

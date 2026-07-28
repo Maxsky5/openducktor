@@ -126,12 +126,6 @@ export function useTaskDetailsSheetViewModel({
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const taskId = task?.id ?? null;
-  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = taskDocumentsHook(
-    taskId,
-    open,
-    workspaceRepoPath ?? "",
-  );
-
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
   const deleteImpactTaskIds = useMemo(
     () => collectDeleteImpactTaskIds(task, taskById),
@@ -161,6 +155,11 @@ export function useTaskDetailsSheetViewModel({
     onOpenChange,
     onDelete,
   });
+  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = taskDocumentsHook(
+    taskId,
+    open && !isDeletePending,
+    workspaceRepoPath ?? "",
+  );
   const {
     isResetDialogOpen,
     isResetPending,
