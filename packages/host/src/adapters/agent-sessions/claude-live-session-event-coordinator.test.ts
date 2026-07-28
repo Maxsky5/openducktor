@@ -13,6 +13,13 @@ const statusEvent = (timestamp: string): ClaudeAgentSdkEvent => ({
   status: { type: "busy", message: null },
 });
 
+const transcriptRetractionEvent = (timestamp: string): ClaudeAgentSdkEvent => ({
+  type: "transcript_retracted",
+  externalSessionId: "session-1",
+  timestamp,
+  messageIds: ["queued-user-1"],
+});
+
 describe("Claude live-session event coordinator", () => {
   test("surfaces a processing failure once without stranding later events", async () => {
     const processedTimestamps: string[] = [];
@@ -69,7 +76,7 @@ describe("Claude live-session event coordinator", () => {
     ]);
   });
 
-  test("waits for in-flight projection and discards events emitted during shutdown", async () => {
+  test("forwards transcript retractions and discards other events emitted during shutdown", async () => {
     const started = await Effect.runPromise(Deferred.make<void>());
     const continueProcessing = await Effect.runPromise(Deferred.make<void>());
     const processedTimestamps: string[] = [];
@@ -90,13 +97,14 @@ describe("Claude live-session event coordinator", () => {
       coordinator.shutdown(
         Effect.sync(() => {
           coordinator.enqueueEvent(session, statusEvent("2026-07-17T10:02:00.000Z"));
+          coordinator.enqueueEvent(session, transcriptRetractionEvent("2026-07-17T10:03:00.000Z"));
         }),
       ),
     );
     await Effect.runPromise(Deferred.succeed(continueProcessing, undefined));
     await Effect.runPromise(Fiber.join(shutdownFiber));
 
-    expect(processedTimestamps).toEqual(["2026-07-17T10:01:00.000Z"]);
+    expect(processedTimestamps).toEqual(["2026-07-17T10:01:00.000Z", "2026-07-17T10:03:00.000Z"]);
     expect(() =>
       coordinator.enqueueEvent(session, statusEvent("2026-07-17T10:03:00.000Z")),
     ).toThrow("already released");

@@ -282,7 +282,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         listRetainedSnapshots: (repoPath) => Effect.succeed(state.listRetainedSnapshots(repoPath)),
         readRetainedSnapshot: (ref) => Effect.succeed(state.readRetainedSnapshot(ref)),
         loadContext: (input) =>
-          requireClaudePolicy(input.runtimeKind, "load-context").pipe(
+          requireSessionWorkingDirectory(input, "load-context").pipe(
             Effect.zipRight(eventCoordinator.flush()),
             Effect.zipRight(Effect.sync(() => state.contextRevision(input))),
             Effect.flatMap((contextRevision) =>
@@ -382,7 +382,7 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         sendUserMessage: (input) =>
-          requireClaudePolicy(input.runtimeKind, "send-user-message").pipe(
+          requireSessionWorkingDirectory(input, "send-user-message").pipe(
             Effect.flatMap(() =>
               eventCoordinator.runControlMutation(
                 service.sendUserMessage(toClaudeSendInput(input), runtime.runtimeId).pipe(

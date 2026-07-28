@@ -278,9 +278,9 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
-  test("rejects session creation outside the selected workspace before calling the SDK", async () => {
+  test("rejects session operations outside the selected workspace before calling the SDK", async () => {
     const harness = await createHarness();
-    const sdkCalls = { start: 0, resume: 0, fork: 0 };
+    const sdkCalls = { start: 0, resume: 0, fork: 0, loadContext: 0, sendUserMessage: 0 };
     harness.setStartSession(() => {
       sdkCalls.start += 1;
       return Effect.succeed(summary);
@@ -293,20 +293,45 @@ describe("Claude host live-session adapter", () => {
       sdkCalls.fork += 1;
       return Effect.succeed(summary);
     });
+    harness.setLoadSessionContextUsage(() => {
+      sdkCalls.loadContext += 1;
+      return Effect.succeed(null);
+    });
+    harness.setSendUserMessage(() => {
+      sdkCalls.sendUserMessage += 1;
+      return Effect.die("sendUserMessage should not be called");
+    });
     const outsideWorkspaceInput = {
       ...startInput,
       workingDirectory: "/private",
     };
     const attempts = [
-      harness.adapter.startSession(outsideWorkspaceInput),
-      harness.adapter.resumeSession({
-        ...outsideWorkspaceInput,
-        externalSessionId: "session-1",
-      }),
-      harness.adapter.forkSession({
-        ...outsideWorkspaceInput,
-        parentExternalSessionId: "parent-session",
-      }),
+      harness.adapter.startSession(outsideWorkspaceInput).pipe(Effect.asVoid),
+      harness.adapter
+        .resumeSession({
+          ...outsideWorkspaceInput,
+          externalSessionId: "session-1",
+        })
+        .pipe(Effect.asVoid),
+      harness.adapter
+        .forkSession({
+          ...outsideWorkspaceInput,
+          parentExternalSessionId: "parent-session",
+        })
+        .pipe(Effect.asVoid),
+      harness.adapter
+        .loadContext({
+          ...outsideWorkspaceInput,
+          externalSessionId: "session-1",
+        })
+        .pipe(Effect.asVoid),
+      harness.adapter
+        .sendUserMessage({
+          ...outsideWorkspaceInput,
+          externalSessionId: "session-1",
+          parts: [{ kind: "text", text: "Start" }],
+        })
+        .pipe(Effect.asVoid),
     ];
 
     for (const attempt of attempts) {
@@ -318,7 +343,13 @@ describe("Claude host live-session adapter", () => {
         },
       });
     }
-    expect(sdkCalls).toEqual({ start: 0, resume: 0, fork: 0 });
+    expect(sdkCalls).toEqual({
+      start: 0,
+      resume: 0,
+      fork: 0,
+      loadContext: 0,
+      sendUserMessage: 0,
+    });
   });
 
   test("keeps a no-message start idle after SDK initialization settles", async () => {
@@ -996,6 +1027,56 @@ describe("Claude host live-session adapter", () => {
         },
       },
     ]);
+  });
+
+  test("retracts queued user messages while releasing the runtime", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setSendUserMessage((input) =>
+      Effect.succeed({
+        type: "user_message",
+        externalSessionId: input.externalSessionId,
+        timestamp: "2026-07-17T10:02:00.000Z",
+        messageId: "queued-user-1",
+        message: "Queued",
+        parts: [{ kind: "text", text: "Queued" }],
+        state: "queued",
+      }),
+    );
+    await Effect.runPromise(
+      harness.adapter.sendUserMessage({
+        ...startInput,
+        externalSessionId: "session-1",
+        parts: [{ kind: "text", text: "Queued" }],
+      }),
+    );
+    harness.changes.splice(0);
+    harness.setStopSessionsForRuntime(() =>
+      Effect.sync(() => {
+        harness.eventHub.emit(session, {
+          type: "transcript_retracted",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:03:00.000Z",
+          messageIds: ["queued-user-1"],
+        });
+        harness.eventHub.emit(session, {
+          type: "session_finished",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:03:01.000Z",
+          message: "Finished",
+        });
+      }),
+    );
+
+    await expect(Effect.runPromise(harness.adapter.releaseRuntime())).resolves.toEqual([
+      {
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+    ]);
+    expect(transcriptEventTypes(harness.changes)).toEqual(["transcript_retracted"]);
   });
 
   test("retains runtime state when cleanup fails so release can be retried", async () => {

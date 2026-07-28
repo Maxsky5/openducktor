@@ -52,6 +52,21 @@ export const createClaudeLiveSessionEventCoordinator = ({
       return failure ? Effect.fail(failure) : Effect.void;
     });
 
+  const drainShutdownRetractions = Effect.gen(function* () {
+    for (let index = 0; index < queuedEvents.length; ) {
+      const queued = queuedEvents[index];
+      if (!queued) {
+        break;
+      }
+      if (queued.event.type !== "transcript_retracted") {
+        index += 1;
+        continue;
+      }
+      yield* processEvent(queued.session, queued.event);
+      queuedEvents.splice(index, 1);
+    }
+  });
+
   const drainInBackground = (): void => {
     if (backgroundDrainScheduled) {
       return;
@@ -126,6 +141,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
         }
         forwarding = false;
         const value = yield* effect;
+        yield* drainShutdownRetractions;
         released = true;
         forwardingFailure = null;
         queuedEvents.splice(0);
