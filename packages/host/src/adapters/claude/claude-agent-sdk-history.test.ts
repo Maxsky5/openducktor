@@ -422,6 +422,70 @@ describe("claude-agent-sdk-history", () => {
     ]);
   });
 
+  test("offsets file-reference ranges across attachment-separated text blocks", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "user-reference-after-attachment",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:13.804Z",
+          message: {
+            role: "user",
+            content: [
+              { type: "text", text: "Before" },
+              {
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: "base64-data",
+                },
+              },
+              { type: "text", text: "@src/after.ts" },
+            ],
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    const userMessage = history[0];
+    if (userMessage?.role !== "user") {
+      throw new Error("Expected attachment-bearing Claude history to hydrate as a user message");
+    }
+    expect(userMessage.text).toBe("Before\n@src/after.ts");
+    expect(userMessage.displayParts).toEqual([
+      { kind: "text", text: "Before" },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "user-reference-after-attachment:attachment:1",
+          path: "claude-history://attachment/user-reference-after-attachment/1",
+          name: "Claude document attachment.pdf",
+          kind: "pdf",
+          mime: "application/pdf",
+          localPreviewAvailable: false,
+        },
+      },
+      {
+        kind: "file_reference",
+        file: {
+          id: "src/after.ts",
+          path: "src/after.ts",
+          name: "after.ts",
+          kind: "code",
+        },
+        sourceText: {
+          value: "@src/after.ts",
+          start: 7,
+          end: 20,
+        },
+      },
+    ]);
+  });
+
   test("does not reinterpret unrelated slash commands or email addresses as references", () => {
     const history = toClaudeHistoryMessages(
       [

@@ -837,6 +837,49 @@ describe("Claude live and hydrated transcript parity", () => {
     ).toEqual(["tool-read", "tool-bash"]);
   });
 
+  test("releases completed tool input and timing metadata", () => {
+    const resultMessage = claudeSdkMessageFixture({
+      type: "user",
+      uuid: "result-read",
+      session_id: "session-1",
+      parent_tool_use_id: "tool-read",
+      timestamp: resultTimestamp,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-read",
+            content: "file contents",
+            is_error: false,
+          },
+        ],
+      },
+    });
+    const liveSession = {
+      ...createEventTestSession(),
+      toolEndedAtMsByCallId: new Map<string, number>(),
+    };
+    liveSession.toolInputsByCallId.set("tool-read", { file_path: "/repo/file.ts" });
+    liveSession.toolMessageIdsByCallId.set("tool-read", "assistant-read");
+    liveSession.toolNamesByCallId.set("tool-read", "Read");
+    liveSession.toolStartedAtMsByCallId.set("tool-read", Date.parse(timestamp));
+    liveSession.toolEndedAtMsByCallId.set("tool-read", Date.parse(resultTimestamp));
+
+    handleClaudeUserToolResultMessage({
+      emit: () => {},
+      message: resultMessage,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(liveSession.toolInputsByCallId.has("tool-read")).toBe(false);
+    expect(liveSession.toolStartedAtMsByCallId.has("tool-read")).toBe(false);
+    expect(liveSession.toolEndedAtMsByCallId.has("tool-read")).toBe(false);
+    expect(liveSession.toolMessageIdsByCallId.get("tool-read")).toBe("assistant-read");
+    expect(liveSession.toolNamesByCallId.get("tool-read")).toBe("Read");
+  });
+
   test("preserves file-reference display parts across live send and hydrated history", async () => {
     const parts: AgentUserMessagePart[] = [
       { kind: "text", text: "Inspect " },

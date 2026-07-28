@@ -126,6 +126,7 @@ export const readClaudeHistoryDisplayParts = (
   }
 
   const parts: AgentUserMessageDisplayPart[] = [];
+  let flattenedTextLength = 0;
   for (const [index, block] of content.entries()) {
     if (!isRecord(block)) {
       continue;
@@ -134,7 +135,23 @@ export const readClaudeHistoryDisplayParts = (
     if (type === "text") {
       const text = readStringProp(block, "text");
       if (text) {
-        parts.push(...readClaudeHistoryTextDisplayParts(text));
+        const sourceOffset = flattenedTextLength === 0 ? 0 : flattenedTextLength + 1;
+        parts.push(
+          ...readClaudeHistoryTextDisplayParts(text).map((part) => {
+            if (part.kind !== "file_reference" || !part.sourceText) {
+              return part;
+            }
+            return {
+              ...part,
+              sourceText: {
+                ...part.sourceText,
+                start: part.sourceText.start + sourceOffset,
+                end: part.sourceText.end + sourceOffset,
+              },
+            };
+          }),
+        );
+        flattenedTextLength = sourceOffset + text.length;
       }
       continue;
     }

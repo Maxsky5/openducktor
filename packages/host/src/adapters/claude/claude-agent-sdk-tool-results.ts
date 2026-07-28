@@ -142,5 +142,8 @@ export const handleClaudeUserToolResultMessage = ({
         ...(input ? { input } : {}),
       });
     }
+    session.toolInputsByCallId.delete(result.toolUseId);
+    session.toolStartedAtMsByCallId.delete(result.toolUseId);
+    session.toolEndedAtMsByCallId?.delete(result.toolUseId);
   }
 };
