@@ -231,6 +231,43 @@ describe("builder worktree cleanup", () => {
     expect(calls).toEqual([{ type: "currentBranch", workingDir: "/worktrees/repo/task-1" }]);
   });
 
+  test.skipIf(process.platform === "win32")(
+    "keeps distinct POSIX paths that contain backslashes",
+    async () => {
+      const calls: unknown[] = [];
+      const posixWorktree = String.raw`/repo/a\b`;
+      const cleanupTarget = await Effect.runPromise(
+        findLatestCleanupTarget(
+          {
+            gitPort: createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                [posixWorktree]: { name: "odt/task-1", detached: false },
+              },
+            }),
+            settingsConfig: createBuildSettingsConfig(new Set([posixWorktree])),
+            taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+          },
+          taskStoreWithTasks([task()], {
+            "task-1": [
+              createAgentSessionRecord({
+                externalSessionId: "posix-backslash",
+                startedAt: "2026-05-10T12:00:00.000Z",
+                workingDirectory: posixWorktree,
+              }),
+            ],
+          }),
+          "/repo/a/b",
+          "task-1",
+          "odt/task-1",
+        ),
+      );
+
+      expect(cleanupTarget).toBe(posixWorktree);
+      expect(calls).toEqual([{ type: "currentBranch", workingDir: posixWorktree }]);
+    },
+  );
+
   test("returns undefined when every cleanup candidate is unusable", async () => {
     const calls: unknown[] = [];
     const cleanupTarget = await Effect.runPromise(

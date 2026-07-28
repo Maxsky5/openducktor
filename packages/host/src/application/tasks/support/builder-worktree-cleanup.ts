@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { runtimeRequiredScopesByRole } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { normalizePathForComparison } from "../../../domain/path-comparison";
+import { canonicalPathsEqual, normalizePathForComparison } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
@@ -32,6 +32,7 @@ type BuildWorktreeCleanupError =
   | HostValidationError
   | TaskWorktreeServiceError
   | WorkspaceSettingsError;
+const canonicalPathPlatform = process.platform === "win32" ? "windows" : "posix";
 export const findLatestCleanupTarget = (
   dependencies: {
     gitPort: GitPort;
@@ -73,12 +74,11 @@ export const findLatestCleanupTarget = (
         ? right.workingDirectory.localeCompare(left.workingDirectory)
         : startedAtComparison;
     });
-    const normalizedRepoPath = normalizePathForComparison(repoPath);
     for (const candidate of candidates) {
       const workingDirectory = candidate.workingDirectory.trim();
       if (
         !workingDirectory ||
-        normalizePathForComparison(workingDirectory) === normalizedRepoPath
+        canonicalPathsEqual(workingDirectory, repoPath, canonicalPathPlatform)
       ) {
         continue;
       }
