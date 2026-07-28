@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ELECTRON_WINDOW_TITLE_BAR_HEIGHT } from "../shared/electron-bridge-contract";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 
 describe("resolveElectronWindowChromeOptions", () => {
@@ -13,7 +14,7 @@ describe("resolveElectronWindowChromeOptions", () => {
     expect(resolveElectronWindowChromeOptions(platform)).toEqual({
       titleBarStyle: "hidden",
       titleBarOverlay: {
-        height: 40,
+        height: ELECTRON_WINDOW_TITLE_BAR_HEIGHT,
       },
     });
   });

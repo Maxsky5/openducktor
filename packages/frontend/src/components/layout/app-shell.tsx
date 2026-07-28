@@ -112,7 +112,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
         data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
       >
         <div
-          className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
+          className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px]"
           aria-hidden="true"
         />
         <div className="flex h-full min-h-0 w-full">

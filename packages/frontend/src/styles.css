@@ -373,6 +373,8 @@ body {
 
 .electron-platform-darwin .electron-native-controls-surface {
   display: block;
+  background: var(--background);
+  box-shadow: inset -1rem 0 0 var(--sidebar);
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -429,6 +431,7 @@ body {
   transform: translateX(0.5rem);
 }
 
+/* Combined workspace rail and sidebar width used by titlebar safe areas. */
 .app-shell[data-sidebar-state="open"] {
   --electron-navigation-width: 19rem;
 }
