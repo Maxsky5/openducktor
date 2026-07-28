@@ -137,6 +137,95 @@ describe("createClaudeRuntimeCommandHandlers", () => {
     expect(searchFiles).not.toHaveBeenCalled();
   });
 
+  test("requires a live workspace and validated directory before loading Claude catalogs", async () => {
+    const catalogOperations = [
+      {
+        command: "claude_runtime_list_slash_commands",
+        method: "listAvailableSlashCommands",
+        result: { commands: [] },
+      },
+      {
+        command: "claude_runtime_list_skills",
+        method: "listAvailableSkills",
+        result: { skills: [] },
+      },
+      {
+        command: "claude_runtime_list_subagents",
+        method: "listAvailableSubagents",
+        result: { subagents: [] },
+      },
+    ] as const;
+
+    for (const operation of catalogOperations) {
+      const loadCatalog = mock(() => Effect.succeed(operation.result));
+      const service = {
+        [operation.method]: loadCatalog,
+      } as unknown as ClaudeAgentSdkService;
+      const input = {
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/private",
+      };
+
+      const routerWithoutRuntime = createHostCommandRouter({
+        handlers: createHandlers(service),
+      });
+      await expect(routerWithoutRuntime.invoke(operation.command, { input })).rejects.toMatchObject(
+        {
+          _tag: "HostValidationError",
+          field: "runtimeKind",
+        },
+      );
+
+      const routerWithRuntime = createHostCommandRouter({
+        handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
+      });
+      await expect(routerWithRuntime.invoke(operation.command, { input })).rejects.toMatchObject({
+        _tag: "HostValidationError",
+        field: "workingDirectory",
+      });
+      expect(loadCatalog).not.toHaveBeenCalled();
+    }
+  });
+
+  test("loads Claude catalogs from the managed task worktree root", async () => {
+    const catalogOperations = [
+      {
+        command: "claude_runtime_list_slash_commands",
+        method: "listAvailableSlashCommands",
+        result: { commands: [] },
+      },
+      {
+        command: "claude_runtime_list_skills",
+        method: "listAvailableSkills",
+        result: { skills: [] },
+      },
+      {
+        command: "claude_runtime_list_subagents",
+        method: "listAvailableSubagents",
+        result: { subagents: [] },
+      },
+    ] as const;
+
+    for (const operation of catalogOperations) {
+      const loadCatalog = mock(() => Effect.succeed(operation.result));
+      const service = {
+        [operation.method]: loadCatalog,
+      } as unknown as ClaudeAgentSdkService;
+      const router = createHostCommandRouter({
+        handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
+      });
+      const input = {
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/worktrees/repo/task-1",
+      };
+
+      await expect(router.invoke(operation.command, { input })).resolves.toEqual(operation.result);
+      expect(loadCatalog).toHaveBeenCalledWith(input);
+    }
+  });
+
   test("allows file search in the managed task worktree root", async () => {
     const searchFiles = mock((_input: SearchAgentFilesInput) => Effect.succeed([]));
     const service = { searchFiles } as unknown as ClaudeAgentSdkService;
@@ -247,7 +336,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
         input: {
           repoPath: "/repo",
           runtimeKind: "claude",
-          workingDirectory: "/repo",
+          workingDirectory: "/worktrees/repo/task-1",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
           model: {
@@ -262,7 +351,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
     expect(loadSessionHistory).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "claude",
-      workingDirectory: "/repo",
+      workingDirectory: "/worktrees/repo/task-1",
       externalSessionId: "session-1",
       runtimePolicy: { kind: "claude" },
       model: {
@@ -312,7 +401,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
         input: {
           repoPath: "/repo",
           runtimeKind: "claude",
-          workingDirectory: "/repo",
+          workingDirectory: "/worktrees/repo/task-1",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
         },
@@ -321,9 +410,48 @@ describe("createClaudeRuntimeCommandHandlers", () => {
     expect(loadSessionTodos).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "claude",
-      workingDirectory: "/repo",
+      workingDirectory: "/worktrees/repo/task-1",
       externalSessionId: "session-1",
       runtimePolicy: { kind: "claude" },
     });
+  });
+
+  test("rejects cold history and todo reads outside the selected workspace", async () => {
+    const readOperations = [
+      {
+        command: "claude_runtime_load_session_history",
+        method: "loadSessionHistory",
+      },
+      {
+        command: "claude_runtime_load_session_todos",
+        method: "loadSessionTodos",
+      },
+    ] as const;
+
+    for (const operation of readOperations) {
+      const loadSessionData = mock(() => Effect.succeed([]));
+      const service = {
+        [operation.method]: loadSessionData,
+      } as unknown as ClaudeAgentSdkService;
+      const router = createHostCommandRouter({
+        handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
+      });
+
+      await expect(
+        router.invoke(operation.command, {
+          input: {
+            repoPath: "/repo",
+            runtimeKind: "claude",
+            workingDirectory: "/private",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+          },
+        }),
+      ).rejects.toMatchObject({
+        _tag: "HostValidationError",
+        field: "workingDirectory",
+      });
+      expect(loadSessionData).not.toHaveBeenCalled();
+    }
   });
 });
