@@ -210,6 +210,27 @@ describe("removeWorktreeAndFilesystemPath", () => {
     });
     expect(harness.calls).not.toContain("removePathIfPresent:/outside/task-1");
   });
+  test("removes a registered worktree outside managed roots without filesystem cleanup", async () => {
+    const outsidePath = "/outside/task-1";
+    let pathExistsCalls = 0;
+    const harness = createCleanupHarness({
+      isRegistered: (worktreePath) => worktreePath === outsidePath,
+      pathExists: () => {
+        pathExistsCalls += 1;
+        return pathExistsCalls === 1;
+      },
+      resolvedPaths: [
+        cleanupResolution(outsidePath, "outside"),
+        cleanupResolution(outsidePath, "outside"),
+      ],
+    });
+
+    await expect(removeForcedWorktree(harness, outsidePath)).resolves.toBeUndefined();
+    expect(harness.calls).toEqual([
+      `isRegisteredWorktree:/repo|${outsidePath}`,
+      `removeWorktree:/repo|${outsidePath}|true`,
+    ]);
+  });
   test("propagates the removal error when a missing outside identity is unproved", async () => {
     const removalError = new Error("worktree removal race");
     const harness = createCleanupHarness({
