@@ -108,6 +108,24 @@ export const toClaudeHistoryMessages = (
   let pendingManualCompaction: { messageId: string; timestamp: string } | null = null;
   let manualCompactionBoundaryReceived = false;
   let unclaimedManualCompactionBoundary = false;
+  const appendOrMergeAssistantSnapshot = (
+    snapshot: MutableAssistantHistoryMessage,
+  ): MutableAssistantHistoryMessage => {
+    const existingMessage = lastAssistantMessage;
+    if (existingMessage?.messageId !== snapshot.messageId) {
+      history.push(snapshot);
+      return snapshot;
+    }
+    const nextPartIds = new Set(snapshot.parts.map((part) => part.partId));
+    // Tool-call maps retain this object, so update it without replacing its identity.
+    Object.assign(existingMessage, snapshot, {
+      parts: [
+        ...existingMessage.parts.filter((part) => !nextPartIds.has(part.partId)),
+        ...snapshot.parts,
+      ],
+    });
+    return existingMessage;
+  };
   const resetCurrentUserTurnAssistantTracking = () => {
     lastAssistantMessage = null;
     lastAssistantTextMessage = null;
@@ -363,8 +381,8 @@ export const toClaudeHistoryMessages = (
       if (!projection) {
         continue;
       }
-      const { message: assistantMessage, stopReason } = projection;
-      history.push(assistantMessage);
+      const { message: assistantSnapshot, stopReason } = projection;
+      const assistantMessage = appendOrMergeAssistantSnapshot(assistantSnapshot);
       lastAssistantMessage = assistantMessage;
       const assistantText = assistantMessage.text.trim();
       if (assistantText.length > 0) {

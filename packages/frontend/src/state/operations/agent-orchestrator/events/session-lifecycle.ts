@@ -23,6 +23,7 @@ import {
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
 import { toUserChatMessage } from "../support/user-message-event";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { settleSessionToIdle } from "./session-helpers";
 
@@ -31,6 +32,13 @@ const clearTurnTracking = (
 ): void => {
   context.turn.turnMetadata.clearSession(context.session.key);
 };
+
+const workflowSessionPersistenceOptions = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+) =>
+  isWorkflowAgentSession(context.store.readSession(context.session.identity))
+    ? ({ persist: true } as const)
+    : undefined;
 
 const nextContextUsageWasEstablishedForMessage = (
   context: Pick<SessionLifecycleEventContext, "session" | "turn" | "store">,
@@ -344,7 +352,7 @@ export const handleSessionError = (
             ),
       };
     },
-    { persist: true },
+    workflowSessionPersistenceOptions(context),
   );
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
@@ -416,7 +424,7 @@ export const handleSessionFinished = (
         stopRequestedAt: null,
       };
     },
-    { persist: true },
+    workflowSessionPersistenceOptions(context),
   );
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);

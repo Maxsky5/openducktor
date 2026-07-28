@@ -322,6 +322,77 @@ describe("Claude live and hydrated transcript parity", () => {
     });
   });
 
+  test("keeps only the latest completed snapshot for one Claude response", () => {
+    const responseId = "response-final";
+    const firstSnapshot = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-first",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: "First completed snapshot" }],
+        stop_reason: "end_turn",
+      },
+    });
+    const finalSnapshot = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-final",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp: resultTimestamp,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: "Authoritative final snapshot" }],
+        stop_reason: "end_turn",
+      },
+    });
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+
+    handleClaudeSdkMessage({
+      emit,
+      message: firstSnapshot,
+      modelSelection,
+      session: liveSession,
+      timestamp,
+    });
+    handleClaudeSdkMessage({
+      emit,
+      message: finalSnapshot,
+      modelSelection,
+      session: liveSession,
+      timestamp: resultTimestamp,
+    });
+
+    expect(retainedLiveAssistantMessageIds(liveEvents)).toEqual([responseId]);
+    expect(liveEvents.filter((event) => event.type === "assistant_message").at(-1)).toMatchObject({
+      messageId: responseId,
+      message: "Authoritative final snapshot",
+    });
+
+    const hydratedAssistantMessages = toClaudeHistoryMessages(
+      claudeHistoryMessageFixtures([firstSnapshot, finalSnapshot]),
+      () => resultTimestamp,
+    ).filter((message) => message.role === "assistant");
+    expect(hydratedAssistantMessages).toHaveLength(1);
+    expect(hydratedAssistantMessages[0]).toMatchObject({
+      messageId: responseId,
+      text: "Authoritative final snapshot",
+    });
+  });
+
   test("keeps one transcript identity across streamed and split completed assistant messages", () => {
     const responseId = "response-final";
     const reasoningMessage = claudeSdkMessageFixture({

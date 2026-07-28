@@ -3,6 +3,7 @@ import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { getAgentSession } from "@/state/agent-session-collection";
 import { applyAgentSessionLiveDelta } from "../session-read-model/agent-session-live-projection";
 import { createSessionTurnState } from "../support/session-turn-state";
+import type { UpdateSession } from "./session-event-types";
 import {
   buildSession,
   createSessionsRef,
@@ -25,6 +26,14 @@ const createConsumerHarness = (
 ) => {
   const sessionsRef = createSessionsRef([session]);
   const updateSession = createSessionUpdater(sessionsRef);
+  const guardedUpdateSession: UpdateSession = (identity, updater, options) =>
+    updateSession(identity, (current) => {
+      const nextSession = updater(current);
+      if (options?.persist === true && nextSession.role === null) {
+        throw new Error(`Session '${identity.externalSessionId}' is not a workflow session.`);
+      }
+      return nextSession;
+    });
   const consumer = createAgentSessionTranscriptEventConsumer(
     {
       readSession: (identity) => getAgentSession(sessionsRef.current, identity),
@@ -32,7 +41,7 @@ const createConsumerHarness = (
         const current = getAgentSession(sessionsRef.current, identity);
         return current ?? createSession();
       },
-      updateSession,
+      updateSession: guardedUpdateSession,
       updateSessionTodos: () => undefined,
       sessionTurnState: createSessionTurnState(),
     },
@@ -94,6 +103,27 @@ describe("agent session transcript event consumer", () => {
 
     expect(getSession(sessionsRef).status).toBe("error");
     expect(getSessionMessages(sessionsRef).at(-1)?.content).toContain("Child runtime failed");
+    consumer.close();
+  });
+
+  test("does not persist child session errors as workflow sessions", () => {
+    const child = buildSession({
+      externalSessionId: "child-thread",
+      role: null,
+      runtimeKind: "claude",
+    });
+    const { consumer, sessionsRef } = createConsumerHarness(0, child);
+
+    expect(() =>
+      consumer.handle({
+        type: "session_error",
+        externalSessionId: "child-thread",
+        timestamp: "2026-07-17T08:00:01.000Z",
+        message: "Child runtime failed",
+        sessionRef: { ...sessionRef, runtimeKind: "claude", externalSessionId: "child-thread" },
+      }),
+    ).not.toThrow();
+    expect(getSession(sessionsRef, "child-thread").status).toBe("error");
     consumer.close();
   });
 
