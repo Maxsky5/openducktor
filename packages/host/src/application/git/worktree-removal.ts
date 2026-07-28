@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { canonicalPathsEqual } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -47,13 +48,15 @@ const cleanupIdentityChanged = (effectiveWorktreePath: string, cause?: unknown) 
     message: `Refusing worktree cleanup because its filesystem identity changed for ${effectiveWorktreePath}`,
     cause,
   });
-const hasStableManagedIdentity = (
-  initial: { canonicalPath: string; kind: "descendant" | "outside" },
-  current: { canonicalPath: string; kind: "descendant" | "outside" },
+const canonicalPathPlatform = process.platform === "win32" ? "windows" : "posix";
+const isStableManagedCleanupPath = (
+  initial: { canonicalPath: string; cleanupPath: string; kind: "descendant" | "outside" },
+  current: { canonicalPath: string; cleanupPath: string; kind: "descendant" | "outside" },
 ) =>
   initial.kind === "descendant" &&
   current.kind === "descendant" &&
-  current.canonicalPath === initial.canonicalPath;
+  canonicalPathsEqual(current.canonicalPath, initial.canonicalPath, canonicalPathPlatform) &&
+  canonicalPathsEqual(current.cleanupPath, initial.cleanupPath, canonicalPathPlatform);
 export const removeWorktreeAndFilesystemPath = (
   dependencies: RemoveWorktreeAndFilesystemPathDependencies,
   input: RemoveWorktreeAndFilesystemPathInput,
@@ -85,7 +88,7 @@ export const removeWorktreeAndFilesystemPath = (
       input,
       effectiveWorktreePath,
     );
-    const cleanupIdentityIsStable = hasStableManagedIdentity(initialCleanup, currentCleanup);
+    const cleanupIdentityIsStable = isStableManagedCleanupPath(initialCleanup, currentCleanup);
     if (removalResult._tag === "Left") {
       const registered = yield* gitPort.isRegisteredWorktree(
         repoPath,
@@ -110,18 +113,23 @@ export const removeWorktreeAndFilesystemPath = (
         return;
       }
       return yield* Effect.fail(
-        currentCleanup.canonicalPath === initialCleanup.canonicalPath
+        initialCleanup.kind === "outside" || currentCleanup.kind === "outside"
           ? cleanupRefused(effectiveWorktreePath)
           : cleanupIdentityChanged(effectiveWorktreePath),
       );
     }
-    yield* worktreeFiles.removePathIfPresent(currentCleanup.canonicalPath).pipe(
+    yield* worktreeFiles.removePathIfPresent(currentCleanup.cleanupPath).pipe(
       Effect.mapError(
         (error) =>
           new HostOperationError({
             operation: "git.remove_worktree.cleanup_path",
-            message: `git worktree removal left filesystem path cleanup incomplete for ${worktreePath}`,
+            message: `git worktree removal left filesystem path cleanup incomplete for ${worktreePath} (canonical cleanup path: ${currentCleanup.cleanupPath})`,
             cause: error,
+            details: {
+              canonicalPath: currentCleanup.canonicalPath,
+              cleanupPath: currentCleanup.cleanupPath,
+              worktreePath,
+            },
           }),
       ),
     );

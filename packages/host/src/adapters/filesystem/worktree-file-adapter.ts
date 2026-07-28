@@ -34,6 +34,15 @@ const resolvePathThroughExistingAncestor = (
     },
   );
 };
+const isStrictPathDescendant = (root: string, candidate: string): boolean => {
+  const relativePath = path.relative(root, candidate);
+  return (
+    relativePath !== "" &&
+    !path.isAbsolute(relativePath) &&
+    relativePath !== ".." &&
+    !relativePath.startsWith(`..${path.sep}`)
+  );
+};
 const normalizeForComparison = (inputPath: string) =>
   Effect.tryPromise({
     try: () => realpath(inputPath),
@@ -368,18 +377,19 @@ export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
   resolvePathWithinRoot(root, candidate) {
     return Effect.tryPromise({
       try: async () => {
-        const [canonicalRoot, canonicalCandidate] = await Promise.all([
+        const absoluteCandidate = path.resolve(candidate);
+        const [canonicalRoot, canonicalCandidate, canonicalCandidateParent] = await Promise.all([
           resolvePathThroughExistingAncestor(root),
-          resolvePathThroughExistingAncestor(candidate),
+          resolvePathThroughExistingAncestor(absoluteCandidate),
+          resolvePathThroughExistingAncestor(path.dirname(absoluteCandidate)),
         ]);
-        const relativePath = path.relative(canonicalRoot, canonicalCandidate);
+        const cleanupPath = path.join(canonicalCandidateParent, path.basename(absoluteCandidate));
         const isDescendant =
-          relativePath !== "" &&
-          !path.isAbsolute(relativePath) &&
-          relativePath !== ".." &&
-          !relativePath.startsWith(`..${path.sep}`);
+          isStrictPathDescendant(canonicalRoot, canonicalCandidate) &&
+          isStrictPathDescendant(canonicalRoot, cleanupPath);
         return {
           canonicalPath: canonicalCandidate,
+          cleanupPath,
           kind: isDescendant ? ("descendant" as const) : ("outside" as const),
         };
       },

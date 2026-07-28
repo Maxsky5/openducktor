@@ -415,6 +415,7 @@ const createBuildStartWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
     resolvePathWithinRoot(root, candidate) {
       return Effect.succeed({
         canonicalPath: candidate,
+        cleanupPath: candidate,
         kind:
           candidate !== root && candidate.startsWith(`${root}/`)
             ? ("descendant" as const)

@@ -5,13 +5,19 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ResolvedPathWithinRoot, WorktreeFilePort } from "../../ports/worktree-file-port";
 import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
+type CleanupResolution = ResolvedPathWithinRoot & { cleanupPath: string };
+const cleanupResolution = (
+  canonicalPath: string,
+  kind: CleanupResolution["kind"],
+  cleanupPath = canonicalPath,
+): CleanupResolution => ({ canonicalPath, cleanupPath, kind });
 type CleanupHarnessInput = {
   isRegistered?: (worktreePath: string) => boolean;
   pathExists?: boolean;
   pathIsWithinRoot?: (root: string, candidate: string) => boolean;
   removePathError?: HostOperationError;
   removalError?: Error;
-  resolvedPaths: ResolvedPathWithinRoot[];
+  resolvedPaths: CleanupResolution[];
 };
 const createCleanupHarness = ({
   isRegistered = () => false,
@@ -113,8 +119,8 @@ describe("removeWorktreeAndFilesystemPath", () => {
       isRegistered: (worktreePath) => worktreePath === "/real/worktrees/task-1",
       removalError,
       resolvedPaths: [
-        { canonicalPath: "/real/worktrees/task-1", kind: "descendant" },
-        { canonicalPath: "/real/worktrees/task-1", kind: "descendant" },
+        cleanupResolution("/real/worktrees/task-1", "descendant"),
+        cleanupResolution("/real/worktrees/task-1", "descendant"),
       ],
     });
     const error = await getForcedRemovalError(harness, "/managed/worktrees/task-1");
@@ -134,8 +140,8 @@ describe("removeWorktreeAndFilesystemPath", () => {
         isRegistered: (worktreePath) => worktreePath === canonicalPath,
         removalError,
         resolvedPaths: [
-          { canonicalPath, kind },
-          { canonicalPath, kind },
+          cleanupResolution(canonicalPath, kind),
+          cleanupResolution(canonicalPath, kind),
         ],
       });
       const error = await getForcedRemovalError(harness, "/managed/worktrees/task-1");
@@ -151,8 +157,8 @@ describe("removeWorktreeAndFilesystemPath", () => {
       pathIsWithinRoot: (root, candidate) => candidate.startsWith(`${root}/`),
       removalError,
       resolvedPaths: [
-        { canonicalPath: "/outside/task-1", kind: "outside" },
-        { canonicalPath: "/outside/task-1", kind: "outside" },
+        cleanupResolution("/outside/task-1", "outside"),
+        cleanupResolution("/outside/task-1", "outside"),
       ],
     });
     const error = await getForcedRemovalError(harness, "/managed/worktrees/runtime-link/task-1");
@@ -166,8 +172,8 @@ describe("removeWorktreeAndFilesystemPath", () => {
       pathExists: false,
       removalError: new Error("worktree removal race"),
       resolvedPaths: [
-        { canonicalPath: "/real/worktrees/task-1", kind: "descendant" },
-        { canonicalPath: "/real/worktrees/task-1", kind: "descendant" },
+        cleanupResolution("/real/worktrees/task-1", "descendant"),
+        cleanupResolution("/real/worktrees/task-1", "descendant"),
       ],
     });
     await expect(
@@ -184,8 +190,8 @@ describe("removeWorktreeAndFilesystemPath", () => {
       removePathError: finalCleanupError,
       removalError: new Error("worktree removal race"),
       resolvedPaths: [
-        { canonicalPath: "/managed/worktrees/task-1", kind: "descendant" },
-        { canonicalPath: "/managed/worktrees/task-1", kind: "descendant" },
+        cleanupResolution("/managed/worktrees/task-1", "descendant"),
+        cleanupResolution("/managed/worktrees/task-1", "descendant"),
       ],
     });
     const error = await getForcedRemovalError(harness, "/managed/worktrees/task-1");
@@ -193,13 +199,14 @@ describe("removeWorktreeAndFilesystemPath", () => {
       cause: finalCleanupError,
       operation: "git.remove_worktree.cleanup_path",
     });
+    expect(error.message).toContain("canonical cleanup path: /managed/worktrees/task-1");
   });
-  test("rejects a stranded existing path outside managed roots", async () => {
+  test("reports a stranded existing path outside managed roots", async () => {
     const harness = createCleanupHarness({
       removalError: new Error("worktree removal race"),
       resolvedPaths: [
-        { canonicalPath: "/outside/task-1", kind: "outside" },
-        { canonicalPath: "/outside/task-1", kind: "outside" },
+        cleanupResolution("/outside/task-1", "outside"),
+        cleanupResolution("/outside/task-1", "outside"),
       ],
     });
     await expect(getForcedRemovalError(harness, "/outside/task-1")).resolves.toMatchObject({
@@ -213,8 +220,8 @@ describe("removeWorktreeAndFilesystemPath", () => {
       pathExists: false,
       removalError,
       resolvedPaths: [
-        { canonicalPath: "/legacy/task-1", kind: "outside" },
-        { canonicalPath: "/legacy/task-1", kind: "outside" },
+        cleanupResolution("/legacy/task-1", "outside"),
+        cleanupResolution("/legacy/task-1", "outside"),
       ],
     });
     const error = await getForcedRemovalError(harness, "/legacy/task-1");
@@ -225,8 +232,8 @@ describe("removeWorktreeAndFilesystemPath", () => {
     const harness = createCleanupHarness({
       pathIsWithinRoot: (root, candidate) => root === candidate,
       resolvedPaths: [
-        { canonicalPath: "/managed/worktrees", kind: "outside" },
-        { canonicalPath: "/managed/worktrees", kind: "outside" },
+        cleanupResolution("/managed/worktrees", "outside"),
+        cleanupResolution("/managed/worktrees", "outside"),
       ],
     });
     await expect(removeForcedWorktree(harness, "/managed/worktrees")).rejects.toThrow(
@@ -240,13 +247,65 @@ describe("removeWorktreeAndFilesystemPath", () => {
       pathIsWithinRoot: (root, candidate) => candidate.startsWith(`${root}/`),
       removalError,
       resolvedPaths: [
-        { canonicalPath: "/managed/worktrees/task-1", kind: "descendant" },
-        { canonicalPath: "/managed/worktrees/task-2", kind: "descendant" },
+        cleanupResolution("/managed/worktrees/task-1", "descendant"),
+        cleanupResolution("/managed/worktrees/task-2", "descendant"),
       ],
     });
     const error = await getForcedRemovalError(harness, "/managed/worktrees/task-1");
     expect(error).toMatchObject({ cause: removalError });
     expect(harness.calls).not.toContain("removePathIfPresent:/managed/worktrees/task-1");
     expect(harness.calls).not.toContain("removePathIfPresent:/managed/worktrees/task-2");
+  });
+  test("removes a final symlink entry instead of its canonical target", async () => {
+    const symlinkPath = "/managed/worktrees/task-link";
+    const targetPath = "/managed/worktrees/task-target";
+    const harness = createCleanupHarness({
+      removalError: new Error("worktree removal race"),
+      resolvedPaths: [
+        cleanupResolution(targetPath, "descendant", symlinkPath),
+        cleanupResolution(targetPath, "descendant", symlinkPath),
+      ],
+    });
+    await expect(removeForcedWorktree(harness, symlinkPath)).resolves.toBeUndefined();
+    expect(harness.calls).toContain(`removePathIfPresent:${symlinkPath}`);
+    expect(harness.calls).not.toContain(`removePathIfPresent:${targetPath}`);
+  });
+  test.skipIf(process.platform !== "win32")(
+    "accepts case-only changes to a Windows cleanup identity",
+    async () => {
+      const harness = createCleanupHarness({
+        resolvedPaths: [
+          cleanupResolution(String.raw`C:\Managed\Worktrees\Task-1`, "descendant"),
+          cleanupResolution(String.raw`c:\managed\worktrees\task-1`, "descendant"),
+        ],
+      });
+      await expect(
+        removeForcedWorktree(harness, String.raw`C:\Managed\Worktrees\Task-1`),
+      ).resolves.toBeUndefined();
+      expect(harness.calls).toContain(String.raw`removePathIfPresent:c:\managed\worktrees\task-1`);
+    },
+  );
+  test("rejects a changed cleanup identity after Git succeeds", async () => {
+    const harness = createCleanupHarness({
+      resolvedPaths: [
+        cleanupResolution("/managed/worktrees/task-1", "descendant"),
+        cleanupResolution("/managed/worktrees/task-2", "descendant"),
+      ],
+    });
+    await expect(removeForcedWorktree(harness, "/managed/worktrees/task-1")).rejects.toThrow(
+      "filesystem identity changed",
+    );
+    expect(harness.calls).not.toContain("removePathIfPresent:/managed/worktrees/task-1");
+    expect(harness.calls).not.toContain("removePathIfPresent:/managed/worktrees/task-2");
+  });
+  test("rejects the repository root before calling Git", async () => {
+    const harness = createCleanupHarness({
+      pathIsWithinRoot: (root, candidate) => root === candidate,
+      resolvedPaths: [cleanupResolution("/repo", "outside")],
+    });
+    await expect(removeForcedWorktree(harness, "/repo")).rejects.toThrow(
+      "worktree path cannot be the repository root",
+    );
+    expect(harness.calls).toEqual([]);
   });
 });

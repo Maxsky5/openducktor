@@ -193,6 +193,44 @@ describe("builder worktree cleanup", () => {
     expect(calls).toEqual([]);
   });
 
+  test("skips repository-root cleanup candidates at the source", async () => {
+    const calls: unknown[] = [];
+    const cleanupTarget = await Effect.runPromise(
+      findLatestCleanupTarget(
+        {
+          gitPort: createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/repo": { name: "odt/task-1", detached: false },
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+        },
+        taskStoreWithTasks([task()], {
+          "task-1": [
+            createAgentSessionRecord({
+              externalSessionId: "repo-root",
+              startedAt: "2026-05-10T12:00:00.000Z",
+              workingDirectory: "/repo",
+            }),
+            createAgentSessionRecord({
+              externalSessionId: "task-worktree",
+              startedAt: "2026-05-10T11:00:00.000Z",
+              workingDirectory: "/worktrees/repo/task-1",
+            }),
+          ],
+        }),
+        "/repo",
+        "task-1",
+        "odt/task-1",
+      ),
+    );
+    expect(cleanupTarget).toBe("/worktrees/repo/task-1");
+    expect(calls).toEqual([{ type: "currentBranch", workingDir: "/worktrees/repo/task-1" }]);
+  });
+
   test("returns undefined when every cleanup candidate is unusable", async () => {
     const calls: unknown[] = [];
     const cleanupTarget = await Effect.runPromise(

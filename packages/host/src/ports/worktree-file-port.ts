@@ -4,8 +4,8 @@ import type { HostOperationError, HostValidationError } from "../effect/host-err
 export type WorktreeFileError = HostOperationError | HostValidationError;
 
 export type ResolvedPathWithinRoot =
-  | { canonicalPath: string; kind: "descendant" }
-  | { canonicalPath: string; kind: "outside" };
+  | { canonicalPath: string; cleanupPath: string; kind: "descendant" }
+  | { canonicalPath: string; cleanupPath: string; kind: "outside" };
 
 export type WorktreeFilePort = {
   ensureDirectory(path: string): Effect.Effect<void, HostOperationError>;

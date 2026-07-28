@@ -143,6 +143,7 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
     resolvePathWithinRoot: (root: string, candidate: string) =>
       Effect.succeed({
         canonicalPath: candidate,
+        cleanupPath: candidate,
         kind:
           candidate !== root && candidate.startsWith(`${root}/`)
             ? ("descendant" as const)

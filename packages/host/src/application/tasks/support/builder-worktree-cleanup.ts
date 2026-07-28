@@ -73,9 +73,13 @@ export const findLatestCleanupTarget = (
         ? right.workingDirectory.localeCompare(left.workingDirectory)
         : startedAtComparison;
     });
+    const normalizedRepoPath = normalizePathForComparison(repoPath);
     for (const candidate of candidates) {
       const workingDirectory = candidate.workingDirectory.trim();
-      if (!workingDirectory) {
+      if (
+        !workingDirectory ||
+        normalizePathForComparison(workingDirectory) === normalizedRepoPath
+      ) {
         continue;
       }
       if (!(yield* dependencies.settingsConfig.pathExists(workingDirectory))) {
