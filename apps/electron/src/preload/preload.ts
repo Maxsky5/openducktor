@@ -1,4 +1,8 @@
-import { appUpdateCommandResultSchema, appUpdateStateSchema } from "@openducktor/contracts";
+import {
+  appPlatformSchema,
+  appUpdateCommandResultSchema,
+  appUpdateStateSchema,
+} from "@openducktor/contracts";
 import electron from "electron";
 import {
   ELECTRON_APP_UPDATE_CHECK_CHANNEL,
@@ -87,6 +91,7 @@ const terminals: OpenDucktorElectronTerminalApi = {
 };
 
 const electronApi: OpenDucktorElectronApi = {
+  platform: appPlatformSchema.parse(process.platform),
   invoke: invokeHost,
   subscribe(channel, listener) {
     const handleEvent = (

@@ -59,6 +59,7 @@ const createElectronApi = (): {
   const unsubscribeTaskStream = mock(() => {});
   return {
     electronApi: {
+      platform: "darwin",
       invoke: mock(async () => ({ ok: true as const, value: {} })),
       subscribe: mock(() => unsubscribe),
       appUpdates: {

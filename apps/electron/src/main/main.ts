@@ -4,6 +4,7 @@ import {
   type AppUpdateCommandResult,
   type AppUpdateOperation,
   type AppUpdateState,
+  appPlatformSchema,
   appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
@@ -76,6 +77,7 @@ import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindi
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
+import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 import {
   createElectronTerminalIpcController,
@@ -89,6 +91,7 @@ const ELECTRON_RENDERER_SESSION_PARTITION = "persist:openducktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
 const rendererDevUrl = app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL;
 const isDevelopment = Boolean(rendererDevUrl);
+const electronAppPlatform = appPlatformSchema.parse(process.platform);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
 
@@ -413,6 +416,7 @@ const createMainWindowEffect = (
           autoHideMenuBar: process.platform !== "darwin",
           title: "OpenDucktor",
           icon: resolveElectronWindowIcon(),
+          ...resolveElectronWindowChromeOptions(electronAppPlatform),
           webPreferences: {
             contextIsolation: true,
             devTools: isDevelopment,

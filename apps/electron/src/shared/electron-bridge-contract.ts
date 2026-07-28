@@ -1,4 +1,5 @@
 import type {
+  AppPlatform,
   AppUpdateCheckInput,
   AppUpdateCommandResult,
   AppUpdateState,
@@ -35,6 +36,7 @@ export const ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL =
   "openducktor:task-stream:terminal-failure";
 export const ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL = "openducktor:task-stream:acknowledge";
 export const ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL = "openducktor:task-stream:unsubscribe";
+export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
 
 export type ElectronHostInvokeRequest = {
   command: string;
@@ -127,6 +129,7 @@ export type OpenDucktorElectronTaskStreamApi = {
 };
 
 export type OpenDucktorElectronApi = {
+  platform: AppPlatform;
   invoke(
     command: HostCommandName,
     args?: Record<string, unknown>,

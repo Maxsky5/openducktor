@@ -107,21 +107,30 @@ export const AppShell = memo(function AppShell(): ReactElement {
 
   return (
     <>
-      <div className="h-screen min-h-screen w-full overflow-hidden">
+      <div
+        className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
+        data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
+      >
+        <div
+          className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
+          aria-hidden="true"
+        />
         <div className="flex h-full min-h-0 w-full">
           <WorkspaceRail onOpenRepositoryModal={openRepositoryModal} />
 
           <aside
             className={cn(
-              "flex h-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out",
+              "workspace-sidebar flex h-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out",
               isSidebarOpen ? "w-[248px]" : "w-14",
             )}
           >
             {isSidebarOpen ? (
               <>
-                <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <AppBrand />
+                <div className="electron-sidebar-content-open flex-1 space-y-3 overflow-y-auto p-4">
+                  <div className="electron-sidebar-heading flex items-center justify-between gap-2">
+                    <div className="electron-sidebar-brand">
+                      <AppBrand />
+                    </div>
                     <Button
                       type="button"
                       size="icon"
@@ -171,18 +180,20 @@ export const AppShell = memo(function AppShell(): ReactElement {
                 </div>
               </>
             ) : (
-              <div className="flex h-full flex-col items-center gap-2 p-2">
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                  onClick={handleShowSidebar}
-                  aria-label="Show sidebar"
-                  title="Show sidebar"
-                >
-                  <PanelLeftOpen className="size-4" />
-                </Button>
+              <div className="electron-sidebar-content-collapsed flex h-full flex-col items-center gap-2 p-2">
+                <div className="electron-sidebar-collapsed-title-row flex w-full items-center justify-center">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="electron-sidebar-collapsed-toggle size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                    onClick={handleShowSidebar}
+                    aria-label="Show sidebar"
+                    title="Show sidebar"
+                  >
+                    <PanelLeftOpen className="size-4" />
+                  </Button>
+                </div>
                 <div className="flex w-full justify-center border-t border-sidebar-border pt-2">
                   <DiagnosticsPanel
                     autoOpenedByRepo={diagnosticsAutoOpenedByRepo}

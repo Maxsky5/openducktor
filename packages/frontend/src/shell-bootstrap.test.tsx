@@ -283,9 +283,10 @@ describe("shell entrypoints", () => {
     expect(source).toMatch(
       /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
     );
-    expect(source).toMatch(
-      /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createElectronShellBridge,\s*routerMode:\s*"hash",\s*\}\)/u,
-    );
+    expect(source).toContain("bootstrapOpenDucktorShell(");
+    expect(source).toContain("prepare: initializeElectronWindowChrome");
+    expect(source).toContain("createShellBridge: createElectronShellBridge");
+    expect(source).toContain('routerMode: "hash"');
     expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
     expectNoManualShellBootstrapSteps(source);
   });
@@ -312,18 +313,6 @@ describe("shell entrypoints", () => {
     );
     expect(source).toContain("<App routerMode={routerMode} />");
     expect(source).toContain("routerMode");
-  });
-
-  test("electron delegates shared startup to the frontend bootstrap", () => {
-    const source = readRepoFile("apps/electron/src/renderer/main.tsx");
-
-    expect(source).toMatch(
-      /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
-    );
-    expect(source).toContain("createShellBridge: createElectronShellBridge");
-    expect(source).toContain('routerMode: "hash"');
-    expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
-    expectNoManualShellBootstrapSteps(source);
   });
 
   test("the frontend package root does not export bootstrap internals", () => {

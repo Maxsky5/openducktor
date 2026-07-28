@@ -24,7 +24,7 @@ export function KanbanCollapsedColumn({ column }: KanbanCollapsedColumnProps): R
           type="button"
           aria-label={label}
           className={cn(
-            "group flex min-h-96 cursor-default flex-col overflow-hidden rounded-2xl border p-0 text-left shadow-sm transition-[background-color,border-color,box-shadow] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "group flex min-h-96 cursor-default flex-col overflow-hidden rounded-2xl border p-0 text-left shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             KANBAN_COLLAPSED_LANE_WIDTH_CLASS,
             theme.boardSurfaceClass,
           )}

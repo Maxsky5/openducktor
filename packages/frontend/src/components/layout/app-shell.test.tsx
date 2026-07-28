@@ -269,6 +269,19 @@ describe("AppShell", () => {
     expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
   });
 
+  test("exposes the sidebar state to the shell layout", () => {
+    renderAppShellForTest();
+
+    const mainContent = document.querySelector('[data-main-scroll-container="true"]');
+    const shellRoot = mainContent?.closest(".app-shell");
+
+    expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("open");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+
+    expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("collapsed");
+  });
+
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {
     renderAppShellForTest();
 

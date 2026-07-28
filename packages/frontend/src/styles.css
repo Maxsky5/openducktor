@@ -366,6 +366,112 @@ body {
   background: var(--background);
 }
 
+.electron-native-controls-surface {
+  display: none;
+  height: var(--electron-titlebar-height);
+}
+
+.electron-platform-darwin .electron-native-controls-surface {
+  display: block;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.electron-platform-darwin .workspace-rail {
+  height: calc(100% - var(--electron-titlebar-height));
+  margin-top: var(--electron-titlebar-height);
+}
+
+.electron-platform-darwin .electron-sidebar-content-open,
+.electron-platform-darwin .electron-sidebar-content-collapsed {
+  padding-top: 0;
+}
+
+.electron-shell .electron-sidebar-heading,
+.electron-shell .electron-sidebar-collapsed-title-row {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.electron-platform-darwin .electron-sidebar-heading {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: var(--electron-titlebar-height) auto;
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+}
+
+.electron-platform-darwin .electron-sidebar-brand {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.electron-shell .electron-sidebar-heading > button,
+.electron-shell .electron-sidebar-collapsed-title-row button {
+  -webkit-app-region: no-drag;
+}
+
+.electron-shell .electron-sidebar-heading > button {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.electron-platform-darwin .electron-sidebar-collapsed-title-row {
+  height: var(--electron-titlebar-height);
+  flex-shrink: 0;
+  width: calc(100% + 1rem);
+  margin-inline: -0.5rem;
+  padding-inline: 0.5rem;
+}
+
+.electron-platform-darwin .electron-sidebar-collapsed-toggle {
+  transform: translateX(0.5rem);
+}
+
+.app-shell[data-sidebar-state="open"] {
+  --electron-navigation-width: 19rem;
+}
+
+.app-shell[data-sidebar-state="collapsed"] {
+  --electron-navigation-width: 7rem;
+}
+
+:is(.electron-platform-win32, .electron-platform-linux) .app-shell {
+  --electron-left-controls-height: clamp(
+    0px,
+    env(titlebar-area-x, 0px),
+    var(--electron-titlebar-height)
+  );
+  --electron-right-controls-width: max(
+    0px,
+    calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))
+  );
+}
+
+:is(.electron-platform-win32, .electron-platform-linux) .electron-titlebar-safe-area {
+  margin-left: max(0px, calc(env(titlebar-area-x, 0px) - var(--electron-navigation-width)));
+  margin-right: var(--electron-right-controls-width);
+}
+
+:is(.electron-platform-win32, .electron-platform-linux) .workspace-rail {
+  height: calc(100% - var(--electron-left-controls-height));
+  margin-top: var(--electron-left-controls-height);
+}
+
+:is(.electron-platform-win32, .electron-platform-linux) .workspace-sidebar {
+  padding-top: var(--electron-left-controls-height);
+}
+
+.electron-shell .electron-titlebar-safe-area {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.electron-shell .electron-titlebar-safe-area button {
+  -webkit-app-region: no-drag;
+}
+
 code,
 pre {
   font-family: "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
