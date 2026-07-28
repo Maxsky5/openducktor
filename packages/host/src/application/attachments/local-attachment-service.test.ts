@@ -1,3 +1,4 @@
+import { LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { LocalAttachmentEntry, LocalAttachmentPort } from "../../ports/local-attachment-port";
@@ -198,6 +199,20 @@ describe("createLocalAttachmentService", () => {
       /^\/tmp\/openducktor-local-attachments\/[0-9a-f-]{36}-_.._Preview___.png$/,
     );
     expect(Buffer.from(files.get(staged.path)?.bytes ?? []).toString("utf8")).toBe("preview-bytes");
+  });
+  test("rejects oversized staging payloads before decoding or writing them", async () => {
+    const { files, port } = createFakeLocalAttachmentPort();
+    const service = createLocalAttachmentService(port);
+
+    await expect(
+      Effect.runPromise(
+        service.stage({
+          name: "brief.pdf",
+          base64Data: "A".repeat(LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT + 1),
+        }),
+      ),
+    ).rejects.toThrow("Attachment payload exceeds the 32 MiB staging limit.");
+    expect(files.size).toBe(0);
   });
   test("resolves relative filename tokens to the newest staged attachment", async () => {
     const { calls, port } = createFakeLocalAttachmentPort();

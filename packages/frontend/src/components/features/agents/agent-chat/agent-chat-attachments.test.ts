@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import {
   buildComposerAttachmentFromFile,
   buildComposerAttachmentFromPath,
@@ -159,5 +160,30 @@ describe("agent-chat-attachments", () => {
         },
       }),
     ).toEqual({});
+  });
+
+  test("rejects files whose combined size exceeds the staging limit", () => {
+    const first = buildComposerAttachmentFromFile(
+      new File(["first"], "first.pdf", { type: "application/pdf" }),
+    );
+    const second = buildComposerAttachmentFromFile(
+      new File(["second"], "second.pdf", { type: "application/pdf" }),
+    );
+    if (!first || !second) {
+      throw new Error("Expected PDF attachments to classify");
+    }
+    first.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 + 1 } as File;
+    second.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 } as File;
+
+    expect(
+      validateComposerAttachments([first, second], {
+        pdf: true,
+        image: false,
+        audio: false,
+        video: false,
+      }),
+    ).toEqual({
+      [second.id]: "Attachments must total 32 MiB or less.",
+    });
   });
 });

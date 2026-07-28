@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { ReusablePrompt } from "@openducktor/contracts";
+import { LOCAL_ATTACHMENT_BYTE_LIMIT, type ReusablePrompt } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
@@ -115,6 +115,35 @@ describe("resolveAgentStudioSendDraftParts", () => {
                 kind: "image",
                 mime: "image/png",
                 path: "/tmp/image.png",
+              },
+              "attachment-1",
+            ),
+          ],
+        },
+        reusablePrompts: [],
+        selectedModelDescriptor,
+        stageAttachment,
+      }),
+    ).resolves.toBeNull();
+    expect(stageAttachment).not.toHaveBeenCalled();
+  });
+
+  test("rejects oversized attachments before staging", async () => {
+    const stageAttachment = mock(async () => "/tmp/brief.pdf");
+    const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    Object.defineProperty(file, "size", { value: LOCAL_ATTACHMENT_BYTE_LIMIT + 1 });
+
+    await expect(
+      resolveParts({
+        draft: {
+          segments: [createTextSegment("review")],
+          attachments: [
+            createComposerAttachment(
+              {
+                name: "brief.pdf",
+                kind: "pdf",
+                mime: "application/pdf",
+                file,
               },
               "attachment-1",
             ),

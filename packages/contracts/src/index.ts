@@ -6,6 +6,7 @@ export * from "./agent-session-live-schemas";
 export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
+export * from "./attachment-limits";
 export * from "./claude-runtime-command-contracts";
 export * from "./codex-app-server-protocol";
 export * from "./config-schemas";

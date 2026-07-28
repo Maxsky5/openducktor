@@ -268,6 +268,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
   "taskSessionBootstrapSchema",
+  "LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT",
+  "LOCAL_ATTACHMENT_BYTE_LIMIT",
   "classifyRuntimeDescriptorSchemaIssue",
   "runtimeInstanceSummarySchema",
   "runtimeInstanceSummaryRoleSchema",

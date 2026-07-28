@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { readText } from "./claude-agent-sdk-utils";
@@ -27,8 +28,6 @@ const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set([
   "image/webp",
 ] as const);
 const SUPPORTED_CLAUDE_PDF_MIME = "application/pdf";
-const CLAUDE_ATTACHMENT_MEMORY_BUDGET_BYTES = 32 * 1024 * 1024;
-
 type ClaudeSupportedImageMime = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 const MIME_BY_EXTENSION: Record<
@@ -119,14 +118,14 @@ const toClaudeAttachmentBlock = async (
     });
   });
   const totalBytes = currentAttachmentBytes + metadata.size;
-  if (totalBytes > CLAUDE_ATTACHMENT_MEMORY_BUDGET_BYTES) {
+  if (totalBytes > LOCAL_ATTACHMENT_BYTE_LIMIT) {
     throw new HostValidationError({
       field: "parts",
       message: "Claude attachments exceed the 32 MiB input memory budget.",
       details: {
         attachmentId: attachment.id,
         totalBytes,
-        limitBytes: CLAUDE_ATTACHMENT_MEMORY_BUDGET_BYTES,
+        limitBytes: LOCAL_ATTACHMENT_BYTE_LIMIT,
       },
     });
   }

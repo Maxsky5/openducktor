@@ -1,3 +1,4 @@
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentAttachmentKind, AgentModelAttachmentSupport } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import {
@@ -244,7 +245,13 @@ export const validateComposerAttachments = (
   attachments: AgentChatComposerAttachment[],
   support: AgentModelAttachmentSupport | null | undefined,
 ): Record<string, string> => {
+  let totalFileBytes = 0;
   return attachments.reduce<Record<string, string>>((acc, attachment) => {
+    totalFileBytes += attachment.file?.size ?? 0;
+    if (totalFileBytes > LOCAL_ATTACHMENT_BYTE_LIMIT) {
+      acc[attachment.id] = "Attachments must total 32 MiB or less.";
+      return acc;
+    }
     const error = readAttachmentValidationError(attachment, support);
     if (error) {
       acc[attachment.id] = error;
