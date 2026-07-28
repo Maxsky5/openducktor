@@ -36,7 +36,7 @@ const inspectFilesystemCleanup = (
       settingsConfig.pathExists(effectiveWorktreePath),
       worktreeFiles.resolvePathWithinRoot(managedBase, effectiveWorktreePath),
     ]);
-    return { ...resolvedPath, targetExists };
+    return { ...resolvedPath, managedBasePath: managedBase, targetExists };
   });
 const cleanupRefused = (effectiveWorktreePath: string, cause?: unknown) =>
   new HostValidationError({
@@ -83,6 +83,12 @@ export const removeWorktreeAndFilesystemPath = (
       input,
       effectiveWorktreePath,
     );
+    if (
+      initialCleanup.kind === "outside" &&
+      (yield* worktreeFiles.pathIsWithinRoot(effectiveWorktreePath, initialCleanup.managedBasePath))
+    ) {
+      return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
+    }
     const removalResult = yield* Effect.either(
       gitPort.removeWorktree(repoPath, worktreePath, force),
     );

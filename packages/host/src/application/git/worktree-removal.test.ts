@@ -241,6 +241,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
     await expect(removeForcedWorktree(harness, "/managed/worktrees")).rejects.toThrow(
       "outside managed roots",
     );
+    expect(harness.calls).not.toContain("removeWorktree:/repo|/managed/worktrees|true");
     expect(harness.calls).not.toContain("removePathIfPresent:/managed/worktrees");
   });
   test("does not remove a path when its canonical identity changes during Git cleanup", async () => {
