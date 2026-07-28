@@ -283,10 +283,9 @@ describe("shell entrypoints", () => {
     expect(source).toMatch(
       /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
     );
-    expect(source).toContain("bootstrapOpenDucktorShell(");
-    expect(source).toContain("prepare: initializeElectronWindowChrome");
-    expect(source).toContain("createShellBridge: createElectronShellBridge");
-    expect(source).toContain('routerMode: "hash"');
+    expect(source).toMatch(
+      /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createElectronShellBridge,\s*prepare:\s*initializeElectronWindowChrome,\s*routerMode:\s*"hash",?\s*\}\)/u,
+    );
     expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
     expectNoManualShellBootstrapSteps(source);
   });
