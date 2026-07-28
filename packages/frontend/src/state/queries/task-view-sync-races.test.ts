@@ -111,6 +111,10 @@ describe("TaskViewSync races", () => {
     const firstDocumentStarted = createDeferred<void>();
     const { queryClient, sync } = createSync(
       createPorts({
+        listTasks: async () => [
+          createTaskCardFixture({ id: "task-a", status: "open" }),
+          createTaskCardFixture({ id: "task-b", status: "open" }),
+        ],
         loadFreshDocument: async (_repoPath, taskId) => {
           if (taskId === "task-a") {
             firstDocumentStarted.resolve();

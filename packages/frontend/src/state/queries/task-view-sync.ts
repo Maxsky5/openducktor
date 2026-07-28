@@ -290,12 +290,16 @@ export const createTaskViewSync = ({
         }
         await cancelRepoTaskQueries(repoPath);
         await invalidateRepoTaskQueries(queryClient, repoPath);
-        await fetchTasks(repoPath, doneVisibleDays);
+        const tasks = await fetchTasks(repoPath, doneVisibleDays);
         if (options.impact.kind === "refresh-documents") {
           await refreshDocuments(repoPath, options.impact.taskIds);
         }
         if (options.refreshDocumentsFor) {
-          await refreshDocuments(repoPath, options.refreshDocumentsFor);
+          const taskIds = new Set(tasks.map((task) => task.id));
+          await refreshDocuments(
+            repoPath,
+            options.refreshDocumentsFor.filter((taskId) => taskIds.has(taskId)),
+          );
         }
         if (options.refreshKanban) {
           await refreshCachedKanban(repoPath, doneVisibleDays);

@@ -185,6 +185,41 @@ describe("TaskViewSync", () => {
     expect(queryClient.getQueryData(documentQueryKeys.plan("/repo", "task-1"))).toBeUndefined();
   });
 
+  test("does not refresh metadata for an event task absent from the fresh task list", async () => {
+    const loadFreshDocument = mock(async () => {
+      throw new Error("Task not found: task-1");
+    });
+    const { queryClient, sync } = createSync(
+      createPorts({
+        listTasks: async () => [],
+        loadFreshDocument,
+      }),
+    );
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+      markdown: "# Cached",
+      updatedAt: null,
+    });
+
+    await expect(
+      sync.reconcileExternalEvent(
+        {
+          kind: "tasks_updated",
+          eventId: "event-before-delete",
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          removedTaskIds: [],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        },
+        "/repo",
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(loadFreshDocument).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryState(documentQueryKeys.spec("/repo", "task-1"))?.isInvalidated,
+    ).toBe(true);
+  });
+
   test("invalidates inactive repository caches without fetching", async () => {
     const listTasks = mock(async () => [] as TaskCard[]);
     const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
