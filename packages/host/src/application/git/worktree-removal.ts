@@ -85,6 +85,16 @@ export const removeWorktreeAndFilesystemPath = (
     );
     if (
       initialCleanup.kind === "outside" &&
+      !canonicalPathsEqual(
+        initialCleanup.cleanupPath,
+        initialCleanup.canonicalPath,
+        canonicalPathPlatform,
+      )
+    ) {
+      return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
+    }
+    if (
+      initialCleanup.kind === "outside" &&
       (initialCleanup.targetExists ||
         (yield* worktreeFiles.pathIsWithinRoot(
           effectiveWorktreePath,

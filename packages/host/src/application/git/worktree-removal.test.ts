@@ -259,9 +259,10 @@ describe("removeWorktreeAndFilesystemPath", () => {
     expect(harness.calls).not.toContain("removeWorktree:/repo|/managed/worktrees|true");
     expect(harness.calls).not.toContain("removePathIfPresent:/managed/worktrees");
   });
-  test("rejects an existing managed symlink to an outside target before calling Git", async () => {
+  test("rejects a registered managed symlink to an outside target before calling Git", async () => {
     const symlinkPath = "/managed/worktrees/task-link";
     const harness = createCleanupHarness({
+      isRegistered: (worktreePath) => worktreePath === "/outside/task-1",
       resolvedPaths: [cleanupResolution("/outside/task-1", "outside", symlinkPath)],
     });
     await expect(removeForcedWorktree(harness, symlinkPath)).rejects.toThrow(
