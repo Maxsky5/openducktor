@@ -235,7 +235,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   updateSessionModel(input: UpdateAgentSessionModelInput) {
     return fromPromise("claudeRuntime.updateSessionModel", async () => {
-      const session = this.requireSession(input.externalSessionId);
+      const session = this.sessionStore.get(input.externalSessionId);
+      if (!session) {
+        return;
+      }
       assertClaudeSessionRef(session, input, "update session model");
       await applyClaudeSessionModel(session, input.model);
       session.summary = { ...session.summary };

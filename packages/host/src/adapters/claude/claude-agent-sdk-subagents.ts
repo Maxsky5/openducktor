@@ -1,5 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import {
@@ -14,6 +15,7 @@ type ClaudeSubagentSession = {
   hiddenSubagentTaskIds?: Set<string>;
   retractedSubagentTaskIds?: Set<string>;
   retractedToolUseIds?: Set<string>;
+  subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolMessageIdsByCallId: Map<string, string>;
@@ -173,6 +175,31 @@ const readFailedTaskErrorReason = (value: Record<string, unknown>): string | und
     readStringProp(value, "reason"),
   );
 
+const subagentToolUseId = (
+  session: ClaudeSubagentSession,
+  taskId: string,
+  toolUseId: string | undefined,
+): string | undefined => {
+  if (toolUseId) {
+    return toolUseId;
+  }
+  for (const [candidateToolUseId, candidateTaskId] of session.subagentTaskIdsByToolUseId) {
+    if (candidateTaskId === taskId) {
+      return candidateToolUseId;
+    }
+  }
+  return undefined;
+};
+
+const releaseSubagentEventSession = (
+  session: ClaudeSubagentSession,
+  toolUseId: string | undefined,
+): void => {
+  if (toolUseId) {
+    session.subagentEventSessionsByToolUseId?.delete(toolUseId);
+  }
+};
+
 export const emitClaudeAgentToolResultSubagentPart = ({
   emit,
   input,
@@ -264,6 +291,9 @@ export const emitClaudeAgentToolResultSubagentPart = ({
       metadata,
     },
   });
+  if (status !== "running") {
+    releaseSubagentEventSession(session, toolUseId);
+  }
 };
 
 export const handleClaudeSubagentSystemMessage = ({
@@ -388,4 +418,5 @@ export const handleClaudeSubagentSystemMessage = ({
       ...(message.output_file ? { metadata: { outputFile: message.output_file } } : {}),
     },
   );
+  releaseSubagentEventSession(session, subagentToolUseId(session, message.task_id, toolUseId));
 };

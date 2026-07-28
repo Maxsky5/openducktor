@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
@@ -7,7 +8,10 @@ import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 describe("handleClaudeSdkMessage Agent tool results", () => {
   test("links Claude Agent tool results to the stored subagent transcript id", () => {
     const events: AgentEvent[] = [];
-    const session = createSession();
+    const session = {
+      ...createSession(),
+      subagentEventSessionsByToolUseId: new Map<string, ClaudeEventSession>(),
+    };
     const emit = (event: AgentEvent) => events.push(event);
     const modelSelection = (model: string) => ({
       providerId: "claude",
@@ -42,6 +46,10 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           stop_reason: "tool_use",
         },
       }),
+    });
+    session.subagentEventSessionsByToolUseId.set("toolu_agent_1", {
+      ...createSession(),
+      externalSessionId: "session-1::claude-subagent::aef1c17051550cb2b",
     });
 
     handleClaudeSdkMessage({
@@ -104,6 +112,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         }),
       }),
     );
+    expect(session.subagentEventSessionsByToolUseId.has("toolu_agent_1")).toBe(false);
   });
 
   test("keeps a forwarded parent Agent result in the root transcript when it follows another result", () => {
@@ -425,7 +434,10 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
 
   test("maps Claude async Agent launches as running background subagents", () => {
     const events: AgentEvent[] = [];
-    const session = createSession();
+    const session = {
+      ...createSession(),
+      subagentEventSessionsByToolUseId: new Map<string, ClaudeEventSession>(),
+    };
     const emit = (event: AgentEvent) => events.push(event);
     const modelSelection = (model: string) => ({
       providerId: "claude",
@@ -461,6 +473,10 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
           stop_reason: "tool_use",
         },
       }),
+    });
+    session.subagentEventSessionsByToolUseId.set("toolu_agent_async", {
+      ...createSession(),
+      externalSessionId: "session-1::claude-subagent::async-agent-1",
     });
 
     handleClaudeSdkMessage({
@@ -524,6 +540,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       }),
     );
     expect(subagentPart).not.toHaveProperty("endedAtMs");
+    expect(session.subagentEventSessionsByToolUseId.has("toolu_agent_async")).toBe(true);
 
     handleClaudeSdkMessage({
       session,

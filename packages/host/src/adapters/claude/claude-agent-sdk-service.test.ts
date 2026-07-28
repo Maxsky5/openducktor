@@ -470,6 +470,27 @@ describe("createClaudeAgentSdkService", () => {
     expect(session.model?.variant).toBe("xhigh");
   });
 
+  test("defers model changes for cold Claude sessions", async () => {
+    const service = createService(null);
+
+    await expect(
+      Effect.runPromise(
+        service.updateSessionModel({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          model: {
+            runtimeKind: "claude",
+            providerId: "claude",
+            modelId: "claude-opus-4-6",
+            variant: "xhigh",
+          },
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   test("prepares live Claude question replies before completing them", async () => {
     const resolvedAnswers: string[][][] = [];
     const session = createSession({

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
@@ -52,7 +53,10 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
 
   test("maps Claude subagent task metadata across start, progress, and notification events", () => {
     const events: AgentEvent[] = [];
-    const session = createSession();
+    const session = {
+      ...createSession(),
+      subagentEventSessionsByToolUseId: new Map<string, ClaudeEventSession>(),
+    };
     session.toolMessageIdsByCallId.set("task-tool-1", "assistant-1");
     const emit = (event: AgentEvent) => events.push(event);
     const modelSelection = (model: string) => ({
@@ -78,6 +82,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         session_id: "session-1",
       }),
     });
+    session.subagentEventSessionsByToolUseId.set("task-tool-1", createSession());
 
     handleClaudeSdkMessage({
       session,
@@ -153,6 +158,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         }),
       }),
     ]);
+    expect(session.subagentEventSessionsByToolUseId.has("task-tool-1")).toBe(false);
   });
 
   test("maps Claude task status updates explicitly", () => {
