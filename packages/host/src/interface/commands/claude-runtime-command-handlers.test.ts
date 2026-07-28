@@ -71,7 +71,10 @@ describe("createClaudeRuntimeCommandHandlers", () => {
     }
 
     const router = createHostCommandRouter({
-      handlers: createHandlers(new ServiceWithReceiver() as unknown as ClaudeAgentSdkService),
+      handlers: createHandlers(
+        new ServiceWithReceiver() as unknown as ClaudeAgentSdkService,
+        createLiveClaudeRuntimeRegistry(),
+      ),
     });
 
     await expect(
@@ -85,6 +88,33 @@ describe("createClaudeRuntimeCommandHandlers", () => {
       models: [],
       defaultModelsByProvider: {},
     });
+  });
+
+  test("requires a matching live Claude workspace runtime before loading models", async () => {
+    const listAvailableModels = mock((_input: ListAgentModelsInput) =>
+      Effect.succeed({
+        models: [],
+        defaultModelsByProvider: {},
+      }),
+    );
+    const service = { listAvailableModels } as unknown as ClaudeAgentSdkService;
+    const router = createHostCommandRouter({
+      handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
+    });
+
+    await expect(
+      router.invoke("claude_runtime_list_models", {
+        input: {
+          repoPath: "/private",
+          runtimeKind: "claude",
+        },
+      }),
+    ).rejects.toMatchObject({
+      _tag: "HostValidationError",
+      field: "runtimeKind",
+    });
+
+    expect(listAvailableModels).not.toHaveBeenCalled();
   });
 
   test("allows empty file search queries for initial autocomplete", async () => {
@@ -276,7 +306,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
       listAvailableModels: () => Effect.succeed({ unrelated: true }),
     } as unknown as ClaudeAgentSdkService;
     const router = createHostCommandRouter({
-      handlers: createHandlers(service),
+      handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
     });
 
     await expect(

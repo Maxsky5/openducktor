@@ -72,7 +72,10 @@ export const createClaudeRuntimeCommandHandlers = (
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command]: createClaudeCommandHandler(
     service,
     CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels,
-    (runtimeService, input) => runtimeService.listAvailableModels(input),
+    (runtimeService, input) =>
+      requireLiveClaudeWorkspaceRuntime(runtimeRegistry, input).pipe(
+        Effect.flatMap(() => runtimeService.listAvailableModels(input)),
+      ),
   ),
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands.command]: createClaudeCommandHandler(
     service,
