@@ -59,7 +59,7 @@ export function TaskDeleteConfirmDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="pt-4">
+        <DialogBody className="py-4">
           <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
             <p className="font-medium">This action permanently removes the task.</p>
             {impact.hasSubtasks ? (
@@ -67,11 +67,12 @@ export function TaskDeleteConfirmDialog({
                 Direct subtasks will also be deleted to avoid orphaned children in the workflow.
               </p>
             ) : null}
-            <p>
-              {impact.terminalCount === 0
-                ? "No running task terminals will be stopped."
-                : `${impact.terminalCount} associated terminal${impact.terminalCount === 1 ? "" : "s"} will be terminated before deletion.`}
-            </p>
+            {impact.terminalCount === 0 ? null : (
+              <p>
+                {impact.terminalCount} associated terminal
+                {impact.terminalCount === 1 ? "" : "s"} will be terminated before deletion.
+              </p>
+            )}
             {impact.isLoading ? (
               <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
             ) : impact.error ? (
@@ -84,7 +85,7 @@ export function TaskDeleteConfirmDialog({
           </div>
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex flex-row justify-end gap-2 border-t border-border pt-5">
+        <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"
