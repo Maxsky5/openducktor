@@ -274,8 +274,10 @@ describe("AppShell", () => {
 
     const mainContent = document.querySelector('[data-main-scroll-container="true"]');
     const shellRoot = mainContent?.closest(".app-shell");
+    const nativeControlsSurface = shellRoot?.querySelector(".electron-native-controls-surface");
 
     expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("open");
+    expect(nativeControlsSurface?.classList.contains("bg-sidebar")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
 
