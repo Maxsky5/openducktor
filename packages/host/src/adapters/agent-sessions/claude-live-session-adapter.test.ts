@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionControlSummary,
+  type RepoConfig,
   RUNTIME_DESCRIPTORS_BY_KIND,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -31,6 +32,22 @@ const runtime = {
   runtimeRoute: { type: "host_service" as const, identity: "runtime-1" },
   startedAt: "2026-07-17T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+};
+
+const workingDirectoryDependencies = {
+  settingsConfig: {
+    canonicalizePath: (path: string) => Effect.succeed(path),
+    defaultRepoWorktreeBasePath: () => "/legacy-worktrees/repo",
+    defaultWorktreeBasePath: () => "/worktrees/repo",
+    resolveConfiguredPath: (path: string) => path,
+  },
+  workspaceSettingsService: {
+    getRepoConfigByRepoPath: () =>
+      Effect.succeed({
+        workspaceId: "repo",
+        worktreeBasePath: "/worktrees/repo",
+      } as RepoConfig),
+  },
 };
 
 const summary = {
@@ -204,6 +221,7 @@ const createHarness = async () => {
           ? (session as unknown as ReturnType<ClaudeSessionStore["get"]>)
           : undefined,
     } as ClaudeSessionStore,
+    workingDirectoryDependencies,
   });
   const prepared = await Effect.runPromise(prepare(runtime));
   await Effect.runPromise(prepared.startForwarding());
@@ -260,6 +278,49 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
+  test("rejects session creation outside the selected workspace before calling the SDK", async () => {
+    const harness = await createHarness();
+    const sdkCalls = { start: 0, resume: 0, fork: 0 };
+    harness.setStartSession(() => {
+      sdkCalls.start += 1;
+      return Effect.succeed(summary);
+    });
+    harness.setResumeSession(() => {
+      sdkCalls.resume += 1;
+      return Effect.succeed(summary);
+    });
+    harness.setForkSession(() => {
+      sdkCalls.fork += 1;
+      return Effect.succeed(summary);
+    });
+    const outsideWorkspaceInput = {
+      ...startInput,
+      workingDirectory: "/private",
+    };
+    const attempts = [
+      harness.adapter.startSession(outsideWorkspaceInput),
+      harness.adapter.resumeSession({
+        ...outsideWorkspaceInput,
+        externalSessionId: "session-1",
+      }),
+      harness.adapter.forkSession({
+        ...outsideWorkspaceInput,
+        parentExternalSessionId: "parent-session",
+      }),
+    ];
+
+    for (const attempt of attempts) {
+      expect(await Effect.runPromise(Effect.either(attempt))).toMatchObject({
+        _tag: "Left",
+        left: {
+          _tag: "HostValidationError",
+          field: "workingDirectory",
+        },
+      });
+    }
+    expect(sdkCalls).toEqual({ start: 0, resume: 0, fork: 0 });
+  });
+
   test("keeps a no-message start idle after SDK initialization settles", async () => {
     const harness = await createHarness();
     harness.setStartSession(() =>

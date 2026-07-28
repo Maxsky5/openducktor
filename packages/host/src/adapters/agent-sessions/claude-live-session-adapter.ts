@@ -4,12 +4,17 @@ import {
   agentSessionContextUsageSchema,
   agentSessionControlSummarySchema,
   type RuntimeInstanceSummary,
+  type RuntimeKind,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type {
   ClaudeAgentSdkService,
   ClaudePendingInputResolution,
 } from "../../application/runtimes/claude-agent-sdk-service";
+import {
+  type ClaudeWorkspaceWorkingDirectoryDependencies,
+  requireClaudeWorkspaceWorkingDirectory,
+} from "../../application/runtimes/claude-workspace-runtime";
 import {
   type HostError,
   HostValidationError,
@@ -60,6 +65,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
   readonly service: ClaudeAgentSdkService;
   readonly sessionStore: ClaudeSessionStore;
+  readonly workingDirectoryDependencies: ClaudeWorkspaceWorkingDirectoryDependencies;
 };
 
 const requireRuntime = (
@@ -114,6 +120,7 @@ export const createClaudeLiveSessionAdapterPreparer =
     liveSessionLifecycle,
     service,
     sessionStore,
+    workingDirectoryDependencies,
   }: CreateClaudeLiveSessionAdapterPreparerInput): ClaudeLiveSessionAdapterPreparer =>
   (runtimeInput) =>
     Effect.gen(function* () {
@@ -255,6 +262,16 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         );
 
+      const requireSessionWorkingDirectory = (
+        input: { repoPath: string; runtimeKind: RuntimeKind; workingDirectory: string },
+        operation: string,
+      ) =>
+        requireClaudePolicy(input.runtimeKind, operation).pipe(
+          Effect.flatMap(() =>
+            requireClaudeWorkspaceWorkingDirectory(workingDirectoryDependencies, input),
+          ),
+        );
+
       const adapter: AgentSessionRuntimeAdapterPort = {
         binding: {
           runtimeId: runtime.runtimeId,
@@ -339,7 +356,7 @@ export const createClaudeLiveSessionAdapterPreparer =
               );
           }),
         startSession: (input) =>
-          requireClaudePolicy(input.runtimeKind, "start-session").pipe(
+          requireSessionWorkingDirectory(input, "start-session").pipe(
             Effect.flatMap(() =>
               runSummary("claude-live-session.start-session", () =>
                 service.startSession(toClaudeStartInput(input), runtime.runtimeId),
@@ -347,7 +364,7 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         resumeSession: (input) =>
-          requireClaudePolicy(input.runtimeKind, "resume-session").pipe(
+          requireSessionWorkingDirectory(input, "resume-session").pipe(
             Effect.flatMap(() =>
               runSummary(
                 "claude-live-session.resume-session",
@@ -357,7 +374,7 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         forkSession: (input) =>
-          requireClaudePolicy(input.runtimeKind, "fork-session").pipe(
+          requireSessionWorkingDirectory(input, "fork-session").pipe(
             Effect.flatMap(() =>
               runSummary("claude-live-session.fork-session", () =>
                 service.forkSession(toClaudeForkInput(input), runtime.runtimeId),

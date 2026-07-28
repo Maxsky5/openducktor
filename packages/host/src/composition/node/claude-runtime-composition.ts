@@ -10,6 +10,7 @@ import { createClaudeWorkspaceRuntimeStarter } from "../../adapters/claude/claud
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import type { ClaudeRuntimeSessionOperationsPort } from "../../adapters/runtimes/runtime-session-operations";
 import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
+import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../application/runtimes/claude-workspace-runtime";
 import type { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
@@ -32,6 +33,7 @@ export type CreateClaudeRuntimeCompositionInput = {
   runtimeDistribution: HostRuntimeDistribution;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
+  workingDirectoryDependencies: ClaudeWorkspaceWorkingDirectoryDependencies;
 };
 
 export const createClaudeRuntimeComposition = ({
@@ -42,6 +44,7 @@ export const createClaudeRuntimeComposition = ({
   runtimeDistribution,
   systemCommands,
   toolDiscovery,
+  workingDirectoryDependencies,
 }: CreateClaudeRuntimeCompositionInput): ClaudeRuntimeComposition => {
   const eventHub = createClaudeAgentSdkEventHub();
   const sessionStore = createClaudeAgentSdkSessionStore({ emit: eventHub.emit });
@@ -59,6 +62,7 @@ export const createClaudeRuntimeComposition = ({
     liveSessionLifecycle,
     service: agentSdkService,
     sessionStore,
+    workingDirectoryDependencies,
   });
 
   return {

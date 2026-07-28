@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { type RepoConfig, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createArtifactRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostDependencyError } from "../../effect/host-errors";
@@ -37,6 +37,22 @@ const createToolDiscovery = (): ToolDiscoveryPort => ({
   },
 });
 
+const workingDirectoryDependencies = {
+  settingsConfig: {
+    canonicalizePath: (path: string) => Effect.succeed(path),
+    defaultRepoWorktreeBasePath: () => "/legacy-worktrees/repo",
+    defaultWorktreeBasePath: () => "/worktrees/repo",
+    resolveConfiguredPath: (path: string) => path,
+  },
+  workspaceSettingsService: {
+    getRepoConfigByRepoPath: () =>
+      Effect.succeed({
+        workspaceId: "repo",
+        worktreeBasePath: "/worktrees/repo",
+      } as RepoConfig),
+  },
+};
+
 describe("createClaudeRuntimeComposition", () => {
   test("returns a fully initialized workspace starter without a runtime registry", async () => {
     const calls = { registered: 0, released: 0 };
@@ -66,6 +82,7 @@ describe("createClaudeRuntimeComposition", () => {
       }),
       systemCommands: createSystemCommands(),
       toolDiscovery: createToolDiscovery(),
+      workingDirectoryDependencies,
     });
 
     const handle = await Effect.runPromise(

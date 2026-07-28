@@ -186,6 +186,7 @@ export const createNodeEffectHostCommandRouter = (
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
+  const claudeWorkingDirectoryDependencies = { settingsConfig, workspaceSettingsService };
   let resolvedMcpHostBridge = mcpHostBridge;
   const claudeRuntime = createClaudeRuntimeComposition({
     liveSessionLifecycle: agentSessionLiveStateService,
@@ -194,6 +195,7 @@ export const createNodeEffectHostCommandRouter = (
     runtimeDistribution,
     systemCommands,
     toolDiscovery,
+    workingDirectoryDependencies: claudeWorkingDirectoryDependencies,
     resolveMcpBridgeConnection: (repoPath) =>
       resolvedMcpHostBridge
         ? resolvedMcpHostBridge.ensureConnection({ repoPath }).pipe(
@@ -464,7 +466,7 @@ export const createNodeEffectHostCommandRouter = (
       ...createClaudeRuntimeCommandHandlers(
         claudeRuntime.agentSdkService,
         effectiveRuntimeRegistry,
-        { settingsConfig, workspaceSettingsService },
+        claudeWorkingDirectoryDependencies,
       ),
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService, {

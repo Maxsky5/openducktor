@@ -2,73 +2,26 @@ import {
   CLAUDE_RUNTIME_COMMAND_CONTRACTS,
   type ClaudeRuntimeCommandContract,
 } from "@openducktor/contracts";
-import { pathStartsWith } from "@openducktor/path-support";
 import { Effect } from "effect";
 import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
-import { requireLiveClaudeWorkspaceRuntime } from "../../application/runtimes/claude-workspace-runtime";
-import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
+import {
+  type ClaudeWorkspaceWorkingDirectoryDependencies,
+  requireClaudeWorkspaceWorkingDirectory,
+  requireLiveClaudeWorkspaceRuntime,
+} from "../../application/runtimes/claude-workspace-runtime";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { HostCommandHandler, HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord } from "./command-inputs";
 
-type ClaudeRuntimeCommandDependencies = {
-  settingsConfig: Pick<
-    SettingsConfigPort,
-    | "canonicalizePath"
-    | "defaultRepoWorktreeBasePath"
-    | "defaultWorktreeBasePath"
-    | "resolveConfiguredPath"
-  >;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
-};
-
-const requireClaudeWorkspaceWorkingDirectory = (
+const requireClaudeRuntimeWorkingDirectory = (
   runtimeRegistry: RuntimeRegistryPort,
-  dependencies: ClaudeRuntimeCommandDependencies,
+  dependencies: ClaudeWorkspaceWorkingDirectoryDependencies,
   input: { repoPath: string; runtimeKind: string; workingDirectory: string },
 ) =>
-  Effect.gen(function* () {
-    yield* requireLiveClaudeWorkspaceRuntime(runtimeRegistry, input);
-    const canonicalRepoPath = yield* dependencies.settingsConfig.canonicalizePath(input.repoPath);
-    const canonicalWorkingDirectory = yield* dependencies.settingsConfig.canonicalizePath(
-      input.workingDirectory,
-    );
-    if (pathStartsWith(canonicalWorkingDirectory, canonicalRepoPath)) {
-      return;
-    }
-
-    const repoConfig =
-      yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(canonicalRepoPath);
-    const worktreeBasePath =
-      repoConfig.worktreeBasePath !== undefined
-        ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-        : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-    const canonicalWorktreeBasePath =
-      yield* dependencies.settingsConfig.canonicalizePath(worktreeBasePath);
-    if (pathStartsWith(canonicalWorkingDirectory, canonicalWorktreeBasePath)) {
-      return;
-    }
-
-    const canonicalLegacyWorktreeBasePath = yield* dependencies.settingsConfig.canonicalizePath(
-      dependencies.settingsConfig.defaultRepoWorktreeBasePath(canonicalRepoPath),
-    );
-    if (pathStartsWith(canonicalWorkingDirectory, canonicalLegacyWorktreeBasePath)) {
-      return;
-    }
-
-    return yield* Effect.fail(
-      new HostValidationError({
-        field: "workingDirectory",
-        message: `Working directory '${input.workingDirectory}' is outside the selected workspace.`,
-        details: {
-          repoPath: input.repoPath,
-          workingDirectory: input.workingDirectory,
-        },
-      }),
-    );
-  });
+  requireLiveClaudeWorkspaceRuntime(runtimeRegistry, input).pipe(
+    Effect.flatMap(() => requireClaudeWorkspaceWorkingDirectory(dependencies, input)),
+  );
 
 const toClaudeCommandValidationError = (command: string, cause: unknown): HostValidationError => {
   if (cause instanceof HostValidationError) {
@@ -114,7 +67,7 @@ const createClaudeCommandHandler = <Input, Response>(
 export const createClaudeRuntimeCommandHandlers = (
   service: ClaudeAgentSdkService,
   runtimeRegistry: RuntimeRegistryPort,
-  dependencies: ClaudeRuntimeCommandDependencies,
+  dependencies: ClaudeWorkspaceWorkingDirectoryDependencies,
 ): HostCommandHandlers => ({
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command]: createClaudeCommandHandler(
     service,
@@ -125,7 +78,7 @@ export const createClaudeRuntimeCommandHandlers = (
     service,
     CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands,
     (runtimeService, input) =>
-      requireClaudeWorkspaceWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
+      requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
         Effect.flatMap(() => runtimeService.listAvailableSlashCommands(input)),
       ),
   ),
@@ -133,7 +86,7 @@ export const createClaudeRuntimeCommandHandlers = (
     service,
     CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills,
     (runtimeService, input) =>
-      requireClaudeWorkspaceWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
+      requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
         Effect.flatMap(() => runtimeService.listAvailableSkills(input)),
       ),
   ),
@@ -141,7 +94,7 @@ export const createClaudeRuntimeCommandHandlers = (
     service,
     CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents,
     (runtimeService, input) =>
-      requireClaudeWorkspaceWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
+      requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
         Effect.flatMap(() => runtimeService.listAvailableSubagents(input)),
       ),
   ),
@@ -149,7 +102,7 @@ export const createClaudeRuntimeCommandHandlers = (
     service,
     CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles,
     (runtimeService, input) =>
-      requireClaudeWorkspaceWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
+      requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
         Effect.flatMap(() => runtimeService.searchFiles(input)),
       ),
   ),
@@ -157,7 +110,7 @@ export const createClaudeRuntimeCommandHandlers = (
     service,
     CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory,
     (runtimeService, input) =>
-      requireClaudeWorkspaceWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
+      requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
         Effect.flatMap(() =>
           runtimeService.loadSessionHistory({
             repoPath: input.repoPath,
@@ -187,7 +140,7 @@ export const createClaudeRuntimeCommandHandlers = (
         runtimePolicy: input.runtimePolicy,
         ...(input.model ? { model: input.model } : {}),
       };
-      return requireClaudeWorkspaceWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
+      return requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
         Effect.flatMap(() =>
           runtimeService.loadSessionTodos(
             input.sessionScope ? { ...todosInput, sessionScope: input.sessionScope } : todosInput,
