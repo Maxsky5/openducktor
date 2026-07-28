@@ -115,4 +115,29 @@ describe("withClaudeSkillMentions", () => {
 
     expect(withClaudeSkillMentions(session, [GRILL_SKILL])).toBe(session);
   });
+
+  test("does not add skill mentions inside structured file references", () => {
+    const content = '@"docs /grill-me"';
+    const session = threadSession(
+      userMessage(content, [
+        { kind: "text", text: content },
+        {
+          kind: "file_reference",
+          file: {
+            id: "docs /grill-me",
+            path: "docs /grill-me",
+            name: "grill-me",
+            kind: "default",
+          },
+          sourceText: {
+            value: content,
+            start: 0,
+            end: content.length,
+          },
+        },
+      ]),
+    );
+
+    expect(withClaudeSkillMentions(session, [GRILL_SKILL])).toBe(session);
+  });
 });

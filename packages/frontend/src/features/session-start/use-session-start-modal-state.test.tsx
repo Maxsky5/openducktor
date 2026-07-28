@@ -1829,6 +1829,86 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("preserves a fork source model while its runtime catalog loads", async () => {
+    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const loadCatalog = mock(async () => catalogDeferred.promise);
+    const harness = createHookHarness(
+      createBaseProps({
+        loadCatalog,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-10-CROSS-RUNTIME-FORK",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        initialStartMode: "fork",
+        existingSessionOptions: [
+          {
+            value: "claude-source-session",
+            sourceSession: {
+              externalSessionId: "claude-source-session",
+              runtimeKind: "claude",
+              workingDirectory: "/repo/worktree",
+            },
+            label: "Claude source session",
+            description: "Claude session with a persisted model",
+            selectedModel: {
+              runtimeKind: "claude",
+              providerId: "claude",
+              modelId: "gpt-5.6-luna",
+              variant: "high",
+            },
+          },
+        ],
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedRuntimeKind).toBe("claude");
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "gpt-5.6-luna",
+      variant: "high",
+    });
+
+    await harness.run(() => {
+      catalogDeferred.resolve({
+        ...CLAUDE_CATALOG,
+        models: [
+          {
+            id: "gpt-5.6-luna",
+            providerId: "claude",
+            providerName: "Claude",
+            modelId: "gpt-5.6-luna",
+            modelName: "GPT-5.6 Luna",
+            variants: ["high"],
+          },
+        ],
+        defaultModelsByProvider: {
+          claude: "gpt-5.6-luna",
+        },
+      });
+    });
+    await harness.waitFor((state) => state.isCatalogLoading === false);
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "gpt-5.6-luna",
+      variant: "high",
+    });
+
+    await harness.unmount();
+  });
+
   test("normalizes a stale source session id back to the first valid option in reuse mode", async () => {
     const harness = createHookHarness(createBaseProps());
 

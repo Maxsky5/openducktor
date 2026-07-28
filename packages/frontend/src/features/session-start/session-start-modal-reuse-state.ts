@@ -148,9 +148,12 @@ const buildSourceSelectionDraft = ({
     ...sourceSelection.selectedModel,
     runtimeKind,
   };
+  const matchingCatalog = catalog?.runtime?.kind === runtimeKind ? catalog : null;
   return {
     runtimeKind,
-    selection: catalog ? coerceVisibleSelectionToCatalog(catalog, sourceModel) : sourceModel,
+    selection: matchingCatalog
+      ? coerceVisibleSelectionToCatalog(matchingCatalog, sourceModel)
+      : sourceModel,
   };
 };
 

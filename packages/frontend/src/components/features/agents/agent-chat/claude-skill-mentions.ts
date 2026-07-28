@@ -11,8 +11,6 @@ const hasStartBoundary = (text: string, start: number): boolean =>
 const hasEndBoundary = (text: string, end: number): boolean =>
   end === text.length || REFERENCE_END_BOUNDARY_PATTERN.test(text[end] ?? "");
 
-const sourceRangeKey = (start: number, end: number): string => `${start}:${end}`;
-
 const readSkillMentions = (
   message: AgentChatMessage,
   skills: readonly AgentSkillReference[],
@@ -21,10 +19,18 @@ const readSkillMentions = (
     return [];
   }
 
-  const existingRanges = new Set<string>();
+  const existingRanges: { start: number; end: number }[] = [];
   for (const part of message.meta.parts ?? []) {
-    if (part.kind === "skill_mention" && part.sourceText) {
-      existingRanges.add(sourceRangeKey(part.sourceText.start, part.sourceText.end));
+    if (
+      (part.kind === "file_reference" ||
+        part.kind === "skill_mention" ||
+        part.kind === "subagent_reference") &&
+      part.sourceText
+    ) {
+      existingRanges.push({
+        start: part.sourceText.start,
+        end: part.sourceText.end,
+      });
     }
   }
   const tokens = skills
@@ -44,7 +50,10 @@ const readSkillMentions = (
       continue;
     }
     const end = start + match.value.length;
-    if (!existingRanges.has(sourceRangeKey(start, end))) {
+    const overlapsExistingRange = existingRanges.some(
+      (range) => start < range.end && end > range.start,
+    );
+    if (!overlapsExistingRange) {
       mentions.push({
         kind: "skill_mention",
         skill: match.skill,
