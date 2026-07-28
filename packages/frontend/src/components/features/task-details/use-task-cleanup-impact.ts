@@ -1,11 +1,18 @@
 import type { AgentSessionRecord, TaskWorktreeSummary } from "@openducktor/contracts";
 import { normalizePathForComparison } from "@openducktor/path-support";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import {
+  type AgentSessionReadPort,
+  agentSessionListQueryOptions,
+} from "@/state/queries/agent-sessions";
+import {
+  type TaskWorktreeQueryHost,
+  taskWorktreeQueryOptions,
+} from "@/state/queries/build-runtime";
 import { terminalListQueryOptions } from "@/state/queries/terminals";
+import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 
 type TaskCleanupImpact = {
   hasCanonicalWorktree: boolean;
@@ -29,6 +36,12 @@ type TaskWorktreeImpactQuerySnapshot = {
   error: unknown;
   isLoading: boolean;
   isFetching: boolean;
+};
+
+type TaskCleanupImpactReadPorts = {
+  agentSessions?: AgentSessionReadPort;
+  taskWorktrees?: TaskWorktreeQueryHost;
+  terminals?: NonNullable<Parameters<typeof terminalListQueryOptions>[0]["hostClient"]>;
 };
 
 const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
@@ -150,42 +163,72 @@ export const getTaskCleanupImpactFromSessionQueries = (
   };
 };
 
-export function useTaskCleanupImpact(taskIds: string[], open: boolean): TaskCleanupImpact {
+export function useTaskCleanupImpact(
+  taskIds: string[],
+  enabled: boolean,
+  readPorts: TaskCleanupImpactReadPorts = {},
+): TaskCleanupImpact {
   const { activeWorkspace } = useWorkspaceState();
+  const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const taskSessionQueries = useQueries({
-    queries: taskIds.map((taskId) => ({
-      ...(workspaceRepoPath
-        ? agentSessionListQueryOptions(workspaceRepoPath, taskId)
-        : agentSessionListQueryOptions("", taskId)),
-      enabled: open && Boolean(workspaceRepoPath),
-    })),
+  const queryRepoPath = workspaceRepoPath ?? "";
+  const shouldLoadImpact = enabled && Boolean(workspaceRepoPath);
+  const sessionLists = useAgentSessionLists({
+    repoPath: workspaceRepoPath,
+    taskIds,
+    enabled: shouldLoadImpact,
+    queryClient,
+    ...(readPorts.agentSessions ? { readPort: readPorts.agentSessions } : {}),
   });
-  const taskWorktreeQueries = useQueries({
-    queries: taskIds.map((taskId) => ({
-      ...(workspaceRepoPath
-        ? taskWorktreeQueryOptions({ repoPath: workspaceRepoPath, taskId })
-        : taskWorktreeQueryOptions({ repoPath: "", taskId })),
-      enabled: open && Boolean(workspaceRepoPath),
-    })),
-  });
-  const terminalQueries = useQueries({
-    queries: taskIds.map((taskId) => ({
-      ...(workspaceRepoPath
-        ? terminalListQueryOptions({ repoPath: workspaceRepoPath, taskId })
-        : terminalListQueryOptions({ repoPath: "", taskId })),
-      enabled: open && Boolean(workspaceRepoPath),
-    })),
-  });
+  // Observe canonical per-task state without starting reads here; useAgentSessionLists owns session loading so cold gaps stay batched.
+  const taskSessionObservers = useQueries(
+    {
+      queries: taskIds.map((taskId) => ({
+        ...agentSessionListQueryOptions(queryRepoPath, taskId, readPorts.agentSessions),
+        enabled: false,
+      })),
+    },
+    queryClient,
+  );
+  const taskWorktreeQueries = useQueries(
+    {
+      queries: taskIds.map((taskId) => ({
+        ...taskWorktreeQueryOptions({
+          repoPath: queryRepoPath,
+          taskId,
+          ...(readPorts.taskWorktrees ? { hostClient: readPorts.taskWorktrees } : {}),
+        }),
+        enabled: shouldLoadImpact,
+      })),
+    },
+    queryClient,
+  );
+  const terminalQueries = useQueries(
+    {
+      queries: taskIds.map((taskId) => ({
+        ...terminalListQueryOptions({
+          repoPath: queryRepoPath,
+          taskId,
+          ...(readPorts.terminals ? { hostClient: readPorts.terminals } : {}),
+        }),
+        enabled: shouldLoadImpact,
+      })),
+    },
+    queryClient,
+  );
 
   return useMemo((): TaskCleanupImpact => {
     const sessionImpact = getTaskCleanupImpactFromSessionQueries(
-      open ? workspaceRepoPath : null,
+      shouldLoadImpact ? workspaceRepoPath : null,
       taskIds,
-      taskSessionQueries,
+      taskSessionObservers.map((query) => ({
+        ...query,
+        error: sessionLists.error ?? query.error,
+        isLoading: sessionLists.isPending || query.isLoading,
+      })),
       taskWorktreeQueries,
     );
-    if (!open || taskIds.length === 0 || !workspaceRepoPath) return sessionImpact;
+    if (!shouldLoadImpact || taskIds.length === 0 || !workspaceRepoPath) return sessionImpact;
     if (terminalQueries.some((query) => query.error != null)) {
       return {
         ...sessionImpact,
@@ -205,5 +248,14 @@ export function useTaskCleanupImpact(taskIds: string[], open: boolean): TaskClea
         0,
       ),
     };
-  }, [workspaceRepoPath, open, taskIds, taskSessionQueries, taskWorktreeQueries, terminalQueries]);
+  }, [
+    workspaceRepoPath,
+    shouldLoadImpact,
+    taskIds,
+    sessionLists.error,
+    sessionLists.isPending,
+    taskSessionObservers,
+    taskWorktreeQueries,
+    terminalQueries,
+  ]);
 }
