@@ -160,6 +160,7 @@ describe("toClaudeDisplayParts", () => {
           path: "/repo/context.pdf",
         },
       },
+      { kind: "text", text: "\n" },
       {
         kind: "file_reference",
         file: {
@@ -174,6 +175,39 @@ describe("toClaudeDisplayParts", () => {
           end: 20,
         },
       },
+    ]);
+  });
+
+  test("preserves the canonical separator between attachment-delimited text blocks", () => {
+    expect(
+      toClaudeDisplayParts([
+        { kind: "text", text: "Before" },
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-1",
+            kind: "pdf",
+            mime: "application/pdf",
+            name: "context.pdf",
+            path: "/repo/context.pdf",
+          },
+        },
+        { kind: "text", text: "After" },
+      ]),
+    ).toEqual([
+      { kind: "text", text: "Before" },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "attachment-1",
+          kind: "pdf",
+          mime: "application/pdf",
+          name: "context.pdf",
+          path: "/repo/context.pdf",
+        },
+      },
+      { kind: "text", text: "\n" },
+      { kind: "text", text: "After" },
     ]);
   });
 });

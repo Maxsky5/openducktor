@@ -123,6 +123,27 @@ const streamedTextMessageIds = (session: ClaudeResultEventSession): string[] =>
     ? [...session.streamAssistantMessageIdsByBlockIndex.values()]
     : [];
 
+const resultModelForCompletedTurn = (
+  session: ClaudeResultEventSession,
+  completedUserTurnIndex: number,
+  duplicatesAssistantTextFromSameTurn: boolean,
+): AgentModelSelection | undefined => {
+  const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
+    | { model?: AgentModelSelection }
+    | undefined;
+  const acceptedModel = acceptedMessage?.model;
+  if (!acceptedModel) {
+    return session.model;
+  }
+  if (!duplicatesAssistantTextFromSameTurn || !session.model) {
+    return acceptedModel;
+  }
+  return {
+    ...acceptedModel,
+    modelId: session.model.modelId,
+  };
+};
+
 export const emitClaudePermissionDeniedToolPart = ({
   emit,
   permission,
@@ -180,6 +201,11 @@ const emitSuccessfulResultText = ({
   if (!text || (duplicatesAssistantTextFromSameTurn && durationMs === undefined)) {
     return;
   }
+  const resultModel = resultModelForCompletedTurn(
+    session,
+    completedUserTurnIndex,
+    duplicatesAssistantTextFromSameTurn,
+  );
   const streamedMessageIds = streamedTextMessageIds(session);
   const streamedMessageId = streamedMessageIds[0];
   const messageId =
@@ -206,6 +232,6 @@ const emitSuccessfulResultText = ({
     messageId,
     message: text,
     ...(durationMs !== undefined ? { durationMs } : {}),
-    ...(session.model ? { model: session.model } : {}),
+    ...(resultModel ? { model: resultModel } : {}),
   });
 };

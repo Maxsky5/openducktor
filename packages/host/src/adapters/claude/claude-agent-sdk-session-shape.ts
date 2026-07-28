@@ -38,6 +38,9 @@ export const toClaudeDisplayParts = (
     }
     const { sourceTextByPartIndex, text } = encodeClaudePromptTextWithSourceRanges(promptSegment);
     const sourceOffset = flattenedTextLength === 0 ? 0 : flattenedTextLength + 1;
+    if (flattenedTextLength > 0 && text.length > 0) {
+      displayParts.push({ kind: "text", text: "\n" });
+    }
     for (const [index, part] of promptSegment.entries()) {
       const sourceText = sourceTextByPartIndex[index];
       const offsetSourceText = sourceText

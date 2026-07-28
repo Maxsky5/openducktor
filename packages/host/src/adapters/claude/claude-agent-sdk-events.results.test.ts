@@ -112,19 +112,26 @@ describe("handleClaudeSdkMessage result events", () => {
     ]);
   });
 
-  test("preserves the Claude model when a result finalizes a preceding assistant payload", () => {
+  test("keeps result metadata tied to the accepted turn when the next model is selected", () => {
     const events: AgentEvent[] = [];
+    const acceptedTurnModel = {
+      providerId: "claude",
+      modelId: "configured-model",
+      runtimeKind: "claude" as const,
+      variant: "high",
+      profileId: "profile-1",
+    };
     const session = {
       ...createSession(),
       model: {
         providerId: "claude",
-        modelId: "configured-model",
+        modelId: "claude-opus-4-6",
         runtimeKind: "claude" as const,
         variant: "xhigh",
         profileId: "profile-1",
       },
     };
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push({ model: acceptedTurnModel });
     session.pendingUserTurnCount = 1;
     const input = {
       session,
@@ -181,7 +188,7 @@ describe("handleClaudeSdkMessage result events", () => {
         providerId: "claude",
         modelId: "claude-sonnet-4-6",
         runtimeKind: "claude",
-        variant: "xhigh",
+        variant: "high",
         profileId: "profile-1",
       },
     });
