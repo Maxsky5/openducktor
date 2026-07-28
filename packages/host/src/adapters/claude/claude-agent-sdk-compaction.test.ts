@@ -150,6 +150,40 @@ describe("Claude manual compaction", () => {
     expect(events.some((event) => event.type === "user_message")).toBe(false);
   });
 
+  test("keeps queued manual compaction visible while hiding delivered compaction", () => {
+    const compactPart = { kind: "text" as const, text: "/compact" };
+    const history = toClaudeHistoryMessages([], () => "2026-07-23T11:00:00.000Z", [
+      {
+        isManualCompaction: true,
+        messageId: "queued-compact-request",
+        parts: [compactPart],
+        state: "queued",
+        text: "/compact",
+        timestamp: "2026-07-23T10:00:00.000Z",
+      },
+      {
+        isManualCompaction: true,
+        messageId: "delivered-compact-request",
+        parts: [compactPart],
+        state: "read",
+        text: "/compact",
+        timestamp: "2026-07-23T10:00:01.000Z",
+      },
+    ]);
+
+    expect(history).toEqual([
+      {
+        messageId: "queued-compact-request",
+        role: "user",
+        timestamp: "2026-07-23T10:00:00.000Z",
+        text: "/compact",
+        displayParts: [compactPart],
+        state: "queued",
+        parts: [],
+      },
+    ]);
+  });
+
   test("settles a successful no-op without exposing the SDK result as assistant output", () => {
     const events: AgentEvent[] = [];
     const session: ClaudeEventSession = createEventTestSession();

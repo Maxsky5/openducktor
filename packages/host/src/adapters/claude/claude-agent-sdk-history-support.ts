@@ -25,7 +25,8 @@ export const appendUnmatchedLiveUserMessages = (
 ): void => {
   const projectedMessageIds = new Set(history.map((message) => message.messageId));
   for (const message of liveUserMessages) {
-    if (message.isManualCompaction || projectedMessageIds.has(message.messageId)) {
+    const isDeliveredManualCompaction = message.isManualCompaction && message.state !== "queued";
+    if (isDeliveredManualCompaction || projectedMessageIds.has(message.messageId)) {
       continue;
     }
     history.push({
