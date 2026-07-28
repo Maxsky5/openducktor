@@ -120,7 +120,6 @@ export const projectClaudeHistoryAssistantMessage = ({
     stopReason === "tool_use" &&
     Array.isArray(content) &&
     content.some((block) => isRecord(block) && readStringProp(block, "type") !== "text");
-  let emittedBlockOrderText = false;
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
       if (!isRecord(block)) {
@@ -129,15 +128,14 @@ export const projectClaudeHistoryAssistantMessage = ({
       const type = readStringProp(block, "type");
       if (type === "text" && preservesBlockOrder) {
         const blockText = readStringProp(block, "text");
-        if (!emittedBlockOrderText && blockText?.trim() && text.trim().length > 0) {
+        if (blockText?.trim()) {
           parts.push(
             createClaudeAssistantTextPart({
               messageId,
               partId: `${messageId}:text:${index}`,
-              text,
+              text: blockText,
             }),
           );
-          emittedBlockOrderText = true;
         }
         continue;
       }

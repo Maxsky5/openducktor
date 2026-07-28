@@ -2,6 +2,7 @@ import type { SessionRef } from "@openducktor/core";
 import { agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -129,13 +130,17 @@ export const createClaudeAgentSdkSessionStore = ({
         },
       }),
     stopSessionsForRuntime: (runtimeId) =>
-      Effect.try({
-        try: () => {
-          for (const session of [...sessions.values()]) {
-            if (session.runtimeId === runtimeId) {
-              close(session);
-              publishSessionFinished(session, "Runtime stopped");
-            }
+      Effect.tryPromise({
+        try: async () => {
+          const stoppedSessions = [...sessions.values()].filter(
+            (session) => session.runtimeId === runtimeId,
+          );
+          for (const session of stoppedSessions) {
+            close(session);
+          }
+          await Promise.all(stoppedSessions.map(flushClaudeLiveContextUsageRefresh));
+          for (const session of stoppedSessions) {
+            publishSessionFinished(session, "Runtime stopped");
           }
         },
         catch: (cause) =>

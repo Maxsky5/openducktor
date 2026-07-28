@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { Effect } from "effect";
+import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
@@ -294,6 +295,46 @@ describe("createClaudeAgentSdkSessionStore", () => {
       },
     ]);
     expect(session.pendingApprovals.size).toBe(0);
+  });
+
+  test("drains live context refreshes before finishing runtime shutdown", async () => {
+    const contextRead = Promise.withResolvers<{ maxTokens: number; totalTokens: number }>();
+    const queryClosed = Promise.withResolvers<void>();
+    const events: Array<{ type: string }> = [];
+    const backgroundFailures: unknown[] = [];
+    const store = createClaudeAgentSdkSessionStore({
+      emit: (_session, event) => events.push(event),
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const session = createSession({
+      query: {
+        close: mock(() => queryClosed.resolve()),
+        getContextUsage: () => contextRead.promise,
+      } as unknown as ClaudeSession["query"],
+    });
+    store.set(session);
+    scheduleClaudeLiveContextUsageRefresh({
+      session,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      emit: (_session, event) => events.push(event),
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          backgroundFailures.push(failure);
+        }),
+    });
+
+    const stopPromise = Effect.runPromise(store.stopSessionsForRuntime("runtime-1"));
+    await queryClosed.promise;
+    expect(events).toEqual([]);
+
+    contextRead.resolve({ maxTokens: 200_000, totalTokens: 95_000 });
+    await stopPromise;
+
+    expect(events.map((event) => event.type)).toEqual([
+      "session_context_updated",
+      "session_finished",
+    ]);
+    expect(backgroundFailures).toEqual([]);
   });
 
   test("aborts pending questions before closing a runtime session", async () => {

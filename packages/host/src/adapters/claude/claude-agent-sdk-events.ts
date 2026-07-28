@@ -257,9 +257,11 @@ const handleAssistantMessage = ({
   if (!hasToolUse && !stopReason && !isForwardedSubagentText) {
     return;
   }
-  let emittedToolUseText = false;
   if ((text.length > 0 || hasToolUse) && !isFinalAssistantText) {
     settleClaudeStreamedAssistantText({ emit, session, timestamp });
+  }
+  if (hasToolUse && text.length > 0) {
+    rememberAssistantTextForCurrentTurn(session, text, message.uuid);
   }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
@@ -269,19 +271,17 @@ const handleAssistantMessage = ({
       const type = readStringProp(block, "type");
       if (type === "text" && hasToolUse) {
         const blockText = readStringProp(block, "text");
-        if (!emittedToolUseText && blockText?.trim() && text.length > 0) {
+        if (blockText?.trim()) {
           const messageId = message.uuid;
-          rememberAssistantTextForCurrentTurn(session, text, messageId);
           emit(
             claudeAssistantTextPartEvent({
               externalSessionId: session.externalSessionId,
               messageId,
               partId: `${messageId}:text:${index}`,
-              text,
+              text: blockText,
               timestamp,
             }),
           );
-          emittedToolUseText = true;
         }
         continue;
       }

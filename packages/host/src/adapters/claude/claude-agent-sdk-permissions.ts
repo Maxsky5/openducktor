@@ -85,6 +85,9 @@ const rewriteSessionPath = (session: ClaudeSessionContext, value: string): strin
   if (normalizePathForComparison(repoPath) === normalizePathForComparison(workingDirectory)) {
     return value;
   }
+  if (pathStartsWith(value, workingDirectory)) {
+    return value;
+  }
   if (normalizePathForComparison(value) === normalizePathForComparison(repoPath)) {
     return workingDirectory;
   }

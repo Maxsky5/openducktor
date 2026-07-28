@@ -83,7 +83,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     });
   });
 
-  test("combines assistant text blocks when Claude stops to use a tool", () => {
+  test("preserves assistant text and tool block order when Claude stops to use a tool", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
 
@@ -126,7 +126,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           kind: "text",
           messageId: "assistant-1",
           partId: "assistant-1:text:0",
-          text: "I will inspect the task first.\nThen I will inspect the plan.",
+          text: "I will inspect the task first.",
           completed: true,
         }),
       }),
@@ -136,6 +136,16 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           kind: "tool",
           callId: "tool-1",
           status: "pending",
+        }),
+      }),
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "text",
+          messageId: "assistant-1",
+          partId: "assistant-1:text:2",
+          text: "Then I will inspect the plan.",
+          completed: true,
         }),
       }),
     ]);

@@ -91,7 +91,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
     );
   });
 
-  test("preserves same-message text before tool-use blocks for hydrated drafts", () => {
+  test("preserves interleaved text and tool block order for hydrated drafts", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -110,6 +110,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
                 name: "mcp__openducktor__odt_read_task",
                 input: { taskId: "task-1" },
               },
+              { type: "text", text: "Then I will inspect the plan." },
             ],
             stop_reason: "tool_use",
           },
@@ -119,7 +120,12 @@ describe("claude-agent-sdk-history assistant turns", () => {
     );
 
     expect(history).toHaveLength(1);
-    expect(history[0]?.parts.map((part) => part.kind)).toEqual(["text", "tool"]);
+    expect(history[0]?.parts.map((part) => part.kind)).toEqual(["text", "tool", "text"]);
+    expect(history[0]?.parts).toEqual([
+      expect.objectContaining({ kind: "text", text: "I'll read the task before editing." }),
+      expect.objectContaining({ kind: "tool", callId: "tool-1" }),
+      expect.objectContaining({ kind: "text", text: "Then I will inspect the plan." }),
+    ]);
   });
 
   test("hydrates final assistant text carried only by a successful result", () => {

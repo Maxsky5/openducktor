@@ -146,6 +146,25 @@ describe("createClaudeAgentSdkService", () => {
     ).toThrow("Cannot load session history Claude session 'session-1'");
   });
 
+  test("rejects live child history and TODO reads from another working directory", () => {
+    const service = createService(createSession());
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const ref = {
+      repoPath: "/repo/",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/other-worktree/",
+      externalSessionId: childExternalSessionId,
+      runtimePolicy: { kind: "claude" as const },
+    };
+
+    expect(() => service.loadSessionHistory(ref)).toThrow(
+      "Cannot load session history Claude session 'session-1'",
+    );
+    expect(() => service.loadSessionTodos(ref)).toThrow(
+      "Cannot load session todos Claude session 'session-1'",
+    );
+  });
+
   test("loads detached root context usage but not parent usage for a subagent", async () => {
     const loadDetachedSessionContextUsage = mock(
       async (_input: {

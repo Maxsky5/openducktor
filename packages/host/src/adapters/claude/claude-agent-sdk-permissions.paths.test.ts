@@ -160,6 +160,37 @@ describe("Claude permission path routing", () => {
     expect(session.pendingApprovals.size).toBe(0);
   });
 
+  test("preserves paths already rooted in a nested session worktree", async () => {
+    const session = createSession("build");
+    session.input = {
+      ...session.input,
+      repoPath: "/repo/fairnest",
+      workingDirectory: "/repo/fairnest/.worktrees/task",
+    };
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: () => {},
+    });
+    const filePath = "/repo/fairnest/.worktrees/task/apps/api/src/lib/auth.ts";
+
+    await expect(
+      canUseTool(
+        "Read",
+        { file_path: filePath },
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool-use-1",
+          blockedPath: filePath,
+        },
+      ),
+    ).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { file_path: filePath },
+    });
+  });
+
   test("preserves Bash commands exactly while routing non-shell file paths", async () => {
     const events: AgentEvent[] = [];
     const session = createSession("build");

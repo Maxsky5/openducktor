@@ -169,19 +169,25 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
-    const session = this.sessionStore.get(input.externalSessionId);
+    const target = parseClaudeTranscriptTarget(input.externalSessionId);
+    const session = this.sessionStore.get(target.sessionId);
     if (session) {
-      assertClaudeSessionRef(session, input, "load session history");
+      assertClaudeSessionRef(
+        session,
+        { ...input, externalSessionId: target.sessionId },
+        "load session history",
+      );
     }
-    const liveContext = session
-      ? {
-          source:
-            "externalSessionId" in session.input || "parentExternalSessionId" in session.input
-              ? ("persisted" as const)
-              : ("fresh" as const),
-          userMessages: session.acceptedUserMessages,
-        }
-      : undefined;
+    const liveContext =
+      session && !target.subpath
+        ? {
+            source:
+              "externalSessionId" in session.input || "parentExternalSessionId" in session.input
+                ? ("persisted" as const)
+                : ("fresh" as const),
+            userMessages: session.acceptedUserMessages,
+          }
+        : undefined;
     return fromPromise("claudeRuntime.loadSessionHistory", () =>
       loadClaudeHistory(input, this.now, liveContext),
     );
@@ -189,12 +195,16 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   loadSessionTodos(input: LoadAgentSessionTodosInput) {
     const target = parseClaudeTranscriptTarget(input.externalSessionId);
-    if (!target.subpath) {
-      const session = this.sessionStore.get(target.sessionId);
-      if (session) {
-        assertClaudeSessionRef(session, input, "load session todos");
-        return Effect.succeed([...session.todosById.values()]);
-      }
+    const session = this.sessionStore.get(target.sessionId);
+    if (session) {
+      assertClaudeSessionRef(
+        session,
+        { ...input, externalSessionId: target.sessionId },
+        "load session todos",
+      );
+    }
+    if (session && !target.subpath) {
+      return Effect.succeed([...session.todosById.values()]);
     }
     return fromPromise("claudeRuntime.loadSessionTodos", () => loadClaudeTodos(input));
   }
