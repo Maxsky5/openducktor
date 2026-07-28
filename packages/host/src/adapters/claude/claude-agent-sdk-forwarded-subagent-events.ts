@@ -22,8 +22,8 @@ const hasToolResultForParent = (
   if (Array.isArray(content)) {
     for (const block of content) {
       const result = decodeClaudeToolResultValue(block, null);
-      if (result) {
-        return result.toolUseId === parentToolUseId;
+      if (result?.toolUseId === parentToolUseId) {
+        return true;
       }
     }
   }

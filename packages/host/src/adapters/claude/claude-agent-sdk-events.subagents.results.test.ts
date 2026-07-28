@@ -106,6 +106,56 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
     );
   });
 
+  test("keeps a forwarded parent Agent result in the root transcript when it follows another result", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    session.toolNamesByCallId.set("toolu_agent_1", "Agent");
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "tool-results-1",
+        session_id: "session-1",
+        parent_tool_use_id: "toolu_agent_1",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "inner-tool-1",
+              content: [{ type: "text", text: "Nested result" }],
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_agent_1",
+              content: [{ type: "text", text: "Agent completed" }],
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        part: expect.objectContaining({
+          kind: "tool",
+          callId: "toolu_agent_1",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
   test("keeps the task-started description immutable across progress and completion", () => {
     const events: AgentEvent[] = [];
     const session = createSession();

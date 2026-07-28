@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { resolveLocalAttachmentPreviewSrc } from "./local-attachment-files";
+import {
+  resolveLocalAttachmentPreviewSrc,
+  stageLocalAttachmentFile,
+} from "./local-attachment-files";
 import {
   configureShellBridge,
   createDisabledAppUpdateBridge,
@@ -42,6 +46,21 @@ afterEach(() => {
 });
 
 describe("local-attachment-files", () => {
+  test("stageLocalAttachmentFile rejects oversized files before reading them", async () => {
+    const arrayBuffer = mock(async () => new ArrayBuffer(0));
+    const file = {
+      name: "oversized.pdf",
+      type: "application/pdf",
+      size: LOCAL_ATTACHMENT_BYTE_LIMIT + 1,
+      arrayBuffer,
+    } as unknown as File;
+
+    await expect(stageLocalAttachmentFile(file)).rejects.toThrow(
+      "Attachments must total 32 MiB or less.",
+    );
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
   test("resolveLocalAttachmentPreviewSrc rejects blank paths before shell delegation", async () => {
     await expect(resolveLocalAttachmentPreviewSrc("   ")).rejects.toThrow(
       "Attachment preview is unavailable because the local file path is missing.",
