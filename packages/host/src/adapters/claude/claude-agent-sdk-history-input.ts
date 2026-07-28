@@ -2,7 +2,7 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import {
   type ClaudeLiveUserMessage,
-  createLiveUserMessageIdResolver,
+  createLiveUserMessageResolver,
   readClaudeHistoryDisplayParts,
   readHistoryToolResults,
 } from "./claude-agent-sdk-history-support";
@@ -34,7 +34,7 @@ const handledWithoutMessage: ClaudeHistoryInputProjection = { handled: true };
 export const createClaudeHistoryInputProjector = (options: {
   liveUserMessages: readonly ClaudeLiveUserMessage[];
 }) => {
-  const resolveLiveUserMessageId = createLiveUserMessageIdResolver(options.liveUserMessages);
+  const resolveLiveUserMessage = createLiveUserMessageResolver(options.liveUserMessages);
   const compactPromptIds = new Set<string>();
   let pendingQueuedPrompt: { text: string; timestamp: string } | null = null;
 
@@ -44,17 +44,25 @@ export const createClaudeHistoryInputProjector = (options: {
     text: string;
     timestamp: string;
   }): ClaudeVisibleHistoryMessage | undefined => {
-    const displayParts = readClaudeHistoryDisplayParts(input.fallbackMessageId, input.message);
+    const liveUserMessage = resolveLiveUserMessage(
+      input.fallbackMessageId,
+      input.text,
+      input.timestamp,
+    );
+    const messageId = liveUserMessage?.messageId ?? input.fallbackMessageId;
+    const displayParts =
+      liveUserMessage?.parts ?? readClaudeHistoryDisplayParts(messageId, input.message);
     if (input.text.trim().length === 0 && displayParts.length === 0) {
       return undefined;
     }
     return {
-      messageId: resolveLiveUserMessageId(input.fallbackMessageId, input.text, input.timestamp),
+      messageId,
       role: "user",
       timestamp: input.timestamp,
       text: input.text,
       displayParts,
-      state: "read",
+      state: liveUserMessage?.state ?? "read",
+      ...(liveUserMessage?.model ? { model: liveUserMessage.model } : {}),
       parts: [],
     };
   };
@@ -82,7 +90,8 @@ export const createClaudeHistoryInputProjector = (options: {
           return {
             handled: true,
             manualCompaction: {
-              messageId: resolveLiveUserMessageId(messageId, text, commandTimestamp),
+              messageId:
+                resolveLiveUserMessage(messageId, text, commandTimestamp)?.messageId ?? messageId,
               timestamp: commandTimestamp,
             },
           };
@@ -146,7 +155,8 @@ export const createClaudeHistoryInputProjector = (options: {
       return {
         handled: true,
         manualCompaction: {
-          messageId: resolveLiveUserMessageId(entry.uuid, text, commandTimestamp),
+          messageId:
+            resolveLiveUserMessage(entry.uuid, text, commandTimestamp)?.messageId ?? entry.uuid,
           timestamp: commandTimestamp,
         },
       };

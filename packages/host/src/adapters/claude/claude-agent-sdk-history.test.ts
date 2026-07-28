@@ -311,6 +311,66 @@ describe("claude-agent-sdk-history", () => {
     expect(history.map((message) => message.messageId)).toEqual(["older-user", "live-user-1"]);
   });
 
+  test("preserves matched live user message metadata during hydration", () => {
+    const model = {
+      runtimeKind: "claude" as const,
+      providerId: "claude",
+      modelId: "claude-sonnet-4-6",
+      variant: "high",
+    };
+    const parts = [
+      { kind: "text" as const, text: "Inspect this file " },
+      {
+        kind: "file_reference" as const,
+        file: {
+          id: "apps/api/src/app.ts",
+          path: "apps/api/src/app.ts",
+          name: "app.ts",
+          kind: "code" as const,
+        },
+      },
+    ];
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "sdk-user-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:04:13.804Z",
+          message: {
+            role: "user",
+            content: "Inspect this file @apps/api/src/app.ts",
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [
+        {
+          messageId: "live-user-1",
+          text: "Inspect this file @apps/api/src/app.ts",
+          timestamp: "2026-06-26T11:04:13.804Z",
+          model,
+          parts,
+          state: "queued",
+        },
+      ],
+    );
+
+    expect(history).toEqual([
+      {
+        messageId: "live-user-1",
+        role: "user",
+        timestamp: "2026-06-26T11:04:13.804Z",
+        text: "Inspect this file @apps/api/src/app.ts",
+        displayParts: parts,
+        state: "queued",
+        model,
+        parts: [],
+      },
+    ]);
+  });
+
   test("matches attachment-only turns by their live UUID instead of empty text", () => {
     const history = toClaudeHistoryMessages(
       [

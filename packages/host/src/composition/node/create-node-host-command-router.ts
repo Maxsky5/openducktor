@@ -464,6 +464,7 @@ export const createNodeEffectHostCommandRouter = (
       ...createClaudeRuntimeCommandHandlers(
         claudeRuntime.agentSdkService,
         effectiveRuntimeRegistry,
+        { settingsConfig, workspaceSettingsService },
       ),
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService, {

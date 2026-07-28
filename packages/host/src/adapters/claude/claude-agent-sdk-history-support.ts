@@ -219,7 +219,7 @@ export const readClaudeHistoryDisplayParts = (
   return parts;
 };
 
-export const createLiveUserMessageIdResolver = (
+export const createLiveUserMessageResolver = (
   liveUserMessages: readonly ClaudeLiveUserMessage[],
 ) => {
   const consumedIndexes = new Set<number>();
@@ -235,7 +235,11 @@ export const createLiveUserMessageIdResolver = (
     }
     return -1;
   };
-  return (fallbackMessageId: string, text: string, timestamp: string): string => {
+  return (
+    fallbackMessageId: string,
+    text: string,
+    timestamp: string,
+  ): ClaudeLiveUserMessage | undefined => {
     let matchingIndex = findUnconsumedIndex((message) => message.messageId === fallbackMessageId);
     if (matchingIndex < 0) {
       matchingIndex = findUnconsumedIndex(
@@ -244,10 +248,10 @@ export const createLiveUserMessageIdResolver = (
     }
     const liveUserMessage = liveUserMessages[matchingIndex];
     if (matchingIndex < 0 || !liveUserMessage) {
-      return fallbackMessageId;
+      return undefined;
     }
     consumedIndexes.add(matchingIndex);
-    return liveUserMessage.messageId;
+    return liveUserMessage;
   };
 };
 
