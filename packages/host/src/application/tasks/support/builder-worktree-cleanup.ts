@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { runtimeRequiredScopesByRole } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { canonicalPathsEqual, normalizePathForComparison } from "../../../domain/path-comparison";
+import { canonicalPathsEqual } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
@@ -126,12 +126,12 @@ export const cleanupMergedBuilderState = (
       taskId,
       sourceBranch,
     );
-    if (
-      cleanupTarget &&
-      normalizePathForComparison(cleanupTarget) !== normalizePathForComparison(repoPath) &&
-      (yield* dependencies.settingsConfig.pathExists(cleanupTarget))
-    ) {
-      yield* dependencies.gitPort.removeWorktree(repoPath, cleanupTarget, false);
+    if (cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))) {
+      const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(cleanupTarget);
+      const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
+      if (!canonicalPathsEqual(canonicalCleanupTarget, canonicalRepoPath, canonicalPathPlatform)) {
+        yield* dependencies.gitPort.removeWorktree(repoPath, cleanupTarget, false);
+      }
     }
     const sourceBranchExists = (yield* dependencies.gitPort.listBranches(repoPath)).some(
       (branch) => !branch.isRemote && branch.name === sourceBranch,

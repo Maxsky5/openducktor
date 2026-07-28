@@ -1145,7 +1145,7 @@ describe("createGitService", () => {
       "removePathIfPresent:/managed/repo/task-1",
     ]);
   });
-  test("refuses filesystem cleanup outside managed roots after Git removes the worktree", async () => {
+  test("refuses existing paths outside managed roots before calling Git", async () => {
     const calls: string[] = [];
     const service = createGitService({
       gitPort: createFakeGitPort({
@@ -1166,7 +1166,7 @@ describe("createGitService", () => {
         }),
       ),
     ).rejects.toThrow("outside managed roots");
-    expect(calls).toEqual(["removeWorktree:/canonical/repo|/outside/recreated-data|true"]);
+    expect(calls).toEqual([]);
   });
   test("fails remove worktree through the Effect channel when settings config is missing", async () => {
     const calls: string[] = [];

@@ -377,6 +377,9 @@ describe("builder worktree cleanup", () => {
             devServerService: createDirectMergeDevServerService(calls),
             gitPort: createDirectMergeGitPort({
               calls,
+              canonicalPaths: {
+                "/repo/./task/..": "/repo",
+              },
               currentBranches: {
                 "/repo/./task/..": { name: "odt/task-1", detached: false },
               },
@@ -407,6 +410,49 @@ describe("builder worktree cleanup", () => {
       force: false,
     });
   });
+
+  test.skipIf(process.platform === "win32")(
+    "removes a distinct POSIX worktree whose path contains a backslash",
+    async () => {
+      const calls: unknown[] = [];
+      const repoPath = "/repo/a/b";
+      const worktreePath = String.raw`/repo/a\b`;
+
+      await Effect.runPromise(
+        Effect.scoped(
+          cleanupMergedBuilderState(
+            {
+              devServerService: createDirectMergeDevServerService(calls),
+              gitPort: createDirectMergeGitPort({
+                calls,
+                currentBranches: {
+                  [worktreePath]: { name: "odt/task-1", detached: false },
+                },
+                branches: {
+                  [repoPath]: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+                },
+              }),
+              settingsConfig: createBuildSettingsConfig(new Set([repoPath, worktreePath])),
+              taskWorktreeService: createDirectMergeTaskWorktreeService(worktreePath),
+              terminalService: createTerminalCleanupService(calls),
+            },
+            taskStoreWithTasks([task()]),
+            repoPath,
+            "task-1",
+            "odt/task-1",
+            "main",
+          ),
+        ),
+      );
+
+      expect(calls).toContainEqual({
+        type: "removeWorktree",
+        repoPath,
+        worktreePath,
+        force: false,
+      });
+    },
+  );
 
   test("propagates worktree removal failures before deleting the branch", async () => {
     const calls: unknown[] = [];

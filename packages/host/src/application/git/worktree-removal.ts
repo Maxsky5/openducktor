@@ -85,7 +85,11 @@ export const removeWorktreeAndFilesystemPath = (
     );
     if (
       initialCleanup.kind === "outside" &&
-      (yield* worktreeFiles.pathIsWithinRoot(effectiveWorktreePath, initialCleanup.managedBasePath))
+      (initialCleanup.targetExists ||
+        (yield* worktreeFiles.pathIsWithinRoot(
+          effectiveWorktreePath,
+          initialCleanup.managedBasePath,
+        )))
     ) {
       return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
     }

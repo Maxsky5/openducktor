@@ -613,6 +613,7 @@ const createBuildStartGitPort = ({
   });
 const createDirectMergeGitPort = ({
   calls,
+  canonicalPaths = {},
   currentBranches = {},
   branches = {},
   aheadBehind = {},
@@ -620,6 +621,7 @@ const createDirectMergeGitPort = ({
   removeWorktreeErrors = {},
 }: {
   calls: unknown[];
+  canonicalPaths?: Record<string, string>;
   currentBranches?: Record<string, GitCurrentBranch>;
   branches?: Record<string, GitBranch[]>;
   aheadBehind?: Record<string, CommitsAheadBehind>;
@@ -629,7 +631,7 @@ const createDirectMergeGitPort = ({
   createGitPort({
     canonicalizePath(path) {
       return Effect.sync(() => {
-        return path;
+        return canonicalPaths[path] ?? path;
       });
     },
     isGitRepository() {
