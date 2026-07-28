@@ -100,17 +100,28 @@ export const useModelSelectionActions = ({
       if (!model) {
         return;
       }
+      const liveVariants = loadedSessionIdentity ? model.liveSessionUpdates?.variants : undefined;
+      const liveVariantSet = liveVariants ? new Set(liveVariants) : null;
+      const variants = liveVariantSet
+        ? model.variants.filter((variant) => liveVariantSet.has(variant))
+        : model.variants;
       applySelection({
         runtimeKind: effectiveRuntimeKind,
         providerId: model.providerId,
         modelId: model.modelId,
-        ...(model.variants[0] ? { variant: model.variants[0] } : {}),
+        ...(variants[0] ? { variant: variants[0] } : {}),
         ...(selectedModelSelection?.profileId
           ? { profileId: selectedModelSelection.profileId }
           : {}),
       });
     },
-    [applySelection, effectiveRuntimeKind, selectedModelSelection?.profileId, selectionCatalog],
+    [
+      applySelection,
+      effectiveRuntimeKind,
+      loadedSessionIdentity,
+      selectedModelSelection?.profileId,
+      selectionCatalog,
+    ],
   );
 
   const handleSelectVariant = useCallback(

@@ -18,7 +18,7 @@ import {
 } from "./claude-agent-sdk-context-usage";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { emitClaudeTerminalSessionFailure } from "./claude-agent-sdk-lifecycle";
-import { encodeClaudePromptText, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
+import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -26,7 +26,7 @@ import type {
   ClaudeSessionStore,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
-import { modelSelection } from "./claude-agent-sdk-utils";
+import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 const LIVE_CLAUDE_EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh"]);
 
@@ -291,10 +291,8 @@ export const sendClaudeUserMessage = async (input: {
   assertClaudeSessionAcceptingMessages(session);
   const timestamp = now();
   const messageId = randomId();
-  const message = encodeClaudePromptText(
-    messageInput.parts.filter((part) => part.kind !== "attachment"),
-  );
   const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
+  const message = textFromContentBlocks(sdkMessage.message.content);
   assertClaudeSessionAcceptingMessages(session);
   const displayParts = toClaudeDisplayParts(messageInput.parts);
   sdkMessage.uuid = messageId as NonNullable<SDKUserMessage["uuid"]>;

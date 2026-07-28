@@ -121,6 +121,48 @@ describe("useModelSelectionActions", () => {
     await harness.unmount();
   });
 
+  test("chooses a supported variant when changing a live session model", async () => {
+    const updateAgentSessionModel = mock(async () => {});
+    const selectionCatalog: AgentModelCatalog = {
+      ...claudeCatalog,
+      models: [
+        ...claudeCatalog.models,
+        {
+          id: "claude/claude-sonnet-4-6",
+          providerId: "claude",
+          providerName: "Claude",
+          modelId: "claude-sonnet-4-6",
+          modelName: "Claude Sonnet 4.6",
+          variants: ["max", "high"],
+          liveSessionUpdates: {
+            profile: false,
+            variants: ["high"],
+          },
+        },
+      ],
+    };
+    const harness = createHarness(
+      createBaseProps({
+        selectionCatalog,
+        updateAgentSessionModel,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectModel("claude/claude-sonnet-4-6");
+    });
+
+    expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, {
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "claude-sonnet-4-6",
+      variant: "high",
+      profileId: "orchestrator",
+    });
+    await harness.unmount();
+  });
+
   test("surfaces live model update failures", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");

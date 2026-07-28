@@ -128,6 +128,76 @@ describe("Claude session I/O attachments and invalid updates", () => {
     }
   });
 
+  test("preserves text boundaries around attachments in accepted messages", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "openducktor-claude-send-"));
+    try {
+      const documentPath = join(workspace, "context.pdf");
+      await writeFile(documentPath, Buffer.from("pdf-bytes"));
+      const session = createClaudeSession({
+        activity: "idle",
+        query: {
+          applyFlagSettings: mock(async (_settings: unknown) => {}),
+          setModel: mock(async (_model?: string) => {}),
+        } as unknown as ClaudeSession["query"],
+      });
+
+      const accepted = await sendClaudeUserMessage({
+        session,
+        now: () => "2026-06-25T20:00:00.000Z",
+        randomId: () => "00000000-0000-4000-8000-000000000002",
+        emit: () => {},
+        messageInput: {
+          externalSessionId: "session-1",
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          parts: [
+            { kind: "text", text: "Before" },
+            {
+              kind: "attachment",
+              attachment: {
+                id: "attachment-1",
+                kind: "pdf",
+                mime: "application/pdf",
+                name: "context.pdf",
+                path: documentPath,
+              },
+            },
+            {
+              kind: "file_reference",
+              file: {
+                id: "src/after.ts",
+                kind: "code",
+                name: "after.ts",
+                path: "src/after.ts",
+              },
+            },
+          ],
+        },
+      });
+
+      expect(accepted.message).toBe("Before\n@src/after.ts");
+      expect(accepted.parts.at(-1)).toEqual({
+        kind: "file_reference",
+        file: {
+          id: "src/after.ts",
+          kind: "code",
+          name: "after.ts",
+          path: "src/after.ts",
+        },
+        sourceText: {
+          value: "@src/after.ts",
+          start: 7,
+          end: 20,
+        },
+      });
+    } finally {
+      await rm(workspace, { force: true, recursive: true });
+    }
+  });
+
   test("rejects unsupported live Claude effort changes without mutating session model", async () => {
     const applyFlagSettings = mock(async (_settings: unknown) => {});
     const session = createClaudeSession({

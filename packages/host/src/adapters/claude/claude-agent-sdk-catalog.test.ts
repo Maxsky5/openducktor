@@ -326,13 +326,6 @@ describe("toClaudeSkillCatalog", () => {
           description: "Bundled code review skill",
         },
         {
-          id: "design-sync",
-          name: "design-sync",
-          path: "design-sync",
-          title: "design-sync",
-          description: "Bundled design skill",
-        },
-        {
           id: "future-prompt-command",
           name: "future-prompt-command",
           path: "future-prompt-command",

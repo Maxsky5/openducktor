@@ -310,7 +310,7 @@ const CLAUDE_NON_SKILL_COMMANDS = new Set([
 ]);
 
 const isClaudeSkillCommand = (command: SlashCommand): boolean =>
-  !CLAUDE_NON_SKILL_COMMANDS.has(command.name);
+  !HIDDEN_CLAUDE_SLASH_COMMANDS.has(command.name) && !CLAUDE_NON_SKILL_COMMANDS.has(command.name);
 
 export const toClaudeSlashCommandCatalog = (
   commands: SlashCommand[],

@@ -69,6 +69,27 @@ describe("snapshotForClaudeSession", () => {
 });
 
 describe("toClaudeDisplayParts", () => {
+  test("preserves non-skill slash commands as visible text", () => {
+    expect(
+      toClaudeDisplayParts([
+        {
+          kind: "slash_command",
+          command: {
+            id: "review",
+            trigger: "review",
+            title: "review",
+            source: "command",
+            hints: [],
+          },
+        },
+        { kind: "text", text: " focus on auth" },
+      ]),
+    ).toEqual([
+      { kind: "text", text: "/review" },
+      { kind: "text", text: " focus on auth" },
+    ]);
+  });
+
   test("projects Claude skill commands as source-mapped skill chips", () => {
     expect(
       toClaudeDisplayParts([
@@ -98,6 +119,59 @@ describe("toClaudeDisplayParts", () => {
           value: "/grill-me",
           start: 0,
           end: 9,
+        },
+      },
+    ]);
+  });
+
+  test("offsets source-mapped references across attachment-separated text blocks", () => {
+    expect(
+      toClaudeDisplayParts([
+        { kind: "text", text: "Before" },
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-1",
+            kind: "pdf",
+            mime: "application/pdf",
+            name: "context.pdf",
+            path: "/repo/context.pdf",
+          },
+        },
+        {
+          kind: "file_reference",
+          file: {
+            id: "src/after.ts",
+            kind: "code",
+            name: "after.ts",
+            path: "src/after.ts",
+          },
+        },
+      ]),
+    ).toEqual([
+      { kind: "text", text: "Before" },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "attachment-1",
+          kind: "pdf",
+          mime: "application/pdf",
+          name: "context.pdf",
+          path: "/repo/context.pdf",
+        },
+      },
+      {
+        kind: "file_reference",
+        file: {
+          id: "src/after.ts",
+          kind: "code",
+          name: "after.ts",
+          path: "src/after.ts",
+        },
+        sourceText: {
+          value: "@src/after.ts",
+          start: 7,
+          end: 20,
         },
       },
     ]);
