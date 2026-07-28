@@ -1,4 +1,6 @@
 import {
+  type AgentSessionControlSendInput,
+  type AgentSessionUserMessagePart,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
   agentSessionControlResumeInputSchema,
@@ -15,6 +17,10 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import type {
+  LocalAttachmentService,
+  LocalAttachmentServiceError,
+} from "../../application/attachments/local-attachment-service";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 
@@ -38,8 +44,34 @@ const parseCommandInput = <Output>(
       }),
   });
 
+type LocalAttachmentResolver = Pick<LocalAttachmentService, "resolve">;
+
+const resolveSendInputPart = (
+  part: AgentSessionUserMessagePart,
+  attachmentResolver: LocalAttachmentResolver,
+): Effect.Effect<AgentSessionUserMessagePart, LocalAttachmentServiceError> =>
+  Effect.gen(function* () {
+    if (part.kind !== "attachment") {
+      return part;
+    }
+    const { path } = yield* attachmentResolver.resolve({ path: part.attachment.path });
+    return {
+      ...part,
+      attachment: { ...part.attachment, path },
+    };
+  });
+
+const resolveSendInputAttachments = (
+  input: AgentSessionControlSendInput,
+  attachmentResolver: LocalAttachmentResolver,
+) =>
+  Effect.forEach(input.parts, (part) => resolveSendInputPart(part, attachmentResolver)).pipe(
+    Effect.map((parts) => ({ ...input, parts })),
+  );
+
 export const createAgentSessionLiveCommandHandlers = (
   service: AgentSessionLiveStateService,
+  attachmentResolver: LocalAttachmentResolver,
 ): HostCommandHandlers => ({
   agent_session_control_fork: (args) =>
     parseCommandInput(agentSessionControlForkInputSchema, args, "agent_session_control_fork").pipe(
@@ -59,6 +91,7 @@ export const createAgentSessionLiveCommandHandlers = (
     ).pipe(Effect.flatMap(service.resumeSession)),
   agent_session_control_send: (args) =>
     parseCommandInput(agentSessionControlSendInputSchema, args, "agent_session_control_send").pipe(
+      Effect.flatMap((input) => resolveSendInputAttachments(input, attachmentResolver)),
       Effect.flatMap(service.sendUserMessage),
     ),
   agent_session_control_start: (args) =>

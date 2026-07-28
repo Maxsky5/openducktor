@@ -457,7 +457,10 @@ export const createNodeEffectHostCommandRouter = (
         }
       }),
     handlers: {
-      ...createAgentSessionLiveCommandHandlers(agentSessionLiveStateService),
+      ...createAgentSessionLiveCommandHandlers(
+        agentSessionLiveStateService,
+        localAttachmentService,
+      ),
       ...createClaudeRuntimeCommandHandlers(
         claudeRuntime.agentSdkService,
         effectiveRuntimeRegistry,

@@ -115,7 +115,18 @@ export const agentSessionControlSendInputSchema = z
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(({ parts }, ctx) => {
+    const hasAttachment = parts.some((part) => part.kind === "attachment");
+    const hasSlashCommand = parts.some((part) => part.kind === "slash_command");
+    if (hasAttachment && hasSlashCommand) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["parts"],
+        message: "Slash commands and attachments cannot be combined in one message.",
+      });
+    }
+  });
 export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema>;
 
 export const agentSessionControlUpdateModelInputSchema = z
