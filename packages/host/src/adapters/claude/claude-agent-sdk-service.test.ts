@@ -123,13 +123,27 @@ describe("createClaudeAgentSdkService", () => {
           createService(session).loadSessionHistory({
             repoPath: "/repo/",
             runtimeKind: "claude",
-            workingDirectory: "/missing-worktree",
+            workingDirectory: "/repo/worktree/",
             externalSessionId: session.externalSessionId,
             runtimePolicy: { kind: "claude" },
           }),
         ),
       ).rejects.toThrow("Failed to load Claude session");
     }
+  });
+
+  test("rejects live history reads from another working directory", () => {
+    const service = createService(createSession());
+
+    expect(() =>
+      service.loadSessionHistory({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/other-worktree/",
+        externalSessionId: "session-1",
+        runtimePolicy: { kind: "claude" },
+      }),
+    ).toThrow("Cannot load session history Claude session 'session-1'");
   });
 
   test("loads detached root context usage but not parent usage for a subagent", async () => {

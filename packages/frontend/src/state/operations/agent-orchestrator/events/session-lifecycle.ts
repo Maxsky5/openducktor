@@ -402,9 +402,12 @@ export const handleSessionFinished = (
     context.session.identity,
     (current) => {
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
-      const terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
+      let terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
         ? "stopped"
         : "idle";
+      if (current.status === "error") {
+        terminalStatus = "error";
+      }
       return {
         ...current,
         pendingUserMessageStartedAt: undefined,

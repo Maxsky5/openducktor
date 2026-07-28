@@ -170,6 +170,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const session = this.sessionStore.get(input.externalSessionId);
+    if (session) {
+      assertClaudeSessionRef(session, input, "load session history");
+    }
     const liveContext = session
       ? {
           source:

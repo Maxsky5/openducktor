@@ -97,6 +97,48 @@ describe("createClaudeAgentSdkSessionStore", () => {
     ]);
   });
 
+  test("retracts queued user messages when stopping a session", async () => {
+    const events: unknown[] = [];
+    const store = createClaudeAgentSdkSessionStore({
+      emit: (_session, event) => events.push(event),
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const queuedMessage = {
+      type: "user",
+      uuid: "queued-1",
+      message: { role: "user", content: [{ type: "text", text: "continue" }] },
+      session_id: "session-1",
+      parent_tool_use_id: null,
+    } as unknown as ClaudeSession["queuedSdkMessages"][number];
+    const session = createSession({
+      pendingUserTurnCount: 1,
+      queuedSdkMessages: [queuedMessage],
+    });
+    store.set(session);
+
+    await Effect.runPromise(
+      store.stopSession({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        externalSessionId: "session-1",
+      }),
+    );
+
+    expect(events).toEqual([
+      {
+        type: "transcript_retracted",
+        externalSessionId: "session-1",
+        timestamp: "2026-06-25T20:00:00.000Z",
+        messageIds: ["queued-1"],
+      },
+      expect.objectContaining({
+        type: "session_finished",
+        externalSessionId: "session-1",
+      }),
+    ]);
+  });
+
   test("notifies lifecycle listeners whenever a session is closed", async () => {
     const store = createClaudeAgentSdkSessionStore();
     const closedSessionIds: string[] = [];

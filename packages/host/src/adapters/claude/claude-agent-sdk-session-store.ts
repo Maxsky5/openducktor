@@ -42,6 +42,17 @@ export const createClaudeAgentSdkSessionStore = ({
   };
   const close = (session: ClaudeSession): void => {
     rejectPendingApprovals(session, "Claude session was stopped.");
+    const queuedMessageIds = session.queuedSdkMessages.flatMap((message) =>
+      message.uuid ? [message.uuid] : [],
+    );
+    if (queuedMessageIds.length > 0) {
+      emit?.(session, {
+        type: "transcript_retracted",
+        externalSessionId: session.externalSessionId,
+        timestamp: now(),
+        messageIds: queuedMessageIds,
+      });
+    }
     session.activity = "stopped";
     session.activeSdkUserTurnCount = 0;
     session.pendingUserTurnCount = 0;

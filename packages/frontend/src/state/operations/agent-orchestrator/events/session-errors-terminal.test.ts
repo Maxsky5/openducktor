@@ -297,6 +297,57 @@ describe("agent-orchestrator session errors and terminal state", () => {
     });
   });
 
+  test("keeps a terminal session error after the following finished event", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "session_error",
+      externalSessionId: "session-1",
+      message: "SDK stream failed.",
+      timestamp: "2026-02-22T08:00:10.000Z",
+    });
+    handleEvent({
+      type: "session_finished",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:11.000Z",
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("error");
+    expect(getLastSessionMessage(sessionsRef)).toMatchObject({
+      content: "SDK stream failed.",
+      meta: {
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      },
+    });
+  });
+
   test("normalizes JSON-wrapped session_error payloads before rendering the error notice", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
