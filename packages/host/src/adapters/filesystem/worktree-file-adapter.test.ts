@@ -83,7 +83,32 @@ describe("createWorktreeFileAdapter", () => {
       ).resolves.toEqual({
         canonicalPath: path.join(canonicalOutsideRoot, "task-1"),
         cleanupPath: path.join(canonicalOutsideRoot, "task-1"),
-        isSymlink: false,
+        isSymlink: true,
+        kind: "outside",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("classifies an existing cleanup path whose symlinked parent leaves the managed root", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    const outsideRoot = path.join(root, "outside");
+    const symlinkedParent = path.join(managedRoot, "runtime-link");
+    const outsideWorktree = path.join(outsideRoot, "task-1");
+    const aliasedWorktree = path.join(symlinkedParent, "task-1");
+    await mkdir(managedRoot, { recursive: true });
+    await mkdir(outsideWorktree, { recursive: true });
+    await symlink(outsideRoot, symlinkedParent);
+    const canonicalOutsideWorktree = await realpath(outsideWorktree);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, aliasedWorktree)),
+      ).resolves.toEqual({
+        canonicalPath: canonicalOutsideWorktree,
+        cleanupPath: canonicalOutsideWorktree,
+        isSymlink: true,
         kind: "outside",
       });
     } finally {

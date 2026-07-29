@@ -220,6 +220,40 @@ describe("TaskViewSync", () => {
     ).toBe(true);
   });
 
+  test("refreshes cached documents for existing tasks hidden from the kanban list", async () => {
+    const listTasks = mock(
+      async (_repoPath: string, requestedDoneVisibleDays?: number): Promise<TaskCard[]> =>
+        requestedDoneVisibleDays === undefined
+          ? [createTaskCardFixture({ id: "task-1", status: "closed" })]
+          : [],
+    );
+    const loadFreshDocument = mock(async () => ({
+      markdown: "# Updated hidden task",
+      updatedAt: "2026-04-10T13:10:00.000Z",
+    }));
+    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+      markdown: "# Stale",
+      updatedAt: null,
+    });
+
+    await sync.reconcileExternalEvent(
+      {
+        kind: "tasks_updated",
+        eventId: "event-hidden-task",
+        repoPath: "/repo",
+        taskIds: ["task-1"],
+        removedTaskIds: [],
+        emittedAt: "2026-04-10T13:10:00.000Z",
+      },
+      "/repo",
+    );
+
+    expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
+    expect(listTasks).toHaveBeenCalledWith("/repo", undefined);
+    expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
+  });
+
   test("invalidates inactive repository caches without fetching", async () => {
     const listTasks = mock(async () => [] as TaskCard[]);
     const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
@@ -366,6 +400,33 @@ describe("TaskViewSync", () => {
     expect(
       queryClient.getQueryState(documentQueryKeys.spec("/repo", "deleted-task"))?.isInvalidated,
     ).toBe(true);
+  });
+
+  test("refreshes active snapshot documents for existing tasks hidden from the kanban list", async () => {
+    const listTasks = mock(
+      async (_repoPath: string, requestedDoneVisibleDays?: number): Promise<TaskCard[]> =>
+        requestedDoneVisibleDays === undefined
+          ? [createTaskCardFixture({ id: "task-1", status: "closed" })]
+          : [],
+    );
+    const loadFreshDocument = mock(async () => ({
+      markdown: "# Updated hidden task",
+      updatedAt: "2026-04-10T13:10:00.000Z",
+    }));
+    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+    const documentKey = documentQueryKeys.spec("/repo", "task-1");
+    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
+    const unsubscribe = observeDocument(queryClient, documentKey);
+
+    try {
+      await sync.reconcileStreamSnapshot("/repo");
+
+      expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
+      expect(listTasks).toHaveBeenCalledWith("/repo", undefined);
+      expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("waits for fresh retained active documents while leaving inactive cached documents invalidated", async () => {

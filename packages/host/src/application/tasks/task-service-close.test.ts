@@ -144,6 +144,7 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
       Effect.succeed({
         canonicalPath: candidate,
         cleanupPath: candidate,
+        isSymlink: false,
         kind:
           candidate !== root && candidate.startsWith(`${root}/`)
             ? ("descendant" as const)

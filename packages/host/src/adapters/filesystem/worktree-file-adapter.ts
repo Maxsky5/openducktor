@@ -43,6 +43,43 @@ const isStrictPathDescendant = (root: string, candidate: string): boolean => {
     !relativePath.startsWith(`..${path.sep}`)
   );
 };
+const pathUsesSymlinkedComponent = async (
+  trustedRoot: string,
+  candidate: string,
+): Promise<boolean> => {
+  const absoluteRoot = path.resolve(trustedRoot);
+  const absoluteCandidate = path.resolve(candidate);
+  let scanRoot = absoluteRoot;
+  while (scanRoot !== absoluteCandidate && !isStrictPathDescendant(scanRoot, absoluteCandidate)) {
+    const parent = path.dirname(scanRoot);
+    if (parent === scanRoot) {
+      scanRoot = path.parse(absoluteCandidate).root;
+      break;
+    }
+    scanRoot = parent;
+  }
+  const relativeCandidate = path.relative(scanRoot, absoluteCandidate);
+  if (!relativeCandidate) {
+    return false;
+  }
+  let current = scanRoot;
+  for (const component of relativeCandidate.split(path.sep)) {
+    current = path.join(current, component);
+    const stats = await lstat(current).catch((cause: unknown) => {
+      if (hasErrorCode(cause, "ENOENT")) {
+        return null;
+      }
+      throw cause;
+    });
+    if (!stats) {
+      return false;
+    }
+    if (stats.isSymbolicLink()) {
+      return true;
+    }
+  }
+  return false;
+};
 const normalizeForComparison = (inputPath: string) =>
   Effect.tryPromise({
     try: () => realpath(inputPath),
@@ -378,17 +415,12 @@ export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
     return Effect.tryPromise({
       try: async () => {
         const absoluteCandidate = path.resolve(candidate);
-        const [canonicalRoot, canonicalCandidate, canonicalCandidateParent, candidateStats] =
+        const [canonicalRoot, canonicalCandidate, canonicalCandidateParent, isSymlink] =
           await Promise.all([
             resolvePathThroughExistingAncestor(root),
             resolvePathThroughExistingAncestor(absoluteCandidate),
             resolvePathThroughExistingAncestor(path.dirname(absoluteCandidate)),
-            lstat(absoluteCandidate).catch((cause: unknown) => {
-              if (hasErrorCode(cause, "ENOENT")) {
-                return null;
-              }
-              throw cause;
-            }),
+            pathUsesSymlinkedComponent(root, absoluteCandidate),
           ]);
         const cleanupPath = path.join(canonicalCandidateParent, path.basename(absoluteCandidate));
         const isDescendant =
@@ -397,7 +429,7 @@ export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
         return {
           canonicalPath: canonicalCandidate,
           cleanupPath,
-          isSymlink: candidateStats?.isSymbolicLink() ?? false,
+          isSymlink,
           kind: isDescendant ? ("descendant" as const) : ("outside" as const),
         };
       },

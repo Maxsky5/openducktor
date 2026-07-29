@@ -15,6 +15,8 @@ export const taskQueryKeys = {
   repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
   repoData: (repoPath: string, doneVisibleDays: number) =>
     [...taskQueryKeys.repoDataPrefix(repoPath), doneVisibleDays] as const,
+  unfilteredRepoData: (repoPath: string) =>
+    [...taskQueryKeys.repoDataPrefix(repoPath), "all"] as const,
   kanbanData: (repoPath: string, doneVisibleDays: number) =>
     taskQueryKeys.repoData(repoPath, doneVisibleDays),
 };
