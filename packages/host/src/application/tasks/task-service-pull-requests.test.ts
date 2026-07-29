@@ -3216,6 +3216,64 @@ describe("createTaskService pull requests", () => {
       ),
     ).rejects.toThrow("Task task-1 does not have a linked pull request.");
   });
+  test("requires worktree files before linking a merged pull request with cleanup", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
+        calls.push({ type: "list", input });
+        return Effect.succeed([task({ status: "human_review" })]);
+      },
+      getTaskMetadata(input) {
+        calls.push({ type: "metadata", input });
+        return Effect.succeed({
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        });
+      },
+      setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return Effect.succeed(true);
+      },
+    };
+    const service = createTaskService({
+      devServerService: createDirectMergeDevServerService(calls),
+      gitPort: createDirectMergeGitPort({
+        calls,
+        currentBranches: {
+          "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+        },
+      }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const error = await Effect.runPromise(
+      service
+        .linkMergedPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: pullRequest(),
+        })
+        .pipe(Effect.flip),
+    );
+
+    expect(error).toMatchObject({
+      _tag: "HostDependencyError",
+      message: "Worktree file port is required for git worktree mutation commands.",
+    });
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+    ]);
+  });
   test("links a merged pull request, closes the task, and cleans task state", async () => {
     const calls: unknown[] = [];
     const closedTask = task({ status: "closed" });

@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { requireWorktreeFiles } from "../../git/git-service-inputs";
 import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
@@ -110,6 +111,9 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         }
       }
 
+      if (cleanup !== null) {
+        yield* requireWorktreeFiles(dependencies.worktreeFiles);
+      }
       yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
       const postLink = yield* Effect.either(
         Effect.gen(function* () {
