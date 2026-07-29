@@ -6,6 +6,7 @@ import {
   createAgentSessionRecord,
   createApprovalSystemCommands,
   createBuildSettingsConfig,
+  createBuildStartWorktreeFiles,
   createBuildWorkspaceSettingsService,
   createDirectMergeDevServerService,
   createDirectMergeGitPort,
@@ -669,7 +670,7 @@ describe("createTaskService direct merge", () => {
       },
     });
   });
-  test("completes a published direct merge after sync and cleans builder state", async () => {
+  test("completes a published direct merge after sync and cleans task state", async () => {
     const calls: unknown[] = [];
     const closedTask = task({ status: "closed" });
     const buildSession = createAgentSessionRecord({
@@ -804,6 +805,7 @@ describe("createTaskService direct merge", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
     });
     await expect(
       Effect.runPromise(service.completeDirectMerge({ repoPath: "/repo", taskId: "task-1" })),
@@ -822,6 +824,7 @@ describe("createTaskService direct merge", () => {
         worktreePath: "/worktrees/repo/task-1",
         force: false,
       },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "listBranches", workingDir: "/repo" },
       { type: "isAncestor", workingDir: "/repo", ancestor: "odt/task-1", descendant: "main" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },

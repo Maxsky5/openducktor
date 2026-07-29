@@ -7,6 +7,7 @@ import type {
   TaskCard,
   WorkspaceRecord,
 } from "@openducktor/contracts";
+import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -320,10 +321,26 @@ const createAgentSessionWorkspaceSettingsService = (
       });
     },
   }) as unknown as WorkspaceSettingsService;
-const createBuildSettingsConfig = (existingPaths: Set<string>): SettingsConfigPort =>
+const createBuildSettingsConfig = (
+  existingPaths: Set<string>,
+  repoPath = "/repo",
+): SettingsConfigPort =>
   createSettingsConfigPort({
     readConfig() {
-      return Effect.dieMessage("unexpected read config");
+      return Effect.succeed(
+        globalConfigSchema.parse({
+          version: 2,
+          workspaces: {
+            repo: {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath,
+              defaultRuntimeKind: "opencode",
+              worktreeCopyPaths: [],
+            },
+          },
+        }),
+      );
     },
     writeConfig() {
       return Effect.dieMessage("unexpected write config");
@@ -416,6 +433,7 @@ const createBuildStartWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
       return Effect.succeed({
         canonicalPath: candidate,
         cleanupPath: candidate,
+        isSymlink: false,
         kind:
           candidate !== root && candidate.startsWith(`${root}/`)
             ? ("descendant" as const)

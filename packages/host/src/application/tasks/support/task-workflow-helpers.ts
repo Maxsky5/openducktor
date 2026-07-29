@@ -194,7 +194,7 @@ export const buildCompletionWorktreePath = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Worktree cleanup scripts require a builder worktree for task ${taskId}. Start Builder first.`,
+          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. Start Builder first.`,
           details: { taskId, worktreePath },
         }),
       );
@@ -205,7 +205,7 @@ export const buildCompletionWorktreePath = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Worktree cleanup scripts require a builder worktree for task ${taskId}. Start Builder first.`,
+          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. Start Builder first.`,
           details: { taskId, worktreePath },
         }),
       );

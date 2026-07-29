@@ -54,6 +54,7 @@ const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
       return Effect.succeed({
         canonicalPath: candidate,
         cleanupPath: candidate,
+        isSymlink: false,
         kind:
           candidate !== root && candidate.startsWith(`${root}/`)
             ? ("descendant" as const)
@@ -1194,7 +1195,7 @@ describe("createTaskService task mutations and reset", () => {
       "task_delete requires runtime session activity checks for tasks with workflow sessions.",
     );
   });
-  test("resets implementation after activity guard and cleans builder state", async () => {
+  test("resets implementation after activity guard and cleans task state", async () => {
     const calls: unknown[] = [];
     const currentSessions = [
       createAgentSessionRecord({

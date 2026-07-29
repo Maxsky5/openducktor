@@ -848,7 +848,7 @@ describe("createTaskService build start worktree handling", () => {
     );
   });
 
-  test("rolls back the build worktree when runtime startup fails", async () => {
+  test("rolls back the task worktree when runtime startup fails", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -1077,7 +1077,7 @@ describe("createTaskService build start worktree handling", () => {
     );
   });
 
-  test("does not roll back a build worktree when worktree creation fails before creating it", async () => {
+  test("does not roll back a task worktree when worktree creation fails before creating it", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -1134,7 +1134,7 @@ describe("createTaskService build start worktree handling", () => {
     ).toEqual([]);
   });
 
-  test("rolls back the build worktree when the task transition fails", async () => {
+  test("rolls back the task worktree when the task transition fails", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {

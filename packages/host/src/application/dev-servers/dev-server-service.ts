@@ -375,7 +375,7 @@ export const createDevServerService = ({
           return yield* Effect.fail(
             new HostValidationError({
               field: "taskId",
-              message: `Builder continuation cannot start until a builder worktree exists for task ${taskId}. Start Builder first.`,
+              message: `Builder continuation cannot start until a task worktree exists for task ${taskId}. Start Builder first.`,
               details: { repoPath, taskId },
             }),
           );

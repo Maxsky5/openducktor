@@ -378,11 +378,18 @@ export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
     return Effect.tryPromise({
       try: async () => {
         const absoluteCandidate = path.resolve(candidate);
-        const [canonicalRoot, canonicalCandidate, canonicalCandidateParent] = await Promise.all([
-          resolvePathThroughExistingAncestor(root),
-          resolvePathThroughExistingAncestor(absoluteCandidate),
-          resolvePathThroughExistingAncestor(path.dirname(absoluteCandidate)),
-        ]);
+        const [canonicalRoot, canonicalCandidate, canonicalCandidateParent, candidateStats] =
+          await Promise.all([
+            resolvePathThroughExistingAncestor(root),
+            resolvePathThroughExistingAncestor(absoluteCandidate),
+            resolvePathThroughExistingAncestor(path.dirname(absoluteCandidate)),
+            lstat(absoluteCandidate).catch((cause: unknown) => {
+              if (hasErrorCode(cause, "ENOENT")) {
+                return null;
+              }
+              throw cause;
+            }),
+          ]);
         const cleanupPath = path.join(canonicalCandidateParent, path.basename(absoluteCandidate));
         const isDescendant =
           isStrictPathDescendant(canonicalRoot, canonicalCandidate) &&
@@ -390,6 +397,7 @@ export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
         return {
           canonicalPath: canonicalCandidate,
           cleanupPath,
+          isSymlink: candidateStats?.isSymbolicLink() ?? false,
           kind: isDescendant ? ("descendant" as const) : ("outside" as const),
         };
       },

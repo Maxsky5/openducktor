@@ -349,7 +349,7 @@ describe("createDevServerService", () => {
       "Dev servers are already running for task task-1. Stop or restart them instead.",
     );
   });
-  test("requires a builder worktree before starting scripts", async () => {
+  test("requires a task worktree before starting scripts", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
       processPort,
@@ -359,7 +359,7 @@ describe("createDevServerService", () => {
     await expect(
       Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
     ).rejects.toThrow(
-      "Builder continuation cannot start until a builder worktree exists for task task-1. Start Builder first.",
+      "Builder continuation cannot start until a task worktree exists for task task-1. Start Builder first.",
     );
   });
   test("fails start when no dev server scripts are configured", async () => {

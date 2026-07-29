@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { cleanupMergedBuilderState } from "../support/builder-worktree-cleanup";
 import {
   fetchLinkedPullRequest,
   githubPullRequestSyncPolicy,
@@ -7,13 +6,14 @@ import {
 } from "../support/github-pull-requests";
 import {
   requireDependencies,
-  requireMergedBuilderCleanupDependencies,
+  requireMergedTaskCleanupDependencies,
   requirePullRequestSyncDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { taskListWithCurrent } from "../support/task-workflow-helpers";
+import { cleanupMergedTaskState } from "../support/task-worktree-cleanup";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService, TaskServiceError } from "../task-service";
 
@@ -26,6 +26,7 @@ export const createTaskPullRequestSyncUseCases = ({
   taskSessionBootstrapCoordinator,
   taskWorktreeService,
   terminalService,
+  worktreeFiles,
   workspaceSettingsService,
 }: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
   TaskService,
@@ -71,8 +72,15 @@ export const createTaskPullRequestSyncUseCases = ({
 
           if (updated.record.state === "merged" && task.status !== "closed") {
             const cleanupDependencies = yield* requireDependencies(() =>
-              requireMergedBuilderCleanupDependencies(
-                { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService },
+              requireMergedTaskCleanupDependencies(
+                {
+                  devServerService,
+                  gitPort,
+                  settingsConfig,
+                  taskWorktreeService,
+                  terminalService,
+                  worktreeFiles,
+                },
                 "repo_pull_request_sync",
               ),
             );
@@ -89,7 +97,7 @@ export const createTaskPullRequestSyncUseCases = ({
             );
             yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
             yield* completeTaskClosure({
-              cleanup: cleanupMergedBuilderState(
+              cleanup: cleanupMergedTaskState(
                 cleanupDependencies,
                 taskStore,
                 effectiveRepoPath,

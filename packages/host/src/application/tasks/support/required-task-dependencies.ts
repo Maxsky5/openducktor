@@ -204,28 +204,28 @@ export const requireBuildStartDependencies = (
     workspaceSettingsService,
   };
 };
-type MergedBuilderCleanupDependencies = {
+type MergedTaskCleanupDependencies = {
   devServerService: DevServerService;
   gitPort: GitPort;
   settingsConfig: SettingsConfigPort;
   taskWorktreeService: TaskWorktreeService;
   terminalService: TaskTerminalCleanupPort;
+  worktreeFiles?: WorktreeFilePort;
 };
-type MergedBuilderCleanupDependencyInput = {
-  [Key in keyof MergedBuilderCleanupDependencies]:
-    | MergedBuilderCleanupDependencies[Key]
-    | undefined;
+type MergedTaskCleanupDependencyInput = {
+  [Key in keyof MergedTaskCleanupDependencies]: MergedTaskCleanupDependencies[Key] | undefined;
 };
-export const requireMergedBuilderCleanupDependencies = (
+export const requireMergedTaskCleanupDependencies = (
   {
     devServerService,
     gitPort,
     settingsConfig,
     taskWorktreeService,
     terminalService,
-  }: MergedBuilderCleanupDependencyInput,
+    worktreeFiles,
+  }: MergedTaskCleanupDependencyInput,
   operation: "repo_pull_request_sync" | "task_direct_merge_complete",
-): MergedBuilderCleanupDependencies => {
+): MergedTaskCleanupDependencies => {
   if (!devServerService) {
     throw missingTaskDependency(`Dev server service is required for ${operation}.`);
   }
@@ -241,7 +241,14 @@ export const requireMergedBuilderCleanupDependencies = (
   if (!terminalService) {
     throw missingTaskDependency(`Terminal service is required for ${operation}.`);
   }
-  return { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService };
+  return {
+    devServerService,
+    gitPort,
+    settingsConfig,
+    taskWorktreeService,
+    terminalService,
+    ...(worktreeFiles ? { worktreeFiles } : {}),
+  };
 };
 export const requireDirectMergeDependencies = ({
   devServerService,
@@ -249,6 +256,7 @@ export const requireDirectMergeDependencies = ({
   settingsConfig,
   taskWorktreeService,
   terminalService,
+  worktreeFiles,
   workspaceSettingsService,
 }: {
   devServerService: DevServerService | undefined;
@@ -256,12 +264,9 @@ export const requireDirectMergeDependencies = ({
   settingsConfig: SettingsConfigPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   terminalService: TaskTerminalCleanupPort | undefined;
+  worktreeFiles: WorktreeFilePort | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
-}): {
-  devServerService: DevServerService;
-  settingsConfig: SettingsConfigPort;
-  taskWorktreeService: TaskWorktreeService;
-  terminalService: TaskTerminalCleanupPort;
+}): MergedTaskCleanupDependencies & {
   workspaceSettingsService: WorkspaceSettingsService;
 } & GithubRepositoryDependencies => {
   if (!devServerService) {
@@ -289,6 +294,7 @@ export const requireDirectMergeDependencies = ({
     settingsConfig,
     taskWorktreeService,
     terminalService,
+    ...(worktreeFiles ? { worktreeFiles } : {}),
     workspaceSettingsService,
   };
 };
@@ -298,13 +304,9 @@ export const requireLinkMergedPullRequestDependencies = (
   settingsConfig: SettingsConfigPort | undefined,
   taskWorktreeService: TaskWorktreeService | undefined,
   terminalService: TaskTerminalCleanupPort | undefined,
+  worktreeFiles: WorktreeFilePort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): {
-  devServerService: DevServerService;
-  gitPort: GitPort;
-  settingsConfig: SettingsConfigPort;
-  taskWorktreeService: TaskWorktreeService;
-  terminalService: TaskTerminalCleanupPort;
+): MergedTaskCleanupDependencies & {
   workspaceSettingsService: WorkspaceSettingsService;
 } => {
   if (!devServerService) {
@@ -339,6 +341,7 @@ export const requireLinkMergedPullRequestDependencies = (
     settingsConfig,
     taskWorktreeService,
     terminalService,
+    ...(worktreeFiles ? { worktreeFiles } : {}),
     workspaceSettingsService,
   };
 };

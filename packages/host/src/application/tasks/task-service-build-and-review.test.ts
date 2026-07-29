@@ -650,7 +650,7 @@ describe("createTaskService build and review", () => {
       ]),
     );
   });
-  test("rolls back the build worktree when pre-start hooks fail", async () => {
+  test("rolls back the task worktree when pre-start hooks fail", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       listTasks() {
@@ -830,7 +830,7 @@ describe("createTaskService build and review", () => {
       ]),
     );
   });
-  test("completes a build into AI review and runs post-complete hooks in the builder worktree", async () => {
+  test("completes a build into AI review and runs post-complete hooks in the task worktree", async () => {
     const calls: unknown[] = [];
     const updatedTask = task({ id: "task-1", status: "ai_review" });
     const taskStore: TaskStorePort = {

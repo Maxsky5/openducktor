@@ -12,7 +12,9 @@ import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
+import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
+import { requireWorktreeFiles } from "../../git/git-service-inputs";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type {
@@ -27,7 +29,7 @@ import type {
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import { createTaskCleanupProgressState, runTaskRuntimeCleanup } from "./task-cleanup-support";
 
-type BuildWorktreeCleanupError =
+type TaskWorktreeCleanupError =
   | GitPortError
   | HostValidationError
   | TaskWorktreeServiceError
@@ -97,13 +99,14 @@ export const findLatestCleanupTarget = (
     }
     return undefined;
   });
-export const cleanupMergedBuilderState = (
+export const cleanupMergedTaskState = (
   dependencies: {
     devServerService: DevServerService;
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
     terminalService: TaskTerminalCleanupPort;
+    worktreeFiles?: WorktreeFilePort;
   },
   taskStore: TaskStorePort,
   repoPath: string,
@@ -127,10 +130,23 @@ export const cleanupMergedBuilderState = (
       sourceBranch,
     );
     if (cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))) {
+      const worktreeFiles = yield* requireWorktreeFiles(dependencies.worktreeFiles);
       const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(cleanupTarget);
       const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
       if (!canonicalPathsEqual(canonicalCleanupTarget, canonicalRepoPath, canonicalPathPlatform)) {
-        yield* dependencies.gitPort.removeWorktree(repoPath, cleanupTarget, false);
+        yield* removeWorktreeAndFilesystemPath(
+          {
+            gitPort: dependencies.gitPort,
+            settingsConfig: dependencies.settingsConfig,
+            worktreeFiles,
+          },
+          {
+            force: false,
+            missingOutsideManagedRootPathPolicy: "fail",
+            repoPath,
+            worktreePath: cleanupTarget,
+          },
+        );
       }
     }
     const sourceBranchExists = (yield* dependencies.gitPort.listBranches(repoPath)).some(
@@ -146,20 +162,21 @@ export const cleanupMergedBuilderState = (
     ));
     yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete);
   });
-export const cleanupDirectMergeBuilderState = (
+export const cleanupDirectMergeTaskState = (
   dependencies: {
     devServerService: DevServerService;
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
     terminalService: TaskTerminalCleanupPort;
+    worktreeFiles?: WorktreeFilePort;
   },
   taskStore: TaskStorePort,
   repoPath: string,
   taskId: string,
   directMerge: DirectMergeRecord,
 ) =>
-  cleanupMergedBuilderState(
+  cleanupMergedTaskState(
     dependencies,
     taskStore,
     repoPath,
@@ -224,12 +241,12 @@ export const resolveBuildStartPoint = (
     return yield* Effect.fail(
       new HostValidationError({
         field: "targetBranch",
-        message: `Configured target branch is unavailable for build worktree creation: ${configuredTargetBranch}`,
+        message: `Configured target branch is unavailable for task worktree creation: ${configuredTargetBranch}`,
         details: { repoPath, targetBranch: configuredTargetBranch },
       }),
     );
   });
-export const rollbackFailedBuildWorktree = (
+export const rollbackFailedTaskWorktree = (
   dependencies: ReturnType<typeof requireBuildStartDependencies>,
   repoPath: string,
   worktreePath: string,
@@ -321,7 +338,7 @@ export const resolveRuntimeDescriptorForTaskSession = (
     }
     return descriptor;
   });
-export const loadBuilderBranchCleanup = (
+export const loadTaskBranchCleanup = (
   dependencies: {
     gitPort: GitPort;
     taskWorktreeService: TaskWorktreeService;
@@ -336,7 +353,7 @@ export const loadBuilderBranchCleanup = (
     sourceBranch: string;
     targetBranch: string;
   },
-  BuildWorktreeCleanupError
+  TaskWorktreeCleanupError
 > =>
   Effect.gen(function* () {
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
@@ -347,7 +364,7 @@ export const loadBuilderBranchCleanup = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `${operationLabel} requires a builder worktree for task ${taskId}. Start Builder first.`,
+          message: `${operationLabel} requires a task worktree for task ${taskId}. Start Builder first.`,
           details: { repoPath, taskId },
         }),
       );
@@ -359,7 +376,7 @@ export const loadBuilderBranchCleanup = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "workingDirectory",
-          message: `${operationLabel} requires a builder branch, but the builder worktree is detached.`,
+          message: `${operationLabel} requires a task branch, but the task worktree is detached.`,
           details: { workingDirectory: taskWorktree.workingDirectory },
         }),
       );
@@ -369,7 +386,7 @@ export const loadBuilderBranchCleanup = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "workingDirectory",
-          message: `${operationLabel} requires a builder branch name.`,
+          message: `${operationLabel} requires a task branch name.`,
           details: { workingDirectory: taskWorktree.workingDirectory },
         }),
       );
@@ -390,6 +407,6 @@ export const loadBuilderBranchCleanup = (
     return { sourceBranch, targetBranch: checkoutTarget };
   });
 export const canSkipRelinkedPullRequestCleanup = (message: string): boolean =>
-  message.includes("requires a builder worktree for task") ||
-  message.includes("the builder worktree is detached") ||
-  message.includes("requires a builder branch name");
+  message.includes("requires a task worktree for task") ||
+  message.includes("the task worktree is detached") ||
+  message.includes("requires a task branch name");

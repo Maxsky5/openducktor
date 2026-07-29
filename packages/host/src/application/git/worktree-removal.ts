@@ -88,14 +88,7 @@ export const removeWorktreeAndFilesystemPath = (
     ) {
       return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
     }
-    if (
-      initialCleanup.kind === "outside" &&
-      !canonicalPathsEqual(
-        initialCleanup.cleanupPath,
-        initialCleanup.canonicalPath,
-        canonicalPathPlatform,
-      )
-    ) {
+    if (initialCleanup.isSymlink) {
       return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
     }
     if (initialCleanup.kind === "outside" && initialCleanup.targetExists) {

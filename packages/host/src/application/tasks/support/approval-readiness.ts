@@ -10,9 +10,9 @@ import { HostValidationError } from "../../../effect/host-errors";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
-import { effectiveTargetBranchForTask } from "./builder-worktree-cleanup";
 import { type GithubRepositoryDependencies, githubProviderStatus } from "./github-pull-requests";
 import { loadDefaultMergeMethod } from "./task-workflow-helpers";
+import { effectiveTargetBranchForTask } from "./task-worktree-cleanup";
 export const loadOpenApprovalContext = (
   dependencies: GithubRepositoryDependencies & {
     settingsConfig: SettingsConfigPort;
@@ -44,7 +44,7 @@ export const loadOpenApprovalContext = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Human approval requires a builder worktree for task ${taskId}. Start Builder first.`,
+          message: `Human approval requires a task worktree for task ${taskId}. Start Builder first.`,
           details: { repoPath: effectiveRepoPath, taskId },
         }),
       );
@@ -56,8 +56,7 @@ export const loadOpenApprovalContext = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "workingDirectory",
-          message:
-            "Human approval requires a builder branch, but the builder worktree is detached.",
+          message: "Human approval requires a task branch, but the task worktree is detached.",
           details: { workingDirectory: taskWorktree.workingDirectory },
         }),
       );
@@ -67,7 +66,7 @@ export const loadOpenApprovalContext = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "workingDirectory",
-          message: "Human approval requires a builder branch name.",
+          message: "Human approval requires a task branch name.",
           details: { workingDirectory: taskWorktree.workingDirectory },
         }),
       );

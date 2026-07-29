@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-cleanup";
-import { requireMergedBuilderCleanupDependencies } from "../support/required-task-dependencies";
+import { requireMergedTaskCleanupDependencies } from "../support/required-task-dependencies";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
+import { cleanupDirectMergeTaskState } from "../support/task-worktree-cleanup";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskCompleteDirectMergeUseCase = ({
@@ -16,12 +16,20 @@ export const createTaskCompleteDirectMergeUseCase = ({
   taskSessionBootstrapCoordinator,
   taskWorktreeService,
   terminalService,
+  worktreeFiles,
 }: CreateTaskServiceInput): Pick<TaskService, "completeDirectMerge"> => ({
   completeDirectMerge(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const dependencies = requireMergedBuilderCleanupDependencies(
-        { devServerService, gitPort, settingsConfig, taskWorktreeService, terminalService },
+      const dependencies = requireMergedTaskCleanupDependencies(
+        {
+          devServerService,
+          gitPort,
+          settingsConfig,
+          taskWorktreeService,
+          terminalService,
+          worktreeFiles,
+        },
         "task_direct_merge_complete",
       );
       const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
@@ -77,7 +85,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
       }
 
       let task = current;
-      const cleanup = cleanupDirectMergeBuilderState(
+      const cleanup = cleanupDirectMergeTaskState(
         dependencies,
         taskStore,
         repoPath,

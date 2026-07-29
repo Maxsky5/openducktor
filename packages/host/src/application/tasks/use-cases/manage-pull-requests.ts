@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { ensureCleanBuilderWorktree } from "../../../domain/task";
+import { ensureCleanTaskWorktree } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import {
@@ -120,7 +120,7 @@ export const createTaskPullRequestManagementUseCases = ({
         repoConfig,
       );
       yield* Effect.try({
-        try: () => ensureCleanBuilderWorktree(approval),
+        try: () => ensureCleanTaskWorktree(approval),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -131,7 +131,7 @@ export const createTaskPullRequestManagementUseCases = ({
         return yield* Effect.fail(
           new HostValidationError({
             field: "taskId",
-            message: `Human approval requires a builder worktree for task ${taskId}. Start Builder first.`,
+            message: `Human approval requires a task worktree for task ${taskId}. Start Builder first.`,
             details: { repoPath: effectiveRepoPath, taskId },
           }),
         );
@@ -154,7 +154,7 @@ export const createTaskPullRequestManagementUseCases = ({
         return yield* Effect.fail(
           new HostValidationError({
             field: "taskId",
-            message: `Failed to push the builder branch before creating the pull request: ${pushResult.output}`,
+            message: `Failed to push the task branch before creating the pull request: ${pushResult.output}`,
             details: { repoPath: effectiveRepoPath, taskId },
           }),
         );

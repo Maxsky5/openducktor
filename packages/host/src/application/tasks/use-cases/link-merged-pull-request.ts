@@ -1,11 +1,6 @@
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
-  canSkipRelinkedPullRequestCleanup,
-  cleanupMergedBuilderState,
-  loadBuilderBranchCleanup,
-} from "../support/builder-worktree-cleanup";
-import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
 } from "../support/required-task-dependencies";
@@ -19,6 +14,11 @@ import {
   validateTaskTransitionEffect,
 } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
+import {
+  canSkipRelinkedPullRequestCleanup,
+  cleanupMergedTaskState,
+  loadTaskBranchCleanup,
+} from "../support/task-worktree-cleanup";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -30,6 +30,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   taskSessionBootstrapCoordinator,
   taskWorktreeService,
   terminalService,
+  worktreeFiles,
   workspaceSettingsService,
 }: CreateTaskServiceInput) => ({
   linkMergedPullRequest(input: Parameters<TaskService["linkMergedPullRequest"]>[0]) {
@@ -53,6 +54,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           settingsConfig,
           taskWorktreeService,
           terminalService,
+          worktreeFiles,
           workspaceSettingsService,
         ),
       );
@@ -87,7 +89,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
 
       let cleanup: { sourceBranch: string; targetBranch: string } | null = null;
       if (metadata.pullRequest === undefined) {
-        cleanup = yield* loadBuilderBranchCleanup(
+        cleanup = yield* loadTaskBranchCleanup(
           dependencies,
           current,
           repoPath,
@@ -96,7 +98,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         );
       } else {
         const cleanupResult = yield* Effect.either(
-          loadBuilderBranchCleanup(dependencies, current, repoPath, taskId, "Pull request linking"),
+          loadTaskBranchCleanup(dependencies, current, repoPath, taskId, "Pull request linking"),
         );
         if (cleanupResult._tag === "Right") {
           cleanup = cleanupResult.right;
@@ -113,7 +115,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         Effect.gen(function* () {
           yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
           const cleanupEffect = cleanup
-            ? cleanupMergedBuilderState(
+            ? cleanupMergedTaskState(
                 dependencies,
                 taskStore,
                 repoPath,

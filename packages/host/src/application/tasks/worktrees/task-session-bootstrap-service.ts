@@ -3,17 +3,17 @@ import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { buildBranchName } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
-import { resolveRuntimeDescriptorForTaskSession } from "../support/builder-worktree-cleanup";
-import {
-  prepareNewBuildWorktree,
-  validateExistingGitBuildWorktree,
-} from "../support/builder-worktree-start";
 import {
   requireBuildStartDependencies,
   requireDependencies,
 } from "../support/required-task-dependencies";
 import { validateTaskSessionWorkflowAvailable } from "../support/task-session-workflow-validation";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
+import { resolveRuntimeDescriptorForTaskSession } from "../support/task-worktree-cleanup";
+import {
+  prepareNewTaskWorktree,
+  validateExistingGitTaskWorktree,
+} from "../support/task-worktree-start";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 import type { TaskSessionBootstrapReservation } from "./task-session-bootstrap-coordinator";
 
@@ -138,7 +138,7 @@ export const createTaskSessionBootstrapUseCase = ({
                   }),
                 );
               }
-              yield* validateExistingGitBuildWorktree(
+              yield* validateExistingGitTaskWorktree(
                 dependencies,
                 canonicalRepoPath,
                 worktreePath,
@@ -146,7 +146,7 @@ export const createTaskSessionBootstrapUseCase = ({
                 branch,
               );
             } else {
-              const newWorktree = yield* prepareNewBuildWorktree(
+              const newWorktree = yield* prepareNewTaskWorktree(
                 dependencies,
                 repoConfig,
                 task,

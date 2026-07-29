@@ -59,6 +59,7 @@ describe("createWorktreeFileAdapter", () => {
       ).resolves.toEqual({
         canonicalPath: path.join(canonicalManagedRoot, "task-1"),
         cleanupPath: path.join(canonicalManagedRoot, "task-1"),
+        isSymlink: false,
         kind: "descendant",
       });
     } finally {
@@ -82,6 +83,7 @@ describe("createWorktreeFileAdapter", () => {
       ).resolves.toEqual({
         canonicalPath: path.join(canonicalOutsideRoot, "task-1"),
         cleanupPath: path.join(canonicalOutsideRoot, "task-1"),
+        isSymlink: false,
         kind: "outside",
       });
     } finally {
@@ -123,6 +125,7 @@ describe("createWorktreeFileAdapter", () => {
       ).resolves.toEqual({
         canonicalPath: canonicalTargetPath,
         cleanupPath: path.join(canonicalManagedRoot, "task-link"),
+        isSymlink: true,
         kind: "descendant",
       });
     } finally {
@@ -159,6 +162,7 @@ describe("createWorktreeFileAdapter", () => {
       ).resolves.toEqual({
         canonicalPath: canonicalManagedRoot,
         cleanupPath: canonicalManagedRoot,
+        isSymlink: false,
         kind: "outside",
       });
     } finally {
