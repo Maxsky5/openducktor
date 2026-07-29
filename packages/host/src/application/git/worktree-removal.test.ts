@@ -230,6 +230,42 @@ describe("removeWorktreeAndFilesystemPath", () => {
       `removeWorktree:/repo|${outsidePath}|true`,
     ]);
   });
+  test("removes a registered outside worktree through its canonical creation path", async () => {
+    const aliasPath = "/outside-alias/task-1";
+    const canonicalPath = "/outside/task-1";
+    let pathExistsCalls = 0;
+    const harness = createCleanupHarness({
+      isRegistered: (worktreePath) => worktreePath === canonicalPath,
+      pathExists: () => {
+        pathExistsCalls += 1;
+        return pathExistsCalls === 1;
+      },
+      resolvedPaths: [
+        cleanupResolution(canonicalPath, "outside"),
+        cleanupResolution(canonicalPath, "outside"),
+      ],
+    });
+
+    await expect(removeForcedWorktree(harness, aliasPath)).resolves.toBeUndefined();
+    expect(harness.calls).toEqual([
+      `isRegisteredWorktree:/repo|${canonicalPath}`,
+      `removeWorktree:/repo|${canonicalPath}|true`,
+    ]);
+  });
+  test("rejects a registered outside final symlink before calling Git", async () => {
+    const symlinkPath = "/outside/task-link";
+    const canonicalPath = "/outside/task-1";
+    const harness = createCleanupHarness({
+      isRegistered: (worktreePath) => worktreePath === canonicalPath,
+      resolvedPaths: [cleanupResolution(canonicalPath, "outside", symlinkPath, true)],
+    });
+
+    await expect(removeForcedWorktree(harness, symlinkPath)).rejects.toThrow(
+      "outside managed roots",
+    );
+    expect(harness.calls).not.toContain(`removeWorktree:/repo|${canonicalPath}|true`);
+    expect(harness.calls).not.toContain(`removePathIfPresent:${symlinkPath}`);
+  });
   test("propagates the removal error when a missing outside identity is unproved", async () => {
     const removalError = new Error("worktree removal race");
     const harness = createCleanupHarness({

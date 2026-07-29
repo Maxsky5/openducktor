@@ -281,6 +281,9 @@ export const requireDirectMergeDependencies = ({
   if (!terminalService) {
     throw missingTaskDependency("Terminal service is required for task_direct_merge.");
   }
+  if (!worktreeFiles) {
+    throw missingTaskDependency("Worktree file port is required for task_direct_merge.");
+  }
   if (!workspaceSettingsService) {
     throw missingTaskDependency("Workspace settings service is required for task_direct_merge.");
   }
@@ -294,7 +297,7 @@ export const requireDirectMergeDependencies = ({
     settingsConfig,
     taskWorktreeService,
     terminalService,
-    ...(worktreeFiles ? { worktreeFiles } : {}),
+    worktreeFiles,
     workspaceSettingsService,
   };
 };

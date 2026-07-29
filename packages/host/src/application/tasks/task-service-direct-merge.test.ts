@@ -20,6 +20,39 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService direct merge", () => {
+  test("requires worktree files before starting a local direct merge", async () => {
+    const calls: unknown[] = [];
+    const service = createTaskService({
+      devServerService: createDirectMergeDevServerService(calls),
+      gitPort: createDirectMergeGitPort({ calls }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      systemCommands: createApprovalSystemCommands(),
+      taskStore: {} as TaskStorePort,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+        defaultTargetBranch: { branch: "main" },
+      }),
+    });
+
+    const error = await Effect.runPromise(
+      service
+        .directMerge({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { mergeMethod: "merge_commit" },
+        })
+        .pipe(Effect.flip),
+    );
+
+    expect(error).toMatchObject({
+      _tag: "HostDependencyError",
+      message: "Worktree file port is required for task_direct_merge.",
+    });
+    expect(calls).toEqual([]);
+  });
   test("records a published direct merge and moves ai review to human review", async () => {
     const calls: unknown[] = [];
     const humanReviewTask = task({ status: "human_review" });
@@ -261,6 +294,7 @@ describe("createTaskService direct merge", () => {
       systemCommands: createApprovalSystemCommands(),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
@@ -382,6 +416,7 @@ describe("createTaskService direct merge", () => {
       systemCommands: createApprovalSystemCommands(),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
@@ -647,6 +682,7 @@ describe("createTaskService direct merge", () => {
           systemCommands: createApprovalSystemCommands(),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          worktreeFiles: createBuildStartWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",

@@ -49,19 +49,13 @@ const pathUsesSymlinkedComponent = async (
 ): Promise<boolean> => {
   const absoluteRoot = path.resolve(trustedRoot);
   const absoluteCandidate = path.resolve(candidate);
-  let scanRoot = absoluteRoot;
-  while (scanRoot !== absoluteCandidate && !isStrictPathDescendant(scanRoot, absoluteCandidate)) {
-    const parent = path.dirname(scanRoot);
-    if (parent === scanRoot) {
-      scanRoot = path.parse(absoluteCandidate).root;
-      break;
-    }
-    scanRoot = parent;
-  }
-  const relativeCandidate = path.relative(scanRoot, absoluteCandidate);
-  if (!relativeCandidate) {
+  if (absoluteCandidate === absoluteRoot) {
     return false;
   }
+  const scanRoot = isStrictPathDescendant(absoluteRoot, absoluteCandidate)
+    ? absoluteRoot
+    : path.dirname(absoluteCandidate);
+  const relativeCandidate = path.relative(scanRoot, absoluteCandidate);
   let current = scanRoot;
   for (const component of relativeCandidate.split(path.sep)) {
     current = path.join(current, component);

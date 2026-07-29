@@ -100,8 +100,12 @@ export const removeWorktreeAndFilesystemPath = (
         return yield* Effect.fail(cleanupRefused(effectiveWorktreePath));
       }
     }
+    const gitWorktreePath =
+      initialCleanup.kind === "outside" && initialCleanup.targetExists
+        ? initialCleanup.canonicalPath
+        : worktreePath;
     const removalResult = yield* Effect.either(
-      gitPort.removeWorktree(repoPath, worktreePath, force),
+      gitPort.removeWorktree(repoPath, gitWorktreePath, force),
     );
     if (removalResult._tag === "Left" && !force) {
       return yield* Effect.fail(removalResult.left);
