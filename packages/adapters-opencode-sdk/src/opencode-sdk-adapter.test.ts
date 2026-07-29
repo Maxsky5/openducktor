@@ -193,7 +193,13 @@ test("rejects repository scope before workflow-only runtime side effects", async
   const createClient = mock(() => {
     throw new Error("createClient should not be called");
   });
-  const adapter = new OpencodeSdkAdapter({ createClient });
+  const requireRepoRuntime = mock(async () => {
+    throw new Error("requireRepoRuntime should not be called");
+  });
+  const adapter = new OpencodeSdkAdapter({
+    createClient,
+    repoRuntimeResolver: { requireRepoRuntime },
+  });
   const sessionScope = { kind: "repository" } as const;
 
   await expect(
@@ -231,7 +237,30 @@ test("rejects repository scope before workflow-only runtime side effects", async
   ).rejects.toThrow(
     "Cannot fork OpenCode session with repository session context; workflow session context is required.",
   );
+  await expect(
+    adapter.sendUserMessage({
+      ...sessionRuntimeRef("external-session-send", { sessionScope }),
+      parts: [{ kind: "text", text: "Continue" }],
+    }),
+  ).rejects.toThrow(
+    "Cannot send OpenCode user message with repository session context; workflow session context is required.",
+  );
+  await expect(
+    adapter.sendUserMessage({
+      ...sessionRuntimeRef("external-session-compact", { sessionScope }),
+      parts: [
+        {
+          kind: "slash_command",
+          command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+        },
+      ],
+    }),
+  ).rejects.toThrow(
+    "Cannot send OpenCode user message with repository session context; workflow session context is required.",
+  );
   expect(createClient).toHaveBeenCalledTimes(0);
+  expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
+  expect((adapter as unknown as TestAdapterInternals).sessions.size).toBe(0);
 });
 
 const makeMockClient = (

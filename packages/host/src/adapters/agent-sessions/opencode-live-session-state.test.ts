@@ -113,6 +113,52 @@ describe("OpenCode host live-session state", () => {
     });
   });
 
+  test("keeps a retained workflow association across runtime discovery refreshes", () => {
+    const state = createState();
+    state.initialize([source("session-1", "request-1")], new Map());
+    state.retainControlSummary({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/session-1",
+      title: "BUILD task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      startedAt: "2026-07-16T10:01:00.000Z",
+      status: "running",
+    });
+
+    const changes = state.refresh([
+      {
+        ...source("session-1", "request-2"),
+        pendingApprovals: [],
+      },
+      source("session-2", "request-3"),
+    ]);
+
+    expect(state.listSnapshots()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ref: expect.objectContaining({ externalSessionId: "session-1" }),
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+        expect.objectContaining({
+          ref: expect.objectContaining({ externalSessionId: "session-2" }),
+          sessionAssociation: { kind: "unbound" },
+        }),
+      ]),
+    );
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        {
+          type: "session_upsert",
+          snapshot: expect.objectContaining({
+            ref: expect.objectContaining({ externalSessionId: "session-1" }),
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          }),
+        },
+      ]),
+    );
+  });
+
   test("clears all routes and snapshots when its runtime is released", () => {
     const state = createState();
     state.initialize(

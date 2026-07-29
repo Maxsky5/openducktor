@@ -579,6 +579,7 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
+    requireWorkflowAgentSessionScope(input.sessionScope, "send OpenCode user message");
     let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
     try {
       systemInvocation = classifySystemSlashCommandInvocation(input.parts);

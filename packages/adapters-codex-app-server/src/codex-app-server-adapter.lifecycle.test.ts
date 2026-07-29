@@ -142,6 +142,80 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
   });
 
+  test("rejects repository-scoped controls before runtime, state, or transport side effects", async () => {
+    const sessionScope = { kind: "repository" } as const;
+    const controls = [
+      {
+        name: "start",
+        externalSessionId: "thread/start-runtime-live",
+        invoke: (adapter: CodexAppServerAdapter) =>
+          adapter.startSession({
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo",
+            sessionScope,
+            runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+            systemPrompt: "Use the repo rules.",
+            model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+          }),
+      },
+      {
+        name: "resume",
+        externalSessionId: "thread-resume",
+        invoke: (adapter: CodexAppServerAdapter) =>
+          adapter.resumeSession({
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo",
+            externalSessionId: "thread-resume",
+            sessionScope,
+            runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+            systemPrompt: "Use the repo rules.",
+            model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+          }),
+      },
+      {
+        name: "fork",
+        externalSessionId: "thread/fork-runtime-live",
+        invoke: (adapter: CodexAppServerAdapter) =>
+          adapter.forkSession({
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo",
+            parentExternalSessionId: "thread-parent",
+            sessionScope,
+            runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+            systemPrompt: "Use the repo rules.",
+            model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+          }),
+      },
+      {
+        name: "send",
+        externalSessionId: "thread-send",
+        invoke: (adapter: CodexAppServerAdapter) =>
+          adapter.sendUserMessage(
+            codexUserMessageInput({
+              externalSessionId: "thread-send",
+              sessionScope,
+              parts: [{ kind: "text", text: "Continue" }],
+            }),
+          ),
+      },
+    ];
+
+    for (const control of controls) {
+      const { adapter, requireRepoRuntime, transportFactory, transports } = createHarness();
+
+      await expect(control.invoke(adapter)).rejects.toThrow(
+        "repository session context; workflow session context is required",
+      );
+      expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
+      expect(transportFactory).toHaveBeenCalledTimes(0);
+      expect(transports.size).toBe(0);
+      expect(localSessions(adapter).has(control.externalSessionId)).toBe(false);
+    }
+  });
+
   test("keeps started sessions addressable when thread naming fails", async () => {
     const transport = new NameFailingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
