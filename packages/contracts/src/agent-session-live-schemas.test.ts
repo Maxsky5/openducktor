@@ -19,6 +19,7 @@ const ref = {
 
 const snapshot = {
   ref,
+  sessionAssociation: { kind: "unbound" },
   activity: "waiting_for_permission",
   title: "Implement live state",
   startedAt: "2026-07-16T10:00:00.000Z",
@@ -113,7 +114,7 @@ describe("agent-session live contracts", () => {
     ).toBe(false);
   });
 
-  test("accepts only an optional normalized workflow scope for context loading", () => {
+  test("accepts an optional startable scope for context loading", () => {
     expect(
       agentSessionLiveLoadContextInputSchema.parse({
         ...ref,
@@ -124,16 +125,45 @@ describe("agent-session live contracts", () => {
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
     });
     expect(agentSessionLiveLoadContextInputSchema.parse(ref)).toEqual(ref);
+    expect(
+      agentSessionLiveLoadContextInputSchema.parse({
+        ...ref,
+        sessionScope: { kind: "repository" },
+      }),
+    ).toEqual({
+      ...ref,
+      sessionScope: { kind: "repository" },
+    });
 
     for (const nativeField of [
       { runtimeId: "runtime-private" },
       { runtimePolicy: { kind: "codex" } },
+      { sessionScope: { kind: "unbound" } },
       { sessionScope: { kind: "workflow", taskId: "task-1", role: "build", runtimeId: "x" } },
     ]) {
       expect(
         agentSessionLiveLoadContextInputSchema.safeParse({ ...ref, ...nativeField }).success,
       ).toBe(false);
     }
+  });
+
+  test("requires explicit workflow, repository, or unbound association on live snapshots", () => {
+    expect(
+      agentSessionLiveSnapshotSchema.parse({
+        ...snapshot,
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    ).toMatchObject({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
+    expect(
+      agentSessionLiveSnapshotSchema.parse({
+        ...snapshot,
+        sessionAssociation: { kind: "repository" },
+      }),
+    ).toMatchObject({ sessionAssociation: { kind: "repository" } });
+    const { sessionAssociation: _, ...withoutAssociation } = snapshot;
+    expect(agentSessionLiveSnapshotSchema.safeParse(withoutAssociation).success).toBe(false);
   });
 
   test("routes ordered envelope variants by repository without attachment identity", () => {

@@ -3,10 +3,10 @@ import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRuntimeEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
+  agentSessionAssociationSchema,
   agentSessionLiveRefSchema,
-  agentSessionWorkflowScopeSchema,
+  agentSessionScopeSchema,
 } from "./agent-session-schemas";
-import { agentRoleSchema } from "./agent-workflow-schemas";
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandDescriptorSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
@@ -78,7 +78,7 @@ export type AgentSessionUserMessagePart = z.infer<typeof agentSessionUserMessage
 export const agentSessionControlStartInputSchema = z
   .object({
     ...agentSessionControlWorkingDirectoryShape,
-    sessionScope: agentSessionWorkflowScopeSchema,
+    sessionScope: agentSessionScopeSchema,
     systemPrompt: z.string(),
     model: agentModelSelectionSchema.optional(),
   })
@@ -88,7 +88,7 @@ export type AgentSessionControlStartInput = z.infer<typeof agentSessionControlSt
 export const agentSessionControlResumeInputSchema = z
   .object({
     ...agentSessionControlRefShape,
-    sessionScope: agentSessionWorkflowScopeSchema,
+    sessionScope: agentSessionScopeSchema,
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
   })
@@ -98,7 +98,7 @@ export type AgentSessionControlResumeInput = z.infer<typeof agentSessionControlR
 export const agentSessionControlForkInputSchema = z
   .object({
     ...agentSessionControlWorkingDirectoryShape,
-    sessionScope: agentSessionWorkflowScopeSchema,
+    sessionScope: agentSessionScopeSchema,
     systemPrompt: z.string(),
     model: agentModelSelectionSchema.optional(),
     parentExternalSessionId: nonEmptyStringSchema,
@@ -110,7 +110,7 @@ export type AgentSessionControlForkInput = z.infer<typeof agentSessionControlFor
 export const agentSessionControlSendInputSchema = z
   .object({
     ...agentSessionControlRefShape,
-    sessionScope: agentSessionWorkflowScopeSchema,
+    sessionScope: agentSessionScopeSchema,
     parts: z.array(agentSessionUserMessagePartSchema).min(1),
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
@@ -151,7 +151,7 @@ export const agentSessionControlSummarySchema = z
     runtimeKind: runtimeKindSchema,
     workingDirectory: nonEmptyStringSchema,
     title: z.string().optional(),
-    role: agentRoleSchema.nullable(),
+    sessionAssociation: agentSessionAssociationSchema,
     startedAt: z.string().datetime({ offset: true }),
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
   })

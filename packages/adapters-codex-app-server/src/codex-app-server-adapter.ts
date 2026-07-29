@@ -828,6 +828,7 @@ export class CodexAppServerAdapter
     const route = this.subagents.routeForChild(session.threadId, session.runtimeId);
     return agentSessionLiveSnapshotSchema.parse({
       ref: codexSessionRef(session),
+      sessionAssociation: session.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
         runtimeActivity,
         pendingApprovals,
@@ -866,6 +867,7 @@ export class CodexAppServerAdapter
         ...codexSessionRef(parentSession),
         externalSessionId: route.childExternalSessionId,
       },
+      sessionAssociation: parentSession.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
         runtimeActivity: isRunning ? "running" : "idle",
         pendingApprovals,

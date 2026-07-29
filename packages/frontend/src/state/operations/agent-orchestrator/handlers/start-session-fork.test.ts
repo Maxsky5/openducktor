@@ -70,6 +70,9 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     ]);
 
     adapter.forkSession = async (input) => {
+      if (input.sessionScope.kind !== "workflow") {
+        throw new Error("Expected workflow session scope.");
+      }
       expect(input.sessionScope.taskId).toBe("task-1");
       expect(input.sessionScope.role).toBe("build");
       expect(input.parentExternalSessionId).toBe("external-source-build");
@@ -81,7 +84,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-forked-pr-session",
         startedAt: "2026-02-22T08:20:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -197,7 +200,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "fork-under-lease",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [];
@@ -261,7 +264,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "fork-stale-after-complete",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [];
@@ -322,7 +325,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "fork-persistence-failure",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [];
@@ -377,7 +380,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "fork-persistence-stop-failure",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [];
@@ -439,7 +442,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-forked-from-loaded-source",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [
@@ -561,7 +564,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-forked-from-runtime-connection",
         startedAt: "2026-02-22T08:20:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -628,7 +631,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-fork-history-failure",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => {
@@ -696,7 +699,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "fork-child-history-stop-failure",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => {
@@ -755,7 +758,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-forked-stale-after-history",
       startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.loadSessionHistory = async () => {

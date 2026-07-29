@@ -302,12 +302,10 @@ export type CodexSessionState = {
   summary: AgentSessionSummary;
   model?: AgentModelSelection;
   systemPrompt: string;
-  role: AgentRole | null;
   runtimeId: string;
   repoPath: string;
   threadId: string;
   workingDirectory: string;
-  taskId: string | null;
   runtimePolicy: AgentSessionRuntimePolicy;
   liveStatus?: {
     classification: AgentSessionActivity;

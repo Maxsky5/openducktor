@@ -44,18 +44,16 @@ describe("codex session lifecycle", () => {
     );
 
     expect(resumed).toMatchObject({
-      role: "planner",
       runtimeId: "runtime-1",
       repoPath: "/repo",
       threadId: "thread-1",
       workingDirectory: "/repo",
-      taskId: "task-1",
       model,
       summary: {
         externalSessionId: "thread-1",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        role: "planner",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         status: "running",
       },
       liveStatus: {
@@ -63,18 +61,16 @@ describe("codex session lifecycle", () => {
       },
     });
     expect(existingThreadSession).toMatchObject({
-      role: "planner",
       runtimeId: "runtime-1",
       repoPath: "/repo",
       threadId: "thread-1",
       workingDirectory: "/repo",
-      taskId: "task-1",
       model,
       summary: {
         externalSessionId: "thread-1",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        role: "planner",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         status: "running",
       },
     });

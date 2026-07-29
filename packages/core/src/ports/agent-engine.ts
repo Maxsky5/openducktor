@@ -1,8 +1,11 @@
 import type {
+  AgentSessionAssociation,
   AgentSessionControlForkInput,
   AgentSessionControlResumeInput,
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
+  AgentSessionScope,
+  AgentSessionWorkflowScope,
   CodexEffectivePolicy,
   AgentSessionHistoryMessage as ContractsAgentSessionHistoryMessage,
   FileDiff,
@@ -43,8 +46,15 @@ import type {
   SessionRef,
 } from "../types/agent-orchestrator";
 
-export type AgentSessionWorkflowScope = { kind: "workflow"; taskId: string; role: AgentRole };
-export type AgentSessionScope = AgentSessionWorkflowScope;
+export type {
+  AgentSessionAssociation,
+  AgentSessionRepositoryScope,
+  AgentSessionScope,
+  AgentSessionUnboundAssociation,
+  AgentSessionWorkflowScope,
+} from "@openducktor/contracts";
+
+export type AgentSessionRef = SessionRef & { sessionScope?: AgentSessionScope };
 export type WorkflowSessionRef = SessionRef & { sessionScope: AgentSessionWorkflowScope };
 export type AgentSessionRuntimePolicy =
   | { kind: "opencode" }
@@ -63,13 +73,21 @@ export const workflowAgentSessionScope = (
   role: AgentRole,
 ): AgentSessionWorkflowScope => ({ kind: "workflow", taskId, role });
 
-export const sessionScopeRole = (scope: AgentSessionScope): AgentRole => scope.role;
+export const isWorkflowAgentSessionScope = (
+  scope: AgentSessionAssociation | null | undefined,
+): scope is AgentSessionWorkflowScope => scope?.kind === "workflow";
+
 export const requireWorkflowAgentSessionScope = (
-  scope: AgentSessionScope | null | undefined,
+  scope: AgentSessionAssociation | null | undefined,
   action: string,
 ): AgentSessionWorkflowScope => {
   if (!scope) {
     throw new Error(`Cannot ${action} without workflow session context.`);
+  }
+  if (!isWorkflowAgentSessionScope(scope)) {
+    throw new Error(
+      `Cannot ${action} with ${scope.kind} session context; workflow session context is required.`,
+    );
   }
   return scope;
 };
@@ -96,7 +114,7 @@ export const toAgentRuntimePolicyBinding = (input: {
   return input as AgentRuntimePolicyBinding;
 };
 
-export type PolicyBoundSessionRef = (SessionRef | WorkflowSessionRef) &
+export type PolicyBoundSessionRef = AgentSessionRef &
   AgentRuntimePolicyBinding & {
     model?: AgentModelSelection;
     systemPrompt?: string;
@@ -209,7 +227,7 @@ export type AgentSessionSummary = {
   runtimeKind: RuntimeKind;
   workingDirectory: string;
   title?: string;
-  role: AgentRole | null;
+  sessionAssociation: AgentSessionAssociation;
   startedAt: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };

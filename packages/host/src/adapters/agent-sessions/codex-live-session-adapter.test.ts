@@ -59,6 +59,7 @@ const noBackgroundFailure = () => Effect.void;
 
 const liveSnapshot = (): AgentSessionLiveSnapshot => ({
   ref,
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   activity: "waiting_for_permission",
   title: "Live Codex session",
   startedAt: "2026-07-16T10:01:00.000Z",
@@ -126,7 +127,7 @@ const createControllerHarness = ({
     runtimeKind: "codex" as const,
     workingDirectory: "/repo/worktree",
     title: "Live Codex session",
-    role: "build" as const,
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
     startedAt: "2026-07-16T10:01:00.000Z",
     status: "running" as const,
   };
@@ -381,7 +382,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     }
   });
 
-  test("fails actionably when a direct Codex control omits workflow scope", async () => {
+  test("fails actionably when a direct Codex control lacks workflow context", async () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
@@ -400,7 +401,20 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
           parts: [{ kind: "text", text: "Hello" }],
         } as never),
       ),
-    ).rejects.toThrow("requires workflow session scope");
+    ).rejects.toThrow(
+      "Cannot run Codex live-session control 'send-user-message' without workflow session context.",
+    );
+    await expect(
+      Effect.runPromise(
+        prepared.adapter.sendUserMessage({
+          ...ref,
+          sessionScope: { kind: "repository" },
+          parts: [{ kind: "text", text: "Hello" }],
+        }),
+      ),
+    ).rejects.toThrow(
+      "Cannot run Codex live-session control 'send-user-message' with repository session context; workflow session context is required.",
+    );
     expect(harness.controlInputs.sends).toEqual([]);
   });
 

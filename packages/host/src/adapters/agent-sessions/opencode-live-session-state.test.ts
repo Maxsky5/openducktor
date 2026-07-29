@@ -18,6 +18,7 @@ const runtime: OpenCodeRuntimeInstance = {
 
 const source = (externalSessionId: string, requestId: string): OpencodeRuntimeSnapshotSource => ({
   externalSessionId,
+  sessionAssociation: { kind: "unbound" },
   title: externalSessionId,
   workingDirectory: `/repo/${externalSessionId}`,
   startedAt: "2026-07-16T10:01:00.000Z",

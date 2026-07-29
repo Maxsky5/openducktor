@@ -14,7 +14,7 @@ import type { CodexSessionState } from "./types";
 const createSession = (liveStatus?: CodexSessionState["liveStatus"]): CodexSessionState => ({
   summary: {
     externalSessionId: "thread-1",
-    role: null,
+    sessionAssociation: { kind: "unbound" },
     startedAt: "2026-05-07T00:00:00.000Z",
     status: liveStatus ? agentSessionStatusFromActivity(liveStatus.classification) : "idle",
   },

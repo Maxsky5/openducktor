@@ -1,4 +1,4 @@
-import type { AgentRole, AgentSessionSummary } from "@openducktor/core";
+import type { AgentSessionAssociation, AgentSessionSummary } from "@openducktor/core";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 import type {
   CodexThreadForkResult,
@@ -30,14 +30,14 @@ export const toSessionSummary = (input: {
   workingDirectory: string;
   startedAt: string;
   title?: string;
-  role: AgentRole | null;
+  sessionAssociation: AgentSessionAssociation;
   status: AgentSessionSummary["status"];
 }): AgentSessionSummary => ({
   externalSessionId: input.externalSessionId,
   runtimeKind: "codex",
   workingDirectory: input.workingDirectory,
   ...(input.title ? { title: input.title } : {}),
-  role: input.role,
+  sessionAssociation: input.sessionAssociation,
   startedAt: input.startedAt,
   status: input.status,
 });

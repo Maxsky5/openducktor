@@ -142,7 +142,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope ?? { kind: "unbound" },
         status: "idle",
       };
     };
@@ -314,7 +314,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-updated-runs",
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope ?? { kind: "unbound" },
         status: "idle",
       };
     };
@@ -560,7 +560,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-unexpected",
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -921,7 +921,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: input.sessionScope?.role ?? null,
+        sessionAssociation: input.sessionScope ?? { kind: "unbound" },
         status: "idle",
       };
     };

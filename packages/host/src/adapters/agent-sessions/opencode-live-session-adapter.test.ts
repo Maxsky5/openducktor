@@ -47,6 +47,7 @@ const nativeSource = (
   overrides: Partial<OpencodeRuntimeSnapshotSource> = {},
 ): OpencodeRuntimeSnapshotSource => ({
   externalSessionId: "session-1",
+  sessionAssociation: { kind: "unbound" },
   title: "Live OpenCode session",
   workingDirectory: "/repo/worktree",
   startedAt: "2026-07-16T10:01:00.000Z",
@@ -81,7 +82,7 @@ const controlSummary = {
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo/worktree",
   title: "Controlled session",
-  role: "build" as const,
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
   startedAt: "2026-07-16T10:02:00.000Z",
   status: "running" as const,
 };
@@ -230,6 +231,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     expect(snapshots).toEqual([
       {
         ref,
+        sessionAssociation: { kind: "unbound" },
         activity: "waiting_for_question",
         title: "Live OpenCode session",
         startedAt: "2026-07-16T10:01:00.000Z",
@@ -692,6 +694,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const otherRef = { ...ref, externalSessionId: "session-2" };
     const otherSnapshot: AgentSessionLiveSnapshot = {
       ref: otherRef,
+      sessionAssociation: { kind: "unbound" },
       activity: "idle",
       title: "Other runtime session",
       startedAt: "2026-07-16T10:02:00.000Z",

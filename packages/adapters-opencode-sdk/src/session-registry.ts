@@ -372,19 +372,20 @@ export const registerSession = (
   } & RegisterSessionStartEvent,
 ): AgentSessionSummary => {
   const startsActive = input.emitStartedEvent !== false;
+  const sessionAssociation = input.sessionInput.sessionScope ?? { kind: "unbound" };
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(input.sessionInput.sessionScope
+    ...(sessionAssociation.kind === "workflow"
       ? {
           title: formatWorkflowAgentSessionTitle(
-            input.sessionInput.sessionScope.role,
-            input.sessionInput.sessionScope.taskId,
+            sessionAssociation.role,
+            sessionAssociation.taskId,
           ),
         }
       : {}),
-    role: input.sessionInput.sessionScope?.role ?? null,
+    sessionAssociation,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",
   };

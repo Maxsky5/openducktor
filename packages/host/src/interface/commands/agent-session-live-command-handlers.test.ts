@@ -22,10 +22,25 @@ const startInput: AgentSessionControlStartInput = {
   systemPrompt: "Build the feature",
 };
 
+const controlSummary = (
+  input: Pick<AgentSessionControlStartInput, "runtimeKind" | "workingDirectory" | "sessionScope">,
+  externalSessionId: string,
+) => ({
+  externalSessionId,
+  runtimeKind: input.runtimeKind,
+  workingDirectory: input.workingDirectory,
+  title: "Build session",
+  sessionAssociation: input.sessionScope,
+  startedAt: "2026-07-16T10:00:00.000Z",
+  status: "idle" as const,
+});
+
 const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve"]) => {
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const snapshots: AgentSessionLiveSnapshot[] = [];
   const attachmentResolutions: string[] = [];
+  const forks: unknown[] = [];
+  const resumes: unknown[] = [];
   const sends: AgentSessionControlSendInput[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
@@ -55,6 +70,7 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
             workingDirectory: input.workingDirectory,
             externalSessionId: "session-1",
           },
+          sessionAssociation: input.sessionScope,
           activity: "idle",
           title: "Build session",
           startedAt: "2026-07-16T10:00:00.000Z",
@@ -63,18 +79,18 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
           contextUsage: null,
         };
         snapshots.push(snapshot);
-        return {
-          externalSessionId: "session-1",
-          runtimeKind: "opencode" as const,
-          workingDirectory: input.workingDirectory,
-          title: "Build session",
-          role: "build" as const,
-          startedAt: snapshot.startedAt,
-          status: "idle" as const,
-        };
+        return controlSummary(input, "session-1");
       }),
-    resumeSession: () => Effect.dieMessage("unexpected resume"),
-    forkSession: () => Effect.dieMessage("unexpected fork"),
+    resumeSession: (input) =>
+      Effect.sync(() => {
+        resumes.push(input);
+        return controlSummary(input, input.externalSessionId);
+      }),
+    forkSession: (input) =>
+      Effect.sync(() => {
+        forks.push(input);
+        return controlSummary(input, "fork-1");
+      }),
     sendUserMessage: (input) =>
       Effect.sync(() => {
         sends.push(input);
@@ -110,6 +126,8 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
   return {
     attachmentResolutions,
     envelopes,
+    forks,
+    resumes,
     router: createEffectHostCommandRouter({
       handlers: createAgentSessionLiveCommandHandlers(service, attachmentResolver),
     }),
@@ -120,12 +138,37 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
 
 describe("createAgentSessionLiveCommandHandlers", () => {
   test("parses and routes a normalized session-control command", async () => {
-    const { router, starts } = await createHarness();
+    const { forks, resumes, router, starts } = await createHarness();
 
     await expect(
       Effect.runPromise(router.invoke("agent_session_control_start", startInput)),
     ).resolves.toMatchObject({ externalSessionId: "session-1", runtimeKind: "opencode" });
     expect(starts).toEqual([startInput]);
+
+    const sessionScope = { kind: "repository" } as const;
+    const resumeInput = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope,
+    };
+    const forkInput = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      parentExternalSessionId: "session-1",
+      sessionScope,
+      systemPrompt: "Fork it",
+    };
+    await expect(
+      Effect.runPromise(router.invoke("agent_session_control_resume", resumeInput)),
+    ).resolves.toMatchObject({ sessionAssociation: sessionScope });
+    await expect(
+      Effect.runPromise(router.invoke("agent_session_control_fork", forkInput)),
+    ).resolves.toMatchObject({ sessionAssociation: sessionScope });
+    expect(resumes).toEqual([resumeInput]);
+    expect(forks).toEqual([forkInput]);
   });
 
   test("rejects native routing fields before invoking an adapter", async () => {

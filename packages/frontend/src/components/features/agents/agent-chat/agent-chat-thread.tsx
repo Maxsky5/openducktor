@@ -1,4 +1,4 @@
-import { type AgentSessionTodoItem, workflowAgentSessionScope } from "@openducktor/core";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
 import {
   memo,
@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
+import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
@@ -344,21 +345,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     syncBottomAfterComposerLayoutRef,
   } = model;
   const stableSessionIdentity = useStableAgentSessionIdentity(session);
-  const sessionScopeTaskId = session?.sessionScope?.taskId ?? null;
-  const sessionScopeRole = session?.sessionScope?.role ?? null;
+  const sessionScope = useStableAgentSessionScope(session?.sessionScope);
   const sessionIdentity = useMemo<AgentSessionTranscriptTarget | null>(() => {
     if (stableSessionIdentity === null) {
       return null;
     }
-    const sessionScope =
-      sessionScopeTaskId !== null && sessionScopeRole !== null
-        ? workflowAgentSessionScope(sessionScopeTaskId, sessionScopeRole)
-        : null;
     return {
       ...stableSessionIdentity,
       ...(sessionScope ? { sessionScope } : {}),
     };
-  }, [sessionScopeRole, sessionScopeTaskId, stableSessionIdentity]);
+  }, [sessionScope, stableSessionIdentity]);
   const {
     messagesContentRef,
     renderedTurns,

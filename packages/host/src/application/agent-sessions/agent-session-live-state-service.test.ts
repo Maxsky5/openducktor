@@ -28,6 +28,7 @@ const liveSnapshot = (
   runtimeKind: "codex" | "opencode" = "codex",
 ): AgentSessionLiveSnapshot => ({
   ref: sessionRef(externalSessionId, runtimeKind),
+  sessionAssociation: { kind: "unbound" },
   activity: "idle",
   title: `Session ${externalSessionId}`,
   startedAt: "2026-07-16T10:00:00.000Z",
@@ -96,6 +97,33 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  test("preserves repository association across snapshots, list, read, and events", async () => {
+    const { events, service } = createHarness();
+    const snapshot = {
+      ...liveSnapshot("repository-session"),
+      sessionAssociation: { kind: "repository" } as const,
+    };
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [snapshot] }),
+      ),
+    );
+
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
+      snapshot,
+    ]);
+    await expect(Effect.runPromise(service.read(snapshot.ref))).resolves.toEqual({
+      type: "live",
+      session: snapshot,
+    });
+    expect(events).toEqual([
+      { type: "session_upsert", session: snapshot },
+      { type: "snapshot", repoPath: "/repo", sessions: [snapshot] },
+    ]);
+  });
+
   test("publishes exactly one snapshot before a change queued during refresh", async () => {
     const { events, service } = createHarness();
     const entered = await Effect.runPromise(Deferred.make<void>());
@@ -919,7 +947,7 @@ describe("createAgentSessionLiveStateService", () => {
       externalSessionId: "persisted-session",
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/persisted-session",
-      role: "build" as const,
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
       startedAt: "2026-07-16T10:00:00.000Z",
       status: "idle" as const,
     };

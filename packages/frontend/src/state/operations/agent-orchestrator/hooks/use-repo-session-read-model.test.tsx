@@ -65,6 +65,7 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
     workingDirectory: record.workingDirectory,
     externalSessionId: record.externalSessionId,
   },
+  sessionAssociation: { kind: "unbound" },
   activity: "idle",
   title: "Builder",
   startedAt: record.startedAt,

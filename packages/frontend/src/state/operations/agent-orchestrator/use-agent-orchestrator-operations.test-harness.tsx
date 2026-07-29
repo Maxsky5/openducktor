@@ -41,6 +41,7 @@ export const createAgentSessionLiveSnapshotFixture = (
       externalSessionId: "external-1",
       ...refOverrides,
     },
+    sessionAssociation: { kind: "unbound" },
     activity: "idle",
     title: "BUILD task-1",
     startedAt: "2026-02-22T08:00:00.000Z",

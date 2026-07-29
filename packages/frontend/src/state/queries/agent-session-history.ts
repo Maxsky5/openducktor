@@ -46,8 +46,7 @@ export const runtimeSessionHistoryRefQueryOptions = (
       input.runtimeKind,
       normalizeWorkingDirectory(input.workingDirectory),
       input.externalSessionId,
-      input.sessionScope?.taskId ?? null,
-      input.sessionScope?.role ?? null,
+      input.sessionScope,
     ],
     queryFn: async () => {
       const runtimePolicy = await resolveAgentSessionRuntimePolicy({

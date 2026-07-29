@@ -9,7 +9,7 @@ const sessionSummary: AgentSessionSummary = {
   externalSessionId: "external-started",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-  role: "build",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   startedAt: "2026-02-22T09:00:00.000Z",
   status: "running",
 };

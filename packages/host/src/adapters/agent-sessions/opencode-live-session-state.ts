@@ -106,6 +106,7 @@ export const createOpenCodeLiveSessionState = ({
     return parseSnapshot(
       {
         ref,
+        sessionAssociation: source.sessionAssociation,
         activity: classifyActivity({
           runtimeActivity: source.runtimeActivity,
           pendingApprovals,
@@ -232,6 +233,7 @@ export const createOpenCodeLiveSessionState = ({
     const snapshot = parseSnapshot(
       {
         ref,
+        sessionAssociation: summary.sessionAssociation,
         activity: classifyActivity({
           runtimeActivity,
           pendingApprovals,

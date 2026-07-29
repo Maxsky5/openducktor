@@ -1,6 +1,7 @@
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
+  AgentSessionAssociation,
   AgentSessionRuntimeActivity,
   AgentSessionRuntimeSnapshotSource,
 } from "@openducktor/core";
@@ -48,6 +49,7 @@ export type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
 
 export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & {
   externalSessionId: string;
+  sessionAssociation: AgentSessionAssociation;
   workingDirectory: string;
 };
 
@@ -110,12 +112,15 @@ const normalizeSessionDirectory = (directory: unknown): string | undefined => {
 
 const toOpencodeLocalRuntimeSnapshot = (session: SessionRecord): OpencodeRuntimeSnapshotSource => ({
   externalSessionId: session.externalSessionId,
-  title: session.input.sessionScope
-    ? formatWorkflowAgentSessionTitle(
-        session.input.sessionScope.role,
-        session.input.sessionScope.taskId,
-      )
-    : "OpenCode",
+  sessionAssociation: session.summary.sessionAssociation,
+  title:
+    session.summary.title ??
+    (session.summary.sessionAssociation.kind === "workflow"
+      ? formatWorkflowAgentSessionTitle(
+          session.summary.sessionAssociation.role,
+          session.summary.sessionAssociation.taskId,
+        )
+      : "OpenCode"),
   workingDirectory: session.input.workingDirectory,
   startedAt: session.summary.startedAt,
   runtimeActivity: isLocalSessionBusy(session) ? "running" : "idle",
@@ -318,6 +323,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     const parentExternalSessionId = readParentExternalSessionId(session);
     return {
       externalSessionId: session.id,
+      sessionAssociation: { kind: "unbound" },
       ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
       title: requireSessionTitle(session.title, session.id),
       workingDirectory: normalizedDirectory,
