@@ -848,7 +848,7 @@ describe("createTaskService build start worktree handling", () => {
     );
   });
 
-  test("rolls back the build worktree when runtime startup fails", async () => {
+  test("rolls back the task worktree when runtime startup fails", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -928,7 +928,156 @@ describe("createTaskService build start worktree handling", () => {
     ).toBe(false);
   });
 
-  test("does not roll back a build worktree when worktree creation fails before creating it", async () => {
+  test("cleans an unregistered worktree residue so a later session can recreate it", async () => {
+    const calls: unknown[] = [];
+    const worktreePath = "/worktrees/repo/task-1";
+    const runtimeCreatedPath = `${worktreePath}/.serena`;
+    const existingPaths = new Set(["/repo"]);
+    const runtimeCreatedPaths = new Set<string>();
+    let registered = false;
+    const baseGitPort = createBuildStartGitPort({ calls });
+    const gitPort = {
+      ...baseGitPort,
+      createWorktree(
+        repoPath: string,
+        targetWorktreePath: string,
+        branch: string,
+        createBranch: boolean,
+        startPoint?: string,
+      ) {
+        return baseGitPort
+          .createWorktree(repoPath, targetWorktreePath, branch, createBranch, startPoint)
+          .pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                existingPaths.add(targetWorktreePath);
+                registered = true;
+              }),
+            ),
+          );
+      },
+      isRegisteredWorktree(repoPath: string, targetWorktreePath: string) {
+        return Effect.sync(() => {
+          calls.push({
+            type: "isRegisteredWorktree",
+            repoPath,
+            worktreePath: targetWorktreePath,
+          });
+          return registered;
+        });
+      },
+      removeWorktree(repoPath: string, targetWorktreePath: string, force: boolean) {
+        return Effect.gen(function* () {
+          yield* Effect.sync(() => {
+            calls.push({
+              type: "removeWorktree",
+              repoPath,
+              worktreePath: targetWorktreePath,
+              force,
+            });
+            registered = false;
+            runtimeCreatedPaths.add(`${targetWorktreePath}/.serena`);
+          });
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "test.removeWorktree",
+              message: "worktree directory changed during removal",
+            }),
+          );
+        });
+      },
+    };
+    const baseWorktreeFiles = createBuildStartWorktreeFiles(calls);
+    const worktreeFiles = {
+      ...baseWorktreeFiles,
+      removePathIfPresent(path: string) {
+        return Effect.sync(() => {
+          calls.push({
+            type: "removePathIfPresent",
+            path,
+            runtimeCreatedPathPresent: runtimeCreatedPaths.has(`${path}/.serena`),
+          });
+          existingPaths.delete(path);
+          runtimeCreatedPaths.delete(`${path}/.serena`);
+        });
+      },
+    };
+    const service = createTaskService({
+      taskStore: {
+        getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+      } as TaskStorePort,
+      gitPort,
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+      settingsConfig: createBuildSettingsConfig(existingPaths),
+      systemCommands: createBuildSystemCommands(calls),
+      worktreeFiles,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const failedSessionBootstrap = await Effect.runPromise(
+      service.taskSessionBootstrapPrepare({
+        repoPath: "/repo",
+        taskId: "task-1",
+        role: "spec",
+        runtimeKind: "opencode",
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        service.taskSessionBootstrapAbort({
+          repoPath: "/repo",
+          taskId: "task-1",
+          bootstrapId: failedSessionBootstrap.bootstrapId,
+        }),
+      ),
+    ).resolves.toBe(true);
+
+    expect(existingPaths.has(worktreePath)).toBe(false);
+    expect(runtimeCreatedPaths.has(runtimeCreatedPath)).toBe(false);
+    expect(calls).toContainEqual({
+      type: "isRegisteredWorktree",
+      repoPath: "/repo",
+      worktreePath,
+    });
+    expect(calls).toContainEqual({
+      type: "removePathIfPresent",
+      path: worktreePath,
+      runtimeCreatedPathPresent: true,
+    });
+
+    const laterSessionBootstrap = await Effect.runPromise(
+      service.taskSessionBootstrapPrepare({
+        repoPath: "/repo",
+        taskId: "task-1",
+        role: "spec",
+        runtimeKind: "opencode",
+      }),
+    );
+    expect(laterSessionBootstrap.workingDirectory).toBe(worktreePath);
+    expect(
+      calls.filter(
+        (call) =>
+          typeof call === "object" &&
+          call !== null &&
+          "type" in call &&
+          call.type === "createWorktree",
+      ),
+    ).toHaveLength(2);
+    await Effect.runPromise(
+      service.taskSessionBootstrapComplete({
+        repoPath: "/repo",
+        taskId: "task-1",
+        bootstrapId: laterSessionBootstrap.bootstrapId,
+      }),
+    );
+  });
+
+  test("does not roll back a task worktree when worktree creation fails before creating it", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -985,7 +1134,7 @@ describe("createTaskService build start worktree handling", () => {
     ).toEqual([]);
   });
 
-  test("rolls back the build worktree when the task transition fails", async () => {
+  test("rolls back the task worktree when the task transition fails", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {

@@ -126,7 +126,7 @@ describe("createTaskWorktreeService", () => {
         }),
       ),
     ).rejects.toThrow(
-      "Builder continuation cannot start until a builder worktree exists for task task-1. The resolved worktree points to the repository root.",
+      "Builder continuation cannot start until a task worktree exists for task task-1. The resolved worktree points to the repository root.",
     );
   });
 });

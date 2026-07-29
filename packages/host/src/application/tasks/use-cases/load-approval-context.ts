@@ -8,15 +8,15 @@ import {
 import { HostValidationError } from "../../../effect/host-errors";
 import { providerStatuses } from "../support/approval-readiness";
 import {
-  effectiveTargetBranchForTask,
-  findLatestCleanupTarget,
-} from "../support/builder-worktree-cleanup";
-import {
   requireApprovalContextDependencies,
   requireDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
+import {
+  effectiveTargetBranchForTask,
+  findLatestCleanupTarget,
+} from "../support/task-worktree-cleanup";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskApprovalContextUseCase = ({
@@ -110,8 +110,7 @@ export const createTaskApprovalContextUseCase = ({
         return yield* Effect.fail(
           new HostValidationError({
             field: "workingDirectory",
-            message:
-              "Human approval requires a builder branch, but the builder worktree is detached.",
+            message: "Human approval requires a task branch, but the task worktree is detached.",
             details: { workingDirectory: taskWorktree.workingDirectory },
           }),
         );
@@ -121,7 +120,7 @@ export const createTaskApprovalContextUseCase = ({
         return yield* Effect.fail(
           new HostValidationError({
             field: "workingDirectory",
-            message: "Human approval requires a builder branch name.",
+            message: "Human approval requires a task branch name.",
             details: { workingDirectory: taskWorktree.workingDirectory },
           }),
         );

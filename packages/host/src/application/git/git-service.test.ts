@@ -618,6 +618,17 @@ const createFakeWorktreeFiles = (calls: string[] = []): WorktreeFilePort => ({
   resolveWorktreePath(repoPath, worktreePath) {
     return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
   },
+  resolvePathWithinRoot(root, candidate) {
+    return Effect.succeed({
+      canonicalPath: candidate,
+      cleanupPath: candidate,
+      isSymlink: false,
+      kind:
+        candidate !== root && candidate.startsWith(`${root}/`)
+          ? ("descendant" as const)
+          : ("outside" as const),
+    });
+  },
   pathIsWithinRoot(root, candidate) {
     return Effect.tryPromise({
       try: async () => {
@@ -1035,6 +1046,25 @@ describe("createGitService", () => {
       "copyConfiguredPaths:/canonical/repo|/worktrees/repo-task|.env",
     ]);
   });
+  test("rejects dot segments before creating a worktree", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({ calls }),
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+    await expect(
+      Effect.runPromise(
+        service.createWorktree({
+          repoPath: "/repo",
+          worktreePath: "/worktrees/link/./repo-task",
+          branch: "feature/task",
+          createBranch: true,
+        }),
+      ),
+    ).rejects.toThrow("worktree path cannot contain '.' or '..' segments");
+    expect(calls).toEqual([]);
+  });
   test("fails create worktree through the Effect channel when settings config is missing", async () => {
     const calls: string[] = [];
     const service = createGitService({
@@ -1135,6 +1165,29 @@ describe("createGitService", () => {
       "removePathIfPresent:/managed/repo/task-1",
     ]);
   });
+  test("refuses existing paths outside managed roots before calling Git", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+      }),
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: "/outside/recreated-data",
+          force: true,
+        }),
+      ),
+    ).rejects.toThrow("outside managed roots");
+    expect(calls).toEqual([]);
+  });
   test("fails remove worktree through the Effect channel when settings config is missing", async () => {
     const calls: string[] = [];
     const service = createGitService({
@@ -1180,56 +1233,6 @@ describe("createGitService", () => {
     expect(error).toBeInstanceOf(HostDependencyError);
     expect(error).toMatchObject({ dependency: "worktreeFiles" });
     expect(calls).toEqual([]);
-  });
-  test("rejects forced stranded worktree cleanup outside managed roots", async () => {
-    const calls: string[] = [];
-    const service = createGitService({
-      gitPort: createFakeGitPort({
-        canonicalPaths: { "/repo": "/canonical/repo" },
-        gitRepositories: ["/canonical/repo"],
-        calls,
-        removeWorktreeErrors: {
-          "/canonical/repo|/outside/task-1|true": new Error("fatal: is not a working tree"),
-        },
-      }),
-      settingsConfig: createFakeSettingsConfig(createConfig()),
-      worktreeFiles: createFakeWorktreeFiles(calls),
-    });
-    await expect(
-      Effect.runPromise(
-        service.removeWorktree({
-          repoPath: "/repo",
-          worktreePath: "/outside/task-1",
-          force: true,
-        }),
-      ),
-    ).rejects.toThrow("outside managed roots");
-    expect(calls).toEqual(["removeWorktree:/canonical/repo|/outside/task-1|true"]);
-  });
-  test("rejects missing forced stranded worktree cleanup outside managed roots", async () => {
-    const calls: string[] = [];
-    const service = createGitService({
-      gitPort: createFakeGitPort({
-        canonicalPaths: { "/repo": "/canonical/repo" },
-        gitRepositories: ["/canonical/repo"],
-        calls,
-        removeWorktreeErrors: {
-          "/canonical/repo|/legacy/repo/task-1|true": new Error("fatal: is not a working tree"),
-        },
-      }),
-      settingsConfig: createFakeSettingsConfig(createConfig(), new Set(["/canonical/repo"])),
-      worktreeFiles: createFakeWorktreeFiles(calls),
-    });
-    await expect(
-      Effect.runPromise(
-        service.removeWorktree({
-          repoPath: "/repo",
-          worktreePath: "/legacy/repo/task-1",
-          force: true,
-        }),
-      ),
-    ).rejects.toThrow("outside managed roots");
-    expect(calls).toEqual(["removeWorktree:/canonical/repo|/legacy/repo/task-1|true"]);
   });
   test("resets a worktree selection after validating the current snapshot", async () => {
     const statusData: GitWorktreeStatusData = {

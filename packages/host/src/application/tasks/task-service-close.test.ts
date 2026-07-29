@@ -140,6 +140,16 @@ const createTaskWorktreeService = (workingDirectory: string | null): TaskWorktre
 const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
   ({
     resolveWorktreePath: (_repoPath: string, worktreePath: string) => worktreePath,
+    resolvePathWithinRoot: (root: string, candidate: string) =>
+      Effect.succeed({
+        canonicalPath: candidate,
+        cleanupPath: candidate,
+        isSymlink: false,
+        kind:
+          candidate !== root && candidate.startsWith(`${root}/`)
+            ? ("descendant" as const)
+            : ("outside" as const),
+      }),
     pathIsWithinRoot: (root: string, candidate: string) =>
       Effect.succeed(candidate === root || candidate.startsWith(`${root}/`)),
     removePathIfPresent: (path: string) => {

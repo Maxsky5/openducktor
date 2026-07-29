@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
-import { loadBuilderBranchCleanup } from "../support/builder-worktree-cleanup";
 import {
   findGithubPullRequestForBranch,
   requireGithubPullRequestContext,
@@ -11,6 +10,7 @@ import {
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
+import { loadTaskBranchCleanup } from "../support/task-worktree-cleanup";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
@@ -54,7 +54,7 @@ export const createTaskPullRequestDetectionUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
-      const builderContext = yield* loadBuilderBranchCleanup(
+      const taskContext = yield* loadTaskBranchCleanup(
         dependencies,
         current,
         effectiveRepoPath,
@@ -70,7 +70,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         dependencies,
         effectiveRepoPath,
         githubContext,
-        builderContext.sourceBranch,
+        taskContext.sourceBranch,
         "open",
       );
       if (openPullRequest !== undefined) {
@@ -89,7 +89,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         dependencies,
         effectiveRepoPath,
         githubContext,
-        builderContext.sourceBranch,
+        taskContext.sourceBranch,
         "all",
       );
       if (pullRequest?.record.state === "merged") {
@@ -101,8 +101,8 @@ export const createTaskPullRequestDetectionUseCase = ({
 
       return {
         outcome: "not_found",
-        sourceBranch: builderContext.sourceBranch,
-        targetBranch: builderContext.targetBranch,
+        sourceBranch: taskContext.sourceBranch,
+        targetBranch: taskContext.targetBranch,
       };
     });
   },

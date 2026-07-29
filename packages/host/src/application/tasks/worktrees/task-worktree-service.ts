@@ -58,7 +58,7 @@ export const createTaskWorktreeService = ({
       if (canonicalWorktreePath === canonicalRepoPath) {
         return yield* Effect.fail(
           new HostValidationError({
-            message: `Builder continuation cannot start until a builder worktree exists for task ${taskId}. The resolved worktree points to the repository root.`,
+            message: `Builder continuation cannot start until a task worktree exists for task ${taskId}. The resolved worktree points to the repository root.`,
           }),
         );
       }

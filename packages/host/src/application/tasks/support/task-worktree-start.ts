@@ -1,22 +1,22 @@
 import type { RepoConfig, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import {
   effectiveTargetBranchForTask,
   resolveBuildStartPoint,
-  rollbackFailedBuildWorktree,
-} from "./builder-worktree-cleanup";
-import type { requireBuildStartDependencies } from "./required-task-dependencies";
+  rollbackFailedTaskWorktree,
+} from "./task-worktree-cleanup";
 import { runHookCommandsAllowFailure } from "./workflow-hooks";
 
 type BuildStartDependencies = ReturnType<typeof requireBuildStartDependencies>;
 
-export type PreparedBuildWorktree = {
-  cleanup: () => ReturnType<typeof rollbackFailedBuildWorktree>;
+export type PreparedTaskWorktree = {
+  cleanup: () => ReturnType<typeof rollbackFailedTaskWorktree>;
   worktreePath: string;
 };
 
-export const validateExistingGitBuildWorktree = (
+export const validateExistingGitTaskWorktree = (
   dependencies: Pick<BuildStartDependencies, "gitPort">,
   canonicalRepoPath: string,
   worktreePath: string,
@@ -80,7 +80,7 @@ export const validateExistingGitBuildWorktree = (
     }
   });
 
-export const prepareNewBuildWorktree = (
+export const prepareNewTaskWorktree = (
   dependencies: BuildStartDependencies,
   repoConfig: RepoConfig,
   task: TaskCard,
@@ -93,15 +93,16 @@ export const prepareNewBuildWorktree = (
     yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
 
     let createdTrackingRef: string | null = null;
-    let createdBuildWorktree = false;
-    const cleanup = (): ReturnType<typeof rollbackFailedBuildWorktree> =>
-      createdBuildWorktree
-        ? rollbackFailedBuildWorktree(
+    let createdTaskWorktree = false;
+    const cleanup = (): ReturnType<typeof rollbackFailedTaskWorktree> =>
+      createdTaskWorktree
+        ? rollbackFailedTaskWorktree(
             dependencies,
             canonicalRepoPath,
             worktreePath,
             branch,
             createdTrackingRef,
+            worktreeBase,
           )
         : Effect.succeed("");
     const setupResult = yield* Effect.either(
@@ -124,7 +125,7 @@ export const prepareNewBuildWorktree = (
           true,
           startPoint.reference,
         );
-        createdBuildWorktree = true;
+        createdTaskWorktree = true;
 
         if (startPoint.upstreamRemote) {
           const upstreamSetup = yield* dependencies.gitPort.configureBranchUpstream(
@@ -172,5 +173,5 @@ export const prepareNewBuildWorktree = (
       );
     }
 
-    return { cleanup, worktreePath } satisfies PreparedBuildWorktree;
+    return { cleanup, worktreePath } satisfies PreparedTaskWorktree;
   });

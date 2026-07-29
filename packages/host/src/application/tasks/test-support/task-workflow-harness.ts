@@ -7,6 +7,7 @@ import type {
   TaskCard,
   WorkspaceRecord,
 } from "@openducktor/contracts";
+import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -91,6 +92,7 @@ const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePo
     copyConfiguredPaths: () => Effect.dieMessage("unexpected copy configured paths"),
     removePathIfPresent: () => Effect.dieMessage("unexpected remove path"),
     resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
+    resolvePathWithinRoot: () => Effect.dieMessage("unexpected path resolution"),
     pathIsWithinRoot: () => Effect.dieMessage("unexpected path root check"),
     ...port,
   }) as WorktreeFilePort;
@@ -319,10 +321,26 @@ const createAgentSessionWorkspaceSettingsService = (
       });
     },
   }) as unknown as WorkspaceSettingsService;
-const createBuildSettingsConfig = (existingPaths: Set<string>): SettingsConfigPort =>
+const createBuildSettingsConfig = (
+  existingPaths: Set<string>,
+  repoPath = "/repo",
+): SettingsConfigPort =>
   createSettingsConfigPort({
     readConfig() {
-      return Effect.dieMessage("unexpected read config");
+      return Effect.succeed(
+        globalConfigSchema.parse({
+          version: 2,
+          workspaces: {
+            repo: {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath,
+              defaultRuntimeKind: "opencode",
+              worktreeCopyPaths: [],
+            },
+          },
+        }),
+      );
     },
     writeConfig() {
       return Effect.dieMessage("unexpected write config");
@@ -410,6 +428,17 @@ const createBuildStartWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
     },
     resolveWorktreePath(repoPath, worktreePath) {
       return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
+    },
+    resolvePathWithinRoot(root, candidate) {
+      return Effect.succeed({
+        canonicalPath: candidate,
+        cleanupPath: candidate,
+        isSymlink: false,
+        kind:
+          candidate !== root && candidate.startsWith(`${root}/`)
+            ? ("descendant" as const)
+            : ("outside" as const),
+      });
     },
     pathIsWithinRoot(root, candidate) {
       return Effect.sync(() => {
@@ -602,6 +631,7 @@ const createBuildStartGitPort = ({
   });
 const createDirectMergeGitPort = ({
   calls,
+  canonicalPaths = {},
   currentBranches = {},
   branches = {},
   aheadBehind = {},
@@ -609,6 +639,7 @@ const createDirectMergeGitPort = ({
   removeWorktreeErrors = {},
 }: {
   calls: unknown[];
+  canonicalPaths?: Record<string, string>;
   currentBranches?: Record<string, GitCurrentBranch>;
   branches?: Record<string, GitBranch[]>;
   aheadBehind?: Record<string, CommitsAheadBehind>;
@@ -618,7 +649,7 @@ const createDirectMergeGitPort = ({
   createGitPort({
     canonicalizePath(path) {
       return Effect.sync(() => {
-        return path;
+        return canonicalPaths[path] ?? path;
       });
     },
     isGitRepository() {

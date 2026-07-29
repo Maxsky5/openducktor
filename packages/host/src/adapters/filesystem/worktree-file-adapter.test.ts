@@ -1,11 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import { createWorktreeFileAdapter as createEffectWorktreeFileAdapter } from "./worktree-file-adapter";
+import { createWorktreeFileAdapter } from "./worktree-file-adapter";
 
-const createWorktreeFileAdapter = (...args: Parameters<typeof createEffectWorktreeFileAdapter>) =>
-  createEffectWorktreeFileAdapter(...args);
 const createTempRoot = (): Promise<string> => mkdtemp(path.join(tmpdir(), "odt-worktree-file-"));
 describe("createWorktreeFileAdapter", () => {
   test("copies configured repository paths into a worktree", async () => {
@@ -42,6 +40,181 @@ describe("createWorktreeFileAdapter", () => {
       await expect(
         Effect.runPromise(files.copyConfiguredPaths(repo, worktree, ["../secret"])),
       ).rejects.toThrow("cannot traverse outside");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("resolves a missing cleanup path through a symlinked managed root", async () => {
+    const root = await createTempRoot();
+    const configuredRoot = path.join(root, "configured-worktrees");
+    const managedRoot = path.join(root, "managed-worktrees");
+    const missingWorktree = path.join(managedRoot, "task-1");
+    await mkdir(managedRoot, { recursive: true });
+    await symlink(managedRoot, configuredRoot);
+    const canonicalManagedRoot = await realpath(managedRoot);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(configuredRoot, missingWorktree)),
+      ).resolves.toEqual({
+        canonicalPath: path.join(canonicalManagedRoot, "task-1"),
+        cleanupPath: path.join(canonicalManagedRoot, "task-1"),
+        isSymlink: false,
+        kind: "descendant",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("classifies a missing cleanup path whose symlinked parent leaves the managed root", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    const outsideRoot = path.join(root, "outside");
+    const symlinkedParent = path.join(managedRoot, "runtime-link");
+    const missingWorktree = path.join(symlinkedParent, "task-1");
+    await mkdir(managedRoot, { recursive: true });
+    await mkdir(outsideRoot, { recursive: true });
+    await symlink(outsideRoot, symlinkedParent);
+    const canonicalOutsideRoot = await realpath(outsideRoot);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, missingWorktree)),
+      ).resolves.toEqual({
+        canonicalPath: path.join(canonicalOutsideRoot, "task-1"),
+        cleanupPath: path.join(canonicalOutsideRoot, "task-1"),
+        isSymlink: true,
+        kind: "outside",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("classifies an existing cleanup path whose symlinked parent leaves the managed root", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    const outsideRoot = path.join(root, "outside");
+    const symlinkedParent = path.join(managedRoot, "runtime-link");
+    const outsideWorktree = path.join(outsideRoot, "task-1");
+    const aliasedWorktree = path.join(symlinkedParent, "task-1");
+    await mkdir(managedRoot, { recursive: true });
+    await mkdir(outsideWorktree, { recursive: true });
+    await symlink(outsideRoot, symlinkedParent);
+    const canonicalOutsideWorktree = await realpath(outsideWorktree);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, aliasedWorktree)),
+      ).resolves.toEqual({
+        canonicalPath: canonicalOutsideWorktree,
+        cleanupPath: canonicalOutsideWorktree,
+        isSymlink: true,
+        kind: "outside",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("does not treat an outside creation path with a symlinked ancestor as a managed alias", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    const outsideRoot = path.join(root, "outside");
+    const outsideAlias = path.join(root, "outside-alias");
+    const outsideWorktree = path.join(outsideRoot, "task-1");
+    const aliasedWorktree = path.join(outsideAlias, "task-1");
+    await mkdir(managedRoot, { recursive: true });
+    await mkdir(outsideWorktree, { recursive: true });
+    await symlink(outsideRoot, outsideAlias);
+    const canonicalOutsideWorktree = await realpath(outsideWorktree);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, aliasedWorktree)),
+      ).resolves.toEqual({
+        canonicalPath: canonicalOutsideWorktree,
+        cleanupPath: canonicalOutsideWorktree,
+        isSymlink: false,
+        kind: "outside",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("classifies existing paths by their canonical containment", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    const managedWorktree = path.join(managedRoot, "task-1");
+    const outsideWorktree = path.join(root, "outside", "task-2");
+    await mkdir(managedWorktree, { recursive: true });
+    await mkdir(outsideWorktree, { recursive: true });
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, managedWorktree)),
+      ).resolves.toMatchObject({ kind: "descendant" });
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, outsideWorktree)),
+      ).resolves.toMatchObject({ kind: "outside" });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("keeps a final managed symlink as the filesystem cleanup entry", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    const targetPath = path.join(managedRoot, "task-target");
+    const symlinkPath = path.join(managedRoot, "task-link");
+    await mkdir(targetPath, { recursive: true });
+    await symlink(targetPath, symlinkPath);
+    const canonicalTargetPath = await realpath(targetPath);
+    const canonicalManagedRoot = await realpath(managedRoot);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, symlinkPath)),
+      ).resolves.toEqual({
+        canonicalPath: canonicalTargetPath,
+        cleanupPath: path.join(canonicalManagedRoot, "task-link"),
+        isSymlink: true,
+        kind: "descendant",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("classifies an outside symlink entry as outside even when its target is managed", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    const targetPath = path.join(managedRoot, "task-target");
+    const outsideRoot = path.join(root, "outside");
+    const symlinkPath = path.join(outsideRoot, "task-link");
+    await mkdir(targetPath, { recursive: true });
+    await mkdir(outsideRoot, { recursive: true });
+    await symlink(targetPath, symlinkPath);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, symlinkPath)),
+      ).resolves.toMatchObject({ isSymlink: true, kind: "outside" });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+  test("does not classify the managed root itself as a cleanup target", async () => {
+    const root = await createTempRoot();
+    const managedRoot = path.join(root, "managed-worktrees");
+    await mkdir(managedRoot, { recursive: true });
+    const canonicalManagedRoot = await realpath(managedRoot);
+    const files = createWorktreeFileAdapter();
+    try {
+      await expect(
+        Effect.runPromise(files.resolvePathWithinRoot(managedRoot, managedRoot)),
+      ).resolves.toEqual({
+        canonicalPath: canonicalManagedRoot,
+        cleanupPath: canonicalManagedRoot,
+        isSymlink: false,
+        kind: "outside",
+      });
     } finally {
       await rm(root, { force: true, recursive: true });
     }

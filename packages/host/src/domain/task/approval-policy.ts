@@ -2,7 +2,7 @@ import type { GitConflict, GitMergeMethod, TaskApprovalContext } from "@openduck
 import { canonicalTargetBranch, checkoutBranch } from "./task-branch-policy";
 import { TaskPolicyError } from "./task-policy-error";
 
-export const ensureCleanBuilderWorktree = (approval: TaskApprovalContext): void => {
+export const ensureCleanTaskWorktree = (approval: TaskApprovalContext): void => {
   if (!approval.hasUncommittedChanges) {
     return;
   }
@@ -13,7 +13,7 @@ export const ensureCleanBuilderWorktree = (approval: TaskApprovalContext): void 
       : `${approval.uncommittedFileCount} uncommitted files`;
   const pronoun = approval.uncommittedFileCount === 1 ? "it" : "them";
   throw TaskPolicyError.policy(
-    `Human approval is blocked because the builder worktree has ${fileLabel}. Commit or discard ${pronoun} before merging or opening a pull request.`,
+    `Human approval is blocked because the task worktree has ${fileLabel}. Commit or discard ${pronoun} before merging or opening a pull request.`,
   );
 };
 

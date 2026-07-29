@@ -5,6 +5,7 @@ import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
+  createBuildStartWorktreeFiles,
   createBuildWorkspaceSettingsService,
   createDirectMergeDevServerService,
   createDirectMergeGitPort,
@@ -25,7 +26,7 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService pull requests", () => {
-  test("detects and links an existing open pull request for the builder branch", async () => {
+  test("detects and links an existing open pull request for the task branch", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -751,7 +752,7 @@ describe("createTaskService pull requests", () => {
     });
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "setPullRequest" }));
   });
-  test("reports not_found when no pull request matches the builder branch", async () => {
+  test("reports not_found when no pull request matches the task branch", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask() {
@@ -953,7 +954,7 @@ describe("createTaskService pull requests", () => {
       targetBranch: "main",
     });
   });
-  test("creates a pull request from a clean builder worktree", async () => {
+  test("creates a pull request from a clean task worktree", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask() {
@@ -1569,7 +1570,7 @@ describe("createTaskService pull requests", () => {
       }),
     );
   });
-  test("rejects pull request upsert from a dirty builder worktree", async () => {
+  test("rejects pull request upsert from a dirty task worktree", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask() {
@@ -1823,7 +1824,7 @@ describe("createTaskService pull requests", () => {
         }),
       ),
     ).rejects.toThrow(
-      "Human approval is blocked because the builder worktree has 1 uncommitted file. Commit or discard it before merging or opening a pull request.",
+      "Human approval is blocked because the task worktree has 1 uncommitted file. Commit or discard it before merging or opening a pull request.",
     );
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "push" }));
   });
@@ -2238,6 +2239,7 @@ describe("createTaskService pull requests", () => {
           }),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          worktreeFiles: createBuildStartWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
@@ -3214,7 +3216,65 @@ describe("createTaskService pull requests", () => {
       ),
     ).rejects.toThrow("Task task-1 does not have a linked pull request.");
   });
-  test("links a merged pull request, closes the task, and cleans builder state", async () => {
+  test("requires worktree files before linking a merged pull request with cleanup", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
+        calls.push({ type: "list", input });
+        return Effect.succeed([task({ status: "human_review" })]);
+      },
+      getTaskMetadata(input) {
+        calls.push({ type: "metadata", input });
+        return Effect.succeed({
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        });
+      },
+      setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return Effect.succeed(true);
+      },
+    };
+    const service = createTaskService({
+      devServerService: createDirectMergeDevServerService(calls),
+      gitPort: createDirectMergeGitPort({
+        calls,
+        currentBranches: {
+          "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+        },
+      }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const error = await Effect.runPromise(
+      service
+        .linkMergedPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: pullRequest(),
+        })
+        .pipe(Effect.flip),
+    );
+
+    expect(error).toMatchObject({
+      _tag: "HostDependencyError",
+      message: "Worktree file port is required for git worktree mutation commands.",
+    });
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+    ]);
+  });
+  test("links a merged pull request, closes the task, and cleans task state", async () => {
     const calls: unknown[] = [];
     const closedTask = task({ status: "closed" });
     const buildSession = createAgentSessionRecord({
@@ -3352,6 +3412,7 @@ describe("createTaskService pull requests", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
@@ -3384,6 +3445,7 @@ describe("createTaskService pull requests", () => {
         worktreePath: "/worktrees/repo/task-1",
         force: false,
       },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "listBranches", workingDir: "/repo" },
       { type: "isAncestor", workingDir: "/repo", ancestor: "odt/task-1", descendant: "main" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: false },
@@ -3430,6 +3492,7 @@ describe("createTaskService pull requests", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeFiles: createBuildStartWorktreeFiles([]),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",

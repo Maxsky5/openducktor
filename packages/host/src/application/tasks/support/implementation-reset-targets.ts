@@ -5,8 +5,8 @@ import { HostDependencyError, HostValidationError } from "../../../effect/host-e
 import type { GitPort } from "../../../ports/git-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
-import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./builder-worktree-cleanup";
 import { appendTaskCleanupProgress, type TaskCleanupProgressState } from "./task-cleanup-support";
+import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 
 type CanonicalImplementationResetTarget = {
   branch: string;

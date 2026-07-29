@@ -148,7 +148,7 @@ export const configureBranchUpstream = (
       );
       return yield* Effect.fail(
         gitOperationError(
-          `Failed configuring upstream merge for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
+          `Failed configuring upstream merge for task worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
           "git.config.upstream-merge",
           error,
         ),
@@ -184,7 +184,7 @@ export const configureBranchUpstream = (
         );
         return yield* Effect.fail(
           gitOperationError(
-            `Failed creating upstream tracking ref ${trackingRef} for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
+            `Failed creating upstream tracking ref ${trackingRef} for task worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
             "git.update-ref.upstream-tracking",
             error,
           ),
@@ -228,7 +228,7 @@ export const configureBranchUpstream = (
       );
       return yield* Effect.fail(
         gitOperationError(
-          `Failed verifying upstream tracking for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
+          `Failed verifying upstream tracking for task worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
           "git.verify-upstream-tracking",
           error,
         ),

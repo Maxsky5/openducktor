@@ -50,6 +50,17 @@ const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
     resolveWorktreePath(repoPath, worktreePath) {
       return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
     },
+    resolvePathWithinRoot(root, candidate) {
+      return Effect.succeed({
+        canonicalPath: candidate,
+        cleanupPath: candidate,
+        isSymlink: false,
+        kind:
+          candidate !== root && candidate.startsWith(`${root}/`)
+            ? ("descendant" as const)
+            : ("outside" as const),
+      });
+    },
     pathIsWithinRoot(root, candidate) {
       return Effect.tryPromise({
         try: async () => {
@@ -945,17 +956,18 @@ describe("createTaskService task mutations and reset", () => {
       Effect.runPromise(
         createTaskService({
           devServerService: createDirectMergeDevServerService(calls),
-          gitPort: createDirectMergeGitPort({
-            calls,
-            branches: {
-              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-            },
-            removeWorktreeErrors: {
-              "/repo|/worktrees/repo/task-1|true": new Error(
-                "fatal: '/worktrees/repo/task-1' is not a working tree",
-              ),
-            },
-          }),
+          gitPort: {
+            ...createDirectMergeGitPort({
+              calls,
+              branches: {
+                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              },
+              removeWorktreeErrors: {
+                "/repo|/worktrees/repo/task-1|true": new Error("worktree removal race"),
+              },
+            }),
+            isRegisteredWorktree: () => Effect.succeed(false),
+          },
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskActivityGuard,
           taskStore,
@@ -993,8 +1005,9 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-  test("deletes tasks when a stale outside-root worktree path is already missing", async () => {
+  test("keeps a task when failed worktree removal leaves missing outside-root identity unproved", async () => {
     const calls: unknown[] = [];
+    const removalError = new Error("worktree removal race");
     const session = createAgentSessionRecord({ workingDirectory: "/legacy/repo/task-1" });
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -1027,17 +1040,22 @@ describe("createTaskService task mutations and reset", () => {
       Effect.runPromise(
         createTaskService({
           devServerService: createDirectMergeDevServerService(calls),
-          gitPort: createDirectMergeGitPort({
-            calls,
-            branches: {
-              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-            },
-            removeWorktreeErrors: {
-              "/repo|/legacy/repo/task-1|true": new Error(
-                "fatal: '/legacy/repo/task-1' is not a working tree",
-              ),
-            },
-          }),
+          gitPort: {
+            ...createDirectMergeGitPort({
+              calls,
+              branches: {
+                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              },
+              removeWorktreeErrors: {
+                "/repo|/legacy/repo/task-1|true": removalError,
+              },
+            }),
+            isRegisteredWorktree: (repoPath, worktreePath) =>
+              Effect.sync(() => {
+                calls.push({ type: "isRegisteredWorktree", repoPath, worktreePath });
+                return true;
+              }),
+          },
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskActivityGuard,
           taskStore,
@@ -1049,7 +1067,7 @@ describe("createTaskService task mutations and reset", () => {
           }),
         }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
       ),
-    ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
+    ).rejects.toThrow("worktree removal race");
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -1067,10 +1085,10 @@ describe("createTaskService task mutations and reset", () => {
         worktreePath: "/legacy/repo/task-1",
         force: true,
       },
-      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
-        type: "delete",
-        input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
+        type: "isRegisteredWorktree",
+        repoPath: "/repo",
+        worktreePath: "/legacy/repo/task-1",
       },
     ]);
   });
@@ -1177,7 +1195,7 @@ describe("createTaskService task mutations and reset", () => {
       "task_delete requires runtime session activity checks for tasks with workflow sessions.",
     );
   });
-  test("resets implementation after activity guard and cleans builder state", async () => {
+  test("resets implementation after activity guard and cleans task state", async () => {
     const calls: unknown[] = [];
     const currentSessions = [
       createAgentSessionRecord({

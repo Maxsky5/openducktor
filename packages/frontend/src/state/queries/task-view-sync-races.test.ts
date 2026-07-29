@@ -111,6 +111,10 @@ describe("TaskViewSync races", () => {
     const firstDocumentStarted = createDeferred<void>();
     const { queryClient, sync } = createSync(
       createPorts({
+        listTasks: async () => [
+          createTaskCardFixture({ id: "task-a", status: "open" }),
+          createTaskCardFixture({ id: "task-b", status: "open" }),
+        ],
         loadFreshDocument: async (_repoPath, taskId) => {
           if (taskId === "task-a") {
             firstDocumentStarted.resolve();
@@ -392,6 +396,61 @@ describe("TaskViewSync races", () => {
     } finally {
       snapshotList.resolve([createTaskCardFixture({ id: "task-1", status: "open" })]);
       freshDocument.resolve({ markdown: "# Fresh", updatedAt: "2026-04-10T13:11:00.000Z" });
+      unsubscribe();
+    }
+  });
+
+  test("retries a hidden-task lookup after a task-list-only successor cancels it", async () => {
+    const hiddenTaskLookup = createDeferred<TaskCard[]>();
+    const hiddenTaskLookupStarted = createDeferred<void>();
+    let hiddenTaskReads = 0;
+    const { queryClient, sync } = createSync(
+      createPorts({
+        listTasks: async (_repoPath, requestedDoneVisibleDays) => {
+          if (requestedDoneVisibleDays !== undefined) {
+            return [];
+          }
+          hiddenTaskReads += 1;
+          if (hiddenTaskReads === 1) {
+            hiddenTaskLookupStarted.resolve();
+            return hiddenTaskLookup.promise;
+          }
+          return [createTaskCardFixture({ id: "task-1", status: "closed" })];
+        },
+        loadFreshDocument: async () => ({
+          markdown: "# Fresh",
+          updatedAt: "2026-04-10T13:11:00.000Z",
+        }),
+      }),
+    );
+    const documentKey = documentQueryKeys.spec("/repo", "task-1");
+    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
+    const observer = new QueryObserver(queryClient, {
+      queryKey: documentKey,
+      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
+      staleTime: Infinity,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    try {
+      const snapshotResult = sync.reconcileStreamSnapshot("/repo").then(
+        () => null,
+        (error) => error,
+      );
+      await hiddenTaskLookupStarted.promise;
+
+      await sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+
+      expect(await snapshotResult).toBeNull();
+      expect(hiddenTaskReads).toBe(2);
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
+      ).toEqual({
+        markdown: "# Fresh",
+        updatedAt: "2026-04-10T13:11:00.000Z",
+      });
+    } finally {
+      hiddenTaskLookup.resolve([createTaskCardFixture({ id: "task-1", status: "closed" })]);
       unsubscribe();
     }
   });

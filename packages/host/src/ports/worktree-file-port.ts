@@ -3,6 +3,10 @@ import type { HostOperationError, HostValidationError } from "../effect/host-err
 
 export type WorktreeFileError = HostOperationError | HostValidationError;
 
+export type ResolvedPathWithinRoot =
+  | { canonicalPath: string; cleanupPath: string; isSymlink: boolean; kind: "descendant" }
+  | { canonicalPath: string; cleanupPath: string; isSymlink: boolean; kind: "outside" };
+
 export type WorktreeFilePort = {
   ensureDirectory(path: string): Effect.Effect<void, HostOperationError>;
   copyConfiguredPaths(
@@ -12,6 +16,10 @@ export type WorktreeFilePort = {
   ): Effect.Effect<void, WorktreeFileError>;
   removePathIfPresent(path: string): Effect.Effect<void, HostOperationError>;
   resolveWorktreePath(repoPath: string, worktreePath: string): string;
+  resolvePathWithinRoot(
+    root: string,
+    candidate: string,
+  ): Effect.Effect<ResolvedPathWithinRoot, HostOperationError>;
   pathIsWithinRoot(root: string, candidate: string): Effect.Effect<boolean, WorktreeFileError>;
 };
 

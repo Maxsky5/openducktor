@@ -16,7 +16,7 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService approval context", () => {
-  test("loads approval context from the active builder worktree", async () => {
+  test("loads approval context from the active task worktree", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -292,7 +292,7 @@ describe("createTaskService approval context", () => {
       targetBranch: "origin/release",
     });
   });
-  test("reports a missing builder worktree for approval context", async () => {
+  test("reports a missing task worktree for approval context", async () => {
     const taskStore: TaskStorePort = {
       getTask() {
         return Effect.tryPromise({

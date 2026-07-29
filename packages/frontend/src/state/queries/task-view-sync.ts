@@ -8,7 +8,7 @@ import { workspaceQueryKeys } from "./workspace";
 
 export type TaskViewSyncPorts = {
   loadSettings: () => Promise<SettingsSnapshot>;
-  listTasks: (repoPath: string, doneVisibleDays: number) => Promise<TaskCard[]>;
+  listTasks: (repoPath: string, doneVisibleDays?: number) => Promise<TaskCard[]>;
   loadFreshDocument: (
     repoPath: string,
     taskId: string,
@@ -89,13 +89,53 @@ export const createTaskViewSync = ({
     return queryClient.fetchQuery({ queryKey, queryFn: ports.loadSettings, staleTime: 0 });
   };
 
-  const fetchTasks = async (repoPath: string, doneVisibleDays: number): Promise<TaskCard[]> => {
+  const fetchTasks = async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+    const queryKey =
+      doneVisibleDays === undefined
+        ? taskQueryKeys.unfilteredRepoData(repoPath)
+        : taskQueryKeys.repoData(repoPath, doneVisibleDays);
     const taskData = await queryClient.fetchQuery({
-      queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
+      queryKey,
       queryFn: async () => ({ tasks: await ports.listTasks(repoPath, doneVisibleDays) }),
       staleTime: 0,
     });
     return taskData.tasks;
+  };
+
+  const retainExistingTaskIds = async (
+    repoPath: string,
+    visibleTasks: TaskCard[],
+    taskIds: string[],
+  ): Promise<string[]> => {
+    const visibleTaskIds = new Set(visibleTasks.map((task) => task.id));
+    if (taskIds.every((taskId) => visibleTaskIds.has(taskId))) {
+      return taskIds;
+    }
+    const allTasks = await fetchTasks(repoPath);
+    const existingTaskIds = new Set(allTasks.map((task) => task.id));
+    return taskIds.filter((taskId) => existingTaskIds.has(taskId));
+  };
+
+  const retainExistingSnapshotTaskIds = async (
+    repoPath: string,
+    doneVisibleDays: number,
+    taskIds: string[],
+  ): Promise<string[]> => {
+    const taskData = queryClient.getQueryData<{ tasks: TaskCard[] }>(
+      taskQueryKeys.repoData(repoPath, doneVisibleDays),
+    );
+    if (!taskData) {
+      throw new Error(`Task snapshot refresh for '${repoPath}' did not populate task data.`);
+    }
+    try {
+      return await retainExistingTaskIds(repoPath, taskData.tasks, taskIds);
+    } catch (error) {
+      if (!isCancellation(error)) throw error;
+      const successor = activeRefreshes.get(repoPath)?.promise;
+      if (!successor) throw error;
+      await successor;
+      return retainExistingSnapshotTaskIds(repoPath, doneVisibleDays, taskIds);
+    }
   };
 
   const refreshDocumentEntry = async (
@@ -290,12 +330,17 @@ export const createTaskViewSync = ({
         }
         await cancelRepoTaskQueries(repoPath);
         await invalidateRepoTaskQueries(queryClient, repoPath);
-        await fetchTasks(repoPath, doneVisibleDays);
+        const tasks = await fetchTasks(repoPath, doneVisibleDays);
         if (options.impact.kind === "refresh-documents") {
           await refreshDocuments(repoPath, options.impact.taskIds);
         }
         if (options.refreshDocumentsFor) {
-          await refreshDocuments(repoPath, options.refreshDocumentsFor);
+          const existingTaskIds = await retainExistingTaskIds(
+            repoPath,
+            tasks,
+            options.refreshDocumentsFor,
+          );
+          await refreshDocuments(repoPath, existingTaskIds);
         }
         if (options.refreshKanban) {
           await refreshCachedKanban(repoPath, doneVisibleDays);
@@ -403,15 +448,13 @@ export const createTaskViewSync = ({
           prepare: prepareSnapshotCaches,
           refreshKanban: false,
         });
-        const taskData = queryClient.getQueryData<{ tasks: TaskCard[] }>(
-          taskQueryKeys.repoData(activeRepoPath, doneVisibleDays),
+        const retainedTaskIds = new Set(
+          await retainExistingSnapshotTaskIds(
+            activeRepoPath,
+            doneVisibleDays,
+            activeDocumentEntries.map((entry) => entry.taskId),
+          ),
         );
-        if (!taskData) {
-          throw new Error(
-            `Task snapshot refresh for '${activeRepoPath}' did not populate task data.`,
-          );
-        }
-        const retainedTaskIds = new Set(taskData.tasks.map((task) => task.id));
         await refreshSnapshotDocumentEntries(
           activeRepoPath,
           activeDocumentEntries.filter((entry) => retainedTaskIds.has(entry.taskId)),
