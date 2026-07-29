@@ -437,4 +437,13 @@ describe("removeWorktreeAndFilesystemPath", () => {
     );
     expect(harness.calls).toEqual([]);
   });
+  test("rejects dot segments before inspecting or removing a worktree", async () => {
+    const harness = createCleanupHarness({
+      resolvedPaths: [cleanupResolution("/managed/worktrees/task-1", "descendant")],
+    });
+    await expect(
+      removeForcedWorktree(harness, "/managed/worktrees/link/../task-1"),
+    ).rejects.toThrow("worktree path cannot contain '.' or '..' segments");
+    expect(harness.calls).toEqual([]);
+  });
 });

@@ -54,6 +54,21 @@ export type GitWorktreeStatusInput = GitScopeInput & {
   diffScope: GitDiffScope;
   targetBranch: string;
 };
+export const validateWorktreePathSegments = (
+  worktreePath: string,
+): Effect.Effect<void, HostValidationError> => {
+  const segments =
+    process.platform === "win32" ? worktreePath.split(/[\\/]/) : worktreePath.split("/");
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    return Effect.fail(
+      new HostValidationError({
+        message: "worktree path cannot contain '.' or '..' segments",
+        field: "worktreePath",
+      }),
+    );
+  }
+  return Effect.void;
+};
 export const resolveGitWorkingDirectory = (
   gitPort: GitPort,
   repoPath: string,

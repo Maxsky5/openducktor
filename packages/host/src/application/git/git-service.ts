@@ -27,6 +27,7 @@ import {
   requireSettingsConfig,
   requireWorktreeFiles,
   resolveGitWorkingDirectory,
+  validateWorktreePathSegments,
 } from "./git-service-inputs";
 import type { GitService } from "./git-service-types";
 import {
@@ -230,6 +231,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
     createWorktree(input) {
       return Effect.gen(function* () {
         const { repoPath, worktreePath, branch, createBranch } = input;
+        yield* validateWorktreePathSegments(worktreePath);
         const config = yield* requireSettingsConfig(settingsConfig);
         const files = yield* requireWorktreeFiles(worktreeFiles);
         const canonicalRepoPath = yield* resolveGitWorkingDirectory(gitPort, repoPath, undefined);

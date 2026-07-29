@@ -1046,6 +1046,25 @@ describe("createGitService", () => {
       "copyConfiguredPaths:/canonical/repo|/worktrees/repo-task|.env",
     ]);
   });
+  test("rejects dot segments before creating a worktree", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({ calls }),
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+    await expect(
+      Effect.runPromise(
+        service.createWorktree({
+          repoPath: "/repo",
+          worktreePath: "/worktrees/link/./repo-task",
+          branch: "feature/task",
+          createBranch: true,
+        }),
+      ),
+    ).rejects.toThrow("worktree path cannot contain '.' or '..' segments");
+    expect(calls).toEqual([]);
+  });
   test("fails create worktree through the Effect channel when settings config is missing", async () => {
     const calls: string[] = [];
     const service = createGitService({

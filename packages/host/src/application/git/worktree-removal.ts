@@ -4,7 +4,7 @@ import { HostOperationError, HostValidationError } from "../../effect/host-error
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
-import { findRepoConfigByPath } from "./git-service-inputs";
+import { findRepoConfigByPath, validateWorktreePathSegments } from "./git-service-inputs";
 export type RemoveWorktreeAndFilesystemPathInput = {
   force: boolean;
   managedWorktreeBasePath?: string;
@@ -70,6 +70,7 @@ export const removeWorktreeAndFilesystemPath = (
   Effect.gen(function* () {
     const { gitPort, worktreeFiles } = dependencies;
     const { repoPath, worktreePath, force } = input;
+    yield* validateWorktreePathSegments(worktreePath);
     const effectiveWorktreePath = worktreeFiles.resolveWorktreePath(repoPath, worktreePath);
     if (yield* worktreeFiles.pathIsWithinRoot(effectiveWorktreePath, repoPath)) {
       return yield* Effect.fail(
