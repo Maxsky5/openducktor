@@ -565,7 +565,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(findSession(sessionsRef, "session-1")?.status).toBe("starting");
   });
 
-  test("settles pending outbound sends when the runtime emits idle", async () => {
+  test("keeps pending outbound sends running when early idle arrives before runtime activity", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -606,6 +606,22 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       type: "session_idle",
       externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
+    expect(findSession(sessionsRef, "session-1")?.pendingUserMessageStartedAt).toBe(123);
+
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "assistant-1",
+      message: "Done",
+      timestamp: "2026-02-22T08:00:04.000Z",
+    });
+    handleEvent({
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:05.000Z",
     });
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");

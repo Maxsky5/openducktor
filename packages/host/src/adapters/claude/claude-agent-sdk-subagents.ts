@@ -8,6 +8,7 @@ import {
   isClaudeToolUseRetracted,
   retireClaudeSubagentTask,
 } from "./claude-agent-sdk-transcript-correlation";
+import { settleClaudeStreamedAssistantText } from "./claude-agent-sdk-transcript-retractions";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeSubagentSession = {
@@ -200,6 +201,36 @@ const releaseSubagentEventSession = (
   }
 };
 
+const emitCompletedSubagentAssistantMessage = (
+  emit: (event: AgentEvent) => void,
+  session: ClaudeSubagentSession,
+  toolUseId: string | undefined,
+  timestamp: string,
+): void => {
+  const childSession = toolUseId
+    ? session.subagentEventSessionsByToolUseId?.get(toolUseId)
+    : undefined;
+  const pending = childSession?.pendingSubagentAssistantMessage;
+  if (!childSession || !pending) {
+    return;
+  }
+  emit({
+    type: "assistant_message",
+    externalSessionId: childSession.externalSessionId,
+    timestamp,
+    messageId: pending.messageId,
+    message: pending.text,
+    ...(pending.model ? { model: pending.model } : {}),
+  });
+  settleClaudeStreamedAssistantText({
+    emit,
+    preserveMessageId: pending.messageId,
+    session: childSession,
+    timestamp,
+  });
+  delete childSession.pendingSubagentAssistantMessage;
+};
+
 export const emitClaudeAgentToolResultSubagentPart = ({
   emit,
   input,
@@ -292,6 +323,9 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     },
   });
   if (status !== "running") {
+    if (status === "completed") {
+      emitCompletedSubagentAssistantMessage(emit, session, toolUseId, timestamp);
+    }
     releaseSubagentEventSession(session, toolUseId);
   }
 };
@@ -418,5 +452,9 @@ export const handleClaudeSubagentSystemMessage = ({
       ...(message.output_file ? { metadata: { outputFile: message.output_file } } : {}),
     },
   );
-  releaseSubagentEventSession(session, subagentToolUseId(session, message.task_id, toolUseId));
+  const resolvedToolUseId = subagentToolUseId(session, message.task_id, toolUseId);
+  if (message.status === "completed") {
+    emitCompletedSubagentAssistantMessage(emit, session, resolvedToolUseId, timestamp);
+  }
+  releaseSubagentEventSession(session, resolvedToolUseId);
 };

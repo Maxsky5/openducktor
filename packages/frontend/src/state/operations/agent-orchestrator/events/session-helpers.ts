@@ -46,6 +46,13 @@ export const settleSessionToIdle = (
     if (current.status === "starting") {
       return current;
     }
+    if (
+      current.pendingUserMessageStartedAt !== undefined &&
+      current.pendingApprovals.length === 0 &&
+      current.pendingQuestions.length === 0
+    ) {
+      return current;
+    }
 
     shouldClear = shouldClearTurnFromCurrentState(current);
     const messages = settleDanglingTodoToolMessages(current, timestamp);

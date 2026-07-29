@@ -40,6 +40,24 @@ export const addClaudeHistoryFinishStep = (
 export const isLiveFinalAssistantStopReason = (stopReason: string | undefined): boolean =>
   stopReason === "end_turn" || stopReason === "stop_sequence";
 
+export const moveNestedResultToEnd = (
+  history: AgentSessionHistoryMessage[],
+  message: MutableAssistantHistoryMessage,
+  timestamp: string,
+  includeNestedEntries: boolean | undefined,
+): void => {
+  if (!includeNestedEntries) {
+    return;
+  }
+  const index = history.indexOf(message);
+  if (index < 0 || index === history.length - 1) {
+    return;
+  }
+  history.splice(index, 1);
+  message.timestamp = timestamp;
+  history.push(message);
+};
+
 type ProjectClaudeHistoryAssistantMessageInput = {
   entry: ClaudeHistoryMessage;
   entryIndex: number;

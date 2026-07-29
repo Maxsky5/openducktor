@@ -3,6 +3,94 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history subagents", () => {
+  test("places a completed subagent response after tool work that followed its forwarded text", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-forwarded-text",
+          session_id: "session-1",
+          parent_tool_use_id: "task-tool-1",
+          timestamp: "2026-06-26T11:04:10.000Z",
+          message: {
+            id: "response-1",
+            role: "assistant",
+            content: [{ type: "text", text: "Repository review complete." }],
+            stop_reason: null,
+          },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-read",
+          session_id: "session-1",
+          parent_tool_use_id: "task-tool-1",
+          timestamp: "2026-06-26T11:04:11.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "read-1",
+                name: "Read",
+                input: { file_path: "/repo/package.json" },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "read-result-1",
+          session_id: "session-1",
+          parent_tool_use_id: "task-tool-1",
+          timestamp: "2026-06-26T11:04:12.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "read-1",
+                content: "package contents",
+              },
+            ],
+          },
+        }),
+        {
+          type: "result",
+          uuid: "result-1",
+          timestamp: "2026-06-26T11:04:13.000Z",
+          subtype: "success",
+          is_error: false,
+          result: "Repository review complete.",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          usage: { input_tokens: 2, output_tokens: 3 },
+        },
+      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      { includeNestedEntries: true },
+    );
+
+    const finalIndex = history.findIndex(
+      (message) =>
+        message.role === "assistant" &&
+        message.parts.some((part) => part.kind === "step" && part.phase === "finish"),
+    );
+    const toolIndex = history.findIndex(
+      (message) =>
+        message.role === "assistant" &&
+        message.parts.some((part) => part.kind === "tool" && part.callId === "read-1"),
+    );
+    expect(toolIndex).toBeGreaterThanOrEqual(0);
+    expect(finalIndex).toBeGreaterThan(toolIndex);
+    expect(history[finalIndex]).toMatchObject({
+      messageId: "response-1",
+      timestamp: "2026-06-26T11:04:13.000Z",
+      text: "Repository review complete.",
+    });
+  });
+
   test("does not hydrate subagent sidechain messages into the parent transcript", () => {
     const history = toClaudeHistoryMessages(
       [

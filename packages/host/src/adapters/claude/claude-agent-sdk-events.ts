@@ -239,22 +239,17 @@ const handleAssistantMessage = ({
     );
   const stopReason = readStringProp(message.message, "stop_reason");
   const isForwardedSubagentText = isClaudeSubagentTranscriptTarget(session.externalSessionId);
-  const isFinalAssistantText =
-    text.length > 0 &&
-    !hasToolUse &&
-    (stopReason === "end_turn" ||
-      stopReason === "stop_sequence" ||
-      (!stopReason && isForwardedSubagentText));
+  const hasFinalStopReason = stopReason === "end_turn" || stopReason === "stop_sequence";
+  const isPendingSubagentAssistantText =
+    text.length > 0 && !hasToolUse && !stopReason && isForwardedSubagentText;
+  const isFinalAssistantText = text.length > 0 && !hasToolUse && hasFinalStopReason;
   const responseId = readStringProp(message.message, "id");
-  const usesResponseIdentity =
-    stopReason === "end_turn" ||
-    stopReason === "stop_sequence" ||
-    (!stopReason && isForwardedSubagentText && isFinalAssistantText);
+  const usesResponseIdentity = hasFinalStopReason || isPendingSubagentAssistantText;
   const assistantMessageId = usesResponseIdentity && responseId ? responseId : message.uuid;
   if (!hasToolUse && !stopReason && !isForwardedSubagentText) {
     return;
   }
-  if ((text.length > 0 || hasToolUse) && !isFinalAssistantText) {
+  if ((text.length > 0 || hasToolUse) && !isFinalAssistantText && !isPendingSubagentAssistantText) {
     settleClaudeStreamedAssistantText({ emit, session, timestamp });
   }
   if (hasToolUse && text.length > 0) {
@@ -327,12 +322,18 @@ const handleAssistantMessage = ({
     if (!stopReason && !isForwardedSubagentText) {
       return;
     }
-    if (
-      stopReason === "end_turn" ||
-      stopReason === "stop_sequence" ||
-      (!stopReason && isForwardedSubagentText)
-    ) {
+    if (isPendingSubagentAssistantText) {
+      rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
+      session.pendingSubagentAssistantMessage = {
+        messageId: assistantMessageId,
+        text,
+        ...(assistantModel ? { model: assistantModel } : {}),
+      };
+      return;
+    }
+    if (hasFinalStopReason) {
       const messageId = assistantMessageId;
+      delete session.pendingSubagentAssistantMessage;
       rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel);
       emit({
         type: "assistant_message",

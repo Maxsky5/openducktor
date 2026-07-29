@@ -5,6 +5,7 @@ import {
   addClaudeHistoryFinishStep,
   isLiveFinalAssistantStopReason,
   type MutableAssistantHistoryMessage,
+  moveNestedResultToEnd,
   projectClaudeHistoryAssistantMessage,
 } from "./claude-agent-sdk-history-assistant";
 import {
@@ -30,6 +31,7 @@ import {
   finishReasonForClaudeResult,
   isFailedClaudeResult,
   readClaudeResultDurationMs,
+  successfulClaudeResultText,
 } from "./claude-agent-sdk-result-lifecycle";
 import {
   emitClaudeAgentToolResultSubagentPart,
@@ -48,13 +50,6 @@ import {
 } from "./claude-agent-sdk-transcript-correlation";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
-const successfulResultText = (entry: ClaudeHistoryResultMessage): string | null => {
-  if (isFailedClaudeResult(entry)) {
-    return null;
-  }
-  const text = typeof entry.result === "string" ? entry.result.trim() : "";
-  return text.length > 0 ? text : null;
-};
 const failedResultText = (entry: ClaudeHistoryResultMessage): string => {
   const errors = Array.isArray(entry.errors)
     ? entry.errors.filter((error): error is string => typeof error === "string")
@@ -421,7 +416,7 @@ export const toClaudeHistoryMessages = (
             messageId: pendingManualCompaction.messageId,
             role: "system",
             timestamp,
-            text: successfulResultText(entry) ?? "No session compaction was needed.",
+            text: successfulClaudeResultText(entry) ?? "No session compaction was needed.",
             notice: {
               tone: "info",
               reason: "session_compacted",
@@ -449,7 +444,7 @@ export const toClaudeHistoryMessages = (
         });
         continue;
       }
-      const resultText = successfulResultText(entry);
+      const resultText = successfulClaudeResultText(entry);
       const durationMs = readClaudeResultDurationMs(entry);
       const lastMatchingAssistantTextMessage =
         resultText && resultText === lastAssistantText ? lastAssistantTextMessage : null;
@@ -481,6 +476,10 @@ export const toClaudeHistoryMessages = (
       }
       if (!resultTarget) {
         continue;
+      }
+      if (resultText) {
+        moveNestedResultToEnd(history, resultTarget, timestamp, options.includeNestedEntries);
+        lastAssistantMessage = resultTarget;
       }
       if (durationMs !== undefined) {
         resultTarget.durationMs = durationMs;

@@ -272,6 +272,17 @@ describe("Claude live and hydrated transcript parity", () => {
           stop_reason: null,
         },
       }),
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        uuid: "subagent-task-completed",
+        session_id: "session-1",
+        task_id: "agent-task",
+        tool_use_id: parentToolUseId,
+        status: "completed",
+        output_file: "/tmp/agent-task.output",
+        summary: "Task completed",
+      }),
     ]) {
       handleClaudeSdkMessage({
         emit,

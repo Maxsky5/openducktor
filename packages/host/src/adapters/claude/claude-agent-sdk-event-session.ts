@@ -20,6 +20,11 @@ export type ClaudeEventSession = {
   lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
+  pendingSubagentAssistantMessage?: {
+    messageId: string;
+    model?: AgentModelSelection;
+    text: string;
+  };
   streamReasoningByBlockIndex?: Map<number, string>;
   streamAssistantResponseId?: string;
   streamAssistantMessageOrdinal: number;

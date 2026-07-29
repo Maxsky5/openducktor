@@ -4,6 +4,7 @@ import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
 import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
+import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage subagent events", () => {
@@ -45,20 +46,23 @@ describe("handleClaudeSdkMessage subagent events", () => {
     ]);
   });
 
-  test("routes forwarded subagent final text when Claude omits the stop reason", () => {
+  test("waits for task completion before finalizing forwarded subagent text without a stop reason", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     session.subagentTaskIdsByToolUseId.set("task-tool-1", "task-1");
-
-    handleClaudeSdkMessage({
+    const input = {
       session,
-      timestamp: "2026-06-25T20:00:00.000Z",
-      modelSelection: (model) => ({
+      modelSelection: (model: string) => ({
         providerId: "claude",
         modelId: model,
-        runtimeKind: "claude",
+        runtimeKind: "claude" as const,
       }),
-      emit: (event) => events.push(event),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-final",
@@ -74,15 +78,67 @@ describe("handleClaudeSdkMessage subagent events", () => {
         },
       }),
     });
+    expect(events).toEqual([]);
 
-    expect(events).toEqual([
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "assistant-tool",
+        session_id: "session-1",
+        parent_tool_use_id: "task-tool-1",
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-5",
+          content: [
+            {
+              type: "tool_use",
+              id: "inner-tool-1",
+              name: "Read",
+              input: { file_path: "/repo/package.json" },
+            },
+          ],
+          stop_reason: "tool_use",
+        },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        uuid: "task-completed",
+        session_id: "session-1",
+        task_id: "task-1",
+        tool_use_id: "task-tool-1",
+        status: "completed",
+        output_file: "/tmp/task-1.output",
+        summary: "Task completed",
+      }),
+    });
+
+    const toolIndex = events.findIndex(
+      (event) =>
+        event.type === "assistant_part" &&
+        event.externalSessionId === "session-1::claude-subagent::task-1" &&
+        event.part.kind === "tool" &&
+        event.part.callId === "inner-tool-1",
+    );
+    const finalIndex = events.findIndex(
+      (event) =>
+        event.type === "assistant_message" &&
+        event.externalSessionId === "session-1::claude-subagent::task-1" &&
+        event.messageId === "assistant-final",
+    );
+    expect(toolIndex).toBeGreaterThanOrEqual(0);
+    expect(finalIndex).toBeGreaterThan(toolIndex);
+    expect(events[finalIndex]).toEqual(
       expect.objectContaining({
-        type: "assistant_message",
-        externalSessionId: "session-1::claude-subagent::task-1",
-        messageId: "assistant-final",
         message: "nested final response",
       }),
-    ]);
+    );
   });
 
   test("routes forwarded subagent user messages into the nested transcript", () => {
@@ -120,6 +176,60 @@ describe("handleClaudeSdkMessage subagent events", () => {
         state: "read",
       }),
     ]);
+  });
+
+  test("finalizes pending subagent text when the Agent tool result completes first", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    session.subagentTaskIdsByToolUseId.set("task-tool-1", "task-1");
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "assistant-final",
+        session_id: "session-1",
+        parent_tool_use_id: "task-tool-1",
+        message: {
+          id: "response-final",
+          role: "assistant",
+          model: "claude-sonnet-4-5",
+          content: [{ type: "text", text: "nested final response" }],
+          stop_reason: null,
+        },
+      }),
+    });
+    emitClaudeAgentToolResultSubagentPart({
+      emit: (event) => events.push(event),
+      input: { subagent_type: "Explore" },
+      isError: false,
+      resultRaw: {
+        toolUseResult: {
+          agentId: "task-1",
+          status: "completed",
+        },
+      },
+      resultText: "nested final response",
+      session,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      toolUseId: "task-tool-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        externalSessionId: "session-1::claude-subagent::task-1",
+        messageId: "response-final",
+        message: "nested final response",
+      }),
+    );
   });
 
   test("streams forwarded subagent text deltas into the nested transcript", () => {

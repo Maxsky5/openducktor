@@ -1,6 +1,7 @@
 export type ClaudeResultLike = {
   duration_ms?: unknown;
   is_error?: unknown;
+  result?: unknown;
   stop_reason?: unknown;
   subtype?: unknown;
   terminal_reason?: unknown;
@@ -36,6 +37,14 @@ export const isFailedClaudeResult = (message: ClaudeResultLike): boolean => {
       terminalReason !== "tool_deferred" &&
       terminalReason !== "background_requested",
   );
+};
+
+export const successfulClaudeResultText = (message: ClaudeResultLike): string | null => {
+  if (isFailedClaudeResult(message)) {
+    return null;
+  }
+  const text = typeof message.result === "string" ? message.result.trim() : "";
+  return text.length > 0 ? text : null;
 };
 
 export const lifecycleOutcomeForClaudeResult = (
