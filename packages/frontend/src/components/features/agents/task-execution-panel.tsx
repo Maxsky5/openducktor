@@ -283,7 +283,7 @@ export function TaskExecutionPanelToggleButton({
 }
 
 export const agentStudioPanelToggleButtonClassName =
-  "size-10 rounded-md border border-transparent bg-transparent text-studio-chrome-foreground hover:border-studio-chrome-foreground/30 hover:bg-studio-chrome-foreground/10";
+  "size-8 rounded-md border border-transparent bg-transparent text-studio-chrome-foreground hover:border-studio-chrome-foreground/30 hover:bg-studio-chrome-foreground/10";
 
 export function TaskExecutionPanel({ model }: { model: TaskExecutionPanelModel }): ReactElement {
   return <TaskExecutionPanelColumn model={model} />;
