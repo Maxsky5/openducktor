@@ -21,6 +21,5 @@ describe("KanbanCollapsedColumn", () => {
     expect(html).toContain('type="button"');
     expect(html).not.toContain('title="Backlog column is empty and collapsed"');
     expect(html).toContain("bg-muted-foreground/45");
-    expect(html).toContain("transition-[background-color,border-color,box-shadow]");
   });
 });

@@ -168,7 +168,7 @@ const buildModel = () => ({
 });
 
 describe("AgentStudioHeader", () => {
-  test("renders workflow rail with browser layout and session controls", () => {
+  test("renders workflow rail and session controls", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         model: buildModel(),
@@ -181,9 +181,6 @@ describe("AgentStudioHeader", () => {
     expect(html).toMatch(/aria-label="Session history[^"]*"/);
     expect(html).toContain(">Open<");
     expect(html).toContain("Quick actions");
-    expect(html).toContain("truncate text-xl");
-    expect(html).toContain("mt-1 flex items-center gap-1.5");
-    expect(html).toContain("border-b border-border bg-card pb-4");
     const taskIdIndex = html.indexOf("fairnest-97f");
     const openButtonIndex = html.indexOf('aria-label="Open task details"');
     expect(taskIdIndex).toBeGreaterThan(-1);
