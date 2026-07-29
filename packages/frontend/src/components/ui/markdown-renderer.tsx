@@ -129,7 +129,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 
   if (hasMermaidCandidate) {
     renderedContent = (
-      <Suspense fallback={fallback ?? null}>
+      <Suspense fallback={null}>
         <MarkdownRendererMermaidCandidate
           markdown={content}
           components={components}
@@ -143,7 +143,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     );
   }
 
-  if (hasMathCandidate) {
+  if (hasMathCandidate && !hasMermaidCandidate) {
     renderedContent = (
       <Suspense fallback={fallback ?? null}>
         <MarkdownRendererMathCandidate

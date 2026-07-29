@@ -1,13 +1,13 @@
 import type { MermaidConfig } from "mermaid";
 
-let initialized = false;
-
 export const MERMAID_RENDER_CONFIG = {
   startOnLoad: false,
   securityLevel: "strict",
   suppressErrorRendering: true,
   htmlLabels: false,
 } satisfies MermaidConfig;
+
+let initialized = false;
 
 function createMermaidRenderContainer(): HTMLDivElement {
   const container = document.createElement("div");

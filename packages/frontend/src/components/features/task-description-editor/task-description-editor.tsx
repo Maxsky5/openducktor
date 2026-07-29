@@ -2,6 +2,7 @@ import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { AlertCircle, Code2, Eye, Info } from "lucide-react";
 import { lazy, type ReactElement, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { Textarea } from "@/components/ui/textarea";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
@@ -9,6 +10,7 @@ import type { VisualMarkdownCompatibility } from "./task-description-markdown-co
 import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
 
 const loadTaskDescriptionMarkdown = () => import("./task-description-markdown");
+const loadTaskDescriptionMermaidPreviews = () => import("./task-description-mermaid-previews");
 const loadTaskDescriptionVisualEditor = () => import("./task-description-visual-editor");
 const TaskDescriptionVisualEditor = lazy(loadTaskDescriptionVisualEditor);
 
@@ -35,7 +37,8 @@ function TaskDescriptionEditorSession({
   const [compatibilityState, setCompatibilityState] = useState<{
     markdown: string;
     result: VisualMarkdownCompatibility | null;
-  }>({ markdown, result: null });
+    mermaidPreviews: MermaidPreviews;
+  }>({ markdown, result: null, mermaidPreviews: new Map() });
   const lastVisualChange = useRef<string | null>(null);
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);
   const compatibilityIsCurrent =
@@ -48,36 +51,39 @@ function TaskDescriptionEditorSession({
   useEffect(() => {
     if (lastVisualChange.current === markdown) {
       lastVisualChange.current = null;
-      setCompatibilityState({ markdown, result: { compatible: true } });
+      setCompatibilityState({ markdown, result: { compatible: true }, mermaidPreviews: new Map() });
       return;
     }
     if (mode === "markdown" || compatibilityIsCurrent) {
       return;
     }
     let active = true;
-    setCompatibilityState({ markdown, result: null });
-    const visualEditorModule = loadTaskDescriptionVisualEditor();
-    void visualEditorModule.catch(() => undefined);
-    void loadTaskDescriptionMarkdown()
-      .then(({ assessVisualMarkdownCompatibility }) => {
+    setCompatibilityState({ markdown, result: null, mermaidPreviews: new Map() });
+    void (async () => {
+      try {
+        const [{ assessVisualMarkdownCompatibility }] = await Promise.all([
+          loadTaskDescriptionMarkdown(),
+          loadTaskDescriptionVisualEditor(),
+        ]);
         const result = assessVisualMarkdownCompatibility(markdown);
         if (!result.compatible) {
           if (active) {
-            setCompatibilityState({ markdown, result });
+            setCompatibilityState({ markdown, result, mermaidPreviews: new Map() });
           }
           return;
         }
-        return visualEditorModule.then(() => {
-          if (!active) {
-            return;
-          }
-          setCompatibilityState({
-            markdown,
-            result,
-          });
+        const { renderInitialTaskDescriptionMermaidPreviews } =
+          await loadTaskDescriptionMermaidPreviews();
+        const mermaidPreviews = await renderInitialTaskDescriptionMermaidPreviews(markdown);
+        if (!active) {
+          return;
+        }
+        setCompatibilityState({
+          markdown,
+          result,
+          mermaidPreviews,
         });
-      })
-      .catch(() => {
+      } catch {
         if (active) {
           setCompatibilityState({
             markdown,
@@ -86,9 +92,11 @@ function TaskDescriptionEditorSession({
               reason:
                 "Visual mode could not load its Markdown compatibility check. Keep editing in Markdown mode and retry after reloading the app.",
             },
+            mermaidPreviews: new Map(),
           });
         }
-      });
+      }
+    })();
     return () => {
       active = false;
     };
@@ -147,6 +155,7 @@ function TaskDescriptionEditorSession({
           onUpload={stageImage}
           uploads={uploads}
           previews={previews}
+          mermaidPreviews={compatibilityState.mermaidPreviews}
           renderContext={renderContext}
         />
       </Suspense>
@@ -204,6 +213,7 @@ function TaskDescriptionEditorSession({
         <div
           className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
           role="alert"
+          aria-label="Visual mode compatibility error"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
           <span>{effectiveGateMessage}</span>

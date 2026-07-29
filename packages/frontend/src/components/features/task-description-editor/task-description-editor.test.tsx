@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render, waitFor as testingLibraryWaitFor } from "@testing-library/react";
 import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
@@ -32,6 +32,38 @@ describe("TaskDescriptionEditor", () => {
     expect(loadingSurface.className).toContain("bg-card");
     expect(view.queryByRole("textbox")).toBeNull();
     expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
+  });
+
+  test("commits the initial Visual editor only after its Mermaid preview is ready", async () => {
+    const renderModule = await import("@/components/ui/markdown-mermaid-render");
+    let resolveRender: ((svg: string) => void) | undefined;
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRender = resolve;
+        }),
+    );
+
+    try {
+      const view = render(
+        <TaskDescriptionEditor
+          {...createProps()}
+          markdown={"1. ```mermaid\n   graph TD\n     A --> B\n   ```"}
+          onChange={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1));
+      expect(view.container.querySelector(".tiptap")).toBeNull();
+
+      resolveRender?.(
+        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+      );
+      await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy());
+      expect(view.container.querySelector(".tiptap")).not.toBeNull();
+    } finally {
+      renderSpy.mockRestore();
+    }
   });
 
   test("keeps Markdown typing stable and uses the normal interface font", async () => {
@@ -137,7 +169,7 @@ describe("TaskDescriptionEditor", () => {
     ["an ordered fence containing a list lookalike", "1. ```md\n   1. fake\n   ```"],
     [
       "an ordered Mermaid fence containing a list lookalike",
-      "1. ```mermaid\n   1. invalid\n   ```",
+      '1. ```mermaid\n   graph TD\n     A["1. fake"]\n   ```',
     ],
     ["a zero-start dot marker", "0. > quote"],
     ["a zero-start parenthesis marker", "0) > quote"],
@@ -172,7 +204,7 @@ describe("TaskDescriptionEditor", () => {
       );
 
       await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
-      expect(view.queryByRole("alert")).toBeNull();
+      expect(view.queryByRole("alert", { name: "Visual mode compatibility error" })).toBeNull();
 
       fireEvent.click(view.getByRole("button", { name: "Markdown" }));
 
@@ -371,7 +403,7 @@ describe("TaskDescriptionEditor", () => {
     );
 
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
-    expect(view.queryByRole("alert")).toBeNull();
+    expect(view.queryByRole("alert", { name: "Visual mode compatibility error" })).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
 

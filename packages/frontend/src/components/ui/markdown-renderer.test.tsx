@@ -456,6 +456,79 @@ describe("rich task description rendering", () => {
     });
   });
 
+  test("does not commit a transient layout before the first Mermaid preview is ready", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    let resolveRender: ((svg: string) => void) | undefined;
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRender = resolve;
+        }),
+    );
+
+    try {
+      const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+
+      expect(view.container.innerHTML).toBe("");
+
+      resolveRender?.(
+        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+      );
+      await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
+        timeout: 3000,
+      });
+    } finally {
+      renderSpy.mockRestore();
+    }
+  }, 4000);
+
+  test("commits surrounding Markdown and its Mermaid preview together", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    let resolveRender: ((svg: string) => void) | undefined;
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRender = resolve;
+        }),
+    );
+
+    try {
+      const view = render(
+        <MarkdownRenderer markdown={"Before\n\n```mermaid\ngraph TD\n  A --> B\n```\n\nAfter"} />,
+      );
+
+      await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1), {
+        timeout: 3000,
+      });
+      expect(view.queryByText("Before")).toBeNull();
+      expect(view.queryByText("After")).toBeNull();
+      expect(view.container.querySelector("svg")).toBeNull();
+
+      resolveRender?.(
+        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+      );
+      await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
+        timeout: 3000,
+      });
+      expect(view.getByText("Before")).toBeTruthy();
+      expect(view.getByText("After")).toBeTruthy();
+    } finally {
+      renderSpy.mockRestore();
+    }
+  }, 4000);
+
+  test("commits math and Mermaid through the same prepared render", async () => {
+    const view = render(
+      <MarkdownRenderer markdown={"Before $x$\n\n```mermaid\ngraph TD\n  A --> B\n```"} />,
+    );
+
+    await waitFor(() => expect(view.container.querySelector("svg")).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(view.container.querySelector(".katex")).not.toBeNull();
+    expect(view.getByText("Before")).toBeTruthy();
+  }, 4000);
+
   test("keeps the current Mermaid preview visible while an editor update settles", async () => {
     const renderModule = await import("./markdown-mermaid-render");
     const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(

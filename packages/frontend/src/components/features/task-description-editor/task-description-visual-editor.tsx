@@ -7,6 +7,8 @@ import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from 
 import { ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { MermaidPreviewProvider } from "@/components/ui/markdown-mermaid";
+import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { cn } from "@/lib/utils";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import { TaskDescriptionFormattingToolbar } from "./task-description-formatting-toolbar";
@@ -44,6 +46,7 @@ type TaskDescriptionVisualEditorProps = {
   renderContext: Omit<TaskAssetRenderContext, "assetId"> | null;
   uploads: TaskDescriptionAssetUpload[];
   previews: ReadonlyMap<string, string>;
+  mermaidPreviews: MermaidPreviews;
 };
 
 const applyMathEdit = (editor: Editor, edit: TaskDescriptionMathEdit, latex: string): boolean => {
@@ -68,6 +71,7 @@ export default function TaskDescriptionVisualEditor({
   renderContext,
   uploads,
   previews,
+  mermaidPreviews,
 }: TaskDescriptionVisualEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadFilesRef = useRef<(files: File[]) => void>(() => {});
@@ -227,25 +231,27 @@ export default function TaskDescriptionVisualEditor({
         />
       </div>
       <TaskDescriptionImageContext.Provider value={imageContext}>
-        <EditorContent
-          editor={editor}
-          onDrop={(event) => {
-            const files = Array.from(event.dataTransfer.files).filter((file) =>
-              file.type.startsWith("image/"),
-            );
-            if (files.length === 0) return;
-            event.preventDefault();
-            uploadFilesRef.current(files);
-          }}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData.files).filter((file) =>
-              file.type.startsWith("image/"),
-            );
-            if (files.length === 0) return;
-            event.preventDefault();
-            uploadFilesRef.current(files);
-          }}
-        />
+        <MermaidPreviewProvider previews={mermaidPreviews}>
+          <EditorContent
+            editor={editor}
+            onDrop={(event) => {
+              const files = Array.from(event.dataTransfer.files).filter((file) =>
+                file.type.startsWith("image/"),
+              );
+              if (files.length === 0) return;
+              event.preventDefault();
+              uploadFilesRef.current(files);
+            }}
+            onPaste={(event) => {
+              const files = Array.from(event.clipboardData.files).filter((file) =>
+                file.type.startsWith("image/"),
+              );
+              if (files.length === 0) return;
+              event.preventDefault();
+              uploadFilesRef.current(files);
+            }}
+          />
+        </MermaidPreviewProvider>
       </TaskDescriptionImageContext.Provider>
       {linkHref !== null ? (
         <TaskDescriptionLinkDialog

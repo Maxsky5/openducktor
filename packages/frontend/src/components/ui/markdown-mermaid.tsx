@@ -1,11 +1,25 @@
-import { AlertCircle, LoaderCircle } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { AlertCircle } from "lucide-react";
+import { createContext, type ReactNode, useContext, useId, useLayoutEffect, useState } from "react";
 import { renderMermaidSvg } from "./markdown-mermaid-render";
+import {
+  getMermaidErrorMessage,
+  type MermaidPreview,
+  type MermaidPreviews,
+} from "./markdown-mermaid-state";
 
-type MermaidState =
-  | { status: "loading" }
-  | { status: "ready"; svg: string }
-  | { status: "error"; message: string };
+const MermaidPreviewContext = createContext<MermaidPreviews | null>(null);
+
+export function MermaidPreviewProvider({
+  previews,
+  children,
+}: {
+  previews: MermaidPreviews;
+  children: ReactNode;
+}) {
+  return (
+    <MermaidPreviewContext.Provider value={previews}>{children}</MermaidPreviewContext.Provider>
+  );
+}
 
 export function MarkdownMermaid({
   source,
@@ -15,9 +29,13 @@ export function MarkdownMermaid({
   renderDelayMs?: number;
 }) {
   const reactId = useId();
-  const [state, setState] = useState<MermaidState>({ status: "loading" });
+  const preparedPreview = useContext(MermaidPreviewContext)?.get(source);
+  const [state, setState] = useState<MermaidPreview | null>(preparedPreview ?? null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (preparedPreview) {
+      return;
+    }
     let active = true;
     const renderDiagram = async (): Promise<void> => {
       try {
@@ -30,8 +48,7 @@ export function MarkdownMermaid({
         if (active) {
           setState({
             status: "error",
-            message:
-              cause instanceof Error ? cause.message : "Mermaid could not parse this diagram.",
+            message: getMermaidErrorMessage(cause),
           });
         }
       }
@@ -48,31 +65,32 @@ export function MarkdownMermaid({
       active = false;
       clearTimeout(renderTimeout);
     };
-  }, [reactId, renderDelayMs, source]);
+  }, [preparedPreview, reactId, renderDelayMs, source]);
+
+  const preview = preparedPreview ?? state;
+  if (!preview) {
+    return null;
+  }
 
   return (
     <section className="my-3 overflow-hidden rounded-md border border-border bg-card">
       <div className="p-3">
-        {state.status === "loading" ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            Rendering diagram…
-          </div>
-        ) : null}
-        {state.status === "ready" ? (
+        {preview.status === "ready" ? (
           <div
             className="overflow-x-auto [&_svg]:mx-auto [&_svg]:max-w-full"
             // The SVG comes from Mermaid strict mode and passes through DOMPurify.
             // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized Mermaid SVG must be inserted as markup to render.
-            dangerouslySetInnerHTML={{ __html: state.svg }}
+            dangerouslySetInnerHTML={{ __html: preview.svg }}
           />
         ) : null}
-        {state.status === "error" ? (
+        {preview.status === "error" ? (
           <div className="flex items-start gap-2 text-sm text-destructive" role="alert">
             <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <div>
               <p className="font-medium">Diagram preview failed</p>
-              <p className="text-xs">{state.message} Edit the Mermaid source to fix the diagram.</p>
+              <p className="text-xs">
+                {preview.message} Edit the Mermaid source to fix the diagram.
+              </p>
             </div>
           </div>
         ) : null}
