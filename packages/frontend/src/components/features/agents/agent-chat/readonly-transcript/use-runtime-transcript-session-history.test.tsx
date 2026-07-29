@@ -81,6 +81,49 @@ const createHarness = (
 };
 
 describe("useRuntimeTranscriptSessionHistory", () => {
+  test("forwards repository scope unchanged to the history request", async () => {
+    const readSessionHistory = mock(async () => []);
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryProvider useIsolatedClient>
+        <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+          {children}
+        </AgentOperationsContext.Provider>
+      </QueryProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "repository-thread",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          sessionScope: { kind: "repository" },
+        },
+        repoReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "repository-thread",
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "opencode" },
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("loads a completed child transcript without a live projection entry", async () => {
     const history: AgentSessionHistoryMessage[] = [
       {
