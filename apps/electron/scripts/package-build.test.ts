@@ -210,7 +210,7 @@ describe("build Electron release artifact", () => {
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
-  }, 5_000);
+  });
 
   it("copies channel-specific release metadata for prerelease artifacts", async () => {
     const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-release-"));
