@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react";
-import type {
-  AgentChatComposerModel,
-  AgentChatQueuedSendContent,
-} from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatComposerModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import {
   type AgentChatComposerDraft,
   appendTextToDraft,
@@ -101,7 +98,7 @@ type UseAgentStudioReviewCommentComposerAdapterArgs = {
 };
 
 type UseAgentStudioReviewCommentComposerAdapterResult = {
-  queuedSendContent: AgentChatQueuedSendContent | null;
+  pendingInlineCommentCount: number;
   onSend: AgentChatComposerModel["onSend"];
 };
 
@@ -110,7 +107,7 @@ export function useAgentStudioReviewCommentComposerAdapter({
   draftStateKey,
   onSend,
 }: UseAgentStudioReviewCommentComposerAdapterArgs): UseAgentStudioReviewCommentComposerAdapterResult {
-  const queuedCommentCount = useInlineCommentDraftStore((store) => store.getDraftCount());
+  const pendingInlineCommentCount = useInlineCommentDraftStore((store) => store.getDraftCount());
   const adapter = useMemo(
     () =>
       createAgentStudioReviewCommentComposerAdapter(() => useInlineCommentDraftStore.getState()),
@@ -125,23 +122,12 @@ export function useAgentStudioReviewCommentComposerAdapter({
     (draft: AgentChatComposerDraft): Promise<boolean> => adapter.submitDraft(draft, onSend),
     [adapter, onSend],
   );
-  const queuedSendContent = useMemo<AgentChatQueuedSendContent | null>(() => {
-    if (queuedCommentCount <= 0) {
-      return null;
-    }
-
-    const commentLabel = queuedCommentCount === 1 ? "comment" : "comments";
-    return {
-      count: queuedCommentCount,
-      accessibleLabel: `${queuedCommentCount} queued review ${commentLabel}`,
-    };
-  }, [queuedCommentCount]);
 
   return useMemo(
     () => ({
-      queuedSendContent,
+      pendingInlineCommentCount,
       onSend: submitDraft,
     }),
-    [queuedSendContent, submitDraft],
+    [pendingInlineCommentCount, submitDraft],
   );
 }

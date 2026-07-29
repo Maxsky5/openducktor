@@ -2,7 +2,10 @@ import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
-import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type {
+  AgentChatModel,
+  AgentChatPendingSendItems,
+} from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import {
   type AgentChatDraftScope,
@@ -217,6 +220,18 @@ export function useAgentStudioChatModel({
     draftStateKey,
     onSend: sessionActions.onSend,
   });
+  const pendingSendItems = useMemo<AgentChatPendingSendItems | null>(() => {
+    const count = reviewCommentComposer.pendingInlineCommentCount;
+    if (count <= 0) {
+      return null;
+    }
+
+    const commentLabel = count === 1 ? "comment" : "comments";
+    return {
+      count,
+      accessibleLabel: `${count} pending review ${commentLabel}`,
+    };
+  }, [reviewCommentComposer.pendingInlineCommentCount]);
 
   const composerConfig = useMemo(
     () => ({
@@ -237,9 +252,7 @@ export function useAgentStudioChatModel({
       stopAgentSession: sessionActions.stopAgentSession,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
-      ...(reviewCommentComposer.queuedSendContent
-        ? { queuedSendContent: reviewCommentComposer.queuedSendContent }
-        : {}),
+      ...(pendingSendItems ? { pendingSendItems } : {}),
       draftStateKey,
       draftPersistenceIdentity,
       onSend: reviewCommentComposer.onSend,
@@ -308,7 +321,7 @@ export function useAgentStudioChatModel({
       modelSelection.supportsSubagentReferences,
       modelSelection.variantOptions,
       reviewCommentComposer.onSend,
-      reviewCommentComposer.queuedSendContent,
+      pendingSendItems,
       selectedSession.pendingInput.waitingInputPlaceholder,
       selectedSessionIdentity,
       selectedSessionModel,

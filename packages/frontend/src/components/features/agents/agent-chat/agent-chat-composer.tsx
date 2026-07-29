@@ -92,12 +92,12 @@ const renderUnsupportedAttachmentDescription = (name: string): ReactElement => {
 
 const hasComposerSendContent = (
   draft: AgentChatComposerDraft,
-  queuedSendContent: AgentChatComposerModel["queuedSendContent"],
+  pendingSendItems: AgentChatComposerModel["pendingSendItems"],
 ): boolean => {
-  return draftHasMeaningfulContent(draft) || (queuedSendContent?.count ?? 0) > 0;
+  return draftHasMeaningfulContent(draft) || (pendingSendItems?.count ?? 0) > 0;
 };
 
-const SEND_QUEUED_CONTENT_BADGE_CLASS_NAME =
+const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
   "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
 
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
@@ -119,7 +119,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession,
   showSubmittingState,
   sendDisabled,
-  queuedSendContent,
+  pendingSendItems,
 }: {
   onPickAttachments: () => void;
   attachmentIntakeDisabled: boolean;
@@ -139,7 +139,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession: AgentChatComposerModel["onStopSession"];
   showSubmittingState: boolean;
   sendDisabled: boolean;
-  queuedSendContent: AgentChatComposerModel["queuedSendContent"];
+  pendingSendItems: AgentChatComposerModel["pendingSendItems"];
 }): ReactElement {
   const hasVariantOptions = variantOptions.length > 0;
 
@@ -247,14 +247,14 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               <SendHorizontal className="size-3.5" />
             )}
           </Button>
-          {queuedSendContent && queuedSendContent.count > 0 ? (
+          {pendingSendItems && pendingSendItems.count > 0 ? (
             <span
-              aria-label={queuedSendContent.accessibleLabel}
-              className={SEND_QUEUED_CONTENT_BADGE_CLASS_NAME}
-              data-testid="agent-chat-send-queued-content-badge"
+              aria-label={pendingSendItems.accessibleLabel}
+              className={SEND_PENDING_ITEMS_BADGE_CLASS_NAME}
+              data-testid="agent-chat-send-pending-items-badge"
               role="status"
             >
-              {queuedSendContent.count}
+              {pendingSendItems.count}
             </span>
           ) : null}
         </div>
@@ -284,7 +284,7 @@ function AgentChatComposerFormView({
   submitAction,
 }: AgentChatComposerFormViewProps): ReactElement {
   const {
-    queuedSendContent,
+    pendingSendItems,
     isSessionWorking,
     isWaitingInput,
     isSelectionCatalogLoading,
@@ -430,7 +430,7 @@ function AgentChatComposerFormView({
             onStopSession={onStopSession}
             showSubmittingState={isSubmitting}
             sendDisabled={sendDisabled}
-            queuedSendContent={queuedSendContent}
+            pendingSendItems={pendingSendItems}
           />
         </div>
       </div>
@@ -543,7 +543,7 @@ export function AgentChatComposer({
     isReadOnly,
     readOnlyReason,
     busySendBlockedReason,
-    queuedSendContent,
+    pendingSendItems,
     draftStateKey,
     draftPersistenceIdentity,
     onSend,
@@ -679,7 +679,7 @@ export function AgentChatComposer({
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
     !taskId ||
-    !hasComposerSendContent(draft, queuedSendContent) ||
+    !hasComposerSendContent(draft, pendingSendItems) ||
     !isInteractionEnabled;
 
   useLayoutEffect(() => {

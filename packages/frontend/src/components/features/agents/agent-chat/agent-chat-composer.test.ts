@@ -248,21 +248,21 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('aria-label="Send message" disabled');
   });
 
-  test("shows caller-owned queued content and keeps send enabled when the draft is empty", () => {
+  test("shows caller-owned pending send items and keeps send enabled when the draft is empty", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          queuedSendContent: {
+          pendingSendItems: {
             count: 3,
-            accessibleLabel: "3 queued review comments",
+            accessibleLabel: "3 pending review comments",
           },
         },
       }),
     );
 
-    expect(html).toContain("agent-chat-send-queued-content-badge");
-    expect(html).toContain('aria-label="3 queued review comments"');
+    expect(html).toContain("agent-chat-send-pending-items-badge");
+    expect(html).toContain('aria-label="3 pending review comments"');
     expect(html).toContain(">3<");
     expect(html).not.toContain('aria-label="Send message" disabled');
   });

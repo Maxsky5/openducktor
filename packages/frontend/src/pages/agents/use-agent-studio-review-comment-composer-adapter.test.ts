@@ -159,7 +159,7 @@ const buildScope = (
 });
 
 describe("Agent Studio review comment composer adapter", () => {
-  test("formats queued comments and sends them when the typed draft is empty", async () => {
+  test("formats pending comments and sends them when the typed draft is empty", async () => {
     const fakeStore = createFakeReviewCommentStore([
       buildComment("first-comment", 1, "Keep this branch explicit."),
     ]);
@@ -177,7 +177,7 @@ describe("Agent Studio review comment composer adapter", () => {
     expect(fakeStore.getStore().drafts).toEqual([]);
   });
 
-  test("restores the exact queued comments when send returns false", async () => {
+  test("restores the exact pending comments when send returns false", async () => {
     const fakeStore = createFakeReviewCommentStore([
       buildComment("first-comment", 1, "Keep this branch explicit."),
     ]);
@@ -196,7 +196,7 @@ describe("Agent Studio review comment composer adapter", () => {
     ]);
   });
 
-  test("restores queued comments and propagates a thrown send failure", async () => {
+  test("restores pending comments and propagates a thrown send failure", async () => {
     const fakeStore = createFakeReviewCommentStore([
       buildComment("first-comment", 1, "Keep this branch explicit."),
     ]);

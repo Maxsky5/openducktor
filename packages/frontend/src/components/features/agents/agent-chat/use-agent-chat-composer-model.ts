@@ -40,7 +40,7 @@ export type AgentChatComposerConfig = {
   stopAgentSession: StopAgentSession;
   isReadOnly: boolean;
   readOnlyReason: string | null;
-  queuedSendContent?: AgentChatComposerModel["queuedSendContent"];
+  pendingSendItems?: AgentChatComposerModel["pendingSendItems"];
   draftStateKey: string;
   draftPersistenceIdentity: AgentChatDraftSessionIdentity | null;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
@@ -140,7 +140,7 @@ export function useAgentChatComposerModel({
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,
       busySendBlockedReason: composer.busySendBlockedReason,
-      ...(composer.queuedSendContent ? { queuedSendContent: composer.queuedSendContent } : {}),
+      ...(composer.pendingSendItems ? { pendingSendItems: composer.pendingSendItems } : {}),
       draftStateKey: composer.draftStateKey,
       draftPersistenceIdentity: composer.draftPersistenceIdentity,
       onSend: (draft) => submitComposerDraft(draft, composer.onSend),
