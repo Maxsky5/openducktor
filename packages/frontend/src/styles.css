@@ -469,6 +469,10 @@ body {
   user-select: none;
 }
 
+.electron-shell .agent-studio-titlebar-safe-area {
+  padding-top: 0;
+}
+
 .electron-shell .electron-titlebar-safe-area button {
   -webkit-app-region: no-drag;
 }

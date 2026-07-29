@@ -73,6 +73,12 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).not.toContain("rounded-full border");
     expect(html).not.toContain("bg-card/80");
     expect(html).toContain("bg-studio-chrome");
+    expect(html).toContain("agent-studio-titlebar-safe-area");
+    expect(html).toContain("pt-1.5");
+    expect(html).toContain("h-10");
+    expect(html).toContain("min-h-10");
+    expect(html).toContain("size-10");
+    expect(html).toContain("size-[1.4rem]");
     expect(html).toContain("cursor-pointer");
     expect(html).not.toContain("cursor-grab");
     expect(html).not.toContain("cursor-inherit");
