@@ -60,14 +60,14 @@ export const createAgentStudioReviewCommentComposerAdapter = (
     submitDraft: async (draft, onSend) => {
       const store = getStore();
       const pendingDrafts = store.getPendingDrafts();
-      const submittingDrafts = pendingDrafts.map((pendingDraft) => ({
+      const pendingDraftSnapshots = pendingDrafts.map((pendingDraft) => ({
         id: pendingDraft.id,
         revision: pendingDraft.revision,
       }));
       const commentAppendix = store.formatBatchMessage(pendingDrafts);
       const nextDraft =
         commentAppendix.length > 0 ? appendTextToDraft(draft, commentAppendix) : draft;
-      const submissionId = store.beginSubmittingDrafts(submittingDrafts);
+      const submissionId = store.beginSubmittingDrafts(pendingDraftSnapshots);
 
       try {
         const didSend = await onSend(nextDraft);

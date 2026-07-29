@@ -3,7 +3,7 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
 } from "@openducktor/core";
-import { type MutableRefObject, type RefObject, useCallback, useMemo } from "react";
+import { type MutableRefObject, type RefObject, useMemo } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -102,17 +102,6 @@ export function useAgentChatComposerModel({
   scrollToBottomOnSendRef,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatComposerModelArgs): AgentChatComposerModel | undefined {
-  const submitComposerDraft = useCallback(
-    async (
-      draft: AgentChatComposerDraft,
-      onSend: AgentChatComposerConfig["onSend"],
-    ): Promise<boolean> => {
-      scrollToBottomOnSendRef.current?.();
-      return onSend(draft);
-    },
-    [scrollToBottomOnSendRef],
-  );
-
   const isRuntimeReady = runtimeReadiness.state === "ready";
   const composerState = useMemo(
     () =>
@@ -143,7 +132,10 @@ export function useAgentChatComposerModel({
       ...(composer.pendingSendItems ? { pendingSendItems: composer.pendingSendItems } : {}),
       draftStateKey: composer.draftStateKey,
       draftPersistenceIdentity: composer.draftPersistenceIdentity,
-      onSend: (draft) => submitComposerDraft(draft, composer.onSend),
+      onSend: async (draft: AgentChatComposerDraft): Promise<boolean> => {
+        scrollToBottomOnSendRef.current?.();
+        return composer.onSend(draft);
+      },
       isSending: composer.isSending,
       isStarting: composer.isStarting,
       isSessionWorking: composer.isSessionWorking,
@@ -200,7 +192,6 @@ export function useAgentChatComposerModel({
     composerFormRef,
     resizeComposerEditor,
     scrollToBottomOnSendRef,
-    submitComposerDraft,
     syncBottomAfterComposerLayoutRef,
   ]);
 }
