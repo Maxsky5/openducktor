@@ -629,9 +629,6 @@ describe("AgentChatThread", () => {
     expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Approval required")).toBeLessThan(
       (bottomStack as HTMLDivElement).innerHTML.indexOf("Todo"),
     );
-    const questionLayer = screen.getByText("Input needed").closest("section")?.parentElement;
-    expect(questionLayer?.className).toContain("relative z-30");
-
     rendered.unmount();
   });
 

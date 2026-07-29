@@ -243,14 +243,13 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
       )}
     >
       {pendingQuestions.map((request) => (
-        <div key={`${externalSessionId}:${request.requestId}`} className="relative z-30">
-          <AgentSessionQuestionCard
-            request={request}
-            disabled={!canSubmitQuestionAnswers}
-            isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
-            onSubmit={onSubmitQuestionAnswers}
-          />
-        </div>
+        <AgentSessionQuestionCard
+          key={`${externalSessionId}:${request.requestId}`}
+          request={request}
+          disabled={!canSubmitQuestionAnswers}
+          isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
+          onSubmit={onSubmitQuestionAnswers}
+        />
       ))}
 
       {pendingApprovals.map((request) => (
