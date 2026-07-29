@@ -116,6 +116,28 @@ export const createTaskViewSync = ({
     return taskIds.filter((taskId) => existingTaskIds.has(taskId));
   };
 
+  const retainExistingSnapshotTaskIds = async (
+    repoPath: string,
+    doneVisibleDays: number,
+    taskIds: string[],
+  ): Promise<string[]> => {
+    const taskData = queryClient.getQueryData<{ tasks: TaskCard[] }>(
+      taskQueryKeys.repoData(repoPath, doneVisibleDays),
+    );
+    if (!taskData) {
+      throw new Error(`Task snapshot refresh for '${repoPath}' did not populate task data.`);
+    }
+    try {
+      return await retainExistingTaskIds(repoPath, taskData.tasks, taskIds);
+    } catch (error) {
+      if (!isCancellation(error)) throw error;
+      const successor = activeRefreshes.get(repoPath)?.promise;
+      if (!successor) throw error;
+      await successor;
+      return retainExistingSnapshotTaskIds(repoPath, doneVisibleDays, taskIds);
+    }
+  };
+
   const refreshDocumentEntry = async (
     repoPath: string,
     entry: ReturnType<typeof cachedDocumentEntries>[number],
@@ -426,18 +448,10 @@ export const createTaskViewSync = ({
           prepare: prepareSnapshotCaches,
           refreshKanban: false,
         });
-        const taskData = queryClient.getQueryData<{ tasks: TaskCard[] }>(
-          taskQueryKeys.repoData(activeRepoPath, doneVisibleDays),
-        );
-        if (!taskData) {
-          throw new Error(
-            `Task snapshot refresh for '${activeRepoPath}' did not populate task data.`,
-          );
-        }
         const retainedTaskIds = new Set(
-          await retainExistingTaskIds(
+          await retainExistingSnapshotTaskIds(
             activeRepoPath,
-            taskData.tasks,
+            doneVisibleDays,
             activeDocumentEntries.map((entry) => entry.taskId),
           ),
         );

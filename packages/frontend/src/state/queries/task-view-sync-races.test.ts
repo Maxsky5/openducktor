@@ -400,6 +400,61 @@ describe("TaskViewSync races", () => {
     }
   });
 
+  test("retries a hidden-task lookup after a task-list-only successor cancels it", async () => {
+    const hiddenTaskLookup = createDeferred<TaskCard[]>();
+    const hiddenTaskLookupStarted = createDeferred<void>();
+    let hiddenTaskReads = 0;
+    const { queryClient, sync } = createSync(
+      createPorts({
+        listTasks: async (_repoPath, requestedDoneVisibleDays) => {
+          if (requestedDoneVisibleDays !== undefined) {
+            return [];
+          }
+          hiddenTaskReads += 1;
+          if (hiddenTaskReads === 1) {
+            hiddenTaskLookupStarted.resolve();
+            return hiddenTaskLookup.promise;
+          }
+          return [createTaskCardFixture({ id: "task-1", status: "closed" })];
+        },
+        loadFreshDocument: async () => ({
+          markdown: "# Fresh",
+          updatedAt: "2026-04-10T13:11:00.000Z",
+        }),
+      }),
+    );
+    const documentKey = documentQueryKeys.spec("/repo", "task-1");
+    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
+    const observer = new QueryObserver(queryClient, {
+      queryKey: documentKey,
+      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
+      staleTime: Infinity,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    try {
+      const snapshotResult = sync.reconcileStreamSnapshot("/repo").then(
+        () => null,
+        (error) => error,
+      );
+      await hiddenTaskLookupStarted.promise;
+
+      await sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+
+      expect(await snapshotResult).toBeNull();
+      expect(hiddenTaskReads).toBe(2);
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
+      ).toEqual({
+        markdown: "# Fresh",
+        updatedAt: "2026-04-10T13:11:00.000Z",
+      });
+    } finally {
+      hiddenTaskLookup.resolve([createTaskCardFixture({ id: "task-1", status: "closed" })]);
+      unsubscribe();
+    }
+  });
+
   test("waits for a newer same-task document refresh after cancelling the snapshot read", async () => {
     const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const successorDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
