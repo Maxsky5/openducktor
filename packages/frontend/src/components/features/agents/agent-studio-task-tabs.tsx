@@ -55,11 +55,11 @@ export type TerminalPanelToggleModel = {
 };
 
 const taskTabLabelClassName =
-  "h-9 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none text-inherit";
+  "h-7 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none text-inherit";
 
 const taskTabShellClassName = (tab: AgentStudioTaskTab): string =>
   cn(
-    "group relative z-1 inline-flex h-10 shrink-0 cursor-pointer touch-none select-none items-center gap-1 rounded-t-[10px] pl-2 pr-1",
+    "group relative z-1 inline-flex h-8 shrink-0 cursor-pointer touch-none select-none items-center gap-1 rounded-t-[10px] pl-2 pr-1",
     tab.isActive
       ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
       : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
@@ -248,11 +248,14 @@ export function AgentStudioTaskTabs({
     : null;
 
   return (
-    <div className="bg-studio-chrome px-2 pt-1.5 pb-0">
-      <div className="flex min-w-0 items-center gap-1">
+    <div className="agent-studio-titlebar-safe-area electron-titlebar-safe-area bg-studio-chrome px-2 pb-0">
+      <div className="flex min-w-0 items-center gap-1 pt-1">
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          <div ref={scrollRegionRef} className="hide-scrollbar min-w-0 max-w-full overflow-x-auto">
-            <div className="inline-flex h-10 min-w-max items-center gap-1 pl-2">
+          <div
+            ref={scrollRegionRef}
+            className="hide-scrollbar min-w-0 max-w-full overflow-x-auto pt-0.5"
+          >
+            <div className="inline-flex h-8 min-w-max items-center gap-1 pl-1">
               {hasAnyTab ? (
                 <DndContext
                   sensors={sensors}
@@ -266,7 +269,7 @@ export function AgentStudioTaskTabs({
                   <SortableContext items={tabTaskIds} strategy={horizontalListSortingStrategy}>
                     <TabsList
                       aria-label="Agent Studio task tabs"
-                      className="h-auto min-h-10 w-max justify-start gap-1 rounded-none bg-transparent p-0"
+                      className="h-auto min-h-8 w-max justify-start gap-1 rounded-none bg-transparent p-0"
                     >
                       {tabs.map((tab) => (
                         <SortableAgentStudioTaskTab
@@ -297,14 +300,14 @@ export function AgentStudioTaskTabs({
             size="icon"
             variant="ghost"
             aria-label="Open new task tab"
-            className="size-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            className="size-8 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             disabled={!canOpenCreateDialog}
             onClick={() => {
               setPendingTaskId(availableTabTasks[0]?.id ?? "");
               setIsCreateDialogOpen(true);
             }}
           >
-            <Plus className="size-[1.4rem]" />
+            <Plus className="size-5" />
             <span className="sr-only">New Tab</span>
           </Button>
         </div>

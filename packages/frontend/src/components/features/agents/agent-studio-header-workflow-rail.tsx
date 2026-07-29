@@ -164,7 +164,7 @@ function WorkflowStepButton({
       size="sm"
       variant="outline"
       className={cn(
-        "h-10 shrink-0 gap-2 rounded-lg border px-4 text-sm transition-none",
+        "h-9 shrink-0 gap-2 rounded-lg border px-4 text-sm transition-none",
         workflowStepClassName(step.state),
         workflowBorderStyleClassName(step.state),
         workflowSelectionClassName(isSelected, step.state),

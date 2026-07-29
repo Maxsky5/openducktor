@@ -28,7 +28,7 @@ export class ElectronPreloadBridgeUnavailableError extends Error {
   }
 }
 
-const getElectronApi = (): OpenDucktorElectronApi => {
+export const getElectronApi = (): OpenDucktorElectronApi => {
   const electronApi = window.openducktorElectron;
   if (!electronApi) {
     throw new ElectronPreloadBridgeUnavailableError();

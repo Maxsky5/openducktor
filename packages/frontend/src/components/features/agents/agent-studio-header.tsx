@@ -28,20 +28,20 @@ function HeaderTitle({ taskTitle, taskId, onOpenTaskDetails }: HeaderTitleProps)
     <div className="min-w-0 flex-1">
       <div className="flex min-w-0 items-center gap-1.5">
         <CardTitle
-          className="truncate text-xl"
+          className="truncate text-lg leading-6"
           title={hasTaskTitle ? normalizedTaskTitle : undefined}
         >
           {hasTaskTitle ? normalizedTaskTitle : "Agent Studio"}
         </CardTitle>
       </div>
       {hasTaskId ? (
-        <div className="mt-1 flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
           <TaskIdBadge taskId={normalizedTaskId} />
           {canOpenTaskDetails ? (
             <Button
               type="button"
               variant="ghost"
-              className="h-auto shrink-0 gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground transition hover:border-border hover:bg-muted hover:text-muted-foreground"
+              className="h-auto shrink-0 gap-1 rounded-md border border-transparent px-1.5 py-0 text-[11px] font-normal text-muted-foreground transition hover:border-border hover:bg-muted hover:text-muted-foreground"
               title="Open task details"
               aria-label="Open task details"
               onClick={() => onOpenTaskDetails?.()}
@@ -104,7 +104,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     : "quick-actions-unavailable";
 
   return (
-    <CardHeader className="border-b border-border bg-card pb-4">
+    <CardHeader className="border-b border-border bg-card py-3 px-3">
       <div className="flex items-start justify-between gap-2">
         <HeaderTitle
           taskTitle={model.taskTitle}
