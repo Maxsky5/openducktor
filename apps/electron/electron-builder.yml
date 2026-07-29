@@ -1,6 +1,7 @@
 appId: com.openducktor.app
 productName: OpenDucktor
 asar: true
+npmRebuild: false
 asarUnpack:
   - node_modules/node-pty/**/*
 
