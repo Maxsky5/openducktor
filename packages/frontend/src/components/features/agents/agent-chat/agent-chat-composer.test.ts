@@ -11,7 +11,6 @@ const buildModel = () => ({
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,
-  pendingInlineCommentCount: 0,
   draftStateKey: "draft-1",
   draftPersistenceIdentity: null,
   onSend: async () => true,
@@ -249,17 +248,21 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('aria-label="Send message" disabled');
   });
 
-  test("shows a send badge and keeps send enabled when only inline comments are pending", () => {
+  test("shows caller-owned queued content and keeps send enabled when the draft is empty", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          pendingInlineCommentCount: 3,
+          queuedSendContent: {
+            count: 3,
+            accessibleLabel: "3 queued review comments",
+          },
         },
       }),
     );
 
-    expect(html).toContain("agent-chat-send-comment-badge");
+    expect(html).toContain("agent-chat-send-queued-content-badge");
+    expect(html).toContain('aria-label="3 queued review comments"');
     expect(html).toContain(">3<");
     expect(html).not.toContain('aria-label="Send message" disabled');
   });

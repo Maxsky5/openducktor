@@ -18,6 +18,7 @@ import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import { toSelectedSessionThreadSession } from "./agent-studio-thread-session";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
+import { useAgentStudioReviewCommentComposerAdapter } from "./use-agent-studio-review-comment-composer-adapter";
 
 export type AgentStudioChatSessionActionsContext = {
   isStarting: boolean;
@@ -210,6 +211,12 @@ export function useAgentStudioChatModel({
     selectedSessionTranscriptState.kind,
     sessionReadModelLoadState.kind,
   ]);
+  const draftStateKey = agentChatDraftScopeKey(composer.draftScope);
+  const reviewCommentComposer = useAgentStudioReviewCommentComposerAdapter({
+    draftScope: composer.draftScope,
+    draftStateKey,
+    onSend: sessionActions.onSend,
+  });
 
   const composerConfig = useMemo(
     () => ({
@@ -230,10 +237,12 @@ export function useAgentStudioChatModel({
       stopAgentSession: sessionActions.stopAgentSession,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
-      draftStateKey: agentChatDraftScopeKey(composer.draftScope),
-      draftScope: composer.draftScope,
+      ...(reviewCommentComposer.queuedSendContent
+        ? { queuedSendContent: reviewCommentComposer.queuedSendContent }
+        : {}),
+      draftStateKey,
       draftPersistenceIdentity,
-      onSend: sessionActions.onSend,
+      onSend: reviewCommentComposer.onSend,
       isSending: sessionActions.isSending,
       isStarting: sessionActions.isStarting,
       contextUsage: chatContextUsage,
@@ -268,7 +277,7 @@ export function useAgentStudioChatModel({
     }),
     [
       chatContextUsage,
-      composer.draftScope,
+      draftStateKey,
       draftPersistenceIdentity,
       modelSelection.agentOptions,
       modelSelection.isSelectionCatalogLoading,
@@ -298,6 +307,8 @@ export function useAgentStudioChatModel({
       modelSelection.supportsSlashCommands,
       modelSelection.supportsSubagentReferences,
       modelSelection.variantOptions,
+      reviewCommentComposer.onSend,
+      reviewCommentComposer.queuedSendContent,
       selectedSession.pendingInput.waitingInputPlaceholder,
       selectedSessionIdentity,
       selectedSessionModel,
@@ -312,7 +323,6 @@ export function useAgentStudioChatModel({
       sessionActions.isSessionWorking,
       sessionActions.isStarting,
       sessionActions.isWaitingInput,
-      sessionActions.onSend,
       sessionActions.stopAgentSession,
     ],
   );

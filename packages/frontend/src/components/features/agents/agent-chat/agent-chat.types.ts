@@ -100,6 +100,11 @@ export type AgentChatThreadModel = {
   syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
+export type AgentChatQueuedSendContent = {
+  count: number;
+  accessibleLabel: string;
+};
+
 export type AgentChatComposerModel = {
   taskId: string;
   displayedSessionKey: string | null;
@@ -107,7 +112,7 @@ export type AgentChatComposerModel = {
   isReadOnly: boolean;
   readOnlyReason: string | null;
   busySendBlockedReason: string | null;
-  pendingInlineCommentCount: number;
+  queuedSendContent?: AgentChatQueuedSendContent;
   draftStateKey: string;
   draftPersistenceIdentity: AgentChatDraftSessionIdentity | null;
   onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<boolean>;

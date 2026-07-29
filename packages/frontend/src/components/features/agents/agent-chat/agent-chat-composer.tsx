@@ -92,12 +92,12 @@ const renderUnsupportedAttachmentDescription = (name: string): ReactElement => {
 
 const hasComposerSendContent = (
   draft: AgentChatComposerDraft,
-  pendingInlineCommentCount: number,
+  queuedSendContent: AgentChatComposerModel["queuedSendContent"],
 ): boolean => {
-  return draftHasMeaningfulContent(draft) || pendingInlineCommentCount > 0;
+  return draftHasMeaningfulContent(draft) || (queuedSendContent?.count ?? 0) > 0;
 };
 
-const SEND_COMMENT_BADGE_CLASS_NAME =
+const SEND_QUEUED_CONTENT_BADGE_CLASS_NAME =
   "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
 
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
@@ -119,7 +119,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession,
   showSubmittingState,
   sendDisabled,
-  pendingInlineCommentCount,
+  queuedSendContent,
 }: {
   onPickAttachments: () => void;
   attachmentIntakeDisabled: boolean;
@@ -139,7 +139,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession: AgentChatComposerModel["onStopSession"];
   showSubmittingState: boolean;
   sendDisabled: boolean;
-  pendingInlineCommentCount: number;
+  queuedSendContent: AgentChatComposerModel["queuedSendContent"];
 }): ReactElement {
   const hasVariantOptions = variantOptions.length > 0;
 
@@ -247,12 +247,14 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               <SendHorizontal className="size-3.5" />
             )}
           </Button>
-          {pendingInlineCommentCount > 0 ? (
+          {queuedSendContent && queuedSendContent.count > 0 ? (
             <span
-              className={SEND_COMMENT_BADGE_CLASS_NAME}
-              data-testid="agent-chat-send-comment-badge"
+              aria-label={queuedSendContent.accessibleLabel}
+              className={SEND_QUEUED_CONTENT_BADGE_CLASS_NAME}
+              data-testid="agent-chat-send-queued-content-badge"
+              role="status"
             >
-              {pendingInlineCommentCount}
+              {queuedSendContent.count}
             </span>
           ) : null}
         </div>
@@ -282,7 +284,7 @@ function AgentChatComposerFormView({
   submitAction,
 }: AgentChatComposerFormViewProps): ReactElement {
   const {
-    pendingInlineCommentCount,
+    queuedSendContent,
     isSessionWorking,
     isWaitingInput,
     isSelectionCatalogLoading,
@@ -428,7 +430,7 @@ function AgentChatComposerFormView({
             onStopSession={onStopSession}
             showSubmittingState={isSubmitting}
             sendDisabled={sendDisabled}
-            pendingInlineCommentCount={pendingInlineCommentCount}
+            queuedSendContent={queuedSendContent}
           />
         </div>
       </div>
@@ -541,7 +543,7 @@ export function AgentChatComposer({
     isReadOnly,
     readOnlyReason,
     busySendBlockedReason,
-    pendingInlineCommentCount,
+    queuedSendContent,
     draftStateKey,
     draftPersistenceIdentity,
     onSend,
@@ -677,7 +679,7 @@ export function AgentChatComposer({
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
     !taskId ||
-    !hasComposerSendContent(draft, pendingInlineCommentCount) ||
+    !hasComposerSendContent(draft, queuedSendContent) ||
     !isInteractionEnabled;
 
   useLayoutEffect(() => {
