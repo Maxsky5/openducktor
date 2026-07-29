@@ -3,10 +3,6 @@ import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
-import {
-  type AgentChatDraftScope,
-  agentChatDraftScopeKey,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
@@ -23,6 +19,10 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import {
+  type AgentStudioChatDraftScope,
+  agentStudioChatDraftScopeKey,
+} from "./agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -46,7 +46,7 @@ type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 const DEFAULT_SKILLS: HookArgs["modelSelection"]["skills"] = [];
 const reloadSessionReadModel = () => undefined;
 
-const draftScopeFixture = (taskId: string): AgentChatDraftScope => ({
+const draftScopeFixture = (taskId: string): AgentStudioChatDraftScope => ({
   taskId,
   role: "planner",
   session: null,
@@ -357,7 +357,7 @@ const createAgentChatThreadElement = (model: AgentChatModel) =>
   );
 
 describe("useAgentStudioPageModels", () => {
-  test("keeps the interactive composer model available before a task is selected", async () => {
+  test("keeps a read-only composer model available before a task is selected", async () => {
     const harness = createHookHarness(
       createHookArgs({
         selectedSessionCore: {
@@ -373,7 +373,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const state = harness.getLatest();
-    expect(state.agentChatModel.composer.taskId).toBe("");
+    expect(state.agentChatModel.composer.isReadOnly).toBe(true);
+    expect(state.agentChatModel.composer.readOnlyReason).toBe("Select a task to begin.");
     expect(state.agentChatModel.thread.emptyState?.title).toBe("Select a task to begin.");
 
     await harness.unmount();
@@ -412,12 +413,7 @@ describe("useAgentStudioPageModels", () => {
       totalTokens: 12,
       contextWindow: 100,
     });
-    expect(state.agentChatModel.composer.draftPersistenceIdentity).toEqual({
-      workspaceId: "workspace-repo",
-      externalSessionId: "external-1",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
-    });
+    expect(state.agentChatModel.composer.draftScope.persistence).not.toBeNull();
     expect(state.agentChatModel.thread.runtimeReadiness.state).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
@@ -1182,8 +1178,8 @@ describe("useAgentStudioPageModels", () => {
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).not.toBe(initialComposerModel);
-    expect(nextState.agentChatModel.composer.draftStateKey).toBe(
-      agentChatDraftScopeKey(draftScopeFixture("draft-update")),
+    expect(nextState.agentChatModel.composer.draftScope.key).toBe(
+      agentStudioChatDraftScopeKey(draftScopeFixture("draft-update")),
     );
 
     await harness.unmount();

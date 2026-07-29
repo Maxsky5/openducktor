@@ -25,7 +25,7 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
-import type { AgentChatDraftSessionIdentity } from "./agent-chat-draft-storage";
+import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 
 export type AgentRoleOption = {
   role: AgentRole;
@@ -106,15 +106,13 @@ export type AgentChatPendingSendItems = {
 };
 
 export type AgentChatComposerModel = {
-  taskId: string;
   displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
   busySendBlockedReason: string | null;
   pendingSendItems?: AgentChatPendingSendItems;
-  draftStateKey: string;
-  draftPersistenceIdentity: AgentChatDraftSessionIdentity | null;
+  draftScope: AgentChatDraftScope;
   onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<boolean>;
   isSending: boolean;
   isStarting: boolean;

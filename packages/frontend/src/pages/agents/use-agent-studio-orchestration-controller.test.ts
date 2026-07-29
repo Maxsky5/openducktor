@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import { agentStudioChatDraftScopeKey } from "./agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -250,7 +250,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
       role: "planner",
       session: toAgentSessionIdentity(session),
     });
-    expect(agentChatDraftScopeKey(mapped.composer.draftScope)).toBe(
+    expect(agentStudioChatDraftScopeKey(mapped.composer.draftScope)).toBe(
       `task-1:planner:${agentSessionIdentityKey(toAgentSessionIdentity(session))}`,
     );
   });

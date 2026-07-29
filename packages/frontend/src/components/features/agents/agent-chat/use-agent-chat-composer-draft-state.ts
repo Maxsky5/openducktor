@@ -4,36 +4,21 @@ import {
   createEmptyComposerDraft,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
-import {
-  type AgentChatDraftSessionIdentity,
-  toAgentChatDraftStorageKey,
-} from "./agent-chat-draft-storage";
-import {
-  clearAgentChatDraft,
-  flushAgentChatDraft,
-  flushAllAgentChatDrafts,
-  hydrateAgentChatDraft,
-  readAgentChatDraftVersion,
-  setAgentChatDraft,
-} from "./agent-chat-draft-store";
+import type { AgentChatDraftPersistence, AgentChatDraftScope } from "./agent-chat-draft-scope";
 
 type ComposerDraftState = {
   key: string;
-  identity: AgentChatDraftSessionIdentity | null;
-  taskId: string;
+  persistence: AgentChatDraftPersistence | null;
   draft: AgentChatComposerDraft;
 };
 
 type UseAgentChatComposerDraftStateArgs = {
-  draftStateKey: string;
-  persistenceIdentity: AgentChatDraftSessionIdentity | null;
-  taskId: string;
+  scope: AgentChatDraftScope;
 };
 
 type SubmittedDraftSnapshot = {
   key: string;
-  identity: AgentChatDraftSessionIdentity | null;
-  taskId: string;
+  persistence: AgentChatDraftPersistence | null;
   version: number | null;
   draft: AgentChatComposerDraft;
 };
@@ -47,43 +32,22 @@ type UseAgentChatComposerDraftStateResult = {
   restoreSubmittedDraft: (snapshot: SubmittedDraftSnapshot) => void;
 };
 
-const toComposerDraftStateKey = (
-  draftStateKey: string,
-  identity: AgentChatDraftSessionIdentity | null,
-): string => (identity ? toAgentChatDraftStorageKey(identity) : draftStateKey);
-
-const areIdentitiesEqual = (
-  left: AgentChatDraftSessionIdentity | null,
-  right: AgentChatDraftSessionIdentity | null,
-): boolean =>
-  left === right ||
-  (left !== null &&
-    right !== null &&
-    toAgentChatDraftStorageKey(left) === toAgentChatDraftStorageKey(right));
-
 const createInitialDraftState = ({
-  draftStateKey,
-  persistenceIdentity,
-  taskId,
-}: UseAgentChatComposerDraftStateArgs): ComposerDraftState => ({
-  key: toComposerDraftStateKey(draftStateKey, persistenceIdentity),
-  identity: persistenceIdentity,
-  taskId,
-  draft: persistenceIdentity
-    ? hydrateAgentChatDraft(persistenceIdentity, taskId)
-    : createEmptyComposerDraft(),
+  key,
+  persistence,
+}: AgentChatDraftScope): ComposerDraftState => ({
+  key,
+  persistence,
+  draft: persistence?.hydrate() ?? createEmptyComposerDraft(),
 });
 
 export function useAgentChatComposerDraftState({
-  draftStateKey,
-  persistenceIdentity,
-  taskId,
+  scope,
 }: UseAgentChatComposerDraftStateArgs): UseAgentChatComposerDraftStateResult {
-  const [state, setState] = useState<ComposerDraftState>(() =>
-    createInitialDraftState({ draftStateKey, persistenceIdentity, taskId }),
-  );
+  const [state, setState] = useState<ComposerDraftState>(() => createInitialDraftState(scope));
   const latestStateRef = useRef(state);
-  const nextStateKey = toComposerDraftStateKey(draftStateKey, persistenceIdentity);
+  const nextKey = scope.key;
+  const nextPersistence = scope.persistence;
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -91,64 +55,50 @@ export function useAgentChatComposerDraftState({
 
   useLayoutEffect(() => {
     const current = latestStateRef.current;
-    if (
-      current.key === nextStateKey &&
-      current.taskId === taskId &&
-      areIdentitiesEqual(current.identity, persistenceIdentity)
-    ) {
+    if (current.key === nextKey) {
       return;
     }
 
-    if (current.identity) {
-      void flushAgentChatDraft(current.identity);
+    if (current.persistence) {
+      void current.persistence.flush();
     }
 
-    const nextDraft = persistenceIdentity
-      ? hydrateAgentChatDraft(persistenceIdentity, taskId)
-      : createEmptyComposerDraft();
-    setState({
-      key: nextStateKey,
-      identity: persistenceIdentity,
-      taskId,
-      draft: nextDraft,
-    });
-  }, [nextStateKey, persistenceIdentity, taskId]);
+    setState(createInitialDraftState({ key: nextKey, persistence: nextPersistence }));
+  }, [nextKey, nextPersistence]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") {
       return;
     }
 
-    const flushDrafts = (): void => {
-      void flushAllAgentChatDrafts();
+    const flushDraft = (): void => {
+      const persistence = latestStateRef.current.persistence;
+      if (persistence) {
+        void persistence.flush();
+      }
     };
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") {
-        flushDrafts();
+        flushDraft();
       }
     };
 
-    window.addEventListener("pagehide", flushDrafts);
+    window.addEventListener("pagehide", flushDraft);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("pagehide", flushDrafts);
+      window.removeEventListener("pagehide", flushDraft);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      flushDrafts();
+      flushDraft();
     };
   }, []);
 
   const commitDraft = useCallback((nextDraft: AgentChatComposerDraft): void => {
-    const activeIdentity = latestStateRef.current.identity;
-    const activeKey = latestStateRef.current.key;
-    const activeTaskId = latestStateRef.current.taskId;
-    if (activeIdentity) {
-      setAgentChatDraft(activeIdentity, activeTaskId, nextDraft);
-    }
+    const current = latestStateRef.current;
+    current.persistence?.set(nextDraft);
     setState({
-      key: activeKey,
-      identity: activeIdentity,
-      taskId: activeTaskId,
+      key: current.key,
+      persistence: current.persistence,
       draft: nextDraft,
     });
   }, []);
@@ -157,8 +107,7 @@ export function useAgentChatComposerDraftState({
     const current = latestStateRef.current;
     setState({
       key: current.key,
-      identity: current.identity,
-      taskId: current.taskId,
+      persistence: current.persistence,
       draft: nextDraft,
     });
   }, []);
@@ -168,9 +117,8 @@ export function useAgentChatComposerDraftState({
       const current = latestStateRef.current;
       return {
         key: current.key,
-        identity: current.identity,
-        taskId: current.taskId,
-        version: current.identity ? readAgentChatDraftVersion(current.identity) : null,
+        persistence: current.persistence,
+        version: current.persistence?.readVersion() ?? null,
         draft,
       };
     },
@@ -178,36 +126,26 @@ export function useAgentChatComposerDraftState({
   );
 
   const clearSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
-    if (!snapshot.identity) {
-      return;
-    }
-    clearAgentChatDraft(snapshot.identity, { onlyIfVersion: snapshot.version });
+    snapshot.persistence?.clear({ onlyIfVersion: snapshot.version });
   }, []);
 
   const restoreSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
     const current = latestStateRef.current;
-    if (
-      current.key !== snapshot.key ||
-      current.taskId !== snapshot.taskId ||
-      draftHasMeaningfulContent(current.draft)
-    ) {
+    if (current.key !== snapshot.key || draftHasMeaningfulContent(current.draft)) {
       return;
     }
 
-    if (current.identity) {
-      setAgentChatDraft(current.identity, current.taskId, snapshot.draft);
-    }
+    current.persistence?.set(snapshot.draft);
     setState({
       key: current.key,
-      identity: current.identity,
-      taskId: current.taskId,
+      persistence: current.persistence,
       draft: snapshot.draft,
     });
   }, []);
 
   return useMemo(
     () => ({
-      draft: state.key === nextStateKey ? state.draft : createEmptyComposerDraft(),
+      draft: state.key === nextKey ? state.draft : createEmptyComposerDraft(),
       commitDraft,
       setDisplayedDraft,
       createSubmittedDraftSnapshot,
@@ -218,8 +156,8 @@ export function useAgentChatComposerDraftState({
       clearSubmittedDraft,
       commitDraft,
       createSubmittedDraftSnapshot,
-      nextStateKey,
       restoreSubmittedDraft,
+      nextKey,
       setDisplayedDraft,
       state.draft,
       state.key,

@@ -430,12 +430,6 @@ export const flushAgentChatDraft = (identity: AgentChatDraftSessionIdentity): Pr
   return flushPromise;
 };
 
-export const flushAllAgentChatDrafts = async (): Promise<void> => {
-  await Promise.all(
-    Array.from(draftEntries.values(), (entry) => flushAgentChatDraft(entry.identity)),
-  );
-};
-
 export const clearAgentChatDraftsForTargets = (targets: AgentChatDraftCleanupTarget[]): void => {
   const uniqueIdentities = new Map<string, AgentChatDraftSessionIdentity>();
   for (const target of targets) {

@@ -7,17 +7,18 @@ import type {
   AgentChatPendingSendItems,
 } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import {
-  type AgentChatDraftScope,
-  agentChatDraftScopeKey,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
-import type { AgentChatDraftSessionIdentity } from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
+import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
+import {
+  type AgentStudioChatDraftScope,
+  agentStudioChatDraftScopeKey,
+  createAgentStudioChatDraftPersistence,
+} from "./agent-studio-chat-draft";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import { toSelectedSessionThreadSession } from "./agent-studio-thread-session";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
@@ -71,7 +72,7 @@ export type AgentStudioChatModelSelectionContext = {
 };
 
 export type AgentStudioChatComposerContext = {
-  draftScope: AgentChatDraftScope;
+  draftScope: AgentStudioChatDraftScope;
   workspaceId: string | null;
 };
 
@@ -155,18 +156,15 @@ export function useAgentStudioChatModel({
   const selectedSessionKey = selectedSessionIdentity
     ? agentSessionIdentityKey(selectedSessionIdentity)
     : null;
-  const draftPersistenceIdentity = useMemo<AgentChatDraftSessionIdentity | null>(() => {
-    if (!composer.workspaceId || !selectedSessionIdentity) {
-      return null;
-    }
-
-    return {
-      workspaceId: composer.workspaceId,
-      externalSessionId: selectedSessionIdentity.externalSessionId,
-      runtimeKind: selectedSessionIdentity.runtimeKind,
-      workingDirectory: selectedSessionIdentity.workingDirectory,
-    };
-  }, [composer.workspaceId, selectedSessionIdentity]);
+  const draftPersistence = useMemo(
+    () =>
+      createAgentStudioChatDraftPersistence({
+        workspaceId: composer.workspaceId,
+        taskId: selectedSession.taskId,
+        session: selectedSessionIdentity,
+      }),
+    [composer.workspaceId, selectedSession.taskId, selectedSessionIdentity],
+  );
   const surfaceState = useMemo(
     () =>
       deriveAgentStudioChatSurfaceState({
@@ -214,7 +212,14 @@ export function useAgentStudioChatModel({
     selectedSessionTranscriptState.kind,
     sessionReadModelLoadState.kind,
   ]);
-  const draftStateKey = agentChatDraftScopeKey(composer.draftScope);
+  const draftStateKey = agentStudioChatDraftScopeKey(composer.draftScope);
+  const draftScope = useMemo<AgentChatDraftScope>(
+    () => ({
+      key: draftStateKey,
+      persistence: draftPersistence,
+    }),
+    [draftPersistence, draftStateKey],
+  );
   const reviewCommentComposer = useAgentStudioReviewCommentComposerAdapter({
     draftScope: composer.draftScope,
     draftStateKey,
@@ -235,7 +240,6 @@ export function useAgentStudioChatModel({
 
   const composerConfig = useMemo(
     () => ({
-      taskId: selectedSession.taskId,
       displayedSessionKey: selectedSessionKey,
       selectedSession: selectedSessionIdentity
         ? {
@@ -253,8 +257,7 @@ export function useAgentStudioChatModel({
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
       ...(pendingSendItems ? { pendingSendItems } : {}),
-      draftStateKey,
-      draftPersistenceIdentity,
+      draftScope,
       onSend: reviewCommentComposer.onSend,
       isSending: sessionActions.isSending,
       isStarting: sessionActions.isStarting,
@@ -290,8 +293,7 @@ export function useAgentStudioChatModel({
     }),
     [
       chatContextUsage,
-      draftStateKey,
-      draftPersistenceIdentity,
+      draftScope,
       modelSelection.agentOptions,
       modelSelection.isSelectionCatalogLoading,
       modelSelection.isSlashCommandsLoading,
@@ -327,7 +329,6 @@ export function useAgentStudioChatModel({
       selectedSessionModel,
       selectedSessionKey,
       selectedSessionRuntimeData.isLoadingModelCatalog,
-      selectedSession.taskId,
       surfaceState.composerReadOnly,
       surfaceState.composerReadOnlyReason,
       sessionActions.busySendBlockedReason,

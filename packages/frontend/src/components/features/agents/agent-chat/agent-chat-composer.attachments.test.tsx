@@ -8,8 +8,12 @@ import {
   writeAgentChatDraftToStorage,
 } from "./agent-chat-draft-storage";
 import {
+  clearAgentChatDraft,
   flushAgentChatDraft,
+  hydrateAgentChatDraft,
+  readAgentChatDraftVersion,
   resetAgentChatDraftStoreForTests,
+  setAgentChatDraft,
   setAgentChatDraftAttachmentStagerForTests,
   setAgentChatDraftStorageForTests,
 } from "./agent-chat-draft-store";
@@ -27,14 +31,15 @@ const SHARED_CALLBACKS = {
 };
 
 const buildModel = () => ({
-  taskId: "task-1",
   displayedSessionKey: "session-1",
   isInteractionEnabled: true,
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,
-  draftStateKey: "draft-1",
-  draftPersistenceIdentity: null,
+  draftScope: {
+    key: "draft-1",
+    persistence: null,
+  },
   onSend: SHARED_CALLBACKS.onSend,
   isSending: false,
   isStarting: false,
@@ -115,6 +120,19 @@ const sessionIdentity = (
   workingDirectory,
 });
 
+const persistedDraftScope = (key: string, identity: AgentChatDraftSessionIdentity) => ({
+  key,
+  persistence: {
+    hydrate: () => hydrateAgentChatDraft(identity, "task-1"),
+    set: (draft: Parameters<typeof setAgentChatDraft>[2]) =>
+      setAgentChatDraft(identity, "task-1", draft),
+    readVersion: () => readAgentChatDraftVersion(identity),
+    clear: (options?: Parameters<typeof clearAgentChatDraft>[1]) =>
+      clearAgentChatDraft(identity, options),
+    flush: () => flushAgentChatDraft(identity),
+  },
+});
+
 const createDeferred = <T,>() => {
   let resolve: ((value: T) => void) | null = null;
   const promise = new Promise<T>((res) => {
@@ -191,8 +209,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: sessionA,
+          draftScope: persistedDraftScope("draft-a", sessionA),
         }}
       />,
     );
@@ -203,8 +220,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-b",
-          draftStateKey: "draft-b",
-          draftPersistenceIdentity: sessionB,
+          draftScope: persistedDraftScope("draft-b", sessionB),
         }}
       />,
     );
@@ -218,8 +234,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: sessionA,
+          draftScope: persistedDraftScope("draft-a", sessionA),
         }}
       />,
     );
@@ -242,8 +257,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: sessionA,
+          draftScope: persistedDraftScope("draft-a", sessionA),
         }}
       />,
     );
@@ -252,8 +266,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-b",
-          draftStateKey: "draft-b",
-          draftPersistenceIdentity: sessionB,
+          draftScope: persistedDraftScope("draft-b", sessionB),
         }}
       />,
     );
@@ -262,8 +275,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: sessionA,
+          draftScope: persistedDraftScope("draft-a", sessionA),
         }}
       />,
     );
@@ -293,8 +305,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: identity,
+          draftScope: persistedDraftScope("draft-a", identity),
         }}
       />,
     );
@@ -315,8 +326,7 @@ describe("AgentChatComposer attachments", () => {
           ...buildModel(),
           onSend,
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: identity,
+          draftScope: persistedDraftScope("draft-a", identity),
         }}
       />,
     );
@@ -348,8 +358,7 @@ describe("AgentChatComposer attachments", () => {
           ...buildModel(),
           onSend,
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: identity,
+          draftScope: persistedDraftScope("draft-a", identity),
           selectedModelDescriptor: {
             id: "openai/gpt-5.3-codex",
             providerId: "openai",
@@ -415,8 +424,7 @@ describe("AgentChatComposer attachments", () => {
           ...buildModel(),
           onSend,
           displayedSessionKey: "session-a",
-          draftStateKey: "draft-a",
-          draftPersistenceIdentity: identity,
+          draftScope: persistedDraftScope("draft-a", identity),
         }}
       />,
     );
@@ -578,7 +586,10 @@ describe("AgentChatComposer attachments", () => {
       <AgentChatComposer
         model={{
           ...initialModel,
-          draftStateKey: "draft-2",
+          draftScope: {
+            key: "draft-2",
+            persistence: null,
+          },
           displayedSessionKey: "session-2",
         }}
       />,
