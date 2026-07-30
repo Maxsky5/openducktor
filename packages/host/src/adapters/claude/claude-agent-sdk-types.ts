@@ -84,6 +84,7 @@ export type ClaudeManualCompactionState = {
 
 export type ClaudeSession = {
   acceptedUserMessages: ClaudeAcceptedUserMessage[];
+  activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount: number;
   abortController: AbortController;

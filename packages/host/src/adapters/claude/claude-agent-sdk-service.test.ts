@@ -5,6 +5,7 @@ import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../effect/host-errors";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
+import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
@@ -306,6 +307,43 @@ describe("createClaudeAgentSdkService", () => {
     ).resolves.toEqual({ totalTokens: 176_005, contextWindow: 272_000 });
 
     expect(getContextUsage).toHaveBeenCalledTimes(1);
+  });
+
+  test("drains live context refreshes before releasing a session", async () => {
+    const contextRead = Promise.withResolvers<{ maxTokens: number; totalTokens: number }>();
+    const queryClosed = Promise.withResolvers<void>();
+    const session = createSession({
+      query: {
+        close: mock(() => queryClosed.resolve()),
+        getContextUsage: () => contextRead.promise,
+      } as unknown as ClaudeSession["query"],
+    });
+    scheduleClaudeLiveContextUsageRefresh({
+      session,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      emit: () => {},
+      onBackgroundFailure: () => Effect.void,
+    });
+
+    let released = false;
+    const releasePromise = Effect.runPromise(
+      createService(session).releaseSession({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+      }),
+    ).then(() => {
+      released = true;
+    });
+    await queryClosed.promise;
+    await Promise.resolve();
+    expect(released).toBe(false);
+
+    contextRead.resolve({ maxTokens: 200_000, totalTokens: 95_000 });
+    await releasePromise;
+
+    expect(released).toBe(true);
   });
 
   test("returns the live Claude TODO snapshot", async () => {

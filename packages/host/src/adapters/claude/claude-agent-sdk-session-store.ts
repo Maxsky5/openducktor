@@ -23,6 +23,7 @@ const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.activeSdkUserTurnCount > 0 ||
   session.pendingUserTurnCount > 0 ||
   session.queuedSdkMessages.length > 0 ||
+  (session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0 ||
   session.pendingApprovals.size > 0 ||
   session.pendingQuestions.size > 0;
 
@@ -100,8 +101,8 @@ export const createClaudeAgentSdkSessionStore = ({
       });
     },
     stopSession: (input: SessionRef) =>
-      Effect.try({
-        try: () => {
+      Effect.tryPromise({
+        try: async () => {
           const session = sessions.get(input.externalSessionId);
           if (!session) {
             throw new HostValidationError({
@@ -112,6 +113,7 @@ export const createClaudeAgentSdkSessionStore = ({
           }
           assertClaudeSessionRef(session, input, "stop");
           close(session);
+          await flushClaudeLiveContextUsageRefresh(session);
           publishSessionFinished(session, "Session stopped");
         },
         catch: (cause) => {

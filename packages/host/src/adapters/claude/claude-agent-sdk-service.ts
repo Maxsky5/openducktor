@@ -31,7 +31,10 @@ import {
   loadClaudeHistory,
   searchClaudeWorkspaceFiles,
 } from "./claude-agent-sdk-catalog";
-import { readClaudeContextUsageFromQuery } from "./claude-agent-sdk-context-usage";
+import {
+  flushClaudeLiveContextUsageRefresh,
+  readClaudeContextUsageFromQuery,
+} from "./claude-agent-sdk-context-usage";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
 import {
   prepareClaudeApprovalReply,
@@ -112,6 +115,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       }
       assertClaudeSessionRef(session, input, "release");
       this.sessionStore.close(session);
+      await flushClaudeLiveContextUsageRefresh(session);
     });
   }
 

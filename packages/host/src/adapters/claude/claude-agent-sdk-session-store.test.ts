@@ -210,6 +210,28 @@ describe("createClaudeAgentSdkSessionStore", () => {
     ).resolves.toEqual({ supported: true, hasLiveSession: true });
   });
 
+  test("reports Claude sessions with running background subagents as active", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    store.set(
+      createSession({
+        activeBackgroundSubagentTaskIds: new Set(["task-1"]),
+        activity: "idle",
+        sdkState: "idle",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        store.probeSessionStatus({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+  });
+
   test("emits terminal events when stopping every session for a runtime", async () => {
     const events: unknown[] = [];
     const store = createClaudeAgentSdkSessionStore({
@@ -335,6 +357,48 @@ describe("createClaudeAgentSdkSessionStore", () => {
       "session_finished",
     ]);
     expect(backgroundFailures).toEqual([]);
+  });
+
+  test("drains live context refreshes before finishing an individual stop", async () => {
+    const contextRead = Promise.withResolvers<{ maxTokens: number; totalTokens: number }>();
+    const queryClosed = Promise.withResolvers<void>();
+    const events: Array<{ type: string }> = [];
+    const store = createClaudeAgentSdkSessionStore({
+      emit: (_session, event) => events.push(event),
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const session = createSession({
+      query: {
+        close: mock(() => queryClosed.resolve()),
+        getContextUsage: () => contextRead.promise,
+      } as unknown as ClaudeSession["query"],
+    });
+    store.set(session);
+    scheduleClaudeLiveContextUsageRefresh({
+      session,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      emit: (_session, event) => events.push(event),
+      onBackgroundFailure: () => Effect.void,
+    });
+
+    const stopPromise = Effect.runPromise(
+      store.stopSession({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo",
+        externalSessionId: "session-1",
+      }),
+    );
+    await queryClosed.promise;
+    expect(events).toEqual([]);
+
+    contextRead.resolve({ maxTokens: 200_000, totalTokens: 95_000 });
+    await stopPromise;
+
+    expect(events.map((event) => event.type)).toEqual([
+      "session_context_updated",
+      "session_finished",
+    ]);
   });
 
   test("aborts pending questions before closing a runtime session", async () => {

@@ -4,7 +4,10 @@ import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { isLiveFinalAssistantStopReason } from "./claude-agent-sdk-history-assistant";
-import { loadClaudeHistoryProjectionInput } from "./claude-agent-sdk-history-import";
+import {
+  type ClaudeHistoryMessage,
+  loadClaudeHistoryProjectionInput,
+} from "./claude-agent-sdk-history-import";
 import type { ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
 import {
   claudeSubagentAgentId,
@@ -62,6 +65,7 @@ export const reconciledClaudeSubagentStatus = (
 const reconcileClaudeSubagentStatuses = async (
   input: LoadAgentSessionHistoryInput,
   history: AgentSessionHistoryMessage[],
+  rootMessages: readonly SessionMessage[],
 ): Promise<void> => {
   const latestStatusBySessionId = new Map<string, { agentId?: string; status: string }>();
   for (const message of history) {
@@ -94,7 +98,7 @@ const reconcileClaudeSubagentStatuses = async (
       ? await getSubagentMessages(target.sessionId, selectedAgentId, {
           dir: input.workingDirectory,
         })
-      : [];
+      : rootMessages;
     const completionStates = await Promise.all(
       runningAgentIds.map(async (agentId) => {
         const messages = await getSubagentMessages(target.sessionId, agentId, {
@@ -134,6 +138,13 @@ const reconcileClaudeSubagentStatuses = async (
   }
 };
 
+const claudeSessionMessages = (messages: readonly ClaudeHistoryMessage[]): SessionMessage[] =>
+  messages.filter(
+    (message): message is SessionMessage =>
+      (message.type === "assistant" || message.type === "user" || message.type === "system") &&
+      "message" in message,
+  );
+
 export const finalizeClaudeHistory = (
   input: LoadAgentSessionHistoryInput,
   history: AgentSessionHistoryMessage[],
@@ -170,6 +181,6 @@ export const loadClaudeHistory = async (
     subagentAgentIdsByToolUseId,
     transcriptExternalSessionId: input.externalSessionId,
   });
-  await reconcileClaudeSubagentStatuses(input, history);
+  await reconcileClaudeSubagentStatuses(input, history, claudeSessionMessages(messages));
   return finalizeClaudeHistory(input, history);
 };
