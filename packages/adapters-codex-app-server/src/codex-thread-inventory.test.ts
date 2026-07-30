@@ -537,6 +537,21 @@ describe("CodexThreadInventoryReader", () => {
     expect(historyLoad).toEqual(threadReadResponse("thread-idle", "/repo", { type: "idle" }, []));
   });
 
+  test("rejects malformed paginated turn data", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadRead: async () => threadReadResponse("thread-idle"),
+      threadTurnsList: async () => ({ data: {}, nextCursor: null }),
+    } as unknown as CodexAppServerClient;
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-idle",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toThrow("Codex thread/turns/list response data must be an array.");
+  });
+
   test("returns null when read-only history has no stored thread", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
@@ -563,6 +578,24 @@ describe("CodexThreadInventoryReader", () => {
         throw new Error(
           "thread is not materialized yet: includeTurns is unavailable before first user message",
         );
+      },
+    } as unknown as CodexAppServerClient;
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-local",
+        workingDirectory: "/repo",
+        allowUnmaterialized: true,
+      }),
+    ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
+  });
+
+  test("preserves empty history when paginated turns are unavailable before the first message", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadRead: async () => threadReadResponse("thread-local"),
+      threadTurnsList: async () => {
+        throw new Error("thread/turns/list is unavailable before first user message");
       },
     } as unknown as CodexAppServerClient;
 
