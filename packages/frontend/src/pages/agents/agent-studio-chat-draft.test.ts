@@ -85,6 +85,31 @@ describe("Agent Studio chat draft adapter", () => {
     ).toBe(false);
   });
 
+  test("uses stable persistence targets for equivalent session identities", () => {
+    const selectedSession = session("session-1");
+    const first = createAgentStudioChatDraftPersistence({
+      workspaceId: "workspace",
+      taskId: "task-1",
+      session: selectedSession,
+    });
+    const refreshed = createAgentStudioChatDraftPersistence({
+      workspaceId: "workspace",
+      taskId: "task-1",
+      session: { ...selectedSession },
+    });
+    const otherWorkspace = createAgentStudioChatDraftPersistence({
+      workspaceId: "other-workspace",
+      taskId: "task-1",
+      session: selectedSession,
+    });
+
+    expect(first?.targetKey).toBe(refreshed?.targetKey);
+    expect(first?.targetKey).not.toBe(otherWorkspace?.targetKey);
+    expect(first?.targetKey).toBe(
+      toAgentChatDraftStorageKey({ workspaceId: "workspace", ...selectedSession }),
+    );
+  });
+
   test("reads an existing version 2 payload without migration", () => {
     const storage = createMemoryStorage();
     const selectedSession = session("session-1");

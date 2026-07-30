@@ -123,6 +123,7 @@ const sessionIdentity = (
 const persistedDraftScope = (key: string, identity: AgentChatDraftSessionIdentity) => ({
   key,
   persistence: {
+    targetKey: toAgentChatDraftStorageKey(identity),
     hydrate: () => hydrateAgentChatDraft(identity, "task-1"),
     set: (draft: Parameters<typeof setAgentChatDraft>[2]) =>
       setAgentChatDraft(identity, "task-1", draft),
@@ -340,6 +341,38 @@ describe("AgentChatComposer attachments", () => {
     await waitFor(() => {
       expect(onSend).toHaveBeenCalledTimes(1);
       expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
+    });
+  });
+
+  test("keeps the composer empty when equivalent persistence refreshes during send", async () => {
+    const storage = createMemoryStorage();
+    const identity = sessionIdentity("session-a");
+    const sendResult = createDeferred<boolean>();
+    const onSend = mock(() => sendResult.promise);
+    setAgentChatDraftStorageForTests(storage);
+    const buildPersistedModel = () => ({
+      ...buildModel(),
+      onSend,
+      displayedSessionKey: "session-a",
+      draftScope: persistedDraftScope("draft-a", identity),
+    });
+    const { container, rerender } = render(<AgentChatComposer model={buildPersistedModel()} />);
+
+    typeIntoComposer(container, "send once");
+    await flushAgentChatDraft(identity);
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(getEditorRoot(container).textContent).not.toContain("send once");
+    });
+
+    rerender(<AgentChatComposer model={buildPersistedModel()} />);
+    expect(getEditorRoot(container).textContent).not.toContain("send once");
+
+    sendResult.resolve(true);
+    await waitFor(() => {
+      expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
+      expect(getEditorRoot(container).textContent).not.toContain("send once");
     });
   });
 

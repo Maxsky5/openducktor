@@ -55,7 +55,16 @@ export function useAgentChatComposerDraftState({
 
   useLayoutEffect(() => {
     const current = latestStateRef.current;
-    if (current.key === nextKey && current.persistence === nextPersistence) {
+    const isSameDraft = current.key === nextKey;
+    const isSamePersistenceTarget = current.persistence?.targetKey === nextPersistence?.targetKey;
+    if (isSameDraft && isSamePersistenceTarget) {
+      if (current.persistence !== nextPersistence) {
+        setState({
+          key: current.key,
+          persistence: nextPersistence,
+          draft: current.draft,
+        });
+      }
       return;
     }
 
@@ -63,7 +72,7 @@ export function useAgentChatComposerDraftState({
       void current.persistence.flush();
     }
 
-    if (current.key === nextKey) {
+    if (isSameDraft) {
       const hasCurrentDraft = draftHasMeaningfulContent(current.draft);
       const nextDraft = hasCurrentDraft
         ? current.draft

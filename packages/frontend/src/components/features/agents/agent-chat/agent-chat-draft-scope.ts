@@ -1,6 +1,7 @@
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 
 export type AgentChatDraftPersistence = {
+  targetKey: string;
   hydrate: () => AgentChatComposerDraft;
   set: (draft: AgentChatComposerDraft) => number;
   readVersion: () => number | null;

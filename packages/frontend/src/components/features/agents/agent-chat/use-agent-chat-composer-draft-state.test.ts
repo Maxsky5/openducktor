@@ -25,6 +25,8 @@ const createDeferred = () => {
   return { promise, resolve: resolvePromise };
 };
 
+let fakePersistenceId = 0;
+
 const createFakePersistence = (
   initialDraft: AgentChatComposerDraft = createEmptyComposerDraft(),
   flush: () => Promise<void> = async () => {},
@@ -39,6 +41,7 @@ const createFakePersistence = (
     return true;
   });
   const adapter: AgentChatDraftPersistence = {
+    targetKey: `fake-persistence:${fakePersistenceId++}`,
     hydrate: () => draft,
     set: (nextDraft) => {
       draft = nextDraft;

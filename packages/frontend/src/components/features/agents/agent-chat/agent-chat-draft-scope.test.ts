@@ -18,6 +18,7 @@ describe("agent chat draft scope", () => {
     const scope = {
       key: "caller-owned",
       persistence: {
+        targetKey: "caller-owned:persistence",
         hydrate: () => draft,
         set: () => 1,
         readVersion: () => 1,

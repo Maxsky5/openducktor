@@ -1,6 +1,9 @@
 import type { AgentRole } from "@openducktor/core";
 import type { AgentChatDraftPersistence } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
-import type { AgentChatDraftSessionIdentity } from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
+import {
+  type AgentChatDraftSessionIdentity,
+  toAgentChatDraftStorageKey,
+} from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
 import {
   clearAgentChatDraft,
   flushAgentChatDraft,
@@ -67,6 +70,7 @@ export const createAgentStudioChatDraftPersistence = ({
   }
 
   return {
+    targetKey: toAgentChatDraftStorageKey(identity),
     hydrate: () => hydrateAgentChatDraft(identity, taskId),
     set: (draft) => setAgentChatDraft(identity, taskId, draft),
     readVersion: () => readAgentChatDraftVersion(identity),
