@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
@@ -172,82 +173,89 @@ describe("handleClaudeSdkMessage denied tool events", () => {
     ]);
   });
 
-  test("routes subagent permission denials to the subagent transcript", () => {
-    const events: AgentEvent[] = [];
-    const session = createSession();
-    session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
-    const handleMessage = (
-      message: Parameters<typeof handleClaudeSdkMessage>[0]["message"],
-      timestamp: string,
-    ) => {
-      handleClaudeSdkMessage({
-        session,
-        timestamp,
-        modelSelection: (model) => ({
-          providerId: "claude",
-          modelId: model,
-          runtimeKind: "claude",
-        }),
-        emit: (event) => events.push(event),
-        message,
-      });
-    };
+  test.each(["task", "agent"] as const)(
+    "routes subagent permission denials through the %s ID map",
+    (idMap) => {
+      const events: AgentEvent[] = [];
+      const session: ClaudeEventSession = createSession();
+      if (idMap === "task") {
+        session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
+      } else {
+        session.subagentAgentIdsByToolUseId = new Map([["agent-call", "agent-1"]]);
+      }
+      const handleMessage = (
+        message: Parameters<typeof handleClaudeSdkMessage>[0]["message"],
+        timestamp: string,
+      ) => {
+        handleClaudeSdkMessage({
+          session,
+          timestamp,
+          modelSelection: (model) => ({
+            providerId: "claude",
+            modelId: model,
+            runtimeKind: "claude",
+          }),
+          emit: (event) => events.push(event),
+          message,
+        });
+      };
 
-    handleMessage(
-      claudeSdkMessageFixture({
-        type: "assistant",
-        uuid: "assistant-subagent",
-        session_id: "session-1",
-        parent_tool_use_id: "agent-call",
-        message: {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_use",
-              id: "bash-call",
-              name: "Bash",
-              input: { command: "rm -rf dist" },
-            },
-          ],
-          stop_reason: "tool_use",
-        },
-      }),
-      "2026-06-25T20:00:00.000Z",
-    );
-    handleMessage(
-      claudeSdkMessageFixture({
-        type: "system",
-        subtype: "permission_denied",
-        uuid: "permission-subagent",
-        session_id: "session-1",
-        tool_use_id: "bash-call",
-        tool_name: "Bash",
-        message: "Denied by policy",
-        agent_id: "agent-1",
-      }),
-      "2026-06-25T20:00:03.000Z",
-    );
-
-    const toolEvents = events.filter(
-      (event) =>
-        event.type === "assistant_part" &&
-        event.part.kind === "tool" &&
-        event.part.callId === "bash-call",
-    );
-    expect(toolEvents).toHaveLength(2);
-    expect(toolEvents[0]?.externalSessionId).not.toBe("session-1");
-    expect(toolEvents[1]).toEqual(
-      expect.objectContaining({
-        externalSessionId: toolEvents[0]?.externalSessionId,
-        part: expect.objectContaining({
-          callId: "bash-call",
-          error: "Denied by policy",
-          input: { command: "rm -rf dist" },
-          status: "error",
+      handleMessage(
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: "assistant-subagent",
+          session_id: "session-1",
+          parent_tool_use_id: "agent-call",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "bash-call",
+                name: "Bash",
+                input: { command: "rm -rf dist" },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
         }),
-      }),
-    );
-  });
+        "2026-06-25T20:00:00.000Z",
+      );
+      handleMessage(
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "permission_denied",
+          uuid: "permission-subagent",
+          session_id: "session-1",
+          tool_use_id: "bash-call",
+          tool_name: "Bash",
+          message: "Denied by policy",
+          agent_id: "agent-1",
+        }),
+        "2026-06-25T20:00:03.000Z",
+      );
+
+      const toolEvents = events.filter(
+        (event) =>
+          event.type === "assistant_part" &&
+          event.part.kind === "tool" &&
+          event.part.callId === "bash-call",
+      );
+      expect(toolEvents).toHaveLength(2);
+      expect(toolEvents[0]?.externalSessionId).not.toBe("session-1");
+      expect(toolEvents[1]).toEqual(
+        expect.objectContaining({
+          externalSessionId: toolEvents[0]?.externalSessionId,
+          part: expect.objectContaining({
+            callId: "bash-call",
+            error: "Denied by policy",
+            input: { command: "rm -rf dist" },
+            status: "error",
+          }),
+        }),
+      );
+    },
+  );
 
   test("does not turn result permission summaries into duplicate tool parts", () => {
     const events: AgentEvent[] = [];

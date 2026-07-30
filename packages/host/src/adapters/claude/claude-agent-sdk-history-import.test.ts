@@ -102,6 +102,49 @@ describe("Claude SDK history import", () => {
     );
   });
 
+  test("maps direct subagent transcripts to Agent tool calls in the root transcript", () => {
+    const rootEntry = {
+      type: "assistant",
+      uuid: "root-agent-tool",
+      timestamp: "2026-07-22T20:27:59.000Z",
+      sessionId: "session-1",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "root-agent-call",
+            name: "Agent",
+            input: { description: "Inspect behavior" },
+          },
+        ],
+      },
+    } as const satisfies SessionStoreEntry;
+    const childEntry = {
+      type: "assistant",
+      uuid: "child-message",
+      timestamp: "2026-07-22T20:28:00.000Z",
+      sessionId: "session-1",
+      parent_tool_use_id: "root-agent-call",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Inspecting." }],
+      },
+    } as const satisfies SessionStoreEntry;
+    const entriesBySubpath = new Map<string | undefined, SessionStoreEntry[]>([
+      [undefined, [rootEntry]],
+      ["subagents/agent-child", [childEntry]],
+    ]);
+
+    expect(readSubagentAgentIdsByToolUseId(entriesBySubpath, undefined)).toEqual(
+      new Map([["root-agent-call", "child"]]),
+    );
+    expect(
+      filterClaudeHistoryMessages(entriesBySubpath.get(undefined) ?? []).map((entry) => entry.uuid),
+    ).toEqual(["root-agent-tool"]);
+  });
+
   test("propagates missing Claude transcripts as typed history errors", async () => {
     const workingDirectory = await mkdtemp(join(tmpdir(), "openducktor-claude-history-"));
     try {

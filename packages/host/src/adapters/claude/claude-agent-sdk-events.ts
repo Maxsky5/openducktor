@@ -5,7 +5,7 @@ import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
 import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
-  claudeSubagentEventSession,
+  findClaudeSubagentSessionByAgentId,
   findClaudeSubagentTaskSession,
   rememberAssistantTextForCurrentTurn,
 } from "./claude-agent-sdk-event-session";
@@ -178,17 +178,7 @@ export const handleClaudeSdkMessage = ({
   if (message.type === "system" && message.subtype === "permission_denied") {
     let permissionSession = session;
     if (message.agent_id) {
-      let parentToolUseId: string | undefined;
-      for (const [toolUseId, agentId] of session.subagentTaskIdsByToolUseId) {
-        if (agentId === message.agent_id) {
-          parentToolUseId = toolUseId;
-          break;
-        }
-      }
-      if (!parentToolUseId) {
-        return;
-      }
-      const subagentSession = claudeSubagentEventSession(session, parentToolUseId);
+      const subagentSession = findClaudeSubagentSessionByAgentId(session, message.agent_id);
       if (!subagentSession) {
         return;
       }

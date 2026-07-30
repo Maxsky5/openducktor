@@ -256,6 +256,35 @@ const pickSessionCatalogDefaultSelection = (
   return fallbackSelection;
 };
 
+const coerceLiveSessionRepairSelection = (
+  selectionCatalog: AgentModelCatalog,
+  selection: AgentModelSelection | null,
+): AgentModelSelection | null => {
+  if (!selection) {
+    return null;
+  }
+  const model = selectionCatalog.models.find(
+    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
+  );
+  if (!model?.liveSessionUpdates?.variants) {
+    return selection;
+  }
+
+  const liveVariants = new Set(model.liveSessionUpdates.variants);
+  const variant =
+    selection.variant && liveVariants.has(selection.variant)
+      ? selection.variant
+      : model.variants.find((entry) => liveVariants.has(entry));
+  if (model.variants.length > 0 && !variant) {
+    return null;
+  }
+
+  return {
+    ...selection,
+    ...(variant ? { variant } : {}),
+  };
+};
+
 const resolveLoadedSessionSelection = ({
   selectionCatalog,
   selectedSessionModel,
@@ -297,8 +326,21 @@ const resolveLoadedSessionSelection = ({
     selectionCatalog,
     sessionRuntimeKind,
   );
+  if (
+    normalizedSessionSelection &&
+    isSameSelection(selectedSessionModel, normalizedSessionSelection)
+  ) {
+    return {
+      selectedModelSelection: normalizedSessionSelection,
+      repairSelection: null,
+      isSendable: true,
+    };
+  }
+
   const selectedModelSelection =
-    normalizedSessionSelection ?? fallbackRoleDefaultSelection ?? fallbackCatalogSelection;
+    coerceLiveSessionRepairSelection(selectionCatalog, normalizedSessionSelection) ??
+    coerceLiveSessionRepairSelection(selectionCatalog, fallbackRoleDefaultSelection) ??
+    coerceLiveSessionRepairSelection(selectionCatalog, fallbackCatalogSelection);
 
   if (!selectedModelSelection) {
     return {
@@ -308,13 +350,9 @@ const resolveLoadedSessionSelection = ({
     };
   }
 
-  const repairSelection = isSameSelection(selectedSessionModel, selectedModelSelection)
-    ? null
-    : selectedModelSelection;
-
   return {
     selectedModelSelection,
-    repairSelection,
-    isSendable: repairSelection === null,
+    repairSelection: selectedModelSelection,
+    isSendable: false,
   };
 };

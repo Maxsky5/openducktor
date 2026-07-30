@@ -215,9 +215,6 @@ export const readSubagentAgentIdsByToolUseId = (
   entriesBySubpath: ReadonlyMap<string | undefined, readonly SessionStoreEntry[]>,
   targetSubpath: string | undefined,
 ): Map<string, string> => {
-  if (!targetSubpath) {
-    return new Map();
-  }
   const targetToolUseIds = readAgentToolUseIds(entriesBySubpath.get(targetSubpath) ?? []);
   const agentIdsByToolUseId = new Map<string, string>();
   for (const [subpath, entries] of entriesBySubpath) {
@@ -248,7 +245,7 @@ export const loadClaudeHistoryProjectionInput = async (
   try {
     await importSessionToStore(target.sessionId, store, {
       dir: input.workingDirectory,
-      includeSubagents: target.subpath !== undefined,
+      includeSubagents: true,
     });
   } catch (cause) {
     throw new HostOperationError({
