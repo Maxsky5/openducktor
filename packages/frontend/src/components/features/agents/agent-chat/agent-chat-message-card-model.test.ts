@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { AgentModelCatalog } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   assistantRoleFromMessage,
@@ -874,6 +875,46 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("assistant footer", () => {
+    test("uses the catalog display name without changing the runtime model id", () => {
+      const catalog = {
+        models: [
+          {
+            id: "sonnet",
+            providerId: "claude",
+            providerName: "Claude",
+            modelId: "sonnet",
+            modelName: "GPT-5.6-TERRA",
+            variants: ["high"],
+            attachmentSupport: {
+              image: true,
+              audio: false,
+              video: false,
+              pdf: true,
+            },
+          },
+        ],
+        defaultModelsByProvider: {
+          claude: "sonnet",
+        },
+      } satisfies AgentModelCatalog;
+      const message = createMessage({
+        meta: {
+          kind: "assistant",
+          agentRole: "spec",
+          isFinal: true,
+          providerId: "claude",
+          modelId: "sonnet",
+          variant: "high",
+        },
+      });
+
+      expect(message.meta?.kind === "assistant" ? message.meta.modelId : null).toBe("sonnet");
+      expect(getAssistantFooterData(message, catalog).infoParts).toEqual([
+        "claude/GPT-5.6-TERRA",
+        "high",
+      ]);
+    });
+
     test("returns metadata labels for assistant messages", () => {
       const footer = getAssistantFooterData(
         createMessage({

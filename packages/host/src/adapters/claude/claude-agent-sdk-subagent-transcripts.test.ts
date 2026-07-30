@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
+import {
+  claudeSubagentAgentId,
+  parseClaudeTranscriptTarget,
+} from "./claude-agent-sdk-subagent-transcripts";
 
 describe("parseClaudeTranscriptTarget", () => {
   test("keeps root session ids unchanged", () => {
@@ -15,14 +18,14 @@ describe("parseClaudeTranscriptTarget", () => {
     });
   });
 
-  test("maps nested subagent levels to the Claude SDK transcript subpath", () => {
+  test("uses the root session and leaf agent id for nested subagent transcripts", () => {
     expect(
       parseClaudeTranscriptTarget(
         "session-1::claude-subagent::child::claude-subagent::agent-grandchild",
       ),
     ).toEqual({
       sessionId: "session-1",
-      subpath: "subagents/agent-child/subagents/agent-grandchild",
+      subpath: "subagents/agent-grandchild",
     });
   });
 
@@ -31,5 +34,12 @@ describe("parseClaudeTranscriptTarget", () => {
     expect(parseClaudeTranscriptTarget(externalSessionId)).toEqual({
       sessionId: externalSessionId,
     });
+  });
+
+  test("reads the selected leaf agent id", () => {
+    expect(
+      claudeSubagentAgentId("session-1::claude-subagent::parent::claude-subagent::grandchild"),
+    ).toBe("grandchild");
+    expect(claudeSubagentAgentId("session-1")).toBeUndefined();
   });
 });

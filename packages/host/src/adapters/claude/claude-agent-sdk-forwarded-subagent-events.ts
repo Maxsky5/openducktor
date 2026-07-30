@@ -7,6 +7,7 @@ import {
 import { readClaudeHistoryDisplayParts } from "./claude-agent-sdk-history-support";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
+import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ForwardedClaudeSubagentMessage = {
@@ -69,7 +70,7 @@ export const emitClaudeSubagentUserMessage = ({
   if (
     !isClaudeSubagentTranscriptTarget(session.externalSessionId) ||
     isClaudeToolResultUserMessage(message) ||
-    message.isSynthetic === true
+    !isClaudeHumanUserMessage(message)
   ) {
     return;
   }
@@ -91,12 +92,7 @@ export const emitClaudeSubagentUserMessage = ({
 };
 
 const forwardedSubagentParentToolUseId = (message: SDKMessage): string | null => {
-  if (
-    message.type !== "assistant" &&
-    message.type !== "user" &&
-    message.type !== "stream_event" &&
-    message.type !== "tool_progress"
-  ) {
+  if (message.type !== "assistant" && message.type !== "user" && message.type !== "tool_progress") {
     return null;
   }
   const parentToolUseId = message.parent_tool_use_id;

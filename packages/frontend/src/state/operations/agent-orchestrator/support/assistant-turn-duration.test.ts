@@ -29,6 +29,17 @@ describe("assistant-turn-duration", () => {
     ).toBeUndefined();
   });
 
+  test("does not include assistant activity that predates the current user turn", () => {
+    expect(
+      resolveAssistantTurnDurationMs({
+        activityStartedAtMs: 1_000,
+        userAnchorAtMs: 10_000,
+        previousAssistantCompletedAtMs: 500,
+        completedAtMs: 20_000,
+      }),
+    ).toBe(10_000);
+  });
+
   test("reads assistant-owned activity from tool and subagent parts", () => {
     const parts = [
       {

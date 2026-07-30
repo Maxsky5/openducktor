@@ -3,7 +3,8 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history assistant turns", () => {
-  test("hydrates Claude thinking and skips superseded text-only tool-use drafts", () => {
+  test("hydrates one Claude response from split reasoning, text, and tool snapshots", () => {
+    const responseId = "response-tool-use";
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -13,6 +14,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           parent_tool_use_id: null,
           timestamp: "2026-06-26T11:03:14.000Z",
           message: {
+            id: responseId,
             role: "assistant",
             content: [{ type: "thinking", thinking: "I need the task context first." }],
             stop_reason: "tool_use",
@@ -25,6 +27,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           parent_tool_use_id: null,
           timestamp: "2026-06-26T11:03:15.000Z",
           message: {
+            id: responseId,
             role: "assistant",
             content: [{ type: "text", text: "I will inspect the task first." }],
             stop_reason: "tool_use",
@@ -37,6 +40,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           parent_tool_use_id: null,
           timestamp: "2026-06-26T11:03:16.000Z",
           message: {
+            id: responseId,
             role: "assistant",
             content: [
               { type: "text", text: "I will inspect the task first." },
@@ -54,33 +58,20 @@ describe("claude-agent-sdk-history assistant turns", () => {
       () => "2026-06-26T12:00:00.000Z",
     );
 
-    expect(history).toHaveLength(2);
+    expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
-      messageId: "assistant-thinking",
-      role: "assistant",
-      text: "",
-      parts: [
-        {
-          kind: "reasoning",
-          messageId: "assistant-thinking",
-          partId: "assistant-thinking:thinking:0",
-          text: "I need the task context first.",
-          completed: true,
-        },
-      ],
-    });
-    expect(history[1]).toMatchObject({
-      messageId: "assistant-final",
+      messageId: responseId,
       role: "assistant",
       text: "I will inspect the task first.",
     });
-    expect(history[1]?.parts[0]).toMatchObject({
-      kind: "text",
-      messageId: "assistant-final",
-      text: "I will inspect the task first.",
+    expect(history[0]?.parts).toContainEqual({
+      kind: "reasoning",
+      messageId: responseId,
+      partId: `${responseId}:thinking:0`,
+      text: "I need the task context first.",
       completed: true,
     });
-    expect(history[1]?.parts).toContainEqual(
+    expect(history[0]?.parts).toContainEqual(
       expect.objectContaining({
         kind: "tool",
         callId: "tool-1",
@@ -91,7 +82,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
     );
   });
 
-  test("preserves interleaved text and tool block order for hydrated drafts", () => {
+  test("preserves interleaved text and tool block order for hydrated intermediate responses", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -218,9 +209,190 @@ describe("claude-agent-sdk-history assistant turns", () => {
     expect(history[0]).toMatchObject({
       messageId: "assistant-final",
       text: "  Spec persisted.\n",
-      durationMs: 4_000,
     });
+    expect(history[0]).not.toHaveProperty("durationMs");
     expect(history[0]?.parts.filter((part) => part.kind === "step")).toHaveLength(1);
+  });
+
+  test("hydrates peer responses as intermediate and the closing task response as final", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "human-user",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:10.000Z",
+          message: { role: "user", content: "Review the task" },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "human-assistant",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:11.000Z",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [{ type: "text", text: "Human turn response" }],
+            stop_reason: "end_turn",
+          },
+        }),
+        {
+          type: "result",
+          uuid: "human-result",
+          timestamp: "2026-06-26T11:03:12.000Z",
+          subtype: "success",
+          duration_ms: 1_000,
+          is_error: false,
+          result: "Human turn response",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          origin: { kind: "human" },
+        },
+        {
+          type: "user",
+          uuid: "first-task-user",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:12.100Z",
+          message: { role: "user", content: "First task notification" },
+          origin: { kind: "task-notification" },
+        },
+        toSessionMessage({
+          type: "assistant",
+          uuid: "first-task-assistant",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:12.200Z",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [{ type: "text", text: "First task response" }],
+            stop_reason: "end_turn",
+          },
+        }),
+        {
+          type: "result",
+          uuid: "first-task-result",
+          timestamp: "2026-06-26T11:03:12.300Z",
+          subtype: "success",
+          is_error: false,
+          result: "First task response",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          origin: { kind: "task-notification" },
+        },
+        {
+          type: "user",
+          uuid: "peer-user",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:13.000Z",
+          message: { role: "user", content: "Peer update" },
+          origin: {
+            kind: "peer",
+            from: "general-purpose",
+            senderTaskId: "agent-1",
+          },
+        },
+        toSessionMessage({
+          type: "assistant",
+          uuid: "peer-assistant",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:14.000Z",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [{ type: "text", text: "Peer turn response" }],
+            stop_reason: "end_turn",
+          },
+        }),
+        {
+          type: "result",
+          uuid: "peer-result",
+          timestamp: "2026-06-26T11:03:15.000Z",
+          subtype: "success",
+          duration_ms: 1_000,
+          is_error: false,
+          result: "Peer turn response",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          origin: {
+            kind: "peer",
+            from: "general-purpose",
+            senderTaskId: "agent-1",
+          },
+        },
+        {
+          type: "user",
+          uuid: "task-user",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:16.000Z",
+          message: { role: "user", content: "Task notification" },
+          origin: { kind: "task-notification" },
+        },
+        toSessionMessage({
+          type: "assistant",
+          uuid: "task-assistant",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:17.000Z",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [{ type: "text", text: "Task-notification response" }],
+            stop_reason: "end_turn",
+          },
+        }),
+        {
+          type: "result",
+          uuid: "task-result",
+          timestamp: "2026-06-26T11:03:18.000Z",
+          subtype: "success",
+          duration_ms: 1_000,
+          is_error: false,
+          result: "Task-notification response",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          origin: { kind: "task-notification" },
+        },
+      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    const findAssistantResponse = (text: string) =>
+      history.find(
+        (message): message is Extract<(typeof history)[number], { role: "assistant" }> =>
+          message.role === "assistant" && message.text === text,
+      );
+    const humanResponse = findAssistantResponse("Human turn response");
+    const firstTaskResponse = findAssistantResponse("First task response");
+    const peerResponse = findAssistantResponse("Peer turn response");
+    const taskResponse = findAssistantResponse("Task-notification response");
+
+    expect(humanResponse?.parts).toContainEqual(
+      expect.objectContaining({ kind: "step", phase: "finish" }),
+    );
+    expect(humanResponse?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
+    expect(firstTaskResponse?.parts).not.toContainEqual(
+      expect.objectContaining({ kind: "step", phase: "finish" }),
+    );
+    expect(firstTaskResponse?.model).toBeUndefined();
+    expect(peerResponse?.parts).not.toContainEqual(
+      expect.objectContaining({ kind: "step", phase: "finish" }),
+    );
+    expect(peerResponse?.model).toBeUndefined();
+    expect(taskResponse?.parts).toContainEqual(
+      expect.objectContaining({ kind: "step", phase: "finish" }),
+    );
+    expect(taskResponse?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
   });
 
   test("does not mark reasoning-only end-turn frames as completed turns before final text", () => {
@@ -274,7 +446,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
     });
   });
 
-  test("finalizes non-final same-text assistant output repeated by a successful result", () => {
+  test("finalizes result text repeated by an intermediate assistant response", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -284,6 +456,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           parent_tool_use_id: null,
           timestamp: "2026-06-26T11:03:16.000Z",
           message: {
+            id: "response-draft",
             role: "assistant",
             content: [{ type: "text", text: "Spec persisted." }],
           },
@@ -305,13 +478,13 @@ describe("claude-agent-sdk-history assistant turns", () => {
 
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
-      messageId: "assistant-draft",
+      messageId: "response-draft",
       text: "Spec persisted.",
       parts: [
         {
           kind: "step",
-          messageId: "assistant-draft",
-          partId: "assistant-draft:finish",
+          messageId: "response-draft",
+          partId: "response-draft:finish",
           phase: "finish",
           reason: "stop",
         },

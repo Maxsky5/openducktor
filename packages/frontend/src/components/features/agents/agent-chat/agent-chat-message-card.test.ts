@@ -1203,6 +1203,46 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("high");
   });
 
+  test("renders the catalog model name while preserving the runtime model id", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-claude-footer",
+          role: "assistant",
+          content: "Implemented the requested changes.",
+          timestamp: "2026-02-22T10:23:15.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            isFinal: true,
+            providerId: "claude",
+            modelId: "sonnet",
+            variant: "high",
+          },
+        },
+        modelCatalog: {
+          models: [
+            {
+              id: "sonnet",
+              providerId: "claude",
+              providerName: "Claude",
+              modelId: "sonnet",
+              modelName: "GPT-5.6-TERRA",
+              variants: ["high"],
+            },
+          ],
+          defaultModelsByProvider: {
+            claude: "sonnet",
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("claude/GPT-5.6-TERRA");
+    expect(html).not.toContain("claude/sonnet");
+  });
+
   test("renders no-profile Codex assistant footer with the Codex session accent", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

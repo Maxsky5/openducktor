@@ -1,6 +1,19 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import { readClaudeBackgroundAgentLaunch } from "./claude-agent-sdk-runtime-messages";
+import {
+  claudeAgentResultExecutionMode,
+  claudeAgentResultStatus,
+  claudeSubagentStatusFromTaskStatus,
+  firstClaudeTaskText,
+  isTerminalClaudeTaskStatus,
+  readClaudeFailedTaskMessage,
+  readClaudeFailedTaskReason,
+  readClaudeTaskStopTaskId,
+  readStructuredClaudeAgentResult,
+  resolveClaudeSubagentToolUseId,
+} from "./claude-agent-sdk-subagent-results";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import {
@@ -12,13 +25,16 @@ import { settleClaudeStreamedAssistantText } from "./claude-agent-sdk-transcript
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeSubagentSession = {
+  activeBackgroundSubagentTaskIds?: Set<string>;
   externalSessionId: string;
   hiddenSubagentTaskIds?: Set<string>;
   retractedSubagentTaskIds?: Set<string>;
   retractedToolUseIds?: Set<string>;
   subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
   subagentMessageIdsByTaskId: Map<string, string>;
+  subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
+  toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };
@@ -30,10 +46,6 @@ type ClaudeSubagentSystemMessage = Extract<
     subtype: "task_started" | "task_progress" | "task_updated" | "task_notification";
   }
 >;
-
-type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
-type SubagentExecutionMode = NonNullable<SubagentStreamPart["executionMode"]>;
-
 const shouldSuppressSubagentTask = (
   session: ClaudeSubagentSession,
   taskId: string,
@@ -47,24 +59,8 @@ const shouldSuppressSubagentTask = (
   return session.hiddenSubagentTaskIds?.has(taskId) ?? false;
 };
 
-const subagentStatusFromClaudeTaskStatus = (
-  status: "pending" | "running" | "completed" | "failed" | "killed" | "paused" | undefined,
-): Extract<AgentStreamPart, { kind: "subagent" }>["status"] => {
-  if (status === "completed") {
-    return "completed";
-  }
-  if (status === "failed") {
-    return "error";
-  }
-  if (status === "killed") {
-    return "cancelled";
-  }
-  return "running";
-};
-
 const isAgentToolName = (toolName: string | undefined): boolean =>
   toolName?.toLowerCase() === "agent";
-
 const isVisibleSubagentTaskStart = (
   message: ClaudeSubagentSystemMessage,
   toolName: string | undefined,
@@ -75,18 +71,24 @@ const isVisibleSubagentTaskStart = (
   if (isAgentToolName(toolName)) {
     return true;
   }
-  return readStringProp(message, "task_type") === "agent";
+  const taskType = readStringProp(message, "task_type");
+  return taskType === "local_agent" || taskType === "remote_agent";
 };
 
 const emitSubagentPart = (
   emit: (event: AgentEvent) => void,
   session: ClaudeSubagentSession,
-  taskId: string,
+  agentId: string,
+  toolUseId: string | undefined,
   status: Extract<AgentStreamPart, { kind: "subagent" }>["status"],
   timestamp: string,
   details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>>,
 ): void => {
-  const messageId = session.subagentMessageIdsByTaskId.get(taskId) ?? session.externalSessionId;
+  const correlationKey = toolUseId ?? agentId;
+  const messageId =
+    (toolUseId ? session.toolMessageIdsByCallId.get(toolUseId) : undefined) ??
+    session.subagentMessageIdsByTaskId.get(agentId) ??
+    session.externalSessionId;
   emit({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,
@@ -94,113 +96,14 @@ const emitSubagentPart = (
     part: {
       kind: "subagent",
       messageId,
-      partId: `claude-subagent:${taskId}`,
-      correlationKey: taskId,
+      partId: `claude-subagent:${correlationKey}`,
+      correlationKey,
       status,
-      externalSessionId: claudeSubagentExternalSessionId(session.externalSessionId, taskId),
+      externalSessionId: claudeSubagentExternalSessionId(session.externalSessionId, agentId),
       ...details,
     },
   });
 };
-
-const readStructuredAgentResult = (raw: Record<string, unknown>): Record<string, unknown> => {
-  if (isRecord(raw.toolUseResult)) {
-    return raw.toolUseResult;
-  }
-  if (isRecord(raw.structuredContent)) {
-    return raw.structuredContent;
-  }
-  return raw;
-};
-
-const agentResultStatus = (
-  result: Record<string, unknown>,
-  isError: boolean,
-): SubagentStreamPart["status"] => {
-  if (isError) {
-    return "error";
-  }
-  const status = readStringProp(result, "status");
-  if (status === "async_launched" || status === "remote_launched") {
-    return "running";
-  }
-  if (status === "running" || status === "pending") {
-    return "running";
-  }
-  if (status === "completed") {
-    return "completed";
-  }
-  if (status === "failed" || status === "error") {
-    return "error";
-  }
-  if (status === "cancelled" || status === "canceled" || status === "killed") {
-    return "cancelled";
-  }
-  return "completed";
-};
-
-const agentResultExecutionMode = (
-  result: Record<string, unknown>,
-  input: Record<string, unknown> | undefined,
-): SubagentExecutionMode => {
-  const status = readStringProp(result, "status");
-  if (status === "async_launched" || status === "remote_launched") {
-    return "background";
-  }
-  return input?.run_in_background === true ? "background" : "foreground";
-};
-
-const firstNonEmptyString = (...values: Array<string | undefined | null>): string | undefined => {
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (trimmed) {
-      return trimmed;
-    }
-  }
-  return undefined;
-};
-
-const readFailedTaskMessage = (value: Record<string, unknown>): string | undefined =>
-  firstNonEmptyString(
-    readStringProp(value, "error"),
-    readStringProp(value, "message"),
-    readStringProp(value, "reason"),
-    readStringProp(value, "description"),
-    readStringProp(value, "summary"),
-  );
-
-const readFailedTaskErrorReason = (value: Record<string, unknown>): string | undefined =>
-  firstNonEmptyString(
-    readStringProp(value, "error"),
-    readStringProp(value, "message"),
-    readStringProp(value, "reason"),
-  );
-
-const subagentToolUseId = (
-  session: ClaudeSubagentSession,
-  taskId: string,
-  toolUseId: string | undefined,
-): string | undefined => {
-  if (toolUseId) {
-    return toolUseId;
-  }
-  for (const [candidateToolUseId, candidateTaskId] of session.subagentTaskIdsByToolUseId) {
-    if (candidateTaskId === taskId) {
-      return candidateToolUseId;
-    }
-  }
-  return undefined;
-};
-
-const releaseSubagentEventSession = (
-  session: ClaudeSubagentSession,
-  toolUseId: string | undefined,
-): void => {
-  if (toolUseId) {
-    session.subagentEventSessionsByToolUseId?.delete(toolUseId);
-  }
-};
-
 const emitCompletedSubagentAssistantMessage = (
   emit: (event: AgentEvent) => void,
   session: ClaudeSubagentSession,
@@ -230,7 +133,6 @@ const emitCompletedSubagentAssistantMessage = (
   });
   delete childSession.pendingSubagentAssistantMessage;
 };
-
 export const emitClaudeAgentToolResultSubagentPart = ({
   emit,
   input,
@@ -253,26 +155,33 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   if (isClaudeToolUseRetracted(session, toolUseId)) {
     return;
   }
-  const structuredResult = readStructuredAgentResult(resultRaw);
-  const agentId =
+  const storedResult = readStructuredClaudeAgentResult(resultRaw);
+  const backgroundLaunch = readClaudeBackgroundAgentLaunch(resultText);
+  const structuredResult = backgroundLaunch
+    ? { ...backgroundLaunch, ...storedResult }
+    : storedResult;
+  const resultAgentId =
     readStringProp(structuredResult, "agentId") ?? readStringProp(structuredResult, "taskId");
+  const knownAgentId = session.subagentAgentIdsByToolUseId?.get(toolUseId);
+  const agentId = resultAgentId ?? knownAgentId;
   if (!agentId) {
     return;
   }
 
   const taskId = session.subagentTaskIdsByToolUseId.get(toolUseId);
-  session.subagentTaskIdsByToolUseId.set(toolUseId, agentId);
+  session.subagentAgentIdsByToolUseId ??= new Map();
+  session.subagentAgentIdsByToolUseId.set(toolUseId, agentId);
   const externalSessionId = claudeSubagentExternalSessionId(session.externalSessionId, agentId);
-  const status = agentResultStatus(structuredResult, isError);
-  const executionMode = agentResultExecutionMode(structuredResult, input);
+  const status = resultAgentId ? claudeAgentResultStatus(structuredResult, isError) : "running";
+  const executionMode = claudeAgentResultExecutionMode(structuredResult, input);
   const agent =
     readStringProp(structuredResult, "agentType") ?? readStringProp(input, "subagent_type");
   const prompt = readStringProp(structuredResult, "prompt") ?? readStringProp(input, "prompt");
   const description = taskId ? undefined : readStringProp(input, "description");
   const error =
     status === "error"
-      ? (firstNonEmptyString(
-          readFailedTaskErrorReason(structuredResult),
+      ? (firstClaudeTaskText(
+          readClaudeFailedTaskReason(structuredResult),
           resultText,
           description,
         ) ?? `Claude subagent ${agentId} failed.`)
@@ -308,8 +217,8 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     part: {
       kind: "subagent",
       messageId,
-      partId: taskId ? `claude-subagent:${taskId}` : `claude-subagent:${agentId}`,
-      correlationKey: taskId ?? `session:${toolUseId}:${externalSessionId}`,
+      partId: `claude-subagent:${toolUseId}`,
+      correlationKey: toolUseId,
       status,
       externalSessionId,
       executionMode,
@@ -326,7 +235,89 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     if (status === "completed") {
       emitCompletedSubagentAssistantMessage(emit, session, toolUseId, timestamp);
     }
-    releaseSubagentEventSession(session, toolUseId);
+    session.subagentEventSessionsByToolUseId?.delete(toolUseId);
+  }
+};
+
+export const emitClaudeTaskStopSubagentPart = ({
+  emit,
+  resultRaw,
+  resultText,
+  session,
+  timestamp,
+}: {
+  emit: (event: AgentEvent) => void;
+  resultRaw: Record<string, unknown>;
+  resultText: string;
+  session: ClaudeSubagentSession;
+  timestamp: string;
+}): void => {
+  const taskId = readClaudeTaskStopTaskId(resultRaw, resultText);
+  if (!taskId) {
+    return;
+  }
+  const toolUseId = resolveClaudeSubagentToolUseId(
+    session.subagentTaskIdsByToolUseId,
+    session.subagentAgentIdsByToolUseId,
+    taskId,
+    undefined,
+  );
+  if (!toolUseId || isClaudeToolUseRetracted(session, toolUseId)) {
+    return;
+  }
+  session.activeBackgroundSubagentTaskIds?.delete(taskId);
+  const agentId = session.subagentAgentIdsByToolUseId?.get(toolUseId) ?? taskId;
+  const endedAtMs = timestampMs(timestamp);
+  emitSubagentPart(emit, session, agentId, toolUseId, "cancelled", timestamp, {
+    endedAtMs,
+    metadata: {
+      agentId,
+      sourceToolUseId: toolUseId,
+    },
+  });
+  session.subagentEventSessionsByToolUseId?.delete(toolUseId);
+};
+
+export const emitClaudeSubagentLifecyclePart = ({
+  agentId,
+  agentType,
+  emit,
+  session,
+  status,
+  timestamp,
+  toolUseId,
+}: {
+  agentId: string;
+  agentType: string;
+  emit: (event: AgentEvent) => void;
+  session: ClaudeSubagentSession;
+  status: "running" | "completed";
+  timestamp: string;
+  toolUseId: string;
+}): void => {
+  session.subagentAgentIdsByToolUseId ??= new Map();
+  session.subagentAgentIdsByToolUseId.set(toolUseId, agentId);
+  const messageId = session.toolMessageIdsByCallId.get(toolUseId);
+  if (messageId) {
+    session.subagentMessageIdsByTaskId.set(agentId, messageId);
+  }
+  const input = session.toolInputsByCallId.get(toolUseId);
+  const description = readStringProp(input, "description");
+  const prompt = readStringProp(input, "prompt");
+  emitSubagentPart(emit, session, agentId, toolUseId, status, timestamp, {
+    agent: agentType,
+    executionMode: input?.run_in_background === true ? "background" : "foreground",
+    ...(status === "running" ? { startedAtMs: timestampMs(timestamp) } : {}),
+    ...(status === "completed" ? { endedAtMs: timestampMs(timestamp) } : {}),
+    ...(description ? { description } : {}),
+    ...(prompt ? { prompt } : {}),
+    metadata: {
+      agentId,
+      sourceToolUseId: toolUseId,
+    },
+  });
+  if (status === "completed") {
+    emitCompletedSubagentAssistantMessage(emit, session, toolUseId, timestamp);
   }
 };
 
@@ -346,6 +337,12 @@ export const handleClaudeSubagentSystemMessage = ({
     : undefined;
   const toolMessageId = toolUseId ? session.toolMessageIdsByCallId.get(toolUseId) : undefined;
   const toolName = toolUseId ? session.toolNamesByCallId.get(toolUseId) : undefined;
+  const taskEnded =
+    message.subtype === "task_notification" ||
+    (message.subtype === "task_updated" && isTerminalClaudeTaskStatus(message.patch.status));
+  if (taskEnded) {
+    session.activeBackgroundSubagentTaskIds?.delete(message.task_id);
+  }
 
   if (toolUseId && isClaudeToolUseRetracted(session, toolUseId)) {
     retireClaudeSubagentTask(session, message.task_id);
@@ -369,9 +366,11 @@ export const handleClaudeSubagentSystemMessage = ({
     if (toolMessageId) {
       session.subagentMessageIdsByTaskId.set(message.task_id, toolMessageId);
     }
+    session.activeBackgroundSubagentTaskIds ??= new Set();
+    session.activeBackgroundSubagentTaskIds.add(message.task_id);
     const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {
       description: message.description,
-      executionMode: "foreground",
+      executionMode: "background",
       startedAtMs: timestampMs(timestamp),
     };
     const agent = message.subagent_type ?? message.workflow_name;
@@ -381,7 +380,10 @@ export const handleClaudeSubagentSystemMessage = ({
     if (message.prompt) {
       details.prompt = message.prompt;
     }
-    emitSubagentPart(emit, session, message.task_id, "running", timestamp, details);
+    const agentId =
+      (toolUseId ? session.subagentAgentIdsByToolUseId?.get(toolUseId) : undefined) ??
+      message.task_id;
+    emitSubagentPart(emit, session, agentId, toolUseId, "running", timestamp, details);
     return;
   }
 
@@ -393,7 +395,17 @@ export const handleClaudeSubagentSystemMessage = ({
     if (message.subagent_type) {
       details.agent = message.subagent_type;
     }
-    emitSubagentPart(emit, session, message.task_id, "running", timestamp, details);
+    const resolvedToolUseId = resolveClaudeSubagentToolUseId(
+      session.subagentTaskIdsByToolUseId,
+      session.subagentAgentIdsByToolUseId,
+      message.task_id,
+      toolUseId,
+    );
+    const agentId =
+      (resolvedToolUseId
+        ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId)
+        : undefined) ?? message.task_id;
+    emitSubagentPart(emit, session, agentId, resolvedToolUseId, "running", timestamp, details);
     return;
   }
 
@@ -407,9 +419,9 @@ export const handleClaudeSubagentSystemMessage = ({
       readStringProp(patch, "error") ??
       readStringProp(message, "error") ??
       (message.patch.status === "failed"
-        ? (firstNonEmptyString(
-            readFailedTaskErrorReason(patch),
-            readFailedTaskErrorReason(message),
+        ? (firstClaudeTaskText(
+            readClaudeFailedTaskReason(patch),
+            readClaudeFailedTaskReason(message),
           ) ?? `Claude subagent ${message.task_id} failed.`)
         : undefined);
     if (error) {
@@ -418,11 +430,22 @@ export const handleClaudeSubagentSystemMessage = ({
     if (message.patch.end_time !== undefined) {
       details.endedAtMs = message.patch.end_time;
     }
+    const resolvedToolUseId = resolveClaudeSubagentToolUseId(
+      session.subagentTaskIdsByToolUseId,
+      session.subagentAgentIdsByToolUseId,
+      message.task_id,
+      toolUseId,
+    );
+    const agentId =
+      (resolvedToolUseId
+        ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId)
+        : undefined) ?? message.task_id;
     emitSubagentPart(
       emit,
       session,
-      message.task_id,
-      subagentStatusFromClaudeTaskStatus(message.patch.status),
+      agentId,
+      resolvedToolUseId,
+      claudeSubagentStatusFromTaskStatus(message.patch.status),
       timestamp,
       details,
     );
@@ -434,12 +457,22 @@ export const handleClaudeSubagentSystemMessage = ({
   }
   const notificationError =
     message.status === "failed"
-      ? (readFailedTaskMessage(message) ?? `Claude subagent ${message.task_id} failed.`)
+      ? (readClaudeFailedTaskMessage(message) ?? `Claude subagent ${message.task_id} failed.`)
       : undefined;
+  const resolvedToolUseId = resolveClaudeSubagentToolUseId(
+    session.subagentTaskIdsByToolUseId,
+    session.subagentAgentIdsByToolUseId,
+    message.task_id,
+    toolUseId,
+  );
+  const agentId =
+    (resolvedToolUseId ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId) : undefined) ??
+    message.task_id;
   emitSubagentPart(
     emit,
     session,
-    message.task_id,
+    agentId,
+    resolvedToolUseId,
     message.status === "failed"
       ? "error"
       : message.status === "stopped"
@@ -452,9 +485,10 @@ export const handleClaudeSubagentSystemMessage = ({
       ...(message.output_file ? { metadata: { outputFile: message.output_file } } : {}),
     },
   );
-  const resolvedToolUseId = subagentToolUseId(session, message.task_id, toolUseId);
   if (message.status === "completed") {
     emitCompletedSubagentAssistantMessage(emit, session, resolvedToolUseId, timestamp);
   }
-  releaseSubagentEventSession(session, resolvedToolUseId);
+  if (resolvedToolUseId) {
+    session.subagentEventSessionsByToolUseId?.delete(resolvedToolUseId);
+  }
 };

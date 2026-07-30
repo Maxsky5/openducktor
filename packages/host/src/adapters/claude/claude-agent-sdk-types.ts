@@ -92,6 +92,7 @@ export type ClaudeSession = {
   input: ClaudeSessionInput;
   lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
+  lastAssistantTextFinal?: boolean;
   lastAssistantTextTurnIndex?: number;
   model: AgentModelSelection | undefined;
   modelAfterQueuedTurns?: AgentModelSelection | null;
@@ -110,6 +111,7 @@ export type ClaudeSession = {
   streamAssistantMessageIdsByBlockIndex: Map<number, string>;
   hiddenSubagentTaskIds?: Set<string>;
   subagentMessageIdsByTaskId: Map<string, string>;
+  subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolEndedAtMsByCallId: Map<string, number>;
   toolInputsByCallId: Map<string, Record<string, unknown>>;

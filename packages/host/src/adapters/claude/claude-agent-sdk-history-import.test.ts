@@ -6,6 +6,7 @@ import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import {
   filterClaudeHistoryMessages,
   loadClaudeRawHistoryMessages,
+  readSubagentAgentIdsByToolUseId,
 } from "./claude-agent-sdk-history-import";
 
 describe("Claude SDK history import", () => {
@@ -51,6 +52,54 @@ describe("Claude SDK history import", () => {
     ];
 
     expect(filterClaudeHistoryMessages(entries)).toEqual([compactQueueEntry]);
+  });
+
+  test("maps nested subagent transcripts to Agent tool calls in the selected transcript", () => {
+    const entriesBySubpath = new Map<string | undefined, SessionStoreEntry[]>([
+      [
+        "subagents/agent-parent",
+        [
+          {
+            type: "assistant",
+            uuid: "parent-agent-tool",
+            timestamp: "2026-07-22T20:27:59.000Z",
+            sessionId: "session-1",
+            parent_tool_use_id: "root-agent-tool",
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "nested-agent-tool",
+                  name: "Agent",
+                  input: { description: "Inspect nested behavior" },
+                },
+              ],
+            },
+          },
+        ],
+      ],
+      [
+        "subagents/agent-child",
+        [
+          {
+            type: "assistant",
+            uuid: "child-message",
+            timestamp: "2026-07-22T20:28:00.000Z",
+            sessionId: "session-1",
+            parent_tool_use_id: "nested-agent-tool",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "Inspecting." }],
+            },
+          },
+        ],
+      ],
+    ]);
+
+    expect(readSubagentAgentIdsByToolUseId(entriesBySubpath, "subagents/agent-parent")).toEqual(
+      new Map([["nested-agent-tool", "child"]]),
+    );
   });
 
   test("propagates missing Claude transcripts as typed history errors", async () => {

@@ -216,20 +216,78 @@ describe("claude-agent-sdk-history subagents", () => {
       expect.objectContaining({
         kind: "subagent",
         messageId: "assistant-1",
-        correlationKey: "task-1",
-        status: "running",
+        correlationKey: "task-tool-1",
+        status: "completed",
         description: "Run affected web tests",
         startedAtMs: Date.parse("2026-06-26T11:04:11.000Z"),
-      }),
-      expect.objectContaining({
-        kind: "subagent",
-        messageId: "assistant-1",
-        correlationKey: "task-1",
-        status: "completed",
         endedAtMs: Date.parse("2026-06-26T11:04:12.000Z"),
       }),
     ]);
-    expect(subagentParts[1]).not.toHaveProperty("description");
+  });
+
+  test("anchors nested Claude task system entries to the selected subagent transcript", () => {
+    const parentExternalSessionId = "session-1::claude-subagent::parent-agent";
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:04:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "task-tool-1",
+                name: "Agent",
+                input: { description: "Inspect nested behavior" },
+              },
+            ],
+          },
+        }),
+        {
+          type: "system",
+          subtype: "task_started",
+          uuid: "task-started-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:11.000Z",
+          task_id: "child-agent",
+          tool_use_id: "task-tool-1",
+          description: "Inspect nested behavior",
+          subagent_type: "Explore",
+        },
+        {
+          type: "system",
+          subtype: "task_notification",
+          uuid: "task-finished-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:12.000Z",
+          task_id: "child-agent",
+          status: "completed",
+          output_file: "/tmp/child-agent.output",
+          summary: "Nested inspection complete",
+        },
+      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      {
+        includeNestedEntries: true,
+        transcriptExternalSessionId: parentExternalSessionId,
+      },
+    );
+
+    const subagentParts = history.flatMap((message) =>
+      message.parts.filter((part) => part.kind === "subagent"),
+    );
+    expect(subagentParts).toEqual([
+      expect.objectContaining({
+        kind: "subagent",
+        externalSessionId: `${parentExternalSessionId}::claude-subagent::child-agent`,
+        status: "completed",
+      }),
+    ]);
   });
 
   test("hydrates Claude Agent tool results with the stored subagent transcript id", () => {
@@ -294,8 +352,8 @@ describe("claude-agent-sdk-history subagents", () => {
       expect.objectContaining({
         kind: "subagent",
         messageId: "assistant-1",
-        partId: "claude-subagent:aef1c17051550cb2b",
-        correlationKey: "session:toolu_agent_1:session-1::claude-subagent::aef1c17051550cb2b",
+        partId: "claude-subagent:toolu_agent_1",
+        correlationKey: "toolu_agent_1",
         status: "completed",
         agent: "Explore",
         prompt: "Locate package.json",
@@ -311,6 +369,421 @@ describe("claude-agent-sdk-history subagents", () => {
         }),
       }),
     ]);
+  });
+
+  test("completes a hydrated background Agent from the SDK task notification", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:04:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "agent-tool-1",
+                name: "Agent",
+                input: {
+                  description: "Review spec compliance",
+                  subagent_type: "general-purpose",
+                  run_in_background: true,
+                  prompt: "Review the spec",
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-launch-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:11.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "agent-tool-1",
+                content: "Agent launched",
+              },
+            ],
+          },
+          toolUseResult: {
+            status: "async_launched",
+            agentId: "agent-1",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-notification-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:12.000Z",
+          message: {
+            role: "user",
+            content: `<task-notification>
+<task-id>agent-1</task-id>
+<tool-use-id>agent-tool-1</tool-use-id>
+<output-file>/tmp/agent-1.output</output-file>
+<status>completed</status>
+<summary>Agent "Review spec compliance" finished</summary>
+</task-notification>`,
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    expect(
+      history
+        .flatMap((message) => message.parts)
+        .filter((part) => part.kind === "subagent")
+        .map((part) => part.status),
+    ).toEqual(["completed"]);
+  });
+
+  test("updates the original card when a resumed subagent completes through SendMessage", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-agent",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:04:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "agent-tool-1",
+                name: "Agent",
+                input: {
+                  description: "Review spec compliance",
+                  subagent_type: "general-purpose",
+                  run_in_background: true,
+                  prompt: "Review the spec",
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-launch-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:11.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "agent-tool-1",
+                content: "Agent launched",
+              },
+            ],
+          },
+          toolUseResult: {
+            status: "async_launched",
+            agentId: "agent-1",
+          },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-send",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:05:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "send-tool-1",
+                name: "SendMessage",
+                input: {
+                  to: "agent-1",
+                  message: "Check one more detail.",
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-notification-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:05:12.000Z",
+          message: {
+            role: "user",
+            content: `<task-notification>
+<task-id>agent-1</task-id>
+<tool-use-id>send-tool-1</tool-use-id>
+<output-file>/tmp/agent-1.output</output-file>
+<status>completed</status>
+<summary>Agent "Review spec compliance" finished</summary>
+</task-notification>`,
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    const subagentEntries = history.flatMap((message) =>
+      message.parts.filter((part) => part.kind === "subagent").map((part) => ({ message, part })),
+    );
+    expect(subagentEntries).toHaveLength(1);
+    expect(subagentEntries[0]).toMatchObject({
+      message: {
+        messageId: "assistant-agent",
+        timestamp: "2026-06-26T11:04:10.000Z",
+      },
+      part: {
+        messageId: "assistant-agent",
+        partId: "claude-subagent:agent-tool-1",
+        correlationKey: "agent-tool-1",
+        status: "completed",
+        description: "Review spec compliance",
+        externalSessionId: "session-1::claude-subagent::agent-1",
+        metadata: {
+          agentId: "agent-1",
+          sourceToolUseId: "agent-tool-1",
+          outputFile: "/tmp/agent-1.output",
+        },
+      },
+    });
+  });
+
+  test("settles every background Agent in a grouped stopped notification", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        ...["agent-1", "agent-2"].flatMap((_agentId, index) => {
+          const toolUseId = `agent-tool-${index + 1}`;
+          return [
+            toSessionMessage({
+              type: "assistant",
+              uuid: `assistant-${index + 1}`,
+              session_id: "session-1",
+              parent_tool_use_id: null,
+              timestamp: `2026-06-26T11:04:1${index}.000Z`,
+              message: {
+                role: "assistant",
+                content: [
+                  {
+                    type: "tool_use",
+                    id: toolUseId,
+                    name: "Agent",
+                    input: {
+                      description: `Review ${index + 1}`,
+                      run_in_background: true,
+                    },
+                  },
+                ],
+                stop_reason: "tool_use",
+              },
+            }),
+            toSessionMessage({
+              type: "user",
+              uuid: `agent-launch-${index + 1}`,
+              session_id: "session-1",
+              timestamp: `2026-06-26T11:04:2${index}.000Z`,
+              message: {
+                role: "user",
+                content: [{ type: "tool_result", tool_use_id: toolUseId, content: "Launched" }],
+              },
+            }),
+          ];
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-notification",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:30.000Z",
+          message: {
+            role: "user",
+            content: `<task-notification>
+<task-id>agent-1</task-id>
+<task-id>agent-2</task-id>
+<status>stopped</status>
+</task-notification>`,
+          },
+        }),
+      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      {
+        subagentAgentIdsByToolUseId: new Map([
+          ["agent-tool-1", "agent-1"],
+          ["agent-tool-2", "agent-2"],
+        ]),
+      },
+    );
+
+    expect(
+      history
+        .flatMap((message) => message.parts)
+        .filter((part) => part.kind === "subagent")
+        .map((part) => [part.externalSessionId, part.status, part.description]),
+    ).toEqual([
+      ["session-1::claude-subagent::agent-1", "cancelled", "Review 1"],
+      ["session-1::claude-subagent::agent-2", "cancelled", "Review 2"],
+    ]);
+  });
+
+  test("anchors an imported nested subagent to its parent Agent tool call", () => {
+    const parentExternalSessionId = "session-1::claude-subagent::parent-agent";
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: "root-agent-tool",
+          timestamp: "2026-06-26T11:04:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "nested-agent-tool",
+                name: "Agent",
+                input: {
+                  description: "Inspect nested behavior",
+                  subagent_type: "Explore",
+                  prompt: "Inspect the nested flow",
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-result-1",
+          session_id: "session-1",
+          parent_tool_use_id: "root-agent-tool",
+          timestamp: "2026-06-26T11:04:11.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "nested-agent-tool",
+                content: "Request interrupted by user",
+                is_error: true,
+              },
+            ],
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      {
+        includeNestedEntries: true,
+        subagentAgentIdsByToolUseId: new Map([["nested-agent-tool", "child-agent"]]),
+        transcriptExternalSessionId: parentExternalSessionId,
+      },
+    );
+
+    const nestedPart = history
+      .flatMap((message) => message.parts)
+      .find((part) => part.kind === "subagent");
+    expect(nestedPart).toMatchObject({
+      kind: "subagent",
+      messageId: "assistant-1",
+      status: "running",
+      description: "Inspect nested behavior",
+      externalSessionId: `${parentExternalSessionId}::claude-subagent::child-agent`,
+      metadata: {
+        agentId: "child-agent",
+        sourceToolUseId: "nested-agent-tool",
+      },
+    });
+    expect(history.find((message) => message.messageId === "assistant-1")?.parts).toEqual([
+      expect.objectContaining({ kind: "tool", callId: "nested-agent-tool" }),
+      expect.objectContaining({ kind: "subagent", partId: "claude-subagent:nested-agent-tool" }),
+    ]);
+  });
+
+  test("hydrates a nested background Agent from the SDK launch text", () => {
+    const parentExternalSessionId = "session-1::claude-subagent::parent-agent";
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:04:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "agent-tool-1",
+                name: "Agent",
+                input: {
+                  description: "Review diff standards",
+                  subagent_type: "general-purpose",
+                  run_in_background: true,
+                  prompt: "Review the diff",
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-launch-1",
+          session_id: "session-1",
+          timestamp: "2026-06-26T11:04:11.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "agent-tool-1",
+                content: [
+                  {
+                    type: "text",
+                    text: `Async agent launched successfully. (internal metadata)
+agentId: child-agent (internal ID - do not mention to user.)
+The agent is working in the background.
+output_file: /tmp/child-agent.output`,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [],
+      {
+        includeNestedEntries: true,
+        transcriptExternalSessionId: parentExternalSessionId,
+      },
+    );
+
+    expect(
+      history.flatMap((message) => message.parts).find((part) => part.kind === "subagent"),
+    ).toMatchObject({
+      kind: "subagent",
+      status: "running",
+      externalSessionId: `${parentExternalSessionId}::claude-subagent::child-agent`,
+      metadata: {
+        agentId: "child-agent",
+        outputFile: "/tmp/child-agent.output",
+        sourceToolUseId: "agent-tool-1",
+      },
+    });
   });
 
   test("anchors nested Claude Agent results to the selected subagent transcript", () => {
@@ -560,8 +1033,8 @@ describe("claude-agent-sdk-history subagents", () => {
       expect.objectContaining({
         kind: "subagent",
         messageId: "assistant-async",
-        partId: "claude-subagent:async-agent-1",
-        correlationKey: "session:toolu_agent_async:session-1::claude-subagent::async-agent-1",
+        partId: "claude-subagent:toolu_agent_async",
+        correlationKey: "toolu_agent_async",
         status: "running",
         executionMode: "background",
         agent: "Explore",
@@ -578,5 +1051,118 @@ describe("claude-agent-sdk-history subagents", () => {
       }),
     ]);
     expect(subagentParts[0]).not.toHaveProperty("endedAtMs");
+  });
+
+  test("hydrates a successful TaskStop result as the original subagent card being cancelled", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-agent",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:14:10.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "agent-tool",
+                name: "Agent",
+                input: {
+                  description: "Audit API changes",
+                  subagent_type: "Explore",
+                  prompt: "Audit the API changes",
+                  run_in_background: true,
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "agent-result",
+          sessionId: "session-1",
+          timestamp: "2026-06-26T11:14:11.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "agent-tool",
+                content: "Background agent launched",
+              },
+            ],
+          },
+          toolUseResult: {
+            agentId: "agent-1",
+            status: "async_launched",
+          },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-stop",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:14:12.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "stop-tool",
+                name: "TaskStop",
+                input: { task_id: "agent-1" },
+              },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "stop-result",
+          sessionId: "session-1",
+          timestamp: "2026-06-26T11:14:13.000Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "stop-tool",
+                content: JSON.stringify({
+                  message: "Successfully stopped task",
+                  task_id: "agent-1",
+                  task_type: "local_agent",
+                }),
+              },
+            ],
+          },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    const subagentParts = history.flatMap((message) =>
+      message.parts.filter((part) => part.kind === "subagent"),
+    );
+    expect(subagentParts).toEqual([
+      expect.objectContaining({
+        kind: "subagent",
+        messageId: "assistant-agent",
+        partId: "claude-subagent:agent-tool",
+        correlationKey: "agent-tool",
+        status: "cancelled",
+        description: "Audit API changes",
+        prompt: "Audit the API changes",
+        externalSessionId: "session-1::claude-subagent::agent-1",
+        endedAtMs: Date.parse("2026-06-26T11:14:13.000Z"),
+      }),
+    ]);
+    const agentIndex = history.findIndex((message) => message.messageId === "assistant-agent");
+    const stopIndex = history.findIndex((message) =>
+      message.parts.some((part) => part.kind === "tool" && part.callId === "stop-tool"),
+    );
+    expect(stopIndex).toBeGreaterThan(agentIndex);
   });
 });

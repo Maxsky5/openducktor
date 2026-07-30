@@ -185,7 +185,6 @@ describe("handleClaudeSdkMessage result events", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       messageId: "assistant-final",
       message: "Final answer",
-      durationMs: 2_000,
       model: {
         providerId: "claude",
         modelId: "claude-sonnet-4-6",
@@ -193,6 +192,44 @@ describe("handleClaudeSdkMessage result events", () => {
         variant: "high",
         profileId: "profile-1",
       },
+    });
+  });
+
+  test("does not use the persistent SDK query duration as the visible turn duration", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    session.acceptedUserMessages.push({});
+    session.pendingUserTurnCount = 1;
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T23:23:18.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "result-long-lived-query",
+        session_id: "session-1",
+        is_error: false,
+        duration_ms: 12_198_000,
+        result: "Build complete.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 2 },
+      }),
+    });
+
+    expect(events).toContainEqual({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      timestamp: "2026-06-25T23:23:18.000Z",
+      messageId: "result-long-lived-query",
+      message: "Build complete.",
     });
   });
 
@@ -380,7 +417,7 @@ describe("handleClaudeSdkMessage result events", () => {
     ]);
   });
 
-  test("keeps streamed tool-use draft text separate from final result text", () => {
+  test("keeps streamed intermediate tool-use text separate from final result text", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     session.acceptedUserMessages.push({});

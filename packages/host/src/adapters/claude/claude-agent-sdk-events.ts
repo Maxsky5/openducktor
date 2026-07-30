@@ -6,6 +6,7 @@ import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
   claudeSubagentEventSession,
+  findClaudeSubagentTaskSession,
   rememberAssistantTextForCurrentTurn,
 } from "./claude-agent-sdk-event-session";
 import {
@@ -42,6 +43,10 @@ import {
   settleClaudeStreamedAssistantText,
 } from "./claude-agent-sdk-transcript-retractions";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
+import {
+  readClaudeTurnOriginKind,
+  shouldFinalizeClaudeTurn,
+} from "./claude-agent-sdk-user-messages";
 import { isRecord, readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 type SdkMessageHandlerInput = {
@@ -90,6 +95,12 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "user") {
+    const originKind = readClaudeTurnOriginKind(message);
+    if (originKind === "human") {
+      delete session.assistantTurnOriginKind;
+    } else if (originKind !== undefined) {
+      session.assistantTurnOriginKind = originKind;
+    }
     emitClaudeSubagentUserMessage({ emit, message, session, timestamp });
     handleClaudeUserToolResultMessage({ emit, message, session, timestamp });
     return;
@@ -155,7 +166,13 @@ export const handleClaudeSdkMessage = ({
       message.subtype === "task_updated" ||
       message.subtype === "task_notification")
   ) {
-    handleClaudeSubagentSystemMessage({ emit, message, session, timestamp });
+    const taskSession =
+      findClaudeSubagentTaskSession(
+        session,
+        readStringProp(message, "tool_use_id"),
+        message.task_id,
+      ) ?? session;
+    handleClaudeSubagentSystemMessage({ emit, message, session: taskSession, timestamp });
     return;
   }
   if (message.type === "system" && message.subtype === "permission_denied") {
@@ -242,18 +259,26 @@ const handleAssistantMessage = ({
   const hasFinalStopReason = stopReason === "end_turn" || stopReason === "stop_sequence";
   const isPendingSubagentAssistantText =
     text.length > 0 && !hasToolUse && !stopReason && isForwardedSubagentText;
-  const isFinalAssistantText = text.length > 0 && !hasToolUse && hasFinalStopReason;
+  const isFinalAssistantText =
+    text.length > 0 &&
+    !hasToolUse &&
+    hasFinalStopReason &&
+    shouldFinalizeClaudeTurn(
+      session.assistantTurnOriginKind,
+      session.activeBackgroundSubagentTaskIds?.size ?? 0,
+    );
   const responseId = readStringProp(message.message, "id");
-  const usesResponseIdentity = hasFinalStopReason || isPendingSubagentAssistantText;
-  const assistantMessageId = usesResponseIdentity && responseId ? responseId : message.uuid;
-  if (!hasToolUse && !stopReason && !isForwardedSubagentText) {
-    return;
-  }
+  const assistantMessageId = responseId ?? message.uuid;
   if ((text.length > 0 || hasToolUse) && !isFinalAssistantText && !isPendingSubagentAssistantText) {
-    settleClaudeStreamedAssistantText({ emit, session, timestamp });
+    settleClaudeStreamedAssistantText({
+      emit,
+      ...(responseId ? { preserveMessageId: responseId } : {}),
+      session,
+      timestamp,
+    });
   }
   if (hasToolUse && text.length > 0) {
-    rememberAssistantTextForCurrentTurn(session, text, message.uuid, assistantModel);
+    rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
   }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
@@ -264,12 +289,11 @@ const handleAssistantMessage = ({
       if (type === "text" && hasToolUse) {
         const blockText = readStringProp(block, "text");
         if (blockText?.trim()) {
-          const messageId = message.uuid;
           emit(
             claudeAssistantTextPartEvent({
               externalSessionId: session.externalSessionId,
-              messageId,
-              partId: `${messageId}:text:${index}`,
+              messageId: assistantMessageId,
+              partId: `${assistantMessageId}:text:${index}`,
               text: blockText,
               timestamp,
             }),
@@ -292,7 +316,7 @@ const handleAssistantMessage = ({
 
         emitClaudePendingToolPart({
           emit,
-          fallbackMessageId: message.uuid,
+          fallbackMessageId: assistantMessageId,
           session,
           timestamp,
           toolUse,
@@ -319,9 +343,6 @@ const handleAssistantMessage = ({
     if (hasToolUse) {
       return;
     }
-    if (!stopReason && !isForwardedSubagentText) {
-      return;
-    }
     if (isPendingSubagentAssistantText) {
       rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
       session.pendingSubagentAssistantMessage = {
@@ -331,10 +352,10 @@ const handleAssistantMessage = ({
       };
       return;
     }
-    if (hasFinalStopReason) {
+    if (isFinalAssistantText) {
       const messageId = assistantMessageId;
       delete session.pendingSubagentAssistantMessage;
-      rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel);
+      rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel, true);
       emit({
         type: "assistant_message",
         externalSessionId: session.externalSessionId,
@@ -351,12 +372,11 @@ const handleAssistantMessage = ({
       });
       return;
     }
-    const messageId = message.uuid;
-    rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel);
+    rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
     emit(
       claudeAssistantTextPartEvent({
         externalSessionId: session.externalSessionId,
-        messageId,
+        messageId: assistantMessageId,
         text,
         timestamp,
       }),

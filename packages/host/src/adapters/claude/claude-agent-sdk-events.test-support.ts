@@ -1,5 +1,6 @@
 export const createEventTestSession = (activity: "idle" | "running" = "running") => ({
   acceptedUserMessages: [] as unknown[],
+  activeBackgroundSubagentTaskIds: new Set<string>(),
   activeSdkUserTurnCount: 0,
   activity,
   externalSessionId: "session-1",

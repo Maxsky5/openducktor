@@ -152,7 +152,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
-  test("emits text-only Claude tool-use drafts without finalizing them", () => {
+  test("emits text-only Claude intermediate responses without finalizing them", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
 
@@ -191,6 +191,184 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
     ]);
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+  });
+
+  test("keeps assistant responses to peer turns intermediate", () => {
+    const origins = [{ kind: "peer", from: "general-purpose", senderTaskId: "agent-1" }] as const;
+
+    for (const [index, origin] of origins.entries()) {
+      const events: AgentEvent[] = [];
+      const session = createSession("running");
+      session.activeSdkUserTurnCount = 1;
+      session.pendingUserTurnCount = 1;
+      session.acceptedUserMessages.push({});
+
+      handleClaudeSdkMessage({
+        session,
+        timestamp: "2026-06-25T20:00:00.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+        message: claudeSdkMessageFixture({
+          type: "user",
+          uuid: `non-human-user-${index}`,
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: { role: "user", content: "Runtime-generated input" },
+          origin,
+        }),
+      });
+
+      handleClaudeSdkMessage({
+        session,
+        timestamp: "2026-06-25T20:00:01.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+        message: claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: `non-human-assistant-${index}`,
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: `Runtime-generated response ${index}` }],
+          },
+        }),
+      });
+
+      handleClaudeSdkMessage({
+        session,
+        timestamp: "2026-06-25T20:00:02.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+        message: claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: `non-human-result-${index}`,
+          session_id: "session-1",
+          is_error: false,
+          duration_ms: 1_000,
+          result: `Runtime-generated response ${index}`,
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          usage: { input_tokens: 1, output_tokens: 1 },
+          origin,
+        }),
+      });
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_part",
+          part: expect.objectContaining({
+            kind: "text",
+            text: `Runtime-generated response ${index}`,
+          }),
+        }),
+      );
+      expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "session_idle",
+        }),
+      );
+    }
+  });
+
+  test("finalizes the response to the last completed background task", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("running");
+    session.activeBackgroundSubagentTaskIds = new Set(["task-1"]);
+    session.activeSdkUserTurnCount = 1;
+    session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push({});
+    const input = {
+      session,
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        task_id: "task-1",
+        status: "completed",
+        uuid: "task-notification-1",
+        session_id: "session-1",
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "task-user-1",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Task completed" },
+        origin: { kind: "task-notification" },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "task-assistant-1",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "All background reviews are complete." }],
+        },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "task-result-1",
+        session_id: "session-1",
+        is_error: false,
+        result: "All background reviews are complete.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin: { kind: "task-notification" },
+      }),
+    });
+
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set());
+    expect(
+      events.filter(
+        (event) =>
+          event.type === "assistant_message" &&
+          event.message === "All background reviews are complete.",
+      ),
+    ).toHaveLength(1);
   });
 
   test("renders terminal assistant text without closing the active SDK user turn", () => {
@@ -236,7 +414,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     );
   });
 
-  test("does not finalize assistant text without a terminal stop reason", () => {
+  test("emits assistant snapshots without a stop reason as intermediate responses", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
 
@@ -262,7 +440,18 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
     });
 
-    expect(events).toEqual([]);
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "text",
+          messageId: "assistant-1",
+          text: "Draft snapshot",
+          completed: true,
+        }),
+      }),
+    ]);
+    expect(events.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
   test("emits non-final text parts for non-normal Claude stop reasons", () => {
@@ -855,39 +1044,5 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
     ]);
     expect(session.toolInputsByCallId.get("tool-1")).toEqual({ command: "bun test" });
-  });
-
-  test("ignores forwarded partial stream events before their subagent task is known", () => {
-    const events: AgentEvent[] = [];
-    const session = createSession();
-
-    handleClaudeSdkMessage({
-      session,
-      timestamp: "2026-06-25T20:00:00.000Z",
-      modelSelection: (model) => ({
-        providerId: "claude",
-        modelId: model,
-        runtimeKind: "claude",
-      }),
-      emit: (event) => events.push(event),
-      message: claudeSdkMessageFixture({
-        type: "stream_event",
-        uuid: "subagent-stream-tool-start",
-        session_id: "session-1",
-        parent_tool_use_id: "agent-tool-1",
-        event: {
-          type: "content_block_start",
-          index: 1,
-          content_block: {
-            type: "tool_use",
-            id: "subagent-tool-1",
-            name: "Bash",
-            input: { command: "pwd" },
-          },
-        },
-      }),
-    });
-
-    expect(events).toEqual([]);
   });
 });

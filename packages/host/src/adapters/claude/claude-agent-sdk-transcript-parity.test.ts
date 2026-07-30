@@ -39,6 +39,241 @@ const retainedLiveAssistantMessageIds = (events: AgentEvent[]): string[] => {
 };
 
 describe("Claude live and hydrated transcript parity", () => {
+  test("keeps one response identity for split tool-use reasoning, text, and tool snapshots", () => {
+    const responseId = "response-tool-use";
+    const reasoningMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-reasoning",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "thinking", thinking: "Planning notification synchronization" }],
+        stop_reason: "tool_use",
+      },
+    });
+    const draftMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-draft",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [{ type: "text", text: "I’m waiting for both review passes." }],
+        stop_reason: "tool_use",
+      },
+    });
+    const toolMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-tool",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp: resultTimestamp,
+      message: {
+        id: responseId,
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-output",
+            name: "TaskOutput",
+            input: { task_id: "reviewer", block: true },
+          },
+        ],
+        stop_reason: "tool_use",
+      },
+    });
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+    const emit = (event: AgentEvent) => liveEvents.push(event);
+
+    for (const message of [
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "stream-start",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: { type: "message_start", message: { id: responseId } },
+      }),
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "stream-reasoning",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "Planning notification synchronization" },
+        },
+      }),
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "stream-reasoning-stop",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: { type: "content_block_stop", index: 0 },
+      }),
+      reasoningMessage,
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        uuid: "stream-draft",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        event: {
+          type: "content_block_delta",
+          index: 1,
+          delta: { type: "text_delta", text: "I’m waiting for both review passes." },
+        },
+      }),
+      draftMessage,
+      toolMessage,
+    ]) {
+      handleClaudeSdkMessage({
+        emit,
+        message,
+        modelSelection,
+        session: liveSession,
+        timestamp,
+      });
+    }
+
+    expect(liveEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "reasoning",
+          messageId: responseId,
+          text: "Planning notification synchronization",
+        }),
+      }),
+    );
+    expect(liveEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_delta",
+        messageId: responseId,
+        delta: "I’m waiting for both review passes.",
+      }),
+    );
+    expect(liveEvents).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          messageId: responseId,
+          callId: "tool-output",
+        }),
+      }),
+    );
+    expect(liveEvents.some((event) => event.type === "assistant_message")).toBe(false);
+
+    const hydratedMessages = toClaudeHistoryMessages(
+      claudeHistoryMessageFixtures([reasoningMessage, draftMessage, toolMessage]),
+      () => resultTimestamp,
+    ).filter((message) => message.role === "assistant");
+    expect(hydratedMessages).toHaveLength(1);
+    expect(hydratedMessages[0]).toMatchObject({
+      messageId: responseId,
+      text: "I’m waiting for both review passes.",
+    });
+    expect(hydratedMessages[0]?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "reasoning",
+          messageId: responseId,
+          text: "Planning notification synchronization",
+        }),
+        expect.objectContaining({
+          kind: "tool",
+          messageId: responseId,
+          callId: "tool-output",
+        }),
+      ]),
+    );
+  });
+
+  test("shows parent intermediate assistant snapshots in both live and hydrated transcripts", () => {
+    const draftMessage = claudeSdkMessageFixture({
+      type: "assistant",
+      uuid: "assistant-draft",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      timestamp,
+      message: {
+        id: "response-draft",
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [
+          { type: "thinking", thinking: "Planning notification synchronization" },
+          {
+            type: "text",
+            text: "I’m waiting for both review passes before I give a combined result.",
+          },
+        ],
+        stop_reason: null,
+      },
+    });
+    const liveEvents: AgentEvent[] = [];
+
+    handleClaudeSdkMessage({
+      emit: (event) => liveEvents.push(event),
+      message: draftMessage,
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      session: createEventTestSession(),
+      timestamp,
+    });
+
+    expect(
+      liveEvents.flatMap((event) => (event.type === "assistant_part" ? [event.part] : [])),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "reasoning",
+          messageId: "response-draft",
+          text: "Planning notification synchronization",
+        }),
+        expect.objectContaining({
+          kind: "text",
+          messageId: "response-draft",
+          text: "I’m waiting for both review passes before I give a combined result.",
+        }),
+      ]),
+    );
+    expect(liveEvents.some((event) => event.type === "assistant_message")).toBe(false);
+
+    const hydratedAssistantMessages = toClaudeHistoryMessages(
+      [claudeSessionMessageFixture(draftMessage)],
+      () => timestamp,
+    ).filter((message) => message.role === "assistant");
+    expect(hydratedAssistantMessages).toHaveLength(1);
+    expect(hydratedAssistantMessages[0]).toMatchObject({
+      messageId: "response-draft",
+      text: "I’m waiting for both review passes before I give a combined result.",
+    });
+    expect(hydratedAssistantMessages[0]?.parts).toContainEqual(
+      expect.objectContaining({
+        kind: "reasoning",
+        messageId: "response-draft",
+        text: "Planning notification synchronization",
+      }),
+    );
+  });
+
   test("does not expose Claude synthetic messages in live subagent transcripts", () => {
     const liveEvents: AgentEvent[] = [];
     const liveSession = createEventTestSession();
@@ -87,6 +322,71 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(
       liveEvents.flatMap((event) => (event.type === "user_message" ? [event.message] : [])),
     ).toEqual(["Inspect the authentication flow."]);
+  });
+
+  test("shows only human user messages in live and hydrated subagent transcripts", () => {
+    const parentToolUseId = "agent-tool";
+    const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    liveSession.subagentTaskIdsByToolUseId.set(parentToolUseId, "agent-task");
+    const userMessages = [
+      claudeSdkMessageFixture({
+        type: "user",
+        uuid: "subagent-prompt",
+        session_id: "session-1",
+        parent_tool_use_id: parentToolUseId,
+        message: { role: "user", content: "Inspect the authentication flow." },
+      }),
+      claudeSdkMessageFixture({
+        type: "user",
+        uuid: "peer-notification",
+        session_id: "session-1",
+        parent_tool_use_id: parentToolUseId,
+        origin: { kind: "peer", from: "reviewer" },
+        message: { role: "user", content: "The reviewer finished." },
+      }),
+      claudeSdkMessageFixture({
+        type: "user",
+        uuid: "context-only",
+        session_id: "session-1",
+        parent_tool_use_id: parentToolUseId,
+        shouldQuery: false,
+        message: { role: "user", content: "Context for the next query." },
+      }),
+    ];
+
+    for (const message of userMessages) {
+      handleClaudeSdkMessage({
+        emit: (event) => liveEvents.push(event),
+        message,
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        session: liveSession,
+        timestamp,
+      });
+    }
+
+    expect(
+      liveEvents.flatMap((event) => (event.type === "user_message" ? [event.message] : [])),
+    ).toEqual(["Inspect the authentication flow."]);
+
+    const hydratedUserMessages = toClaudeHistoryMessages(
+      userMessages.map((message) =>
+        claudeSessionMessageFixture({ ...message, parent_tool_use_id: null }),
+      ),
+      () => timestamp,
+      [],
+      {
+        includeNestedEntries: true,
+        transcriptExternalSessionId: "session-1::claude-subagent::agent-task",
+      },
+    ).filter((message) => message.role === "user");
+    expect(hydratedUserMessages.map((message) => message.text)).toEqual([
+      "Inspect the authentication flow.",
+    ]);
   });
 
   test("keeps the streamed response identity when the SDK assistant snapshot precedes message stop", () => {
@@ -222,7 +522,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
   });
 
-  test("keeps one response identity for streamed subagent finals without a stop reason", () => {
+  test("keeps one response identity for subagent finals without a stop reason", () => {
     const responseId = "subagent-response-final";
     const assistantUuid = "subagent-assistant-final";
     const parentToolUseId = "agent-tool";
@@ -238,27 +538,6 @@ describe("Claude live and hydrated transcript parity", () => {
     });
 
     for (const message of [
-      claudeSdkMessageFixture({
-        type: "stream_event",
-        uuid: "subagent-stream-start",
-        session_id: "session-1",
-        parent_tool_use_id: parentToolUseId,
-        event: {
-          type: "message_start",
-          message: { id: responseId },
-        },
-      }),
-      claudeSdkMessageFixture({
-        type: "stream_event",
-        uuid: "subagent-stream-delta",
-        session_id: "session-1",
-        parent_tool_use_id: parentToolUseId,
-        event: {
-          type: "content_block_delta",
-          index: 0,
-          delta: { type: "text_delta", text: finalText },
-        },
-      }),
       claudeSdkMessageFixture({
         type: "assistant",
         uuid: assistantUuid,
@@ -297,7 +576,7 @@ describe("Claude live and hydrated transcript parity", () => {
       liveEvents
         .filter((event) => event.type === "assistant_delta" || event.type === "assistant_message")
         .map((event) => event.messageId),
-    ).toEqual([responseId, responseId]);
+    ).toEqual([responseId]);
     expect(liveEvents.some((event) => event.type === "transcript_retracted")).toBe(false);
 
     const hydratedAssistantMessages = toClaudeHistoryMessages(
@@ -1192,7 +1471,7 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(hydrated.map((message) => message.messageId)).toEqual(["assistant-tool-replacement"]);
   });
 
-  test("preserves final response duration and model across live and hydrated projections", () => {
+  test("preserves the final response and model without using the SDK query duration", () => {
     const assistantMessage = claudeSdkMessageFixture({
       type: "assistant",
       uuid: "assistant-final",
@@ -1246,7 +1525,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const liveFinal = liveEvents.find(
       (event): event is Extract<AgentEvent, { type: "assistant_message" }> =>
-        event.type === "assistant_message" && event.durationMs === 2_000,
+        event.type === "assistant_message" && event.message === "Final answer",
     );
     const hydratedFinal = toClaudeHistoryMessages(
       claudeHistoryMessageFixtures([assistantMessage, resultMessage]),
@@ -1255,9 +1534,10 @@ describe("Claude live and hydrated transcript parity", () => {
 
     expect(liveFinal).toMatchObject({
       message: hydratedFinal?.text,
-      durationMs: hydratedFinal?.durationMs,
       model: hydratedFinal?.model,
     });
+    expect(liveFinal).not.toHaveProperty("durationMs");
+    expect(hydratedFinal).not.toHaveProperty("durationMs");
   });
 
   test("projects completed subagents with their initial description in both paths", () => {

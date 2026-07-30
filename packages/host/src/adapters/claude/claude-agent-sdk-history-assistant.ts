@@ -1,5 +1,4 @@
 import type { AgentSessionHistoryMessage, AgentStreamPart } from "@openducktor/core";
-import { isSupersededTextOnlyToolUseDraft } from "./claude-agent-sdk-history-drafts";
 import { readHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
@@ -60,9 +59,6 @@ export const moveNestedResultToEnd = (
 
 type ProjectClaudeHistoryAssistantMessageInput = {
   entry: ClaudeHistoryMessage;
-  entryIndex: number;
-  messages: ClaudeHistoryMessage[];
-  options: { includeNestedEntries?: boolean };
   timestamp: string;
   toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
@@ -74,21 +70,18 @@ type ClaudeHistoryAssistantProjection = {
   stopReason: string | undefined;
 };
 
-const claudeAssistantResponseId = (entry: ClaudeHistoryMessage | undefined): string | undefined =>
+const claudeAssistantResponseId = (entry: ClaudeHistoryMessage): string | undefined =>
   entry?.type === "assistant" && isRecord(entry.message)
     ? readStringProp(entry.message, "id")
     : undefined;
 
-const claudeAssistantContent = (entry: ClaudeHistoryMessage | undefined): unknown[] =>
+const claudeAssistantContent = (entry: ClaudeHistoryMessage): unknown[] =>
   entry?.type === "assistant" && isRecord(entry.message) && Array.isArray(entry.message.content)
     ? entry.message.content
     : [];
 
 export const projectClaudeHistoryAssistantMessage = ({
   entry,
-  entryIndex,
-  messages,
-  options,
   timestamp,
   toolInputsByCallId,
   toolMessageIdsByCallId,
@@ -101,39 +94,13 @@ export const projectClaudeHistoryAssistantMessage = ({
     return null;
   }
   const responseId = claudeAssistantResponseId(entry);
-  const nextEntry = messages[entryIndex + 1];
-  const entryText = historyMessageText(entry.message);
-  if (
-    responseId !== undefined &&
-    entryText.trim().length === 0 &&
-    claudeAssistantResponseId(nextEntry) === responseId
-  ) {
-    return null;
-  }
-  const previousEntry = messages[entryIndex - 1];
-  const includesPreviousFragment =
-    responseId !== undefined &&
-    claudeAssistantResponseId(previousEntry) === responseId &&
-    previousEntry?.type === "assistant" &&
-    historyMessageText(previousEntry.message).trim().length === 0;
-  const content = includesPreviousFragment
-    ? [...claudeAssistantContent(previousEntry), ...claudeAssistantContent(entry)]
-    : claudeAssistantContent(entry);
-  const projectedMessage =
-    includesPreviousFragment && isRecord(entry.message)
-      ? { ...entry.message, content }
-      : entry.message;
-  const text = historyMessageText(projectedMessage);
+  const content = claudeAssistantContent(entry);
+  const text = historyMessageText(entry.message);
   const parts: AgentStreamPart[] = [];
-  const stopReason = isRecord(projectedMessage)
-    ? readStringProp(projectedMessage, "stop_reason")
+  const stopReason = isRecord(entry.message)
+    ? readStringProp(entry.message, "stop_reason")
     : undefined;
-  const isForwardedSubagentFinal =
-    options.includeNestedEntries === true && !stopReason && text.trim().length > 0;
-  const messageId =
-    (isLiveFinalAssistantStopReason(stopReason) || isForwardedSubagentFinal) && responseId
-      ? responseId
-      : entry.uuid;
+  const messageId = responseId ?? entry.uuid;
   const preservesBlockOrder =
     stopReason === "tool_use" &&
     Array.isArray(content) &&
@@ -164,8 +131,8 @@ export const projectClaudeHistoryAssistantMessage = ({
           index,
         });
         if (toolUse) {
-          parts.push(createClaudePendingToolPart({ messageId: entry.uuid, toolUse }));
-          toolMessageIdsByCallId.set(toolUse.callId, entry.uuid);
+          parts.push(createClaudePendingToolPart({ messageId, toolUse }));
+          toolMessageIdsByCallId.set(toolUse.callId, messageId);
           toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
           if (toolUse.input) {
             toolInputsByCallId.set(toolUse.callId, toolUse.input);
@@ -186,14 +153,6 @@ export const projectClaudeHistoryAssistantMessage = ({
         }
       }
     }
-  }
-  if (
-    stopReason === "tool_use" &&
-    text.trim().length > 0 &&
-    parts.length === 0 &&
-    isSupersededTextOnlyToolUseDraft(messages, entryIndex, text.trim(), options)
-  ) {
-    return null;
   }
   if (text.trim().length === 0 && parts.length === 0) {
     return null;

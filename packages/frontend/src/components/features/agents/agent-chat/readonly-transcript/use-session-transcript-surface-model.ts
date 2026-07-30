@@ -1,8 +1,16 @@
-import type { AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
+import { useQuery } from "@tanstack/react-query";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
+import {
+  RUNTIME_CATALOG_STALE_TIME_MS,
+  repoRuntimeCatalogQueryOptions,
+  runtimeCatalogQueryKeys,
+} from "@/state/queries/runtime-catalog";
+import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
@@ -29,6 +37,7 @@ export function useSessionTranscriptSurfaceModel({
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     hasWorkspace,
   });
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
 
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace,
@@ -56,9 +65,24 @@ export function useSessionTranscriptSurfaceModel({
     chatSettingsError,
   });
   const sessionKey = target ? agentSessionIdentityKey(target) : null;
+  const runtimeRef =
+    workspaceRepoPath && target
+      ? { repoPath: workspaceRepoPath, runtimeKind: target.runtimeKind }
+      : null;
+  const modelCatalogQuery = useQuery(
+    runtimeRef && runtimeReadiness.state === "ready"
+      ? repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
+      : skippedQueryOptions<AgentModelCatalog>({
+          queryKey: runtimeRef
+            ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
+            : runtimeCatalogQueryKeys.all,
+          staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+        }),
+  );
 
   const model = useAgentChatSurfaceModel({
     sessionKey,
+    modelCatalog: modelCatalogQuery.data ?? null,
     session: sessionHistory.session,
     transcriptState: sessionHistory.transcriptState,
     chatSettings,

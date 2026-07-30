@@ -147,6 +147,7 @@ type AgentChatThreadProjectionFields =
   | "shouldResetTranscriptWindow"
   | "transcriptNotice";
 type AgentChatThreadFixtureDefaults =
+  | "modelCatalog"
   | "pendingApprovalRequests"
   | "pendingQuestionRequests"
   | "todos"
@@ -203,6 +204,7 @@ export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChat
 
   return {
     ...model,
+    modelCatalog: model.modelCatalog ?? null,
     session: threadState.threadSession,
     displayedSessionKey: threadState.displayedSessionKey,
     shouldResetTranscriptWindow: threadState.shouldResetTranscriptWindow,

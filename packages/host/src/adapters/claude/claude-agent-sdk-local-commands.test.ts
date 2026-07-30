@@ -285,7 +285,6 @@ describe("Claude local slash commands", () => {
         timestamp,
         messageId: "local-command-output",
         message: "Context usage: 42%",
-        durationMs: 38,
       },
     ]);
   });

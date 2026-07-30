@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { finalizeClaudeHistory, loadClaudeHistory } from "./claude-agent-sdk-history-loader";
+import {
+  finalizeClaudeHistory,
+  isClaudeSubagentTranscriptComplete,
+  loadClaudeHistory,
+  reconciledClaudeSubagentStatus,
+} from "./claude-agent-sdk-history-loader";
 
 const latestProjectedMessage: AgentSessionHistoryMessage = {
   messageId: "assistant-2",
@@ -118,5 +123,98 @@ describe("loadClaudeHistory", () => {
       _tag: "HostOperationError",
       operation: "claude.session.history.import",
     });
+  });
+});
+
+describe("isClaudeSubagentTranscriptComplete", () => {
+  test("accepts only a final assistant message at the end of the SDK transcript", () => {
+    expect(
+      isClaudeSubagentTranscriptComplete([
+        {
+          type: "assistant",
+          uuid: "assistant-final",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Review complete." }],
+            stop_reason: "end_turn",
+          },
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      isClaudeSubagentTranscriptComplete([
+        {
+          type: "assistant",
+          uuid: "assistant-tool",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Still working." }],
+            stop_reason: "tool_use",
+          },
+        },
+      ]),
+    ).toBe(false);
+    expect(
+      isClaudeSubagentTranscriptComplete([
+        {
+          type: "assistant",
+          uuid: "assistant-final",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "First pass complete." }],
+            stop_reason: "end_turn",
+          },
+        },
+        {
+          type: "user",
+          uuid: "user-resume",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: "Review one more file.",
+          },
+        },
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe("reconciledClaudeSubagentStatus", () => {
+  const assistantMessage = (uuid: string, text: string, stopReason: string | null) =>
+    ({
+      type: "assistant",
+      uuid,
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text }],
+        stop_reason: stopReason,
+      },
+    }) as const;
+
+  test("settles a nested child from its terminal parent without a root notification", () => {
+    expect(
+      reconciledClaudeSubagentStatus(
+        [assistantMessage("parent-final", "Parent complete.", "end_turn")],
+        [assistantMessage("child-final", "Child report.", null)],
+      ),
+    ).toBe("completed");
+  });
+
+  test("keeps a nested child running while its parent is not terminal", () => {
+    expect(
+      reconciledClaudeSubagentStatus(
+        [assistantMessage("parent-working", "Parent working.", null)],
+        [assistantMessage("child-working", "Child report.", null)],
+      ),
+    ).toBeNull();
   });
 });

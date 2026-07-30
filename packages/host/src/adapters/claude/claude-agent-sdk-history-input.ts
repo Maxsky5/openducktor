@@ -13,6 +13,7 @@ import {
   readClaudeQueuedPrompt,
 } from "./claude-agent-sdk-local-commands";
 import { createClaudeFinishStepPart } from "./claude-agent-sdk-transcript-parts";
+import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
 import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeVisibleHistoryMessage = Extract<
@@ -125,7 +126,11 @@ export const createClaudeHistoryInputProjector = (options: {
     if (entry.type !== "user" || readHistoryToolResults(entry).length > 0) {
       return notHandled;
     }
-    if (entry.parent_tool_use_id || isClaudeMetaHistoryMessage(entry)) {
+    if (
+      entry.parent_tool_use_id ||
+      isClaudeMetaHistoryMessage(entry) ||
+      !isClaudeHumanUserMessage(entry)
+    ) {
       return handledWithoutMessage;
     }
 

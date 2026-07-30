@@ -163,30 +163,88 @@ export const isClaudeHistoryCompactBoundaryMessage = (
   readStringProp(entry, "subtype") === "compact_boundary";
 
 const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: string }) => {
-  const entries: SessionStoreEntry[] = [];
-  const keyMatchesMainTranscript = (key: SessionKey): boolean =>
-    key.sessionId === target.sessionId && key.subpath === undefined;
-  const keyMatchesTargetTranscript = (key: SessionKey): boolean =>
-    target.subpath === undefined
-      ? keyMatchesMainTranscript(key)
-      : key.sessionId === target.sessionId && key.subpath === target.subpath;
+  const entriesBySubpath = new Map<string | undefined, SessionStoreEntry[]>();
+  const keyMatchesSession = (key: SessionKey): boolean => key.sessionId === target.sessionId;
   const store: SessionStore = {
     append: async (key, nextEntries) => {
-      if (!keyMatchesTargetTranscript(key)) {
+      if (!keyMatchesSession(key)) {
         return;
       }
+      const entries = entriesBySubpath.get(key.subpath) ?? [];
       entries.push(...nextEntries);
+      entriesBySubpath.set(key.subpath, entries);
     },
-    load: async (key) => (keyMatchesTargetTranscript(key) ? entries : null),
+    load: async (key) =>
+      keyMatchesSession(key) ? (entriesBySubpath.get(key.subpath) ?? null) : null,
   };
-  return { entries, store };
+  return { entriesBySubpath, store };
 };
 
-export const loadClaudeRawHistoryMessages = async (
+const readAgentToolUseIds = (entries: readonly SessionStoreEntry[]): Set<string> => {
+  const toolUseIds = new Set<string>();
+  for (const entry of entries) {
+    if (entry.type !== "assistant" || !isRecord(entry.message)) {
+      continue;
+    }
+    const content = entry.message.content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const block of content) {
+      if (
+        isRecord(block) &&
+        readStringProp(block, "type") === "tool_use" &&
+        readStringProp(block, "name") === "Agent"
+      ) {
+        const toolUseId = readStringProp(block, "id");
+        if (toolUseId) {
+          toolUseIds.add(toolUseId);
+        }
+      }
+    }
+  }
+  return toolUseIds;
+};
+
+const readSubagentAgentId = (subpath: string): string | undefined => {
+  const prefix = "subagents/agent-";
+  return subpath.startsWith(prefix) ? subpath.slice(prefix.length) || undefined : undefined;
+};
+
+export const readSubagentAgentIdsByToolUseId = (
+  entriesBySubpath: ReadonlyMap<string | undefined, readonly SessionStoreEntry[]>,
+  targetSubpath: string | undefined,
+): Map<string, string> => {
+  if (!targetSubpath) {
+    return new Map();
+  }
+  const targetToolUseIds = readAgentToolUseIds(entriesBySubpath.get(targetSubpath) ?? []);
+  const agentIdsByToolUseId = new Map<string, string>();
+  for (const [subpath, entries] of entriesBySubpath) {
+    if (!subpath || subpath === targetSubpath) {
+      continue;
+    }
+    const agentId = readSubagentAgentId(subpath);
+    const parentToolUseId = entries
+      .map((entry) => readStringProp(entry, "parent_tool_use_id"))
+      .find((value): value is string => Boolean(value));
+    if (agentId && parentToolUseId && targetToolUseIds.has(parentToolUseId)) {
+      agentIdsByToolUseId.set(parentToolUseId, agentId);
+    }
+  }
+  return agentIdsByToolUseId;
+};
+
+export type ClaudeHistoryProjectionInput = {
+  messages: ClaudeHistoryMessage[];
+  subagentAgentIdsByToolUseId: Map<string, string>;
+};
+
+export const loadClaudeHistoryProjectionInput = async (
   input: LoadAgentSessionHistoryInput,
-): Promise<ClaudeHistoryMessage[]> => {
+): Promise<ClaudeHistoryProjectionInput> => {
   const target = parseClaudeTranscriptTarget(input.externalSessionId);
-  const { entries, store } = createClaudeHistoryImportStore(target);
+  const { entriesBySubpath, store } = createClaudeHistoryImportStore(target);
   try {
     await importSessionToStore(target.sessionId, store, {
       dir: input.workingDirectory,
@@ -203,5 +261,12 @@ export const loadClaudeRawHistoryMessages = async (
       },
     });
   }
-  return filterClaudeHistoryMessages(entries);
+  return {
+    messages: filterClaudeHistoryMessages(entriesBySubpath.get(target.subpath) ?? []),
+    subagentAgentIdsByToolUseId: readSubagentAgentIdsByToolUseId(entriesBySubpath, target.subpath),
+  };
 };
+
+export const loadClaudeRawHistoryMessages = async (
+  input: LoadAgentSessionHistoryInput,
+): Promise<ClaudeHistoryMessage[]> => (await loadClaudeHistoryProjectionInput(input)).messages;

@@ -95,8 +95,8 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       expect.objectContaining({
         kind: "subagent",
         messageId: "assistant-1",
-        partId: "claude-subagent:aef1c17051550cb2b",
-        correlationKey: "session:toolu_agent_1:session-1::claude-subagent::aef1c17051550cb2b",
+        partId: "claude-subagent:toolu_agent_1",
+        correlationKey: "toolu_agent_1",
         status: "completed",
         agent: "Explore",
         prompt: "Locate package.json",
@@ -522,8 +522,8 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       expect.objectContaining({
         kind: "subagent",
         messageId: "assistant-async",
-        partId: "claude-subagent:async-agent-1",
-        correlationKey: "session:toolu_agent_async:session-1::claude-subagent::async-agent-1",
+        partId: "claude-subagent:toolu_agent_async",
+        correlationKey: "toolu_agent_async",
         status: "running",
         executionMode: "background",
         agent: "Explore",

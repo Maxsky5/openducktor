@@ -55,7 +55,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
   });
 
-  test("does not duplicate successful result text already emitted by assistant text parts", () => {
+  test("finalizes successful result text already emitted as an intermediate assistant part", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     const commonInput = {
@@ -100,8 +100,19 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       }),
     });
 
-    expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(0);
-    expect(events.map((event) => event.type)).toEqual(["assistant_part", "session_idle"]);
+    const finalMessages = events.filter((event) => event.type === "assistant_message");
+    expect(finalMessages).toHaveLength(1);
+    expect(finalMessages[0]).toEqual(
+      expect.objectContaining({
+        messageId: "assistant-1",
+        message: "Partial answer",
+      }),
+    );
+    expect(events.map((event) => event.type)).toEqual([
+      "assistant_part",
+      "assistant_message",
+      "session_idle",
+    ]);
     expect(events.at(-1)).toEqual(
       expect.objectContaining({
         type: "session_idle",
@@ -110,7 +121,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     expect(session.activity).toBe("idle");
   });
 
-  test("does not duplicate assistant text parts while earlier queued turns are completing", () => {
+  test("finalizes intermediate text while earlier queued turns are completing", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.acceptedUserMessages.push(
@@ -160,8 +171,15 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       }),
     });
 
-    expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(0);
-    expect(events.map((event) => event.type)).toEqual(["assistant_part"]);
+    const finalMessages = events.filter((event) => event.type === "assistant_message");
+    expect(finalMessages).toHaveLength(1);
+    expect(finalMessages[0]).toEqual(
+      expect.objectContaining({
+        messageId: "assistant-1",
+        message: "First queued result",
+      }),
+    );
+    expect(events.map((event) => event.type)).toEqual(["assistant_part", "assistant_message"]);
     expect(session.pendingUserTurnCount).toBe(1);
     expect(session.activity).toBe("running");
   });

@@ -25,9 +25,17 @@ export const parseClaudeTranscriptTarget = (externalSessionId: string): ClaudeTr
   }
   return {
     sessionId,
-    subpath: taskIds.map(claudeSubagentSubpath).join("/"),
+    subpath: claudeSubagentSubpath(taskIds.at(-1) as string),
   };
 };
 
 export const isClaudeSubagentTranscriptTarget = (externalSessionId: string): boolean =>
   parseClaudeTranscriptTarget(externalSessionId).subpath !== undefined;
+
+export const claudeSubagentAgentId = (externalSessionId: string): string | undefined => {
+  const parts = externalSessionId.split(CLAUDE_SUBAGENT_TRANSCRIPT_SEPARATOR);
+  if (parts.length < 2 || parts.some((part) => !part)) {
+    return undefined;
+  }
+  return parts.at(-1);
+};

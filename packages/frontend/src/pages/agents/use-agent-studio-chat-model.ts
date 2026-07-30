@@ -349,6 +349,7 @@ export function useAgentStudioChatModel({
 
   const surfaceModel = useAgentChatSurfaceModel({
     sessionKey: selectedSessionKey,
+    modelCatalog: selectedSessionRuntimeData.modelCatalog,
     session: activeThreadSession,
     transcriptState: selectedSessionTranscriptState,
     chatSettings,

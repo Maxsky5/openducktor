@@ -67,6 +67,7 @@ export type AgentChatTranscriptNotice = {
 
 export type AgentChatThreadModel = {
   session: AgentChatThreadSession | null;
+  modelCatalog: AgentModelCatalog | null;
   displayedSessionKey: string | null;
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;

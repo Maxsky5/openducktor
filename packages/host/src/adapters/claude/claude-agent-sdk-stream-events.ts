@@ -72,6 +72,29 @@ export const handleClaudeStreamEvent = ({
     }
     return;
   }
+  if (eventType === "content_block_stop") {
+    const index = typeof event.index === "number" ? event.index : null;
+    if (index === null) {
+      return;
+    }
+    const reasoning = session.streamReasoningByBlockIndex?.get(index);
+    if (!reasoning || !session.streamAssistantResponseId) {
+      return;
+    }
+    const messageId = session.streamAssistantResponseId;
+    emit({
+      type: "assistant_part",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      part: createClaudeAssistantReasoningPart({
+        messageId,
+        partId: `${messageId}:thinking:${index}`,
+        text: reasoning,
+      }),
+    });
+    session.streamReasoningByBlockIndex?.delete(index);
+    return;
+  }
   if (eventType === "content_block_start") {
     const index = typeof event.index === "number" ? event.index : null;
     const block = isRecord(event.content_block) ? event.content_block : null;
@@ -97,30 +120,6 @@ export const handleClaudeStreamEvent = ({
     });
     return;
   }
-  if (eventType === "content_block_stop") {
-    const index = typeof event.index === "number" ? event.index : null;
-    if (index === null) {
-      return;
-    }
-    const reasoning = session.streamReasoningByBlockIndex?.get(index);
-    if (!reasoning || !session.streamAssistantResponseId) {
-      return;
-    }
-    const messageId = session.streamAssistantResponseId;
-    emit({
-      type: "assistant_part",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-      part: createClaudeAssistantReasoningPart({
-        messageId,
-        partId: `${messageId}:thinking:${index}`,
-        text: reasoning,
-      }),
-    });
-    session.streamReasoningByBlockIndex?.delete(index);
-    return;
-  }
-
   if (eventType !== "content_block_delta") {
     return;
   }

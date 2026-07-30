@@ -46,6 +46,119 @@ describe("handleClaudeSdkMessage subagent events", () => {
     ]);
   });
 
+  test("routes nested background subagent task events into their parent transcript", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    session.subagentTaskIdsByToolUseId.set("outer-agent-tool", "parent-agent");
+    const input = {
+      session,
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "parent-agent-tool-call",
+        session_id: "session-1",
+        parent_tool_use_id: "outer-agent-tool",
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-5",
+          content: [
+            {
+              type: "tool_use",
+              id: "inner-agent-tool",
+              name: "Agent",
+              input: {
+                description: "Inspect nested behavior",
+                prompt: "Inspect nested behavior",
+                subagent_type: "Explore",
+              },
+            },
+          ],
+          stop_reason: "tool_use",
+        },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        uuid: "nested-task-started",
+        session_id: "session-1",
+        task_id: "child-agent",
+        tool_use_id: "inner-agent-tool",
+        description: "Inspect nested behavior",
+        subagent_type: "Explore",
+        task_type: "local_agent",
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_progress",
+        uuid: "nested-task-progress",
+        session_id: "session-1",
+        task_id: "child-agent",
+        description: "Inspecting",
+        subagent_type: "Explore",
+        usage: { total_tokens: 10, tool_uses: 1, duration_ms: 1000 },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_updated",
+        uuid: "nested-task-updated",
+        session_id: "session-1",
+        task_id: "child-agent",
+        patch: { status: "running" },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:04.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        uuid: "nested-task-completed",
+        session_id: "session-1",
+        task_id: "child-agent",
+        status: "completed",
+        output_file: "/tmp/child-agent.output",
+        summary: "Nested inspection complete",
+      }),
+    });
+
+    const subagentEvents = events.filter(
+      (event) => event.type === "assistant_part" && event.part.kind === "subagent",
+    );
+    expect(subagentEvents).toHaveLength(4);
+    for (const event of subagentEvents) {
+      expect(event).toMatchObject({
+        externalSessionId: "session-1::claude-subagent::parent-agent",
+        part: {
+          kind: "subagent",
+          externalSessionId:
+            "session-1::claude-subagent::parent-agent::claude-subagent::child-agent",
+        },
+      });
+    }
+  });
+
   test("waits for task completion before finalizing forwarded subagent text without a stop reason", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
@@ -232,10 +345,9 @@ describe("handleClaudeSdkMessage subagent events", () => {
     );
   });
 
-  test("streams forwarded subagent text deltas into the nested transcript", () => {
+  test("marks a background subagent cancelled when TaskStop succeeds", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.subagentTaskIdsByToolUseId.set("task-tool-1", "task-1");
     const input = {
       session,
       modelSelection: (model: string) => ({
@@ -250,39 +362,114 @@ describe("handleClaudeSdkMessage subagent events", () => {
       ...input,
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
-        type: "stream_event",
-        uuid: "stream-1",
+        type: "assistant",
+        uuid: "assistant-agent",
         session_id: "session-1",
-        parent_tool_use_id: "task-tool-1",
-        event: {
-          type: "message_start",
-          message: {},
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-5",
+          content: [
+            {
+              type: "tool_use",
+              id: "agent-tool",
+              name: "Agent",
+              input: {
+                description: "Audit API changes",
+                prompt: "Audit the API changes",
+                run_in_background: true,
+                subagent_type: "Explore",
+              },
+            },
+          ],
+          stop_reason: "tool_use",
         },
       }),
     });
     handleClaudeSdkMessage({
       ...input,
-      timestamp: "2026-06-25T20:00:00.100Z",
+      timestamp: "2026-06-25T20:00:01.000Z",
       message: claudeSdkMessageFixture({
-        type: "stream_event",
-        uuid: "stream-2",
+        type: "user",
+        uuid: "agent-result",
         session_id: "session-1",
-        parent_tool_use_id: "task-tool-1",
-        event: {
-          type: "content_block_delta",
-          index: 0,
-          delta: { type: "text_delta", text: "live nested text" },
+        tool_use_result: {
+          agentId: "agent-1",
+          status: "async_launched",
+        },
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "agent-tool",
+              content: "Background agent launched",
+            },
+          ],
+        },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "assistant-stop",
+        session_id: "session-1",
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-5",
+          content: [
+            {
+              type: "tool_use",
+              id: "stop-tool",
+              name: "TaskStop",
+              input: { task_id: "agent-1" },
+            },
+          ],
+          stop_reason: "tool_use",
+        },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "stop-result",
+        session_id: "session-1",
+        tool_use_result: {
+          message: "Successfully stopped task",
+          task_id: "agent-1",
+          task_type: "local_agent",
+        },
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "stop-tool",
+              content: "Successfully stopped task",
+            },
+          ],
         },
       }),
     });
 
-    expect(events).toEqual([
-      expect.objectContaining({
-        type: "assistant_delta",
-        externalSessionId: "session-1::claude-subagent::task-1",
-        delta: "live nested text",
-      }),
-    ]);
+    const subagentEvents = events.filter(
+      (event) => event.type === "assistant_part" && event.part.kind === "subagent",
+    );
+    expect(subagentEvents.at(-1)).toMatchObject({
+      externalSessionId: "session-1",
+      timestamp: "2026-06-25T20:00:03.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-agent",
+        partId: "claude-subagent:agent-tool",
+        correlationKey: "agent-tool",
+        status: "cancelled",
+        externalSessionId: "session-1::claude-subagent::agent-1",
+      },
+    });
   });
 
   test("routes forwarded subagent tool results with their authoritative execution timing", async () => {

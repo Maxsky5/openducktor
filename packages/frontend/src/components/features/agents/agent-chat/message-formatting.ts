@@ -1,6 +1,7 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
+import { findCatalogModel } from "@/lib/model-catalog-selection";
 import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
 import { SYSTEM_PROMPT_PREFIX } from "@/state/operations/agent-orchestrator/support/session-prompt";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -83,7 +84,10 @@ export const roleLabel = (role: AgentChatMessage["role"], message: AgentChatMess
   return "System";
 };
 
-export const getAssistantFooterData = (message: AgentChatMessage): { infoParts: string[] } => {
+export const getAssistantFooterData = (
+  message: AgentChatMessage,
+  modelCatalog?: AgentModelCatalog | null,
+): { infoParts: string[] } => {
   if (!isFinalAssistantChatMessage(message)) {
     return { infoParts: [] };
   }
@@ -98,8 +102,20 @@ export const getAssistantFooterData = (message: AgentChatMessage): { infoParts: 
 
   const providerLabel = assistantMeta.providerId;
   const modelLabel = assistantMeta.modelId;
+  const catalogModel =
+    modelCatalog &&
+    typeof providerLabel === "string" &&
+    providerLabel.trim().length > 0 &&
+    typeof modelLabel === "string" &&
+    modelLabel.trim().length > 0
+      ? findCatalogModel(modelCatalog, {
+          providerId: providerLabel.trim(),
+          modelId: modelLabel.trim(),
+        })
+      : null;
+  const displayedModelLabel = catalogModel?.modelName ?? modelLabel;
   const providerModelParts: string[] = [];
-  for (const value of [providerLabel, modelLabel]) {
+  for (const value of [providerLabel, displayedModelLabel]) {
     if (typeof value === "string" && value.trim().length > 0) {
       providerModelParts.push(value.trim());
     }

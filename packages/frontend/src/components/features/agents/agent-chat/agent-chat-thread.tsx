@@ -29,6 +29,7 @@ import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 
 type AgentChatTranscriptProps = {
   emptyState: AgentChatThreadModel["emptyState"];
+  modelCatalog: AgentChatThreadModel["modelCatalog"];
   isStarting: boolean;
   isSending: boolean;
   isInteractionEnabled: boolean;
@@ -140,6 +141,7 @@ type AgentChatBottomStackProps = {
 
 const AgentChatTranscript = memo(function AgentChatTranscript({
   emptyState,
+  modelCatalog,
   isStarting,
   isSending,
   isInteractionEnabled,
@@ -199,6 +201,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
             <AgentChatTurnGroup
               key={turn.key}
               turn={turn}
+              modelCatalog={modelCatalog}
               sessionAgentColors={sessionAgentColors}
               sessionIdentity={sessionIdentity}
               subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
@@ -299,6 +302,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     runtimeReadiness,
     isInteractionEnabled,
     emptyState,
+    modelCatalog,
     isStarting,
     isSending,
     sessionAgentColors,
@@ -436,6 +440,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
         emptyState={emptyState}
+        modelCatalog={modelCatalog}
         isStarting={isStarting}
         isSending={isSending}
         isInteractionEnabled={isInteractionEnabled}

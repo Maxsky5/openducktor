@@ -5,9 +5,11 @@ import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claud
 
 export type ClaudeEventSession = {
   acceptedUserMessages?: readonly unknown[];
+  activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount?: number;
   activity: ClaudeSessionActivity;
+  assistantTurnOriginKind?: string;
   externalSessionId: string;
   hiddenSubagentTaskIds?: Set<string>;
   pendingApprovals?: Map<string, unknown>;
@@ -17,6 +19,7 @@ export type ClaudeEventSession = {
   retractedToolUseIds?: Set<string>;
   lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
+  lastAssistantTextFinal?: boolean;
   lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
@@ -37,6 +40,7 @@ export type ClaudeEventSession = {
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
   subagentMessageIdsByTaskId: Map<string, string>;
+  subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
 };
@@ -45,18 +49,24 @@ export const claudeSubagentEventSession = (
   session: ClaudeEventSession,
   parentToolUseId: string,
 ): ClaudeEventSession | null => {
-  const taskId = session.subagentTaskIdsByToolUseId.get(parentToolUseId);
-  if (!taskId) {
+  const agentId =
+    session.subagentAgentIdsByToolUseId?.get(parentToolUseId) ??
+    session.subagentTaskIdsByToolUseId.get(parentToolUseId);
+  if (!agentId) {
     return null;
   }
   session.subagentEventSessionsByToolUseId ??= new Map();
   const existing = session.subagentEventSessionsByToolUseId.get(parentToolUseId);
   if (existing) {
+    existing.externalSessionId = claudeSubagentExternalSessionId(
+      session.externalSessionId,
+      agentId,
+    );
     return existing;
   }
   const childSession: ClaudeEventSession = {
     activity: session.activity,
-    externalSessionId: claudeSubagentExternalSessionId(session.externalSessionId, taskId),
+    externalSessionId: claudeSubagentExternalSessionId(session.externalSessionId, agentId),
     streamAssistantMessageOrdinal: 0,
     streamAssistantMessageIdsByBlockIndex: new Map(),
     todosById: new Map(),
@@ -69,6 +79,78 @@ export const claudeSubagentEventSession = (
   };
   session.subagentEventSessionsByToolUseId.set(parentToolUseId, childSession);
   return childSession;
+};
+
+export const findClaudeToolOwnerSession = (
+  session: ClaudeEventSession,
+  toolUseId: string,
+): ClaudeEventSession | null => {
+  if (session.toolNamesByCallId.has(toolUseId)) {
+    return session;
+  }
+  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    const owner = findClaudeToolOwnerSession(childSession, toolUseId);
+    if (owner) {
+      return owner;
+    }
+  }
+  return null;
+};
+
+export const findClaudeSubagentOwnerByAgentId = (
+  session: ClaudeEventSession,
+  agentId: string,
+): { session: ClaudeEventSession; toolUseId: string } | null => {
+  for (const [toolUseId, ownedAgentId] of session.subagentAgentIdsByToolUseId ?? []) {
+    if (ownedAgentId === agentId) {
+      return { session, toolUseId };
+    }
+  }
+  for (const [toolUseId, taskId] of session.subagentTaskIdsByToolUseId) {
+    if (taskId === agentId) {
+      return { session, toolUseId };
+    }
+  }
+  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    const owner = findClaudeSubagentOwnerByAgentId(childSession, agentId);
+    if (owner) {
+      return owner;
+    }
+  }
+  return null;
+};
+
+export const findClaudeSubagentSessionByAgentId = (
+  session: ClaudeEventSession,
+  agentId: string,
+): ClaudeEventSession | null => {
+  const owner = findClaudeSubagentOwnerByAgentId(session, agentId);
+  return owner ? claudeSubagentEventSession(owner.session, owner.toolUseId) : null;
+};
+
+export const findClaudeSubagentTaskSession = (
+  session: ClaudeEventSession,
+  toolUseId: string | undefined,
+  taskId: string,
+): ClaudeEventSession | null => {
+  if (toolUseId) {
+    const toolOwner = findClaudeToolOwnerSession(session, toolUseId);
+    if (toolOwner) {
+      return toolOwner;
+    }
+  }
+  for (const ownedTaskId of session.subagentTaskIdsByToolUseId.values()) {
+    if (ownedTaskId === taskId) {
+      return session;
+    }
+  }
+  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    const owner = findClaudeSubagentTaskSession(childSession, toolUseId, taskId);
+    if (owner) {
+      return owner;
+    }
+  }
+  return null;
 };
 
 const acceptedUserTurnCount = (session: ClaudeEventSession): number => {
@@ -90,6 +172,7 @@ export const rememberAssistantTextForCurrentTurn = (
   text: string,
   messageId: string,
   model?: AgentModelSelection,
+  isFinal = false,
 ): void => {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -97,6 +180,7 @@ export const rememberAssistantTextForCurrentTurn = (
   }
   session.lastAssistantTextMessageId = messageId;
   session.lastAssistantText = trimmed;
+  session.lastAssistantTextFinal = isFinal;
   if (model) {
     session.lastAssistantTextModel = model;
   } else {

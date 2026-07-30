@@ -8,20 +8,26 @@ import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import {
   isFailedClaudeResult,
   lifecycleOutcomeForClaudeResult,
-  readClaudeResultDurationMs,
 } from "./claude-agent-sdk-result-lifecycle";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claude-agent-sdk-types";
+import {
+  readClaudeTurnOriginKind,
+  shouldFinalizeClaudeTurn,
+} from "./claude-agent-sdk-user-messages";
 
 type ClaudeResultEventSession = {
   acceptedUserMessages?: readonly unknown[];
+  activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activity: ClaudeSessionActivity;
+  assistantTurnOriginKind?: string;
   externalSessionId: string;
   pendingUserTurnCount?: number;
   lastAssistantTextMessageId?: string;
   lastAssistantText?: string;
+  lastAssistantTextFinal?: boolean;
   lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
@@ -59,12 +65,18 @@ export const handleClaudeResultMessage = ({
   timestamp,
 }: ClaudeResultEventInput): void => {
   const completedUserTurnIndex = nextCompletedUserTurnIndex(session);
+  const originKind = readClaudeTurnOriginKind(message) ?? session.assistantTurnOriginKind;
+  const shouldFinalize = shouldFinalizeClaudeTurn(
+    originKind,
+    session.activeBackgroundSubagentTaskIds?.size ?? 0,
+  );
+  delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
   const resultText =
     "result" in message && typeof message.result === "string" ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
-  if (!handledManualCompaction) {
+  if (!handledManualCompaction && shouldFinalize) {
     emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
   }
   if (failed) {
@@ -198,11 +210,10 @@ const emitSuccessfulResultText = ({
     return;
   }
   const text = typeof message.result === "string" ? message.result.trim() : "";
-  const durationMs = readClaudeResultDurationMs(message);
   const duplicatesAssistantTextFromSameTurn =
     text === session.lastAssistantText &&
     session.lastAssistantTextTurnIndex === completedUserTurnIndex;
-  if (!text || (duplicatesAssistantTextFromSameTurn && durationMs === undefined)) {
+  if (!text) {
     return;
   }
   const resultModel = resultModelForCompletedTurn(
@@ -210,6 +221,17 @@ const emitSuccessfulResultText = ({
     completedUserTurnIndex,
     duplicatesAssistantTextFromSameTurn,
   );
+  const acceptedTurn = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
+    | { model?: unknown }
+    | undefined;
+  const acceptedTurnHasModel = acceptedTurn?.model !== undefined;
+  if (
+    duplicatesAssistantTextFromSameTurn &&
+    session.lastAssistantTextFinal &&
+    !acceptedTurnHasModel
+  ) {
+    return;
+  }
   const streamedMessageIds = streamedTextMessageIds(session);
   const streamedMessageId = streamedMessageIds[0];
   const messageId =
@@ -221,6 +243,7 @@ const emitSuccessfulResultText = ({
     session.lastAssistantText = text;
     session.lastAssistantTextTurnIndex = completedUserTurnIndex;
   }
+  session.lastAssistantTextFinal = true;
   if (streamedMessageIds.length > 1) {
     emit({
       type: "transcript_retracted",
@@ -235,7 +258,6 @@ const emitSuccessfulResultText = ({
     timestamp,
     messageId,
     message: text,
-    ...(durationMs !== undefined ? { durationMs } : {}),
     ...(resultModel ? { model: resultModel } : {}),
   });
 };

@@ -41,7 +41,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         part: expect.objectContaining({
           kind: "subagent",
           messageId: "assistant-1",
-          correlationKey: "agent-task-1",
+          correlationKey: "toolu_agent_1",
           status: "running",
           externalSessionId: "session-1::claude-subagent::agent-task-1",
           description: "Locate package.json",
@@ -82,6 +82,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         session_id: "session-1",
       }),
     });
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set(["task-1"]));
     session.subagentEventSessionsByToolUseId.set("task-tool-1", createSession());
 
     handleClaudeSdkMessage({
@@ -124,13 +125,13 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         part: expect.objectContaining({
           kind: "subagent",
           messageId: "assistant-1",
-          correlationKey: "task-1",
+          correlationKey: "task-tool-1",
           status: "running",
           agent: "builder",
           externalSessionId: "session-1::claude-subagent::task-1",
           description: "Inspect auth",
           prompt: "Check the login flow",
-          executionMode: "foreground",
+          executionMode: "background",
           startedAtMs: Date.parse("2026-06-25T20:00:00.000Z"),
         }),
       }),
@@ -138,7 +139,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "subagent",
-          correlationKey: "task-1",
+          correlationKey: "task-tool-1",
           status: "running",
           agent: "builder",
           externalSessionId: "session-1::claude-subagent::task-1",
@@ -148,7 +149,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "subagent",
-          correlationKey: "task-1",
+          correlationKey: "task-tool-1",
           status: "completed",
           externalSessionId: "session-1::claude-subagent::task-1",
           endedAtMs: Date.parse("2026-06-25T20:00:02.000Z"),
@@ -159,6 +160,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       }),
     ]);
     expect(session.subagentEventSessionsByToolUseId.has("task-tool-1")).toBe(false);
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set());
   });
 
   test("maps Claude task status updates explicitly", () => {

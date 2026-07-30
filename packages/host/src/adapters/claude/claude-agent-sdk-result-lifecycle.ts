@@ -1,10 +1,27 @@
 export type ClaudeResultLike = {
   duration_ms?: unknown;
+  errors?: unknown;
   is_error?: unknown;
   result?: unknown;
   stop_reason?: unknown;
   subtype?: unknown;
   terminal_reason?: unknown;
+};
+
+export const failedClaudeResultText = (message: ClaudeResultLike): string => {
+  const errors = Array.isArray(message.errors)
+    ? message.errors.filter((error): error is string => typeof error === "string")
+    : [];
+  if (errors.length > 0) {
+    return errors.join("\n");
+  }
+  const result = typeof message.result === "string" ? message.result.trim() : "";
+  if (result.length > 0) {
+    return result;
+  }
+  const terminalReason =
+    typeof message.terminal_reason === "string" ? message.terminal_reason : undefined;
+  return `Claude Agent SDK result failed: ${terminalReason ?? String(message.subtype)}`;
 };
 
 export type ClaudeResultLifecycleOutcome =

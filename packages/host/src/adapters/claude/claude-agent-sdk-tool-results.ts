@@ -1,7 +1,10 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
-import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
+import {
+  emitClaudeAgentToolResultSubagentPart,
+  emitClaudeTaskStopSubagentPart,
+} from "./claude-agent-sdk-subagents";
 import {
   type ClaudeTodoProjection,
   type ClaudeTodoState,
@@ -12,9 +15,11 @@ import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlat
 import { isRecord } from "./claude-agent-sdk-utils";
 
 type ClaudeToolResultSession = {
+  activeBackgroundSubagentTaskIds?: Set<string>;
   externalSessionId: string;
   retractedSubagentTaskIds?: Set<string>;
   retractedToolUseIds?: Set<string>;
+  subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolInputsByCallId: Map<string, Record<string, unknown>>;
@@ -140,6 +145,14 @@ export const handleClaudeUserToolResultMessage = ({
         timestamp,
         toolUseId: result.toolUseId,
         ...(input ? { input } : {}),
+      });
+    } else if (tool === "TaskStop") {
+      emitClaudeTaskStopSubagentPart({
+        emit,
+        resultRaw: result.raw,
+        resultText: result.text,
+        session,
+        timestamp,
       });
     }
     session.toolInputsByCallId.delete(result.toolUseId);
