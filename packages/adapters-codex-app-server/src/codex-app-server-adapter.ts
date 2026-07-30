@@ -623,6 +623,7 @@ export class CodexAppServerAdapter
       ...("systemPrompt" in input && input.systemPrompt
         ? { developerInstructions: input.systemPrompt }
         : {}),
+      excludeTurns: true,
       ...(model ? { model: toTransportModelSelection(model).model } : {}),
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });

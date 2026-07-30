@@ -600,6 +600,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     expect(resumeIndex).toBeGreaterThanOrEqual(0);
     expect(turnStartIndex).toBeGreaterThanOrEqual(0);
     expect(resumeIndex).toBeLessThan(turnStartIndex);
+    expect(transport.calls[resumeIndex]?.params).toEqual(
+      expect.objectContaining({ threadId: "thread-idle", excludeTurns: true }),
+    );
   });
 
   test("lists loaded Codex sessions from App Server", async () => {

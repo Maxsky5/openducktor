@@ -647,7 +647,11 @@ describe("CodexThreadInventoryReader", () => {
     threads.resolve(threadListResponse("thread-idle", "Idle inventory"));
 
     await expect(pendingRead).resolves.toMatchObject({ runtimeId: "runtime-1" });
-    await expect(pendingHistoryLoad).resolves.toEqual(threadReadResponse("thread-idle"));
+    await expect(pendingHistoryLoad).resolves.toEqual(
+      threadReadResponse("thread-idle", "/repo", { type: "idle" }, [
+        { id: "turn-1", status: "completed", items: [] },
+      ]),
+    );
     expect(calls).toEqual([
       "thread/loaded/list",
       "thread/list",

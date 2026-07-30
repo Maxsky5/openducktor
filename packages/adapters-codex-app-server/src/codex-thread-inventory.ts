@@ -374,7 +374,7 @@ export class CodexThreadInventoryReader {
         sortDirection: "asc",
         itemsView,
       });
-      turns.push(...arrayFromUnknown(response));
+      turns.push(...arrayFromUnknown(isPlainObject(response) ? response.data : undefined));
       cursor = isPlainObject(response)
         ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
         : null;
