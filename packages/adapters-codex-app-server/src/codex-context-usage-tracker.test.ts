@@ -15,6 +15,20 @@ const usageNotification = (lastTotalTokens: number, totalTokens = lastTotalToken
 });
 
 describe("CodexContextUsageTracker", () => {
+  test("initializes fresh threads at zero without replacing observed usage", () => {
+    const tracker = new CodexContextUsageTracker();
+    tracker.initializeFreshThread("runtime-live", "thread-idle");
+    expect(tracker.latest("runtime-live", "thread-idle")).toEqual({ totalTokens: 0 });
+
+    tracker.observeNotification("runtime-live", usageNotification(42_000));
+    tracker.initializeFreshThread("runtime-live", "thread-idle");
+
+    expect(tracker.latest("runtime-live", "thread-idle")).toEqual({
+      totalTokens: 42_000,
+      contextWindow: 200_000,
+    });
+  });
+
   test("accepts zero current usage with a positive cumulative total", () => {
     const tracker = new CodexContextUsageTracker();
     tracker.observeNotification("runtime-live", usageNotification(42_000));
