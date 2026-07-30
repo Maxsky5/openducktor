@@ -265,9 +265,6 @@ export class CodexThreadInventoryReader {
     const pagedTurns = (await this.fetchThreadTurns(client, threadId, "full")).filter(
       isPlainObject,
     );
-    if (pagedTurns.length === 0) {
-      return response;
-    }
     if (!isPlainObject(response) || !isPlainObject(response.thread)) {
       return { thread: { id: threadId, turns: pagedTurns } };
     }

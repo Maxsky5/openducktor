@@ -508,6 +508,35 @@ describe("CodexThreadInventoryReader", () => {
     ]);
   });
 
+  test("uses an empty paginated history instead of stale thread metadata turns", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadRead: async () =>
+        threadReadResponse("thread-idle", "/repo", { type: "idle" }, [
+          {
+            id: "stale-turn",
+            status: "completed",
+            items: [
+              {
+                id: "stale-message",
+                type: "agentMessage",
+                phase: "final_answer",
+                text: "Stale metadata history",
+              },
+            ],
+          },
+        ]),
+      threadTurnsList: async () => ({ data: [], nextCursor: null }),
+    } as unknown as CodexAppServerClient;
+
+    const historyLoad = await reader.readThreadHistory(client, {
+      externalSessionId: "thread-idle",
+      workingDirectory: "/repo",
+    });
+
+    expect(historyLoad).toEqual(threadReadResponse("thread-idle", "/repo", { type: "idle" }, []));
+  });
+
   test("returns null when read-only history has no stored thread", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
@@ -601,11 +630,11 @@ describe("CodexThreadInventoryReader", () => {
       },
       threadRead: async () => {
         calls.push("thread/read");
-        return threadReadResponse("thread-idle");
+        return threadReadResponse("thread-idle", "/repo", { type: "idle" }, []);
       },
       threadTurnsList: async () => {
         calls.push("thread/turns/list");
-        return { data: [] };
+        return { data: [{ id: "turn-1", status: "completed", items: [] }] };
       },
     } as unknown as CodexAppServerClient;
 
