@@ -510,4 +510,77 @@ describe("consumeClaudeSession lifecycle", () => {
       "Claude Agent SDK session is no longer accepting messages after its SDK stream stopped.",
     );
   });
+
+  test("drains a live context refresh before finishing a failed SDK stream", async () => {
+    const events: AgentEvent[] = [];
+    let resolveContextUsage!: (usage: { totalTokens: number; maxTokens: number }) => void;
+    let markContextRefreshStarted!: () => void;
+    const contextRefreshStarted = new Promise<void>((resolve) => {
+      markContextRefreshStarted = resolve;
+    });
+    const contextUsage = new Promise<{ totalTokens: number; maxTokens: number }>((resolve) => {
+      resolveContextUsage = resolve;
+    });
+    const query = Object.assign(
+      throwingClaudeQuery(new Error("transport crashed"), [
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: "assistant-1",
+          session_id: "session-1",
+          timestamp: "2026-06-25T20:00:01.000Z",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            stop_reason: null,
+            content: [{ type: "text", text: "Working..." }],
+          },
+        }),
+      ]),
+      {
+        getContextUsage: () => {
+          markContextRefreshStarted();
+          return contextUsage;
+        },
+      },
+    );
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    const sessionClosed = new Promise<void>((resolve) => {
+      sessionStore.subscribeClose(() => resolve());
+    });
+    const session = createClaudeSession({
+      activity: "running",
+      query,
+    });
+    sessionStore.set(session);
+
+    const consumePromise = consumeClaudeSession({
+      session,
+      sessionStore,
+      now: () => "2026-06-25T20:00:02.000Z",
+      emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+    });
+
+    await Promise.all([contextRefreshStarted, sessionClosed]);
+
+    expect(events.some((event) => event.type === "session_error")).toBe(true);
+    expect(events.some((event) => event.type === "session_finished")).toBe(false);
+
+    resolveContextUsage({
+      totalTokens: 42_000,
+      maxTokens: 200_000,
+    });
+    await consumePromise;
+
+    expect(
+      events
+        .filter(
+          (event) =>
+            event.type === "session_error" ||
+            event.type === "session_context_updated" ||
+            event.type === "session_finished",
+        )
+        .map((event) => event.type),
+    ).toEqual(["session_error", "session_context_updated", "session_finished"]);
+  });
 });

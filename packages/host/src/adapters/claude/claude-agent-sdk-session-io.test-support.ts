@@ -99,10 +99,13 @@ export const openClaudeQueryWithMessages = (
   return { query, release };
 };
 
-export const throwingClaudeQuery = (error: Error): ClaudeSession["query"] =>
+export const throwingClaudeQuery = (
+  error: Error,
+  messages: SDKMessage[] = emptySdkMessages,
+): ClaudeSession["query"] =>
   Object.assign(
     (async function* (): AsyncGenerator<SDKMessage> {
-      yield* emptySdkMessages;
+      yield* messages;
       throw error;
     })(),
     defaultQueryControls(),

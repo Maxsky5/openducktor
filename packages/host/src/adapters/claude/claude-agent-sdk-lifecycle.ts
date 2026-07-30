@@ -12,26 +12,6 @@ export type ClaudeLifecycleSession = {
   pendingUserTurnCount?: number;
 };
 
-export const emitClaudeTerminalSessionFailure = ({
-  emit,
-  session,
-  timestamp,
-  message,
-}: ClaudeLifecycleInput & { message: string }): void => {
-  emit({
-    type: "session_error",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-    message,
-  });
-  emit({
-    type: "session_finished",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-    message: "Claude Agent SDK session stream stopped after an error.",
-  });
-};
-
 type ClaudeLifecycleInput = {
   emit: (event: AgentEvent) => void;
   session: ClaudeLifecycleSession;

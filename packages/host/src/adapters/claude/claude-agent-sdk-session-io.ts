@@ -17,7 +17,6 @@ import {
   shouldRefreshClaudeContextUsageForMessage,
 } from "./claude-agent-sdk-context-usage";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { emitClaudeTerminalSessionFailure } from "./claude-agent-sdk-lifecycle";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
   assertClaudeSessionModelUpdateSupported,
@@ -199,18 +198,25 @@ export const consumeClaudeSession = async (input: {
       sessionStore.close(session);
     }
   };
-  const failSession = (error: unknown): void => {
+  const failSession = async (error: unknown): Promise<void> => {
     if (!isLiveSession()) {
       return;
     }
     const timestamp = now();
-    emitClaudeTerminalSessionFailure({
-      emit: (event) => emit(session, event),
-      session,
+    emit(session, {
+      type: "session_error",
+      externalSessionId: session.externalSessionId,
       timestamp,
       message: errorMessage(error),
     });
     closeLiveSession();
+    await flushClaudeLiveContextUsageRefresh(session);
+    emit(session, {
+      type: "session_finished",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      message: "Claude Agent SDK session stream stopped after an error.",
+    });
   };
   try {
     for await (const message of session.query) {
@@ -254,7 +260,7 @@ export const consumeClaudeSession = async (input: {
       closeLiveSession();
     }
   } catch (error) {
-    failSession(error);
+    await failSession(error);
   }
 };
 
