@@ -334,6 +334,7 @@ export class CodexAppServerAdapter
       ...codexTransportPolicy(policy),
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
+      historyMode: "paginated",
       model: transportModel.model,
       effort: transportModel.effort,
     });
@@ -373,6 +374,7 @@ export class CodexAppServerAdapter
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
+      excludeTurns: true,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });
@@ -406,6 +408,7 @@ export class CodexAppServerAdapter
       threadId: input.parentExternalSessionId,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
+      excludeTurns: true,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });

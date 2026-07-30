@@ -450,15 +450,35 @@ describe("CodexThreadInventoryReader", () => {
 
   test("reads stored threads for history without resuming them", async () => {
     const reader = new CodexThreadInventoryReader();
-    const calls: string[] = [];
-    const client = {
-      threadRead: async () => {
-        calls.push("thread/read");
-        return threadReadResponse("thread-idle");
+    const calls: Array<{ method: string; params: unknown }> = [];
+    const pagedTurns = [
+      {
+        id: "turn-1",
+        status: "completed",
+        itemsView: "full",
+        items: [
+          {
+            type: "userMessage",
+            id: "user-live-id",
+            content: [{ type: "text", text: "Inspect the transcript." }],
+          },
+          {
+            type: "agentMessage",
+            id: "msg-live-id",
+            text: "The transcript is intact.",
+            phase: "final_answer",
+          },
+        ],
       },
-      threadTurnsList: async () => {
-        calls.push("thread/turns/list");
-        return { data: [] };
+    ];
+    const client = {
+      threadRead: async (params: unknown) => {
+        calls.push({ method: "thread/read", params });
+        return threadReadResponse("thread-idle", "/repo", { type: "idle" }, []);
+      },
+      threadTurnsList: async (params: unknown) => {
+        calls.push({ method: "thread/turns/list", params });
+        return { data: pagedTurns, nextCursor: null };
       },
     } as unknown as CodexAppServerClient;
 
@@ -467,8 +487,25 @@ describe("CodexThreadInventoryReader", () => {
       workingDirectory: "/repo",
     });
 
-    expect(historyLoad).toEqual(threadReadResponse("thread-idle"));
-    expect(calls).toEqual(["thread/read", "thread/turns/list"]);
+    expect(historyLoad).toEqual(
+      threadReadResponse("thread-idle", "/repo", { type: "idle" }, pagedTurns),
+    );
+    expect(calls).toEqual([
+      {
+        method: "thread/read",
+        params: { threadId: "thread-idle", includeTurns: false },
+      },
+      {
+        method: "thread/turns/list",
+        params: {
+          threadId: "thread-idle",
+          cursor: null,
+          limit: 100,
+          sortDirection: "asc",
+          itemsView: "full",
+        },
+      },
+    ]);
   });
 
   test("returns null when read-only history has no stored thread", async () => {

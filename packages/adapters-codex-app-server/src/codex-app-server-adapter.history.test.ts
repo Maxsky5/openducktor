@@ -168,7 +168,55 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("marks hydrated item timestamps approximate when Codex only reports a turn boundary", async () => {
+  test("keeps stable paginated item ids while hydrating messages and tools", async () => {
+    const turns = [
+      {
+        id: "child-turn",
+        startedAt: 1_783_715_581,
+        completedAt: null,
+        durationMs: null,
+        status: "inProgress",
+        items: [
+          {
+            id: "child-user",
+            type: "userMessage",
+            content: [{ type: "text", text: "Inspect the repository" }],
+          },
+          {
+            id: "child-commentary",
+            type: "agentMessage",
+            phase: "commentary",
+            text: "I’m checking the repository now.",
+          },
+          {
+            id: "child-command",
+            type: "commandExecution",
+            command: "pwd",
+            cwd: "/repo",
+            processId: null,
+            source: "model",
+            status: "completed",
+            commandActions: [{ type: "unknown", command: "pwd" }],
+            aggregatedOutput: "/repo",
+            exitCode: 0,
+            durationMs: 12,
+          },
+          {
+            id: "child-tool",
+            type: "mcpToolCall",
+            server: "semble",
+            tool: "search",
+            status: "completed",
+            arguments: { query: "architecture" },
+            appContext: null,
+            pluginId: null,
+            result: { content: [{ type: "text", text: "result" }] },
+            error: null,
+            durationMs: 107,
+          },
+        ],
+      },
+    ];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/read") {
@@ -178,59 +226,12 @@ describe("CodexAppServerAdapter history loading", () => {
               cwd: "/repo",
               createdAt: 1_783_715_580,
               status: { type: "idle" },
-              turns: [
-                {
-                  id: "child-turn",
-                  startedAt: 1_783_715_581,
-                  completedAt: null,
-                  durationMs: null,
-                  status: "inProgress",
-                  items: [
-                    {
-                      id: "child-user",
-                      type: "userMessage",
-                      content: [{ type: "text", text: "Inspect the repository" }],
-                    },
-                    {
-                      id: "child-commentary",
-                      type: "agentMessage",
-                      phase: "commentary",
-                      text: "I’m checking the repository now.",
-                    },
-                    {
-                      id: "child-command",
-                      type: "commandExecution",
-                      command: "pwd",
-                      cwd: "/repo",
-                      processId: null,
-                      source: "model",
-                      status: "completed",
-                      commandActions: [{ type: "unknown", command: "pwd" }],
-                      aggregatedOutput: "/repo",
-                      exitCode: 0,
-                      durationMs: 12,
-                    },
-                    {
-                      id: "child-tool",
-                      type: "mcpToolCall",
-                      server: "semble",
-                      tool: "search",
-                      status: "completed",
-                      arguments: { query: "architecture" },
-                      appContext: null,
-                      pluginId: null,
-                      result: { content: [{ type: "text", text: "result" }] },
-                      error: null,
-                      durationMs: 107,
-                    },
-                  ],
-                },
-              ],
+              turns: [],
             },
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return { data: turns, nextCursor: null } as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -534,10 +535,6 @@ describe("CodexAppServerAdapter history loading", () => {
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-search", cwd: "/repo", createdAt: 1 } } as Response;
-        }
         return {
           thread: {
             id: "thread-search",
@@ -625,10 +622,6 @@ describe("CodexAppServerAdapter history loading", () => {
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
-        }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-skill", cwd: "/repo", createdAt: 1 } } as Response;
         }
         return {
           thread: {
@@ -888,10 +881,6 @@ describe("CodexAppServerAdapter history loading", () => {
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-contract", cwd: "/repo", createdAt: 1 } } as Response;
-        }
         return {
           thread: {
             id: "thread-contract",
@@ -1033,12 +1022,6 @@ describe("CodexAppServerAdapter history loading", () => {
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
-        }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return {
-            thread: { id: "thread-command-actions", cwd: "/repo", createdAt: 1 },
-          } as Response;
         }
         return {
           thread: {
@@ -1186,7 +1169,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ).resolves.toEqual([]);
 
     expect(calls).toEqual([
-      { method: "thread/read", params: { threadId: "missing-thread", includeTurns: true } },
+      { method: "thread/read", params: { threadId: "missing-thread", includeTurns: false } },
     ]);
   });
 
@@ -1207,10 +1190,6 @@ describe("CodexAppServerAdapter history loading", () => {
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
-        }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-todos", cwd: "/repo", createdAt: 1 } } as Response;
         }
         return {
           thread: {
@@ -1542,10 +1521,6 @@ describe("CodexAppServerAdapter history loading", () => {
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-final-message", cwd: "/repo", createdAt: 1 } } as Response;
-        }
         return {
           thread: {
             id: "thread-final-message",
@@ -1605,10 +1580,6 @@ describe("CodexAppServerAdapter history loading", () => {
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
-        }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-plan-todos", cwd: "/repo", createdAt: 1 } } as Response;
         }
         return {
           thread: {
@@ -1675,12 +1646,6 @@ describe("CodexAppServerAdapter history loading", () => {
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
-        }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return {
-            thread: { id: "thread-plan-text-todos", cwd: "/repo", createdAt: 1 },
-          } as Response;
         }
         return {
           thread: {
@@ -1749,10 +1714,6 @@ describe("CodexAppServerAdapter history loading", () => {
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-named-todos", cwd: "/repo", createdAt: 1 } } as Response;
-        }
         return {
           thread: {
             id: "thread-named-todos",
@@ -1817,10 +1778,6 @@ describe("CodexAppServerAdapter history loading", () => {
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
-        }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-json-todos", cwd: "/repo", createdAt: 1 } } as Response;
         }
         return {
           thread: {
@@ -1888,10 +1845,6 @@ describe("CodexAppServerAdapter history loading", () => {
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
-        }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-bad-todos", cwd: "/repo", createdAt: 1 } } as Response;
         }
         return {
           thread: {

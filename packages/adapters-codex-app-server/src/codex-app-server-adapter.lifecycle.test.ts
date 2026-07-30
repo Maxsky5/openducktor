@@ -128,6 +128,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         ...expectedThreadPolicy,
         cwd: "/repo",
         developerInstructions: "Use the repo rules.",
+        historyMode: "paginated",
         model: "gpt-5",
         effort: "medium",
       },
@@ -242,6 +243,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       threadId: "thread-9",
       cwd: "/repo",
       developerInstructions: "Carry forward the plan.",
+      excludeTurns: true,
       model: "gpt-5",
       effort: "medium",
     });
@@ -250,6 +252,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       threadId: "thread-7",
       cwd: "/repo",
       developerInstructions: "Review the fork.",
+      excludeTurns: true,
       model: "gpt-5",
       effort: "medium",
     });
@@ -358,6 +361,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       sandbox: "workspace-write",
       cwd: "/repo",
       developerInstructions: "Use the repo rules.",
+      historyMode: "paginated",
       model: "gpt-5",
       effort: "medium",
     });
@@ -814,6 +818,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         ...expectedThreadPolicy,
         cwd: "/repo/worktree-task-1",
         developerInstructions: "Use the repo rules.",
+        historyMode: "paginated",
         model: "gpt-5",
         effort: "medium",
       },

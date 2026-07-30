@@ -249,7 +249,7 @@ export class CodexThreadInventoryReader {
   ): Promise<unknown> {
     let response: unknown;
     try {
-      response = await client.threadRead({ threadId, includeTurns: true });
+      response = await client.threadRead({ threadId, includeTurns: false });
     } catch (error) {
       if (isCodexUnmaterializedThreadError(error)) {
         return {
