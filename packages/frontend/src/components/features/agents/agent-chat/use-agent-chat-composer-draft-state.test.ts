@@ -92,6 +92,124 @@ describe("useAgentChatComposerDraftState", () => {
     await harness.unmount();
   });
 
+  test("adopts persistence for the same key and hydrates an empty in-memory draft", async () => {
+    const persistence = createFakePersistence(buildDraft("persisted"));
+    const harness = await mountHarness({
+      key: "conversation:late-persistence",
+      persistence: null,
+    });
+
+    await harness.update({
+      scope: {
+        key: "conversation:late-persistence",
+        persistence: persistence.adapter,
+      },
+    });
+
+    expect(harness.getLatest().draft.segments[0]).toEqual(
+      expect.objectContaining({ text: "persisted" }),
+    );
+    await harness.run((value) => {
+      value.commitDraft(buildDraft("updated"));
+    });
+    expect(persistence.readDraft().segments[0]).toEqual(
+      expect.objectContaining({ text: "updated" }),
+    );
+
+    window.dispatchEvent(new Event("pagehide"));
+    expect(persistence.adapter.flush).toHaveBeenCalledTimes(1);
+    await harness.unmount();
+    expect(persistence.adapter.flush).toHaveBeenCalledTimes(2);
+  });
+
+  test("persists newer in-memory input when adding persistence for the same key", async () => {
+    const persistence = createFakePersistence(buildDraft("older persisted draft"));
+    const harness = await mountHarness({
+      key: "conversation:late-persistence",
+      persistence: null,
+    });
+
+    await harness.run((value) => {
+      value.commitDraft(buildDraft("newer in-memory input"));
+    });
+    await harness.update({
+      scope: {
+        key: "conversation:late-persistence",
+        persistence: persistence.adapter,
+      },
+    });
+
+    expect(harness.getLatest().draft.segments[0]).toEqual(
+      expect.objectContaining({ text: "newer in-memory input" }),
+    );
+    expect(persistence.readDraft().segments[0]).toEqual(
+      expect.objectContaining({ text: "newer in-memory input" }),
+    );
+
+    await harness.unmount();
+    expect(persistence.adapter.flush).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps newer input when replacing persistence for the same key", async () => {
+    const first = createFakePersistence();
+    const second = createFakePersistence(buildDraft("older persisted draft"));
+    const harness = await mountHarness({
+      key: "conversation:replacement",
+      persistence: first.adapter,
+    });
+
+    await harness.run((value) => {
+      value.commitDraft(buildDraft("newer input"));
+    });
+    await harness.update({
+      scope: {
+        key: "conversation:replacement",
+        persistence: second.adapter,
+      },
+    });
+
+    expect(first.adapter.flush).toHaveBeenCalledTimes(1);
+    expect(harness.getLatest().draft.segments[0]).toEqual(
+      expect.objectContaining({ text: "newer input" }),
+    );
+    expect(second.readDraft().segments[0]).toEqual(
+      expect.objectContaining({ text: "newer input" }),
+    );
+
+    let snapshot: ReturnType<HookResult["createSubmittedDraftSnapshot"]> | null = null;
+    await harness.run((value) => {
+      const updatedDraft = buildDraft("replacement updated");
+      value.commitDraft(updatedDraft);
+      snapshot = value.createSubmittedDraftSnapshot(updatedDraft);
+    });
+    expect(second.readDraft().segments[0]).toEqual(
+      expect.objectContaining({ text: "replacement updated" }),
+    );
+
+    await harness.run((value) => {
+      if (!snapshot) {
+        throw new Error("Expected submitted draft snapshot.");
+      }
+      value.clearSubmittedDraft(snapshot);
+      value.setDisplayedDraft(createEmptyComposerDraft());
+    });
+    await harness.run((value) => {
+      if (!snapshot) {
+        throw new Error("Expected submitted draft snapshot.");
+      }
+      value.restoreSubmittedDraft(snapshot);
+    });
+    expect(first.clear).not.toHaveBeenCalled();
+    expect(second.clear).toHaveBeenCalledWith({ onlyIfVersion: 2 });
+    expect(second.readDraft().segments[0]).toEqual(
+      expect.objectContaining({ text: "replacement updated" }),
+    );
+
+    await harness.unmount();
+    expect(first.adapter.flush).toHaveBeenCalledTimes(1);
+    expect(second.adapter.flush).toHaveBeenCalledTimes(1);
+  });
+
   test("flushes the old persistence adapter before switching identities", async () => {
     const pendingFlush = createDeferred();
     const first = createFakePersistence(buildDraft("first"), () => pendingFlush.promise);

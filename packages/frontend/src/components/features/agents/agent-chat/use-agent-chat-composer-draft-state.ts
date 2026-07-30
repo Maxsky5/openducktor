@@ -55,12 +55,28 @@ export function useAgentChatComposerDraftState({
 
   useLayoutEffect(() => {
     const current = latestStateRef.current;
-    if (current.key === nextKey) {
+    if (current.key === nextKey && current.persistence === nextPersistence) {
       return;
     }
 
     if (current.persistence) {
       void current.persistence.flush();
+    }
+
+    if (current.key === nextKey) {
+      const hasCurrentDraft = draftHasMeaningfulContent(current.draft);
+      const nextDraft = hasCurrentDraft
+        ? current.draft
+        : (nextPersistence?.hydrate() ?? current.draft);
+      if (hasCurrentDraft) {
+        nextPersistence?.set(current.draft);
+      }
+      setState({
+        key: current.key,
+        persistence: nextPersistence,
+        draft: nextDraft,
+      });
+      return;
     }
 
     setState(createInitialDraftState({ key: nextKey, persistence: nextPersistence }));
