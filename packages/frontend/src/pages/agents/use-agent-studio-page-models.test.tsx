@@ -1185,6 +1185,38 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("keeps draft persistence stable for equivalent session identity objects", async () => {
+    const session = createSession("session-1", "external-1");
+    const selectedSessionIdentity = toAgentSessionIdentity(session);
+    const selectedSessionCore = {
+      loadedSession: session,
+      sessionsForTask: summarizeSessions([session]),
+      selectedSessionIdentity,
+    };
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore,
+      }),
+    );
+
+    await harness.mount();
+    const initialPersistence = harness.getLatest().agentChatModel.composer.draftScope.persistence;
+
+    await harness.update(
+      createHookArgs({
+        selectedSessionCore: {
+          ...selectedSessionCore,
+          selectedSessionIdentity: { ...selectedSessionIdentity },
+        },
+      }),
+    );
+
+    expect(harness.getLatest().agentChatModel.composer.draftScope.persistence).toBe(
+      initialPersistence,
+    );
+    await harness.unmount();
+  });
+
   test("keeps composer model stable for thread-only updates", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({

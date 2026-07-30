@@ -12,6 +12,7 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
@@ -156,14 +157,15 @@ export function useAgentStudioChatModel({
   const selectedSessionKey = selectedSessionIdentity
     ? agentSessionIdentityKey(selectedSessionIdentity)
     : null;
+  const stableDraftSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
   const draftPersistence = useMemo(
     () =>
       createAgentStudioChatDraftPersistence({
         workspaceId: composer.workspaceId,
         taskId: selectedSession.taskId,
-        session: selectedSessionIdentity,
+        session: stableDraftSessionIdentity,
       }),
-    [composer.workspaceId, selectedSession.taskId, selectedSessionIdentity],
+    [composer.workspaceId, selectedSession.taskId, stableDraftSessionIdentity],
   );
   const surfaceState = useMemo(
     () =>
