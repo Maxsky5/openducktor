@@ -6,7 +6,7 @@ import type {
 import type { AgentEvent } from "@openducktor/core";
 import {
   type ClaudeEventSession,
-  claudeSubagentEventSession,
+  findClaudeSubagentSessionByAgentId,
 } from "./claude-agent-sdk-event-session";
 import { isClaudeFileEditTool } from "./claude-agent-sdk-file-edits";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
@@ -75,19 +75,11 @@ const recordClaudeToolExecutionTiming = (
   ) {
     return;
   }
-  let timingSession: ClaudeEventSession = session;
-  if (input.agent_id) {
-    const parentToolUseId = [...session.subagentTaskIdsByToolUseId].find(
-      ([, taskId]) => taskId === input.agent_id,
-    )?.[0];
-    if (!parentToolUseId) {
-      return;
-    }
-    const childSession = claudeSubagentEventSession(session, parentToolUseId);
-    if (!childSession) {
-      return;
-    }
-    timingSession = childSession;
+  const timingSession = input.agent_id
+    ? findClaudeSubagentSessionByAgentId(session, input.agent_id)
+    : session;
+  if (!timingSession) {
+    return;
   }
   const endedAtMs = timestampMs(timestamp);
   timingSession.toolStartedAtMsByCallId.set(

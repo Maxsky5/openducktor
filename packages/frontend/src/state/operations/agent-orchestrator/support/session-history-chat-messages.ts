@@ -13,7 +13,7 @@ import {
   readAssistantActivityStartedAtMsFromParts,
   resolveAssistantTurnDurationMs,
 } from "./assistant-turn-duration";
-import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
+import { toReasoningMessageId, toTextMessageId, toToolMessageId } from "./chat-message-ids";
 import { isFinalAssistantHistoryMessage } from "./history-finality";
 import { mergeHistoryMessages } from "./history-message-merge";
 import { createSessionMessagesState } from "./messages";
@@ -181,17 +181,37 @@ export const historyToChatMessages = (
 
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
-    let primaryMessageInsertionIndex: number | undefined;
+    const assistantTextMessageIndexes: number[] = [];
 
     for (const part of message.parts as SessionHistoryPart[]) {
       if (
         message.role === "assistant" &&
         part.kind === "text" &&
         !part.synthetic &&
-        part.text.trim().length > 0 &&
-        primaryMessageInsertionIndex === undefined
+        part.text.trim().length > 0
       ) {
-        primaryMessageInsertionIndex = next.length;
+        assistantTextMessageIndexes.push(next.length);
+        next.push(
+          inheritTimestampAccuracy(
+            {
+              id: toTextMessageId(message.messageId, part.partId),
+              role: "assistant",
+              content: part.text,
+              timestamp: message.timestamp,
+              meta: {
+                ...createAssistantMessageMeta({
+                  role: sessionContext.role,
+                  model: message.model,
+                  isFinal: false,
+                }),
+                partId: part.partId,
+                sourceMessageId: message.messageId,
+              },
+            },
+            message,
+          ),
+        );
+        continue;
       }
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
@@ -204,43 +224,67 @@ export const historyToChatMessages = (
     }
 
     const content = message.text;
-    const shouldRenderPrimaryMessage = content.length > 0 || userDisplayParts.length > 0;
-    if (shouldRenderPrimaryMessage) {
-      const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
-      const completedAtMs = Date.parse(message.timestamp);
-      const activityStartedAtMs =
-        message.role === "assistant" && isFinalAssistantMessage && !Number.isNaN(completedAtMs)
-          ? mergeTurnActivityTimestamp(
-              readAssistantActivityStartedAtMsFromMessages({
-                messages: next,
-                previousAssistantCompletedAtMs,
-                completedAtMs,
-              }),
-              readAssistantActivityStartedAtMsFromParts(message.parts, completedAtMs),
-            )
-          : undefined;
-      const assistantDurationMs =
-        message.role === "assistant" && isFinalAssistantMessage && !Number.isNaN(completedAtMs)
-          ? (message.durationMs ??
-            resolveAssistantTurnDurationMs({
+    const isFinalAssistantMessage =
+      message.role === "assistant" && isFinalAssistantHistoryMessage(message);
+    const completedAtMs = Date.parse(message.timestamp);
+    const activityStartedAtMs =
+      isFinalAssistantMessage && !Number.isNaN(completedAtMs)
+        ? mergeTurnActivityTimestamp(
+            readAssistantActivityStartedAtMsFromMessages({
+              messages: next,
+              previousAssistantCompletedAtMs,
               completedAtMs,
-              ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
-              ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
-              ...(typeof previousAssistantCompletedAtMs === "number"
-                ? { previousAssistantCompletedAtMs }
-                : {}),
-            }))
-          : undefined;
+            }),
+            readAssistantActivityStartedAtMsFromParts(message.parts, completedAtMs),
+          )
+        : undefined;
+    const assistantDurationMs =
+      isFinalAssistantMessage && !Number.isNaN(completedAtMs)
+        ? (message.durationMs ??
+          resolveAssistantTurnDurationMs({
+            completedAtMs,
+            ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
+            ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
+            ...(typeof previousAssistantCompletedAtMs === "number"
+              ? { previousAssistantCompletedAtMs }
+              : {}),
+          }))
+        : undefined;
+    const assistantMeta =
+      message.role === "assistant"
+        ? createAssistantMessageMeta({
+            role: sessionContext.role,
+            model: message.model,
+            isFinal: isFinalAssistantMessage,
+            durationMs: isFinalAssistantMessage ? assistantDurationMs : undefined,
+            totalTokens: isFinalAssistantMessage ? message.totalTokens : undefined,
+            contextWindow: isFinalAssistantMessage ? message.contextWindow : undefined,
+          })
+        : undefined;
+    const lastAssistantTextMessageIndex = assistantTextMessageIndexes.at(-1);
+    if (lastAssistantTextMessageIndex !== undefined && assistantMeta) {
+      const lastAssistantTextMessage = next[lastAssistantTextMessageIndex];
+      if (lastAssistantTextMessage?.meta?.kind === "assistant") {
+        next[lastAssistantTextMessageIndex] = {
+          ...lastAssistantTextMessage,
+          meta: {
+            ...assistantMeta,
+            sourceMessageId: message.messageId,
+            ...(lastAssistantTextMessage.meta.partId
+              ? { partId: lastAssistantTextMessage.meta.partId }
+              : {}),
+          },
+        };
+      }
+    }
+
+    const shouldRenderPrimaryMessage =
+      (message.role !== "assistant" || assistantTextMessageIndexes.length === 0) &&
+      (content.length > 0 || userDisplayParts.length > 0);
+    if (shouldRenderPrimaryMessage) {
       let meta: AgentChatMessage["meta"] | undefined;
       if (message.role === "assistant") {
-        meta = createAssistantMessageMeta({
-          role: sessionContext.role,
-          model: message.model,
-          isFinal: isFinalAssistantMessage,
-          durationMs: isFinalAssistantMessage ? assistantDurationMs : undefined,
-          totalTokens: isFinalAssistantMessage ? message.totalTokens : undefined,
-          contextWindow: isFinalAssistantMessage ? message.contextWindow : undefined,
-        });
+        meta = assistantMeta;
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
       } else if (message.role === "system" && message.notice) {
@@ -279,11 +323,7 @@ export const historyToChatMessages = (
         ...(message.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
         ...(meta ? { meta } : {}),
       };
-      if (primaryMessageInsertionIndex === undefined) {
-        next.push(primaryMessage);
-      } else {
-        next.splice(primaryMessageInsertionIndex, 0, primaryMessage);
-      }
+      next.push(primaryMessage);
     }
 
     if (message.role === "user" && (content.length > 0 || userDisplayParts.length > 0)) {

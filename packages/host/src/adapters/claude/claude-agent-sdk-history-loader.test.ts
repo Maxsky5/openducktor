@@ -217,4 +217,24 @@ describe("reconciledClaudeSubagentStatus", () => {
       ),
     ).toBeNull();
   });
+
+  test("keeps an incomplete background child running after its parent turn ends", () => {
+    expect(
+      reconciledClaudeSubagentStatus(
+        [assistantMessage("parent-final", "Parent complete.", "end_turn")],
+        [assistantMessage("child-working", "Child report.", null)],
+        "background",
+      ),
+    ).toBeNull();
+  });
+
+  test("completes a background child from its own terminal transcript", () => {
+    expect(
+      reconciledClaudeSubagentStatus(
+        [assistantMessage("parent-final", "Parent complete.", "end_turn")],
+        [assistantMessage("child-final", "Child complete.", "end_turn")],
+        "background",
+      ),
+    ).toBe("completed");
+  });
 });

@@ -310,10 +310,10 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
   });
 
   test("preserves assistant text ordering around hydrated tools", () => {
-    const textPart = {
+    const firstTextPart = {
       kind: "text",
       messageId: "m-assistant",
-      partId: "p-text",
+      partId: "p-text-1",
       text: "I will inspect the task.",
       completed: true,
     } satisfies AgentSessionHistoryMessage["parts"][number];
@@ -326,22 +326,50 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
       toolType: "read",
       status: "completed",
     } satisfies AgentSessionHistoryMessage["parts"][number];
-    const projectRoles = (parts: AgentSessionHistoryMessage["parts"]): AgentChatMessage["role"][] =>
+    const secondTextPart = {
+      kind: "text",
+      messageId: "m-assistant",
+      partId: "p-text-2",
+      text: "The task is ready.",
+      completed: true,
+    } satisfies AgentSessionHistoryMessage["parts"][number];
+    const project = (parts: AgentSessionHistoryMessage["parts"]): AgentChatMessage[] =>
       historyToChatMessages(
         [
           {
             messageId: "m-assistant",
             role: "assistant",
             timestamp: "2026-02-22T08:00:02.000Z",
-            text: "I will inspect the task.",
+            text: "I will inspect the task.\nThe task is ready.",
             parts,
           },
         ],
         { role: "build" },
-      ).map((message) => message.role);
+      );
 
-    expect(projectRoles([textPart, toolPart])).toEqual(["assistant", "tool"]);
-    expect(projectRoles([toolPart, textPart])).toEqual(["tool", "assistant"]);
+    expect(
+      project([firstTextPart, toolPart, secondTextPart]).map(({ content, id, role }) => ({
+        content,
+        id,
+        role,
+      })),
+    ).toEqual([
+      {
+        id: "text:m-assistant:p-text-1",
+        role: "assistant",
+        content: "I will inspect the task.",
+      },
+      {
+        id: "tool:m-assistant:call-1",
+        role: "tool",
+        content: "Tool read completed",
+      },
+      {
+        id: "text:m-assistant:p-text-2",
+        role: "assistant",
+        content: "The task is ready.",
+      },
+    ]);
   });
 
   test("uses part ids for history-loaded tool messages without call ids", () => {

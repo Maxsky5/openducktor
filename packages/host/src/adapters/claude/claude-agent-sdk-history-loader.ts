@@ -52,9 +52,13 @@ const hasClaudeSubagentFinalText = (messages: readonly SessionMessage[]): boolea
 export const reconciledClaudeSubagentStatus = (
   parentMessages: readonly SessionMessage[],
   childMessages: readonly SessionMessage[],
+  executionMode?: "background" | "foreground",
 ): "cancelled" | "completed" | null => {
   if (isClaudeSubagentTranscriptComplete(childMessages)) {
     return "completed";
+  }
+  if (executionMode === "background") {
+    return null;
   }
   if (!isClaudeSubagentTranscriptComplete(parentMessages)) {
     return null;
@@ -67,7 +71,14 @@ const reconcileClaudeSubagentStatuses = async (
   history: AgentSessionHistoryMessage[],
   rootMessages: readonly SessionMessage[],
 ): Promise<void> => {
-  const latestStatusBySessionId = new Map<string, { agentId?: string; status: string }>();
+  const latestStatusBySessionId = new Map<
+    string,
+    {
+      agentId?: string;
+      executionMode?: "background" | "foreground";
+      status: string;
+    }
+  >();
   for (const message of history) {
     for (const part of message.parts) {
       if (part.kind !== "subagent" || !part.externalSessionId) {
@@ -81,13 +92,15 @@ const reconcileClaudeSubagentStatuses = async (
       latestStatusBySessionId.set(part.externalSessionId, {
         status: part.status,
         ...(resolvedAgentId ? { agentId: resolvedAgentId } : {}),
+        ...(part.executionMode ? { executionMode: part.executionMode } : {}),
       });
     }
   }
-  const runningAgentIds = [...latestStatusBySessionId.values()].flatMap(({ agentId, status }) =>
-    status === "running" && agentId ? [agentId] : [],
+  const runningAgents = [...latestStatusBySessionId.values()].flatMap(
+    ({ agentId, executionMode, status }) =>
+      status === "running" && agentId ? [{ agentId, executionMode }] : [],
   );
-  if (runningAgentIds.length === 0) {
+  if (runningAgents.length === 0) {
     return;
   }
   const target = parseClaudeTranscriptTarget(input.externalSessionId);
@@ -100,11 +113,14 @@ const reconcileClaudeSubagentStatuses = async (
         })
       : rootMessages;
     const completionStates = await Promise.all(
-      runningAgentIds.map(async (agentId) => {
+      runningAgents.map(async ({ agentId, executionMode }) => {
         const messages = await getSubagentMessages(target.sessionId, agentId, {
           dir: input.workingDirectory,
         });
-        return [agentId, reconciledClaudeSubagentStatus(selectedAgentMessages, messages)] as const;
+        return [
+          agentId,
+          reconciledClaudeSubagentStatus(selectedAgentMessages, messages, executionMode),
+        ] as const;
       }),
     );
     terminalStatuses = new Map(

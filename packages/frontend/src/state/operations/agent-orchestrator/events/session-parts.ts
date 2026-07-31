@@ -1,8 +1,12 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta } from "../support/assistant-meta";
-import { toReasoningMessageId } from "../support/chat-message-ids";
+import { toReasoningMessageId, toTextMessageId } from "../support/chat-message-ids";
 import { sanitizeStreamingText } from "../support/core";
-import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
+import {
+  findSessionMessageById,
+  replaceSessionMessageById,
+  upsertSessionMessage,
+} from "../support/messages";
 import { type SubagentMeta, upsertSubagentMessage } from "../support/subagent-messages";
 import type {
   SessionEvent,
@@ -86,12 +90,18 @@ const upsertLiveAssistantMessage = ({
   current,
   model,
   messageId,
+  partId,
+  replacedMessageId,
+  sourceMessageId,
   text,
   timestamp,
 }: {
   current: AgentSessionState;
   model: AgentSessionState["selectedModel"] | null;
   messageId: string;
+  partId?: string;
+  replacedMessageId?: string;
+  sourceMessageId?: string;
   text: string;
   timestamp: string;
 }): AgentSessionState => {
@@ -100,7 +110,7 @@ const upsertLiveAssistantMessage = ({
     return current;
   }
 
-  const existingMessage = findSessionMessageById(current, messageId);
+  const existingMessage = findSessionMessageById(current, replacedMessageId ?? messageId);
   const assistantMeta =
     existingMessage?.meta?.kind === "assistant"
       ? existingMessage.meta
@@ -108,15 +118,22 @@ const upsertLiveAssistantMessage = ({
           ...toAssistantMessageMeta(current, undefined, undefined, model),
           isFinal: false,
         };
+  const nextMessage = {
+    id: messageId,
+    role: "assistant" as const,
+    content: nextContent,
+    timestamp: existingMessage?.timestamp ?? timestamp,
+    meta: {
+      ...assistantMeta,
+      ...(partId ? { partId } : {}),
+      ...(sourceMessageId ? { sourceMessageId } : {}),
+    },
+  };
   return {
     ...current,
-    messages: upsertSessionMessage(current, {
-      id: messageId,
-      role: "assistant",
-      content: nextContent,
-      timestamp: existingMessage?.timestamp ?? timestamp,
-      meta: assistantMeta,
-    }),
+    messages: replacedMessageId
+      ? replaceSessionMessageById(current, replacedMessageId, nextMessage)
+      : upsertSessionMessage(current, nextMessage),
   };
 };
 
@@ -168,13 +185,17 @@ const handleTextPart = (
       return withRunningStatus(prepared);
     }
 
+    const sourceMessage = findSessionMessageById(prepared, part.messageId);
+    const usesPartIdentity = prepared.runtimeKind === "claude";
     return upsertLiveAssistantMessage({
       current: {
         ...prepared,
         status: "running",
       },
       model: resolvePartModelSelection(context, prepared, part.messageId),
-      messageId: part.messageId,
+      messageId: usesPartIdentity ? toTextMessageId(part.messageId, part.partId) : part.messageId,
+      ...(usesPartIdentity ? { partId: part.partId, sourceMessageId: part.messageId } : {}),
+      ...(usesPartIdentity && sourceMessage ? { replacedMessageId: part.messageId } : {}),
       text: part.text,
       timestamp: event.timestamp,
     });

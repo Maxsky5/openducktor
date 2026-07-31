@@ -3,6 +3,9 @@
 export const toReasoningMessageId = (messageId: string, partId: string): string =>
   `thinking:${messageId}:${partId}`;
 
+export const toTextMessageId = (messageId: string, partId: string): string =>
+  `text:${messageId}:${partId}`;
+
 export const toToolMessageId = ({
   messageId,
   partId,

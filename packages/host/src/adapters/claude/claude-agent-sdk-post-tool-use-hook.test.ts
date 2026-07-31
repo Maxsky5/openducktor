@@ -79,7 +79,7 @@ describe("createClaudePostToolUseHook", () => {
 
   test("records subagent tool timing on the nested transcript", async () => {
     const session = createClaudeSession();
-    session.subagentTaskIdsByToolUseId.set("agent-tool-1", "agent-1");
+    session.subagentAgentIdsByToolUseId = new Map([["agent-tool-1", "agent-1"]]);
     const childSession = claudeSubagentEventSession(session, "agent-tool-1");
     expect(childSession).not.toBeNull();
     const hook = createClaudePostToolUseHook({

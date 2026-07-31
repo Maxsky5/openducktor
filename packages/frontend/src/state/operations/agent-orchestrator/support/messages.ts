@@ -395,6 +395,16 @@ export const upsertSessionMessage = (
   return mergeAtIndex(previous, index, message);
 };
 
+export const replaceSessionMessageById = (
+  owner: SessionMessageOwner,
+  replacedMessageId: string,
+  message: AgentChatMessage,
+): SessionMessagesState => {
+  const previous = getSessionState(owner);
+  const index = findMessageIndexById(owner, replacedMessageId);
+  return index >= 0 ? mergeAtIndex(previous, index, message) : previous;
+};
+
 export const upsertUserSessionMessage = (
   owner: SessionMessageOwner,
   message: AgentChatMessage & { role: "user" },
@@ -453,6 +463,7 @@ export const sessionMessageBelongsToSourceMessage = (
   message.id === sourceMessageId ||
   message.id.startsWith(`thinking:${sourceMessageId}:`) ||
   message.id.startsWith(`tool:${sourceMessageId}:`) ||
+  (message.meta?.kind === "assistant" && message.meta.sourceMessageId === sourceMessageId) ||
   (message.meta?.kind === "subagent" && message.meta.sourceMessageId === sourceMessageId);
 
 export const findFirstChangedSessionMessageIndex = (

@@ -46,6 +46,8 @@ export type AgentChatMessageMeta =
     }
   | {
       kind: "assistant";
+      partId?: string;
+      sourceMessageId?: string;
       agentRole?: AgentRole;
       providerId?: string;
       modelId?: string;
