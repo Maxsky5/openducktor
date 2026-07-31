@@ -133,7 +133,7 @@ const nextCompletedUserTurnIndex = (session: ClaudeResultEventSession): number =
 
 const streamedTextMessageIds = (session: ClaudeResultEventSession): string[] =>
   session.streamAssistantMessageIdsByBlockIndex
-    ? [...session.streamAssistantMessageIdsByBlockIndex.values()]
+    ? [...new Set(session.streamAssistantMessageIdsByBlockIndex.values())]
     : [];
 
 const resultModelForCompletedTurn = (

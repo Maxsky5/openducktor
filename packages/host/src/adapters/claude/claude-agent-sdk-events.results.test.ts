@@ -344,6 +344,51 @@ describe("handleClaudeSdkMessage result events", () => {
     ]);
   });
 
+  test("preserves a native response id shared by multiple streamed text blocks", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    session.acceptedUserMessages.push({});
+    session.pendingUserTurnCount = 1;
+    session.streamAssistantMessageIdsByBlockIndex.set(0, "native-response-1");
+    session.streamAssistantMessageIdsByBlockIndex.set(1, "native-response-1");
+    const commonInput = {
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...commonInput,
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "result-1",
+        session_id: "session-1",
+        is_error: false,
+        result: "First block\nSecond block",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 0, output_tokens: 0 },
+      }),
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: "native-response-1",
+        message: "First block\nSecond block",
+      }),
+      expect.objectContaining({
+        type: "session_idle",
+      }),
+    ]);
+  });
+
   test("does not reuse stream ids after result-finalized text when Claude omits message_start", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
