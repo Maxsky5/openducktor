@@ -72,6 +72,55 @@ afterEach(() => {
 });
 
 describe("useAgentChatComposerDraftState", () => {
+  test("adopts fresh equivalent persistence wrappers without scheduling another render", async () => {
+    const adapters: AgentChatDraftPersistence[] = [];
+    const useInlinePersistenceDraftState = (_props: { render: number }) => {
+      const adapter: AgentChatDraftPersistence = {
+        targetKey: "equivalent-target",
+        hydrate: createEmptyComposerDraft,
+        set: mock(() => 1),
+        readVersion: () => 0,
+        clear: () => true,
+        flush: mock(async () => {}),
+      };
+      adapters.push(adapter);
+      return useAgentChatComposerDraftState({
+        scope: {
+          key: "conversation:equivalent-wrapper",
+          persistence: adapter,
+        },
+      });
+    };
+    const harness = createHookHarness(useInlinePersistenceDraftState, { render: 0 });
+
+    await harness.mount();
+    expect(adapters).toHaveLength(1);
+
+    await harness.update({ render: 1 });
+    expect(adapters).toHaveLength(2);
+    const adoptedAdapter = adapters[1];
+    if (!adoptedAdapter) {
+      throw new Error("Expected the rerendered persistence adapter.");
+    }
+
+    const updatedDraft = buildDraft("updated through adopted wrapper");
+    await harness.run((value) => {
+      value.commitDraft(updatedDraft);
+    });
+    expect(adoptedAdapter.set).toHaveBeenCalledWith(updatedDraft);
+    expect(adapters).toHaveLength(3);
+
+    const latestAdapter = adapters[2];
+    if (!latestAdapter) {
+      throw new Error("Expected the latest persistence adapter.");
+    }
+    window.dispatchEvent(new Event("pagehide"));
+    expect(latestAdapter.flush).toHaveBeenCalledTimes(1);
+
+    await harness.unmount();
+    expect(latestAdapter.flush).toHaveBeenCalledTimes(2);
+  });
+
   test("keeps an opaque non-task draft identity in memory without persistence", async () => {
     const harness = await mountHarness({
       key: "repository-chat:conversation/42",

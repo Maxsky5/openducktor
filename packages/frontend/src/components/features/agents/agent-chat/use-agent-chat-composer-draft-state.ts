@@ -59,11 +59,11 @@ export function useAgentChatComposerDraftState({
     const isSamePersistenceTarget = current.persistence?.targetKey === nextPersistence?.targetKey;
     if (isSameDraft && isSamePersistenceTarget) {
       if (current.persistence !== nextPersistence) {
-        setState({
+        latestStateRef.current = {
           key: current.key,
           persistence: nextPersistence,
           draft: current.draft,
-        });
+        };
       }
       return;
     }
