@@ -4,6 +4,10 @@ import {
   clearClaudeManualCompaction,
   settleClaudeManualCompactionResult,
 } from "./claude-agent-sdk-compaction";
+import {
+  type ClaudeBackgroundWorkSession,
+  hasActiveClaudeBackgroundWork,
+} from "./claude-agent-sdk-event-session";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import {
   isFailedClaudeResult,
@@ -17,9 +21,8 @@ import {
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
 
-type ClaudeResultEventSession = {
+type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   acceptedUserMessages?: readonly unknown[];
-  activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activity: ClaudeSessionActivity;
   assistantTurnOriginKind?: string;
@@ -66,10 +69,8 @@ export const handleClaudeResultMessage = ({
 }: ClaudeResultEventInput): void => {
   const completedUserTurnIndex = nextCompletedUserTurnIndex(session);
   const originKind = readClaudeTurnOriginKind(message) ?? session.assistantTurnOriginKind;
-  const shouldFinalize = shouldFinalizeClaudeTurn(
-    originKind,
-    session.activeBackgroundSubagentTaskIds?.size ?? 0,
-  );
+  const hasActiveBackgroundWork = hasActiveClaudeBackgroundWork(session);
+  const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);
   delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
   const resultText =
@@ -112,7 +113,10 @@ export const handleClaudeResultMessage = ({
     timestamp,
     event: {
       kind: "result",
-      outcome: lifecycleOutcomeForClaudeResult(message),
+      outcome:
+        originKind === "task-notification" && hasActiveBackgroundWork
+          ? "continuing"
+          : lifecycleOutcomeForClaudeResult(message),
     },
   });
 };

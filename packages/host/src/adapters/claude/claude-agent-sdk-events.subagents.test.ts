@@ -412,6 +412,21 @@ describe("handleClaudeSdkMessage subagent events", () => {
       ...input,
       timestamp: "2026-06-25T20:00:02.000Z",
       message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-1",
+        tool_use_id: "agent-tool",
+        description: "Audit API changes",
+        uuid: "agent-task-started",
+        session_id: "session-1",
+      }),
+    });
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set(["task-1"]));
+
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      message: claudeSdkMessageFixture({
         type: "assistant",
         uuid: "assistant-stop",
         session_id: "session-1",
@@ -432,7 +447,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
     });
     handleClaudeSdkMessage({
       ...input,
-      timestamp: "2026-06-25T20:00:03.000Z",
+      timestamp: "2026-06-25T20:00:04.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
         uuid: "stop-result",
@@ -460,7 +475,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
     );
     expect(subagentEvents.at(-1)).toMatchObject({
       externalSessionId: "session-1",
-      timestamp: "2026-06-25T20:00:03.000Z",
+      timestamp: "2026-06-25T20:00:04.000Z",
       part: {
         kind: "subagent",
         messageId: "assistant-agent",
@@ -470,6 +485,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
         externalSessionId: "session-1::claude-subagent::agent-1",
       },
     });
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set());
   });
 
   test("routes forwarded subagent tool results with their authoritative execution timing", async () => {

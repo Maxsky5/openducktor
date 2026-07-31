@@ -3,6 +3,7 @@ import { agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
+import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -14,23 +15,6 @@ import { claudeSessionRef } from "./claude-agent-sdk-utils";
 export type CreateClaudeAgentSdkSessionStoreInput = {
   emit?: ClaudeAgentSdkEventEmitter;
   now?: () => string;
-};
-
-type ClaudeBackgroundWorkSession = {
-  activeBackgroundSubagentTaskIds?: ReadonlySet<string>;
-  subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
-};
-
-const hasActiveClaudeBackgroundWork = (session: ClaudeBackgroundWorkSession): boolean => {
-  if ((session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0) {
-    return true;
-  }
-  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
-    if (hasActiveClaudeBackgroundWork(childSession)) {
-      return true;
-    }
-  }
-  return false;
 };
 
 const hasActiveClaudeWork = (session: ClaudeSession): boolean =>

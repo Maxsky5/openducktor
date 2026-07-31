@@ -57,7 +57,6 @@ const shouldSuppressSubagentTask = (
   }
   return session.hiddenSubagentTaskIds?.has(taskId) ?? false;
 };
-
 const isAgentToolName = (toolName: string | undefined): boolean =>
   toolName?.toLowerCase() === "agent";
 const isVisibleSubagentTaskStart = (
@@ -73,7 +72,6 @@ const isVisibleSubagentTaskStart = (
   const taskType = readStringProp(message, "task_type");
   return taskType === "local_agent" || taskType === "remote_agent";
 };
-
 const emitSubagentPart = (
   emit: (event: AgentEvent) => void,
   session: ClaudeSubagentSession,
@@ -267,7 +265,9 @@ export const emitClaudeTaskStopSubagentPart = ({
   if (!toolUseId || isClaudeToolUseRetracted(session, toolUseId)) {
     return;
   }
-  session.activeBackgroundSubagentTaskIds?.delete(taskId);
+  const activeTaskIds = session.activeBackgroundSubagentTaskIds;
+  activeTaskIds?.delete(taskId);
+  activeTaskIds?.delete(session.subagentTaskIdsByToolUseId.get(toolUseId) ?? taskId);
   const agentId = session.subagentAgentIdsByToolUseId?.get(toolUseId) ?? taskId;
   const endedAtMs = timestampMs(timestamp);
   emitSubagentPart(emit, session, agentId, toolUseId, "cancelled", timestamp, {

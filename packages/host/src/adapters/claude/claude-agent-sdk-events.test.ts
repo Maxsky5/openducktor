@@ -371,6 +371,79 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     ).toHaveLength(1);
   });
 
+  test("keeps the root turn active while a nested background task is running", () => {
+    const events: AgentEvent[] = [];
+    const childSession = createSession("running");
+    childSession.activeBackgroundSubagentTaskIds.add("nested-task-1");
+    const session = {
+      ...createSession("running"),
+      subagentEventSessionsByToolUseId: new Map([["outer-agent-tool", childSession]]),
+    };
+    session.activeSdkUserTurnCount = 1;
+    session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push({});
+    const input = {
+      session,
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "nested-task-user",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Outer agent completed" },
+        origin: { kind: "task-notification" },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "nested-task-assistant",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "The outer agent is complete." }],
+        },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "nested-task-result",
+        session_id: "session-1",
+        is_error: false,
+        result: "The outer agent is complete.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin: { kind: "task-notification" },
+      }),
+    });
+
+    expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
+    expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(1);
+    expect(session.pendingUserTurnCount).toBe(1);
+  });
+
   test("renders terminal assistant text without closing the active SDK user turn", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");

@@ -7,6 +7,7 @@ import {
   type ClaudeEventSession,
   findClaudeSubagentSessionByAgentId,
   findClaudeSubagentTaskSession,
+  hasActiveClaudeBackgroundWork,
   rememberAssistantTextForCurrentTurn,
 } from "./claude-agent-sdk-event-session";
 import {
@@ -255,7 +256,7 @@ const handleAssistantMessage = ({
     hasFinalStopReason &&
     shouldFinalizeClaudeTurn(
       session.assistantTurnOriginKind,
-      session.activeBackgroundSubagentTaskIds?.size ?? 0,
+      hasActiveClaudeBackgroundWork(session) ? 1 : 0,
     );
   const responseId = readStringProp(message.message, "id");
   const assistantMessageId = responseId ?? message.uuid;
