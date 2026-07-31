@@ -363,7 +363,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
           runtime: "claude",
           ...(options.agentID ? { agentId: options.agentID } : {}),
         },
-        ...claudeSubagentPendingInputRoute(session.externalSessionId, options.agentID),
+        ...claudeSubagentPendingInputRoute(session, options.agentID),
       };
       return new Promise<PermissionResult>((resolveResult, rejectResult) => {
         let requestPublished = false;

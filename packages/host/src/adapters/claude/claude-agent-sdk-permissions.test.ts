@@ -1,9 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import {
   createClaudeCanUseTool,
   createClaudePermissionTestSession as createSession,
 } from "./claude-agent-sdk-permissions.test-support";
+import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+
+const addNestedSubagent = (session: ClaudeSessionContext): void => {
+  session.subagentAgentIdsByToolUseId = new Map([["outer-agent-tool", "outer-agent"]]);
+  const outerSession = claudeSubagentEventSession(session, "outer-agent-tool");
+  if (!outerSession) {
+    throw new Error("Expected outer Claude subagent session.");
+  }
+  outerSession.subagentAgentIdsByToolUseId = new Map([["nested-agent-tool", "nested-agent"]]);
+};
 
 describe("createClaudeCanUseTool", () => {
   test("allows native Claude ODT read tool aliases for workflow roles", async () => {
@@ -247,6 +258,109 @@ describe("createClaudeCanUseTool", () => {
       parentExternalSessionId: "session-1",
       childExternalSessionId,
       subagentCorrelationKey: "agent-child-1",
+      requestId: "request-1",
+    });
+  });
+
+  test("publishes nested subagent approvals to the nested transcript", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("build");
+    addNestedSubagent(session);
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+    const abortController = new AbortController();
+
+    const resultPromise = canUseTool(
+      "Bash",
+      { command: "git status" },
+      {
+        signal: abortController.signal,
+        toolUseID: "tool-use-1",
+        agentID: "nested-agent",
+      },
+    );
+
+    const parentExternalSessionId = "session-1::claude-subagent::outer-agent";
+    const childExternalSessionId = `${parentExternalSessionId}::claude-subagent::nested-agent`;
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "approval_required",
+        externalSessionId: childExternalSessionId,
+        parentExternalSessionId,
+        childExternalSessionId,
+        subagentCorrelationKey: "nested-agent",
+        requestId: "request-1",
+      }),
+    ]);
+
+    abortController.abort();
+    await expect(resultPromise).resolves.toMatchObject({ behavior: "deny" });
+    expect(events[1]).toMatchObject({
+      type: "approval_resolved",
+      externalSessionId: childExternalSessionId,
+      parentExternalSessionId,
+      childExternalSessionId,
+      subagentCorrelationKey: "nested-agent",
+      requestId: "request-1",
+    });
+  });
+
+  test("publishes nested subagent questions to the nested transcript", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("build");
+    addNestedSubagent(session);
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+    const abortController = new AbortController();
+
+    const resultPromise = canUseTool(
+      "AskUserQuestion",
+      {
+        questions: [
+          {
+            question: "Which approach should the nested subagent use?",
+            header: "Approach",
+            options: [{ label: "Direct", description: "Use the direct approach." }],
+            multiSelect: false,
+          },
+        ],
+      },
+      {
+        signal: abortController.signal,
+        toolUseID: "question-nested-1",
+        agentID: "nested-agent",
+      },
+    );
+
+    const parentExternalSessionId = "session-1::claude-subagent::outer-agent";
+    const childExternalSessionId = `${parentExternalSessionId}::claude-subagent::nested-agent`;
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "question_required",
+        externalSessionId: childExternalSessionId,
+        parentExternalSessionId,
+        childExternalSessionId,
+        subagentCorrelationKey: "nested-agent",
+        requestId: "request-1",
+      }),
+    ]);
+
+    abortController.abort();
+    await expect(resultPromise).resolves.toMatchObject({ behavior: "deny" });
+    expect(events[1]).toMatchObject({
+      type: "question_resolved",
+      externalSessionId: childExternalSessionId,
+      parentExternalSessionId,
+      childExternalSessionId,
+      subagentCorrelationKey: "nested-agent",
       requestId: "request-1",
     });
   });

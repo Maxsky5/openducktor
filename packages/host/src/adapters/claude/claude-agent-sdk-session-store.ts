@@ -16,6 +16,23 @@ export type CreateClaudeAgentSdkSessionStoreInput = {
   now?: () => string;
 };
 
+type ClaudeBackgroundWorkSession = {
+  activeBackgroundSubagentTaskIds?: ReadonlySet<string>;
+  subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
+};
+
+const hasActiveClaudeBackgroundWork = (session: ClaudeBackgroundWorkSession): boolean => {
+  if ((session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0) {
+    return true;
+  }
+  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    if (hasActiveClaudeBackgroundWork(childSession)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.activity === "running" ||
   session.sdkState === "running" ||
@@ -23,7 +40,7 @@ const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.activeSdkUserTurnCount > 0 ||
   session.pendingUserTurnCount > 0 ||
   session.queuedSdkMessages.length > 0 ||
-  (session.activeBackgroundSubagentTaskIds?.size ?? 0) > 0 ||
+  hasActiveClaudeBackgroundWork(session) ||
   session.pendingApprovals.size > 0 ||
   session.pendingQuestions.size > 0;
 

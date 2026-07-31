@@ -182,7 +182,7 @@ export const requestClaudeAskUserQuestion = async ({
     timestamp: now(),
     requestId,
     questions: payload.eventQuestions,
-    ...claudeSubagentPendingInputRoute(session.externalSessionId, agentID),
+    ...claudeSubagentPendingInputRoute(session, agentID),
   };
   const answers = await new Promise<string[][] | null>((resolve, reject) => {
     let requestPublished = false;

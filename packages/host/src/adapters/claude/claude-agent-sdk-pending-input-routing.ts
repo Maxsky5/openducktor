@@ -1,4 +1,8 @@
 import type { AgentEvent } from "@openducktor/core";
+import {
+  type ClaudeEventSession,
+  findClaudeSubagentOwnerByAgentId,
+} from "./claude-agent-sdk-event-session";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 
@@ -10,12 +14,14 @@ type ClaudePendingInputEvent = Extract<
 >;
 
 export const claudeSubagentPendingInputRoute = (
-  parentExternalSessionId: string,
+  session: ClaudeEventSession,
   agentId: string | undefined,
 ) => {
   if (!agentId) {
     return {};
   }
+  const owner = findClaudeSubagentOwnerByAgentId(session, agentId);
+  const parentExternalSessionId = owner?.session.externalSessionId ?? session.externalSessionId;
   return {
     parentExternalSessionId,
     childExternalSessionId: claudeSubagentExternalSessionId(parentExternalSessionId, agentId),

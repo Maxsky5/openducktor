@@ -232,6 +232,38 @@ describe("createClaudeAgentSdkSessionStore", () => {
     ).resolves.toEqual({ supported: true, hasLiveSession: true });
   });
 
+  test("reports Claude sessions with nested running background subagents as active", async () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const session = Object.assign(
+      createSession({
+        activity: "idle",
+        sdkState: "idle",
+      }),
+      {
+        subagentEventSessionsByToolUseId: new Map([
+          [
+            "outer-agent-tool",
+            {
+              activeBackgroundSubagentTaskIds: new Set(["nested-task"]),
+            },
+          ],
+        ]),
+      },
+    );
+    store.set(session);
+
+    await expect(
+      Effect.runPromise(
+        store.probeSessionStatus({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+  });
+
   test("emits terminal events when stopping every session for a runtime", async () => {
     const events: unknown[] = [];
     const store = createClaudeAgentSdkSessionStore({
