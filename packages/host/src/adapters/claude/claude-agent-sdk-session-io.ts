@@ -209,14 +209,18 @@ export const consumeClaudeSession = async (input: {
       timestamp,
       message: errorMessage(error),
     });
-    closeLiveSession();
+    session.activity = "stopped";
     await flushClaudeLiveContextUsageRefresh(session);
+    if (!isLiveSession()) {
+      return;
+    }
     emit(session, {
       type: "session_finished",
       externalSessionId: session.externalSessionId,
       timestamp,
       message: "Claude Agent SDK session stream stopped after an error.",
     });
+    closeLiveSession();
   };
   try {
     for await (const message of session.query) {

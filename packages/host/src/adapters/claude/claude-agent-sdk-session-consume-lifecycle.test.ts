@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
+import { Effect } from "effect";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import {
   applyClaudeSessionModel,
@@ -19,6 +20,7 @@ import {
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
+import type { ClaudeAgentSdkEventEmitter } from "./claude-agent-sdk-types";
 
 describe("consumeClaudeSession lifecycle", () => {
   test("sends the first resumed user message after an unattributed running replay", async () => {
@@ -513,14 +515,11 @@ describe("consumeClaudeSession lifecycle", () => {
 
   test("drains a live context refresh before finishing a failed SDK stream", async () => {
     const events: AgentEvent[] = [];
-    let resolveContextUsage!: (usage: { totalTokens: number; maxTokens: number }) => void;
-    let markContextRefreshStarted!: () => void;
-    const contextRefreshStarted = new Promise<void>((resolve) => {
-      markContextRefreshStarted = resolve;
-    });
-    const contextUsage = new Promise<{ totalTokens: number; maxTokens: number }>((resolve) => {
-      resolveContextUsage = resolve;
-    });
+    const backgroundFailures: unknown[] = [];
+    const contextRefreshStarted = Promise.withResolvers<void>();
+    const contextUsage = Promise.withResolvers<{ totalTokens: number; maxTokens: number }>();
+    const queryClosed = Promise.withResolvers<void>();
+    const sessionFailed = Promise.withResolvers<void>();
     const query = Object.assign(
       throwingClaudeQuery(new Error("transport crashed"), [
         claudeSdkMessageFixture({
@@ -538,14 +537,21 @@ describe("consumeClaudeSession lifecycle", () => {
       ]),
       {
         getContextUsage: () => {
-          markContextRefreshStarted();
-          return contextUsage;
+          contextRefreshStarted.resolve();
+          return contextUsage.promise;
         },
+        close: () => queryClosed.resolve(),
       },
     );
-    const sessionStore = createClaudeAgentSdkSessionStore();
-    const sessionClosed = new Promise<void>((resolve) => {
-      sessionStore.subscribeClose(() => resolve());
+    const emit: ClaudeAgentSdkEventEmitter = (_session, event): void => {
+      events.push(event);
+      if (event.type === "session_error") {
+        sessionFailed.resolve();
+      }
+    };
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      emit,
+      now: () => "2026-06-25T20:00:03.000Z",
     });
     const session = createClaudeSession({
       activity: "running",
@@ -557,20 +563,29 @@ describe("consumeClaudeSession lifecycle", () => {
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
-      emit: (_session, event) => events.push(event),
-      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+      emit,
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          backgroundFailures.push(failure);
+        }),
     });
 
-    await Promise.all([contextRefreshStarted, sessionClosed]);
+    await Promise.all([contextRefreshStarted.promise, sessionFailed.promise]);
 
+    expect(sessionStore.get(session.externalSessionId)).toBe(session);
+    expect(session.activity).toBe("stopped");
     expect(events.some((event) => event.type === "session_error")).toBe(true);
     expect(events.some((event) => event.type === "session_finished")).toBe(false);
 
-    resolveContextUsage({
+    const stopPromise = Effect.runPromise(sessionStore.stopSessionsForRuntime(session.runtimeId));
+    await queryClosed.promise;
+    expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
+
+    contextUsage.resolve({
       totalTokens: 42_000,
       maxTokens: 200_000,
     });
-    await consumePromise;
+    await Promise.all([consumePromise, stopPromise]);
 
     expect(
       events
@@ -582,5 +597,6 @@ describe("consumeClaudeSession lifecycle", () => {
         )
         .map((event) => event.type),
     ).toEqual(["session_error", "session_context_updated", "session_finished"]);
+    expect(backgroundFailures).toEqual([]);
   });
 });
