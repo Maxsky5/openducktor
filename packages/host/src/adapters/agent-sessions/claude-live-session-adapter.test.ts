@@ -129,6 +129,7 @@ const createHarness = async () => {
     Effect.die("prepareQuestionReply was not configured");
   let updateSessionModelImpl: ClaudeAgentSdkService["updateSessionModel"] = () =>
     Effect.die("updateSessionModel was not configured");
+  let stopSessionImpl: ClaudeAgentSdkService["stopSession"] = () => Effect.void;
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
     Effect.void;
@@ -177,7 +178,8 @@ const createHarness = async () => {
       prepareQuestionReplyImpl(input),
     updateSessionModel: (input: Parameters<ClaudeAgentSdkService["updateSessionModel"]>[0]) =>
       updateSessionModelImpl(input),
-    stopSession: () => Effect.void,
+    stopSession: (input: Parameters<ClaudeAgentSdkService["stopSession"]>[0]) =>
+      stopSessionImpl(input),
     stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
     releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
       releaseSessionImpl(input),
@@ -262,6 +264,9 @@ const createHarness = async () => {
     },
     setUpdateSessionModel: (implementation: ClaudeAgentSdkService["updateSessionModel"]) => {
       updateSessionModelImpl = implementation;
+    },
+    setStopSession: (implementation: ClaudeAgentSdkService["stopSession"]) => {
+      stopSessionImpl = implementation;
     },
     setReleaseSession: (implementation: ClaudeAgentSdkService["releaseSession"]) => {
       releaseSessionImpl = implementation;
@@ -859,6 +864,128 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
+  test("resolves a nested subagent approval through the root session", async () => {
+    const harness = await createHarness();
+    const completed: string[] = [];
+    const parentExternalSessionId = "session-1::claude-subagent::outer-agent";
+    const childExternalSessionId = `${parentExternalSessionId}::claude-subagent::nested-agent`;
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "approval_required",
+      externalSessionId: childExternalSessionId,
+      parentExternalSessionId,
+      childExternalSessionId,
+      subagentCorrelationKey: "nested-agent",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      requestId: "approval-1",
+      requestType: "command_execution",
+      title: "Approve command",
+      supportedReplyOutcomes: ["approve_once", "reject"],
+    });
+    harness.setPrepareApprovalReply(() =>
+      Effect.succeed({
+        event: {
+          type: "approval_resolved",
+          externalSessionId: childExternalSessionId,
+          parentExternalSessionId,
+          childExternalSessionId,
+          subagentCorrelationKey: "nested-agent",
+          timestamp: "2026-07-17T10:01:31.000Z",
+          requestId: "approval-1",
+        },
+        complete: () => completed.push("approval-1"),
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.replyApproval({
+        ...startInput,
+        externalSessionId: childExternalSessionId,
+        requestId: "approval-1",
+        outcome: "approve_once",
+      }),
+    );
+
+    expect(completed).toEqual(["approval-1"]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: childExternalSessionId,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { pendingApprovals: [] },
+    });
+  });
+
+  test("resolves a nested subagent question through the root session", async () => {
+    const harness = await createHarness();
+    const completed: string[] = [];
+    const parentExternalSessionId = "session-1::claude-subagent::outer-agent";
+    const childExternalSessionId = `${parentExternalSessionId}::claude-subagent::nested-agent`;
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.eventHub.emit(session, {
+      type: "question_required",
+      externalSessionId: childExternalSessionId,
+      parentExternalSessionId,
+      childExternalSessionId,
+      subagentCorrelationKey: "nested-agent",
+      timestamp: "2026-07-17T10:01:30.000Z",
+      requestId: "question-1",
+      questions: [
+        {
+          question: "Proceed?",
+          header: "Decision",
+          options: [{ label: "Yes", description: "Continue." }],
+          multiple: false,
+          custom: true,
+        },
+      ],
+    });
+    harness.setPrepareQuestionReply(() =>
+      Effect.succeed({
+        event: {
+          type: "question_resolved",
+          externalSessionId: childExternalSessionId,
+          parentExternalSessionId,
+          childExternalSessionId,
+          subagentCorrelationKey: "nested-agent",
+          timestamp: "2026-07-17T10:01:31.000Z",
+          requestId: "question-1",
+        },
+        complete: () => completed.push("question-1"),
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.replyQuestion({
+        ...startInput,
+        externalSessionId: childExternalSessionId,
+        requestId: "question-1",
+        answers: [["Yes"]],
+      }),
+    );
+
+    expect(completed).toEqual(["question-1"]);
+    await expect(
+      Effect.runPromise(
+        harness.adapter.readRetainedSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: childExternalSessionId,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { pendingQuestions: [] },
+    });
+  });
+
   test("uses the SDK summary when resuming a session that is not retained", async () => {
     const harness = await createHarness();
     harness.setResumeSession(() => Effect.succeed(summary));
@@ -992,7 +1119,7 @@ describe("Claude host live-session adapter", () => {
     await expect(loadPromise).resolves.toEqual({ totalTokens: 100, contextWindow: 200 });
   });
 
-  test("does not recreate a released session from runtime events buffered during release", async () => {
+  test("publishes retractions but not status events buffered during release", async () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
     harness.changes.splice(0);
@@ -1003,6 +1130,12 @@ describe("Claude host live-session adapter", () => {
           externalSessionId: "session-1",
           timestamp: "2026-07-17T10:03:00.000Z",
           status: { type: "busy", message: null },
+        });
+        harness.eventHub.emit(session, {
+          type: "transcript_retracted",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:03:01.000Z",
+          messageIds: ["queued-user-1"],
         });
       }),
     );
@@ -1018,6 +1151,13 @@ describe("Claude host live-session adapter", () => {
 
     expect(harness.changes).toEqual([
       {
+        type: "transcript_event",
+        event: expect.objectContaining({
+          type: "transcript_retracted",
+          messageIds: ["queued-user-1"],
+        }),
+      },
+      {
         type: "session_removed",
         ref: {
           repoPath: "/repo",
@@ -1027,6 +1167,43 @@ describe("Claude host live-session adapter", () => {
         },
       },
     ]);
+  });
+
+  test("publishes queued-message retraction and finish before removing a stopped session", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.changes.splice(0);
+    harness.setStopSession(() =>
+      Effect.sync(() => {
+        harness.eventHub.emit(session, {
+          type: "transcript_retracted",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:03:00.000Z",
+          messageIds: ["queued-user-1"],
+        });
+        harness.eventHub.emit(session, {
+          type: "session_finished",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-17T10:03:01.000Z",
+          message: "Session stopped",
+        });
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.adapter.stopSession({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      }),
+    );
+
+    expect(transcriptEventTypes(harness.changes)).toEqual([
+      "transcript_retracted",
+      "session_finished",
+    ]);
+    expect(harness.changes.filter((change) => change.type === "session_removed")).toHaveLength(1);
   });
 
   test("retracts queued user messages while releasing the runtime", async () => {

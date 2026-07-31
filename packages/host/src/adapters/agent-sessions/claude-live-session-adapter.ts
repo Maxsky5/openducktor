@@ -28,6 +28,7 @@ import type {
   PreparedRuntimeLiveSessionAdapter,
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
+import { parseClaudeTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type {
   ClaudeAgentSdkEvent,
   ClaudeSessionContext,
@@ -209,8 +210,9 @@ export const createClaudeLiveSessionAdapterPreparer =
           prepare.pipe(
             Effect.mapError(sessionError(operation, externalSessionId)),
             Effect.flatMap((resolution) => {
-              const rootExternalSessionId =
-                resolution.event.parentExternalSessionId ?? resolution.event.externalSessionId;
+              const rootExternalSessionId = parseClaudeTranscriptTarget(
+                resolution.event.externalSessionId,
+              ).sessionId;
               return requireSessionContext(rootExternalSessionId).pipe(
                 Effect.flatMap((session) => {
                   let rollback = () => {};
@@ -427,32 +429,36 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
           ),
         stopSession: (input) =>
-          eventCoordinator.runControlMutation(
-            service.stopSession(input).pipe(
-              Effect.mapError(
-                sessionError("claude-live-session.stop-session", input.externalSessionId),
+          eventCoordinator.runSessionClosure(
+            input.externalSessionId,
+            service
+              .stopSession(input)
+              .pipe(
+                Effect.mapError(
+                  sessionError("claude-live-session.stop-session", input.externalSessionId),
+                ),
               ),
-              Effect.flatMap(() =>
-                commit("claude-live-session.remove-stopped-session", () => ({
-                  value: undefined,
-                  changes: state.removeSession(input),
-                })),
-              ),
-            ),
+            () =>
+              commit("claude-live-session.remove-stopped-session", () => ({
+                value: undefined,
+                changes: state.removeSession(input),
+              })),
           ),
         releaseSession: (input) =>
-          eventCoordinator.runControlMutation(
-            service.releaseSession(input).pipe(
-              Effect.mapError(
-                sessionError("claude-live-session.release-session", input.externalSessionId),
+          eventCoordinator.runSessionClosure(
+            input.externalSessionId,
+            service
+              .releaseSession(input)
+              .pipe(
+                Effect.mapError(
+                  sessionError("claude-live-session.release-session", input.externalSessionId),
+                ),
               ),
-              Effect.flatMap(() =>
-                commit("claude-live-session.remove-released-session", () => ({
-                  value: undefined,
-                  changes: state.removeSession(input),
-                })),
-              ),
-            ),
+            () =>
+              commit("claude-live-session.remove-released-session", () => ({
+                value: undefined,
+                changes: state.removeSession(input),
+              })),
           ),
       };
 

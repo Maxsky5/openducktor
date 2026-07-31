@@ -52,20 +52,30 @@ export const createClaudeLiveSessionEventCoordinator = ({
       return failure ? Effect.fail(failure) : Effect.void;
     });
 
-  const drainShutdownRetractions = Effect.gen(function* () {
-    for (let index = 0; index < queuedEvents.length; ) {
-      const queued = queuedEvents[index];
-      if (!queued) {
-        break;
+  const drainMatchingEvents = (
+    matches: (event: ClaudeAgentSdkEvent) => boolean,
+  ): Effect.Effect<void, HostError> =>
+    Effect.gen(function* () {
+      for (let index = 0; index < queuedEvents.length; ) {
+        const queued = queuedEvents[index];
+        if (!queued) {
+          break;
+        }
+        if (!matches(queued.event)) {
+          index += 1;
+          continue;
+        }
+        queuedEvents.splice(index, 1);
+        yield* processEvent(queued.session, queued.event);
       }
-      if (queued.event.type !== "transcript_retracted") {
-        index += 1;
-        continue;
-      }
-      yield* processEvent(queued.session, queued.event);
-      queuedEvents.splice(index, 1);
-    }
-  });
+    });
+
+  const drainSessionClosureEvents = (externalSessionId: string): Effect.Effect<void, HostError> =>
+    drainMatchingEvents(
+      (event) =>
+        event.externalSessionId === externalSessionId &&
+        (event.type === "transcript_retracted" || event.type === "session_finished"),
+    );
 
   const drainInBackground = (): void => {
     if (backgroundDrainScheduled) {
@@ -113,15 +123,16 @@ export const createClaudeLiveSessionEventCoordinator = ({
       }),
     );
 
-  const runControlMutation = <Value>(
+  const runExclusiveMutation = <Value>(
     effect: Effect.Effect<Value, HostError>,
+    beforeFinalDrain: (value: Value) => Effect.Effect<Value, HostError>,
   ): Effect.Effect<Value, HostError> =>
     operationSemaphore.withPermits(1)(
       Effect.gen(function* () {
         yield* takeForwardingFailure();
         yield* drainQueuedEvents;
         yield* takeForwardingFailure();
-        const result = yield* Effect.either(effect);
+        const result = yield* Effect.either(effect.pipe(Effect.flatMap(beforeFinalDrain)));
         yield* drainQueuedEvents;
         yield* takeForwardingFailure();
         if (result._tag === "Left") {
@@ -130,6 +141,10 @@ export const createClaudeLiveSessionEventCoordinator = ({
         return result.right;
       }),
     );
+
+  const runControlMutation = <Value>(
+    effect: Effect.Effect<Value, HostError>,
+  ): Effect.Effect<Value, HostError> => runExclusiveMutation(effect, Effect.succeed);
 
   const shutdown = <Value>(
     effect: Effect.Effect<Value, HostError>,
@@ -141,7 +156,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
         }
         forwarding = false;
         const value = yield* effect;
-        yield* drainShutdownRetractions;
+        yield* drainMatchingEvents((event) => event.type === "transcript_retracted");
         released = true;
         forwardingFailure = null;
         queuedEvents.splice(0);
@@ -154,6 +169,14 @@ export const createClaudeLiveSessionEventCoordinator = ({
     flush,
     isReleased: () => released,
     runControlMutation,
+    runSessionClosure: <Value>(
+      externalSessionId: string,
+      effect: Effect.Effect<Value, HostError>,
+      finalize: (value: Value) => Effect.Effect<Value, HostError>,
+    ): Effect.Effect<Value, HostError> =>
+      runExclusiveMutation(effect, (value) =>
+        drainSessionClosureEvents(externalSessionId).pipe(Effect.zipRight(finalize(value))),
+      ),
     shutdown,
     startForwarding: (): Effect.Effect<void, HostError> =>
       operationSemaphore.withPermits(1)(
