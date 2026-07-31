@@ -199,10 +199,15 @@ describe("buildClaudeAgentSdkOptions", () => {
       "mcp__openducktor__odt_set_pull_request",
     ]);
     expect(options.skills).toBe("all");
-    expect(options.systemPrompt).toEqual(
-      expect.stringContaining("OpenDucktor starts this Claude Code session with cwd set to"),
+    const systemPrompt = options.systemPrompt;
+    if (!systemPrompt || typeof systemPrompt !== "object" || Array.isArray(systemPrompt)) {
+      throw new Error("Expected Claude Code's system prompt preset.");
+    }
+    expect(systemPrompt.preset).toBe("claude_code");
+    expect(systemPrompt.append).toContain("Build");
+    expect(systemPrompt.append).toContain(
+      "OpenDucktor starts this Claude Code session with cwd set to",
     );
-    expect(options.systemPrompt).toEqual(expect.stringContaining("Build"));
     expect(typeof options.onUserDialog).toBe("function");
     expect(options.supportedDialogKinds).toContain("ask_user_question");
     expect(options.toolConfig).toEqual({

@@ -150,7 +150,11 @@ export const buildClaudeAgentSdkOptions = async ({
     mcpServers,
     permissionMode,
     ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
-    systemPrompt,
+    systemPrompt: {
+      type: "preset",
+      preset: "claude_code",
+      append: systemPrompt,
+    },
     canUseTool: createClaudeCanUseTool({ session, now, randomId, emit }),
     onUserDialog: createClaudeUserDialogHandler({
       session,
