@@ -541,6 +541,25 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
     );
     expect(subagentPart).not.toHaveProperty("endedAtMs");
     expect(session.subagentEventSessionsByToolUseId.has("toolu_agent_async")).toBe(true);
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set(["async-agent-1"]));
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:10:01.500Z",
+      modelSelection,
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "async-task-1",
+        tool_use_id: "toolu_agent_async",
+        description: "Run background verification",
+        uuid: "async-task-started",
+        session_id: "session-1",
+      }),
+    });
+
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set(["async-task-1"]));
 
     handleClaudeSdkMessage({
       session,
@@ -568,5 +587,89 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         message: "Background verification progress",
       }),
     );
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:10:03.000Z",
+      modelSelection,
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_notification",
+        task_id: "async-task-1",
+        status: "completed",
+        summary: "Background verification complete",
+        uuid: "async-task-completed",
+        session_id: "session-1",
+      }),
+    });
+
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set());
+  });
+
+  test("keeps a task-started marker canonical when the async launch result arrives later", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    const emit = (event: AgentEvent) => events.push(event);
+    const modelSelection = (model: string) => ({
+      providerId: "claude",
+      modelId: model,
+      runtimeKind: "claude" as const,
+    });
+    const toolUseId = "toolu_agent_async_start_first";
+    session.toolNamesByCallId.set(toolUseId, "Agent");
+    session.toolInputsByCallId.set(toolUseId, {
+      description: "Run background verification",
+      subagent_type: "Explore",
+      prompt: "Verify in the background",
+      run_in_background: true,
+    });
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:20:01.000Z",
+      modelSelection,
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "task_started",
+        task_id: "async-task-start-first",
+        tool_use_id: toolUseId,
+        description: "Run background verification",
+        uuid: "async-task-started-first",
+        session_id: "session-1",
+      }),
+    });
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:20:02.000Z",
+      modelSelection,
+      emit,
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "tool-result-async-start-first",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: toolUseId,
+              content: [{ type: "text", text: "Background agent launched" }],
+            },
+          ],
+        },
+        tool_use_result: {
+          status: "async_launched",
+          agentId: "async-agent-start-first",
+          description: "Run background verification",
+          prompt: "Verify in the background",
+        },
+      }),
+    });
+
+    expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set(["async-task-start-first"]));
   });
 });

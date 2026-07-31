@@ -38,7 +38,6 @@ type ClaudeSubagentSession = {
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };
-
 type ClaudeSubagentSystemMessage = Extract<
   SDKMessage,
   {
@@ -167,13 +166,16 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   if (!agentId) {
     return;
   }
-
   const taskId = session.subagentTaskIdsByToolUseId.get(toolUseId);
   session.subagentAgentIdsByToolUseId ??= new Map();
   session.subagentAgentIdsByToolUseId.set(toolUseId, agentId);
   const externalSessionId = claudeSubagentExternalSessionId(session.externalSessionId, agentId);
   const status = resultAgentId ? claudeAgentResultStatus(structuredResult, isError) : "running";
   const executionMode = claudeAgentResultExecutionMode(structuredResult, input);
+  if (executionMode === "background" && status === "running") {
+    session.activeBackgroundSubagentTaskIds ??= new Set();
+    session.activeBackgroundSubagentTaskIds.add(taskId ?? agentId);
+  }
   const agent =
     readStringProp(structuredResult, "agentType") ?? readStringProp(input, "subagent_type");
   const prompt = readStringProp(structuredResult, "prompt") ?? readStringProp(input, "prompt");
@@ -337,13 +339,14 @@ export const handleClaudeSubagentSystemMessage = ({
     : undefined;
   const toolMessageId = toolUseId ? session.toolMessageIdsByCallId.get(toolUseId) : undefined;
   const toolName = toolUseId ? session.toolNamesByCallId.get(toolUseId) : undefined;
+  const launchAgentId = toolUseId && session.subagentAgentIdsByToolUseId?.get(toolUseId);
   const taskEnded =
     message.subtype === "task_notification" ||
     (message.subtype === "task_updated" && isTerminalClaudeTaskStatus(message.patch.status));
   if (taskEnded) {
     session.activeBackgroundSubagentTaskIds?.delete(message.task_id);
+    session.activeBackgroundSubagentTaskIds?.delete(launchAgentId ?? message.task_id);
   }
-
   if (toolUseId && isClaudeToolUseRetracted(session, toolUseId)) {
     retireClaudeSubagentTask(session, message.task_id);
     return;
@@ -351,7 +354,6 @@ export const handleClaudeSubagentSystemMessage = ({
   if (isClaudeSubagentTaskRetracted(session, message.task_id)) {
     return;
   }
-
   if (message.subtype === "task_started") {
     if (
       shouldSuppressSubagentTask(session, message.task_id, message.skip_transcript) ||
@@ -361,6 +363,9 @@ export const handleClaudeSubagentSystemMessage = ({
       return;
     }
     if (toolUseId) {
+      if (launchAgentId && launchAgentId !== message.task_id) {
+        session.activeBackgroundSubagentTaskIds?.delete(launchAgentId);
+      }
       session.subagentTaskIdsByToolUseId.set(toolUseId, message.task_id);
     }
     if (toolMessageId) {
