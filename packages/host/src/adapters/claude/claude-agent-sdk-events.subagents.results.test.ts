@@ -205,7 +205,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         session_id: "session-1",
         task_id: "agent-1",
         tool_use_id: "toolu_agent_1",
-        description: "Initial agent description",
+        description: "Runtime progress description",
         subagent_type: "Explore",
       },
       {
@@ -269,7 +269,12 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         ? [event.part.description]
         : [],
     );
-    expect(descriptions).toEqual(["Initial agent description", undefined, undefined, undefined]);
+    expect(descriptions).toEqual([
+      "Initial agent description",
+      undefined,
+      undefined,
+      "Initial agent description",
+    ]);
   });
 
   test("maps failed Claude Agent tool results with visible error reasons", () => {

@@ -178,6 +178,43 @@ describe("appendHistorySubagentMessage", () => {
 });
 
 describe("upsertSubagentMessage", () => {
+  test("keeps the launch description across lifecycle updates", () => {
+    const running = makeSubagentMessage({
+      correlationKey: "claude-subagent:parent-thread:child-thread",
+      externalSessionId: "child-thread",
+      status: "running",
+      description: "Inspect authentication",
+      startedAtMs: 100,
+    });
+    const messages = upsertSubagentMessage({
+      owner: {
+        externalSessionId: "parent-thread",
+        messages: createSessionMessagesState("parent-thread", [running]),
+      },
+      incomingMeta: {
+        kind: "subagent",
+        partId: "child-thread",
+        correlationKey: "claude-subagent:parent-thread:child-thread",
+        externalSessionId: "child-thread",
+        status: "completed",
+        description: "Authentication review complete",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+      timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(messages.items).toHaveLength(1);
+    expect(messages.items[0]).toMatchObject({
+      content: "Subagent (subagent): Inspect authentication",
+      meta: {
+        kind: "subagent",
+        status: "completed",
+        description: "Inspect authentication",
+      },
+    });
+  });
+
   test("accepts a running lifecycle that starts after the previous completion", () => {
     const completed = makeSubagentMessage({
       correlationKey: "codex-subagent:parent-thread:child-thread",

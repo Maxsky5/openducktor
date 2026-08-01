@@ -660,7 +660,7 @@ const SubagentMessage = ({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               {summary ? (
-                <AgentChatTranscriptProse className="text-sm text-muted-foreground">
+                <AgentChatTranscriptProse className="text-sm text-muted-foreground line-clamp-2">
                   {summary}
                 </AgentChatTranscriptProse>
               ) : null}

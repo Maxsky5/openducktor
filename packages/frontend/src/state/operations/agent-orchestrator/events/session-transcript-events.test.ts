@@ -379,6 +379,72 @@ describe("agent-orchestrator session transcript events", () => {
     ]);
   });
 
+  test("finalizes a Claude assistant text part without adding a duplicate row", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ runtimeKind: "claude", status: "running" }),
+    ]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      eventBatchWindowMs: 0,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:01.000Z",
+      part: {
+        kind: "text",
+        messageId: "response-1",
+        partId: "response-1:text:0",
+        text: "Spec persisted.",
+        completed: true,
+      },
+    });
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "response-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      message: "Spec persisted.",
+    });
+
+    const assistantMessages = getSessionMessages(sessionsRef).filter(
+      (message) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      id: "text:response-1:response-1:text:0",
+      content: "Spec persisted.",
+      meta: {
+        kind: "assistant",
+        isFinal: true,
+        partId: "response-1:text:0",
+        sourceMessageId: "response-1",
+      },
+    });
+  });
+
   test("keeps same-text final assistant rows distinct by stable id", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {

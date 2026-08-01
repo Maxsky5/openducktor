@@ -529,7 +529,8 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(
       getSessionMessages(sessionsRef).some(
         (message) =>
-          message.role === "system" && message.content.includes("Subagent (build): Done subtask"),
+          message.role === "system" &&
+          message.content.includes("Subagent (build): Starting subagent"),
       ),
     ).toBe(true);
     expect(

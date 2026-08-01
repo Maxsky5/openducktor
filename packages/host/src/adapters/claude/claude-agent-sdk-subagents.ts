@@ -177,7 +177,7 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   const agent =
     readStringProp(structuredResult, "agentType") ?? readStringProp(input, "subagent_type");
   const prompt = readStringProp(structuredResult, "prompt") ?? readStringProp(input, "prompt");
-  const description = taskId ? undefined : readStringProp(input, "description");
+  const description = readStringProp(input, "description");
   const error =
     status === "error"
       ? (firstClaudeTaskText(
@@ -373,8 +373,9 @@ export const handleClaudeSubagentSystemMessage = ({
     }
     session.activeBackgroundSubagentTaskIds ??= new Set();
     session.activeBackgroundSubagentTaskIds.add(message.task_id);
+    const launchInput = toolUseId ? session.toolInputsByCallId.get(toolUseId) : undefined;
     const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {
-      description: message.description,
+      description: readStringProp(launchInput, "description") ?? message.description,
       executionMode: "background",
       startedAtMs: timestampMs(timestamp),
     };
@@ -391,7 +392,6 @@ export const handleClaudeSubagentSystemMessage = ({
     emitSubagentPart(emit, session, agentId, toolUseId, "running", timestamp, details);
     return;
   }
-
   if (message.subtype === "task_progress") {
     if (shouldSuppressSubagentTask(session, message.task_id)) {
       return;

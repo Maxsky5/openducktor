@@ -725,7 +725,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     ]);
   });
 
-  test("keeps subagent terminal status and description consistent", () => {
+  test("keeps the hydrated launch description while merging terminal status", () => {
     const merged = mergedMessages(
       [
         {
@@ -773,14 +773,14 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     expect(merged[0]).toMatchObject({
       id: "subagent:part:msg-200:child-a",
       role: "system",
-      content: "Subagent (build): Error A",
+      content: "Subagent (build): Finished A",
       meta: {
         kind: "subagent",
         correlationKey: "part:msg-200:child-a",
         status: "error",
         agent: "build",
         prompt: "Inspect repo",
-        description: "Error A",
+        description: "Finished A",
         externalSessionId: "child-a",
         startedAtMs: 95,
         endedAtMs: 320,

@@ -4,6 +4,8 @@ import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assist
 import {
   appendSessionMessage,
   createSessionMessagesState,
+  findLastSessionMessageByRole,
+  replaceSessionMessageById,
   sessionMessageBelongsToSourceMessage,
   upsertSessionMessage,
   upsertUserSessionMessage,
@@ -115,6 +117,10 @@ export const handleAssistantMessage = (
 ): void => {
   context.store.updateSession(context.session.identity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
+    const settledOwner = {
+      externalSessionId: current.externalSessionId,
+      messages: settledMessages,
+    };
     const durationMs =
       event.durationMs ??
       context.turn.resolveTurnDurationMs(
@@ -134,16 +140,34 @@ export const handleAssistantMessage = (
       model,
       shouldPreserveContextUsage,
     });
+    const sourceTextMessage =
+      current.runtimeKind === "claude"
+        ? findLastSessionMessageByRole(
+            settledOwner,
+            "assistant",
+            (message) =>
+              message.meta?.kind === "assistant" &&
+              message.meta.sourceMessageId === event.messageId,
+          )
+        : undefined;
+    const assistantMessage =
+      sourceTextMessage?.meta?.kind === "assistant"
+        ? {
+            ...nextSnapshot.assistantMessage,
+            id: sourceTextMessage.id,
+            meta: {
+              ...nextSnapshot.assistantMessage.meta,
+              sourceMessageId: event.messageId,
+              ...(sourceTextMessage.meta.partId ? { partId: sourceTextMessage.meta.partId } : {}),
+            },
+          }
+        : nextSnapshot.assistantMessage;
     return {
       ...current,
       pendingUserMessageStartedAt: undefined,
-      messages: upsertSessionMessage(
-        {
-          externalSessionId: current.externalSessionId,
-          messages: settledMessages,
-        },
-        nextSnapshot.assistantMessage,
-      ),
+      messages: sourceTextMessage
+        ? replaceSessionMessageById(settledOwner, sourceTextMessage.id, assistantMessage)
+        : upsertSessionMessage(settledOwner, assistantMessage),
     };
   });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);

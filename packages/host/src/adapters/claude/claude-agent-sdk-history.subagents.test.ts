@@ -192,7 +192,7 @@ describe("claude-agent-sdk-history subagents", () => {
           timestamp: "2026-06-26T11:04:11.000Z",
           task_id: "task-1",
           tool_use_id: "task-tool-1",
-          description: "Run affected web tests",
+          description: "Runtime progress description",
           subagent_type: "general-purpose",
         },
         {
