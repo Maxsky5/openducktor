@@ -55,13 +55,21 @@ afterEach(() => {
 });
 
 describe("Agent Studio chat draft adapter", () => {
-  test("keeps the task, role, and session draft key shape", () => {
+  test("keeps the workspace, task, role, and session draft key shape", () => {
     const selectedSession = session("session-1");
 
-    expect(agentStudioChatDraftScopeKey(scope({ session: selectedSession }))).toBe(
-      `task-1:planner:${agentSessionIdentityKey(selectedSession)}`,
+    expect(agentStudioChatDraftScopeKey("workspace", scope({ session: selectedSession }))).toBe(
+      `workspace:task-1:planner:${agentSessionIdentityKey(selectedSession)}`,
     );
-    expect(agentStudioChatDraftScopeKey(scope())).toBe("task-1:planner:new");
+    expect(agentStudioChatDraftScopeKey("workspace", scope())).toBe("workspace:task-1:planner:new");
+  });
+
+  test("isolates the same draft scope across workspaces", () => {
+    const selectedScope = scope({ session: session("session-1") });
+
+    expect(agentStudioChatDraftScopeKey("workspace-a", selectedScope)).not.toBe(
+      agentStudioChatDraftScopeKey("workspace-b", selectedScope),
+    );
   });
 
   test("recognizes only session changes within the same task and role", () => {

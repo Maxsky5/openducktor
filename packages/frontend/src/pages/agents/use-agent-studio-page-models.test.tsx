@@ -1179,7 +1179,10 @@ describe("useAgentStudioPageModels", () => {
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).not.toBe(initialComposerModel);
     expect(nextState.agentChatModel.composer.draftScope.key).toBe(
-      agentStudioChatDraftScopeKey(draftScopeFixture("draft-update")),
+      agentStudioChatDraftScopeKey(
+        baseProps.composer.workspaceId,
+        draftScopeFixture("draft-update"),
+      ),
     );
 
     await harness.unmount();

@@ -250,8 +250,10 @@ describe("buildAgentStudioPageModelsArgs", () => {
       role: "planner",
       session: toAgentSessionIdentity(session),
     });
-    expect(agentStudioChatDraftScopeKey(mapped.composer.draftScope)).toBe(
-      `task-1:planner:${agentSessionIdentityKey(toAgentSessionIdentity(session))}`,
+    expect(
+      agentStudioChatDraftScopeKey(mapped.composer.workspaceId, mapped.composer.draftScope),
+    ).toBe(
+      `workspace-repo:task-1:planner:${agentSessionIdentityKey(toAgentSessionIdentity(session))}`,
     );
   });
 

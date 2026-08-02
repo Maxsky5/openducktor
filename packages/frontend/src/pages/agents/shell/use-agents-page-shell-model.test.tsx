@@ -446,9 +446,11 @@ const registerModuleMocks = (): void => {
 
   mock.module("./use-agents-page-orchestration-shell-model", () => ({
     useAgentsPageOrchestrationShellModel: ({
+      activeWorkspaceId,
       isForegroundLoadingTasks,
       routeSession,
     }: {
+      activeWorkspaceId: string | null;
       isForegroundLoadingTasks: boolean;
       routeSession: { selection: SelectionState };
     }) => {
@@ -469,7 +471,7 @@ const registerModuleMocks = (): void => {
         role: routeSession.selection.view.role,
         session: routeSession.selection.view.selectedSession.identity,
       };
-      const draftStateKey = agentStudioChatDraftScopeKey(draftScope);
+      const draftStateKey = agentStudioChatDraftScopeKey(activeWorkspaceId, draftScope);
 
       if (!lastOrchestrationSelection) {
         throw new Error("Missing orchestration selection");
@@ -820,7 +822,7 @@ describe("useAgentsPageShellModel", () => {
       await harness.mount();
 
       expect(orchestrationControllerArgs.at(-1)?.draftStateKey).toBe(
-        `task-1:planner:${selectedSessionKey()}`,
+        `workspace-repo:task-1:planner:${selectedSessionKey()}`,
       );
     } finally {
       await harness.unmount();

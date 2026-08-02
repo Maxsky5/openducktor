@@ -214,7 +214,7 @@ export function useAgentStudioChatModel({
     selectedSessionTranscriptState.kind,
     sessionReadModelLoadState.kind,
   ]);
-  const draftStateKey = agentStudioChatDraftScopeKey(composer.draftScope);
+  const draftStateKey = agentStudioChatDraftScopeKey(composer.workspaceId, composer.draftScope);
   const composerDraftScope = useMemo<AgentChatDraftScope>(
     () => ({
       key: draftStateKey,

@@ -25,11 +25,10 @@ const NEW_SESSION_DRAFT_SCOPE = "new";
 const sessionScopeKey = (session: AgentSessionIdentity | null): string =>
   session ? agentSessionIdentityKey(session) : NEW_SESSION_DRAFT_SCOPE;
 
-export const agentStudioChatDraftScopeKey = ({
-  taskId,
-  role,
-  session,
-}: AgentStudioChatDraftScope): string => [taskId, role, sessionScopeKey(session)].join(":");
+export const agentStudioChatDraftScopeKey = (
+  workspaceId: string | null,
+  { taskId, role, session }: AgentStudioChatDraftScope,
+): string => [workspaceId ?? "", taskId, role, sessionScopeKey(session)].join(":");
 
 export const didAgentStudioChatDraftScopeSwitchSessionOnly = (
   previous: AgentStudioChatDraftScope,
