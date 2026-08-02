@@ -230,6 +230,7 @@ export const areAgentChatTurnGroupPropsEqual = (
       previousProps.sessionIdentity,
       nextProps.sessionIdentity,
     ) &&
+    previousProps.runtimePresentation === nextProps.runtimePresentation &&
     previousProps.resolveRowRef === nextProps.resolveRowRef &&
     areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
     areTurnSubagentPendingCountsEquivalent({

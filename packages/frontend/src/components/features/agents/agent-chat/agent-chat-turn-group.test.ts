@@ -95,11 +95,13 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
 
   test("skips rerender for unchanged row identities and equivalent rows", () => {
     const previousProps = baseProps();
+    const runtimePresentation = previousProps.runtimePresentation;
 
     expect(areAgentChatTurnGroupPropsEqual(previousProps, { ...previousProps })).toBe(true);
     expect(
       areAgentChatTurnGroupPropsEqual(
         baseProps({
+          runtimePresentation,
           turn: {
             key: "turn-duration",
             rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
@@ -108,6 +110,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
           },
         }),
         baseProps({
+          runtimePresentation,
           turn: {
             key: "turn-duration",
             rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
@@ -117,6 +120,25 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  test("runtime presentation changes invalidate turn groups", () => {
+    const props = baseProps();
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          runtimePresentation: {
+            ...props.runtimePresentation,
+            workflowToolAliasesByCanonical: {
+              odt_read_task: ["openducktor_odt_read_task"],
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
   });
 
   test("scope changes invalidate turn groups", () => {

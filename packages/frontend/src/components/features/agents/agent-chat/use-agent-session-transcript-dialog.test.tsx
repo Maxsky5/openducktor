@@ -390,6 +390,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
         }),
       ],
     });
+    const plannerTranscriptTarget = toAgentStudioTranscriptTarget({
+      identity: plannerSession,
+      taskId: "task-1",
+      role: "planner",
+    });
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <QueryProvider useIsolatedClient>
@@ -409,11 +414,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       <AgentChatThread
         model={createThreadModel({
           session: plannerSession,
-          transcriptTarget: toAgentStudioTranscriptTarget({
-            identity: plannerSession,
-            taskId: "task-1",
-            role: "planner",
-          }),
+          transcriptTarget: plannerTranscriptTarget,
         })}
       />,
       { wrapper },

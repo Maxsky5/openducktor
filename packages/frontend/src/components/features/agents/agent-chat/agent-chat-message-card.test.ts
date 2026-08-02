@@ -13,17 +13,22 @@ import {
 import { formatTime } from "./message-formatting";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
-const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
-const DEFAULT_TEST_RUNTIME_PRESENTATION = {
+const createDefaultTestChatSettings = () => createChatSettingsFixture();
+const createDefaultTestRuntimePresentation = (): ComponentProps<
+  typeof AgentChatMessageCard
+>["runtimePresentation"] => ({
   runtimeKind: "opencode" as const,
-  workflowToolAliasesByCanonical: OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-  supportedApprovalReplyOutcomes:
-    OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.supportedReplyOutcomes,
-};
-const DEFAULT_TEST_SESSION_IDENTITY: ParentSessionRuntimeContext = {
+  workflowToolAliasesByCanonical: structuredClone(
+    OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+  ),
+  supportedApprovalReplyOutcomes: [
+    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.supportedReplyOutcomes,
+  ],
+});
+const createDefaultTestSessionIdentity = (): ParentSessionRuntimeContext => ({
   runtimeKind: "opencode",
   workingDirectory: "/repo",
-};
+});
 const LONG_TRANSCRIPT_TOKEN =
   "supercalifragilisticexpialidocioussupercalifragilisticexpialidocious";
 
@@ -31,7 +36,7 @@ type AgentChatMessageCardTestProps = Omit<
   ComponentProps<typeof AgentChatMessageCard>,
   "sessionIdentity" | "runtimePresentation"
 > & {
-  chatSettings?: typeof DEFAULT_TEST_CHAT_SETTINGS;
+  chatSettings?: ReturnType<typeof createDefaultTestChatSettings>;
   sessionIdentity?: ParentSessionRuntimeContext | null;
   transcriptDialog?: AgentSessionTranscriptDialogContextValue;
   runtimePresentation?: ComponentProps<typeof AgentChatMessageCard>["runtimePresentation"];
@@ -40,14 +45,14 @@ type AgentChatMessageCardTestProps = Omit<
 const createElement = (
   _type: typeof AgentChatMessageCard,
   {
-    chatSettings = DEFAULT_TEST_CHAT_SETTINGS,
+    chatSettings = createDefaultTestChatSettings(),
     transcriptDialog,
-    runtimePresentation = DEFAULT_TEST_RUNTIME_PRESENTATION,
+    runtimePresentation = createDefaultTestRuntimePresentation(),
     ...props
   }: AgentChatMessageCardTestProps,
 ) => {
   const card = createReactElement(AgentChatMessageCard, {
-    sessionIdentity: DEFAULT_TEST_SESSION_IDENTITY,
+    sessionIdentity: createDefaultTestSessionIdentity(),
     runtimePresentation,
     ...props,
   });
@@ -514,7 +519,7 @@ describe("AgentChatMessageCard tool duration", () => {
         },
         sessionAgentColors: {},
         chatSettings: {
-          ...DEFAULT_TEST_CHAT_SETTINGS,
+          ...createDefaultTestChatSettings(),
           expandFileDiffsByDefault: false,
         },
       }),
@@ -1249,7 +1254,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionIdentity: {
-          ...DEFAULT_TEST_SESSION_IDENTITY,
+          ...createDefaultTestSessionIdentity(),
           runtimeKind: "codex",
         },
         runtimePresentation: {
@@ -1548,7 +1553,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionIdentity: {
-          ...DEFAULT_TEST_SESSION_IDENTITY,
+          ...createDefaultTestSessionIdentity(),
           runtimeKind: "codex",
         },
         runtimePresentation: {
