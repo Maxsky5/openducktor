@@ -332,7 +332,10 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     sessionActions,
     modelSelection,
     chatSettings,
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+    runtimeDefinitions: [
+      structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
+      structuredClone(CODEX_RUNTIME_DESCRIPTOR),
+    ],
     composer,
   };
 };

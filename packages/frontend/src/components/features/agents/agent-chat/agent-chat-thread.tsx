@@ -141,8 +141,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   transcriptNotice,
   runtimePresentation,
 }: AgentChatTranscriptProps): ReactElement {
-  const hasSession = sessionIdentity !== null;
-
   return (
     <div
       ref={messagesContainerRef}
@@ -151,7 +149,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
 
       <div ref={messagesContentRef}>
-        {!hasSession && !transcriptNotice && emptyState ? (
+        {!transcriptNotice && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
             <p>{emptyState.title}</p>
             {emptyState.actionLabel && emptyState.onAction ? (
@@ -408,7 +406,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
-        emptyState={emptyState}
+        emptyState={session ? null : emptyState}
         modelCatalog={modelCatalog}
         isStarting={isStarting}
         isSending={isSending}
