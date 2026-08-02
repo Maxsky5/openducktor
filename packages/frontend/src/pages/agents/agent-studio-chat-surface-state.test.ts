@@ -23,15 +23,17 @@ const transcriptState = (
 
 describe("deriveAgentStudioChatSurfaceState", () => {
   test("prompts for a task before Agent Studio has a task context", () => {
-    expect(
-      deriveAgentStudioChatSurfaceState({
-        ...baseSurfaceInput,
-        taskId: "",
-        transcriptState: transcriptState("empty"),
-      }).emptyState,
-    ).toEqual({
+    const state = deriveAgentStudioChatSurfaceState({
+      ...baseSurfaceInput,
+      taskId: "",
+      transcriptState: transcriptState("empty"),
+    });
+
+    expect(state.emptyState).toEqual({
       title: "Select a task to begin.",
     });
+    expect(state.composerReadOnly).toBe(true);
+    expect(state.composerReadOnlyReason).toBe("Select a task to begin.");
   });
 
   test("hides the kickoff empty state while transcript state is not empty", () => {

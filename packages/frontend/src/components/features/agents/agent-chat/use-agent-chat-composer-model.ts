@@ -10,7 +10,7 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
-import type { AgentChatDraftSessionIdentity } from "./agent-chat-draft-storage";
+import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
 type AgentChatComposerSelectedSession = AgentSessionIdentity & {
@@ -28,7 +28,6 @@ export const invokeStopAgentSession = (
 };
 
 export type AgentChatComposerConfig = {
-  taskId: string;
   displayedSessionKey: string | null;
   selectedSession: AgentChatComposerSelectedSession | null;
   isSessionModelCatalogLoading: boolean;
@@ -41,8 +40,7 @@ export type AgentChatComposerConfig = {
   isReadOnly: boolean;
   readOnlyReason: string | null;
   pendingSendItems?: AgentChatComposerModel["pendingSendItems"];
-  draftStateKey: string;
-  draftPersistenceIdentity: AgentChatDraftSessionIdentity | null;
+  draftScope: AgentChatDraftScope;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   isSending: boolean;
   isStarting: boolean;
@@ -123,15 +121,13 @@ export function useAgentChatComposerModel({
     }
 
     return {
-      taskId: composer.taskId,
       displayedSessionKey: composer.displayedSessionKey,
       isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,
       busySendBlockedReason: composer.busySendBlockedReason,
       ...(composer.pendingSendItems ? { pendingSendItems: composer.pendingSendItems } : {}),
-      draftStateKey: composer.draftStateKey,
-      draftPersistenceIdentity: composer.draftPersistenceIdentity,
+      draftScope: composer.draftScope,
       onSend: async (draft: AgentChatComposerDraft): Promise<boolean> => {
         scrollToBottomOnSendRef.current?.();
         return composer.onSend(draft);

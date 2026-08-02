@@ -12,7 +12,6 @@ import {
 const buildComposerConfig = (
   onSend: AgentChatComposerConfig["onSend"],
 ): AgentChatComposerConfig => ({
-  taskId: "task-1",
   displayedSessionKey: null,
   selectedSession: null,
   isSessionModelCatalogLoading: false,
@@ -24,8 +23,10 @@ const buildComposerConfig = (
   stopAgentSession: async () => {},
   isReadOnly: false,
   readOnlyReason: null,
-  draftStateKey: "task-1:build:new",
-  draftPersistenceIdentity: null,
+  draftScope: {
+    key: "task-1:build:new",
+    persistence: null,
+  },
   onSend,
   isSending: false,
   isStarting: false,

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
-import { agentChatDraftScopeKey } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -23,6 +22,7 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
+import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -446,9 +446,11 @@ const registerModuleMocks = (): void => {
 
   mock.module("./use-agents-page-orchestration-shell-model", () => ({
     useAgentsPageOrchestrationShellModel: ({
+      activeWorkspaceId,
       isForegroundLoadingTasks,
       routeSession,
     }: {
+      activeWorkspaceId: string | null;
       isForegroundLoadingTasks: boolean;
       routeSession: { selection: SelectionState };
     }) => {
@@ -469,7 +471,7 @@ const registerModuleMocks = (): void => {
         role: routeSession.selection.view.role,
         session: routeSession.selection.view.selectedSession.identity,
       };
-      const draftStateKey = agentChatDraftScopeKey(draftScope);
+      const draftStateKey = agentStudioChatDraftScopeKey(activeWorkspaceId, draftScope);
 
       if (!lastOrchestrationSelection) {
         throw new Error("Missing orchestration selection");
@@ -820,7 +822,7 @@ describe("useAgentsPageShellModel", () => {
       await harness.mount();
 
       expect(orchestrationControllerArgs.at(-1)?.draftStateKey).toBe(
-        `task-1:planner:${selectedSessionKey()}`,
+        `workspace-repo:task-1:planner:${selectedSessionKey()}`,
       );
     } finally {
       await harness.unmount();

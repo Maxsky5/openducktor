@@ -5,13 +5,13 @@ import {
   appendTextToDraft,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import {
-  type AgentChatDraftScope,
-  didAgentChatDraftScopeSwitchSessionOnly,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
-import {
   type InlineCommentDraftStore,
   useInlineCommentDraftStore,
 } from "@/state/use-inline-comment-draft-store";
+import {
+  type AgentStudioChatDraftScope,
+  didAgentStudioChatDraftScopeSwitchSessionOnly,
+} from "./agent-studio-chat-draft";
 
 export type AgentStudioReviewCommentStore = Pick<
   InlineCommentDraftStore,
@@ -26,7 +26,7 @@ export type AgentStudioReviewCommentStore = Pick<
 >;
 
 type AgentStudioReviewCommentComposerAdapter = {
-  syncDraftScope: (draftScope: AgentChatDraftScope, draftStateKey: string) => void;
+  syncDraftScope: (draftScope: AgentStudioChatDraftScope, draftStateKey: string) => void;
   submitDraft: (
     draft: AgentChatComposerDraft,
     onSend: AgentChatComposerModel["onSend"],
@@ -36,7 +36,7 @@ type AgentStudioReviewCommentComposerAdapter = {
 export const createAgentStudioReviewCommentComposerAdapter = (
   getStore: () => AgentStudioReviewCommentStore,
 ): AgentStudioReviewCommentComposerAdapter => {
-  let previousDraftScope: AgentChatDraftScope | null = null;
+  let previousDraftScope: AgentStudioChatDraftScope | null = null;
 
   return {
     syncDraftScope: (draftScope, draftStateKey) => {
@@ -47,7 +47,7 @@ export const createAgentStudioReviewCommentComposerAdapter = (
       const store = getStore();
       if (
         previousDraftScope !== null &&
-        didAgentChatDraftScopeSwitchSessionOnly(previousDraftScope, draftScope) &&
+        didAgentStudioChatDraftScopeSwitchSessionOnly(previousDraftScope, draftScope) &&
         store.drafts.some((draft) => draft.status === "submitting")
       ) {
         store.setDraftStateKey(draftStateKey);
@@ -92,7 +92,7 @@ export const createAgentStudioReviewCommentComposerAdapter = (
 };
 
 type UseAgentStudioReviewCommentComposerAdapterArgs = {
-  draftScope: AgentChatDraftScope;
+  draftScope: AgentStudioChatDraftScope;
   draftStateKey: string;
   onSend: AgentChatComposerModel["onSend"];
 };

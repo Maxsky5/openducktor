@@ -83,7 +83,12 @@ export const deriveAgentStudioChatSurfaceState = ({
   kickoffLabel,
   startLaunchKickoff,
 }: DeriveAgentStudioChatSurfaceStateInput): AgentStudioChatSurfaceState => {
-  const composerReadOnly = selectedSessionKey === null && !workflow.selectedRoleAvailable;
+  const hasTask = taskId.length > 0;
+  const composerReadOnly =
+    !hasTask || (selectedSessionKey === null && !workflow.selectedRoleAvailable);
+  const composerReadOnlyReason = hasTask
+    ? workflow.selectedRoleReadOnlyReason
+    : "Select a task to begin.";
 
   return {
     emptyState: deriveAgentStudioChatEmptyState({
@@ -95,6 +100,6 @@ export const deriveAgentStudioChatSurfaceState = ({
       startLaunchKickoff,
     }),
     composerReadOnly,
-    composerReadOnlyReason: composerReadOnly ? workflow.selectedRoleReadOnlyReason : null,
+    composerReadOnlyReason: composerReadOnly ? composerReadOnlyReason : null,
   };
 };

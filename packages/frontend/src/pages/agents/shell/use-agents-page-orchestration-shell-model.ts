@@ -1,8 +1,8 @@
 import { type RefObject, useCallback, useMemo } from "react";
-import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
 import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import type { AgentStudioChatDraftScope } from "../agent-studio-chat-draft";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import type { AgentStudioGitConflictQuickActionContext } from "../use-agents-page-right-panel-model";
@@ -68,7 +68,7 @@ export function useAgentsPageOrchestrationShellModel({
   const { selection, scheduleQueryUpdate, selectAgentStudioSelection } = routeSession;
 
   const composer = useMemo(
-    (): { draftScope: AgentChatDraftScope; workspaceId: string | null } => ({
+    (): { draftScope: AgentStudioChatDraftScope; workspaceId: string | null } => ({
       workspaceId: activeWorkspaceId,
       draftScope: {
         taskId: selection.view.taskId,

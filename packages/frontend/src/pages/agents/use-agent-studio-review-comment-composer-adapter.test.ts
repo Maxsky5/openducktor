@@ -3,11 +3,11 @@ import {
   createEmptyComposerDraft,
   draftToSerializedText,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
 import type {
   InlineCommentDraft,
   InlineCommentDraftSnapshot,
 } from "@/state/use-inline-comment-draft-store";
+import type { AgentStudioChatDraftScope } from "./agent-studio-chat-draft";
 import {
   type AgentStudioReviewCommentStore,
   createAgentStudioReviewCommentComposerAdapter,
@@ -143,9 +143,9 @@ const createFakeReviewCommentStore = (
 
 const buildScope = (
   taskId: string,
-  role: AgentChatDraftScope["role"],
+  role: AgentStudioChatDraftScope["role"],
   externalSessionId: string | null,
-): AgentChatDraftScope => ({
+): AgentStudioChatDraftScope => ({
   taskId,
   role,
   session:

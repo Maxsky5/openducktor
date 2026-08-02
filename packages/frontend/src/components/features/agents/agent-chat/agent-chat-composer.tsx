@@ -537,15 +537,13 @@ export function AgentChatComposer({
   ref?: Ref<AgentChatComposerHandle>;
 }): ReactElement {
   const {
-    taskId,
     displayedSessionKey,
     isInteractionEnabled,
     isReadOnly,
     readOnlyReason,
     busySendBlockedReason,
     pendingSendItems,
-    draftStateKey,
-    draftPersistenceIdentity,
+    draftScope,
     onSend,
     isSending,
     isStarting,
@@ -573,9 +571,7 @@ export function AgentChatComposer({
     clearSubmittedDraft,
     restoreSubmittedDraft,
   } = useAgentChatComposerDraftState({
-    draftStateKey,
-    persistenceIdentity: draftPersistenceIdentity,
-    taskId,
+    scope: draftScope,
   });
   const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
   const latestSendDisabledRef = useRef(false);
@@ -678,7 +674,6 @@ export function AgentChatComposer({
     isReadOnly ||
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
-    !taskId ||
     !hasComposerSendContent(draft, pendingSendItems) ||
     !isInteractionEnabled;
 
@@ -703,7 +698,7 @@ export function AgentChatComposer({
   }, [attachmentLayoutKey, syncBottomAfterComposerLayoutRef]);
 
   const selectorDisabled =
-    !taskId || isSelectionCatalogLoading || isSubmitting || !isInteractionEnabled || isReadOnly;
+    isSelectionCatalogLoading || isSubmitting || !isInteractionEnabled || isReadOnly;
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,

@@ -44,14 +44,15 @@ const buildModel = () => ({
     syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
   }),
   composer: {
-    taskId: "task-1",
     displayedSessionKey: "session-1",
     isInteractionEnabled: true,
     isReadOnly: false,
     readOnlyReason: null,
     busySendBlockedReason: null,
-    draftStateKey: "draft-1",
-    draftPersistenceIdentity: null,
+    draftScope: {
+      key: "draft-1",
+      persistence: null,
+    },
     onSend: async () => true,
     isSending: false,
     isStarting: false,

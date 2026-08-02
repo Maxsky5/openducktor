@@ -5,14 +5,15 @@ import { AgentChatComposer } from "./agent-chat-composer";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
-  taskId: "task-1",
   displayedSessionKey: "session-1",
   isInteractionEnabled: true,
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,
-  draftStateKey: "draft-1",
-  draftPersistenceIdentity: null,
+  draftScope: {
+    key: "draft-1",
+    persistence: null,
+  },
   onSend: async () => true,
   isSending: false,
   isStarting: false,
@@ -227,7 +228,10 @@ describe("AgentChatComposer", () => {
           ...buildModel(),
           isSending: true,
           isSessionWorking: true,
-          draftStateKey: "queued-followup-ready",
+          draftScope: {
+            key: "queued-followup-ready",
+            persistence: null,
+          },
         },
       }),
     );
@@ -388,7 +392,10 @@ describe("AgentChatComposer", () => {
           ...buildModel(),
           busySendBlockedReason:
             "Current runtime does not support queued messages while the session is working.",
-          draftStateKey: "busy-send-visible",
+          draftScope: {
+            key: "busy-send-visible",
+            persistence: null,
+          },
           isSessionWorking: true,
         },
       }),
