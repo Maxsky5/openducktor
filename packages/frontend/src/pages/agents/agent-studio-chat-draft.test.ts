@@ -103,6 +103,9 @@ describe("Agent Studio chat draft adapter", () => {
       session: selectedSession,
     });
 
+    expect(first).not.toBeNull();
+    expect(refreshed).not.toBeNull();
+    expect(otherWorkspace).not.toBeNull();
     expect(first?.targetKey).toBe(refreshed?.targetKey);
     expect(first?.targetKey).not.toBe(otherWorkspace?.targetKey);
     expect(first?.targetKey).toBe(

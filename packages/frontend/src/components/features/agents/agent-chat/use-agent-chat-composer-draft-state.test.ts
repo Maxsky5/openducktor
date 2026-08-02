@@ -74,10 +74,11 @@ afterEach(() => {
 describe("useAgentChatComposerDraftState", () => {
   test("adopts fresh equivalent persistence wrappers without scheduling another render", async () => {
     const adapters: AgentChatDraftPersistence[] = [];
+    const hydrate = mock(createEmptyComposerDraft);
     const useInlinePersistenceDraftState = (_props: { render: number }) => {
       const adapter: AgentChatDraftPersistence = {
         targetKey: "equivalent-target",
-        hydrate: createEmptyComposerDraft,
+        hydrate,
         set: mock(() => 1),
         readVersion: () => 0,
         clear: () => true,
@@ -98,6 +99,7 @@ describe("useAgentChatComposerDraftState", () => {
 
     await harness.update({ render: 1 });
     expect(adapters).toHaveLength(2);
+    expect(hydrate).toHaveBeenCalledTimes(1);
     const adoptedAdapter = adapters[1];
     if (!adoptedAdapter) {
       throw new Error("Expected the rerendered persistence adapter.");
@@ -263,9 +265,18 @@ describe("useAgentChatComposerDraftState", () => {
   });
 
   test("flushes the old persistence adapter before switching identities", async () => {
+    const events: string[] = [];
     const pendingFlush = createDeferred();
-    const first = createFakePersistence(buildDraft("first"), () => pendingFlush.promise);
+    const first = createFakePersistence(buildDraft("first"), () => {
+      events.push("flush:first");
+      return pendingFlush.promise;
+    });
     const second = createFakePersistence(buildDraft("second"));
+    const hydrateSecond = second.adapter.hydrate;
+    second.adapter.hydrate = () => {
+      events.push("hydrate:second");
+      return hydrateSecond();
+    };
     const harness = await mountHarness({
       key: "conversation:first",
       persistence: first.adapter,
@@ -280,6 +291,7 @@ describe("useAgentChatComposerDraftState", () => {
     });
 
     expect(first.adapter.flush).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(["flush:first", "hydrate:second"]);
     expect(harness.getLatest().draft.segments[0]).toEqual(
       expect.objectContaining({ text: "second" }),
     );

@@ -215,7 +215,7 @@ export function useAgentStudioChatModel({
     sessionReadModelLoadState.kind,
   ]);
   const draftStateKey = agentStudioChatDraftScopeKey(composer.draftScope);
-  const draftScope = useMemo<AgentChatDraftScope>(
+  const composerDraftScope = useMemo<AgentChatDraftScope>(
     () => ({
       key: draftStateKey,
       persistence: draftPersistence,
@@ -259,7 +259,7 @@ export function useAgentStudioChatModel({
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
       ...(pendingSendItems ? { pendingSendItems } : {}),
-      draftScope,
+      draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
       isSending: sessionActions.isSending,
       isStarting: sessionActions.isStarting,
@@ -295,7 +295,7 @@ export function useAgentStudioChatModel({
     }),
     [
       chatContextUsage,
-      draftScope,
+      composerDraftScope,
       modelSelection.agentOptions,
       modelSelection.isSelectionCatalogLoading,
       modelSelection.isSlashCommandsLoading,

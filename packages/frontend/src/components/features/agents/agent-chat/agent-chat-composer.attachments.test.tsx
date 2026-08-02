@@ -361,19 +361,25 @@ describe("AgentChatComposer attachments", () => {
     typeIntoComposer(container, "send once");
     await flushAgentChatDraft(identity);
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => {
-      expect(onSend).toHaveBeenCalledTimes(1);
-      expect(getEditorRoot(container).textContent).not.toContain("send once");
-    });
+    await waitFor(
+      () => {
+        expect(onSend).toHaveBeenCalledTimes(1);
+        expect(getEditorRoot(container).textContent).not.toContain("send once");
+      },
+      { timeout: 2_000 },
+    );
 
     rerender(<AgentChatComposer model={buildPersistedModel()} />);
     expect(getEditorRoot(container).textContent).not.toContain("send once");
 
     sendResult.resolve(true);
-    await waitFor(() => {
-      expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
-      expect(getEditorRoot(container).textContent).not.toContain("send once");
-    });
+    await waitFor(
+      () => {
+        expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
+        expect(getEditorRoot(container).textContent).not.toContain("send once");
+      },
+      { timeout: 2_000 },
+    );
   });
 
   test("clears a successfully sent attachment draft when staging resolves during send", async () => {

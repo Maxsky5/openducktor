@@ -59,6 +59,8 @@ export function useAgentChatComposerDraftState({
     const isSamePersistenceTarget = current.persistence?.targetKey === nextPersistence?.targetKey;
     if (isSameDraft && isSamePersistenceTarget) {
       if (current.persistence !== nextPersistence) {
+        // Equivalent wrappers may be recreated every render. Updating state here would loop;
+        // callbacks and lifecycle handlers read this ref until the next state update catches up.
         latestStateRef.current = {
           key: current.key,
           persistence: nextPersistence,
