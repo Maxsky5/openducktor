@@ -1,4 +1,4 @@
-import type { ChatSettings } from "@openducktor/contracts";
+import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
@@ -12,6 +12,8 @@ import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
+import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
+import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
@@ -22,7 +24,10 @@ import {
   createAgentStudioChatDraftPersistence,
 } from "./agent-studio-chat-draft";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
-import { toSelectedSessionThreadSession } from "./agent-studio-thread-session";
+import {
+  toAgentStudioTranscriptTarget,
+  toSelectedSessionThreadSession,
+} from "./agent-studio-thread-session";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { useAgentStudioReviewCommentComposerAdapter } from "./use-agent-studio-review-comment-composer-adapter";
 
@@ -85,6 +90,7 @@ type UseAgentStudioChatModelArgs = {
   sessionActions: AgentStudioChatSessionActionsContext;
   modelSelection: AgentStudioChatModelSelectionContext;
   chatSettings: ChatSettings;
+  runtimeDefinitions: RuntimeDescriptor[];
   composer: AgentStudioChatComposerContext;
 };
 
@@ -109,6 +115,7 @@ export function useAgentStudioChatModel({
   sessionActions,
   modelSelection,
   chatSettings,
+  runtimeDefinitions,
   composer,
 }: UseAgentStudioChatModelArgs): AgentChatModel {
   const subagentPendingApprovalCountBySessionKey =
@@ -160,15 +167,24 @@ export function useAgentStudioChatModel({
   const selectedSessionKey = selectedSessionIdentity
     ? agentSessionIdentityKey(selectedSessionIdentity)
     : null;
-  const stableDraftSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
+  const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
+  const transcriptTarget = useMemo(
+    () =>
+      toAgentStudioTranscriptTarget({
+        identity: stableSelectedSessionIdentity,
+        taskId: selectedSession.taskId,
+        role: selectedSession.role,
+      }),
+    [selectedSession.role, selectedSession.taskId, stableSelectedSessionIdentity],
+  );
   const draftPersistence = useMemo(
     () =>
       createAgentStudioChatDraftPersistence({
         workspaceId: composer.workspaceId,
         taskId: selectedSession.taskId,
-        session: stableDraftSessionIdentity,
+        session: stableSelectedSessionIdentity,
       }),
-    [composer.workspaceId, selectedSession.taskId, stableDraftSessionIdentity],
+    [composer.workspaceId, selectedSession.taskId, stableSelectedSessionIdentity],
   );
   const surfaceState = useMemo(
     () =>
@@ -237,6 +253,31 @@ export function useAgentStudioChatModel({
     sessionActions.loadAgentSessionHistory,
     sessionReadModelLoadState.kind,
   ]);
+  const runtimeBlockedAction = useMemo(
+    () => ({
+      label: "Recheck",
+      onAction: () => {
+        void runtimeReadiness.refreshChecks();
+      },
+      disabled: runtimeReadiness.isLoadingChecks,
+      isPending: runtimeReadiness.isLoadingChecks,
+    }),
+    [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
+  );
+  const runtimeState = deriveAgentChatRuntimeState({
+    transcriptState: selectedSessionTranscriptState,
+    runtimeReadiness,
+    runtimeBlockedAction,
+    failedTranscriptAction,
+  });
+  const runtimePresentation = useMemo(
+    () =>
+      resolveAgentChatRuntimePresentation({
+        runtimeDefinitions,
+        runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
+      }),
+    [runtimeDefinitions, selectedSessionIdentity?.runtimeKind],
+  );
   const draftStateKey = agentStudioChatDraftScopeKey(composer.workspaceId, composer.draftScope);
   const composerDraftScope = useMemo<AgentChatDraftScope>(
     () => ({
@@ -372,10 +413,13 @@ export function useAgentStudioChatModel({
     sessionKey: selectedSessionKey,
     modelCatalog: selectedSessionRuntimeData.modelCatalog,
     session: activeThreadSession,
+    transcriptTarget,
     transcriptState: selectedSessionTranscriptState,
+    transcriptNotice: runtimeState.transcriptNotice,
     chatSettings,
     sessionAuxiliaryError: selectedSessionAuxiliaryError ?? selectedSessionRuntimeData.error,
-    runtimeReadiness,
+    interactionEnabled: runtimeState.interactionEnabled,
+    runtimePresentation,
     emptyState: surfaceState.emptyState,
     pendingApprovalRequests,
     pendingQuestionRequests,
@@ -387,7 +431,6 @@ export function useAgentStudioChatModel({
     sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
-    failedTranscriptAction,
   });
   const composerModel = surfaceModel.composer;
 

@@ -43,6 +43,10 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
   },
   sessionAgentColors: {},
   sessionIdentity: createSessionIdentity(),
+  runtimePresentation: {
+    runtimeKind: "opencode",
+    supportedApprovalReplyOutcomes: null,
+  },
   subagentPendingApprovalCountBySessionKey: {},
   subagentPendingQuestionCountBySessionKey: {},
   resolveRowRef,
@@ -56,6 +60,10 @@ const baseMotionRowProps = (
   isStreamingAssistantMessage: false,
   sessionAgentColors: { build: "text-sky-700" },
   sessionIdentity: createSessionIdentity(),
+  runtimePresentation: {
+    runtimeKind: "opencode",
+    supportedApprovalReplyOutcomes: null,
+  },
   subagentPendingApprovalCount: 0,
   subagentPendingQuestionCount: 0,
   resolveRowRef,

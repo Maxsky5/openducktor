@@ -9,7 +9,7 @@ import { canOpenQuickActionsMenu } from "./agent-studio-header-quick-actions-ava
 import { SessionHistoryMenu } from "./agent-studio-header-session-history";
 import { WorkflowRail } from "./agent-studio-header-workflow-rail";
 
-export type { AgentStudioHeaderModel } from "./agent-studio-header.types";
+export type { AgentRoleOption, AgentStudioHeaderModel } from "./agent-studio-header.types";
 
 type HeaderTitleProps = {
   taskTitle: string | null;

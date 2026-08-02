@@ -17,7 +17,7 @@ describe("agent-chat-composer-model-state", () => {
           profileId: "ignored-selection",
         },
         isSessionModelCatalogLoading: true,
-        isRuntimeReady: false,
+        isInteractionEnabled: false,
         sessionAgentColors: {},
       }),
     ).toEqual({
@@ -38,7 +38,7 @@ describe("agent-chat-composer-model-state", () => {
           profileId: "builder",
         },
         isSessionModelCatalogLoading: false,
-        isRuntimeReady: true,
+        isInteractionEnabled: true,
         sessionAgentColors: {
           builder: "#22c55e",
         },
@@ -60,7 +60,7 @@ describe("agent-chat-composer-model-state", () => {
           modelId: "gpt-5",
         },
         isSessionModelCatalogLoading: false,
-        isRuntimeReady: true,
+        isInteractionEnabled: true,
         sessionAgentColors: {},
       }).accentColor,
     ).toBe(CODEX_SESSION_ACCENT_COLOR);
@@ -76,7 +76,7 @@ describe("agent-chat-composer-model-state", () => {
           modelId: "claude-sonnet-4-6",
         },
         isSessionModelCatalogLoading: false,
-        isRuntimeReady: true,
+        isInteractionEnabled: true,
         sessionAgentColors: {},
       }).accentColor,
     ).toBe(CLAUDE_SESSION_ACCENT_COLOR);

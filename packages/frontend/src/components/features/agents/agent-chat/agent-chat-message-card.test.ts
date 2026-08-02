@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { type ComponentProps, createElement as createReactElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
@@ -14,23 +13,13 @@ import {
 import { formatTime } from "./message-formatting";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
-const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
-  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-  availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  isLoadingRuntimeDefinitions: false,
-  runtimeDefinitionsError: null,
-  refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-  loadRepoRuntimeCatalog: async () => {
-    throw new Error("Test runtime catalog loader was not configured.");
-  },
-  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-  loadRepoRuntimeSkills: async () => ({ skills: [] }),
-  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
-  loadRepoRuntimeFileSearch: async () => [],
-} satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
-
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+const DEFAULT_TEST_RUNTIME_PRESENTATION = {
+  runtimeKind: "opencode" as const,
+  workflowToolAliasesByCanonical: OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+  supportedApprovalReplyOutcomes:
+    OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.supportedReplyOutcomes,
+};
 const DEFAULT_TEST_SESSION_IDENTITY: ParentSessionRuntimeContext = {
   runtimeKind: "opencode",
   workingDirectory: "/repo",
@@ -40,11 +29,12 @@ const LONG_TRANSCRIPT_TOKEN =
 
 type AgentChatMessageCardTestProps = Omit<
   ComponentProps<typeof AgentChatMessageCard>,
-  "sessionIdentity"
+  "sessionIdentity" | "runtimePresentation"
 > & {
   chatSettings?: typeof DEFAULT_TEST_CHAT_SETTINGS;
   sessionIdentity?: ParentSessionRuntimeContext | null;
   transcriptDialog?: AgentSessionTranscriptDialogContextValue;
+  runtimePresentation?: ComponentProps<typeof AgentChatMessageCard>["runtimePresentation"];
 };
 
 const createElement = (
@@ -52,11 +42,13 @@ const createElement = (
   {
     chatSettings = DEFAULT_TEST_CHAT_SETTINGS,
     transcriptDialog,
+    runtimePresentation = DEFAULT_TEST_RUNTIME_PRESENTATION,
     ...props
   }: AgentChatMessageCardTestProps,
 ) => {
   const card = createReactElement(AgentChatMessageCard, {
     sessionIdentity: DEFAULT_TEST_SESSION_IDENTITY,
+    runtimePresentation,
     ...props,
   });
   const cardWithTranscriptContext = transcriptDialog
@@ -67,13 +59,9 @@ const createElement = (
       )
     : card;
   return createReactElement(
-    RuntimeDefinitionsContext.Provider,
-    { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
-    createReactElement(
-      AgentChatSettingsProvider,
-      { value: chatSettings },
-      cardWithTranscriptContext,
-    ),
+    AgentChatSettingsProvider,
+    { value: chatSettings },
+    cardWithTranscriptContext,
   );
 };
 
@@ -1264,6 +1252,10 @@ describe("AgentChatMessageCard tool duration", () => {
           ...DEFAULT_TEST_SESSION_IDENTITY,
           runtimeKind: "codex",
         },
+        runtimePresentation: {
+          runtimeKind: "codex",
+          supportedApprovalReplyOutcomes: null,
+        },
         sessionAgentColors: {},
       }),
     );
@@ -1558,6 +1550,10 @@ describe("AgentChatMessageCard tool duration", () => {
         sessionIdentity: {
           ...DEFAULT_TEST_SESSION_IDENTITY,
           runtimeKind: "codex",
+        },
+        runtimePresentation: {
+          runtimeKind: "codex",
+          supportedApprovalReplyOutcomes: null,
         },
         sessionAgentColors: {},
       }),

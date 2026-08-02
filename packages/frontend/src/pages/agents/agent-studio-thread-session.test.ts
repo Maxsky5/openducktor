@@ -1,12 +1,40 @@
 import { describe, expect, test } from "bun:test";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "./agent-studio-test-utils";
-import { toSelectedSessionThreadSession } from "./agent-studio-thread-session";
+import {
+  toAgentStudioTranscriptTarget,
+  toSelectedSessionThreadSession,
+} from "./agent-studio-thread-session";
 
 const BUFFERING_MESSAGE =
   "Our systems are thinking a bit more about this request before responding.";
 
 describe("agent studio thread session", () => {
+  test("constructs workflow routing in the Agent Studio adapter", () => {
+    const identity = toAgentSessionIdentity(
+      createAgentSessionFixture({
+        externalSessionId: "session-build",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktrees/build",
+      }),
+    );
+
+    expect(
+      toAgentStudioTranscriptTarget({
+        identity,
+        taskId: "openducktor-1234",
+        role: "build",
+      }),
+    ).toEqual({
+      ...identity,
+      sessionScope: {
+        kind: "workflow",
+        taskId: "openducktor-1234",
+        role: "build",
+      },
+    });
+  });
+
   test("projects the runtime status from the matching loaded session", () => {
     const session = createAgentSessionFixture({
       externalSessionId: "session-buffering",

@@ -1,8 +1,15 @@
 import type { AgentRole } from "@openducktor/core";
+import type { LucideIcon } from "lucide-react";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import type { SessionLaunchActionId, SessionStartPostAction } from "@/features/session-start";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
-import type { AgentRoleOption } from "./agent-chat/agent-chat.types";
+
+export type AgentRoleOption = {
+  role: AgentRole;
+  label: string;
+  icon: LucideIcon;
+  disabled?: boolean;
+};
 
 export type AgentWorkflowStep = {
   role: AgentRole;

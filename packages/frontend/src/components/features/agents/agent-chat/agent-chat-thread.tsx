@@ -1,17 +1,7 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import {
-  memo,
-  type ReactElement,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { memo, type ReactElement, type RefObject, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
-import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
@@ -43,18 +33,15 @@ type AgentChatTranscriptProps = {
   renderedTurns: AgentChatRenderedTurn[];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   transcriptNotice: AgentChatThreadModel["transcriptNotice"];
-  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
+  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
 };
 
 const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
   notice,
-  runtimeReadiness,
 }: {
   notice: NonNullable<AgentChatThreadModel["transcriptNotice"]>;
-  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
 }): ReactElement {
   const isLoadingNotice = notice.severity === "loading";
-  const isRuntimeBlocked = notice.kind === "runtime_blocked";
   const action = notice.action;
 
   return (
@@ -110,22 +97,6 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
             <RefreshCcw className={cn("size-3.5", action.isPending ? "animate-spin" : "")} />
             {action.label}
           </Button>
-        ) : isRuntimeBlocked ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
-            disabled={runtimeReadiness.isLoadingChecks}
-            onClick={() => {
-              void runtimeReadiness.refreshChecks();
-            }}
-          >
-            <RefreshCcw
-              className={cn("size-3.5", runtimeReadiness.isLoadingChecks ? "animate-spin" : "")}
-            />
-            Recheck
-          </Button>
         ) : null}
       </div>
     </div>
@@ -143,7 +114,7 @@ type AgentChatBottomStackProps = {
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
   canReplyToApprovals: boolean;
-  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimeSupportedApprovalReplyOutcomes"];
+  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimePresentation"]["supportedApprovalReplyOutcomes"];
   isSubmittingApprovalByRequestId: AgentChatThreadModel["isSubmittingApprovalByRequestId"];
   approvalReplyErrorByRequestId: AgentChatThreadModel["approvalReplyErrorByRequestId"];
   onReplyApproval: AgentChatThreadModel["onReplyApproval"];
@@ -168,7 +139,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   renderedTurns,
   resolveRowRef,
   transcriptNotice,
-  runtimeReadiness,
+  runtimePresentation,
 }: AgentChatTranscriptProps): ReactElement {
   const hasSession = sessionIdentity !== null;
 
@@ -177,9 +148,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       ref={messagesContainerRef}
       className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
     >
-      {transcriptNotice ? (
-        <AgentChatTranscriptNotice notice={transcriptNotice} runtimeReadiness={runtimeReadiness} />
-      ) : null}
+      {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
 
       <div ref={messagesContentRef}>
         {!hasSession && !transcriptNotice && emptyState ? (
@@ -218,6 +187,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
               modelCatalog={modelCatalog}
               sessionAgentColors={sessionAgentColors}
               sessionIdentity={sessionIdentity}
+              runtimePresentation={runtimePresentation}
               subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
               subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
               resolveRowRef={resolveRowRef}
@@ -312,8 +282,9 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     session,
+    transcriptTarget,
     displayedSessionKey,
-    runtimeReadiness,
+    runtimePresentation,
     isInteractionEnabled,
     emptyState,
     modelCatalog,
@@ -330,7 +301,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
     canReplyToApprovals,
-    runtimeSupportedApprovalReplyOutcomes,
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     onReplyApproval,
@@ -344,17 +314,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const stableSessionIdentity = useStableAgentSessionIdentity(session);
-  const sessionScope = useStableAgentSessionScope(session?.sessionScope);
-  const sessionIdentity = useMemo<AgentSessionTranscriptTarget | null>(() => {
-    if (stableSessionIdentity === null) {
-      return null;
-    }
-    return {
-      ...stableSessionIdentity,
-      ...(sessionScope ? { sessionScope } : {}),
-    };
-  }, [sessionScope, stableSessionIdentity]);
+  const sessionIdentity: AgentSessionTranscriptTarget | null = transcriptTarget;
   const {
     messagesContentRef,
     renderedTurns,
@@ -457,12 +417,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
         subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
         sessionIdentity={sessionIdentity}
+        runtimePresentation={runtimePresentation}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={renderedTurns}
         resolveRowRef={resolveRowRef}
         transcriptNotice={renderedTranscriptNotice}
-        runtimeReadiness={runtimeReadiness}
       />
 
       {hasBottomStack && session ? (
@@ -476,7 +436,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
             onSubmitQuestionAnswers={onSubmitQuestionAnswers}
             canReplyToApprovals={canReplyToApprovals}
-            runtimeSupportedApprovalReplyOutcomes={runtimeSupportedApprovalReplyOutcomes}
+            runtimeSupportedApprovalReplyOutcomes={
+              runtimePresentation.supportedApprovalReplyOutcomes
+            }
             isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
             approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
             onReplyApproval={onReplyApproval}

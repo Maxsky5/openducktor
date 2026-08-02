@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -331,6 +332,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     sessionActions,
     modelSelection,
     chatSettings,
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
     composer,
   };
 };
@@ -416,15 +418,13 @@ describe("useAgentStudioPageModels", () => {
       contextWindow: 100,
     });
     expect(state.agentChatModel.composer.draftScope.persistence).not.toBeNull();
-    expect(state.agentChatModel.thread.runtimeReadiness.state).toBe("ready");
+    expect(state.agentChatModel.thread.isInteractionEnabled).toBe(true);
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
 
-    await state.agentChatModel.thread.runtimeReadiness.refreshChecks();
     await state.agentChatModel.composer.onSend(createComposerDraft("message"));
     state.agentChatModel.composer.onStopSession();
 
-    expect(onRefreshChecks).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
 
@@ -624,8 +624,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.transcriptState).toEqual({ kind: "visible" });
-    expect(thread.runtimeReadiness.state).toBe("checking");
+    expect(thread.isInteractionEnabled).toBe(false);
+    expect(thread.transcriptNotice).toBeNull();
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
       "Cached transcript",
     );
@@ -748,7 +748,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.transcriptState).toEqual({ kind: "visible" });
+    expect(thread.transcriptNotice).toBeNull();
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
     );
@@ -874,9 +874,9 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.transcriptState).toEqual({
-      kind: "session_loading",
-      reason: "history",
+    expect(harness.getLatest().agentChatModel.thread.transcriptNotice).toMatchObject({
+      severity: "loading",
+      title: "Loading session",
     });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),

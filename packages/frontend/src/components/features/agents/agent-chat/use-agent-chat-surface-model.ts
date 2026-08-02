@@ -2,17 +2,17 @@ import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
+  AgentChatRuntimePresentation,
   AgentChatSurfaceModel,
   AgentChatThreadSession,
-  AgentChatTranscriptNoticeAction,
+  AgentChatTranscriptNotice,
 } from "./agent-chat.types";
 import { projectAgentChatThreadState } from "./agent-chat-thread-state";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import {
   type AgentChatComposerConfig,
   invokeStopAgentSession,
@@ -33,10 +33,13 @@ type UseAgentChatSurfaceModelArgs = {
   sessionKey: string | null;
   modelCatalog?: AgentModelCatalog | null;
   session: AgentChatThreadSession | null;
+  transcriptTarget: AgentSessionTranscriptTarget | null;
   transcriptState: AgentSessionTranscriptState;
+  transcriptNotice: AgentChatTranscriptNotice | null;
   chatSettings: ChatSettings;
   sessionAuxiliaryError: string | null;
-  runtimeReadiness: RepoRuntimeReadiness;
+  interactionEnabled: boolean;
+  runtimePresentation: AgentChatRuntimePresentation;
   emptyState: AgentChatEmptyStateModel | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
@@ -48,17 +51,19 @@ type UseAgentChatSurfaceModelArgs = {
   sessionAgentColors?: Record<string, string>;
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCountBySessionKey?: Record<string, number>;
-  failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
 };
 
 export function useAgentChatSurfaceModel({
   sessionKey,
   modelCatalog,
   session,
+  transcriptTarget,
   transcriptState,
+  transcriptNotice,
   chatSettings,
   sessionAuxiliaryError,
-  runtimeReadiness,
+  interactionEnabled,
+  runtimePresentation,
   emptyState,
   pendingApprovalRequests,
   pendingQuestionRequests,
@@ -70,15 +75,13 @@ export function useAgentChatSurfaceModel({
   sessionAgentColors,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
-  failedTranscriptAction,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
-  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const threadState = projectAgentChatThreadState({
     sessionKey,
     session,
+    transcriptTarget,
     transcriptState,
-    runtimeReadiness,
-    failedTranscriptAction,
+    transcriptNotice,
   });
   const isSessionWorking = isAgentSessionActivityWorking(threadState.threadSession?.activityState);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
@@ -105,7 +108,7 @@ export function useAgentChatSurfaceModel({
 
   const composerModel = useAgentChatComposerModel({
     composer,
-    runtimeReadiness,
+    interactionEnabled,
     sessionAgentColors: resolvedSessionAgentColors,
     composerFormRef,
     composerEditorRef,
@@ -116,12 +119,11 @@ export function useAgentChatSurfaceModel({
   const threadModel = useAgentChatThreadModel({
     threadState,
     modelCatalog: modelCatalog ?? null,
-    transcriptState,
-    runtimeReadiness,
+    interactionEnabled,
+    runtimePresentation,
     isSessionWorking,
     hasComposer,
     composerActivity,
-    runtimeDefinitions,
     sessionAuxiliaryError,
     emptyState,
     pendingApprovalRequests,

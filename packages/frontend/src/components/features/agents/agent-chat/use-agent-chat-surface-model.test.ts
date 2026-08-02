@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { renderHook } from "@testing-library/react";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { invokeStopAgentSession } from "./use-agent-chat-surface-model";
+import { invokeStopAgentSession, useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 
 const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
   externalSessionId,
@@ -43,5 +46,57 @@ describe("invokeStopAgentSession", () => {
     expect(invokeStopAgentSession(sessionIdentity("session-1"), undefined)).toBeUndefined();
 
     expect(stopCalls).toEqual([]);
+  });
+});
+
+describe("useAgentChatSurfaceModel", () => {
+  test("models a non-workflow chat from caller-owned inputs without app providers", () => {
+    const transcriptTarget = sessionIdentity("standalone-session");
+    const session = {
+      ...transcriptTarget,
+      activityState: null,
+      runtimeStatusMessage: null,
+      messages: createSessionMessagesState(transcriptTarget.externalSessionId),
+    };
+    const runtimePresentation = {
+      runtimeKind: "opencode" as const,
+      supportedApprovalReplyOutcomes: null,
+    };
+
+    const rendered = renderHook(() =>
+      useAgentChatSurfaceModel({
+        sessionKey: "standalone-session",
+        session,
+        transcriptTarget,
+        transcriptState: { kind: "visible" },
+        transcriptNotice: null,
+        chatSettings: createChatSettingsFixture(),
+        sessionAuxiliaryError: null,
+        interactionEnabled: true,
+        runtimePresentation,
+        emptyState: null,
+        pendingApprovalRequests: [],
+        pendingQuestionRequests: [],
+        todos: [],
+        pendingQuestions: {
+          canSubmit: true,
+          isSubmittingByRequestId: {},
+          onSubmit: async () => {},
+        },
+        approvals: {
+          canReply: true,
+          isSubmittingByRequestId: {},
+          errorByRequestId: {},
+          onReply: async () => {},
+        },
+      }),
+    );
+
+    expect(rendered.result.current.thread.session).toEqual(session);
+    expect(rendered.result.current.thread.transcriptTarget).toBe(transcriptTarget);
+    expect(rendered.result.current.thread.runtimePresentation).toBe(runtimePresentation);
+    expect(rendered.result.current.thread.canSubmitQuestionAnswers).toBe(true);
+    expect(rendered.result.current.thread.canReplyToApprovals).toBe(true);
+    rendered.unmount();
   });
 });

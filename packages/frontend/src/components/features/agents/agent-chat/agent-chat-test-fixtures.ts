@@ -6,7 +6,9 @@ import type {
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { createRef } from "react";
+import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
@@ -19,11 +21,8 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type {
-  AgentChatThreadModel,
-  AgentChatThreadSession,
-  AgentRoleOption,
-} from "./agent-chat.types";
+import type { AgentRoleOption } from "../agent-studio-header.types";
+import type { AgentChatThreadModel, AgentChatThreadSession } from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
 import { toAgentChatThreadSession } from "./agent-chat-thread-session";
 import { projectAgentChatThreadState } from "./agent-chat-thread-state";
@@ -146,6 +145,7 @@ export const buildThreadTranscriptState = (
     : transcriptState;
 
 type AgentChatThreadProjectionFields =
+  | "transcriptTarget"
   | "displayedSessionKey"
   | "shouldResetTranscriptWindow"
   | "transcriptNotice";
@@ -154,7 +154,8 @@ type AgentChatThreadFixtureDefaults =
   | "pendingApprovalRequests"
   | "pendingQuestionRequests"
   | "todos"
-  | "sessionAccentColor";
+  | "sessionAccentColor"
+  | "runtimePresentation";
 
 export type AgentChatThreadModelInput = Omit<
   AgentChatThreadModel,
@@ -162,7 +163,10 @@ export type AgentChatThreadModelInput = Omit<
 > &
   Partial<
     Pick<AgentChatThreadModel, AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults>
-  >;
+  > & {
+    transcriptState: AgentSessionTranscriptState;
+    runtimeReadiness: RepoRuntimeReadiness;
+  };
 
 export const buildBaseModel = () => ({
   isSessionWorking: false,
@@ -174,6 +178,10 @@ export const buildBaseModel = () => ({
     refreshChecks: async () => {},
   },
   isInteractionEnabled: true,
+  runtimePresentation: {
+    runtimeKind: "opencode" as const,
+    supportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
+  },
   emptyState: {
     title: "Send a message to start a new session automatically.",
   },
@@ -183,7 +191,6 @@ export const buildBaseModel = () => ({
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
   canReplyToApprovals: true,
-  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
@@ -197,18 +204,33 @@ export const buildBaseModel = () => ({
 });
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
+  const runtimeState = deriveAgentChatRuntimeState({
+    transcriptState: model.transcriptState,
+    runtimeReadiness: model.runtimeReadiness,
+    runtimeBlockedAction: {
+      label: "Recheck",
+      onAction: () => {
+        void model.runtimeReadiness.refreshChecks();
+      },
+      disabled: model.runtimeReadiness.isLoadingChecks,
+      isPending: model.runtimeReadiness.isLoadingChecks,
+    },
+  });
   const threadState = projectAgentChatThreadState({
     sessionKey:
       model.displayedSessionKey ?? (model.session ? agentSessionIdentityKey(model.session) : null),
     session: model.session,
+    transcriptTarget: model.transcriptTarget ?? model.session,
     transcriptState: model.transcriptState,
-    runtimeReadiness: model.runtimeReadiness,
+    transcriptNotice: model.transcriptNotice ?? runtimeState.transcriptNotice,
   });
 
   return {
     ...model,
     modelCatalog: model.modelCatalog ?? null,
+    runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
     session: threadState.threadSession,
+    transcriptTarget: threadState.transcriptTarget,
     displayedSessionKey: threadState.displayedSessionKey,
     shouldResetTranscriptWindow: threadState.shouldResetTranscriptWindow,
     transcriptNotice: threadState.transcriptNotice,

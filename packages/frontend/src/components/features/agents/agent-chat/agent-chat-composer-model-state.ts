@@ -10,7 +10,7 @@ export type AgentChatComposerModelStateInput = {
   selectedSession: AgentChatComposerModelStateSelectedSession | null;
   selectedModelSelection: AgentModelSelection | null;
   isSessionModelCatalogLoading: boolean;
-  isRuntimeReady: boolean;
+  isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
 };
 
@@ -24,7 +24,7 @@ export const deriveAgentChatComposerModelState = ({
   selectedSession,
   selectedModelSelection,
   isSessionModelCatalogLoading,
-  isRuntimeReady,
+  isInteractionEnabled,
   sessionAgentColors,
 }: AgentChatComposerModelStateInput): AgentChatComposerModelState => {
   const runtimeKind = selectedSession?.runtimeKind ?? selectedModelSelection?.runtimeKind ?? null;
@@ -38,7 +38,7 @@ export const deriveAgentChatComposerModelState = ({
       agentColors: sessionAgentColors,
       runtimeKind,
     }),
-    isInteractionEnabled: isRuntimeReady,
+    isInteractionEnabled,
     isModelSelectionPending: Boolean(
       selectedSession && isSessionModelCatalogLoading && !selectedSession.selectedModel,
     ),

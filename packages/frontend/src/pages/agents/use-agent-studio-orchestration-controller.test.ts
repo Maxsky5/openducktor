@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -165,6 +166,7 @@ const baseArgs: BuildArgs = {
     selectedSessionContextUsage: null,
   },
   chatSettings: baseChatSettings,
+  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
   composer: {
     workspaceId: "workspace-repo",
     draftScope: {

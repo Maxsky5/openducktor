@@ -1,5 +1,8 @@
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
+import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -34,10 +37,10 @@ export function useSessionTranscriptSurfaceModel({
   const hasWorkspace = workspaceRepoPath !== null;
   const liveSession = useAgentSession(isOpen ? target : null);
   const visiblePendingInput = useAgentSessionVisiblePendingInput(isOpen ? target : null);
+  const { loadRepoRuntimeCatalog, runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     hasWorkspace,
   });
-  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
 
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace,
@@ -79,15 +82,42 @@ export function useSessionTranscriptSurfaceModel({
           staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
         }),
   );
+  const runtimeBlockedAction = useMemo(
+    () => ({
+      label: "Recheck",
+      onAction: () => {
+        void runtimeReadiness.refreshChecks();
+      },
+      disabled: runtimeReadiness.isLoadingChecks,
+      isPending: runtimeReadiness.isLoadingChecks,
+    }),
+    [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
+  );
+  const runtimeState = deriveAgentChatRuntimeState({
+    transcriptState: sessionHistory.transcriptState,
+    runtimeReadiness,
+    runtimeBlockedAction,
+  });
+  const runtimePresentation = useMemo(
+    () =>
+      resolveAgentChatRuntimePresentation({
+        runtimeDefinitions,
+        runtimeKind: target?.runtimeKind ?? null,
+      }),
+    [runtimeDefinitions, target?.runtimeKind],
+  );
 
   const model = useAgentChatSurfaceModel({
     sessionKey,
     modelCatalog: modelCatalogQuery.data ?? null,
     session: sessionHistory.session,
+    transcriptTarget: target,
     transcriptState: sessionHistory.transcriptState,
+    transcriptNotice: runtimeState.transcriptNotice,
     chatSettings,
     sessionAuxiliaryError: transcriptSurfaceState.loadError,
-    runtimeReadiness,
+    interactionEnabled: runtimeState.interactionEnabled,
+    runtimePresentation,
     emptyState: transcriptSurfaceState.emptyState,
     pendingApprovalRequests: transcriptInteractions.pendingApprovalRequests,
     pendingQuestionRequests: transcriptInteractions.pendingQuestionRequests,

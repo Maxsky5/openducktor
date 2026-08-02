@@ -18,6 +18,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   isStreamingAssistantMessage,
   sessionAgentColors,
   sessionIdentity,
+  runtimePresentation,
   subagentPendingApprovalCount,
   subagentPendingQuestionCount,
   resolveRowRef,
@@ -30,6 +31,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
         isStreamingAssistantMessage={isStreamingAssistantMessage}
         sessionAgentColors={sessionAgentColors}
         sessionIdentity={sessionIdentity}
+        runtimePresentation={runtimePresentation}
         subagentPendingApprovalCount={subagentPendingApprovalCount}
         subagentPendingQuestionCount={subagentPendingQuestionCount}
       />
@@ -42,6 +44,7 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   modelCatalog = null,
   sessionAgentColors,
   sessionIdentity,
+  runtimePresentation,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
   resolveRowRef,
@@ -59,6 +62,7 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           )}
           sessionAgentColors={sessionAgentColors}
           sessionIdentity={sessionIdentity}
+          runtimePresentation={runtimePresentation}
           subagentPendingApprovalCount={readSubagentPendingApprovalCount(
             row,
             subagentPendingApprovalCountBySessionKey,

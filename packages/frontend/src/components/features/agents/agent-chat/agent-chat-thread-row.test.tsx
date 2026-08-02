@@ -15,6 +15,10 @@ const baseProps = {
     taskId: "task-1",
     role: "spec" as const,
   },
+  runtimePresentation: {
+    runtimeKind: "opencode" as const,
+    supportedApprovalReplyOutcomes: null,
+  },
 };
 
 describe("AgentChatThreadRow", () => {

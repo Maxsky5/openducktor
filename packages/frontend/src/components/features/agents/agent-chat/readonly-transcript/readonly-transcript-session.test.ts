@@ -21,18 +21,18 @@ const createHistoryMessage = (): AgentSessionHistoryMessage => ({
 });
 
 describe("createReadonlyTranscriptSession", () => {
-  test("preserves transcript target session scope", () => {
+  test("keeps transcript routing out of rendered session data", () => {
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "spec" as const };
 
-    expect(
-      createReadonlyTranscriptSession({
-        externalSessionId: "session-1",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        sessionScope,
-        history: [createHistoryMessage()],
-      }).sessionScope,
-    ).toEqual(sessionScope);
+    const session = createReadonlyTranscriptSession({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope,
+      history: [createHistoryMessage()],
+    });
+
+    expect("sessionScope" in session).toBe(false);
   });
 
   test("versions readonly transcripts when a system notice changes to a fork boundary", () => {

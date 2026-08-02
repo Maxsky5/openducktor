@@ -10,6 +10,7 @@ import {
   createRepoRuntimeHealthContextValue,
   createRuntimeDefinitionsContextValue,
 } from "@/pages/agents/agent-studio-test-utils";
+import { toAgentStudioTranscriptTarget } from "@/pages/agents/agent-studio-thread-session";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
@@ -33,7 +34,7 @@ import {
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { buildMessage, buildSession, buildThreadTranscriptState } from "./agent-chat-test-fixtures";
+import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,
@@ -50,19 +51,17 @@ const transcriptTarget: AgentSessionTranscriptTarget = {
 };
 
 const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): AgentChatThreadModel => {
-  const session = buildSession();
+  const session = overrides.session ?? buildSession();
 
   return {
     session,
     modelCatalog: null,
+    transcriptTarget: session,
     displayedSessionKey: agentSessionIdentityKey(session),
     isSessionWorking: false,
-    transcriptState: buildThreadTranscriptState(),
-    runtimeReadiness: {
-      state: "ready",
-      message: null,
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
+    runtimePresentation: {
+      runtimeKind: "opencode",
+      supportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
     },
     isInteractionEnabled: true,
     emptyState: null,
@@ -76,7 +75,6 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
     isSubmittingQuestionByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
     canReplyToApprovals: true,
-    runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
     isSubmittingApprovalByRequestId: {},
     approvalReplyErrorByRequestId: {},
     onReplyApproval: async () => {},
@@ -342,6 +340,10 @@ describe("AgentSessionTranscriptDialogHost", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
         }}
+        runtimePresentation={{
+          runtimeKind: "opencode",
+          supportedApprovalReplyOutcomes: null,
+        }}
         subagentPendingApprovalCount={1}
         subagentPendingQuestionCount={1}
       />,
@@ -367,6 +369,27 @@ describe("AgentSessionTranscriptDialogHost", () => {
   test("opens a linked subagent transcript from a Planner thread with its runtime kind", async () => {
     const { AgentChatThread } = await import("./agent-chat-thread");
     let request: OpenAgentSessionTranscriptRequest | null = null;
+    const plannerSession = buildSession({
+      role: "planner",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      messages: [
+        buildMessage("system", "Subagent (explorer): read file", {
+          id: "subagent-planner-running-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-planner-running-1",
+            correlationKey: "part:assistant-task-tool-running:subtask-planner",
+            status: "running",
+            agent: "explorer",
+            description: "Read omp.json file",
+            externalSessionId: "session-child-planner-1",
+            startedAtMs: 1_000,
+          },
+        }),
+      ],
+    });
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <QueryProvider useIsolatedClient>
@@ -385,26 +408,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const rendered = render(
       <AgentChatThread
         model={createThreadModel({
-          session: buildSession({
+          session: plannerSession,
+          transcriptTarget: toAgentStudioTranscriptTarget({
+            identity: plannerSession,
+            taskId: "task-1",
             role: "planner",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo-a",
-            messages: [
-              buildMessage("system", "Subagent (explorer): read file", {
-                id: "subagent-planner-running-1",
-                timestamp: "2026-02-22T10:49:37.000Z",
-                meta: {
-                  kind: "subagent",
-                  partId: "part-subagent-planner-running-1",
-                  correlationKey: "part:assistant-task-tool-running:subtask-planner",
-                  status: "running",
-                  agent: "explorer",
-                  description: "Read omp.json file",
-                  externalSessionId: "session-child-planner-1",
-                  startedAtMs: 1_000,
-                },
-              }),
-            ],
           }),
         })}
       />,

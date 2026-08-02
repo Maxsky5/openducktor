@@ -16,7 +16,6 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 
 const TRANSCRIPT_MODEL_PENDING_NOTICE: NonNullable<AgentChatThreadModel["transcriptNotice"]> =
   Object.freeze({
-    kind: "session_loading",
     severity: "loading",
     title: "Loading session",
     description: "Loading the selected conversation.",

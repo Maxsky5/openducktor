@@ -42,12 +42,10 @@ const transcriptHistoryVersion = (history: AgentSessionHistoryMessage[]): number
 export const createReadonlyTranscriptSession = ({
   externalSessionId,
   runtimeKind,
-  sessionScope,
   workingDirectory,
   history,
 }: ReadonlyTranscriptSessionInput): AgentChatThreadSession => ({
   ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  ...(sessionScope ? { sessionScope } : {}),
   activityState: null,
   runtimeStatusMessage: null,
   messages: createSessionMessagesState(

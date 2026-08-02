@@ -1,10 +1,13 @@
-import type { ChatSettings, RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type {
+  ChatSettings,
+  RuntimeApprovalReplyOutcome,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
-  AgentRole,
-  AgentSessionScope,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSkillReference,
@@ -13,11 +16,8 @@ import type {
   AgentSubagentCatalog,
   AgentSubagentReference,
 } from "@openducktor/core";
-import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -26,13 +26,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
-
-export type AgentRoleOption = {
-  role: AgentRole;
-  label: string;
-  icon: LucideIcon;
-  disabled?: boolean;
-};
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 export type AgentChatEmptyStateModel = {
   title: string;
@@ -44,7 +38,6 @@ export type AgentChatEmptyStateModel = {
 
 export type AgentChatThreadSession = AgentSessionIdentity & {
   title?: string;
-  sessionScope?: AgentSessionScope | null;
   activityState: AgentSessionActivityState | null;
   runtimeStatusMessage: string | null;
   messages: SessionMessagesState;
@@ -71,12 +64,18 @@ export type AgentChatTranscriptNotice = {
   action?: AgentChatTranscriptNoticeAction;
 };
 
+export type AgentChatRuntimePresentation = {
+  runtimeKind: RuntimeKind | null;
+  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"];
+  supportedApprovalReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
+};
+
 export type AgentChatThreadModel = {
   session: AgentChatThreadSession | null;
   modelCatalog: AgentModelCatalog | null;
+  transcriptTarget: AgentSessionTranscriptTarget | null;
   displayedSessionKey: string | null;
-  transcriptState: AgentSessionTranscriptState;
-  runtimeReadiness: RepoRuntimeReadiness;
+  runtimePresentation: AgentChatRuntimePresentation;
   isSessionWorking: boolean;
   isInteractionEnabled: boolean;
   emptyState: AgentChatEmptyStateModel | null;
@@ -93,7 +92,6 @@ export type AgentChatThreadModel = {
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   canReplyToApprovals: boolean;
-  runtimeSupportedApprovalReplyOutcomes?: readonly RuntimeApprovalReplyOutcome[] | null;
   isSubmittingApprovalByRequestId: Record<string, boolean>;
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
