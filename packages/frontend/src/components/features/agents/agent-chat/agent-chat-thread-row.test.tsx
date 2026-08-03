@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 
@@ -17,6 +17,7 @@ const createBaseProps = () => ({
   },
   runtimePresentation: {
     runtimeKind: "opencode" as const,
+    presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: null,
   },
 });

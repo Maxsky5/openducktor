@@ -1,6 +1,4 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
-import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
 import { findCatalogModel } from "@/lib/model-catalog-selection";
 import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
 import { SYSTEM_PROMPT_PREFIX } from "@/state/operations/agent-orchestrator/support/session-prompt";
@@ -40,18 +38,6 @@ export const formatRawJsonLikeText = (value: string): string => {
 };
 
 export { stripToolPrefix };
-
-export const toolDisplayName = (
-  tool: string,
-  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"],
-  displayLabel?: string,
-): string => {
-  const trimmedDisplayLabel = displayLabel?.trim();
-  if (trimmedDisplayLabel) {
-    return trimmedDisplayLabel;
-  }
-  return toOdtWorkflowToolDisplayName(tool, workflowToolAliasesByCanonical);
-};
 
 export const toSingleLineMarkdown = (value: string): string => {
   return value

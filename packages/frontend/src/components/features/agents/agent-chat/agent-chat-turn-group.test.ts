@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import {
   type AgentChatThreadMotionRowProps,
   type AgentChatTurnGroupProps,
@@ -45,6 +45,7 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
   sessionIdentity: createSessionIdentity(),
   runtimePresentation: {
     runtimeKind: "opencode",
+    presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: null,
   },
   subagentPendingApprovalCountBySessionKey: {},
@@ -62,6 +63,7 @@ const baseMotionRowProps = (
   sessionIdentity: createSessionIdentity(),
   runtimePresentation: {
     runtimeKind: "opencode",
+    presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: null,
   },
   subagentPendingApprovalCount: 0,
@@ -132,9 +134,10 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
           ...props,
           runtimePresentation: {
             ...props.runtimePresentation,
-            workflowToolAliasesByCanonical: {
-              odt_read_task: ["openducktor_odt_read_task"],
-            },
+            presentToolCall: (toolName) => ({
+              kind: "workflow",
+              displayName: toolName,
+            }),
           },
         }),
       ),

@@ -29,12 +29,15 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
 }: AgentChatMessageCardProps): ReactElement | null {
   const sessionRuntimeKind = runtimePresentation.runtimeKind;
   const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
-  const workflowToolAliasesByCanonical = runtimePresentation.workflowToolAliasesByCanonical;
+  const toolCallPresentation =
+    message.meta?.kind === "tool"
+      ? runtimePresentation.presentToolCall(message.meta.tool, message.meta.displayLabel)
+      : null;
   const vm = buildAgentChatMessageCardViewModel({
     message,
     sessionAgentColors,
     sessionRuntimeKind: sessionRuntimeKind ?? null,
-    workflowToolAliasesByCanonical,
+    toolCallPresentation,
   });
   return (
     <article className={vm.articleClassName} style={vm.articleStyle}>
@@ -54,7 +57,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
-        workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+        toolCallPresentation={toolCallPresentation}
         subagentPendingApprovalCount={subagentPendingApprovalCount}
         subagentPendingQuestionCount={subagentPendingQuestionCount}
       />

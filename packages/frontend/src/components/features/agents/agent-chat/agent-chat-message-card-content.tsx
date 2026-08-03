@@ -1,9 +1,7 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
   type AgentRole,
   type AgentUserMessageDisplayPart,
-  isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
@@ -22,6 +20,7 @@ import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
@@ -709,7 +708,7 @@ type MessageBodyProps = {
   timeLabel: string;
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
-  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
+  toolCallPresentation: AgentChatToolCallPresentation | null;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
 };
@@ -723,7 +722,7 @@ export const MessageBody = ({
   timeLabel,
   systemPromptBody,
   sessionWorkingDirectory,
-  workflowToolAliasesByCanonical,
+  toolCallPresentation,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
 }: MessageBodyProps): ReactElement => {
@@ -734,14 +733,17 @@ export const MessageBody = ({
   }
 
   if (meta?.kind === "tool") {
-    if (isOdtWorkflowMutationToolName(meta.tool, workflowToolAliasesByCanonical)) {
+    if (!toolCallPresentation) {
+      throw new Error(`Tool Call presentation is missing for ${meta.tool}.`);
+    }
+    if (toolCallPresentation.kind === "workflow") {
       return (
         <WorkflowToolMessage
           meta={meta}
           messageTimestamp={message.timestamp}
           timeLabel={timeLabel}
           sessionWorkingDirectory={sessionWorkingDirectory}
-          workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+          displayName={toolCallPresentation.displayName}
         />
       );
     }
@@ -752,7 +754,7 @@ export const MessageBody = ({
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
         sessionWorkingDirectory={sessionWorkingDirectory}
-        workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+        displayName={toolCallPresentation.displayName}
       />
     );
   }

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { buildSession, buildThreadTranscriptState } from "./agent-chat-test-fixtures";
-import { projectAgentChatThreadState } from "./agent-chat-thread-state";
+import { deriveAgentChatRuntimeState } from "./agent-chat-runtime-state";
 
 const readyRuntimeReadiness = {
   state: "ready" as const,
@@ -20,59 +17,11 @@ const historyFailure = {
   pageCursor: null,
 };
 
-describe("projectAgentChatThreadState", () => {
-  test("passes caller-owned transcript inputs through unchanged", () => {
-    const session = buildSession();
-    const transcriptTarget = {
-      externalSessionId: "external-route",
-      runtimeKind: "codex" as const,
-      workingDirectory: "/repo/routed-worktree",
-      sessionScope: {
-        kind: "workflow" as const,
-        taskId: "opaque-task",
-        role: "qa" as const,
-      },
-    };
-    const projection = projectAgentChatThreadState({
-      sessionKey: agentSessionIdentityKey(session),
-      session,
-      transcriptTarget,
-      transcriptState: buildThreadTranscriptState({ kind: "visible" }),
-      transcriptNotice: null,
-    });
-
-    expect(projection.threadSession).toBe(session);
-    expect(projection.transcriptTarget).toBe(transcriptTarget);
-    expect(projection.shouldResetTranscriptWindow).toBe(false);
-  });
-
-  test("hides and resets transcript rows from caller-supplied loading state", () => {
-    const session = buildSession();
-    const notice = {
-      kind: "session_loading" as const,
-      severity: "loading" as const,
-      title: "Loading archive",
-      description: "The caller is loading the selected archive.",
-    };
-    const projection = projectAgentChatThreadState({
-      sessionKey: agentSessionIdentityKey(session),
-      session,
-      transcriptTarget: session,
-      transcriptState: buildThreadTranscriptState({ kind: "session_loading", reason: "history" }),
-      transcriptNotice: notice,
-    });
-
-    expect(projection.threadSession).toBeNull();
-    expect(projection.shouldResetTranscriptWindow).toBe(true);
-    expect(projection.transcriptNotice).toBe(notice);
-  });
-});
-
 describe("deriveAgentChatRuntimeState", () => {
   test("enables interactions when the caller runtime is ready", () => {
     expect(
       deriveAgentChatRuntimeState({
-        transcriptState: buildThreadTranscriptState({ kind: "visible" }),
+        transcriptState: { kind: "visible" },
         runtimeReadiness: readyRuntimeReadiness,
       }),
     ).toEqual({
@@ -83,7 +32,7 @@ describe("deriveAgentChatRuntimeState", () => {
 
   test("projects a caller-owned loading notice while the runtime starts", () => {
     const state = deriveAgentChatRuntimeState({
-      transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
+      transcriptState: { kind: "runtime_waiting" },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         state: "checking",
@@ -107,7 +56,7 @@ describe("deriveAgentChatRuntimeState", () => {
       isPending: true,
     };
     const state = deriveAgentChatRuntimeState({
-      transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
+      transcriptState: { kind: "runtime_waiting" },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         state: "blocked",
@@ -129,7 +78,7 @@ describe("deriveAgentChatRuntimeState", () => {
   test("projects an explicit retry action for failed transcript loading", () => {
     const retry = () => {};
     const state = deriveAgentChatRuntimeState({
-      transcriptState: buildThreadTranscriptState({ kind: "failed", message: "History failed" }),
+      transcriptState: { kind: "failed", message: "History failed" },
       runtimeReadiness: readyRuntimeReadiness,
       failedTranscriptAction: {
         label: "Retry",
@@ -151,11 +100,11 @@ describe("deriveAgentChatRuntimeState", () => {
 
   test("surfaces failed selected-session history with diagnostic details", () => {
     const state = deriveAgentChatRuntimeState({
-      transcriptState: buildThreadTranscriptState({
+      transcriptState: {
         kind: "failed",
         message: historyFailure.summary,
         historyFailure,
-      }),
+      },
       runtimeReadiness: readyRuntimeReadiness,
     });
 
@@ -163,19 +112,19 @@ describe("deriveAgentChatRuntimeState", () => {
       kind: "session_failed",
       severity: "error",
       title: "Couldn't load conversation history",
-      description: "Codex returned invalid conversation history.",
+      description: historyFailure.summary,
       details: [
         { label: "Error", value: historyFailure.detail },
-        { label: "Method", value: "thread/turns/list" },
+        { label: "Method", value: historyFailure.method },
         { label: "Page cursor", value: "First page" },
-        { label: "Diagnostic ID", value: "diagnostic-1" },
+        { label: "Diagnostic ID", value: historyFailure.diagnosticId },
       ],
     });
   });
 
   test("keeps an incomplete-history warning for a visible transcript", () => {
     const state = deriveAgentChatRuntimeState({
-      transcriptState: buildThreadTranscriptState({ kind: "visible", historyFailure }),
+      transcriptState: { kind: "visible", historyFailure },
       runtimeReadiness: readyRuntimeReadiness,
     });
 
@@ -183,12 +132,12 @@ describe("deriveAgentChatRuntimeState", () => {
       kind: "session_history_warning",
       severity: "error",
       title: "History may be incomplete",
-      description: "Codex returned invalid conversation history.",
+      description: historyFailure.summary,
       details: [
         { label: "Error", value: historyFailure.detail },
-        { label: "Method", value: "thread/turns/list" },
+        { label: "Method", value: historyFailure.method },
         { label: "Page cursor", value: "First page" },
-        { label: "Diagnostic ID", value: "diagnostic-1" },
+        { label: "Diagnostic ID", value: historyFailure.diagnosticId },
       ],
     });
   });

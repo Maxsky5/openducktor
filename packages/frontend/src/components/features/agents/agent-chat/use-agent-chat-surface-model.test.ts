@@ -3,6 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { invokeStopAgentSession, useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 
 const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
@@ -60,21 +61,29 @@ describe("useAgentChatSurfaceModel", () => {
     };
     const runtimePresentation = {
       runtimeKind: "opencode" as const,
+      presentToolCall: presentRegularToolCall,
       supportedApprovalReplyOutcomes: null,
     };
 
     const rendered = renderHook(() =>
       useAgentChatSurfaceModel({
-        sessionKey: "standalone-session",
-        session,
-        transcriptTarget,
-        transcriptState: { kind: "visible" },
-        transcriptNotice: null,
+        transcript: {
+          kind: "session",
+          session,
+          target: transcriptTarget,
+          displayedSessionKey: "standalone-session",
+          shouldResetWindow: false,
+          notice: null,
+        },
         chatSettings: createChatSettingsFixture(),
         sessionAuxiliaryError: null,
         interactionEnabled: true,
         runtimePresentation,
-        emptyState: null,
+        emptyState: {
+          title: "Connect this chat",
+          actionLabel: "Connect",
+          onAction: () => {},
+        },
         pendingApprovalRequests: [],
         pendingQuestionRequests: [],
         todos: [],
@@ -95,6 +104,7 @@ describe("useAgentChatSurfaceModel", () => {
     expect(rendered.result.current.thread.session).toEqual(session);
     expect(rendered.result.current.thread.transcriptTarget).toBe(transcriptTarget);
     expect(rendered.result.current.thread.runtimePresentation).toBe(runtimePresentation);
+    expect(rendered.result.current.thread.isInteractionEnabled).toBe(true);
     expect(rendered.result.current.thread.canSubmitQuestionAnswers).toBe(true);
     expect(rendered.result.current.thread.canReplyToApprovals).toBe(true);
     rendered.unmount();

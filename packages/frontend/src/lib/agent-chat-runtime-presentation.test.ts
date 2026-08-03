@@ -3,29 +3,37 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
 
 describe("resolveAgentChatRuntimePresentation", () => {
-  test("projects tool aliases and approval outcomes above the chat render tree", () => {
-    expect(
-      resolveAgentChatRuntimePresentation({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimeKind: "opencode",
-      }),
-    ).toEqual({
+  test("projects tool presentation and approval outcomes above the chat render tree", () => {
+    const presentation = resolveAgentChatRuntimePresentation({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeKind: "opencode",
-      workflowToolAliasesByCanonical: OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-      supportedApprovalReplyOutcomes:
-        OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.supportedReplyOutcomes,
+    });
+
+    expect(presentation.runtimeKind).toBe("opencode");
+    expect(presentation.supportedApprovalReplyOutcomes).toEqual(
+      OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.supportedReplyOutcomes,
+    );
+    expect(presentation.presentToolCall("openducktor_odt_set_spec")).toEqual({
+      kind: "workflow",
+      displayName: "set_spec",
+    });
+    expect(presentation.presentToolCall("bash", "Shell command")).toEqual({
+      kind: "regular",
+      displayName: "Shell command",
     });
   });
 
   test("keeps non-runtime chats explicit", () => {
-    expect(
-      resolveAgentChatRuntimePresentation({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        runtimeKind: null,
-      }),
-    ).toEqual({
+    const presentation = resolveAgentChatRuntimePresentation({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeKind: null,
-      supportedApprovalReplyOutcomes: null,
+    });
+
+    expect(presentation.runtimeKind).toBeNull();
+    expect(presentation.supportedApprovalReplyOutcomes).toBeNull();
+    expect(presentation.presentToolCall("custom_tool")).toEqual({
+      kind: "regular",
+      displayName: "custom_tool",
     });
   });
 });

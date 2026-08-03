@@ -2,17 +2,13 @@ import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
   AgentChatRuntimePresentation,
   AgentChatSurfaceModel,
-  AgentChatThreadSession,
-  AgentChatTranscriptNotice,
+  AgentChatTranscriptPresentation,
 } from "./agent-chat.types";
-import { projectAgentChatThreadState } from "./agent-chat-thread-state";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import {
   type AgentChatComposerConfig,
   invokeStopAgentSession,
@@ -30,12 +26,8 @@ export { invokeStopAgentSession };
 const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
 
 type UseAgentChatSurfaceModelArgs = {
-  sessionKey: string | null;
   modelCatalog?: AgentModelCatalog | null;
-  session: AgentChatThreadSession | null;
-  transcriptTarget: AgentSessionTranscriptTarget | null;
-  transcriptState: AgentSessionTranscriptState;
-  transcriptNotice: AgentChatTranscriptNotice | null;
+  transcript: AgentChatTranscriptPresentation;
   chatSettings: ChatSettings;
   sessionAuxiliaryError: string | null;
   interactionEnabled: boolean;
@@ -54,12 +46,8 @@ type UseAgentChatSurfaceModelArgs = {
 };
 
 export function useAgentChatSurfaceModel({
-  sessionKey,
   modelCatalog,
-  session,
-  transcriptTarget,
-  transcriptState,
-  transcriptNotice,
+  transcript,
   chatSettings,
   sessionAuxiliaryError,
   interactionEnabled,
@@ -76,18 +64,11 @@ export function useAgentChatSurfaceModel({
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
-  const threadState = projectAgentChatThreadState({
-    sessionKey,
-    session,
-    transcriptTarget,
-    transcriptState,
-    transcriptNotice,
-  });
-  const isSessionWorking = isAgentSessionActivityWorking(threadState.threadSession?.activityState);
+  const isSessionWorking = isAgentSessionActivityWorking(transcript.session?.activityState);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
-      displayedSessionKey: threadState.displayedSessionKey,
+      displayedSessionKey: transcript.displayedSessionKey,
       syncBottomAfterComposerLayoutRef,
     });
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
@@ -117,12 +98,11 @@ export function useAgentChatSurfaceModel({
     syncBottomAfterComposerLayoutRef,
   });
   const threadModel = useAgentChatThreadModel({
-    threadState,
     modelCatalog: modelCatalog ?? null,
+    transcript,
     interactionEnabled,
     runtimePresentation,
     isSessionWorking,
-    hasComposer,
     composerActivity,
     sessionAuxiliaryError,
     emptyState,

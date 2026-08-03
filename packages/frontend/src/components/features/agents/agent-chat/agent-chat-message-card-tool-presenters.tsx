@@ -1,4 +1,3 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   FileText,
   Folder,
@@ -22,7 +21,6 @@ import {
   hasNonEmptyText,
   type QuestionToolDetail,
   questionToolDetails,
-  toolDisplayName,
 } from "./agent-chat-message-card-model";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
@@ -132,7 +130,7 @@ type WorkflowToolMessageProps = {
   messageTimestamp: string;
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
-  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
+  displayName: string;
 };
 
 export const WorkflowToolMessage = ({
@@ -140,7 +138,7 @@ export const WorkflowToolMessage = ({
   messageTimestamp,
   timeLabel,
   sessionWorkingDirectory,
-  workflowToolAliasesByCanonical,
+  displayName,
 }: WorkflowToolMessageProps): ReactElement => {
   const durationMs = getToolDuration(meta, messageTimestamp);
   const hasInput = hasNonEmptyInput(meta.input);
@@ -188,9 +186,7 @@ export const WorkflowToolMessage = ({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <span className={foregroundClassName}>{toolIcon(meta)}</span>
-        <p className={cn("text-[11px] font-semibold", foregroundClassName)}>
-          {toolDisplayName(meta.tool, workflowToolAliasesByCanonical, meta.displayLabel)}
-        </p>
+        <p className={cn("text-[11px] font-semibold", foregroundClassName)}>{displayName}</p>
         {statusLabel ? (
           <span
             className={cn(
@@ -248,7 +244,7 @@ type RegularToolMessageProps = {
   messageTimestamp: string;
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
-  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
+  displayName: string;
 };
 
 export const RegularToolMessage = ({
@@ -257,7 +253,7 @@ export const RegularToolMessage = ({
   messageTimestamp,
   timeLabel,
   sessionWorkingDirectory,
-  workflowToolAliasesByCanonical,
+  displayName,
 }: RegularToolMessageProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
@@ -304,9 +300,7 @@ export const RegularToolMessage = ({
       >
         {toolIcon(meta)}
       </span>
-      <p className="shrink-0 font-medium text-current">
-        {toolDisplayName(meta.tool, workflowToolAliasesByCanonical, meta.displayLabel)}
-      </p>
+      <p className="shrink-0 font-medium text-current">{displayName}</p>
       {summaryText.length > 0 ? (
         <p className="truncate text-muted-foreground">{summaryText}</p>
       ) : null}

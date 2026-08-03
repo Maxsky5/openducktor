@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { type ComponentProps, createElement as createReactElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
+import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import {
   AgentSessionTranscriptDialogContext,
   type AgentSessionTranscriptDialogContextValue,
@@ -16,15 +17,11 @@ import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 const createDefaultTestChatSettings = () => createChatSettingsFixture();
 const createDefaultTestRuntimePresentation = (): ComponentProps<
   typeof AgentChatMessageCard
->["runtimePresentation"] => ({
-  runtimeKind: "opencode" as const,
-  workflowToolAliasesByCanonical: structuredClone(
-    OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-  ),
-  supportedApprovalReplyOutcomes: [
-    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.supportedReplyOutcomes,
-  ],
-});
+>["runtimePresentation"] =>
+  resolveAgentChatRuntimePresentation({
+    runtimeDefinitions: [structuredClone(OPENCODE_RUNTIME_DESCRIPTOR)],
+    runtimeKind: "opencode",
+  });
 const createDefaultTestSessionIdentity = (): ParentSessionRuntimeContext => ({
   runtimeKind: "opencode",
   workingDirectory: "/repo",
@@ -455,6 +452,68 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain(">update_plan<");
   });
 
+  test("renders caller-classified workflow tools without ODT metadata", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "custom-workflow-tool",
+          role: "tool",
+          content: "Tool deploy running",
+          timestamp: "2026-02-20T19:00:02.500Z",
+          meta: {
+            kind: "tool",
+            partId: "custom-workflow-part",
+            callId: "custom-workflow-call",
+            tool: "deploy",
+            toolType: "generic",
+            status: "running",
+          },
+        },
+        runtimePresentation: {
+          runtimeKind: null,
+          presentToolCall: () => ({
+            kind: "workflow",
+            displayName: "Deploy release",
+          }),
+          supportedApprovalReplyOutcomes: null,
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Deploy release");
+    expect(html).toContain("RUNNING");
+  });
+
+  test("does not use tool title as the visible tool label", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-read-path-title",
+          role: "tool",
+          content: "Tool read completed",
+          timestamp: "2026-02-22T10:20:35.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-read-path-title",
+            callId: "call-read-path-title",
+            tool: "read",
+            toolType: "read",
+            title: "/repo/src/app.ts",
+            status: "completed",
+            input: { path: "/repo/src/app.ts" },
+            output: "contents",
+          },
+        },
+        sessionAgentColors: {},
+        sessionIdentity: null,
+      }),
+    );
+
+    expect(html).toContain('<p class="shrink-0 font-medium text-current">read</p>');
+    expect(html).not.toContain('<p class="shrink-0 font-medium text-current">/repo/src/app.ts</p>');
+    expect(html).toContain('<p class="truncate text-muted-foreground">/repo/src/app.ts</p>');
+  });
   test("renders file tool summaries relative to the session working directory", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -1259,6 +1318,7 @@ describe("AgentChatMessageCard tool duration", () => {
         },
         runtimePresentation: {
           runtimeKind: "codex",
+          presentToolCall: presentRegularToolCall,
           supportedApprovalReplyOutcomes: null,
         },
         sessionAgentColors: {},
@@ -1558,6 +1618,7 @@ describe("AgentChatMessageCard tool duration", () => {
         },
         runtimePresentation: {
           runtimeKind: "codex",
+          presentToolCall: presentRegularToolCall,
           supportedApprovalReplyOutcomes: null,
         },
         sessionAgentColors: {},

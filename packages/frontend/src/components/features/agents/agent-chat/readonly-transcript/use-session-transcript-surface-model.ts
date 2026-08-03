@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
 import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
+import { resolveAgentChatTranscriptPresentation } from "@/lib/agent-chat-transcript-presentation";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -106,14 +107,27 @@ export function useSessionTranscriptSurfaceModel({
       }),
     [runtimeDefinitions, target?.runtimeKind],
   );
+  const transcript = useMemo(
+    () =>
+      resolveAgentChatTranscriptPresentation({
+        sessionKey,
+        session: sessionHistory.session,
+        target,
+        state: sessionHistory.transcriptState,
+        notice: runtimeState.transcriptNotice,
+      }),
+    [
+      runtimeState.transcriptNotice,
+      sessionHistory.session,
+      sessionHistory.transcriptState,
+      sessionKey,
+      target,
+    ],
+  );
 
   const model = useAgentChatSurfaceModel({
-    sessionKey,
     modelCatalog: modelCatalogQuery.data ?? null,
-    session: sessionHistory.session,
-    transcriptTarget: target,
-    transcriptState: sessionHistory.transcriptState,
-    transcriptNotice: runtimeState.transcriptNotice,
+    transcript,
     chatSettings,
     sessionAuxiliaryError: transcriptSurfaceState.loadError,
     interactionEnabled: runtimeState.interactionEnabled,

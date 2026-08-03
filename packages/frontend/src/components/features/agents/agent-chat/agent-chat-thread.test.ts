@@ -18,7 +18,6 @@ import {
   buildMessage,
   buildQuestionRequest,
   buildSession,
-  buildThreadTranscriptState,
   buildTodoItem,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
@@ -31,6 +30,11 @@ import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+const RUNTIME_STARTING_NOTICE = {
+  severity: "loading" as const,
+  title: "Runtime is starting",
+  description: "Waiting for runtime and MCP health before loading this session.",
+};
 
 const AgentChatThread = ({ model }: { model: AgentChatThreadModelInput }) =>
   createElement(
@@ -310,13 +314,15 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "runtime_waiting",
-          }),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "blocked",
-            message: "OpenCode runtime is unavailable",
+          transcriptNotice: {
+            kind: "runtime_blocked",
+            severity: "error",
+            title: "Runtime unavailable",
+            description: "OpenCode runtime is unavailable",
+            action: {
+              label: "Recheck",
+              onAction: () => {},
+            },
           },
           isInteractionEnabled: false,
           session: null,
@@ -335,11 +341,6 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "blocked",
-            message: "OpenCode runtime is unavailable",
-          },
           isInteractionEnabled: false,
           session: buildSession({
             messages: [
@@ -390,11 +391,18 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "failed",
-            message: failure.summary,
-            historyFailure: failure,
-          }),
+          transcriptNotice: {
+            kind: "session_failed",
+            severity: "error",
+            title: "Couldn't load conversation history",
+            description: failure.summary,
+            details: [
+              { label: "Error", value: failure.detail },
+              { label: "Method", value: failure.method },
+              { label: "Page cursor", value: "First page" },
+              { label: "Diagnostic ID", value: failure.diagnosticId },
+            ],
+          },
           isInteractionEnabled: false,
           session: null,
         },
@@ -414,13 +422,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "runtime_waiting",
-          }),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "checking",
-          },
+          transcriptNotice: RUNTIME_STARTING_NOTICE,
           isInteractionEnabled: false,
           session: buildSession({
             messages: [
@@ -443,9 +445,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "runtime_waiting",
-          }),
+          transcriptNotice: RUNTIME_STARTING_NOTICE,
           session: buildSession({
             messages: [
               buildMessage("assistant", "Cached transcript", {
@@ -467,10 +467,6 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "checking",
-          },
           isInteractionEnabled: false,
           session: buildSession({
             messages: [
@@ -1134,14 +1130,14 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
+          session: null,
+          shouldResetTranscriptWindow: true,
+          transcriptNotice: {
             kind: "session_loading",
-            reason: "preparing",
-          }),
-          session: buildSession({
-            externalSessionId: "session-loading",
-            messages: [buildMessage("assistant", "Loading", { id: "assistant-1" })],
-          }),
+            severity: "loading",
+            title: "Loading session",
+            description: "Preparing the selected session view.",
+          },
         },
       }),
     );
@@ -1155,18 +1151,14 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
+          session: null,
+          shouldResetTranscriptWindow: true,
+          transcriptNotice: {
             kind: "session_loading",
-            reason: "history",
-          }),
-          session: buildSession({
-            externalSessionId: "session-history-loading",
-            messages: [
-              buildMessage("assistant", "Old cached message", {
-                id: "assistant-old-1",
-              }),
-            ],
-          }),
+            severity: "loading",
+            title: "Loading session",
+            description: "Loading the selected conversation.",
+          },
         },
       }),
     );
@@ -1198,7 +1190,6 @@ describe("AgentChatThread", () => {
     });
     const model = {
       ...buildBaseModel(),
-      transcriptState: buildThreadTranscriptState({ kind: "visible" }),
       session,
     };
 

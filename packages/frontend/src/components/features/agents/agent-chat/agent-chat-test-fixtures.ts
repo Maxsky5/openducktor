@@ -6,11 +6,8 @@ import type {
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { createRef } from "react";
-import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -22,10 +19,13 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { AgentRoleOption } from "../agent-studio-header.types";
-import type { AgentChatThreadModel, AgentChatThreadSession } from "./agent-chat.types";
+import type {
+  AgentChatThreadModel,
+  AgentChatThreadSession,
+  AgentChatToolCallPresentation,
+} from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
 import { toAgentChatThreadSession } from "./agent-chat-thread-session";
-import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -127,24 +127,16 @@ export const buildSession = (
   });
 };
 
-type TranscriptStateFixtureInput =
-  | AgentSessionTranscriptState
-  | { kind: "failed"; message?: string };
-
-export const buildThreadTranscriptState = (
-  transcriptState: TranscriptStateFixtureInput = { kind: "visible" },
-): AgentSessionTranscriptState =>
-  transcriptState.kind === "failed"
-    ? {
-        kind: "failed",
-        message: transcriptState.message ?? "The selected conversation could not be loaded.",
-        ...("historyFailure" in transcriptState
-          ? { historyFailure: transcriptState.historyFailure }
-          : {}),
-      }
-    : transcriptState;
+export const presentRegularToolCall = (
+  toolName: string,
+  displayLabel?: string,
+): AgentChatToolCallPresentation => ({
+  kind: "regular",
+  displayName: displayLabel?.trim() || toolName,
+});
 
 type AgentChatThreadProjectionFields =
+  | "session"
   | "transcriptTarget"
   | "displayedSessionKey"
   | "shouldResetTranscriptWindow"
@@ -163,23 +155,14 @@ export type AgentChatThreadModelInput = Omit<
 > &
   Partial<
     Pick<AgentChatThreadModel, AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults>
-  > & {
-    transcriptState: AgentSessionTranscriptState;
-    runtimeReadiness: RepoRuntimeReadiness;
-  };
+  >;
 
 export const buildBaseModel = () => ({
   isSessionWorking: false,
-  transcriptState: buildThreadTranscriptState(),
-  runtimeReadiness: {
-    state: "ready" as const,
-    message: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  },
   isInteractionEnabled: true,
   runtimePresentation: {
     runtimeKind: "opencode" as const,
+    presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
   },
   emptyState: {
@@ -204,36 +187,18 @@ export const buildBaseModel = () => ({
 });
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
-  const runtimeState = deriveAgentChatRuntimeState({
-    transcriptState: model.transcriptState,
-    runtimeReadiness: model.runtimeReadiness,
-    runtimeBlockedAction: {
-      label: "Recheck",
-      onAction: () => {
-        void model.runtimeReadiness.refreshChecks();
-      },
-      disabled: model.runtimeReadiness.isLoadingChecks,
-      isPending: model.runtimeReadiness.isLoadingChecks,
-    },
-  });
-  const threadState = projectAgentChatThreadState({
-    sessionKey:
-      model.displayedSessionKey ?? (model.session ? agentSessionIdentityKey(model.session) : null),
-    session: model.session,
-    transcriptTarget: model.transcriptTarget ?? model.session,
-    transcriptState: model.transcriptState,
-    transcriptNotice: model.transcriptNotice ?? runtimeState.transcriptNotice,
-  });
+  const session = model.session ?? null;
 
   return {
     ...model,
     modelCatalog: model.modelCatalog ?? null,
     runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
-    session: threadState.threadSession,
-    transcriptTarget: threadState.transcriptTarget,
-    displayedSessionKey: threadState.displayedSessionKey,
-    shouldResetTranscriptWindow: threadState.shouldResetTranscriptWindow,
-    transcriptNotice: threadState.transcriptNotice,
+    session,
+    transcriptTarget: model.transcriptTarget ?? session,
+    displayedSessionKey:
+      model.displayedSessionKey ?? (session ? agentSessionIdentityKey(session) : null),
+    shouldResetTranscriptWindow: model.shouldResetTranscriptWindow ?? false,
+    transcriptNotice: model.transcriptNotice ?? null,
     pendingApprovalRequests: model.pendingApprovalRequests ?? [],
     pendingQuestionRequests: model.pendingQuestionRequests ?? [],
     todos: model.todos ?? [],

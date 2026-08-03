@@ -7,6 +7,7 @@ import { withCapturedConsole } from "@/test-utils/console-capture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
+import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 
 enableReactActEnvironment();
 
@@ -23,6 +24,7 @@ const createElement = (
     sessionIdentity: null,
     runtimePresentation: {
       runtimeKind: null,
+      presentToolCall: presentRegularToolCall,
       supportedApprovalReplyOutcomes: null,
     },
     ...props,

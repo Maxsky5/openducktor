@@ -1,7 +1,6 @@
 import type {
   ChatSettings,
   RuntimeApprovalReplyOutcome,
-  RuntimeDescriptor,
   RuntimeKind,
 } from "@openducktor/contracts";
 import type {
@@ -64,9 +63,34 @@ export type AgentChatTranscriptNotice = {
   action?: AgentChatTranscriptNoticeAction;
 };
 
+type AgentChatTranscriptPresentationBase = {
+  target: AgentSessionTranscriptTarget | null;
+  displayedSessionKey: string | null;
+  notice: AgentChatTranscriptNotice | null;
+};
+
+export type AgentChatTranscriptPresentation = AgentChatTranscriptPresentationBase &
+  (
+    | {
+        kind: "session";
+        session: AgentChatThreadSession;
+        shouldResetWindow: false;
+      }
+    | {
+        kind: "empty";
+        session: null;
+        shouldResetWindow: boolean;
+      }
+  );
+
+export type AgentChatToolCallPresentation = {
+  kind: "regular" | "workflow";
+  displayName: string;
+};
+
 export type AgentChatRuntimePresentation = {
   runtimeKind: RuntimeKind | null;
-  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"];
+  presentToolCall: (toolName: string, displayLabel?: string) => AgentChatToolCallPresentation;
   supportedApprovalReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
 };
 

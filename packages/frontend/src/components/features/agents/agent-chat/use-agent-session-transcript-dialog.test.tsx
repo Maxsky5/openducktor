@@ -34,7 +34,7 @@ import {
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
+import { buildMessage, buildSession, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,
@@ -61,6 +61,7 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
     isSessionWorking: false,
     runtimePresentation: {
       runtimeKind: "opencode",
+      presentToolCall: presentRegularToolCall,
       supportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
     },
     isInteractionEnabled: true,
@@ -342,6 +343,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         }}
         runtimePresentation={{
           runtimeKind: "opencode",
+          presentToolCall: presentRegularToolCall,
           supportedApprovalReplyOutcomes: null,
         }}
         subagentPendingApprovalCount={1}

@@ -6,8 +6,8 @@ import type {
   AgentChatEmptyStateModel,
   AgentChatRuntimePresentation,
   AgentChatThreadModel,
+  AgentChatTranscriptPresentation,
 } from "./agent-chat.types";
-import type { AgentChatThreadState } from "./agent-chat-thread-state";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -31,12 +31,11 @@ type AgentChatThreadComposerActivity = {
 } | null;
 
 type UseAgentChatThreadModelArgs = {
-  threadState: AgentChatThreadState;
   modelCatalog: AgentModelCatalog | null;
+  transcript: AgentChatTranscriptPresentation;
   interactionEnabled: boolean;
   runtimePresentation: AgentChatRuntimePresentation;
   isSessionWorking: boolean;
-  hasComposer: boolean;
   composerActivity: AgentChatThreadComposerActivity;
   sessionAuxiliaryError: string | null;
   emptyState: AgentChatEmptyStateModel | null;
@@ -55,12 +54,11 @@ type UseAgentChatThreadModelArgs = {
 };
 
 export function useAgentChatThreadModel({
-  threadState,
   modelCatalog,
+  transcript,
   interactionEnabled,
   runtimePresentation,
   isSessionWorking,
-  hasComposer,
   composerActivity,
   sessionAuxiliaryError,
   emptyState,
@@ -77,13 +75,7 @@ export function useAgentChatThreadModel({
   scrollToBottomOnSendRef,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatThreadModelArgs): AgentChatThreadModel {
-  const {
-    threadSession,
-    transcriptTarget,
-    displayedSessionKey,
-    shouldResetTranscriptWindow,
-    transcriptNotice,
-  } = threadState;
+  const { session, target, displayedSessionKey, shouldResetWindow, notice } = transcript;
   const [todoPanelCollapsedBySessionKey, setTodoPanelCollapsedBySessionKey] = useState<
     Record<string, boolean>
   >({});
@@ -106,13 +98,13 @@ export function useAgentChatThreadModel({
 
   return useMemo(
     () => ({
-      session: threadSession,
+      session,
       modelCatalog,
-      transcriptTarget,
+      transcriptTarget: target,
       displayedSessionKey,
       runtimePresentation,
       isSessionWorking,
-      isInteractionEnabled: hasComposer && interactionEnabled,
+      isInteractionEnabled: interactionEnabled,
       emptyState,
       isStarting: composerActivity?.isStarting ?? false,
       isSending: composerActivity?.isSending ?? false,
@@ -133,8 +125,8 @@ export function useAgentChatThreadModel({
       approvalReplyErrorByRequestId: approvals.errorByRequestId,
       onReplyApproval: approvals.onReply,
       sessionAuxiliaryError,
-      shouldResetTranscriptWindow,
-      transcriptNotice,
+      shouldResetTranscriptWindow: shouldResetWindow,
+      transcriptNotice: notice,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
       messagesContainerRef,
@@ -150,7 +142,6 @@ export function useAgentChatThreadModel({
       composerActivity,
       emptyState,
       handleToggleTodoPanel,
-      hasComposer,
       interactionEnabled,
       isSessionWorking,
       messagesContainerRef,
@@ -164,13 +155,13 @@ export function useAgentChatThreadModel({
       sessionAgentColors,
       todos,
       sessionAuxiliaryError,
-      shouldResetTranscriptWindow,
+      shouldResetWindow,
       subagentPendingApprovalCountBySessionKey,
       subagentPendingQuestionCountBySessionKey,
       syncBottomAfterComposerLayoutRef,
-      threadSession,
-      transcriptTarget,
-      transcriptNotice,
+      session,
+      target,
+      notice,
     ],
   );
 }

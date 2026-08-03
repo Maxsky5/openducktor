@@ -14,6 +14,7 @@ import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
 import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
+import { resolveAgentChatTranscriptPresentation } from "@/lib/agent-chat-transcript-presentation";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
@@ -278,6 +279,23 @@ export function useAgentStudioChatModel({
       }),
     [runtimeDefinitions, selectedSessionIdentity?.runtimeKind],
   );
+  const transcript = useMemo(
+    () =>
+      resolveAgentChatTranscriptPresentation({
+        sessionKey: selectedSessionKey,
+        session: activeThreadSession,
+        target: transcriptTarget,
+        state: selectedSessionTranscriptState,
+        notice: runtimeState.transcriptNotice,
+      }),
+    [
+      activeThreadSession,
+      runtimeState.transcriptNotice,
+      selectedSessionKey,
+      selectedSessionTranscriptState,
+      transcriptTarget,
+    ],
+  );
   const draftStateKey = agentStudioChatDraftScopeKey(composer.workspaceId, composer.draftScope);
   const composerDraftScope = useMemo<AgentChatDraftScope>(
     () => ({
@@ -410,12 +428,8 @@ export function useAgentStudioChatModel({
   );
 
   const surfaceModel = useAgentChatSurfaceModel({
-    sessionKey: selectedSessionKey,
     modelCatalog: selectedSessionRuntimeData.modelCatalog,
-    session: activeThreadSession,
-    transcriptTarget,
-    transcriptState: selectedSessionTranscriptState,
-    transcriptNotice: runtimeState.transcriptNotice,
+    transcript,
     chatSettings,
     sessionAuxiliaryError: selectedSessionAuxiliaryError ?? selectedSessionRuntimeData.error,
     interactionEnabled: runtimeState.interactionEnabled,
