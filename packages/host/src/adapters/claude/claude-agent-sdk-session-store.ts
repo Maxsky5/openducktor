@@ -3,7 +3,6 @@ import { agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
-import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -24,7 +23,6 @@ const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.activeSdkUserTurnCount > 0 ||
   session.pendingUserTurnCount > 0 ||
   session.queuedSdkMessages.length > 0 ||
-  hasActiveClaudeBackgroundWork(session) ||
   session.pendingApprovals.size > 0 ||
   session.pendingQuestions.size > 0;
 

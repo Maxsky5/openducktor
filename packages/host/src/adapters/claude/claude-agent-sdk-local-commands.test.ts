@@ -261,6 +261,23 @@ describe("Claude local slash commands", () => {
       session,
       timestamp,
     });
+    handleClaudeSdkMessage({
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "session_state_changed",
+        state: "idle",
+        uuid: "local-command-idle",
+        session_id: "session-1",
+      }),
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      session,
+      timestamp,
+    });
 
     expect(session.activeSdkUserTurnCount).toBe(0);
     expect(session.pendingUserTurnCount).toBe(0);

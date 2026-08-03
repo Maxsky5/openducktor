@@ -26,26 +26,8 @@ const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(context.session.identity, (current) => withRunningStatus(current));
 };
 
-const isBackgroundSubagentPart = (part: Extract<SessionPart, { kind: "subagent" }>): boolean => {
-  return part.executionMode === "background";
-};
-
-const isTerminalSubagentPart = (part: Extract<SessionPart, { kind: "subagent" }>): boolean => {
-  return part.status === "completed" || part.status === "cancelled" || part.status === "error";
-};
-
 const isInactiveSessionStatus = (status: AgentSessionState["status"]): boolean => {
   return status === "idle" || status === "stopped" || status === "error";
-};
-
-const shouldPreserveInactiveStatusForSubagentPart = (
-  session: AgentSessionState,
-  part: Extract<SessionPart, { kind: "subagent" }>,
-): boolean => {
-  return (
-    isInactiveSessionStatus(session.status) &&
-    (isBackgroundSubagentPart(part) || isTerminalSubagentPart(part))
-  );
 };
 
 const shouldRecordPartAsTurnActivity = (
@@ -58,7 +40,7 @@ const shouldRecordPartAsTurnActivity = (
 
   const current = context.store.readSession(context.session.identity);
   // If the live session is unavailable, keep the existing activity path because inactivity cannot be proven.
-  return current ? !shouldPreserveInactiveStatusForSubagentPart(current, part) : true;
+  return current ? !isInactiveSessionStatus(current.status) : true;
 };
 
 const resolvePartModelSelection = (
@@ -266,12 +248,8 @@ const handleSubagentPart = (
       ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
       ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
     };
-    const status = shouldPreserveInactiveStatusForSubagentPart(prepared, part)
-      ? prepared.status
-      : "running";
     return {
       ...prepared,
-      status,
       messages: upsertSubagentMessage({
         owner: prepared,
         incomingMeta,

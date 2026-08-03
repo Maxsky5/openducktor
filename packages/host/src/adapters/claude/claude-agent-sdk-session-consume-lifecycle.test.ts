@@ -146,6 +146,13 @@ describe("consumeClaudeSession lifecycle", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 0, output_tokens: 0 },
         }),
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "session_state_changed",
+          state: "idle",
+          uuid: "state-idle-1",
+          session_id: "session-1",
+        }),
       ]),
       queue,
       queuedSdkMessages: [queuedMessage],
@@ -232,7 +239,7 @@ describe("consumeClaudeSession lifecycle", () => {
     await consumePromise;
   });
 
-  test("flushes queued input after terminal result completion without waiting for SDK idle", async () => {
+  test("flushes queued input when the SDK reports the completed turn idle", async () => {
     const events: AgentEvent[] = [];
     const pushed: SDKUserMessage[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();
@@ -274,6 +281,13 @@ describe("consumeClaudeSession lifecycle", () => {
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 0, output_tokens: 0 },
+      }),
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "session_state_changed",
+        state: "idle",
+        uuid: "state-idle-1",
+        session_id: "session-1",
       }),
     ]);
     const session = createClaudeSession({
@@ -350,6 +364,13 @@ describe("consumeClaudeSession lifecycle", () => {
           stop_reason: "end_turn",
           terminal_reason: "completed",
           usage: { input_tokens: 0, output_tokens: 0 },
+        }),
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "session_state_changed",
+          state: "idle",
+          uuid: "state-idle-queued",
+          session_id: "session-1",
         }),
       ]),
       {

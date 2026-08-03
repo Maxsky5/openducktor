@@ -113,11 +113,6 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       "assistant_message",
       "session_idle",
     ]);
-    expect(events.at(-1)).toEqual(
-      expect.objectContaining({
-        type: "session_idle",
-      }),
-    );
     expect(session.activity).toBe("idle");
   });
 

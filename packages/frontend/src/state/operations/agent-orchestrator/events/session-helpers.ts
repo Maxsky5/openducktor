@@ -1,5 +1,6 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
+import { findLastSessionMessage } from "../support/messages";
 import type { SessionLifecycleEventContext, SessionPart } from "./session-event-types";
 
 export const eventTimestampMs = (timestamp: string): number => {
@@ -37,6 +38,20 @@ const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean =>
   );
 };
 
+const hasRuntimeActivitySincePendingMessage = (current: AgentSessionState): boolean => {
+  const pendingMessageStartedAt = current.pendingUserMessageStartedAt;
+  if (pendingMessageStartedAt === undefined) {
+    return false;
+  }
+
+  const lastMessage = findLastSessionMessage(current);
+  return (
+    lastMessage !== undefined &&
+    lastMessage.role !== "user" &&
+    eventTimestampMs(lastMessage.timestamp) >= pendingMessageStartedAt
+  );
+};
+
 export const settleSessionToIdle = (
   context: Pick<SessionLifecycleEventContext, "session" | "store">,
   timestamp: string,
@@ -49,7 +64,8 @@ export const settleSessionToIdle = (
     if (
       current.pendingUserMessageStartedAt !== undefined &&
       current.pendingApprovals.length === 0 &&
-      current.pendingQuestions.length === 0
+      current.pendingQuestions.length === 0 &&
+      !hasRuntimeActivitySincePendingMessage(current)
     ) {
       return current;
     }

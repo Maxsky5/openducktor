@@ -113,7 +113,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         replyApproval: async () => {},
       };
 
-      const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+      const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "running" })]);
       const updateSession = createSessionUpdater(sessionsRef);
       const recordedActivityTimestamps: Array<string | number> = [];
 
@@ -185,12 +185,18 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
           status: "running",
           description: "Background task still running",
           externalSessionId: "child-background-session",
-          executionMode: "background",
           startedAtMs: Date.parse("2026-02-22T08:00:02.000Z"),
         },
       });
 
       expect(findSession(sessionsRef, "session-1")?.status).toBe(inactiveStatus);
+      const runningSubagentMessage = getSessionMessages(sessionsRef).find(
+        (message) => message.role === "system" && message.meta?.kind === "subagent",
+      );
+      if (runningSubagentMessage?.meta?.kind !== "subagent") {
+        throw new Error("Expected running subagent message with subagent meta");
+      }
+      expect(runningSubagentMessage.meta.executionMode).toBe("background");
       expect(recordedActivityTimestamps).toEqual([Date.parse("2026-02-22T08:00:02.000Z")]);
 
       handleEvent({
@@ -224,7 +230,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     },
   );
 
-  test("keeps an idle parent idle when a foreground subagent completes late", async () => {
+  test("keeps a hydrated idle parent idle when a background subagent update omits its mode", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -235,7 +241,82 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       },
       replyApproval: async () => {},
     };
-    const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        runtimeKind: "claude",
+        status: "idle",
+        messages: [
+          {
+            id: "subagent:background-task",
+            role: "system",
+            content: "Subagent (Explore): Explore architecture",
+            timestamp: "2026-02-22T08:00:02.000Z",
+            meta: {
+              kind: "subagent",
+              partId: "background-task",
+              correlationKey: "background-task",
+              status: "running",
+              agent: "Explore",
+              description: "Explore architecture",
+              externalSessionId: "child-background-session",
+              executionMode: "background",
+            },
+          },
+        ],
+      }),
+    ]);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:35.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-background-task",
+        partId: "background-task-update",
+        correlationKey: "background-task",
+        status: "running",
+        externalSessionId: "child-background-session",
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+    const subagentMessage = getSessionMessages(sessionsRef).find(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+    if (subagentMessage?.meta?.kind !== "subagent") {
+      throw new Error("Expected hydrated subagent message with subagent meta");
+    }
+    expect(subagentMessage.meta.executionMode).toBe("background");
+  });
+
+  test("keeps an idle parent idle through foreground subagent updates", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "running" })]);
     const updateSession = createSessionUpdater(sessionsRef);
     const recordedActivityTimestamps: Array<string | number> = [];
 
@@ -282,6 +363,23 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       status: { type: "idle" },
       timestamp: "2026-02-22T08:00:05.000Z",
     });
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:15.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-task-running",
+        partId: "subtask-running",
+        correlationKey: "part:assistant-task:subtask",
+        status: "running",
+        description: "Inspecting the repository",
+        externalSessionId: "child-session",
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
 
     handleEvent({
       type: "assistant_part",

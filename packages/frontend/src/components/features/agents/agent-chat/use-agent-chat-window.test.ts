@@ -1310,6 +1310,45 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("keeps following when an idle session wakes before appending parent rows", async () => {
+    const initialRows = createSingleTurnRows(20);
+    const nextRows = createSingleTurnRows(24);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+        isSessionWorking: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.update({
+      rows: initialRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: true,
+    });
+    await harness.update({
+      rows: nextRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+      isSessionWorking: true,
+    });
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
   test("repins bottom after idle layout settles instead of accepting a browser top jump", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
     const extraContentHeightPx = { current: 0 };

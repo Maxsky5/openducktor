@@ -128,7 +128,6 @@ export const toContextUsage = (
 const applyDirectSnapshot = (
   current: AgentSessionState,
   snapshot: AgentSessionLiveSnapshot,
-  statusMode: "hydrate" | "preserve",
 ): AgentSessionState => {
   if (isTerminalSessionStatus(current.status)) {
     return {
@@ -141,9 +140,8 @@ const applyDirectSnapshot = (
     };
   }
   const snapshotStatus = agentSessionStatusFromActivity(snapshot.activity);
-  const hydratedStatus =
+  const nextStatus =
     current.status === "starting" && snapshotStatus === "idle" ? "starting" : snapshotStatus;
-  const nextStatus = statusMode === "hydrate" ? hydratedStatus : current.status;
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
   const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
@@ -184,7 +182,6 @@ const createLiveOnlySession = (
       selectedModel: null,
     },
     snapshot,
-    "hydrate",
   );
 };
 
@@ -364,10 +361,7 @@ export const buildAgentSessionLiveCollection = ({
   for (const snapshot of snapshots) {
     const session = getAgentSession(collection, toSessionIdentity(snapshot.ref));
     if (session) {
-      collection = replaceAgentSession(
-        collection,
-        applyDirectSnapshot(session, snapshot, "hydrate"),
-      );
+      collection = replaceAgentSession(collection, applyDirectSnapshot(session, snapshot));
       continue;
     }
     const parent = snapshot.parentExternalSessionId
@@ -431,7 +425,7 @@ export const applyAgentSessionLiveDelta = ({
     const withDirectSnapshot = replaceAgentSession(
       current,
       session
-        ? applyDirectSnapshot(session, envelope.session, "preserve")
+        ? applyDirectSnapshot(session, envelope.session)
         : createLiveOnlySession(envelope.session, parent),
     );
     return rebuildProjectedPendingInput(withDirectSnapshot);

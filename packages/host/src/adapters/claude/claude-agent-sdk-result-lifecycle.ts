@@ -71,8 +71,11 @@ export const lifecycleOutcomeForClaudeResult = (
     return "failed";
   }
   const terminalReason = readClaudeResultTerminalReason(message);
-  if (terminalReason === "tool_deferred" || terminalReason === "background_requested") {
+  if (terminalReason === "tool_deferred") {
     return "awaiting_sdk_idle";
+  }
+  if (terminalReason === "background_requested") {
+    return "completed";
   }
   if (readClaudeResultStopReason(message) === "tool_use") {
     return "continuing";

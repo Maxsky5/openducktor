@@ -289,8 +289,19 @@ export function useAgentChatWindow({
   useLayoutEffect(() => {
     void committedRowWindowVersion;
 
+    if (isLatestWindow && !userScrolledRef.current) {
+      forceScrollToBottom();
+      return;
+    }
+
     refreshScrollState();
-  }, [committedRowWindowVersion, refreshScrollState]);
+  }, [
+    committedRowWindowVersion,
+    forceScrollToBottom,
+    isLatestWindow,
+    refreshScrollState,
+    userScrolledRef,
+  ]);
 
   const scrollToTop = useCallback(() => {
     const container = messagesContainerRef.current;

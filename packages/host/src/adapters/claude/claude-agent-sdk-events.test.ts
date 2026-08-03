@@ -279,6 +279,25 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         }),
       );
       expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+
+      handleClaudeSdkMessage({
+        session,
+        timestamp: "2026-06-25T20:00:03.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+        message: claudeSdkMessageFixture({
+          type: "system",
+          subtype: "session_state_changed",
+          state: "idle",
+          uuid: `peer-idle-${index}`,
+          session_id: "session-1",
+        }),
+      });
+
       expect(events).toContainEqual(
         expect.objectContaining({
           type: "session_idle",
@@ -371,7 +390,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     ).toHaveLength(1);
   });
 
-  test("keeps the root turn active while a nested background task is running", () => {
+  test("lets SDK state settle the root while a nested background task is running", () => {
     const events: AgentEvent[] = [];
     const childSession = createSession("running");
     childSession.activeBackgroundSubagentTaskIds.add("nested-task-1");
@@ -438,10 +457,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     });
 
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
-    expect(events.some((event) => event.type === "session_idle")).toBe(false);
-    expect(session.activity).toBe("running");
-    expect(session.activeSdkUserTurnCount).toBe(1);
-    expect(session.pendingUserTurnCount).toBe(1);
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(session.activity).toBe("idle");
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(session.pendingUserTurnCount).toBe(0);
+    expect(childSession.activeBackgroundSubagentTaskIds).toEqual(new Set(["nested-task-1"]));
   });
 
   test("renders terminal assistant text without closing the active SDK user turn", () => {

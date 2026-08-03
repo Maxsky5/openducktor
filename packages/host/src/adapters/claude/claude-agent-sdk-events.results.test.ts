@@ -289,9 +289,7 @@ describe("handleClaudeSdkMessage result events", () => {
         messageId: "claude-stream:session-1:1:1:0",
         message: "Final result",
       }),
-      expect.objectContaining({
-        type: "session_idle",
-      }),
+      expect.objectContaining({ type: "session_idle" }),
     ]);
   });
 
@@ -338,9 +336,7 @@ describe("handleClaudeSdkMessage result events", () => {
         messageId: "claude-stream:session-1:1:1:0",
         message: "First block\nSecond block",
       }),
-      expect.objectContaining({
-        type: "session_idle",
-      }),
+      expect.objectContaining({ type: "session_idle" }),
     ]);
   });
 
@@ -383,9 +379,7 @@ describe("handleClaudeSdkMessage result events", () => {
         messageId: "native-response-1",
         message: "First block\nSecond block",
       }),
-      expect.objectContaining({
-        type: "session_idle",
-      }),
+      expect.objectContaining({ type: "session_idle" }),
     ]);
   });
 
@@ -564,9 +558,7 @@ describe("handleClaudeSdkMessage result events", () => {
         messageId: "result-1",
         message: "Spec persisted and task moved to spec_ready.",
       }),
-      expect.objectContaining({
-        type: "session_idle",
-      }),
+      expect.objectContaining({ type: "session_idle" }),
     ]);
   });
 

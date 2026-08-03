@@ -138,19 +138,11 @@ const applyResultLifecycleEvent = (
   }
   completeActiveSdkUserTurn(input.session);
   const remainingPendingUserTurns = completePendingUserTurn(input.session);
-  input.session.sdkState = "idle";
-  if (input.outcome === "failed") {
-    if (remainingPendingUserTurns > 0) {
-      input.session.activity = "running";
-      return;
-    }
-    emitSessionIdle(input);
-    return;
-  }
   if (remainingPendingUserTurns > 0) {
     input.session.activity = "running";
     return;
   }
+  input.session.sdkState = "idle";
   emitSessionIdle(input);
 };
 

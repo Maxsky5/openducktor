@@ -210,6 +210,19 @@ describe("Claude manual compaction", () => {
         terminal_reason: "completed",
       }),
     });
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-07-23T10:00:03.000Z",
+      modelSelection,
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "session_state_changed",
+        state: "idle",
+        uuid: "compact-idle-1",
+        session_id: "session-1",
+      }),
+    });
 
     expect(session.activeManualCompaction).toBeUndefined();
     expect(events).toContainEqual({

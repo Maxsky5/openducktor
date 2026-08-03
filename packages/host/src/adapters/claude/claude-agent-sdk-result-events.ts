@@ -113,10 +113,7 @@ export const handleClaudeResultMessage = ({
     timestamp,
     event: {
       kind: "result",
-      outcome:
-        originKind === "task-notification" && hasActiveBackgroundWork
-          ? "continuing"
-          : lifecycleOutcomeForClaudeResult(message),
+      outcome: lifecycleOutcomeForClaudeResult(message),
     },
   });
 };

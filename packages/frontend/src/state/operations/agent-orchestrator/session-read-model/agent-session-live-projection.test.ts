@@ -533,7 +533,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(next, identity("thread-2"))?.pendingApprovals).toEqual([approval]);
   });
 
-  test("does not overwrite transcript-owned lifecycle status during a live upsert", () => {
+  test("applies authoritative lifecycle status from a live upsert after reload", () => {
     const tasks = taskSessionRecords({ taskId: "task-1", record: record("thread-1") });
     const initial = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
@@ -558,7 +558,7 @@ describe("agent session live projection", () => {
       },
     });
 
-    expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("running");
+    expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("idle");
   });
 
   test.each(["stopped", "error"] as const)(

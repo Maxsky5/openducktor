@@ -210,7 +210,7 @@ describe("createClaudeAgentSdkSessionStore", () => {
     ).resolves.toEqual({ supported: true, hasLiveSession: true });
   });
 
-  test("reports Claude sessions with running background subagents as active", async () => {
+  test("does not report a background subagent as parent session work", async () => {
     const store = createClaudeAgentSdkSessionStore();
     store.set(
       createSession({
@@ -229,10 +229,10 @@ describe("createClaudeAgentSdkSessionStore", () => {
           externalSessionId: "session-1",
         }),
       ),
-    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
   });
 
-  test("reports Claude sessions with nested running background subagents as active", async () => {
+  test("does not report a nested background subagent as parent session work", async () => {
     const store = createClaudeAgentSdkSessionStore();
     const session = Object.assign(
       createSession({
@@ -261,7 +261,7 @@ describe("createClaudeAgentSdkSessionStore", () => {
           externalSessionId: "session-1",
         }),
       ),
-    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
   });
 
   test("emits terminal events when stopping every session for a runtime", async () => {

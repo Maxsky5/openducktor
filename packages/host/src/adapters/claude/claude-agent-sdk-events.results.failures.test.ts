@@ -42,37 +42,6 @@ describe("handleClaudeSdkMessage failed results", () => {
         externalSessionId: "session-1",
       }),
     ]);
-
-    handleClaudeSdkMessage({
-      session,
-      timestamp: "2026-06-25T20:00:01.000Z",
-      modelSelection: (model) => ({
-        providerId: "claude",
-        modelId: model,
-        runtimeKind: "claude",
-      }),
-      emit: (event) => events.push(event),
-      message: claudeSdkMessageFixture({
-        type: "system",
-        subtype: "session_state_changed",
-        state: "idle",
-        uuid: "state-1",
-        session_id: "session-1",
-      }),
-    });
-
-    expect(session.activity).toBe("idle");
-    expect(events).toEqual([
-      expect.objectContaining({
-        type: "turn_error",
-        messageId: "result-error-1",
-        message: "API Error: an image in the conversation could not be processed.",
-      }),
-      expect.objectContaining({
-        type: "session_idle",
-        externalSessionId: "session-1",
-      }),
-    ]);
   });
 
   test("reports terminal Claude image errors and settles the session idle", () => {
@@ -96,36 +65,6 @@ describe("handleClaudeSdkMessage failed results", () => {
         terminal_reason: "image_error",
         result: "API Error: an image in the conversation could not be processed and was removed.",
         usage: { input_tokens: 5, output_tokens: 1 },
-      }),
-    });
-
-    expect(session.activity).toBe("idle");
-    expect(events).toEqual([
-      expect.objectContaining({
-        type: "turn_error",
-        message: "API Error: an image in the conversation could not be processed and was removed.",
-      }),
-      expect.objectContaining({
-        type: "session_idle",
-        externalSessionId: "session-1",
-      }),
-    ]);
-
-    handleClaudeSdkMessage({
-      session,
-      timestamp: "2026-06-25T20:00:01.000Z",
-      modelSelection: (model) => ({
-        providerId: "claude",
-        modelId: model,
-        runtimeKind: "claude",
-      }),
-      emit: (event) => events.push(event),
-      message: claudeSdkMessageFixture({
-        type: "system",
-        subtype: "session_state_changed",
-        state: "idle",
-        uuid: "state-1",
-        session_id: "session-1",
       }),
     });
 

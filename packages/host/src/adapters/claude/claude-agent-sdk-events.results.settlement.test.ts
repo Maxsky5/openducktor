@@ -5,7 +5,7 @@ import { createEventTestSession as createSession } from "./claude-agent-sdk-even
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result settlement", () => {
-  test("settles completed successful results immediately", () => {
+  test("marks the parent idle when its completed result arrives", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.pendingUserTurnCount = 1;
@@ -40,7 +40,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(session.activity).toBe("idle");
+    expect(session.activity as "idle" | "running").toBe("idle");
     const sdkStateAfterCompletedResult = session.sdkState as
       | "idle"
       | "requires_action"
@@ -48,11 +48,6 @@ describe("handleClaudeSdkMessage result settlement", () => {
       | undefined;
     expect(sdkStateAfterCompletedResult).toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
-    expect(events.at(-1)).toEqual(
-      expect.objectContaining({
-        type: "session_idle",
-      }),
-    );
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -66,7 +61,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       }),
     });
 
-    expect(session.activity).toBe("idle");
+    expect(session.activity as "idle" | "running").toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
     expect(events.at(-1)).toEqual(
       expect.objectContaining({
@@ -75,10 +70,12 @@ describe("handleClaudeSdkMessage result settlement", () => {
     );
   });
 
-  test("settles completed results even when SDK idle is absent", () => {
+  test("marks the parent idle while its background subagent remains active", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.pendingUserTurnCount = 1;
+    session.sdkState = "running";
+    session.activeBackgroundSubagentTaskIds.add("background-task-1");
 
     handleClaudeSdkMessage({
       session,
@@ -101,13 +98,8 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
-    expect(session.sdkState).toBe("idle");
+    expect(session.sdkState as "idle" | "running").toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
-    expect(events.at(-1)).toEqual(
-      expect.objectContaining({
-        type: "session_idle",
-      }),
-    );
   });
 
   test("settles a completed result immediately when SDK idle arrived before the result", () => {
@@ -138,7 +130,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     expect(session.activity).toBe("running");
     expect(session.pendingUserTurnCount).toBe(1);
-    expect(session.sdkState).toBe("idle");
+    expect(session.sdkState as "idle" | "running").toBe("idle");
     expect(events).toEqual([]);
 
     handleClaudeSdkMessage({
@@ -220,21 +212,8 @@ describe("handleClaudeSdkMessage result settlement", () => {
     ]);
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
-
-    handleClaudeSdkMessage({
-      ...commonInput,
-      timestamp: "2026-06-25T20:00:02.000Z",
-      message: claudeSdkMessageFixture({
-        type: "system",
-        subtype: "session_state_changed",
-        state: "idle",
-        uuid: "state-1",
-        session_id: "session-1",
-      }),
-    });
-
-    expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
   });
 
   test("keeps completed results running while later queued user turns are pending", () => {
@@ -266,7 +245,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     expect(events.map((event) => event.type)).toEqual([]);
   });
 
-  test("settles background-requested Claude results on the next SDK idle event", () => {
+  test("marks the parent idle when Claude waits for background work", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.sdkState = "running";
@@ -288,28 +267,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         type: "result",
         subtype: "success",
         is_error: false,
+        stop_reason: "tool_use",
         terminal_reason: "background_requested",
         usage: { input_tokens: 5, output_tokens: 7 },
       }),
     });
 
-    expect(session.activity).toBe("running");
-    expect(session.pendingUserTurnCount).toBe(0);
-    expect(events.map((event) => event.type)).toEqual([]);
-
-    handleClaudeSdkMessage({
-      ...commonInput,
-      timestamp: "2026-06-25T20:00:01.000Z",
-      message: claudeSdkMessageFixture({
-        type: "system",
-        subtype: "session_state_changed",
-        state: "idle",
-        uuid: "state-1",
-        session_id: "session-1",
-      }),
-    });
-
     expect(session.activity).toBe("idle");
+    expect(session.sdkState as "idle" | "running").toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
   });
