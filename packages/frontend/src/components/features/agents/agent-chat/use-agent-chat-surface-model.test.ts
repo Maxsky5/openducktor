@@ -64,17 +64,18 @@ describe("useAgentChatSurfaceModel", () => {
       presentToolCall: presentRegularToolCall,
       supportedApprovalReplyOutcomes: null,
     };
+    const transcript = {
+      kind: "session" as const,
+      session,
+      target: transcriptTarget,
+      displayedSessionKey: "standalone-session",
+      shouldResetWindow: false as const,
+      notice: null,
+    };
 
     const rendered = renderHook(() =>
       useAgentChatSurfaceModel({
-        transcript: {
-          kind: "session",
-          session,
-          target: transcriptTarget,
-          displayedSessionKey: "standalone-session",
-          shouldResetWindow: false,
-          notice: null,
-        },
+        transcript,
         chatSettings: createChatSettingsFixture(),
         sessionAuxiliaryError: null,
         interactionEnabled: true,
@@ -101,8 +102,7 @@ describe("useAgentChatSurfaceModel", () => {
       }),
     );
 
-    expect(rendered.result.current.thread.session).toEqual(session);
-    expect(rendered.result.current.thread.transcriptTarget).toBe(transcriptTarget);
+    expect(rendered.result.current.thread.transcript).toBe(transcript);
     expect(rendered.result.current.thread.runtimePresentation).toBe(runtimePresentation);
     expect(rendered.result.current.thread.isInteractionEnabled).toBe(true);
     expect(rendered.result.current.thread.canSubmitQuestionAnswers).toBe(true);

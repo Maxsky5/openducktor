@@ -75,7 +75,7 @@ export function useAgentChatThreadModel({
   scrollToBottomOnSendRef,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatThreadModelArgs): AgentChatThreadModel {
-  const { session, target, displayedSessionKey, shouldResetWindow, notice } = transcript;
+  const { displayedSessionKey } = transcript;
   const [todoPanelCollapsedBySessionKey, setTodoPanelCollapsedBySessionKey] = useState<
     Record<string, boolean>
   >({});
@@ -98,10 +98,8 @@ export function useAgentChatThreadModel({
 
   return useMemo(
     () => ({
-      session,
       modelCatalog,
-      transcriptTarget: target,
-      displayedSessionKey,
+      transcript,
       runtimePresentation,
       isSessionWorking,
       isInteractionEnabled: interactionEnabled,
@@ -125,8 +123,6 @@ export function useAgentChatThreadModel({
       approvalReplyErrorByRequestId: approvals.errorByRequestId,
       onReplyApproval: approvals.onReply,
       sessionAuxiliaryError,
-      shouldResetTranscriptWindow: shouldResetWindow,
-      transcriptNotice: notice,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
       messagesContainerRef,
@@ -135,7 +131,6 @@ export function useAgentChatThreadModel({
     }),
     [
       activeTodoPanelCollapsed,
-      displayedSessionKey,
       approvals,
       canReplyToApprovalRequests,
       canSubmitQuestionAnswers,
@@ -155,13 +150,10 @@ export function useAgentChatThreadModel({
       sessionAgentColors,
       todos,
       sessionAuxiliaryError,
-      shouldResetWindow,
       subagentPendingApprovalCountBySessionKey,
       subagentPendingQuestionCountBySessionKey,
       syncBottomAfterComposerLayoutRef,
-      session,
-      target,
-      notice,
+      transcript,
     ],
   );
 }

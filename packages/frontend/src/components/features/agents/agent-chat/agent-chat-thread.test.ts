@@ -194,6 +194,20 @@ describe("AgentChatThread", () => {
     globalThis.ResizeObserver = originalResizeObserver;
   });
 
+  test("preserves an explicitly absent transcript target for a rendered session", () => {
+    const session = buildSession({ externalSessionId: "session-without-transcript-target" });
+    const model = completeThreadModel({
+      ...buildBaseModel(),
+      session,
+      transcriptTarget: null,
+      displayedSessionKey: null,
+    });
+
+    expect(model.transcript.session).toBe(session);
+    expect(model.transcript.target).toBeNull();
+    expect(model.transcript.displayedSessionKey).toBeNull();
+  });
+
   test("renders empty state when no session is active", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {

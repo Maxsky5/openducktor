@@ -32,14 +32,14 @@ type AgentChatTranscriptProps = {
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  transcriptNotice: AgentChatThreadModel["transcriptNotice"];
+  transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
 };
 
 const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
   notice,
 }: {
-  notice: NonNullable<AgentChatThreadModel["transcriptNotice"]>;
+  notice: NonNullable<AgentChatThreadModel["transcript"]["notice"]>;
 }): ReactElement {
   const isLoadingNotice = notice.severity === "loading";
   const action = notice.action;
@@ -279,9 +279,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
-    session,
-    transcriptTarget,
-    displayedSessionKey,
+    transcript,
     runtimePresentation,
     isInteractionEnabled,
     emptyState,
@@ -304,14 +302,13 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     onReplyApproval,
     sessionAuxiliaryError,
     isSessionWorking,
-    shouldResetTranscriptWindow,
-    transcriptNotice,
     todoPanelCollapsed,
     onToggleTodoPanel,
     messagesContainerRef,
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
+  const { session, target: transcriptTarget } = transcript;
   const {
     messagesContentRef,
     renderedTurns,
@@ -321,11 +318,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottom,
     scrollToTop,
   } = useAgentChatRenderedTranscript({
-    session,
-    displayedSessionKey,
+    transcript,
     isSessionWorking,
-    shouldResetTranscriptWindow,
-    transcriptNotice,
     messagesContainerRef,
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,

@@ -142,16 +142,18 @@ describe("AgentChat", () => {
 
   test("renders the caller empty state when only transcript routing metadata remains", () => {
     const model = buildModel();
-    expect(model.thread.transcriptTarget).not.toBeNull();
+    const { transcript, ...threadFields } = model.thread;
+    expect(transcript.target).not.toBeNull();
 
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
           ...model,
-          thread: {
-            ...model.thread,
+          thread: completeThreadModel({
+            ...threadFields,
             session: null,
-          },
+            transcriptTarget: transcript.target,
+          }),
         },
       }),
     );
@@ -161,18 +163,20 @@ describe("AgentChat", () => {
   });
 
   test("renders the todo stack immediately above the composer", () => {
+    const model = buildModel();
+    const { transcript: _transcript, ...threadFields } = model.thread;
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
-          ...buildModel(),
-          thread: {
-            ...buildModel().thread,
+          ...model,
+          thread: completeThreadModel({
+            ...threadFields,
             session: buildSession({
               status: "idle",
             }),
             todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             sessionAccentColor: "#123456",
-          },
+          }),
         },
       }),
     );
@@ -184,18 +188,20 @@ describe("AgentChat", () => {
   });
 
   test("renders session auxiliary errors in the bottom stack above the composer", () => {
+    const model = buildModel();
+    const { transcript: _transcript, ...threadFields } = model.thread;
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
-          ...buildModel(),
-          thread: {
-            ...buildModel().thread,
+          ...model,
+          thread: completeThreadModel({
+            ...threadFields,
             session: buildSession({
               status: "idle",
             }),
             todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             sessionAuxiliaryError: "todos unavailable",
-          },
+          }),
         },
       }),
     );

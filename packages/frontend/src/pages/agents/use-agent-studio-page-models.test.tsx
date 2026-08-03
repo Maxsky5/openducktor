@@ -487,7 +487,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const chatModel = harness.getLatest().agentChatModel;
-    expect(chatModel.thread.session).toBeNull();
+    expect(chatModel.thread.transcript.session).toBeNull();
     expect(chatModel.thread.isSessionWorking).toBe(false);
     expect(chatModel.thread.sessionAccentColor).toBe("#0ea5e9");
     expect(chatModel.composer.accentColor).toBe("#0ea5e9");
@@ -628,10 +628,10 @@ describe("useAgentStudioPageModels", () => {
 
     const thread = harness.getLatest().agentChatModel.thread;
     expect(thread.isInteractionEnabled).toBe(false);
-    expect(thread.transcriptNotice).toBeNull();
-    expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
-      "Cached transcript",
-    );
+    expect(thread.transcript.notice).toBeNull();
+    expect(
+      thread.transcript.session ? sessionMessageAt(thread.transcript.session, 0)?.content : null,
+    ).toBe("Cached transcript");
 
     await harness.unmount();
   });
@@ -751,7 +751,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.transcriptNotice).toBeNull();
+    expect(thread.transcript.notice).toBeNull();
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
     );
@@ -877,7 +877,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.transcriptNotice).toMatchObject({
+    expect(harness.getLatest().agentChatModel.thread.transcript.notice).toMatchObject({
       severity: "loading",
       title: "Loading session",
     });

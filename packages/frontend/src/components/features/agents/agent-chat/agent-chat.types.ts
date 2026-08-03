@@ -95,10 +95,8 @@ export type AgentChatRuntimePresentation = {
 };
 
 export type AgentChatThreadModel = {
-  session: AgentChatThreadSession | null;
   modelCatalog: AgentModelCatalog | null;
-  transcriptTarget: AgentSessionTranscriptTarget | null;
-  displayedSessionKey: string | null;
+  transcript: AgentChatTranscriptPresentation;
   runtimePresentation: AgentChatRuntimePresentation;
   isSessionWorking: boolean;
   isInteractionEnabled: boolean;
@@ -120,8 +118,6 @@ export type AgentChatThreadModel = {
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   sessionAuxiliaryError: string | null;
-  shouldResetTranscriptWindow: boolean;
-  transcriptNotice: AgentChatTranscriptNotice | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;

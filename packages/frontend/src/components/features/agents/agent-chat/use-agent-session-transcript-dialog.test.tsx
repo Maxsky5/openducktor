@@ -54,10 +54,15 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
   const session = overrides.session ?? buildSession();
 
   return {
-    session,
     modelCatalog: null,
-    transcriptTarget: session,
-    displayedSessionKey: agentSessionIdentityKey(session),
+    transcript: {
+      kind: "session",
+      session,
+      target: session,
+      displayedSessionKey: agentSessionIdentityKey(session),
+      shouldResetWindow: false,
+      notice: null,
+    },
     isSessionWorking: false,
     runtimePresentation: {
       runtimeKind: "opencode",
@@ -80,8 +85,6 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
     approvalReplyErrorByRequestId: {},
     onReplyApproval: async () => {},
     sessionAuxiliaryError: null,
-    shouldResetTranscriptWindow: false,
-    transcriptNotice: null,
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
@@ -415,8 +418,14 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const rendered = render(
       <AgentChatThread
         model={createThreadModel({
-          session: plannerSession,
-          transcriptTarget: plannerTranscriptTarget,
+          transcript: {
+            kind: "session",
+            session: plannerSession,
+            target: plannerTranscriptTarget,
+            displayedSessionKey: agentSessionIdentityKey(plannerSession),
+            shouldResetWindow: false,
+            notice: null,
+          },
         })}
       />,
       { wrapper },

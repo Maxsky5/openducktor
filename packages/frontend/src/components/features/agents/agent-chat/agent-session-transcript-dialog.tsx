@@ -57,7 +57,10 @@ function AgentSessionTranscriptDialogContent({
     workspaceRepoPath,
     target,
   });
-  const resolvedTitle = resolveAgentSessionDialogTitle(title, model.thread.session?.title);
+  const resolvedTitle = resolveAgentSessionDialogTitle(
+    title,
+    model.thread.transcript.session?.title,
+  );
 
   return (
     <>

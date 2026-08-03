@@ -23,6 +23,7 @@ import type {
   AgentChatThreadModel,
   AgentChatThreadSession,
   AgentChatToolCallPresentation,
+  AgentChatTranscriptPresentation,
 } from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
 import { toAgentChatThreadSession } from "./agent-chat-thread-session";
@@ -135,12 +136,6 @@ export const presentRegularToolCall = (
   displayName: displayLabel?.trim() || toolName,
 });
 
-type AgentChatThreadProjectionFields =
-  | "session"
-  | "transcriptTarget"
-  | "displayedSessionKey"
-  | "shouldResetTranscriptWindow"
-  | "transcriptNotice";
 type AgentChatThreadFixtureDefaults =
   | "modelCatalog"
   | "pendingApprovalRequests"
@@ -151,11 +146,16 @@ type AgentChatThreadFixtureDefaults =
 
 export type AgentChatThreadModelInput = Omit<
   AgentChatThreadModel,
-  AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults
+  "transcript" | AgentChatThreadFixtureDefaults
 > &
-  Partial<
-    Pick<AgentChatThreadModel, AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults>
-  >;
+  Partial<Pick<AgentChatThreadModel, AgentChatThreadFixtureDefaults>> & {
+    transcript?: AgentChatTranscriptPresentation;
+    session?: AgentChatThreadSession | null;
+    transcriptTarget?: AgentChatTranscriptPresentation["target"];
+    displayedSessionKey?: AgentChatTranscriptPresentation["displayedSessionKey"];
+    shouldResetTranscriptWindow?: boolean;
+    transcriptNotice?: AgentChatTranscriptPresentation["notice"];
+  };
 
 export const buildBaseModel = () => ({
   isSessionWorking: false,
@@ -187,18 +187,59 @@ export const buildBaseModel = () => ({
 });
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
-  const session = model.session ?? null;
+  const {
+    transcript: suppliedTranscript,
+    session: suppliedSession,
+    transcriptTarget,
+    displayedSessionKey: suppliedDisplayedSessionKey,
+    shouldResetTranscriptWindow,
+    transcriptNotice,
+    ...threadFields
+  } = model;
+
+  if (suppliedTranscript) {
+    return {
+      ...threadFields,
+      modelCatalog: model.modelCatalog ?? null,
+      transcript: suppliedTranscript,
+      runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
+      pendingApprovalRequests: model.pendingApprovalRequests ?? [],
+      pendingQuestionRequests: model.pendingQuestionRequests ?? [],
+      todos: model.todos ?? [],
+    };
+  }
+
+  const session = suppliedSession ?? null;
+  const target = Object.hasOwn(model, "transcriptTarget") ? (transcriptTarget ?? null) : session;
+  const displayedSessionKey = Object.hasOwn(model, "displayedSessionKey")
+    ? (suppliedDisplayedSessionKey ?? null)
+    : session
+      ? agentSessionIdentityKey(session)
+      : null;
+  const notice = transcriptNotice ?? null;
+  const transcript: AgentChatTranscriptPresentation = session
+    ? {
+        kind: "session",
+        session,
+        target,
+        displayedSessionKey,
+        shouldResetWindow: false,
+        notice,
+      }
+    : {
+        kind: "empty",
+        session: null,
+        target,
+        displayedSessionKey,
+        shouldResetWindow: shouldResetTranscriptWindow ?? false,
+        notice,
+      };
 
   return {
-    ...model,
+    ...threadFields,
     modelCatalog: model.modelCatalog ?? null,
     runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
-    session,
-    transcriptTarget: model.transcriptTarget ?? session,
-    displayedSessionKey:
-      model.displayedSessionKey ?? (session ? agentSessionIdentityKey(session) : null),
-    shouldResetTranscriptWindow: model.shouldResetTranscriptWindow ?? false,
-    transcriptNotice: model.transcriptNotice ?? null,
+    transcript,
     pendingApprovalRequests: model.pendingApprovalRequests ?? [],
     pendingQuestionRequests: model.pendingQuestionRequests ?? [],
     todos: model.todos ?? [],
