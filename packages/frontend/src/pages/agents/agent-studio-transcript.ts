@@ -1,6 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
-import type { AgentChatThreadSession } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatTranscriptSession } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "@/components/features/agents/agent-chat/agent-session-transcript-target";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
@@ -26,14 +26,14 @@ export const toAgentStudioTranscriptTarget = ({
   };
 };
 
-export const toSelectedSessionThreadSession = ({
+export const toAgentStudioTranscriptSession = ({
   identity,
   activityState,
   loadedSession,
 }: Pick<
   AgentStudioSelectedSessionState,
   "identity" | "activityState" | "loadedSession"
->): AgentChatThreadSession | null => {
+>): AgentChatTranscriptSession | null => {
   if (!identity || !loadedSession || !matchesAgentSessionIdentity(loadedSession, identity)) {
     return null;
   }

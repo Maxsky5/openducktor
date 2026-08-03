@@ -1,7 +1,7 @@
 import type {
-  AgentChatThreadSession,
   AgentChatTranscriptNotice,
   AgentChatTranscriptPresentation,
+  AgentChatTranscriptSession,
 } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "@/components/features/agents/agent-chat/agent-session-transcript-target";
 import {
@@ -11,7 +11,7 @@ import {
 
 type ResolveAgentChatTranscriptPresentationArgs = {
   sessionKey: string | null;
-  session: AgentChatThreadSession | null;
+  session: AgentChatTranscriptSession | null;
   target: AgentSessionTranscriptTarget | null;
   state: AgentSessionTranscriptState;
   notice: AgentChatTranscriptNotice | null;

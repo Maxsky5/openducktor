@@ -5,7 +5,7 @@ import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "../agent-chat.types";
+import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 
 type ReadonlyTranscriptSessionInput = AgentSessionTranscriptTarget & {
@@ -44,7 +44,7 @@ export const createReadonlyTranscriptSession = ({
   runtimeKind,
   workingDirectory,
   history,
-}: ReadonlyTranscriptSessionInput): AgentChatThreadSession => ({
+}: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => ({
   ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
   activityState: null,
   runtimeStatusMessage: null,

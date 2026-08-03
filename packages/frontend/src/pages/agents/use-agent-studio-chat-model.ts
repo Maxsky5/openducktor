@@ -12,8 +12,8 @@ import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
+import { deriveAgentChatReadiness } from "@/lib/agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
-import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
 import { resolveAgentChatTranscriptPresentation } from "@/lib/agent-chat-transcript-presentation";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
@@ -26,9 +26,9 @@ import {
 } from "./agent-studio-chat-draft";
 import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import {
+  toAgentStudioTranscriptSession,
   toAgentStudioTranscriptTarget,
-  toSelectedSessionThreadSession,
-} from "./agent-studio-thread-session";
+} from "./agent-studio-transcript";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { useAgentStudioReviewCommentComposerAdapter } from "./use-agent-studio-review-comment-composer-adapter";
 
@@ -128,13 +128,13 @@ export function useAgentStudioChatModel({
   const selectedSessionIdentity = selectedSessionState.identity;
   const selectedSessionModel = selectedSessionState.selectedModel;
   const selectedSessionRuntimeData = selectedSessionState.runtimeData;
-  const activeThreadSession = useMemo(() => {
-    const threadSession = toSelectedSessionThreadSession({
+  const transcriptSession = useMemo(() => {
+    const session = toAgentStudioTranscriptSession({
       identity: selectedSessionIdentity,
       activityState: selectedSessionState.activityState,
       loadedSession: selectedSessionState.loadedSession,
     });
-    return threadSession ? withClaudeSkillMentions(threadSession, modelSelection.skills) : null;
+    return session ? withClaudeSkillMentions(session, modelSelection.skills) : null;
   }, [
     modelSelection.skills,
     selectedSessionIdentity,
@@ -265,7 +265,7 @@ export function useAgentStudioChatModel({
     }),
     [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
   );
-  const runtimeState = deriveAgentChatRuntimeState({
+  const chatReadiness = deriveAgentChatReadiness({
     transcriptState: selectedSessionTranscriptState,
     runtimeReadiness,
     runtimeBlockedAction,
@@ -283,16 +283,16 @@ export function useAgentStudioChatModel({
     () =>
       resolveAgentChatTranscriptPresentation({
         sessionKey: selectedSessionKey,
-        session: activeThreadSession,
+        session: transcriptSession,
         target: transcriptTarget,
         state: selectedSessionTranscriptState,
-        notice: runtimeState.transcriptNotice,
+        notice: chatReadiness.transcriptNotice,
       }),
     [
-      activeThreadSession,
-      runtimeState.transcriptNotice,
+      chatReadiness.transcriptNotice,
       selectedSessionKey,
       selectedSessionTranscriptState,
+      transcriptSession,
       transcriptTarget,
     ],
   );
@@ -432,7 +432,7 @@ export function useAgentStudioChatModel({
     transcript,
     chatSettings,
     sessionAuxiliaryError: selectedSessionAuxiliaryError ?? selectedSessionRuntimeData.error,
-    interactionEnabled: runtimeState.interactionEnabled,
+    interactionEnabled: chatReadiness.interactionEnabled,
     runtimePresentation,
     emptyState: surfaceState.emptyState,
     pendingApprovalRequests,

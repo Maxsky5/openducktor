@@ -5,7 +5,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentChatThreadSession } from "./agent-chat.types";
+import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 
@@ -15,7 +15,7 @@ const actEnvironment = globalThis as typeof globalThis & {
 const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
 
 type HarnessProps = {
-  session: AgentChatThreadSession | null;
+  session: AgentChatTranscriptSession | null;
   showThinkingMessages: boolean;
 };
 
@@ -42,7 +42,7 @@ const flushTranscriptDerivation = async (
 const createLargeSession = (
   externalSessionId: string,
   messageCount = 500,
-): AgentChatThreadSession => {
+): AgentChatTranscriptSession => {
   const messages = Array.from({ length: messageCount }, (_, index) => {
     const turnIndex = Math.floor(index / 2);
     if (index % 2 === 0) {

@@ -6,14 +6,14 @@ import type {
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
-type DeriveAgentChatRuntimeStateInput = {
+type DeriveAgentChatReadinessInput = {
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;
   runtimeBlockedAction?: AgentChatTranscriptNoticeAction | null;
   failedTranscriptAction?: AgentChatTranscriptNoticeAction | null;
 };
 
-export type AgentChatRuntimeState = {
+type AgentChatReadiness = {
   interactionEnabled: boolean;
   transcriptNotice: AgentChatTranscriptNotice | null;
 };
@@ -46,12 +46,12 @@ const sessionHistoryFailureNotice = ({
   ...(action ? { action } : {}),
 });
 
-export const deriveAgentChatRuntimeState = ({
+export const deriveAgentChatReadiness = ({
   transcriptState,
   runtimeReadiness,
   runtimeBlockedAction,
   failedTranscriptAction,
-}: DeriveAgentChatRuntimeStateInput): AgentChatRuntimeState => {
+}: DeriveAgentChatReadinessInput): AgentChatReadiness => {
   let transcriptNotice: AgentChatTranscriptNotice | null = null;
 
   if (
@@ -112,3 +112,4 @@ export const deriveAgentChatRuntimeState = ({
     transcriptNotice,
   };
 };
+

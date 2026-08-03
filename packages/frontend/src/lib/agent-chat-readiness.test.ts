@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { deriveAgentChatRuntimeState } from "./agent-chat-runtime-state";
+import { deriveAgentChatReadiness } from "./agent-chat-readiness";
 
 const readyRuntimeReadiness = {
   state: "ready" as const,
@@ -17,10 +17,10 @@ const historyFailure = {
   pageCursor: null,
 };
 
-describe("deriveAgentChatRuntimeState", () => {
+describe("deriveAgentChatReadiness", () => {
   test("enables interactions when the caller runtime is ready", () => {
     expect(
-      deriveAgentChatRuntimeState({
+      deriveAgentChatReadiness({
         transcriptState: { kind: "visible" },
         runtimeReadiness: readyRuntimeReadiness,
       }),
@@ -31,7 +31,7 @@ describe("deriveAgentChatRuntimeState", () => {
   });
 
   test("projects a caller-owned loading notice while the runtime starts", () => {
-    const state = deriveAgentChatRuntimeState({
+    const readiness = deriveAgentChatReadiness({
       transcriptState: { kind: "runtime_waiting" },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -39,8 +39,8 @@ describe("deriveAgentChatRuntimeState", () => {
       },
     });
 
-    expect(state.interactionEnabled).toBe(false);
-    expect(state.transcriptNotice).toMatchObject({
+    expect(readiness.interactionEnabled).toBe(false);
+    expect(readiness.transcriptNotice).toMatchObject({
       kind: "runtime_waiting",
       severity: "loading",
       title: "Runtime is starting",
@@ -55,7 +55,7 @@ describe("deriveAgentChatRuntimeState", () => {
       disabled: true,
       isPending: true,
     };
-    const state = deriveAgentChatRuntimeState({
+    const readiness = deriveAgentChatReadiness({
       transcriptState: { kind: "runtime_waiting" },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -65,8 +65,8 @@ describe("deriveAgentChatRuntimeState", () => {
       runtimeBlockedAction: action,
     });
 
-    expect(state.interactionEnabled).toBe(false);
-    expect(state.transcriptNotice).toEqual({
+    expect(readiness.interactionEnabled).toBe(false);
+    expect(readiness.transcriptNotice).toEqual({
       kind: "runtime_blocked",
       severity: "error",
       title: "Runtime unavailable",
@@ -77,7 +77,7 @@ describe("deriveAgentChatRuntimeState", () => {
 
   test("projects an explicit retry action for failed transcript loading", () => {
     const retry = () => {};
-    const state = deriveAgentChatRuntimeState({
+    const readiness = deriveAgentChatReadiness({
       transcriptState: { kind: "failed", message: "History failed" },
       runtimeReadiness: readyRuntimeReadiness,
       failedTranscriptAction: {
@@ -86,7 +86,7 @@ describe("deriveAgentChatRuntimeState", () => {
       },
     });
 
-    expect(state.transcriptNotice).toEqual({
+    expect(readiness.transcriptNotice).toEqual({
       kind: "session_failed",
       severity: "error",
       title: "Failed to load session",
@@ -99,7 +99,7 @@ describe("deriveAgentChatRuntimeState", () => {
   });
 
   test("surfaces failed selected-session history with diagnostic details", () => {
-    const state = deriveAgentChatRuntimeState({
+    const readiness = deriveAgentChatReadiness({
       transcriptState: {
         kind: "failed",
         message: historyFailure.summary,
@@ -108,7 +108,7 @@ describe("deriveAgentChatRuntimeState", () => {
       runtimeReadiness: readyRuntimeReadiness,
     });
 
-    expect(state.transcriptNotice).toEqual({
+    expect(readiness.transcriptNotice).toEqual({
       kind: "session_failed",
       severity: "error",
       title: "Couldn't load conversation history",
@@ -123,12 +123,12 @@ describe("deriveAgentChatRuntimeState", () => {
   });
 
   test("keeps an incomplete-history warning for a visible transcript", () => {
-    const state = deriveAgentChatRuntimeState({
+    const readiness = deriveAgentChatReadiness({
       transcriptState: { kind: "visible", historyFailure },
       runtimeReadiness: readyRuntimeReadiness,
     });
 
-    expect(state.transcriptNotice).toEqual({
+    expect(readiness.transcriptNotice).toEqual({
       kind: "session_history_warning",
       severity: "error",
       title: "History may be incomplete",
@@ -142,3 +142,4 @@ describe("deriveAgentChatRuntimeState", () => {
     });
   });
 });
+

@@ -1,6 +1,6 @@
 import type { AgentSkillReference, AgentUserMessageDisplayPart } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "./agent-chat.types";
+import type { AgentChatTranscriptSession } from "./agent-chat.types";
 
 const REFERENCE_START_BOUNDARY_PATTERN = /[\s([{"']/u;
 const REFERENCE_END_BOUNDARY_PATTERN = /[\s,.;!?)}\]}"']/u;
@@ -79,9 +79,9 @@ const updateRevision = (revision: number, value: string): number => {
 };
 
 export const withClaudeSkillMentions = (
-  session: AgentChatThreadSession,
+  session: AgentChatTranscriptSession,
   skills: readonly AgentSkillReference[],
-): AgentChatThreadSession => {
+): AgentChatTranscriptSession => {
   if (session.runtimeKind !== "claude" || skills.length === 0) {
     return session;
   }

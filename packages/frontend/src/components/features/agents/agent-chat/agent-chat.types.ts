@@ -35,7 +35,7 @@ export type AgentChatEmptyStateModel = {
   isActionPending?: boolean;
 };
 
-export type AgentChatThreadSession = AgentSessionIdentity & {
+export type AgentChatTranscriptSession = AgentSessionIdentity & {
   title?: string;
   activityState: AgentSessionActivityState | null;
   runtimeStatusMessage: string | null;
@@ -73,7 +73,7 @@ export type AgentChatTranscriptPresentation = AgentChatTranscriptPresentationBas
   (
     | {
         kind: "session";
-        session: AgentChatThreadSession;
+        session: AgentChatTranscriptSession;
         shouldResetWindow: false;
       }
     | {

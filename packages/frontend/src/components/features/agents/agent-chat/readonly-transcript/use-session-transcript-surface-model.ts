@@ -1,8 +1,8 @@
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { deriveAgentChatReadiness } from "@/lib/agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
-import { deriveAgentChatRuntimeState } from "@/lib/agent-chat-runtime-state";
 import { resolveAgentChatTranscriptPresentation } from "@/lib/agent-chat-transcript-presentation";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
@@ -94,7 +94,7 @@ export function useSessionTranscriptSurfaceModel({
     }),
     [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
   );
-  const runtimeState = deriveAgentChatRuntimeState({
+  const chatReadiness = deriveAgentChatReadiness({
     transcriptState: sessionHistory.transcriptState,
     runtimeReadiness,
     runtimeBlockedAction,
@@ -114,10 +114,10 @@ export function useSessionTranscriptSurfaceModel({
         session: sessionHistory.session,
         target,
         state: sessionHistory.transcriptState,
-        notice: runtimeState.transcriptNotice,
+        notice: chatReadiness.transcriptNotice,
       }),
     [
-      runtimeState.transcriptNotice,
+      chatReadiness.transcriptNotice,
       sessionHistory.session,
       sessionHistory.transcriptState,
       sessionKey,
@@ -130,7 +130,7 @@ export function useSessionTranscriptSurfaceModel({
     transcript,
     chatSettings,
     sessionAuxiliaryError: transcriptSurfaceState.loadError,
-    interactionEnabled: runtimeState.interactionEnabled,
+    interactionEnabled: chatReadiness.interactionEnabled,
     runtimePresentation,
     emptyState: transcriptSurfaceState.emptyState,
     pendingApprovalRequests: transcriptInteractions.pendingApprovalRequests,

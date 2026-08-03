@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentChatThreadSession } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatTranscriptSession } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { resolveAgentChatTranscriptPresentation } from "./agent-chat-transcript-presentation";
 
-const createSession = (): AgentChatThreadSession => ({
+const createSession = (): AgentChatTranscriptSession => ({
   externalSessionId: "session-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo",

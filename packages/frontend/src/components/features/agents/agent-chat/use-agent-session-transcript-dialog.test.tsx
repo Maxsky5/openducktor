@@ -10,7 +10,7 @@ import {
   createRepoRuntimeHealthContextValue,
   createRuntimeDefinitionsContextValue,
 } from "@/pages/agents/agent-studio-test-utils";
-import { toAgentStudioTranscriptTarget } from "@/pages/agents/agent-studio-thread-session";
+import { toAgentStudioTranscriptTarget } from "@/pages/agents/agent-studio-transcript";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
@@ -51,7 +51,7 @@ const transcriptTarget: AgentSessionTranscriptTarget = {
 };
 
 const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): AgentChatThreadModel => {
-  const session = overrides.session ?? buildSession();
+  const session = buildSession();
 
   return {
     modelCatalog: null,

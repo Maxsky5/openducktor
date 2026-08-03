@@ -7,7 +7,7 @@ import {
   isFinalAssistantChatMessage,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "./agent-chat.types";
+import type { AgentChatTranscriptSession } from "./agent-chat.types";
 
 import { isAssistantMessageStreaming } from "./agent-chat-streaming";
 
@@ -136,7 +136,7 @@ const appendMessageRows = (
 };
 
 export function createAgentChatTranscriptModelBuilder(
-  session: AgentChatThreadSession,
+  session: AgentChatTranscriptSession,
   { showThinkingMessages }: BuildAgentChatTranscriptModelOptions,
 ): AgentChatTranscriptModelBuilder {
   const rows: AgentChatTranscriptRow[] = [];
@@ -206,7 +206,7 @@ export function createAgentChatTranscriptModelBuilder(
 }
 
 export function buildAgentChatTranscriptModel(
-  session: AgentChatThreadSession,
+  session: AgentChatTranscriptSession,
   { showThinkingMessages }: BuildAgentChatTranscriptModelOptions,
 ): AgentChatTranscriptModel {
   return createAgentChatTranscriptModelBuilder(session, { showThinkingMessages }).complete();
@@ -271,7 +271,7 @@ export function updateAgentChatTranscriptModelFromPrefix({
   startMessageIndex,
   mode,
 }: {
-  session: AgentChatThreadSession;
+  session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
   previousTranscriptModel: AgentChatTranscriptModel;
   startMessageIndex: number;

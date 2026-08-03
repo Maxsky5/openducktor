@@ -7,7 +7,7 @@ import {
   getSessionMessageCount,
   getSessionMessagesRevision,
 } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentChatThreadSession } from "./agent-chat.types";
+import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import {
   type AgentChatTranscriptRow,
   type AgentChatTurnAnchor,
@@ -30,7 +30,7 @@ const TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT = 100;
 
 type TranscriptModelRevision = {
   sessionKey: string | null;
-  activityState: AgentChatThreadSession["activityState"];
+  activityState: AgentChatTranscriptSession["activityState"];
   showThinkingMessages: boolean;
   messagesSessionKey: string | null;
   version: number | null;
@@ -65,7 +65,7 @@ const EMPTY_TRANSCRIPT_MODEL_STATE: TranscriptModelState = Object.freeze({
 });
 
 const buildTranscriptModelRevision = (
-  session: AgentChatThreadSession | null,
+  session: AgentChatTranscriptSession | null,
   showThinkingMessages: boolean,
 ): TranscriptModelRevision => {
   if (!session) {
@@ -91,7 +91,7 @@ const toTranscriptModelState = ({
   revision,
   transcriptModel,
 }: {
-  session: AgentChatThreadSession;
+  session: AgentChatTranscriptSession;
   revision: TranscriptModelRevision;
   transcriptModel: Pick<
     TranscriptModelState,
@@ -119,7 +119,7 @@ const buildImmediateTranscriptModelState = ({
   showThinkingMessages,
   cache,
 }: {
-  session: AgentChatThreadSession;
+  session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
   cache: TranscriptModelCache;
 }): TranscriptModelState => {
@@ -177,7 +177,7 @@ type IncrementalTranscriptModelPlan = {
 };
 
 const isMessageIdInPrefix = (
-  messages: AgentChatThreadSession["messages"],
+  messages: AgentChatTranscriptSession["messages"],
   messageId: string,
   endIndex: number,
 ): boolean => {
@@ -195,7 +195,7 @@ const arePrefixMessagesUnchanged = ({
   endIndex,
 }: {
   previousCacheEntry: TranscriptModelCacheEntry;
-  currentSession: AgentChatThreadSession;
+  currentSession: AgentChatTranscriptSession;
   endIndex: number;
 }): boolean => {
   for (let index = 0; index < endIndex; index += 1) {
@@ -211,7 +211,7 @@ const getIncrementalTranscriptModelPlan = ({
   currentSession,
 }: {
   previousCacheEntry: TranscriptModelCacheEntry | null;
-  currentSession: AgentChatThreadSession;
+  currentSession: AgentChatTranscriptSession;
 }): IncrementalTranscriptModelPlan | null => {
   if (!previousCacheEntry) {
     return null;
@@ -277,7 +277,7 @@ export const useAgentChatTranscriptModel = ({
   session,
   showThinkingMessages,
 }: {
-  session: AgentChatThreadSession | null;
+  session: AgentChatTranscriptSession | null;
   showThinkingMessages: boolean;
 }): {
   transcriptState: TranscriptModelState;

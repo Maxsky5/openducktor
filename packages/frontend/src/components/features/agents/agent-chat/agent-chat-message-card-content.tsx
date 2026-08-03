@@ -1,8 +1,4 @@
-import {
-  type AgentModelCatalog,
-  type AgentRole,
-  type AgentUserMessageDisplayPart,
-} from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
   Fragment,

@@ -1,7 +1,7 @@
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { areSessionMessagesSameRevision } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentChatThreadSession } from "./agent-chat.types";
+import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import {
   type AgentChatTranscriptModel,
   findActiveStreamingAssistantMessageIdInRows,
@@ -19,7 +19,7 @@ export type TranscriptModelCacheValue = Pick<
 >;
 
 export type TranscriptModelCacheEntry = AgentChatTranscriptModel & {
-  messages: AgentChatThreadSession["messages"];
+  messages: AgentChatTranscriptSession["messages"];
 };
 
 export type TranscriptModelCache = Map<string, TranscriptModelCacheEntry>;
@@ -49,7 +49,7 @@ const touchTranscriptModelCacheEntry = (
 
 const toTranscriptModelCacheValue = (
   cacheEntry: TranscriptModelCacheEntry,
-  activityState: AgentChatThreadSession["activityState"],
+  activityState: AgentChatTranscriptSession["activityState"],
 ): TranscriptModelCacheValue => {
   return {
     rows: cacheEntry.rows,
@@ -72,7 +72,7 @@ export const writeTranscriptModelCacheEntry = ({
   transcriptModel,
   cache,
 }: {
-  session: AgentChatThreadSession;
+  session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
   transcriptModel: AgentChatTranscriptModel;
   cache: TranscriptModelCache;
@@ -93,7 +93,7 @@ export const peekReusableTranscriptModelState = ({
   cache,
   touch = true,
 }: {
-  session: AgentChatThreadSession;
+  session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
   cache: TranscriptModelCache;
   touch?: boolean;
@@ -129,7 +129,7 @@ export const peekTranscriptModelCacheEntry = ({
   showThinkingMessages,
   cache,
 }: {
-  session: AgentChatThreadSession;
+  session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
   cache: TranscriptModelCache;
 }): TranscriptModelCacheEntry | null => {

@@ -21,12 +21,12 @@ import type {
 import type { AgentRoleOption } from "../agent-studio-header.types";
 import type {
   AgentChatThreadModel,
-  AgentChatThreadSession,
   AgentChatToolCallPresentation,
   AgentChatTranscriptPresentation,
+  AgentChatTranscriptSession,
 } from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
-import { toAgentChatThreadSession } from "./agent-chat-thread-session";
+import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -107,13 +107,13 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-type AgentChatThreadSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+type AgentChatTranscriptSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: SessionMessagesState | AgentChatMessage[];
 };
 
 export const buildSession = (
-  overrides: AgentChatThreadSessionOverrides = {},
-): AgentChatThreadSession => {
+  overrides: AgentChatTranscriptSessionOverrides = {},
+): AgentChatTranscriptSession => {
   const { messages: overrideMessages, ...overrideSessionFields } = overrides;
   const session = {
     ...baseSession,
@@ -122,7 +122,7 @@ export const buildSession = (
   const sourceMessages = overrideMessages ?? baseSession.messages;
   const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
 
-  return toAgentChatThreadSession({
+  return toAgentChatTranscriptSession({
     ...session,
     messages,
   });
@@ -150,7 +150,7 @@ export type AgentChatThreadModelInput = Omit<
 > &
   Partial<Pick<AgentChatThreadModel, AgentChatThreadFixtureDefaults>> & {
     transcript?: AgentChatTranscriptPresentation;
-    session?: AgentChatThreadSession | null;
+    session?: AgentChatTranscriptSession | null;
     transcriptTarget?: AgentChatTranscriptPresentation["target"];
     displayedSessionKey?: AgentChatTranscriptPresentation["displayedSessionKey"];
     shouldResetTranscriptWindow?: boolean;
