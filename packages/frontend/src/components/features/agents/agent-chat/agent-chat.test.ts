@@ -148,17 +148,17 @@ describe("AgentChat", () => {
     expect(html).not.toContain("Send message");
   });
 
-  test("keeps composer visible when no session is selected", () => {
+  test("renders the caller empty state when only transcript routing metadata remains", () => {
+    const model = buildModel();
+    expect(model.thread.transcriptTarget).not.toBeNull();
+
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
-          ...buildModel(),
+          ...model,
           thread: {
-            ...buildModel().thread,
+            ...model.thread,
             session: null,
-          },
-          composer: {
-            ...buildModel().composer,
           },
         },
       }),

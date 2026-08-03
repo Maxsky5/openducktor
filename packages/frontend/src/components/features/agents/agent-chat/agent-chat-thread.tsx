@@ -25,7 +25,7 @@ type AgentChatTranscriptProps = {
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionTranscriptTarget | null;
+  transcriptTarget: AgentSessionTranscriptTarget | null;
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
@@ -131,7 +131,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   isSending,
   isInteractionEnabled,
   sessionAgentColors,
-  sessionIdentity,
+  transcriptTarget,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
   messagesContainerRef,
@@ -184,7 +184,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
               turn={turn}
               modelCatalog={modelCatalog}
               sessionAgentColors={sessionAgentColors}
-              sessionIdentity={sessionIdentity}
+              sessionIdentity={transcriptTarget}
               runtimePresentation={runtimePresentation}
               subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
               subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
@@ -312,7 +312,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const sessionIdentity: AgentSessionTranscriptTarget | null = transcriptTarget;
   const {
     messagesContentRef,
     renderedTurns,
@@ -341,6 +340,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
+  const transcriptEmptyState = session === null ? emptyState : null;
   const hasBottomStack = Boolean(
     session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError || runtimeStatusMessage),
   );
@@ -406,7 +406,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
-        emptyState={session ? null : emptyState}
+        emptyState={transcriptEmptyState}
         modelCatalog={modelCatalog}
         isStarting={isStarting}
         isSending={isSending}
@@ -414,7 +414,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionAgentColors={sessionAgentColors}
         subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
         subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-        sessionIdentity={sessionIdentity}
+        transcriptTarget={transcriptTarget}
         runtimePresentation={runtimePresentation}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
