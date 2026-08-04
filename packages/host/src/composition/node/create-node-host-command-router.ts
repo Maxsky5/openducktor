@@ -110,7 +110,6 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   runtimeRegistry?: RuntimeRegistryPort;
   taskStore?: TaskStorePort;
 };
-
 export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
   readonly taskAssetReadService: TaskAssetReadService;
   readonly taskEventStream: TaskEventStreamPort;
