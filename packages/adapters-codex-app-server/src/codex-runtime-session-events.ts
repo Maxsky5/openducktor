@@ -239,6 +239,10 @@ export class CodexRuntimeSessionEvents {
     return this.contextUsage.latest(runtimeId, threadId);
   }
 
+  initializeFreshThreadContextUsage(runtimeId: string, threadId: string): void {
+    this.contextUsage.initializeFreshThread(runtimeId, threadId);
+  }
+
   loadSessionContextUsage(
     runtimeId: string,
     threadId: string,

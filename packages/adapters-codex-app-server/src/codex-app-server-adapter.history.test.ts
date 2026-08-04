@@ -8,61 +8,71 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
+type PaginatedThreadFixture = Record<string, unknown> & { turns: unknown[] };
+
+const paginatedThreadReadResponse = (thread: PaginatedThreadFixture): unknown => ({
+  thread: { ...thread, turns: [] },
+});
+
+const paginatedTurnsListResponse = (thread: PaginatedThreadFixture): unknown => ({
+  data: thread.turns,
+  nextCursor: null,
+});
+
 describe("CodexAppServerAdapter history loading", () => {
   test("keeps a hydrated subagent at its exact thread item position", async () => {
+    const thread = {
+      id: "parent-thread",
+      cwd: "/repo",
+      createdAt: 1_783_715_500,
+      status: { type: "idle" },
+      turns: [
+        {
+          id: "parent-turn",
+          startedAt: 1_783_715_500,
+          completedAt: 1_783_715_620,
+          status: "completed",
+          items: [
+            {
+              id: "parent-user",
+              type: "userMessage",
+              content: [{ type: "text", text: "Delegate this work" }],
+            },
+            {
+              id: "parent-delegating",
+              type: "agentMessage",
+              phase: "commentary",
+              text: "I am delegating this now.",
+            },
+            {
+              id: "parent-spawn",
+              type: "collabToolCall",
+              tool: "spawnAgent",
+              status: "completed",
+              senderThreadId: "parent-thread",
+              receiverThreadIds: ["child-thread"],
+              prompt: "Inspect the repository",
+              agentsStates: {
+                "child-thread": { status: "completed", message: "Done" },
+              },
+            },
+            {
+              id: "parent-waiting",
+              type: "agentMessage",
+              phase: "commentary",
+              text: "The subagent is running.",
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "parent-thread",
-              cwd: "/repo",
-              createdAt: 1_783_715_500,
-              status: { type: "idle" },
-              turns: [
-                {
-                  id: "parent-turn",
-                  startedAt: 1_783_715_500,
-                  completedAt: 1_783_715_620,
-                  status: "completed",
-                  items: [
-                    {
-                      id: "parent-user",
-                      type: "userMessage",
-                      content: [{ type: "text", text: "Delegate this work" }],
-                    },
-                    {
-                      id: "parent-delegating",
-                      type: "agentMessage",
-                      phase: "commentary",
-                      text: "I am delegating this now.",
-                    },
-                    {
-                      id: "parent-spawn",
-                      type: "collabToolCall",
-                      tool: "spawnAgent",
-                      status: "completed",
-                      senderThreadId: "parent-thread",
-                      receiverThreadIds: ["child-thread"],
-                      prompt: "Inspect the repository",
-                      agentsStates: {
-                        "child-thread": { status: "completed", message: "Done" },
-                      },
-                    },
-                    {
-                      id: "parent-waiting",
-                      type: "agentMessage",
-                      phase: "commentary",
-                      text: "The subagent is running.",
-                    },
-                  ],
-                },
-              ],
-            },
-          } as Response;
+          return paginatedThreadReadResponse(thread) as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -86,54 +96,53 @@ describe("CodexAppServerAdapter history loading", () => {
   });
 
   test("keeps inherited and child-owned subagent activity with their fork owners", async () => {
+    const thread = {
+      id: "child-thread",
+      cwd: "/repo",
+      createdAt: 10,
+      status: { type: "idle" },
+      forkedFromId: "root-thread",
+      parentThreadId: "root-thread",
+      turns: [
+        {
+          id: "root-turn",
+          startedAt: 5,
+          status: "completed",
+          items: [
+            {
+              id: "root-started-sibling",
+              type: "subAgentActivity",
+              agentThreadId: "sibling-thread",
+              kind: "started",
+            },
+          ],
+        },
+        {
+          id: "child-turn",
+          startedAt: 11,
+          status: "completed",
+          items: [
+            {
+              id: "child-started-grandchild",
+              type: "subAgentActivity",
+              agentThreadId: "grandchild-thread",
+              kind: "started",
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "child-thread",
-              cwd: "/repo",
-              createdAt: 10,
-              status: { type: "idle" },
-              forkedFromId: "root-thread",
-              parentThreadId: "root-thread",
-              turns: [
-                {
-                  id: "root-turn",
-                  startedAt: 5,
-                  status: "completed",
-                  items: [
-                    {
-                      id: "root-started-sibling",
-                      type: "subAgentActivity",
-                      agentThreadId: "sibling-thread",
-                      kind: "started",
-                    },
-                  ],
-                },
-                {
-                  id: "child-turn",
-                  startedAt: 11,
-                  status: "completed",
-                  items: [
-                    {
-                      id: "child-started-grandchild",
-                      type: "subAgentActivity",
-                      agentThreadId: "grandchild-thread",
-                      kind: "started",
-                    },
-                  ],
-                },
-              ],
-            },
-          } as Response;
+          return paginatedThreadReadResponse(thread) as Response;
         }
         if (request.method === "thread/turns/list") {
           const { threadId } = request.params as { threadId: string };
           if (threadId === "root-thread") {
             return { data: [{ id: "root-turn" }], nextCursor: null } as Response;
           }
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -168,7 +177,55 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("marks hydrated item timestamps approximate when Codex only reports a turn boundary", async () => {
+  test("keeps stable paginated item ids while hydrating messages and tools", async () => {
+    const turns = [
+      {
+        id: "child-turn",
+        startedAt: 1_783_715_581,
+        completedAt: null,
+        durationMs: null,
+        status: "inProgress",
+        items: [
+          {
+            id: "child-user",
+            type: "userMessage",
+            content: [{ type: "text", text: "Inspect the repository" }],
+          },
+          {
+            id: "child-commentary",
+            type: "agentMessage",
+            phase: "commentary",
+            text: "I’m checking the repository now.",
+          },
+          {
+            id: "child-command",
+            type: "commandExecution",
+            command: "pwd",
+            cwd: "/repo",
+            processId: null,
+            source: "model",
+            status: "completed",
+            commandActions: [{ type: "unknown", command: "pwd" }],
+            aggregatedOutput: "/repo",
+            exitCode: 0,
+            durationMs: 12,
+          },
+          {
+            id: "child-tool",
+            type: "mcpToolCall",
+            server: "semble",
+            tool: "search",
+            status: "completed",
+            arguments: { query: "architecture" },
+            appContext: null,
+            pluginId: null,
+            result: { content: [{ type: "text", text: "result" }] },
+            error: null,
+            durationMs: 107,
+          },
+        ],
+      },
+    ];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/read") {
@@ -178,59 +235,12 @@ describe("CodexAppServerAdapter history loading", () => {
               cwd: "/repo",
               createdAt: 1_783_715_580,
               status: { type: "idle" },
-              turns: [
-                {
-                  id: "child-turn",
-                  startedAt: 1_783_715_581,
-                  completedAt: null,
-                  durationMs: null,
-                  status: "inProgress",
-                  items: [
-                    {
-                      id: "child-user",
-                      type: "userMessage",
-                      content: [{ type: "text", text: "Inspect the repository" }],
-                    },
-                    {
-                      id: "child-commentary",
-                      type: "agentMessage",
-                      phase: "commentary",
-                      text: "I’m checking the repository now.",
-                    },
-                    {
-                      id: "child-command",
-                      type: "commandExecution",
-                      command: "pwd",
-                      cwd: "/repo",
-                      processId: null,
-                      source: "model",
-                      status: "completed",
-                      commandActions: [{ type: "unknown", command: "pwd" }],
-                      aggregatedOutput: "/repo",
-                      exitCode: 0,
-                      durationMs: 12,
-                    },
-                    {
-                      id: "child-tool",
-                      type: "mcpToolCall",
-                      server: "semble",
-                      tool: "search",
-                      status: "completed",
-                      arguments: { query: "architecture" },
-                      appContext: null,
-                      pluginId: null,
-                      result: { content: [{ type: "text", text: "result" }] },
-                      error: null,
-                      durationMs: 107,
-                    },
-                  ],
-                },
-              ],
+              turns: [],
             },
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return { data: turns, nextCursor: null } as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -283,14 +293,7 @@ describe("CodexAppServerAdapter history loading", () => {
               status: { type: "idle" },
               forkedFromId: "missing-parent",
               parentThreadId: "missing-parent",
-              turns: [
-                {
-                  id: "child-turn",
-                  startedAt: 2,
-                  status: "completed",
-                  items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
-                },
-              ],
+              turns: [],
             },
           } as Response;
         }
@@ -350,20 +353,7 @@ describe("CodexAppServerAdapter history loading", () => {
               status: { type: "idle" },
               forkedFromId: "missing-parent",
               parentThreadId: "missing-parent",
-              turns: [
-                {
-                  id: "inherited-turn",
-                  startedAt: 5,
-                  status: "completed",
-                  items: [{ id: "parent-answer", type: "agentMessage", text: "Parent result" }],
-                },
-                {
-                  id: "child-turn",
-                  startedAt: 11,
-                  status: "completed",
-                  items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
-                },
-              ],
+              turns: [],
             },
           } as Response;
         }
@@ -516,7 +506,42 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("loads search command metadata and hides contextual user fragments from thread reads", async () => {
+  test("loads search command metadata and hides contextual user fragments from paginated history", async () => {
+    const thread = {
+      id: "thread-search",
+      cwd: "/repo",
+      createdAt: 1,
+      turns: [
+        {
+          id: "turn-search",
+          startedAt: 1,
+          completedAt: 2,
+          status: "completed",
+          items: [
+            {
+              id: "context-1",
+              type: "userMessage",
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "<environment_context>\nsecret repo context\n</environment_context>",
+                },
+              ],
+            },
+            {
+              id: "search-1",
+              type: "commandExecution",
+              command: "rg foo src",
+              cwd: "/repo",
+              status: "completed",
+              commandActions: [{ type: "search", command: "rg foo src" }],
+              aggregatedOutput: "src/app.ts:foo",
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -529,52 +554,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-search", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-search",
-            cwd: "/repo",
-            createdAt: 1,
-            turns: [
-              {
-                id: "turn-search",
-                startedAt: 1,
-                completedAt: 2,
-                status: "completed",
-                items: [
-                  {
-                    id: "context-1",
-                    type: "userMessage",
-                    role: "user",
-                    content: [
-                      {
-                        type: "text",
-                        text: "<environment_context>\nsecret repo context\n</environment_context>",
-                      },
-                    ],
-                  },
-                  {
-                    id: "search-1",
-                    type: "commandExecution",
-                    command: "rg foo src",
-                    cwd: "/repo",
-                    status: "completed",
-                    commandActions: [{ type: "search", command: "rg foo src" }],
-                    aggregatedOutput: "src/app.ts:foo",
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -608,6 +593,42 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("loads persisted Codex skill marker text into user display parts", async () => {
     const calls: CodexJsonRpcRequest[] = [];
+    const thread = {
+      id: "thread-skill",
+      cwd: "/repo",
+      createdAt: 1,
+      turns: [
+        {
+          id: "turn-skill",
+          startedAt: 1,
+          completedAt: 2,
+          status: "completed",
+          items: [
+            {
+              id: "skill-user-1",
+              type: "userMessage",
+              content: [
+                {
+                  type: "text",
+                  text: "Tell me the purpose of $create-pr please",
+                  text_elements: [
+                    {
+                      byteRange: { start: 23, end: 33 },
+                      placeholder: "$create-pr",
+                    },
+                  ],
+                },
+                {
+                  type: "skill",
+                  name: "create-pr",
+                  path: "/repo/.codex/skills/create-pr/SKILL.md",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
@@ -621,53 +642,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-skill", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-skill",
-            cwd: "/repo",
-            createdAt: 1,
-            turns: [
-              {
-                id: "turn-skill",
-                startedAt: 1,
-                completedAt: 2,
-                status: "completed",
-                items: [
-                  {
-                    id: "skill-user-1",
-                    type: "userMessage",
-                    content: [
-                      {
-                        type: "text",
-                        text: "Tell me the purpose of $create-pr please",
-                        text_elements: [
-                          {
-                            byteRange: { start: 23, end: 33 },
-                            placeholder: "$create-pr",
-                          },
-                        ],
-                      },
-                      {
-                        type: "skill",
-                        name: "create-pr",
-                        path: "/repo/.codex/skills/create-pr/SKILL.md",
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -710,34 +690,33 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("does not request context while reading unloaded idle history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
+    const thread = {
+      id: "thread-unloaded-idle",
+      cwd: "/repo",
+      status: { type: "idle" },
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "msg-1",
+              type: "agentMessage",
+              phase: "final_answer",
+              text: "Hydrated from paginated history",
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "thread-unloaded-idle",
-              cwd: "/repo",
-              status: { type: "idle" },
-              turns: [
-                {
-                  id: "turn-1",
-                  status: "completed",
-                  items: [
-                    {
-                      id: "msg-1",
-                      type: "agentMessage",
-                      phase: "final_answer",
-                      text: "Hydrated from thread/read",
-                    },
-                  ],
-                },
-              ],
-            },
-          } as Response;
+          return paginatedThreadReadResponse(thread) as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method === "thread/loaded/list") {
           return { data: [], nextCursor: null } as Response;
@@ -772,7 +751,7 @@ describe("CodexAppServerAdapter history loading", () => {
 
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
       expect.objectContaining({
-        text: "Hydrated from thread/read",
+        text: "Hydrated from paginated history",
       }),
     );
     await flushCodexAdapterWork();
@@ -804,20 +783,7 @@ describe("CodexAppServerAdapter history loading", () => {
               id: "thread-unloaded",
               cwd: "/repo",
               status: { type: "idle" },
-              turns: [
-                {
-                  id: "turn-1",
-                  status: "completed",
-                  items: [
-                    {
-                      id: "msg-1",
-                      type: "agentMessage",
-                      phase: "final_answer",
-                      text: "Partial from thread/read",
-                    },
-                  ],
-                },
-              ],
+              turns: [],
             },
           } as Response;
         }
@@ -868,7 +834,57 @@ describe("CodexAppServerAdapter history loading", () => {
     expect(calls.some((call) => call.method === "thread/resume")).toBe(false);
   });
 
-  test("loads documented thread-read tool item shapes", async () => {
+  test("loads documented paginated tool item shapes", async () => {
+    const thread = {
+      id: "thread-contract",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          startedAt: 1,
+          completedAt: 2,
+          items: [
+            {
+              id: "cmd-array",
+              type: "commandExecution",
+              command: ["bun", "test"],
+              cwd: "/repo",
+              status: "completed",
+              aggregatedOutput: "70 pass",
+            },
+            {
+              id: "mcp-json-args",
+              type: "mcpToolCall",
+              server: "openducktor",
+              tool: "odt_read_task",
+              status: "completed",
+              arguments: JSON.stringify({ taskId: "task-1" }),
+              result: { content: [{ type: "text", text: "task ok" }] },
+            },
+            {
+              id: "dynamic-json-args",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              tool: "request_user_input",
+              status: "completed",
+              success: true,
+              arguments: JSON.stringify({
+                requestId: "q1",
+                questions: [{ question: "Choose mode" }],
+              }),
+              contentItems: [{ type: "inputText", text: "selected" }],
+            },
+            {
+              id: "final-content-array",
+              type: "agentMessage",
+              phase: "final_answer",
+              content: [{ type: "output_text", text: "Final from content" }],
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -883,67 +899,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-contract", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-contract",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                startedAt: 1,
-                completedAt: 2,
-                items: [
-                  {
-                    id: "cmd-array",
-                    type: "commandExecution",
-                    command: ["bun", "test"],
-                    cwd: "/repo",
-                    status: "completed",
-                    aggregatedOutput: "70 pass",
-                  },
-                  {
-                    id: "mcp-json-args",
-                    type: "mcpToolCall",
-                    server: "openducktor",
-                    tool: "odt_read_task",
-                    status: "completed",
-                    arguments: JSON.stringify({ taskId: "task-1" }),
-                    result: { content: [{ type: "text", text: "task ok" }] },
-                  },
-                  {
-                    id: "dynamic-json-args",
-                    type: "dynamicToolCall",
-                    namespace: "functions",
-                    tool: "request_user_input",
-                    status: "completed",
-                    success: true,
-                    arguments: JSON.stringify({
-                      requestId: "q1",
-                      questions: [{ question: "Choose mode" }],
-                    }),
-                    contentItems: [{ type: "inputText", text: "selected" }],
-                  },
-                  {
-                    id: "final-content-array",
-                    type: "agentMessage",
-                    phase: "final_answer",
-                    content: [{ type: "output_text", text: "Final from content" }],
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1009,7 +970,55 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("loads command action read find and bash tools from thread reads", async () => {
+  test("loads command action read find and bash tools from paginated history", async () => {
+    const thread = {
+      id: "thread-command-actions",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          startedAt: 1,
+          completedAt: 4,
+          durationMs: 3000,
+          items: [
+            {
+              id: "cmd-read-action",
+              type: "commandExecution",
+              command: ["cat", "src/app.ts"],
+              cwd: "/repo",
+              status: "completed",
+              commandActions: [{ type: "Read", path: "src/app.ts" }],
+              aggregatedOutput: "const app = true;",
+            },
+            {
+              id: "cmd-find-action",
+              type: "commandExecution",
+              command: "find src -name '*.ts'",
+              cwd: "/repo",
+              status: "completed",
+              command_actions: [{ kind: "find", path: "src", pattern: "*.ts" }],
+              aggregated_output: "src/app.ts",
+            },
+            {
+              id: "cmd-bash-action",
+              type: "commandExecution",
+              command: "bun test",
+              cwd: "/repo",
+              status: "completed",
+              commandActions: [{ type: "exec", command: "bun test" }],
+              aggregatedOutput: "1 pass",
+            },
+            {
+              id: "final-action-turn",
+              type: "agentMessage",
+              phase: "final_answer",
+              text: "Done",
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1029,67 +1038,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return {
-            thread: { id: "thread-command-actions", cwd: "/repo", createdAt: 1 },
-          } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-command-actions",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                startedAt: 1,
-                completedAt: 4,
-                durationMs: 3000,
-                items: [
-                  {
-                    id: "cmd-read-action",
-                    type: "commandExecution",
-                    command: ["cat", "src/app.ts"],
-                    cwd: "/repo",
-                    status: "completed",
-                    commandActions: [{ type: "Read", path: "src/app.ts" }],
-                    aggregatedOutput: "const app = true;",
-                  },
-                  {
-                    id: "cmd-find-action",
-                    type: "commandExecution",
-                    command: "find src -name '*.ts'",
-                    cwd: "/repo",
-                    status: "completed",
-                    command_actions: [{ kind: "find", path: "src", pattern: "*.ts" }],
-                    aggregated_output: "src/app.ts",
-                  },
-                  {
-                    id: "cmd-bash-action",
-                    type: "commandExecution",
-                    command: "bun test",
-                    cwd: "/repo",
-                    status: "completed",
-                    commandActions: [{ type: "exec", command: "bun test" }],
-                    aggregatedOutput: "1 pass",
-                  },
-                  {
-                    id: "final-action-turn",
-                    type: "agentMessage",
-                    phase: "final_answer",
-                    text: "Done",
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1186,11 +1140,35 @@ describe("CodexAppServerAdapter history loading", () => {
     ).resolves.toEqual([]);
 
     expect(calls).toEqual([
-      { method: "thread/read", params: { threadId: "missing-thread", includeTurns: true } },
+      { method: "thread/read", params: { threadId: "missing-thread", includeTurns: false } },
     ]);
   });
 
-  test("loads Codex session todos from thread-read update_plan tool calls", async () => {
+  test("loads Codex session todos from paginated update_plan tool calls", async () => {
+    const thread = {
+      id: "thread-todos",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "todo-call-1",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              tool: "update_plan",
+              arguments: {
+                plan: [
+                  { step: "Inspect docs", status: "completed" },
+                  { step: "Wire todos", status: "inProgress" },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1203,41 +1181,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-todos", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-todos",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [
-                  {
-                    id: "todo-call-1",
-                    type: "dynamicToolCall",
-                    namespace: "functions",
-                    tool: "update_plan",
-                    arguments: {
-                      plan: [
-                        { step: "Inspect docs", status: "completed" },
-                        { step: "Wire todos", status: "inProgress" },
-                      ],
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1260,6 +1209,34 @@ describe("CodexAppServerAdapter history loading", () => {
   test("loads todos independently after loading Codex session history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const completedAtMs = Date.parse("2026-05-20T10:00:02.000Z");
+    const thread = {
+      id: "thread-history-todos",
+      cwd: "/repo",
+      createdAt: 1,
+      status: { type: "idle" },
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "todo-call-1",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              tool: "update_plan",
+              arguments: {
+                plan: [
+                  { step: "Load transcript once", status: "completed" },
+                  { step: "Reuse todos", status: "inProgress" },
+                ],
+              },
+              durationMs: 25,
+              completedAtMs,
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
@@ -1280,39 +1257,10 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "thread-history-todos",
-              cwd: "/repo",
-              createdAt: 1,
-              status: { type: "idle" },
-              turns: [
-                {
-                  id: "turn-1",
-                  status: "completed",
-                  items: [
-                    {
-                      id: "todo-call-1",
-                      type: "dynamicToolCall",
-                      namespace: "functions",
-                      tool: "update_plan",
-                      arguments: {
-                        plan: [
-                          { step: "Load transcript once", status: "completed" },
-                          { step: "Reuse todos", status: "inProgress" },
-                        ],
-                      },
-                      durationMs: 25,
-                      completedAtMs,
-                    },
-                  ],
-                },
-              ],
-            },
-          } as Response;
+          return paginatedThreadReadResponse(thread) as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -1362,6 +1310,27 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("rejects Codex todo policy mismatches before returning cached todos", async () => {
     const calls: CodexJsonRpcRequest[] = [];
+    const thread = {
+      id: "thread-history-todos",
+      cwd: "/repo",
+      createdAt: 1,
+      status: { type: "idle" },
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "todo-call-1",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              tool: "update_plan",
+              arguments: { plan: [{ step: "Cached todo", status: "completed" }] },
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
@@ -1382,32 +1351,10 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "thread-history-todos",
-              cwd: "/repo",
-              createdAt: 1,
-              status: { type: "idle" },
-              turns: [
-                {
-                  id: "turn-1",
-                  status: "completed",
-                  items: [
-                    {
-                      id: "todo-call-1",
-                      type: "dynamicToolCall",
-                      namespace: "functions",
-                      tool: "update_plan",
-                      arguments: { plan: [{ step: "Cached todo", status: "completed" }] },
-                    },
-                  ],
-                },
-              ],
-            },
-          } as Response;
+          return paginatedThreadReadResponse(thread) as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -1441,6 +1388,17 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("loads empty todos independently after loading Codex session history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
+    const thread = {
+      id: "thread-empty-todos",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         calls.push(request);
@@ -1472,24 +1430,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        return {
-          thread: {
-            id: "thread-empty-todos",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1518,6 +1464,22 @@ describe("CodexAppServerAdapter history loading", () => {
   });
 
   test("loads only the selected final Codex agent message as finished", async () => {
+    const thread = {
+      id: "thread-final-message",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          startedAt: 1,
+          completedAt: 2,
+          items: [
+            { type: "agentMessage", phase: "commentary", text: "Working" },
+            { type: "agentMessage", phase: "final_answer", text: "Final answer" },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1537,33 +1499,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-final-message", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-final-message",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                startedAt: 1,
-                completedAt: 2,
-                items: [
-                  { type: "agentMessage", phase: "commentary", text: "Working" },
-                  { type: "agentMessage", phase: "final_answer", text: "Final answer" },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1586,7 +1527,27 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("loads Codex session todos from thread-read plan items", async () => {
+  test("loads Codex session todos from paginated plan items", async () => {
+    const thread = {
+      id: "thread-plan-todos",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "plan-1",
+              type: "plan",
+              plan: [
+                { step: "Inspect", status: "completed" },
+                { step: "Fix hydration", status: "in_progress" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1601,37 +1562,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-plan-todos", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-plan-todos",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [
-                  {
-                    id: "plan-1",
-                    type: "plan",
-                    plan: [
-                      { step: "Inspect", status: "completed" },
-                      { step: "Fix hydration", status: "in_progress" },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1651,7 +1587,30 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("loads Codex session todos from thread-read plan text checklists", async () => {
+  test("loads Codex session todos from paginated plan text checklists", async () => {
+    const thread = {
+      id: "thread-plan-text-todos",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "plan-text-1",
+              type: "plan",
+              text: [
+                "- [x] First item",
+                "- [ ] Second item",
+                "- in progress: Third item",
+                "- pending: Fourth item",
+                "- pending: Fifth item",
+              ].join("\n"),
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1671,42 +1630,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return {
-            thread: { id: "thread-plan-text-todos", cwd: "/repo", createdAt: 1 },
-          } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-plan-text-todos",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [
-                  {
-                    id: "plan-text-1",
-                    type: "plan",
-                    text: [
-                      "- [x] First item",
-                      "- [ ] Second item",
-                      "- in progress: Third item",
-                      "- pending: Fourth item",
-                      "- pending: Fifth item",
-                    ].join("\n"),
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1729,7 +1658,31 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("loads Codex session todos from thread-read named todo tool inputs", async () => {
+  test("loads Codex session todos from paginated named todo tool inputs", async () => {
+    const thread = {
+      id: "thread-named-todos",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "todo-call-1",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              name: "update_plan",
+              input: JSON.stringify({
+                plan: [
+                  { step: "Inspect", status: "completed" },
+                  { step: "Fix latest todo", status: "in_progress" },
+                ],
+              }),
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1744,41 +1697,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-named-todos", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-named-todos",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [
-                  {
-                    id: "todo-call-1",
-                    type: "dynamicToolCall",
-                    namespace: "functions",
-                    name: "update_plan",
-                    input: JSON.stringify({
-                      plan: [
-                        { step: "Inspect", status: "completed" },
-                        { step: "Fix latest todo", status: "in_progress" },
-                      ],
-                    }),
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1798,7 +1722,33 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("loads Codex session todos from thread-read JSON arguments", async () => {
+  test("loads Codex session todos from paginated JSON arguments", async () => {
+    const thread = {
+      id: "thread-json-todos",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "todo-call-1",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              tool: "update_plan",
+              status: "completed",
+              success: true,
+              arguments: JSON.stringify({
+                plan: [
+                  { step: "Map paginated history", status: "completed" },
+                  { step: "Hydrate todos", status: "in_progress" },
+                ],
+              }),
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1813,43 +1763,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-json-todos", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-json-todos",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [
-                  {
-                    id: "todo-call-1",
-                    type: "dynamicToolCall",
-                    namespace: "functions",
-                    tool: "update_plan",
-                    status: "completed",
-                    success: true,
-                    arguments: JSON.stringify({
-                      plan: [
-                        { step: "Map thread/read", status: "completed" },
-                        { step: "Hydrate todos", status: "in_progress" },
-                      ],
-                    }),
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1864,12 +1783,41 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([
-      expect.objectContaining({ content: "Map thread/read", status: "completed" }),
+      expect.objectContaining({ content: "Map paginated history", status: "completed" }),
       expect.objectContaining({ content: "Hydrate todos", status: "in_progress" }),
     ]);
   });
 
-  test("ignores failed or incomplete Codex thread-read todo tool calls", async () => {
+  test("ignores failed or incomplete Codex paginated todo tool calls", async () => {
+    const thread = {
+      id: "thread-bad-todos",
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          items: [
+            {
+              id: "todo-call-running",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              tool: "update_plan",
+              status: "running",
+              arguments: { plan: [{ step: "Do not show", status: "in_progress" }] },
+            },
+            {
+              id: "todo-call-failed",
+              type: "dynamicToolCall",
+              namespace: "functions",
+              tool: "todo_write",
+              status: "completed",
+              success: false,
+              arguments: { todo: [{ step: "Also hidden", status: "pending" }] },
+            },
+          ],
+        },
+      ],
+    };
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -1884,46 +1832,12 @@ describe("CodexAppServerAdapter history loading", () => {
           } as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: [], nextCursor: null } as Response;
+          return paginatedTurnsListResponse(thread) as Response;
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
-        if (includeTurns === false) {
-          return { thread: { id: "thread-bad-todos", cwd: "/repo", createdAt: 1 } } as Response;
-        }
-        return {
-          thread: {
-            id: "thread-bad-todos",
-            cwd: "/repo",
-            turns: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [
-                  {
-                    id: "todo-call-running",
-                    type: "dynamicToolCall",
-                    namespace: "functions",
-                    tool: "update_plan",
-                    status: "running",
-                    arguments: { plan: [{ step: "Do not show", status: "in_progress" }] },
-                  },
-                  {
-                    id: "todo-call-failed",
-                    type: "dynamicToolCall",
-                    namespace: "functions",
-                    tool: "todo_write",
-                    status: "completed",
-                    success: false,
-                    arguments: { todo: [{ step: "Also hidden", status: "pending" }] },
-                  },
-                ],
-              },
-            ],
-          },
-        } as Response;
+        return paginatedThreadReadResponse(thread) as Response;
       },
     };
     const adapter = createAdapterWithTransport(transport);

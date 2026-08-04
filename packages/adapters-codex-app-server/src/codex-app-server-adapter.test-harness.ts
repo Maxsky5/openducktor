@@ -145,6 +145,134 @@ export const createRuntimeStreamSubscription = () => {
 
 export const createDeferred = <T>(): PromiseWithResolvers<T> => Promise.withResolvers<T>();
 
+const recordingTransportHistoryTurns = () => [
+  {
+    id: "turn-1",
+    startedAt: 1_778_112_001,
+    completedAt: 1_778_112_031,
+    status: "completed",
+    items: [
+      {
+        id: "user-history-1",
+        type: "userMessage",
+        content: [{ type: "text", text: "Hello Codex" }],
+      },
+      {
+        id: "reason-1",
+        type: "reasoning",
+        summary: ["Thinking"],
+        content: [],
+      },
+      {
+        id: "cmd-read-1",
+        type: "commandExecution",
+        command: "cat src/app.ts",
+        cwd: "/repo",
+        processId: "pty-1",
+        source: "model",
+        status: "completed",
+        commandActions: [
+          {
+            type: "read",
+            command: "cat src/app.ts",
+            name: "app.ts",
+            path: "/repo/src/app.ts",
+          },
+        ],
+        aggregatedOutput: "export const app = true;",
+        exitCode: 0,
+        durationMs: 12,
+      },
+      {
+        id: "cmd-bash-1",
+        type: "command_execution",
+        command: "bun test",
+        cwd: "/repo",
+        processId: "pty-2",
+        source: "model",
+        status: "completed",
+        command_actions: [{ type: "unknown", command: "bun test" }],
+        aggregated_output: "1 pass",
+        exitCode: 0,
+        durationMs: 34,
+      },
+      {
+        id: "file-change-1",
+        type: "fileChange",
+        status: "completed",
+        changes: [
+          {
+            path: "/repo/src/app.ts",
+            kind: "update",
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
+          },
+        ],
+      },
+      {
+        id: "file-change-failed-1",
+        type: "fileChange",
+        status: "failed",
+        error: "patch failed",
+        changes: [
+          {
+            path: "/repo/src/broken.ts",
+            kind: "update",
+            diff: "--- a/src/broken.ts\n+++ b/src/broken.ts\n@@\n-old\n+broken",
+          },
+        ],
+      },
+      {
+        id: "dynamic-tool-1",
+        type: "dynamicToolCall",
+        namespace: "codex",
+        tool: "read",
+        arguments: { path: "/repo/README.md" },
+        status: "completed",
+        contentItems: [{ type: "inputText", text: "README" }],
+        success: true,
+        durationMs: 5,
+      },
+      {
+        id: "web-search-1",
+        type: "webSearch",
+        query: "OpenDucktor Codex runtime",
+        output: "search results",
+        action: null,
+      },
+      {
+        id: "tool-1",
+        type: "mcpToolCall",
+        server: "openducktor",
+        tool: "odt_read_task",
+        status: "completed",
+        arguments: { taskId: "task-1" },
+        result: { content: [{ type: "text", text: "ok" }] },
+      },
+      {
+        id: "tool-failed-1",
+        type: "mcpToolCall",
+        server: "openducktor",
+        tool: "odt_read_task",
+        status: "completed",
+        arguments: { taskId: "missing" },
+        result: { isError: true, message: "task missing" },
+      },
+      {
+        id: "msg-1",
+        type: "agentMessage",
+        phase: "final_answer",
+        text: "Hello from history",
+      },
+      {
+        id: "msg-commentary-1",
+        type: "agentMessage",
+        phase: "commentary",
+        text: "Later commentary",
+      },
+    ],
+  },
+];
+
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
   readonly turnStartDeferred = createDeferred<unknown>();
@@ -195,26 +323,6 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           method === "thread/resume"
             ? (params as { threadId: string }).threadId
             : `${method}-${this.runtimeId}`;
-        const turns =
-          method === "thread/resume" &&
-          (threadId === "thread-idle" || threadId === "thread/start-runtime-live")
-            ? [
-                {
-                  id: "turn-1",
-                  startedAt: 1_778_112_001,
-                  completedAt: 1_778_112_031,
-                  status: "completed",
-                  items: [
-                    {
-                      id: "msg-1",
-                      type: "agentMessage",
-                      phase: "final_answer",
-                      text: "Hello from history",
-                    },
-                  ],
-                },
-              ]
-            : [];
         return {
           thread: {
             id: threadId,
@@ -223,7 +331,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
             preview: "Live Codex session",
             status:
               threadId === "thread-idle" ? { type: "idle" } : { type: "active", activeFlags: [] },
-            turns,
+            turns: [],
           },
           startedAt: "2026-05-07T00:00:00.000Z",
         } as Response;
@@ -274,133 +382,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
             createdAt: 1_778_112_000,
             preview: "Live Codex session",
             status: { type: "active", activeFlags: [] },
-            turns: [
-              {
-                id: "turn-1",
-                startedAt: 1_778_112_001,
-                completedAt: 1_778_112_031,
-                status: "completed",
-                items: [
-                  {
-                    id: "user-history-1",
-                    type: "userMessage",
-                    content: [{ type: "text", text: "Hello Codex" }],
-                  },
-                  {
-                    id: "reason-1",
-                    type: "reasoning",
-                    summary: ["Thinking"],
-                    content: [],
-                  },
-                  {
-                    id: "cmd-read-1",
-                    type: "commandExecution",
-                    command: "cat src/app.ts",
-                    cwd: "/repo",
-                    processId: "pty-1",
-                    source: "model",
-                    status: "completed",
-                    commandActions: [
-                      {
-                        type: "read",
-                        command: "cat src/app.ts",
-                        name: "app.ts",
-                        path: "/repo/src/app.ts",
-                      },
-                    ],
-                    aggregatedOutput: "export const app = true;",
-                    exitCode: 0,
-                    durationMs: 12,
-                  },
-                  {
-                    id: "cmd-bash-1",
-                    type: "command_execution",
-                    command: "bun test",
-                    cwd: "/repo",
-                    processId: "pty-2",
-                    source: "model",
-                    status: "completed",
-                    command_actions: [{ type: "unknown", command: "bun test" }],
-                    aggregated_output: "1 pass",
-                    exitCode: 0,
-                    durationMs: 34,
-                  },
-                  {
-                    id: "file-change-1",
-                    type: "fileChange",
-                    status: "completed",
-                    changes: [
-                      {
-                        path: "/repo/src/app.ts",
-                        kind: "update",
-                        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
-                      },
-                    ],
-                  },
-                  {
-                    id: "file-change-failed-1",
-                    type: "fileChange",
-                    status: "failed",
-                    error: "patch failed",
-                    changes: [
-                      {
-                        path: "/repo/src/broken.ts",
-                        kind: "update",
-                        diff: "--- a/src/broken.ts\n+++ b/src/broken.ts\n@@\n-old\n+broken",
-                      },
-                    ],
-                  },
-                  {
-                    id: "dynamic-tool-1",
-                    type: "dynamicToolCall",
-                    namespace: "codex",
-                    tool: "read",
-                    arguments: { path: "/repo/README.md" },
-                    status: "completed",
-                    contentItems: [{ type: "inputText", text: "README" }],
-                    success: true,
-                    durationMs: 5,
-                  },
-                  {
-                    id: "web-search-1",
-                    type: "webSearch",
-                    query: "OpenDucktor Codex runtime",
-                    output: "search results",
-                    action: null,
-                  },
-                  {
-                    id: "tool-1",
-                    type: "mcpToolCall",
-                    server: "openducktor",
-                    tool: "odt_read_task",
-                    status: "completed",
-                    arguments: { taskId: "task-1" },
-                    result: { content: [{ type: "text", text: "ok" }] },
-                  },
-                  {
-                    id: "tool-failed-1",
-                    type: "mcpToolCall",
-                    server: "openducktor",
-                    tool: "odt_read_task",
-                    status: "completed",
-                    arguments: { taskId: "missing" },
-                    result: { isError: true, message: "task missing" },
-                  },
-                  {
-                    id: "msg-1",
-                    type: "agentMessage",
-                    phase: "final_answer",
-                    text: "Hello from history",
-                  },
-                  {
-                    id: "msg-commentary-1",
-                    type: "agentMessage",
-                    phase: "commentary",
-                    text: "Later commentary",
-                  },
-                ],
-              },
-            ],
+            turns: [],
           },
         } as Response;
       case "thread/loaded/list":
@@ -434,7 +416,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           backwardsCursor: null,
         } as Response;
       case "thread/turns/list":
-        return { data: [] } as Response;
+        return { data: recordingTransportHistoryTurns(), nextCursor: null } as Response;
       case "turn/diff":
         return {
           data: [

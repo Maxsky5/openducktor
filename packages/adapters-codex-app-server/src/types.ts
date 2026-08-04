@@ -197,6 +197,7 @@ export type CodexThreadStartParams = {
   approvalsReviewer: CodexAppServerApprovalsReviewer | null;
   cwd: string;
   developerInstructions: string;
+  historyMode: "paginated";
   sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;
@@ -220,6 +221,7 @@ export type CodexThreadForkParams = {
   threadId: string;
   cwd: string;
   developerInstructions: string;
+  excludeTurns: boolean;
   sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;

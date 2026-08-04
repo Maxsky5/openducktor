@@ -34,6 +34,7 @@ describe("createCodexAppServerTransportRegistry", () => {
                 gitInfo: null,
                 name: null,
                 status: { type: "active", activeFlags: [] },
+                historyMode: "paginated",
                 turns: [],
               },
             ],

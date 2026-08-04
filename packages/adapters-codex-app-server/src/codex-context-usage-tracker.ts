@@ -42,6 +42,13 @@ export class CodexContextUsageTracker {
   private readonly latestByKey = new Map<string, CodexSessionContextUsage>();
   private readonly inFlightLoadsByKey = new Map<string, Promise<CodexSessionContextUsage | null>>();
 
+  initializeFreshThread(runtimeId: string, threadId: string): void {
+    const key = contextUsageKey(runtimeId, threadId);
+    if (!this.latestByKey.has(key)) {
+      this.latestByKey.set(key, { totalTokens: 0 });
+    }
+  }
+
   latest(runtimeId: string, threadId: string): CodexSessionContextUsage | null {
     return this.latestByKey.get(contextUsageKey(runtimeId, threadId)) ?? null;
   }

@@ -334,6 +334,7 @@ export class CodexAppServerAdapter
       ...codexTransportPolicy(policy),
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
+      historyMode: "paginated",
       model: transportModel.model,
       effort: transportModel.effort,
     });
@@ -343,6 +344,7 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
+    this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
     await client.threadSetName({
       threadId: session.threadId,
       name: title,
@@ -373,6 +375,7 @@ export class CodexAppServerAdapter
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
+      excludeTurns: true,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });
@@ -406,6 +409,7 @@ export class CodexAppServerAdapter
       threadId: input.parentExternalSessionId,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
+      excludeTurns: true,
       model: toTransportModelSelection(model).model,
       effort: toTransportModelSelection(model).effort,
     });
@@ -620,6 +624,7 @@ export class CodexAppServerAdapter
       ...("systemPrompt" in input && input.systemPrompt
         ? { developerInstructions: input.systemPrompt }
         : {}),
+      excludeTurns: true,
       ...(model ? { model: toTransportModelSelection(model).model } : {}),
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
