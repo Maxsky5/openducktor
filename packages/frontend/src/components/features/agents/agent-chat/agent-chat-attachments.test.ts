@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import {
   buildComposerAttachmentFromFile,
   buildComposerAttachmentFromPath,
@@ -47,9 +48,12 @@ describe("agent-chat-attachments", () => {
   });
 
   test("preserves existing non-empty filenames verbatim", () => {
-    expect(readAttachmentFileName({ name: " report .pdf ", mime: "application/pdf" })).toBe(
-      " report .pdf ",
-    );
+    expect(
+      readAttachmentFileName({
+        name: " report .pdf ",
+        mime: "application/pdf",
+      }),
+    ).toBe(" report .pdf ");
   });
 
   test("rehydrates uncommon supported extensions from their path", () => {
@@ -106,6 +110,80 @@ describe("agent-chat-attachments", () => {
       }),
     ).toEqual({
       [imageAttachment.id]: "The selected model does not support image attachments.",
+    });
+  });
+
+  test("validates staged attachments against model MIME constraints", () => {
+    const heicAttachment = buildComposerAttachmentFromPath("/tmp/photo.heic");
+    const pngAttachment = buildComposerAttachmentFromPath("/tmp/photo.png");
+    if (!heicAttachment || !pngAttachment) {
+      throw new Error("Expected fixture attachments to classify");
+    }
+
+    expect(
+      validateComposerAttachments([heicAttachment, pngAttachment], {
+        pdf: true,
+        image: true,
+        audio: false,
+        video: false,
+        mimeTypes: {
+          image: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          pdf: ["application/pdf"],
+        },
+      }),
+    ).toEqual({
+      [heicAttachment.id]:
+        "The selected model supports image attachments only as image/jpeg, image/png, image/gif, image/webp.",
+    });
+  });
+
+  test("uses supported filename extensions when platforms report generic or alias MIME types", () => {
+    const genericPng = buildComposerAttachmentFromFile(
+      new File(["image"], "photo.png", { type: "application/octet-stream" }),
+    );
+    const aliasJpeg = buildComposerAttachmentFromFile(
+      new File(["image"], "photo.jpg", { type: "image/jpg" }),
+    );
+    if (!genericPng || !aliasJpeg) {
+      throw new Error("Expected extension-recognized image attachments");
+    }
+
+    expect(
+      validateComposerAttachments([genericPng, aliasJpeg], {
+        pdf: true,
+        image: true,
+        audio: false,
+        video: false,
+        mimeTypes: {
+          image: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          pdf: ["application/pdf"],
+        },
+      }),
+    ).toEqual({});
+  });
+
+  test("rejects files whose combined size exceeds the staging limit", () => {
+    const first = buildComposerAttachmentFromFile(
+      new File(["first"], "first.pdf", { type: "application/pdf" }),
+    );
+    const second = buildComposerAttachmentFromFile(
+      new File(["second"], "second.pdf", { type: "application/pdf" }),
+    );
+    if (!first || !second) {
+      throw new Error("Expected PDF attachments to classify");
+    }
+    first.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 + 1 } as File;
+    second.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 } as File;
+
+    expect(
+      validateComposerAttachments([first, second], {
+        pdf: true,
+        image: false,
+        audio: false,
+        video: false,
+      }),
+    ).toEqual({
+      [second.id]: "Attachments must total 32 MiB or less.",
     });
   });
 });

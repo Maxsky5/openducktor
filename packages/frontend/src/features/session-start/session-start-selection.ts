@@ -65,6 +65,13 @@ export const coerceVisibleSelectionToCatalog = (
   if (!catalog || !selection) {
     return selection;
   }
+  if (
+    catalog.runtime?.kind &&
+    selection.runtimeKind &&
+    catalog.runtime.kind !== selection.runtimeKind
+  ) {
+    return null;
+  }
 
   const model = findCatalogModel(catalog, selection);
   if (!model) {

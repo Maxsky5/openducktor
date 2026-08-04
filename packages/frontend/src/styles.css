@@ -118,6 +118,7 @@
   --studio-chrome: oklch(0.446 0.043 257.281); /* ~slate-600 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
   --odt-runtime-accent-codex: oklch(0.596 0.145 163.225); /* OpenAI green */
+  --odt-runtime-accent-claude: #d97757; /* Claude Code orange */
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;
@@ -237,6 +238,7 @@
   --studio-chrome: oklch(0.332 0.038 260.912); /* ~slate-700 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
   --odt-runtime-accent-codex: oklch(0.723 0.219 149.579); /* ~green-500 */
+  --odt-runtime-accent-claude: #c86649; /* Claude Code orange, dark-theme adjusted */
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;
@@ -339,6 +341,7 @@
   --color-studio-chrome: var(--studio-chrome);
   --color-studio-chrome-foreground: var(--studio-chrome-foreground);
   --color-odt-runtime-accent-codex: var(--odt-runtime-accent-codex);
+  --color-odt-runtime-accent-claude: var(--odt-runtime-accent-claude);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

@@ -22,13 +22,22 @@ const EMPTY_EXISTING_SESSION_OPTIONS: SessionStartExistingSessionOption[] = [];
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
   sourceSessionValue: string,
-): AgentModelSelection | null => {
+): {
+  runtimeKind: RuntimeKind;
+  selectedModel: AgentModelSelection | null;
+} | null => {
   if (!sourceSessionValue) {
     return null;
   }
 
   const selectedOption = options.find((option) => option.value === sourceSessionValue);
-  return selectedOption?.selectedModel ?? null;
+  if (!selectedOption) {
+    return null;
+  }
+  return {
+    runtimeKind: selectedOption.sourceSession.runtimeKind,
+    selectedModel: selectedOption.selectedModel ?? null,
+  };
 };
 
 const firstSourceSessionValue = (options: SessionStartExistingSessionOption[]): string =>
@@ -106,15 +115,17 @@ const resolveInitialStartState = ({
   };
 };
 
-const buildReuseSelectionDraft = ({
+const buildSourceSelectionDraft = ({
   catalog,
   options,
   runtimeDefinitions,
+  startMode,
   sourceSessionValue,
 }: {
   catalog: AgentModelCatalog | null;
   options: SessionStartExistingSessionOption[];
   runtimeDefinitions: RuntimeDescriptor[];
+  startMode: "reuse" | "fork";
   sourceSessionValue: string;
 }): {
   runtimeKind: RuntimeKind | null;
@@ -122,26 +133,27 @@ const buildReuseSelectionDraft = ({
 } => {
   const sourceSelection = resolveSourceSelection(options, sourceSessionValue);
   const runtimeKind = resolveRuntimeKindSelection({
-    runtimeDefinitions: filterRuntimeDefinitionsForStartMode(runtimeDefinitions, "reuse"),
+    runtimeDefinitions: filterRuntimeDefinitionsForStartMode(runtimeDefinitions, startMode),
     requestedRuntimeKind: sourceSelection?.runtimeKind ?? null,
   });
 
-  if (!sourceSelection || !runtimeKind) {
+  if (!sourceSelection?.selectedModel || !runtimeKind) {
     return {
       runtimeKind,
       selection: null,
     };
   }
 
+  const sourceModel = {
+    ...sourceSelection.selectedModel,
+    runtimeKind,
+  };
+  const matchingCatalog = catalog?.runtime?.kind === runtimeKind ? catalog : null;
   return {
     runtimeKind,
-    selection: coerceVisibleSelectionToCatalog(catalog, {
-      ...sourceSelection,
-      runtimeKind,
-    }) ?? {
-      ...sourceSelection,
-      runtimeKind,
-    },
+    selection: matchingCatalog
+      ? coerceVisibleSelectionToCatalog(matchingCatalog, sourceModel)
+      : sourceModel,
   };
 };
 
@@ -198,12 +210,17 @@ export function useSessionStartModalReuseState({
     setSelectedSourceSessionValue("");
   }, []);
 
-  const applyReuseSourceSelection = useCallback(
-    (sourceSessionValue: string, options = existingSessionOptions): void => {
-      const nextDraft = buildReuseSelectionDraft({
+  const applySourceSessionSelection = useCallback(
+    (
+      startMode: "reuse" | "fork",
+      sourceSessionValue: string,
+      options = existingSessionOptions,
+    ): void => {
+      const nextDraft = buildSourceSelectionDraft({
         catalog,
         options,
         runtimeDefinitions,
+        startMode,
         sourceSessionValue,
       });
       setRequestedRuntimeKind(nextDraft.runtimeKind);
@@ -229,29 +246,31 @@ export function useSessionStartModalReuseState({
       });
       setSelectedStartMode(nextState.selectedStartMode);
       setSelectedSourceSessionValue(nextState.selectedSourceSessionValue);
-      if (nextState.selectedStartMode === "reuse") {
-        applyReuseSourceSelection(
+      if (nextState.selectedStartMode === "reuse" || nextState.selectedStartMode === "fork") {
+        applySourceSessionSelection(
+          nextState.selectedStartMode,
           nextState.selectedSourceSessionValue,
           nextIntent.existingSessionOptions ?? [],
         );
       }
       return nextState;
     },
-    [applyReuseSourceSelection],
+    [applySourceSessionSelection],
   );
 
   const effectiveSelectedSourceSessionValue =
-    effectiveSelectedStartMode === "reuse"
+    effectiveSelectedStartMode === "reuse" || effectiveSelectedStartMode === "fork"
       ? resolveSelectedSourceSessionValue(existingSessionOptions, selectedSourceSessionValue)
       : selectedSourceSessionValue;
 
   const reuseSelectionDraft = useMemo(
     () =>
       effectiveSelectedStartMode === "reuse" && effectiveSelectedSourceSessionValue
-        ? buildReuseSelectionDraft({
+        ? buildSourceSelectionDraft({
             catalog,
             options: existingSessionOptions,
             runtimeDefinitions,
+            startMode: "reuse",
             sourceSessionValue: effectiveSelectedSourceSessionValue,
           })
         : {
@@ -274,7 +293,7 @@ export function useSessionStartModalReuseState({
       }
 
       setSelectedStartMode(startMode);
-      if (startMode !== "reuse") {
+      if (startMode !== "reuse" && startMode !== "fork") {
         return;
       }
 
@@ -287,9 +306,9 @@ export function useSessionStartModalReuseState({
       }
 
       setSelectedSourceSessionValue(nextSourceSessionValue);
-      applyReuseSourceSelection(nextSourceSessionValue);
+      applySourceSessionSelection(startMode, nextSourceSessionValue);
     },
-    [applyReuseSourceSelection, existingSessionOptions, selectedSourceSessionValue],
+    [applySourceSessionSelection, existingSessionOptions, selectedSourceSessionValue],
   );
 
   const handleSelectSourceSessionValue = useCallback(
@@ -299,15 +318,15 @@ export function useSessionStartModalReuseState({
         sourceSessionValue,
       );
       setSelectedSourceSessionValue(nextSourceSessionValue);
-      if (effectiveSelectedStartMode !== "reuse") {
+      if (effectiveSelectedStartMode !== "reuse" && effectiveSelectedStartMode !== "fork") {
         return;
       }
       if (!nextSourceSessionValue) {
         return;
       }
-      applyReuseSourceSelection(nextSourceSessionValue);
+      applySourceSessionSelection(effectiveSelectedStartMode, nextSourceSessionValue);
     },
-    [applyReuseSourceSelection, effectiveSelectedStartMode, existingSessionOptions],
+    [applySourceSessionSelection, effectiveSelectedStartMode, existingSessionOptions],
   );
 
   return {

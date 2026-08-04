@@ -121,6 +121,7 @@ describe("sanitizeChildProcessEnvironment", () => {
     const resolvedEnvironment: NodeJS.ProcessEnv = {
       PATH: "/already/resolved:/usr/bin",
       ODT_HOST_TOKEN: "host-secret",
+      ODT_HOST_TOKEN_FILE: "/tmp/host-token",
       OPENDUCKTOR_APP_TOKEN: "app-secret",
       USER_SETTING: "preserved",
     };

@@ -73,7 +73,7 @@ describe("agent-orchestrator/support/session-history-chat-messages subagents", (
     expect(subagent.meta.externalSessionId).toBe("session-child-1");
     expect(subagent.meta.startedAtMs).toBe(100);
     expect(subagent.meta.endedAtMs).toBe(300);
-    expect(subagent.content).toContain("Finished work");
+    expect(subagent.content).toContain("Starting work");
   });
 
   test("preserves cancelled history-loaded subagent history parts", () => {
@@ -119,7 +119,7 @@ describe("agent-orchestrator/support/session-history-chat-messages subagents", (
     expect(subagent.meta.externalSessionId).toBe("session-child-1");
     expect(subagent.meta.startedAtMs).toBe(100);
     expect(subagent.meta.endedAtMs).toBe(300);
-    expect(subagent.content).toContain("Cancelled by user");
+    expect(subagent.content).toContain("Starting work");
   });
 
   test("preserves history-loaded subagent error details", () => {

@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, AgentSkillReference } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
-import { AgentOperationsContext } from "@/state/app-state-contexts";
+import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
+import { AgentOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -55,9 +56,11 @@ const createHarness = (
 ) => {
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryProvider useIsolatedClient>
-      <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-        {children}
-      </AgentOperationsContext.Provider>
+      <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+        <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+          {children}
+        </AgentOperationsContext.Provider>
+      </RuntimeDefinitionsContext.Provider>
     </QueryProvider>
   );
   return createHookHarness(
@@ -91,9 +94,11 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const readSessionHistory = mock(async () => history);
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryProvider useIsolatedClient>
-        <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-          {children}
-        </AgentOperationsContext.Provider>
+        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+            {children}
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
       </QueryProvider>
     );
     const harness = createHookHarness(
@@ -141,9 +146,11 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     );
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>
-        <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-          {children}
-        </AgentOperationsContext.Provider>
+        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+            {children}
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
       </QueryClientProvider>
     );
     const harness = createHookHarness(
@@ -200,6 +207,89 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
       expect(harness.getLatest().interactionSession?.pendingApprovals).toHaveLength(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows Claude history before the separate skill catalog resolves", async () => {
+    const history: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "user-skill-1",
+        role: "user",
+        timestamp: "2026-07-27T10:00:00.000Z",
+        text: "/grill-me",
+        displayParts: [{ kind: "text", text: "/grill-me" }],
+        state: "read",
+        parts: [],
+      },
+    ];
+    const readSessionHistory = mock(async () => history);
+    let resolveSkills: ((catalog: { skills: AgentSkillReference[] }) => void) | undefined;
+    const loadRepoRuntimeSkills = mock(
+      () =>
+        new Promise<{ skills: AgentSkillReference[] }>((resolve) => {
+          resolveSkills = resolve;
+        }),
+    );
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>
+        <RuntimeDefinitionsContext.Provider
+          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeSkills })}
+        >
+          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+            {children}
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
+      </QueryClientProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "claude-thread",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+        },
+        repoReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
+      expect(harness.getLatest().session?.messages.items[0]?.content).toBe("/grill-me");
+      expect(harness.getLatest().session?.messages.items[0]?.meta).toMatchObject({
+        kind: "user",
+        parts: [{ kind: "text", text: "/grill-me" }],
+      });
+
+      resolveSkills?.({
+        skills: [
+          {
+            id: "grill-me",
+            name: "grill-me",
+            path: "grill-me",
+            title: "grill-me",
+          },
+        ],
+      });
+      await harness.waitFor((state) => {
+        const meta = state.session?.messages.items[0]?.meta;
+        return (
+          meta?.kind === "user" &&
+          meta.parts?.some((part) => part.kind === "skill_mention") === true
+        );
+      });
     } finally {
       await harness.unmount();
     }

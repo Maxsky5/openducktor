@@ -1,8 +1,12 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta } from "../support/assistant-meta";
-import { toReasoningMessageId } from "../support/chat-message-ids";
+import { toReasoningMessageId, toTextMessageId } from "../support/chat-message-ids";
 import { sanitizeStreamingText } from "../support/core";
-import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
+import {
+  findSessionMessageById,
+  replaceSessionMessageById,
+  upsertSessionMessage,
+} from "../support/messages";
 import { type SubagentMeta, upsertSubagentMessage } from "../support/subagent-messages";
 import type {
   SessionEvent,
@@ -22,26 +26,8 @@ const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(context.session.identity, (current) => withRunningStatus(current));
 };
 
-const isBackgroundSubagentPart = (part: Extract<SessionPart, { kind: "subagent" }>): boolean => {
-  return part.executionMode === "background";
-};
-
-const isTerminalSubagentPart = (part: Extract<SessionPart, { kind: "subagent" }>): boolean => {
-  return part.status === "completed" || part.status === "cancelled" || part.status === "error";
-};
-
 const isInactiveSessionStatus = (status: AgentSessionState["status"]): boolean => {
   return status === "idle" || status === "stopped" || status === "error";
-};
-
-const shouldPreserveInactiveStatusForSubagentPart = (
-  session: AgentSessionState,
-  part: Extract<SessionPart, { kind: "subagent" }>,
-): boolean => {
-  return (
-    isInactiveSessionStatus(session.status) &&
-    (isBackgroundSubagentPart(part) || isTerminalSubagentPart(part))
-  );
 };
 
 const shouldRecordPartAsTurnActivity = (
@@ -54,7 +40,7 @@ const shouldRecordPartAsTurnActivity = (
 
   const current = context.store.readSession(context.session.identity);
   // If the live session is unavailable, keep the existing activity path because inactivity cannot be proven.
-  return current ? !shouldPreserveInactiveStatusForSubagentPart(current, part) : true;
+  return current ? !isInactiveSessionStatus(current.status) : true;
 };
 
 const resolvePartModelSelection = (
@@ -86,12 +72,18 @@ const upsertLiveAssistantMessage = ({
   current,
   model,
   messageId,
+  partId,
+  replacedMessageId,
+  sourceMessageId,
   text,
   timestamp,
 }: {
   current: AgentSessionState;
   model: AgentSessionState["selectedModel"] | null;
   messageId: string;
+  partId?: string;
+  replacedMessageId?: string;
+  sourceMessageId?: string;
   text: string;
   timestamp: string;
 }): AgentSessionState => {
@@ -100,7 +92,7 @@ const upsertLiveAssistantMessage = ({
     return current;
   }
 
-  const existingMessage = findSessionMessageById(current, messageId);
+  const existingMessage = findSessionMessageById(current, replacedMessageId ?? messageId);
   const assistantMeta =
     existingMessage?.meta?.kind === "assistant"
       ? existingMessage.meta
@@ -108,16 +100,22 @@ const upsertLiveAssistantMessage = ({
           ...toAssistantMessageMeta(current, undefined, undefined, model),
           isFinal: false,
         };
-
+  const nextMessage = {
+    id: messageId,
+    role: "assistant" as const,
+    content: nextContent,
+    timestamp: existingMessage?.timestamp ?? timestamp,
+    meta: {
+      ...assistantMeta,
+      ...(partId ? { partId } : {}),
+      ...(sourceMessageId ? { sourceMessageId } : {}),
+    },
+  };
   return {
     ...current,
-    messages: upsertSessionMessage(current, {
-      id: messageId,
-      role: "assistant",
-      content: nextContent,
-      timestamp: existingMessage?.timestamp ?? timestamp,
-      meta: assistantMeta,
-    }),
+    messages: replacedMessageId
+      ? replaceSessionMessageById(current, replacedMessageId, nextMessage)
+      : upsertSessionMessage(current, nextMessage),
   };
 };
 
@@ -169,13 +167,17 @@ const handleTextPart = (
       return withRunningStatus(prepared);
     }
 
+    const sourceMessage = findSessionMessageById(prepared, part.messageId);
+    const usesPartIdentity = prepared.runtimeKind === "claude";
     return upsertLiveAssistantMessage({
       current: {
         ...prepared,
         status: "running",
       },
       model: resolvePartModelSelection(context, prepared, part.messageId),
-      messageId: part.messageId,
+      messageId: usesPartIdentity ? toTextMessageId(part.messageId, part.partId) : part.messageId,
+      ...(usesPartIdentity ? { partId: part.partId, sourceMessageId: part.messageId } : {}),
+      ...(usesPartIdentity && sourceMessage ? { replacedMessageId: part.messageId } : {}),
       text: part.text,
       timestamp: event.timestamp,
     });
@@ -232,6 +234,7 @@ const handleSubagentPart = (
       kind: "subagent",
       partId: part.partId,
       correlationKey: part.correlationKey,
+      sourceMessageId: part.messageId,
       status: part.status,
       ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
       ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
@@ -245,12 +248,8 @@ const handleSubagentPart = (
       ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
       ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
     };
-    const status = shouldPreserveInactiveStatusForSubagentPart(prepared, part)
-      ? prepared.status
-      : "running";
     return {
       ...prepared,
-      status,
       messages: upsertSubagentMessage({
         owner: prepared,
         incomingMeta,

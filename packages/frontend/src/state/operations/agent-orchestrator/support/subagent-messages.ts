@@ -228,9 +228,7 @@ const mergeSubagentMeta = (
   }
   const agent = incomingMeta.agent ?? existingMeta?.agent;
   const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
-  const description = isPreviousRunUpdate
-    ? existingMeta?.description
-    : (incomingMeta.description ?? existingMeta?.description);
+  const description = existingMeta?.description ?? incomingMeta.description;
   let error: string | undefined;
   if (isRestart) {
     error = incomingMeta.error;
@@ -241,11 +239,13 @@ const mergeSubagentMeta = (
   }
   const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
   const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
+  const sourceMessageId = incomingMeta.sourceMessageId ?? existingMeta?.sourceMessageId;
 
   return {
     kind: "subagent",
     partId: incomingMeta.partId,
     correlationKey: incomingMeta.correlationKey,
+    ...(sourceMessageId ? { sourceMessageId } : {}),
     status,
     ...(typeof agent === "string" ? { agent } : {}),
     ...(typeof prompt === "string" ? { prompt } : {}),
@@ -295,24 +295,6 @@ export const upsertSubagentMessage = ({
   );
 };
 
-const chooseSubagentDescription = (
-  loadedMeta: SubagentMeta,
-  currentMeta: SubagentMeta,
-  resolvedStatus: SubagentMeta["status"],
-): string | undefined => {
-  const currentMatchesResolvedStatus = currentMeta.status === resolvedStatus;
-  const loadedMatchesResolvedStatus = loadedMeta.status === resolvedStatus;
-
-  if (currentMatchesResolvedStatus && !loadedMatchesResolvedStatus) {
-    return currentMeta.description ?? loadedMeta.description;
-  }
-  if (loadedMatchesResolvedStatus && !currentMatchesResolvedStatus) {
-    return loadedMeta.description ?? currentMeta.description;
-  }
-
-  return loadedMeta.description ?? currentMeta.description;
-};
-
 export const mergeSubagentMessages = (
   loadedMessage: SubagentMessage,
   currentMessage: SubagentMessage,
@@ -324,18 +306,13 @@ export const mergeSubagentMessages = (
     partId: loadedMeta.partId,
     correlationKey: loadedMeta.correlationKey,
   });
-  const description = chooseSubagentDescription(loadedMeta, currentMeta, nextMeta.status);
-  const resolvedMeta = {
-    ...nextMeta,
-    ...(typeof description === "string" ? { description } : {}),
-  };
 
   return applyPreferredMessageTimestamp(
     createSubagentMessage({
       id: loadedMessage.id,
       timestamp: loadedMessage.timestamp,
       ...(loadedMessage.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
-      meta: resolvedMeta,
+      meta: nextMeta,
     }),
     loadedMessage,
     currentMessage,

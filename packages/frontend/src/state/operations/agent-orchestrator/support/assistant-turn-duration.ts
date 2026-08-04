@@ -67,9 +67,14 @@ export const resolveAssistantTurnDurationMs = ({
     return undefined;
   }
 
-  const startedAtMs =
-    mergeTurnActivityTimestamp(undefined, activityStartedAtMs) ??
-    resolveBoundedUserAnchorAtMs({ userAnchorAtMs, previousAssistantCompletedAtMs, completedAtMs });
+  const boundedUserAnchorAtMs = resolveBoundedUserAnchorAtMs({
+    userAnchorAtMs,
+    previousAssistantCompletedAtMs,
+    completedAtMs,
+  });
+  const startedAtMs = isFiniteTimestamp(activityStartedAtMs)
+    ? Math.max(activityStartedAtMs, boundedUserAnchorAtMs ?? activityStartedAtMs)
+    : boundedUserAnchorAtMs;
   if (!isFiniteTimestamp(startedAtMs)) {
     return undefined;
   }

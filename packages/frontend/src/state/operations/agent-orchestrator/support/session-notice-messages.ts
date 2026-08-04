@@ -37,8 +37,10 @@ export const buildUserStoppedNoticeMessage = (timestamp: string): AgentChatMessa
 export const buildSessionErrorNoticeMessage = (
   timestamp: string,
   message: string,
+  id?: string,
 ): AgentChatMessage =>
   buildSessionNoticeMessage({
+    ...(id ? { id } : {}),
     timestamp,
     content: message,
     meta: {

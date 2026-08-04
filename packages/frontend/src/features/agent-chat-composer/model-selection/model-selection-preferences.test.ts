@@ -51,6 +51,19 @@ const CATALOG: AgentModelCatalog = {
   ],
 };
 
+const LIVE_UPDATE_CATALOG: AgentModelCatalog = {
+  ...CATALOG,
+  models: CATALOG.models.map((model) =>
+    model.modelId === "gpt-5"
+      ? {
+          ...model,
+          variants: ["default", "high", "max"],
+          liveSessionUpdates: { variants: ["default", "high"] },
+        }
+      : model,
+  ),
+};
+
 const createRepoSettings = (overrides: {
   defaultRuntimeKind?: "opencode" | "codex";
   buildDefault?: RepoSettingsInput["agentDefaults"]["build"];
@@ -351,13 +364,102 @@ describe("model-selection-preferences", () => {
     ).toEqual({
       selectionCatalog: CATALOG,
       selectedModelSelection: roleDefaultSelection,
-      selectionForNewSession: draftSelection,
+      selectionForNewSession: roleDefaultSelection,
       sessionModelRepairCommand: {
         key: "session-1|opencode|%2Frepo\u001fopencode\u001fanthropic\u001fclaude-sonnet\u001f\u001f",
         session: sessionIdentity,
         selection: roleDefaultSelection,
       },
       isSelectedSessionModelSendable: false,
+    });
+  });
+
+  test("uses a live-compatible variant when repairing a loaded-session model", () => {
+    const sessionIdentity = {
+      externalSessionId: "session-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          sessionIdentity,
+          sessionRuntimeKind: "opencode",
+          modelCatalog: LIVE_UPDATE_CATALOG,
+          selectedSessionModel: {
+            runtimeKind: "opencode",
+            providerId: "missing",
+            modelId: "missing-model",
+          },
+          draftSelection: null,
+        },
+        roleDefaultSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "max",
+        },
+      }),
+    ).toEqual({
+      selectionCatalog: LIVE_UPDATE_CATALOG,
+      selectedModelSelection: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+      },
+      selectionForNewSession: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+      },
+      sessionModelRepairCommand: {
+        key: "session-1|opencode|%2Frepo\u001fopencode\u001fopenai\u001fgpt-5\u001fdefault\u001f",
+        session: sessionIdentity,
+        selection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "default",
+        },
+      },
+      isSelectedSessionModelSendable: false,
+    });
+  });
+
+  test("preserves the current loaded-session variant even when it cannot be selected live", () => {
+    const selectedSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "max",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          sessionIdentity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          },
+          sessionRuntimeKind: "opencode",
+          modelCatalog: LIVE_UPDATE_CATALOG,
+          selectedSessionModel,
+          draftSelection: null,
+        },
+        roleDefaultSelection: null,
+      }),
+    ).toEqual({
+      selectionCatalog: LIVE_UPDATE_CATALOG,
+      selectedModelSelection: selectedSessionModel,
+      selectionForNewSession: selectedSessionModel,
+      sessionModelRepairCommand: null,
+      isSelectedSessionModelSendable: true,
     });
   });
 
@@ -387,10 +489,78 @@ describe("model-selection-preferences", () => {
     ).toEqual({
       selectionCatalog: CATALOG,
       selectedModelSelection: null,
-      selectionForNewSession: roleDefaultSelection,
+      selectionForNewSession: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      },
       sessionModelRepairCommand: null,
       isSelectedSessionModelSendable: true,
     });
+  });
+
+  test("uses the loaded-session model as the next new-session seed", () => {
+    const selectedSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+    const roleDefaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          sessionIdentity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode" as const,
+            workingDirectory: "/repo",
+          },
+          sessionRuntimeKind: "opencode",
+          modelCatalog: CATALOG,
+          selectedSessionModel,
+          draftSelection: null,
+        },
+        roleDefaultSelection,
+      }).selectionForNewSession,
+    ).toEqual(selectedSessionModel);
+  });
+
+  test("ignores stale draft selections while a session is selected", () => {
+    const selectedSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          sessionIdentity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode" as const,
+            workingDirectory: "/repo",
+          },
+          sessionRuntimeKind: "opencode",
+          modelCatalog: CATALOG,
+          selectedSessionModel,
+          draftSelection: {
+            runtimeKind: "codex" as const,
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+        },
+        roleDefaultSelection: null,
+      }).selectionForNewSession,
+    ).toEqual(selectedSessionModel);
   });
 
   test("resolves chat composer selections for a new session from draft, defaults, then catalog", () => {

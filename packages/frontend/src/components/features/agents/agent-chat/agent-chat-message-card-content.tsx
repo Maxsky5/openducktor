@@ -1,5 +1,6 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
+  type AgentModelCatalog,
   type AgentRole,
   type AgentUserMessageDisplayPart,
   isOdtWorkflowMutationToolName,
@@ -210,6 +211,7 @@ const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactE
 
 type AssistantMessageProps = {
   message: AgentChatMessage;
+  modelCatalog: AgentModelCatalog | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
 };
@@ -253,6 +255,7 @@ function AssistantMessageCopyButton({ markdown }: { markdown: string }): ReactEl
 
 const AssistantMessage = ({
   message,
+  modelCatalog,
   assistantAccentColor,
   isStreamingAssistantMessage,
 }: AssistantMessageProps): ReactElement => {
@@ -260,7 +263,7 @@ const AssistantMessage = ({
   const copyable = canCopyAssistantMessage(message, isStreamingAssistantMessage);
   const pacedContent = usePacedStreamingText(message.content, streaming);
   const renderedContent = useDeferredValue(pacedContent);
-  const footer = getAssistantFooterData(message);
+  const footer = getAssistantFooterData(message, modelCatalog);
   return (
     <div className="group/message relative space-y-2 pr-9">
       {copyable ? <AssistantMessageCopyButton markdown={message.content} /> : null}
@@ -657,7 +660,7 @@ const SubagentMessage = ({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               {summary ? (
-                <AgentChatTranscriptProse className="text-sm text-muted-foreground">
+                <AgentChatTranscriptProse className="text-sm text-muted-foreground line-clamp-2">
                   {summary}
                 </AgentChatTranscriptProse>
               ) : null}
@@ -699,6 +702,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
+  modelCatalog: AgentModelCatalog | null;
   parentSession: ParentSessionRuntimeContext | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
@@ -712,6 +716,7 @@ type MessageBodyProps = {
 
 export const MessageBody = ({
   message,
+  modelCatalog,
   parentSession,
   assistantAccentColor,
   isStreamingAssistantMessage,
@@ -840,6 +845,7 @@ export const MessageBody = ({
     return (
       <AssistantMessage
         message={message}
+        modelCatalog={modelCatalog}
         assistantAccentColor={assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
       />

@@ -11,6 +11,7 @@ import {
   type RuntimeCatalogOperations,
 } from "./operations/shared/runtime-catalog";
 import type { AgentRuntimeAdapter } from "./runtime-adapters/agent-runtime-adapter";
+import { createClaudeRuntimeAdapter } from "./runtime-adapters/claude-runtime-adapter";
 import { createCodexAppServerRuntimeAdapter } from "./runtime-adapters/codex-app-server-runtime-adapter";
 import { createOpenCodeRuntimeAdapter } from "./runtime-adapters/opencode-runtime-adapter";
 
@@ -56,9 +57,11 @@ const toAcceptedAgentUserMessage = (
 export const createAgentRuntimeServices = (): AgentRuntimeServices => {
   const opencodeAdapter = createOpenCodeRuntimeAdapter();
   const codexAdapter = createCodexAppServerRuntimeAdapter();
+  const claudeAdapter = createClaudeRuntimeAdapter();
   const adapters = new Map<RuntimeKind, AgentRuntimeAdapter>([
     ["opencode", opencodeAdapter],
     ["codex", codexAdapter],
+    ["claude", claudeAdapter],
   ]);
   const runtimeKinds = Array.from(adapters.keys());
 

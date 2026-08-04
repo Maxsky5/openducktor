@@ -121,6 +121,49 @@ describe("agent session control contracts", () => {
     ).toMatchObject(ref);
   });
 
+  test("rejects send controls that combine a slash command with an attachment", () => {
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/task",
+      externalSessionId: "session-1",
+      sessionScope: workflowScope,
+    };
+    const slashCommand = {
+      kind: "slash_command" as const,
+      command: {
+        id: "system:compact",
+        trigger: "compact",
+        title: "Compact session",
+        source: "system" as const,
+        hints: [],
+      },
+    };
+    const attachment = {
+      kind: "attachment" as const,
+      attachment: {
+        id: "attachment-1",
+        path: "brief.pdf",
+        name: "brief.pdf",
+        kind: "pdf" as const,
+        mime: "application/pdf",
+      },
+    };
+
+    expect(
+      agentSessionControlSendInputSchema.safeParse({ ...ref, parts: [slashCommand] }).success,
+    ).toBe(true);
+    expect(
+      agentSessionControlSendInputSchema.safeParse({ ...ref, parts: [attachment] }).success,
+    ).toBe(true);
+    expect(
+      agentSessionControlSendInputSchema.safeParse({
+        ...ref,
+        parts: [slashCommand, attachment],
+      }).success,
+    ).toBe(false);
+  });
+
   test("rejects missing workflow scope at the command boundary", () => {
     expect(() =>
       agentSessionControlStartInputSchema.parse({

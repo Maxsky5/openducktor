@@ -53,6 +53,7 @@ export type AgentChatComposerConfig = {
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null | undefined;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
+  supportsAttachments: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
@@ -146,6 +147,7 @@ export function useAgentChatComposerModel({
       ...(composer.supportsProfiles !== undefined
         ? { supportsProfiles: composer.supportsProfiles }
         : {}),
+      supportsAttachments: composer.supportsAttachments,
       supportsSlashCommands: composer.supportsSlashCommands,
       supportsFileSearch: composer.supportsFileSearch,
       supportsSkillReferences: composer.supportsSkillReferences,

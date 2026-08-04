@@ -190,6 +190,8 @@ export const runtimeSupportsCapability = (
       return runtimeDescriptor.capabilities.structuredInput.supportsQuestions;
     case "promptInput.supportedParts":
       return runtimeDescriptor.capabilities.promptInput.supportedParts.includes("text");
+    case "promptInput.supportsAttachments":
+      return runtimeDescriptor.capabilities.promptInput.supportsAttachments;
     case "promptInput.supportsSlashCommands":
       return runtimeDescriptor.capabilities.promptInput.supportsSlashCommands;
     case "promptInput.supportsFileSearch":

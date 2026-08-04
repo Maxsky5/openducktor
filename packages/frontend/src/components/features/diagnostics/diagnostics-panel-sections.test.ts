@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type TaskStoreCheck,
@@ -12,8 +13,17 @@ import {
   deriveRepoRuntimeHealthState,
 } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
+import { buildDiagnosticsPanelModel as buildDiagnosticsPanelModelBase } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
+
+const buildDiagnosticsPanelModel = (input: Parameters<typeof buildDiagnosticsPanelModelBase>[0]) =>
+  buildDiagnosticsPanelModelBase({
+    ...input,
+    runtimeHealthByRuntime: {
+      claude: buildDisabledRuntimeHealth(CLAUDE_RUNTIME_DESCRIPTOR),
+      ...input.runtimeHealthByRuntime,
+    },
+  });
 
 type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
   runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
@@ -113,7 +123,11 @@ describe("DiagnosticsPanelSections", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/Users/dev/fairnest",
       activeWorkspace: makeWorkspace("/Users/dev/fairnest"),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      runtimeDefinitions: [
+        OPENCODE_RUNTIME_DESCRIPTOR,
+        CODEX_RUNTIME_DESCRIPTOR,
+        CLAUDE_RUNTIME_DESCRIPTOR,
+      ],
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -127,6 +141,7 @@ describe("DiagnosticsPanelSections", () => {
         runtimes: [
           { kind: "opencode", ok: true, version: opencodeValue },
           { kind: "codex", enabled: false, ok: true, version: codexValue },
+          { kind: "claude", enabled: false, ok: false, version: null },
         ],
         errors: [],
       },
@@ -173,6 +188,7 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("GitHub CLI:");
     expect(html).toContain("OpenCode:");
     expect(html).toContain("Codex:");
+    expect(html).toContain("Claude:");
     expect(html).toContain(opencodeValue);
     expect(html).toContain(`${codexValue} (runtime disabled)`);
     expect(html).toContain("OpenCode Runtime");
@@ -192,7 +208,11 @@ describe("DiagnosticsPanelSections", () => {
         defaultWorktreeBasePath: null,
         effectiveWorktreeBasePath: null,
       }),
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      runtimeDefinitions: [
+        OPENCODE_RUNTIME_DESCRIPTOR,
+        CODEX_RUNTIME_DESCRIPTOR,
+        CLAUDE_RUNTIME_DESCRIPTOR,
+      ],
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -206,6 +226,7 @@ describe("DiagnosticsPanelSections", () => {
         runtimes: [
           { kind: "opencode", ok: false, version: null },
           { kind: "codex", enabled: false, ok: false, version: null },
+          { kind: "claude", enabled: false, ok: false, version: null },
         ],
         errors: ["gh not found in PATH"],
       },

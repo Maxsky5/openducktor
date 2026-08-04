@@ -9,12 +9,13 @@ import {
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
+import { errorMessage } from "@/lib/errors";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
-  repoRuntimeCatalogQueryOptions,
   runtimeCatalogQueryKeys,
+  sessionStartRuntimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 
@@ -29,6 +30,7 @@ type UseSessionStartModalRuntimeStateArgs = {
 
 type UseSessionStartModalRuntimeStateResult = {
   catalog: AgentModelCatalog | null;
+  catalogError: string | null;
   isCatalogLoading: boolean;
   eligibleRuntimeDefinitions: RuntimeDescriptor[];
   runtimeOptions: ComboboxOption[];
@@ -40,7 +42,7 @@ type UseSessionStartModalRuntimeStateResult = {
 const skippedSessionStartCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
   skippedQueryOptions<AgentModelCatalog>({
     queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
+      ? runtimeCatalogQueryKeys.repoSessionStart(runtimeRef.repoPath, runtimeRef.runtimeKind)
       : runtimeCatalogQueryKeys.all,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
@@ -107,11 +109,13 @@ export function useSessionStartModalRuntimeState({
   const isWaitingForRuntime = selectedRuntimeReadiness.state === "checking";
   const catalogQuery = useQuery(
     !usesInitialCatalog && selectedRepoRuntimeRef && isOpen && canLoadCatalog
-      ? repoRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalog)
+      ? sessionStartRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalog)
       : skippedSessionStartCatalogQueryOptions(selectedRepoRuntimeRef),
   );
 
   const catalog = usesInitialCatalog ? initialCatalog : (catalogQuery.data ?? null);
+  const catalogError =
+    !usesInitialCatalog && catalogQuery.error ? errorMessage(catalogQuery.error) : null;
   const isCatalogLoading =
     !usesInitialCatalog && isOpen && workspaceRepoPath !== null && selectedRuntimeKind !== null
       ? isWaitingForRuntime || catalogQuery.isLoading
@@ -119,6 +123,7 @@ export function useSessionStartModalRuntimeState({
 
   return {
     catalog,
+    catalogError,
     isCatalogLoading,
     eligibleRuntimeDefinitions,
     runtimeOptions,

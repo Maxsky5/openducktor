@@ -50,6 +50,7 @@ type UseAgentStudioSessionActionsArgs = {
   selectedSession: AgentStudioSelectedSessionState;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
+  supportsAttachments: boolean;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   isSelectedSessionModelSendable: boolean;
@@ -106,6 +107,7 @@ export function useAgentStudioSessionActions({
   selectedSession,
   runtimeDefinitions,
   selectedModelDescriptor,
+  supportsAttachments,
   sessionsForTask,
   selectedTask,
   isSelectedSessionModelSendable,
@@ -187,6 +189,7 @@ export function useAgentStudioSessionActions({
     reusablePrompts,
     isStarting,
     selectedModelDescriptor,
+    supportsAttachments,
     sendAgentMessage,
     startSession,
   });

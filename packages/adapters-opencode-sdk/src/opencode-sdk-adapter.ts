@@ -549,10 +549,7 @@ export class OpencodeSdkAdapter
   ): Promise<import("@openducktor/core").AgentSlashCommandCatalog> {
     return listAvailableSlashCommands(
       this.createClient,
-      await this.resolveRuntimeClientInput(
-        { ...input, workingDirectory: input.repoPath },
-        "list available slash commands",
-      ),
+      await this.resolveRuntimeClientInput(input, "list available slash commands"),
     );
   }
 

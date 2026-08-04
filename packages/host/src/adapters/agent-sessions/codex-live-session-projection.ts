@@ -176,7 +176,6 @@ export const createCodexLiveSessionProjection = ({
                 type: "catalog_invalidated",
                 repoPath: runtime.repoPath,
                 runtimeKind: "codex",
-                workingDirectory: runtime.workingDirectory,
               });
             }
             if (normalized.fault) {

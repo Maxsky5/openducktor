@@ -1,3 +1,4 @@
+import type { AgentModelCatalog } from "@openducktor/core";
 import { memo, type ReactElement, use } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -8,6 +9,7 @@ import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
+  modelCatalog?: AgentModelCatalog | null;
   isStreamingAssistantMessage?: boolean;
   sessionAgentColors?: Record<string, string>;
   sessionIdentity: ParentSessionRuntimeContext | null;
@@ -17,6 +19,7 @@ type AgentChatMessageCardProps = {
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
+  modelCatalog = null,
   isStreamingAssistantMessage = false,
   sessionAgentColors,
   sessionIdentity,
@@ -47,6 +50,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
+        modelCatalog={modelCatalog}
         parentSession={sessionIdentity}
         assistantAccentColor={vm.assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}

@@ -43,10 +43,15 @@ const writeExecutable = async (path: string): Promise<void> => {
 
 const builtInOverrideCases = [
   { command: "bun", toolId: "bun", variable: "OPENDUCKTOR_BUN_PATH" },
+  { command: "claude", toolId: "claude", variable: "OPENDUCKTOR_CLAUDE_BINARY" },
   { command: "codex", toolId: "codex", variable: "OPENDUCKTOR_CODEX_BINARY" },
   { command: "git", toolId: "git", variable: "OPENDUCKTOR_GIT_PATH" },
   { command: "gh", toolId: "githubCli", variable: "OPENDUCKTOR_GH_PATH" },
-  { command: "opencode", toolId: "opencode", variable: "OPENDUCKTOR_OPENCODE_BINARY" },
+  {
+    command: "opencode",
+    toolId: "opencode",
+    variable: "OPENDUCKTOR_OPENCODE_BINARY",
+  },
 ] as const satisfies readonly {
   command: string;
   toolId: ToolDiscoveryId;
@@ -97,7 +102,10 @@ describe("discoverToolPath", () => {
             homeDir: root,
             platform: "linux",
           },
-          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          systemCommands: createSystemCommandRunner({
+            env: { PATH: "" },
+            platform: "linux",
+          }),
           toolId: "opencode",
         }),
       ).resolves.toBe(override);
@@ -123,7 +131,10 @@ describe("discoverToolPath", () => {
         discoverBuiltInTool({
           env: { OPENDUCKTOR_BUN_PATH: override },
           options: { homeDir: root, platform: "win32" },
-          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "win32" }),
+          systemCommands: createSystemCommandRunner({
+            env: { PATH: "" },
+            platform: "win32",
+          }),
           toolId: "bun",
         }),
       ).rejects.toThrow("points to a missing or non-executable file");
@@ -145,7 +156,10 @@ describe("discoverToolPath", () => {
       await expect(
         discoverBuiltInTool({
           options: bundledOptions,
-          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          systemCommands: createSystemCommandRunner({
+            env: { PATH: "" },
+            platform: "linux",
+          }),
           toolId: "opencode",
         }),
       ).resolves.toBe(bundled);
@@ -163,7 +177,10 @@ describe("discoverToolPath", () => {
       await expect(
         discoverBuiltInTool({
           options: standardOptions,
-          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          systemCommands: createSystemCommandRunner({
+            env: { PATH: "" },
+            platform: "linux",
+          }),
           toolId: "opencode",
         }),
       ).resolves.toBe(standard);
@@ -193,7 +210,10 @@ describe("discoverToolPath", () => {
             platform: "linux",
             providedToolPaths: { bun: provided },
           },
-          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          systemCommands: createSystemCommandRunner({
+            env: { PATH: "" },
+            platform: "linux",
+          }),
           toolId: "bun",
         }),
       ).resolves.toEqual({
@@ -208,7 +228,10 @@ describe("discoverToolPath", () => {
             platform: "linux",
             providedToolPaths: { bun: provided },
           },
-          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          systemCommands: createSystemCommandRunner({
+            env: { PATH: "" },
+            platform: "linux",
+          }),
           toolId: "bun",
         }),
       ).resolves.toEqual({
@@ -333,7 +356,10 @@ describe("discoverToolPath", () => {
         const adapter = createToolDiscoveryAdapter({
           env: { [overrideCase.variable]: executable },
           options: { homeDir: root, platform: "linux" },
-          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          systemCommands: createSystemCommandRunner({
+            env: { PATH: "" },
+            platform: "linux",
+          }),
         });
 
         await expect(Effect.runPromise(adapter.resolveToolPath(overrideCase.toolId))).resolves.toBe(
@@ -354,7 +380,10 @@ describe("discoverToolPath", () => {
           platform: "linux",
           providedToolPaths: { bun: provided },
         },
-        systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+        systemCommands: createSystemCommandRunner({
+          env: { PATH: "" },
+          platform: "linux",
+        }),
       });
 
       await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).resolves.toBe(provided);
@@ -374,7 +403,10 @@ describe("discoverToolPath", () => {
           platform: "linux",
           providedToolPaths: { bun: provided },
         },
-        systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+        systemCommands: createSystemCommandRunner({
+          env: { PATH: "" },
+          platform: "linux",
+        }),
       });
 
       await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).resolves.toBe(override);

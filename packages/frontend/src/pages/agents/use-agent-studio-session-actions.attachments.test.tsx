@@ -183,6 +183,7 @@ const createBaseArgs = (): HookArgs => {
         pdf: true,
       },
     },
+    supportsAttachments: true,
     sessionsForTask: [],
     selectedTask: createTaskCardFixture(),
     isSelectedSessionModelSendable: true,

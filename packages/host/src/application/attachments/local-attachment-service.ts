@@ -1,3 +1,7 @@
+import {
+  LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
+  LOCAL_ATTACHMENT_BYTE_LIMIT,
+} from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { LocalAttachmentPort } from "../../ports/local-attachment-port";
@@ -94,6 +98,13 @@ const formatAttachmentLookupDisplayName = (token: string): string => {
   return `${sanitized.slice(0, maxAttachmentLookupDisplayLength - 3)}...`;
 };
 const decodeBase64 = (value: string): Uint8Array => {
+  if (value.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT) {
+    throw new HostValidationError({
+      field: "base64Data",
+      message: "Attachment payload exceeds the 32 MiB staging limit.",
+      details: { limitBytes: LOCAL_ATTACHMENT_BYTE_LIMIT },
+    });
+  }
   const compact = value.trim();
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(compact) || compact.length % 4 !== 0) {
     throw new HostValidationError({

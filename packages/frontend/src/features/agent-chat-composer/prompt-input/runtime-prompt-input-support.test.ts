@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import { resolveRuntimePromptInputSupport } from "./runtime-prompt-input-support";
 
 describe("runtime-prompt-input-support", () => {
@@ -10,6 +14,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "opencode",
       }),
     ).toEqual({
+      supportsAttachments: true,
       runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: false,
@@ -24,6 +29,22 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "codex",
       }),
     ).toEqual({
+      supportsAttachments: true,
+      runtimeSupportsSlashCommands: true,
+      supportsFileSearch: true,
+      supportsSkillReferences: true,
+      supportsSubagentReferences: false,
+    });
+  });
+
+  test("derives Claude slash command, file search, and skill reference capabilities", () => {
+    expect(
+      resolveRuntimePromptInputSupport({
+        runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
+        runtimeKind: "claude",
+      }),
+    ).toEqual({
+      supportsAttachments: true,
       runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: true,
@@ -38,6 +59,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: null,
       }),
     ).toEqual({
+      supportsAttachments: false,
       runtimeSupportsSlashCommands: false,
       supportsFileSearch: false,
       supportsSkillReferences: false,
@@ -52,6 +74,7 @@ describe("runtime-prompt-input-support", () => {
         runtimeKind: "codex",
       }),
     ).toEqual({
+      supportsAttachments: false,
       runtimeSupportsSlashCommands: false,
       supportsFileSearch: false,
       supportsSkillReferences: false,

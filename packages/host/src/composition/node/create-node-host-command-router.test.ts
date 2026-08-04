@@ -13,9 +13,9 @@ import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import {
   type CreateNodeHostCommandRouterInput,
-  createLiveSessionFaultLogger,
   createNodeEffectHostCommandRouter,
 } from "./create-node-host-command-router";
+import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
 
 const runtimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../../../.."),

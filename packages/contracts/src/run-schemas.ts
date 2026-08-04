@@ -103,6 +103,12 @@ export const runtimeRouteSchema = z.discriminatedUnion("type", [
       identity: stdioRuntimeIdentitySchema,
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("host_service"),
+      identity: stdioRuntimeIdentitySchema,
+    })
+    .strict(),
 ]);
 export type RuntimeRoute = z.infer<typeof runtimeRouteSchema>;
 

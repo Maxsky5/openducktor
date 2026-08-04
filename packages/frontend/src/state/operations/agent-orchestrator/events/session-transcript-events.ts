@@ -5,8 +5,10 @@ import type { SessionTurnState } from "../support/session-turn-state";
 import {
   createSessionEventBatcher,
   isImmediateSessionEvent,
+  prepareForcedQueuedSessionEvents,
   type QueuedSessionEvent,
   type QueuedSessionEventBatchItem,
+  shouldFlushQueuedSessionEventImmediately,
 } from "./session-event-batching";
 import type {
   EnsureSession,
@@ -25,6 +27,8 @@ import {
   handleSessionStarted,
   handleSessionStatus,
   handleSessionTodosUpdated,
+  handleTranscriptRetracted,
+  handleTurnError,
   handleUserMessage,
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
@@ -104,6 +108,9 @@ const dispatchTranscriptEvent = (
     case "assistant_message":
       handleAssistantMessage(context, event);
       return;
+    case "transcript_retracted":
+      handleTranscriptRetracted(context, event);
+      return;
     case "user_message":
       handleUserMessage(context, event);
       return;
@@ -121,6 +128,9 @@ const dispatchTranscriptEvent = (
       return;
     case "session_status":
       handleSessionStatus(context, event);
+      return;
+    case "turn_error":
+      handleTurnError(context, event);
       return;
     case "session_error":
       handleSessionError(context, event);
@@ -157,7 +167,7 @@ export const createAgentSessionTranscriptEventConsumer = (
   const forceFlushSession = (sessionKey: string): void => {
     const queued = queuedEventsBySession.get(sessionKey) ?? [];
     queuedEventsBySession.delete(sessionKey);
-    for (const item of queued) {
+    for (const item of prepareForcedQueuedSessionEvents(queued)) {
       dispatchTranscriptEvent(dependencies, item.event);
     }
   };
@@ -206,6 +216,10 @@ export const createAgentSessionTranscriptEventConsumer = (
       const queued = queuedEventsBySession.get(sessionKey) ?? [];
       queued.push({ routeKey: sessionKey, event });
       queuedEventsBySession.set(sessionKey, queued);
+      if (shouldFlushQueuedSessionEventImmediately(event)) {
+        forceFlushSession(sessionKey);
+        return;
+      }
       scheduleFlush();
     },
     close: () => {

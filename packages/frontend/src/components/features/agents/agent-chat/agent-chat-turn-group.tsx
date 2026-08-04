@@ -14,6 +14,7 @@ export type { AgentChatTurnGroupProps } from "./agent-chat-turn-group-comparator
 
 const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
   row,
+  modelCatalog = null,
   isStreamingAssistantMessage,
   sessionAgentColors,
   sessionIdentity,
@@ -25,6 +26,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
     <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
       <AgentChatThreadRow
         row={row}
+        modelCatalog={modelCatalog}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
         sessionAgentColors={sessionAgentColors}
         sessionIdentity={sessionIdentity}
@@ -37,6 +39,7 @@ const AgentChatThreadMotionRow = memo(function AgentChatThreadMotionRow({
 
 export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
+  modelCatalog = null,
   sessionAgentColors,
   sessionIdentity,
   subagentPendingApprovalCountBySessionKey,
@@ -49,6 +52,7 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
         <AgentChatThreadMotionRow
           key={row.key}
           row={row}
+          modelCatalog={modelCatalog}
           isStreamingAssistantMessage={isAgentChatTurnRowStreamingAssistant(
             row,
             turn.activeStreamingAssistantMessageId,

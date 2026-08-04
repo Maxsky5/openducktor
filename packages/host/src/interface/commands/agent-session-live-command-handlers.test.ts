@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshot,
@@ -7,6 +8,8 @@ import type {
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
+import { HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import { createEffectHostCommandRouter } from "../router/host-command-router";
 import { createAgentSessionLiveCommandHandlers } from "./agent-session-live-command-handlers";
@@ -19,9 +22,11 @@ const startInput: AgentSessionControlStartInput = {
   systemPrompt: "Build the feature",
 };
 
-const createHarness = async () => {
+const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve"]) => {
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const snapshots: AgentSessionLiveSnapshot[] = [];
+  const attachmentResolutions: string[] = [];
+  const sends: AgentSessionControlSendInput[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
     binding: { runtimeId: "runtime-1", runtimeKind: "opencode", repoPath: "/repo" },
@@ -70,7 +75,19 @@ const createHarness = async () => {
       }),
     resumeSession: () => Effect.dieMessage("unexpected resume"),
     forkSession: () => Effect.dieMessage("unexpected fork"),
-    sendUserMessage: () => Effect.dieMessage("unexpected send"),
+    sendUserMessage: (input) =>
+      Effect.sync(() => {
+        sends.push(input);
+        return {
+          type: "user_message" as const,
+          externalSessionId: input.externalSessionId,
+          timestamp: "2026-07-16T10:02:00.000Z",
+          messageId: "message-1",
+          message: "Continue",
+          parts: [{ kind: "text" as const, text: "Continue" }],
+          state: "queued" as const,
+        };
+      }),
     updateSessionModel: () => Effect.dieMessage("unexpected model update"),
     stopSession: () => Effect.dieMessage("unexpected stop"),
     releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -81,11 +98,22 @@ const createHarness = async () => {
     publish: (envelope) => envelopes.push(envelope),
   });
   await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+  const attachmentResolver: Pick<LocalAttachmentService, "resolve"> = {
+    resolve:
+      resolveAttachment ??
+      ((input) =>
+        Effect.sync(() => {
+          attachmentResolutions.push(input.path);
+          return { path: `/staged/${input.path}` };
+        })),
+  };
   return {
+    attachmentResolutions,
     envelopes,
     router: createEffectHostCommandRouter({
-      handlers: createAgentSessionLiveCommandHandlers(service),
+      handlers: createAgentSessionLiveCommandHandlers(service, attachmentResolver),
     }),
+    sends,
     starts,
   };
 };
@@ -126,5 +154,84 @@ describe("createAgentSessionLiveCommandHandlers", () => {
       ),
     ).rejects.toThrow();
     expect(starts).toEqual([]);
+  });
+
+  test("resolves attachment paths before invoking an adapter", async () => {
+    const { attachmentResolutions, router, sends } = await createHarness();
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      parts: [
+        {
+          kind: "attachment" as const,
+          attachment: {
+            id: "attachment-1",
+            path: "brief.pdf",
+            name: "brief.pdf",
+            kind: "pdf" as const,
+            mime: "application/pdf",
+          },
+        },
+      ],
+    } satisfies AgentSessionControlSendInput;
+
+    await Effect.runPromise(router.invoke("agent_session_control_send", input));
+
+    expect(attachmentResolutions).toEqual(["brief.pdf"]);
+    expect(sends).toEqual([
+      {
+        ...input,
+        parts: [
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-1",
+              path: "/staged/brief.pdf",
+              name: "brief.pdf",
+              kind: "pdf",
+              mime: "application/pdf",
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("does not invoke an adapter when attachment resolution fails", async () => {
+    const { router, sends } = await createHarness(() =>
+      Effect.fail(
+        new HostValidationError({
+          field: "path",
+          message: "Attachment path is not a staged local attachment.",
+        }),
+      ),
+    );
+
+    await expect(
+      Effect.runPromise(
+        router.invoke("agent_session_control_send", {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          parts: [
+            {
+              kind: "attachment",
+              attachment: {
+                id: "attachment-1",
+                path: "/etc/passwd",
+                name: "passwd",
+                kind: "pdf",
+              },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("Attachment path is not a staged local attachment.");
+    expect(sends).toEqual([]);
   });
 });

@@ -340,6 +340,7 @@ const createBaseArgs = (): HookArgs => {
     selectedSession: createSelectedSessionState(),
     runtimeDefinitions: TEST_RUNTIME_DEFINITIONS,
     selectedModelDescriptor: null,
+    supportsAttachments: true,
     sessionsForTask: [],
     selectedTask: createTask(),
     isSelectedSessionModelSendable: true,
@@ -899,6 +900,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -939,6 +941,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -978,6 +981,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -1071,6 +1075,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 
@@ -1125,6 +1130,7 @@ describe("useAgentStudioSessionActions", () => {
           }),
         },
       ),
+      runtimeDefinitions: [],
       sendAgentMessage,
     });
 

@@ -54,6 +54,7 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
 
   return {
     session,
+    modelCatalog: null,
     displayedSessionKey: agentSessionIdentityKey(session),
     isSessionWorking: false,
     transcriptState: buildThreadTranscriptState(),

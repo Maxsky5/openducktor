@@ -1,5 +1,5 @@
 import type { ChatSettings } from "@openducktor/contracts";
-import type { AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -31,6 +31,7 @@ const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
 
 type UseAgentChatSurfaceModelArgs = {
   sessionKey: string | null;
+  modelCatalog?: AgentModelCatalog | null;
   session: AgentChatThreadSession | null;
   transcriptState: AgentSessionTranscriptState;
   chatSettings: ChatSettings;
@@ -52,6 +53,7 @@ type UseAgentChatSurfaceModelArgs = {
 
 export function useAgentChatSurfaceModel({
   sessionKey,
+  modelCatalog,
   session,
   transcriptState,
   chatSettings,
@@ -113,6 +115,7 @@ export function useAgentChatSurfaceModel({
   });
   const threadModel = useAgentChatThreadModel({
     threadState,
+    modelCatalog: modelCatalog ?? null,
     transcriptState,
     runtimeReadiness,
     isSessionWorking,

@@ -8,6 +8,22 @@ import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 enableReactActEnvironment();
 
 describe("AgentChatMarkdownRenderer", () => {
+  test("renders completed markdown without a plain-text first frame", () => {
+    const rendered = render(
+      createElement(AgentChatMarkdownRenderer, {
+        markdown: "Persisted the **canonical spec**.\n\n- First requirement\n- Second requirement",
+      }),
+    );
+
+    try {
+      expect(rendered.container.querySelector(".markdown-body")).not.toBeNull();
+      expect(rendered.container.querySelector("strong")?.textContent).toBe("canonical spec");
+      expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("renders an in-progress fenced code block as code while streaming", async () => {
     const rendered = render(
       createElement(AgentChatMarkdownRenderer, {

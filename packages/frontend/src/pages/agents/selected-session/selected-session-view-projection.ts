@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
 import {
   inactiveRepoRuntimeReadinessTarget,
@@ -82,7 +83,7 @@ export const deriveSelectedSessionViewProjection = ({
       : sessionFault.message;
   }
 
-  if (selectedSessionIdentity && session) {
+  if (selectedSessionIdentity && matchesAgentSessionIdentity(session, selectedSessionIdentity)) {
     return {
       activityState: getAgentSessionActivityStateFromSession(session),
       selectedModel: session.selectedModel,

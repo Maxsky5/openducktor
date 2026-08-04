@@ -38,7 +38,10 @@ import { roleDefaultSelectionFor } from "./session-start-selection";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import { useSessionStartModalSelectionState } from "./use-session-start-modal-selection-state";
 
-export type { SessionStartModalIntent, SessionStartModalSource } from "./session-start-modal-types";
+export type {
+  SessionStartModalIntent,
+  SessionStartModalSource,
+} from "./session-start-modal-types";
 export type { SessionStartPostAction } from "./session-start-workflow";
 
 type UseSessionStartModalStateArgs = {
@@ -59,6 +62,7 @@ type UseSessionStartModalStateResult = {
   runtimeOptions: ComboboxOption[];
   supportsProfiles: boolean;
   supportsVariants: boolean;
+  catalogError: string | null;
   isCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -99,6 +103,7 @@ export function useSessionStartModalState({
   const activeRole = intent?.role ?? null;
   const {
     catalog,
+    catalogError,
     eligibleRuntimeDefinitions,
     isCatalogLoading,
     selectedRuntimeDescriptor,
@@ -163,6 +168,7 @@ export function useSessionStartModalState({
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
       const requestedRuntimeKind =
+        nextIntent.requestedRuntimeKind ??
         nextIntent.selectedModel?.runtimeKind ??
         roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
         repoSettings?.defaultRuntimeKind ??
@@ -176,7 +182,7 @@ export function useSessionStartModalState({
         ),
         requestedRuntimeKind,
       });
-      if (initialStartMode !== "reuse") {
+      if (initialStartMode === "fresh") {
         setRequestedRuntimeKind(requestedRuntimeKind);
       }
       setSelectedStartModeForRuntime(initialStartMode);
@@ -189,7 +195,7 @@ export function useSessionStartModalState({
           ),
         ),
       );
-      if (initialStartMode !== "reuse") {
+      if (initialStartMode === "fresh") {
         initializeSelection(nextIntent.role, initialRuntimeKind, nextIntent.selectedModel ?? null);
       }
     },
@@ -350,6 +356,7 @@ export function useSessionStartModalState({
       selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles ?? false,
     supportsVariants:
       selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsVariants ?? false,
+    catalogError,
     isCatalogLoading,
     agentOptions,
     modelOptions,

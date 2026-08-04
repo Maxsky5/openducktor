@@ -7,6 +7,8 @@ type PackageManifest = {
   dependencies?: Record<string, string>;
 };
 
+const runtimeDependencyNames = ["@anthropic-ai/claude-agent-sdk"] as const;
+
 const expectedPackageFiles = [
   "dist/cli.js",
   "dist/openducktor-mcp.js",
@@ -23,9 +25,20 @@ if (
 }
 
 const repoRoot = path.resolve(import.meta.dir, "..");
+const hostManifestPath = path.join(repoRoot, "packages/host/package.json");
+const hostManifest = JSON.parse(readFileSync(hostManifestPath, "utf8")) as PackageManifest;
 const packageRoot = path.join(repoRoot, "packages/openducktor-web");
 const manifestPath = path.join(packageRoot, "package.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as PackageManifest;
+const allowedRuntimeDependencies = Object.fromEntries(
+  runtimeDependencyNames.map((dependencyName) => {
+    const dependencyVersion = hostManifest.dependencies?.[dependencyName];
+    if (!dependencyVersion) {
+      throw new Error(`Expected ${hostManifestPath} to depend on ${dependencyName}.`);
+    }
+    return [dependencyName, dependencyVersion];
+  }),
+) as Record<(typeof runtimeDependencyNames)[number], string>;
 
 if (manifest.name !== "@openducktor/web") {
   throw new Error(`Expected ${manifestPath} to describe @openducktor/web.`);
@@ -35,9 +48,9 @@ if (manifest.version !== version) {
     `@openducktor/web version ${manifest.version} does not match release version ${version}.`,
   );
 }
-if (manifest.dependencies && Object.keys(manifest.dependencies).length > 0) {
+if (JSON.stringify(manifest.dependencies ?? {}) !== JSON.stringify(allowedRuntimeDependencies)) {
   throw new Error(
-    "@openducktor/web must be self-contained at runtime and publish without dependencies.",
+    `@openducktor/web dependencies must be exactly ${JSON.stringify(allowedRuntimeDependencies)}.`,
   );
 }
 

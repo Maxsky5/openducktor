@@ -1,8 +1,12 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import {
   appendSessionMessage,
+  createSessionMessagesState,
+  findLastSessionMessageByRole,
+  replaceSessionMessageById,
+  sessionMessageBelongsToSourceMessage,
   upsertSessionMessage,
   upsertUserSessionMessage,
 } from "../support/messages";
@@ -21,6 +25,7 @@ import {
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
 import { toUserChatMessage } from "../support/user-message-event";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { settleSessionToIdle } from "./session-helpers";
 
@@ -29,6 +34,13 @@ const clearTurnTracking = (
 ): void => {
   context.turn.turnMetadata.clearSession(context.session.key);
 };
+
+const workflowSessionPersistenceOptions = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+) =>
+  isWorkflowAgentSession(context.store.readSession(context.session.identity))
+    ? ({ persist: true } as const)
+    : undefined;
 
 const nextContextUsageWasEstablishedForMessage = (
   context: Pick<SessionLifecycleEventContext, "session" | "turn" | "store">,
@@ -90,18 +102,12 @@ const resolveFinalAssistantSnapshot = ({
 
 export const handleSessionStarted = (
   context: Pick<SessionLifecycleEventContext, "session" | "store">,
-  event: Extract<SessionEvent, { type: "session_started" }>,
+  _event: Extract<SessionEvent, { type: "session_started" }>,
 ): void => {
   context.store.updateSession(context.session.identity, (current) => ({
     ...current,
     status: "running",
     runtimeStatusMessage: null,
-    messages: appendSessionMessage(current, {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: event.message,
-      timestamp: event.timestamp,
-    }),
   }));
 };
 
@@ -111,12 +117,18 @@ export const handleAssistantMessage = (
 ): void => {
   context.store.updateSession(context.session.identity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
-    const durationMs = context.turn.resolveTurnDurationMs(
-      context.session.key,
-      context.session.identity.externalSessionId,
-      event.timestamp,
-      settledMessages,
-    );
+    const settledOwner = {
+      externalSessionId: current.externalSessionId,
+      messages: settledMessages,
+    };
+    const durationMs =
+      event.durationMs ??
+      context.turn.resolveTurnDurationMs(
+        context.session.key,
+        context.session.identity.externalSessionId,
+        event.timestamp,
+        settledMessages,
+      );
     const shouldPreserveContextUsage =
       nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
       current.contextUsage !== null;
@@ -128,20 +140,61 @@ export const handleAssistantMessage = (
       model,
       shouldPreserveContextUsage,
     });
+    const sourceTextMessage =
+      current.runtimeKind === "claude"
+        ? findLastSessionMessageByRole(
+            settledOwner,
+            "assistant",
+            (message) =>
+              message.meta?.kind === "assistant" &&
+              message.meta.sourceMessageId === event.messageId,
+          )
+        : undefined;
+    const assistantMessage =
+      sourceTextMessage?.meta?.kind === "assistant"
+        ? {
+            ...nextSnapshot.assistantMessage,
+            id: sourceTextMessage.id,
+            meta: {
+              ...nextSnapshot.assistantMessage.meta,
+              sourceMessageId: event.messageId,
+              ...(sourceTextMessage.meta.partId ? { partId: sourceTextMessage.meta.partId } : {}),
+            },
+          }
+        : nextSnapshot.assistantMessage;
     return {
       ...current,
       pendingUserMessageStartedAt: undefined,
-      messages: upsertSessionMessage(
-        {
-          externalSessionId: current.externalSessionId,
-          messages: settledMessages,
-        },
-        nextSnapshot.assistantMessage,
-      ),
+      messages: sourceTextMessage
+        ? replaceSessionMessageById(settledOwner, sourceTextMessage.id, assistantMessage)
+        : upsertSessionMessage(settledOwner, assistantMessage),
     };
   });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
+};
+
+export const handleTranscriptRetracted = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store">,
+  event: Extract<SessionEvent, { type: "transcript_retracted" }>,
+): void => {
+  const retractedMessageIds = new Set(event.messageIds);
+  const belongsToRetractedMessage = (message: AgentChatMessage): boolean => {
+    for (const retractedMessageId of retractedMessageIds) {
+      if (sessionMessageBelongsToSourceMessage(message, retractedMessageId)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    messages: createSessionMessagesState(
+      current.externalSessionId,
+      current.messages.items.filter((message) => !belongsToRetractedMessage(message)),
+      current.messages.version + 1,
+    ),
+  }));
 };
 
 export const handleUserMessage = (
@@ -323,8 +376,34 @@ export const handleSessionError = (
             ),
       };
     },
-    { persist: true },
+    workflowSessionPersistenceOptions(context),
   );
+  context.turn.clearTurnDuration(context.session.key, event.timestamp);
+  clearTurnTracking(context);
+};
+
+export const handleTurnError = (
+  context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
+  event: Extract<SessionEvent, { type: "turn_error" }>,
+): void => {
+  const message = normalizeSessionErrorMessage(event.message);
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    pendingUserMessageStartedAt: undefined,
+    runtimeStatusMessage: null,
+    messages: appendSessionMessage(
+      {
+        externalSessionId: current.externalSessionId,
+        messages: removeRunningSessionCompactionNotices(
+          settleTerminalMessages(current, event.timestamp, {
+            outcome: "error",
+            errorMessage: message,
+          }),
+        ),
+      },
+      buildSessionErrorNoticeMessage(event.timestamp, message, event.messageId),
+    ),
+  }));
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };
@@ -347,9 +426,12 @@ export const handleSessionFinished = (
     context.session.identity,
     (current) => {
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
-      const terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
+      let terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
         ? "stopped"
         : "idle";
+      if (current.status === "error") {
+        terminalStatus = "error";
+      }
       return {
         ...current,
         pendingUserMessageStartedAt: undefined,
@@ -369,7 +451,7 @@ export const handleSessionFinished = (
         stopRequestedAt: null,
       };
     },
-    { persist: true },
+    workflowSessionPersistenceOptions(context),
   );
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);

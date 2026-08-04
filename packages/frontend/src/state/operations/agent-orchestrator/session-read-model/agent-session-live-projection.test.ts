@@ -238,6 +238,67 @@ describe("agent session live projection", () => {
     });
   });
 
+  test("settles a removed live child without dropping its transcript", () => {
+    const tasks = taskSessionRecords({ taskId: "task-1", record: record("parent-thread") });
+    const initial = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: tasks,
+      snapshots: [
+        snapshot("parent-thread"),
+        snapshot("child-thread", {
+          parentExternalSessionId: "parent-thread",
+          activity: "running",
+        }),
+      ],
+    });
+    const child = getAgentSession(initial, identity("child-thread"));
+    if (!child) {
+      throw new Error("Expected live child session.");
+    }
+    const withChildTranscript = replaceAgentSession(initial, {
+      ...child,
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("child-thread", [
+        {
+          id: "tool:assistant-child-1:read-1",
+          role: "tool",
+          content: "Tool Read completed",
+          timestamp: "2026-07-16T08:00:01.000Z",
+          meta: {
+            kind: "tool",
+            partId: "read-1",
+            callId: "read-1",
+            tool: "Read",
+            toolType: "read",
+            status: "completed",
+            startedAtMs: 100,
+            endedAtMs: 160,
+          },
+        },
+      ]),
+    });
+
+    const removed = applyAgentSessionLiveDelta({
+      current: withChildTranscript,
+      taskSessionRecords: tasks,
+      envelope: { type: "session_removed", ref: snapshot("child-thread").ref },
+    });
+
+    expect(getAgentSession(removed, identity("child-thread"))).toMatchObject({
+      status: "idle",
+      liveParentExternalSessionId: undefined,
+      historyLoadState: "loaded",
+      messages: {
+        items: [
+          expect.objectContaining({
+            id: "tool:assistant-child-1:read-1",
+            meta: expect.objectContaining({ startedAtMs: 100, endedAtMs: 160 }),
+          }),
+        ],
+      },
+    });
+  });
+
   test("mirrors a grandchild mutating approval to a read-only root with the grandchild response session", () => {
     const tasks = taskSessionRecords({
       taskId: "task-1",
@@ -472,7 +533,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(next, identity("thread-2"))?.pendingApprovals).toEqual([approval]);
   });
 
-  test("does not overwrite transcript-owned lifecycle status during a live upsert", () => {
+  test("applies authoritative lifecycle status from a live upsert after reload", () => {
     const tasks = taskSessionRecords({ taskId: "task-1", record: record("thread-1") });
     const initial = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
@@ -497,7 +558,7 @@ describe("agent session live projection", () => {
       },
     });
 
-    expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("running");
+    expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("idle");
   });
 
   test.each(["stopped", "error"] as const)(

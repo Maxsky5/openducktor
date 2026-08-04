@@ -18,6 +18,7 @@ const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
     case "transcript_event":
       return envelope.event.sessionRef.repoPath;
     case "catalog_invalidated":
+    case "slash_command_catalog_updated":
       return envelope.scope.repoPath;
   }
 };

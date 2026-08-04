@@ -21,6 +21,15 @@ type RuntimeSessionContextSource = Pick<
 
 export type LoadSettingsSnapshotForRuntimePolicy = () => Promise<SettingsSnapshot>;
 
+export const resolveSettingsIndependentAgentSessionRuntimePolicy = (
+  runtimeKind: RuntimeKind,
+): AgentSessionRuntimePolicy | null => {
+  if (runtimeKind === "opencode" || runtimeKind === "claude") {
+    return { kind: runtimeKind };
+  }
+  return null;
+};
+
 export const resolveAgentSessionRuntimePolicy = async ({
   runtimeKind,
   sessionScope,
@@ -30,8 +39,10 @@ export const resolveAgentSessionRuntimePolicy = async ({
   sessionScope?: AgentSessionScope | null;
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
 }): Promise<AgentSessionRuntimePolicy> => {
-  if (runtimeKind === "opencode") {
-    return { kind: "opencode" };
+  const settingsIndependentPolicy =
+    resolveSettingsIndependentAgentSessionRuntimePolicy(runtimeKind);
+  if (settingsIndependentPolicy) {
+    return settingsIndependentPolicy;
   }
   const snapshot = await loadSettingsSnapshot();
   return resolveAgentSessionRuntimePolicyFromSnapshot({
@@ -50,8 +61,10 @@ export const resolveAgentSessionRuntimePolicyFromSnapshot = ({
   sessionScope?: AgentSessionScope | null;
   snapshot: SettingsSnapshot;
 }): AgentSessionRuntimePolicy => {
-  if (runtimeKind === "opencode") {
-    return { kind: "opencode" };
+  const settingsIndependentPolicy =
+    resolveSettingsIndependentAgentSessionRuntimePolicy(runtimeKind);
+  if (settingsIndependentPolicy) {
+    return settingsIndependentPolicy;
   }
   if (runtimeKind !== "codex") {
     throw new Error(`Unsupported runtime kind '${runtimeKind}' for session runtime policy.`);

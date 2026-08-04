@@ -15,6 +15,19 @@ test("resolves OpenCode policy without loading settings", async () => {
   expect(loadSettingsSnapshot).not.toHaveBeenCalled();
 });
 
+test("resolves Claude policy without loading settings", async () => {
+  const loadSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());
+  const resolvePolicy = await loadSessionRuntimePolicyResolver({
+    runtimeKinds: ["claude"],
+    loadSettingsSnapshot,
+  });
+
+  expect(resolvePolicy({ runtimeKind: "claude", sessionScope: null })).toEqual({
+    kind: "claude",
+  });
+  expect(loadSettingsSnapshot).not.toHaveBeenCalled();
+});
+
 test("loads settings inside the runtime-policy adapter for Codex policy", async () => {
   const loadSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());
   const resolvePolicy = await loadSessionRuntimePolicyResolver({

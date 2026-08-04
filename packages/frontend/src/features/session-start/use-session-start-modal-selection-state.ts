@@ -57,7 +57,7 @@ const resolveVisibleSelection = ({
     return null;
   }
 
-  if (selectedStartMode === "fork" && selection) {
+  if (selectedStartMode === "fork" && selection && !catalog) {
     return selection;
   }
 

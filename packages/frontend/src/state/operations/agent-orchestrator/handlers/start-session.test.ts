@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentModelSelection,
-  StartAgentSessionInput,
-} from "@openducktor/core";
+import type { AgentModelSelection, StartAgentSessionInput } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -440,9 +436,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "planner-external" }));
 
       expect(getSession(sessionCollection, "planner-external")?.status).toBe("starting");
-      expect(getSession(sessionCollection, "planner-external")?.historyLoadState).toBe(
-        "not_requested",
-      );
+      expect(getSession(sessionCollection, "planner-external")?.historyLoadState).toBe("loaded");
       expect(lifecycleEvents).not.toContain("status:idle");
     } finally {
       adapter.startSession = originalStartSession;
@@ -512,19 +506,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("persists only durable session record fields during start", async () => {
     let persistedTaskId: string | null = null;
     let persistedRecord: AgentSessionRecord | null = null;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input: StartAgentSessionInput) => ({
+      externalSessionId: "external-1",
+      runtimeKind: input.runtimeKind,
+      workingDirectory: input.workingDirectory,
+      role: "planner",
+      startedAt: "2026-03-21T10:00:00.000Z",
+      status: "running",
+    });
     const { start } = createStartSessionTestHarness({
-      taskRef: { current: [createTaskCardFixture({ id: "task-1", status: "open" })] },
-      adapter: {
-        ...new OpencodeSdkAdapter(),
-        startSession: async (input: StartAgentSessionInput) => ({
-          externalSessionId: "external-1",
-          runtimeKind: input.runtimeKind,
-          workingDirectory: input.workingDirectory,
-          role: "planner",
-          startedAt: "2026-03-21T10:00:00.000Z",
-          status: "running",
-        }),
-      } as unknown as AgentEnginePort,
+      taskRef: {
+        current: [createTaskCardFixture({ id: "task-1", status: "open" })],
+      },
+      adapter,
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1087,10 +1082,30 @@ describe("agent-orchestrator/handlers/start-session", () => {
             id: "task-1",
             status: "open",
             agentWorkflows: {
-              spec: { required: true, canSkip: false, available: true, completed: false },
-              planner: { required: true, canSkip: false, available: false, completed: false },
-              builder: { required: true, canSkip: false, available: false, completed: false },
-              qa: { required: true, canSkip: false, available: false, completed: false },
+              spec: {
+                required: true,
+                canSkip: false,
+                available: true,
+                completed: false,
+              },
+              planner: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
+              builder: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
+              qa: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
             },
           }),
         ],
@@ -1133,10 +1148,30 @@ describe("agent-orchestrator/handlers/start-session", () => {
             id: "task-1",
             status: "open",
             agentWorkflows: {
-              spec: { required: true, canSkip: false, available: true, completed: false },
-              planner: { required: true, canSkip: false, available: false, completed: false },
-              builder: { required: true, canSkip: false, available: false, completed: false },
-              qa: { required: true, canSkip: false, available: false, completed: false },
+              spec: {
+                required: true,
+                canSkip: false,
+                available: true,
+                completed: false,
+              },
+              planner: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
+              builder: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
+              qa: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
             },
           }),
         ],
@@ -1184,10 +1219,30 @@ describe("agent-orchestrator/handlers/start-session", () => {
             id: "task-1",
             status: "human_review",
             agentWorkflows: {
-              spec: { required: false, canSkip: true, available: true, completed: true },
-              planner: { required: false, canSkip: true, available: true, completed: true },
-              builder: { required: true, canSkip: false, available: true, completed: true },
-              qa: { required: true, canSkip: false, available: true, completed: false },
+              spec: {
+                required: false,
+                canSkip: true,
+                available: true,
+                completed: true,
+              },
+              planner: {
+                required: false,
+                canSkip: true,
+                available: true,
+                completed: true,
+              },
+              builder: {
+                required: true,
+                canSkip: false,
+                available: true,
+                completed: true,
+              },
+              qa: {
+                required: true,
+                canSkip: false,
+                available: true,
+                completed: false,
+              },
             },
           }),
         ],
@@ -1276,7 +1331,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(getSession(sessionsRef.current, "external-created")).toBeDefined();
       const createdSession = getSession(sessionsRef.current, "external-created");
       expect(createdSession).toBeDefined();
-      expect(createdSession?.historyLoadState).toBe("not_requested");
+      expect(createdSession?.historyLoadState).toBe("loaded");
       const createdHeaderMessage = createdSession ? sessionMessageAt(createdSession, 0) : undefined;
       expect(createdHeaderMessage).toEqual({
         id: "history:system-prompt:external-created",
@@ -1358,7 +1413,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
           const { runtimeKind: _runtimeKind, ...selectionWithoutRuntime } = BUILD_SELECTION;
           return selectionWithoutRuntime as AgentModelSelection;
         }
-        return { ...BUILD_SELECTION, runtimeKind } as unknown as AgentModelSelection;
+        return {
+          ...BUILD_SELECTION,
+          runtimeKind,
+        } as unknown as AgentModelSelection;
       })();
 
       const { start } = createStartSessionTestHarness({

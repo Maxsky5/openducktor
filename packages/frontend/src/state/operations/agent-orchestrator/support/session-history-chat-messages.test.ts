@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   createSessionMessagesFixture,
   findSessionMessageForTest,
@@ -85,6 +86,41 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
           tone: "info",
           reason: "session_compacted",
           title: "Compacted",
+        },
+      },
+    ]);
+  });
+
+  test("maps hydrated session errors to chat notice messages", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "result-error-1",
+          role: "system",
+          timestamp: "2026-06-26T11:03:16.287Z",
+          text: "Permission denied for Bash.",
+          notice: {
+            tone: "error",
+            reason: "session_error",
+            title: "Error",
+          },
+          parts: [],
+        },
+      ],
+      { role: "build" },
+    );
+
+    expect(messages).toEqual([
+      {
+        id: "result-error-1",
+        role: "system",
+        content: "Permission denied for Bash.",
+        timestamp: "2026-06-26T11:03:16.287Z",
+        meta: {
+          kind: "session_notice",
+          tone: "error",
+          reason: "session_error",
+          title: "Error",
         },
       },
     ]);
@@ -269,6 +305,69 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
       {
         kind: "text",
         text: "Please implement this",
+      },
+    ]);
+  });
+
+  test("preserves assistant text ordering around hydrated tools", () => {
+    const firstTextPart = {
+      kind: "text",
+      messageId: "m-assistant",
+      partId: "p-text-1",
+      text: "I will inspect the task.",
+      completed: true,
+    } satisfies AgentSessionHistoryMessage["parts"][number];
+    const toolPart = {
+      kind: "tool",
+      messageId: "m-assistant",
+      partId: "p-tool",
+      callId: "call-1",
+      tool: "read",
+      toolType: "read",
+      status: "completed",
+    } satisfies AgentSessionHistoryMessage["parts"][number];
+    const secondTextPart = {
+      kind: "text",
+      messageId: "m-assistant",
+      partId: "p-text-2",
+      text: "The task is ready.",
+      completed: true,
+    } satisfies AgentSessionHistoryMessage["parts"][number];
+    const project = (parts: AgentSessionHistoryMessage["parts"]): AgentChatMessage[] =>
+      historyToChatMessages(
+        [
+          {
+            messageId: "m-assistant",
+            role: "assistant",
+            timestamp: "2026-02-22T08:00:02.000Z",
+            text: "I will inspect the task.\nThe task is ready.",
+            parts,
+          },
+        ],
+        { role: "build" },
+      );
+
+    expect(
+      project([firstTextPart, toolPart, secondTextPart]).map(({ content, id, role }) => ({
+        content,
+        id,
+        role,
+      })),
+    ).toEqual([
+      {
+        id: "text:m-assistant:p-text-1",
+        role: "assistant",
+        content: "I will inspect the task.",
+      },
+      {
+        id: "tool:m-assistant:call-1",
+        role: "tool",
+        content: "Tool read completed",
+      },
+      {
+        id: "text:m-assistant:p-text-2",
+        role: "assistant",
+        content: "The task is ready.",
       },
     ]);
   });
@@ -591,6 +690,87 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
 
     expect(assistant.meta.isFinal).toBe(true);
     expect(assistant.meta.durationMs).toBe(27_000);
+  });
+
+  test("starts a resumed turn duration at its latest user message", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "user-1",
+          role: "user",
+          state: "read",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Start the build",
+          displayParts: [{ kind: "text", text: "Start the build" }],
+          parts: [],
+        },
+        {
+          messageId: "assistant-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:01:00.000Z",
+          text: "Initial work complete",
+          parts: [
+            {
+              kind: "step",
+              messageId: "assistant-1",
+              partId: "assistant-1-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+        {
+          messageId: "old-background-tool",
+          role: "assistant",
+          timestamp: "2026-02-22T11:00:00.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "old-background-tool",
+              partId: "old-background-tool-part",
+              callId: "old-background-tool-call",
+              tool: "read",
+              toolType: "read",
+              status: "completed",
+              startedAtMs: Date.parse("2026-02-22T10:59:58.000Z"),
+              endedAtMs: Date.parse("2026-02-22T11:00:00.000Z"),
+            },
+          ],
+        },
+        {
+          messageId: "user-2",
+          role: "user",
+          state: "read",
+          timestamp: "2026-02-22T11:59:15.000Z",
+          text: "Please finish the build",
+          displayParts: [{ kind: "text", text: "Please finish the build" }],
+          parts: [],
+        },
+        {
+          messageId: "assistant-2",
+          role: "assistant",
+          timestamp: "2026-02-22T12:00:01.000Z",
+          text: "Build complete",
+          parts: [
+            {
+              kind: "step",
+              messageId: "assistant-2",
+              partId: "assistant-2-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      { role: "build" },
+    );
+
+    const assistant = messages.find((message) => message.id === "assistant-2");
+    if (assistant?.meta?.kind !== "assistant") {
+      throw new Error("Expected final assistant message with assistant meta");
+    }
+    expect(assistant.meta.durationMs).toBe(46_000);
   });
 
   test("uses Codex turn user and final assistant timestamps for history-loaded duration", () => {

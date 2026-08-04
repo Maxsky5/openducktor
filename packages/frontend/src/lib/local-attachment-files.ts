@@ -1,3 +1,4 @@
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import { hostClient } from "@/lib/host-client";
 import { getShellBridge } from "./shell-bridge";
 
@@ -13,6 +14,9 @@ const bufferToBase64 = (buffer: ArrayBuffer): string => {
 };
 
 export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
+  if (file.size > LOCAL_ATTACHMENT_BYTE_LIMIT) {
+    throw new Error("Attachments must total 32 MiB or less.");
+  }
   const buffer = await file.arrayBuffer();
   const staged = await hostClient.workspaceStageLocalAttachment({
     name: file.name,

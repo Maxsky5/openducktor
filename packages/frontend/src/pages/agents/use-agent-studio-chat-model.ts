@@ -8,6 +8,7 @@ import type {
 } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat/claude-skill-mentions";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
@@ -44,6 +45,7 @@ export type AgentStudioChatModelSelectionContext = {
   selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
+  supportsAttachments: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
@@ -117,19 +119,19 @@ export function useAgentStudioChatModel({
   const selectedSessionIdentity = selectedSessionState.identity;
   const selectedSessionModel = selectedSessionState.selectedModel;
   const selectedSessionRuntimeData = selectedSessionState.runtimeData;
-  const activeThreadSession = useMemo(
-    () =>
-      toSelectedSessionThreadSession({
-        identity: selectedSessionIdentity,
-        activityState: selectedSessionState.activityState,
-        loadedSession: selectedSessionState.loadedSession,
-      }),
-    [
-      selectedSessionIdentity,
-      selectedSessionState.activityState,
-      selectedSessionState.loadedSession,
-    ],
-  );
+  const activeThreadSession = useMemo(() => {
+    const threadSession = toSelectedSessionThreadSession({
+      identity: selectedSessionIdentity,
+      activityState: selectedSessionState.activityState,
+      loadedSession: selectedSessionState.loadedSession,
+    });
+    return threadSession ? withClaudeSkillMentions(threadSession, modelSelection.skills) : null;
+  }, [
+    modelSelection.skills,
+    selectedSessionIdentity,
+    selectedSessionState.activityState,
+    selectedSessionState.loadedSession,
+  ]);
   const pendingApprovalRequests = selectedSession.pendingInput.pendingApprovalRequests;
   const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
   const sessionAccentColor = useMemo(
@@ -268,6 +270,7 @@ export function useAgentStudioChatModel({
       selectedModelDescriptor: modelSelection.selectedModelDescriptor,
       isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
       supportsProfiles: modelSelection.supportsProfiles ?? true,
+      supportsAttachments: modelSelection.supportsAttachments,
       supportsSlashCommands: modelSelection.supportsSlashCommands,
       supportsFileSearch: modelSelection.supportsFileSearch,
       supportsSkillReferences: modelSelection.supportsSkillReferences,
@@ -319,6 +322,7 @@ export function useAgentStudioChatModel({
       modelSelection.subagents,
       modelSelection.subagentsError,
       modelSelection.supportsFileSearch,
+      modelSelection.supportsAttachments,
       modelSelection.supportsProfiles,
       modelSelection.supportsSkillReferences,
       modelSelection.supportsSlashCommands,
@@ -345,6 +349,7 @@ export function useAgentStudioChatModel({
 
   const surfaceModel = useAgentChatSurfaceModel({
     sessionKey: selectedSessionKey,
+    modelCatalog: selectedSessionRuntimeData.modelCatalog,
     session: activeThreadSession,
     transcriptState: selectedSessionTranscriptState,
     chatSettings,

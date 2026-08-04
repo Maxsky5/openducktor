@@ -7,6 +7,7 @@ import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript
 
 export type AgentChatThreadMotionRowProps = {
   row: AgentChatTranscriptRow;
+  modelCatalog?: AgentChatThreadModel["modelCatalog"];
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionIdentity: AgentSessionTranscriptTarget | null;
@@ -17,6 +18,7 @@ export type AgentChatThreadMotionRowProps = {
 
 export type AgentChatTurnGroupProps = {
   turn: AgentChatRenderedTurn;
+  modelCatalog?: AgentChatThreadModel["modelCatalog"];
   sessionAgentColors: Record<string, string>;
   sessionIdentity: AgentSessionTranscriptTarget | null;
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
@@ -191,6 +193,7 @@ export const areAgentChatThreadMotionRowPropsEqual = (
     previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
     previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
     previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
+    previousProps.modelCatalog === nextProps.modelCatalog &&
     areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
     previousProps.resolveRowRef === nextProps.resolveRowRef &&
     areChatRowsEquivalent(previousProps.row, nextProps.row)
@@ -208,6 +211,7 @@ export const areAgentChatTurnGroupPropsEqual = (
     previousProps.turn.isActive === nextProps.turn.isActive &&
     previousProps.turn.activeStreamingAssistantMessageId ===
       nextProps.turn.activeStreamingAssistantMessageId &&
+    previousProps.modelCatalog === nextProps.modelCatalog &&
     areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
     areAgentSessionTranscriptTargetsEqual(
       previousProps.sessionIdentity,

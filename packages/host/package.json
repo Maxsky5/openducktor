@@ -12,10 +12,13 @@
     "lint": "biome check src drizzle.task-store.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.191",
     "@openducktor/adapters-codex-app-server": "workspace:*",
     "@openducktor/adapters-opencode-sdk": "workspace:*",
     "@openducktor/contracts": "workspace:*",
+    "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
+    "diff": "9.0.0",
     "drizzle-orm": "0.45.2",
     "effect": "^3.22.0"
   },

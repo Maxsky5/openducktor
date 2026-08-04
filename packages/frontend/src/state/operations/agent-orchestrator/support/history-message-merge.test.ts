@@ -33,6 +33,23 @@ const mergedMessageState = (
 };
 
 describe("agent-orchestrator/support/history-message-merge", () => {
+  test("deduplicates a live turn failure when hydration returns the same result", () => {
+    const errorNotice = {
+      id: "result-error-1",
+      role: "system" as const,
+      content: "Attachment could not be processed.",
+      timestamp: "2026-03-01T09:00:02.000Z",
+      meta: {
+        kind: "session_notice" as const,
+        tone: "error" as const,
+        reason: "session_error" as const,
+        title: "Error",
+      },
+    };
+
+    expect(mergedMessages([errorNotice], [errorNotice])).toEqual([errorNotice]);
+  });
+
   test("commits loaded history as one transcript revision", () => {
     const merged = mergedMessageState(
       [
@@ -65,6 +82,99 @@ describe("agent-orchestrator/support/history-message-merge", () => {
       "history-user",
       "history-assistant",
       "live-user",
+    ]);
+  });
+
+  test("inserts unmatched current subagent messages by timestamp during hydration", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "history-user",
+          role: "user",
+          content: "Start",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+        {
+          id: "history-assistant",
+          role: "assistant",
+          content: "Done",
+          timestamp: "2026-03-01T09:00:10.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:task-1",
+          role: "system",
+          content: "Subagent (general-purpose): Run affected web tests",
+          timestamp: "2026-03-01T09:00:04.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "claude-subagent:task-1",
+            correlationKey: "task-1",
+            status: "completed",
+            agent: "general-purpose",
+            description: "Run affected web tests",
+          },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "history-user",
+      "subagent:task-1",
+      "history-assistant",
+    ]);
+  });
+
+  test("inserts unmatched current tool messages by timestamp during hydration", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "history-user",
+          role: "user",
+          content: "Start",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+        {
+          id: "history-assistant",
+          role: "assistant",
+          content: "Done",
+          timestamp: "2026-03-01T09:00:10.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "tool-read",
+          role: "tool",
+          content: "Read src/auth.ts",
+          timestamp: "2026-03-01T09:00:04.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-read",
+            callId: "tool-read",
+            tool: "Read",
+            toolType: "read",
+            status: "completed",
+            input: { file_path: "src/auth.ts" },
+          },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "history-user",
+      "tool-read",
+      "history-assistant",
     ]);
   });
 
@@ -615,7 +725,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     ]);
   });
 
-  test("keeps subagent terminal status and description consistent", () => {
+  test("keeps the hydrated launch description while merging terminal status", () => {
     const merged = mergedMessages(
       [
         {
@@ -663,14 +773,14 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     expect(merged[0]).toMatchObject({
       id: "subagent:part:msg-200:child-a",
       role: "system",
-      content: "Subagent (build): Error A",
+      content: "Subagent (build): Finished A",
       meta: {
         kind: "subagent",
         correlationKey: "part:msg-200:child-a",
         status: "error",
         agent: "build",
         prompt: "Inspect repo",
-        description: "Error A",
+        description: "Finished A",
         externalSessionId: "child-a",
         startedAtMs: 95,
         endedAtMs: 320,

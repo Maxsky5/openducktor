@@ -99,6 +99,13 @@ const GITHUB_CLI_TOOL_DESCRIPTOR = commandTool({
   installHint: "Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
   overrideVariable: "OPENDUCKTOR_GH_PATH",
 });
+const CLAUDE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
+  command: "claude",
+  displayName: "Claude Code",
+  installHint:
+    "Install Claude Code and ensure claude is available on PATH, or set OPENDUCKTOR_CLAUDE_BINARY.",
+  overrideVariable: "OPENDUCKTOR_CLAUDE_BINARY",
+});
 
 const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   command: "opencode",
@@ -153,6 +160,7 @@ const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
 
 export const TOOL_DISCOVERY_DESCRIPTORS: Record<ToolDiscoveryId, ToolDiscoveryDescriptor> = {
   bun: BUN_TOOL_DESCRIPTOR,
+  claude: CLAUDE_TOOL_DESCRIPTOR,
   codex: CODEX_TOOL_DESCRIPTOR,
   git: GIT_TOOL_DESCRIPTOR,
   githubCli: GITHUB_CLI_TOOL_DESCRIPTOR,

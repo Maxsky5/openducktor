@@ -1,5 +1,5 @@
 import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useCallback, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -31,6 +31,7 @@ type AgentChatThreadComposerActivity = {
 
 type UseAgentChatThreadModelArgs = {
   threadState: AgentChatThreadState;
+  modelCatalog: AgentModelCatalog | null;
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;
   isSessionWorking: boolean;
@@ -55,6 +56,7 @@ type UseAgentChatThreadModelArgs = {
 
 export function useAgentChatThreadModel({
   threadState,
+  modelCatalog,
   transcriptState,
   runtimeReadiness,
   isSessionWorking,
@@ -112,6 +114,7 @@ export function useAgentChatThreadModel({
   return useMemo(
     () => ({
       session: threadSession,
+      modelCatalog,
       displayedSessionKey,
       transcriptState,
       runtimeReadiness,
@@ -159,6 +162,7 @@ export function useAgentChatThreadModel({
       isRuntimeReady,
       isSessionWorking,
       messagesContainerRef,
+      modelCatalog,
       pendingApprovalRequests,
       pendingQuestionRequests,
       pendingQuestions,

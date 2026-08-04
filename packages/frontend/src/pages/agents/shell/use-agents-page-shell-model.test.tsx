@@ -217,7 +217,7 @@ let agentOperations: AgentOperationsContextValue = {
   startAgentSession: mock(async () => sessionIdentity("session-1")),
   sendAgentMessage: mock(async () => undefined),
   stopAgentSession: mock(async () => undefined),
-  updateAgentSessionModel: mock(() => undefined),
+  updateAgentSessionModel: mock(async () => undefined),
   replyAgentApproval: mock(async () => undefined),
   answerAgentQuestion: mock(async () => undefined),
 };
@@ -291,6 +291,7 @@ const baseSessionStartModal: SessionStartModalModel = {
   runtimeOptions: [],
   supportsProfiles: true,
   supportsVariants: true,
+  selectionCatalogError: null,
   isSelectionCatalogLoading: false,
   agentOptions: [],
   modelOptions: [],
@@ -555,7 +556,7 @@ beforeEach(async () => {
     startAgentSession: mock(async () => sessionIdentity("session-1")),
     sendAgentMessage: mock(async () => undefined),
     stopAgentSession: mock(async () => undefined),
-    updateAgentSessionModel: mock(() => undefined),
+    updateAgentSessionModel: mock(async () => undefined),
     replyAgentApproval: mock(async () => undefined),
     answerAgentQuestion: mock(async () => undefined),
   };

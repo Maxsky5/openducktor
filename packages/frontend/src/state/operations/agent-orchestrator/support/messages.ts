@@ -1,5 +1,6 @@
 import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 import { applyMessageTimestamp, haveSameMessageTimestamp } from "./message-timestamp";
+import { sessionMessageTimestampInsertionIndex } from "./message-timestamp-ordering";
 
 type MessageRole = AgentChatMessage["role"];
 
@@ -394,6 +395,16 @@ export const upsertSessionMessage = (
   return mergeAtIndex(previous, index, message);
 };
 
+export const replaceSessionMessageById = (
+  owner: SessionMessageOwner,
+  replacedMessageId: string,
+  message: AgentChatMessage,
+): SessionMessagesState => {
+  const previous = getSessionState(owner);
+  const index = findMessageIndexById(owner, replacedMessageId);
+  return index >= 0 ? mergeAtIndex(previous, index, message) : previous;
+};
+
 export const upsertUserSessionMessage = (
   owner: SessionMessageOwner,
   message: AgentChatMessage & { role: "user" },
@@ -417,6 +428,43 @@ export const upsertUserSessionMessage = (
 
   return createDerivedState(previous, [...previous.items, message]);
 };
+
+const insertSessionMessageByTimestamp = (
+  previous: SessionMessagesState,
+  message: AgentChatMessage,
+): SessionMessagesState => {
+  const insertionIndex = sessionMessageTimestampInsertionIndex(previous.items, message);
+  if (insertionIndex === previous.items.length) {
+    return createDerivedState(previous, [...previous.items, message]);
+  }
+
+  const nextMessages = previous.items.slice();
+  nextMessages.splice(insertionIndex, 0, message);
+  return createDerivedState(previous, nextMessages);
+};
+
+export const upsertSessionMessageByTimestamp = (
+  owner: SessionMessageOwner,
+  message: AgentChatMessage,
+): SessionMessagesState => {
+  const previous = getSessionState(owner);
+  const index = findMessageIndexById(owner, message.id);
+  if (index >= 0) {
+    return mergeAtIndex(previous, index, message);
+  }
+
+  return insertSessionMessageByTimestamp(previous, message);
+};
+
+export const sessionMessageBelongsToSourceMessage = (
+  message: AgentChatMessage,
+  sourceMessageId: string,
+): boolean =>
+  message.id === sourceMessageId ||
+  message.id.startsWith(`thinking:${sourceMessageId}:`) ||
+  message.id.startsWith(`tool:${sourceMessageId}:`) ||
+  (message.meta?.kind === "assistant" && message.meta.sourceMessageId === sourceMessageId) ||
+  (message.meta?.kind === "subagent" && message.meta.sourceMessageId === sourceMessageId);
 
 export const findFirstChangedSessionMessageIndex = (
   previousMessages: SessionMessagesState | null,

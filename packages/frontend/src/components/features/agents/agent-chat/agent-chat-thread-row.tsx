@@ -1,6 +1,7 @@
 import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
+import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { AgentTranscriptSeparator } from "./agent-transcript-separator";
@@ -9,6 +10,7 @@ import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
 type AgentChatTranscriptRowProps = {
   row: AgentChatTranscriptRow;
+  modelCatalog?: AgentChatThreadModel["modelCatalog"];
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionIdentity: ParentSessionRuntimeContext | null;
@@ -18,6 +20,7 @@ type AgentChatTranscriptRowProps = {
 
 export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
+  modelCatalog = null,
   isStreamingAssistantMessage,
   sessionAgentColors,
   sessionIdentity,
@@ -37,6 +40,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
         <div className={cn("flow-root", isUserMessage ? "pt-4" : undefined)}>
           <AgentChatMessageCard
             message={row.message}
+            modelCatalog={modelCatalog}
             isStreamingAssistantMessage={isStreamingAssistantMessage}
             sessionAgentColors={sessionAgentColors}
             sessionIdentity={sessionIdentity}

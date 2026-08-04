@@ -50,7 +50,12 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   },
   agentRuntimes: {
     opencode: { enabled: true },
-    codex: { enabled: false, defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY }, roleOverrides: {} },
+    codex: {
+      enabled: false,
+      defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
+      roleOverrides: {},
+    },
+    claude: { enabled: false },
   },
   workspaces: {},
   workspaceOrder: [],
@@ -385,7 +390,10 @@ describe("createWorkspaceSettingsService", () => {
             },
             roleOverrides: {
               spec: { sandboxMode: "read-only", approvalPolicy: "on-request" },
-              planner: { sandboxMode: "read-only", approvalPolicy: "untrusted" },
+              planner: {
+                sandboxMode: "read-only",
+                approvalPolicy: "untrusted",
+              },
               build: {
                 sandboxMode: "workspace-write",
                 approvalPolicy: "untrusted",

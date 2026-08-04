@@ -1,3 +1,4 @@
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentAttachmentKind, AgentModelAttachmentSupport } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import {
@@ -211,25 +212,46 @@ export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean 
 };
 
 const readAttachmentValidationError = (
-  attachment: Pick<AgentChatComposerAttachment, "kind">,
+  attachment: Pick<AgentChatComposerAttachment, "kind" | "mime" | "name">,
   support: AgentModelAttachmentSupport | null | undefined,
 ): string | null => {
   if (!support) {
     return "The selected model does not expose attachment capability data.";
   }
 
-  if (support[attachment.kind]) {
+  if (!support[attachment.kind]) {
+    return `The selected model does not support ${attachment.kind} attachments.`;
+  }
+
+  const supportedMimeTypes = support.mimeTypes?.[attachment.kind];
+  if (!supportedMimeTypes || supportedMimeTypes.length === 0) {
     return null;
   }
 
-  return `The selected model does not support ${attachment.kind} attachments.`;
+  const mime = attachment.mime?.trim().toLowerCase();
+  if (mime && supportedMimeTypes.includes(mime)) {
+    return null;
+  }
+
+  const inferredMime = ATTACHMENT_EXTENSION_MIME[readFileExtension(attachment.name)];
+  if (inferredMime && supportedMimeTypes.includes(inferredMime)) {
+    return null;
+  }
+
+  return `The selected model supports ${attachment.kind} attachments only as ${supportedMimeTypes.join(", ")}.`;
 };
 
 export const validateComposerAttachments = (
   attachments: AgentChatComposerAttachment[],
   support: AgentModelAttachmentSupport | null | undefined,
 ): Record<string, string> => {
+  let totalFileBytes = 0;
   return attachments.reduce<Record<string, string>>((acc, attachment) => {
+    totalFileBytes += attachment.file?.size ?? 0;
+    if (totalFileBytes > LOCAL_ATTACHMENT_BYTE_LIMIT) {
+      acc[attachment.id] = "Attachments must total 32 MiB or less.";
+      return acc;
+    }
     const error = readAttachmentValidationError(attachment, support);
     if (error) {
       acc[attachment.id] = error;

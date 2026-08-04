@@ -1,4 +1,8 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR, resolveCodexEffectivePolicy } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  resolveCodexEffectivePolicy,
+} from "@openducktor/contracts";
 import {
   type AgentSessionTodoItem,
   buildReadOnlyPermissionRejectionMessage,
@@ -36,7 +40,11 @@ import {
   getAgentSessionFixture,
   replaceAgentSessionFixture,
 } from "../test-utils";
-import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
+import {
+  createSessionEventBatcher,
+  isImmediateSessionEvent,
+  shouldFlushQueuedSessionEventImmediately,
+} from "./session-event-batching";
 import { createSessionEventRouter } from "./session-event-router.test-harness";
 import type { ObserveAgentSessionParams, SessionEventAdapter } from "./session-event-test-types";
 import type {
@@ -54,6 +62,8 @@ import {
   handleSessionStarted,
   handleSessionStatus,
   handleSessionTodosUpdated,
+  handleTranscriptRetracted,
+  handleTurnError,
   handleUserMessage,
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
@@ -83,6 +93,9 @@ const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): 
     case "assistant_message":
       handleAssistantMessage(context, event);
       return;
+    case "transcript_retracted":
+      handleTranscriptRetracted(context, event);
+      return;
     case "user_message":
       handleUserMessage(context, event);
       return;
@@ -100,6 +113,9 @@ const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): 
       return;
     case "session_compacted":
       handleSessionCompacted(context, event);
+      return;
+    case "turn_error":
+      handleTurnError(context, event);
       return;
     case "session_error":
       handleSessionError(context, event);
@@ -160,6 +176,10 @@ const listenToAgentSessionEventsImpl = async (
       return;
     }
     if (router.enqueue(event)) {
+      if (shouldFlushQueuedSessionEventImmediately(event)) {
+        flushQueuedEvents();
+        return;
+      }
       scheduleQueuedFlush();
     }
   });
@@ -283,6 +303,14 @@ const runtimeRefForSession = ({
     };
   }
 
+  if (session.runtimeKind === "claude") {
+    return {
+      ...baseRef,
+      runtimeKind: "claude",
+      runtimePolicy: { kind: "claude" },
+    };
+  }
+
   if (session.runtimeKind === "codex") {
     return {
       ...baseRef,
@@ -382,6 +410,8 @@ export const listenToAgentSessionEvents = (
       repoPath: repoPath ?? "/tmp/repo",
       session,
     });
+  const runtimeDefinition =
+    session.runtimeKind === "claude" ? CLAUDE_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR;
 
   return listenToAgentSessionEventsImpl({
     ...eventParams,
@@ -399,7 +429,7 @@ export const listenToAgentSessionEvents = (
         )),
     readOnlyApprovalAutoRejectSafe:
       readOnlyApprovalAutoRejectSafe ??
-      OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.readOnlyAutoRejectSafe,
+      runtimeDefinition.capabilities.approvals.readOnlyAutoRejectSafe,
     isSessionObserved:
       isSessionObserved ??
       ((candidateSession) =>

@@ -46,6 +46,7 @@ export type SessionStartModalModel = {
   runtimeOptions: ComboboxOption[];
   supportsProfiles: boolean;
   supportsVariants: boolean;
+  selectionCatalogError: string | null;
   isSelectionCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -249,6 +250,7 @@ function AgentField({
 }
 
 type ModelVariantFieldsProps = {
+  catalogError: string | null;
   isSelectionCatalogLoading: boolean;
   modelDisabled: boolean;
   modelGroups: ComboboxGroup[];
@@ -264,6 +266,7 @@ type ModelVariantFieldsProps = {
 };
 
 function ModelVariantFields({
+  catalogError,
   isSelectionCatalogLoading,
   modelDisabled,
   modelGroups,
@@ -278,46 +281,53 @@ function ModelVariantFields({
   onSelectVariant,
 }: ModelVariantFieldsProps): ReactElement {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="grid gap-1.5" data-testid="session-start-model-field">
-        <label className="text-sm font-medium text-foreground" htmlFor="session-start-model">
-          Model
-        </label>
-        <Combobox
-          value={selectedModel}
-          options={modelOptions}
-          groups={modelGroups}
-          matchAllSearchTerms
-          placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
-          disabled={modelDisabled}
-          className="w-full"
-          onValueChange={onSelectModel}
-        />
-      </div>
+    <div className="grid gap-2">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-1.5" data-testid="session-start-model-field">
+          <label className="text-sm font-medium text-foreground" htmlFor="session-start-model">
+            Model
+          </label>
+          <Combobox
+            value={selectedModel}
+            options={modelOptions}
+            groups={modelGroups}
+            matchAllSearchTerms
+            placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
+            disabled={modelDisabled}
+            className="w-full"
+            onValueChange={onSelectModel}
+          />
+        </div>
 
-      <div className="grid gap-1.5" data-testid="session-start-variant-field">
-        <label className="text-sm font-medium text-foreground" htmlFor="session-start-variant">
-          Variant
-        </label>
-        <Combobox
-          value={selectedVariant}
-          options={variantOptions}
-          placeholder={
-            isSelectionCatalogLoading
-              ? "Checking compatibility..."
-              : !selectedModelSelection
-                ? "Select model first"
-                : !supportsVariants
-                  ? "Variants handled by runtime"
-                  : variantOptions.length === 0
-                    ? "This model has no variants"
-                    : "Select variant"
-          }
-          disabled={variantDisabled}
-          className="w-full"
-          onValueChange={onSelectVariant}
-        />
+        <div className="grid gap-1.5" data-testid="session-start-variant-field">
+          <label className="text-sm font-medium text-foreground" htmlFor="session-start-variant">
+            Variant
+          </label>
+          <Combobox
+            value={selectedVariant}
+            options={variantOptions}
+            placeholder={
+              isSelectionCatalogLoading
+                ? "Checking compatibility..."
+                : !selectedModelSelection
+                  ? "Select model first"
+                  : !supportsVariants
+                    ? "Variants handled by runtime"
+                    : variantOptions.length === 0
+                      ? "This model has no variants"
+                      : "Select variant"
+            }
+            disabled={variantDisabled}
+            className="w-full"
+            onValueChange={onSelectVariant}
+          />
+        </div>
       </div>
+      {catalogError ? (
+        <p className="text-xs text-destructive" role="alert">
+          Failed to load runtime catalog: {catalogError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -416,6 +426,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     runtimeOptions,
     supportsProfiles,
     supportsVariants,
+    selectionCatalogError,
     isSelectionCatalogLoading,
     agentOptions,
     modelOptions,
@@ -455,6 +466,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
   const confirmDisabled =
     isStarting ||
+    (!isReuseMode && selectionCatalogError !== null) ||
     (!isReuseMode &&
       (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
     (requiresExistingSession && !hasExistingSessionSelection);
@@ -556,6 +568,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               ) : null}
 
               <ModelVariantFields
+                catalogError={selectionCatalogError}
                 isSelectionCatalogLoading={isSelectionCatalogLoading}
                 modelDisabled={modelDisabled}
                 modelGroups={modelGroups}

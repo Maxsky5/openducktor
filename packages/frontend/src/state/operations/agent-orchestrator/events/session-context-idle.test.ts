@@ -565,7 +565,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(findSession(sessionsRef, "session-1")?.status).toBe("starting");
   });
 
-  test("settles pending outbound sends when the runtime emits idle", async () => {
+  test("ignores idle until runtime activity begins, then trusts the runtime idle state", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -608,8 +608,68 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       timestamp: "2026-02-22T08:00:03.000Z",
     });
 
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
+    expect(findSession(sessionsRef, "session-1")?.pendingUserMessageStartedAt).toBe(123);
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:04.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-1",
+        partId: "subagent-1",
+        correlationKey: "subagent-1",
+        status: "running",
+        agent: "Explore",
+        description: "Explore architecture quickly",
+        executionMode: "background",
+      },
+    });
+    handleEvent({
+      type: "session_idle",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:05.000Z",
+    });
+
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
     expect(findSession(sessionsRef, "session-1")?.pendingUserMessageStartedAt).toBeUndefined();
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:06.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-1",
+        partId: "subagent-1",
+        correlationKey: "subagent-1",
+        status: "running",
+        agent: "Explore",
+        description: "Explore architecture quickly",
+        executionMode: "background",
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:07.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-1",
+        partId: "subagent-1",
+        correlationKey: "subagent-1",
+        status: "completed",
+        agent: "Explore",
+        description: "Explore architecture quickly",
+        executionMode: "background",
+      },
+    });
+
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
   });
 
   test("keeps streamed text messages through terminal idle settlement", async () => {

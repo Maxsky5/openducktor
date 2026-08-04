@@ -317,6 +317,23 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(false);
   });
 
+  test("changed model catalogs invalidate turn groups", () => {
+    const props = baseProps();
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          modelCatalog: {
+            models: [],
+            defaultModelsByProvider: {},
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   test("motion row comparator accepts rebuilt equal colors and identities", () => {
     const props = baseMotionRowProps();
 

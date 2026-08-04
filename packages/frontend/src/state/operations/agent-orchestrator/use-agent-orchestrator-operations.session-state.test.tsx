@@ -980,6 +980,11 @@ describe("use-agent-orchestrator-operations session state", () => {
       modelId: "gpt-5",
     };
     let receivedContextInput: unknown = null;
+    let contextReadCount = 0;
+    let releaseContextRead: (() => void) | undefined;
+    const contextReadGate = new Promise<void>((resolve) => {
+      releaseContextRead = resolve;
+    });
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     const liveStream = createLiveSessionStreamFixture();
@@ -993,7 +998,9 @@ describe("use-agent-orchestrator-operations session state", () => {
       {
         ...liveStream.portOverrides,
         agentSessionLiveLoadContext: async (input) => {
+          contextReadCount += 1;
           receivedContextInput = input;
+          await contextReadGate;
           return contextUsage;
         },
       },
@@ -1021,13 +1028,18 @@ describe("use-agent-orchestrator-operations session state", () => {
       expect(persistedSession.contextUsage).toBeNull();
 
       await harness.run(async () => {
-        await harness.getLatest().operations.loadAgentSessionContext({
+        const target = {
           externalSessionId: persistedSession.externalSessionId,
           runtimeKind: persistedSession.runtimeKind,
           workingDirectory: persistedSession.workingDirectory,
-        });
+        };
+        const firstLoad = harness.getLatest().operations.loadAgentSessionContext(target);
+        const secondLoad = harness.getLatest().operations.loadAgentSessionContext(target);
+        releaseContextRead?.();
+        await Promise.all([firstLoad, secondLoad]);
       });
 
+      expect(contextReadCount).toBe(1);
       expect(receivedContextInput).toEqual({
         repoPath: "/tmp/repo",
         externalSessionId: persistedSession.externalSessionId,

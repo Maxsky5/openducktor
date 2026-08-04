@@ -67,6 +67,7 @@ export type AgentChatTranscriptNotice = {
 
 export type AgentChatThreadModel = {
   session: AgentChatThreadSession | null;
+  modelCatalog: AgentModelCatalog | null;
   displayedSessionKey: string | null;
   transcriptState: AgentSessionTranscriptState;
   runtimeReadiness: RepoRuntimeReadiness;
@@ -124,6 +125,7 @@ export type AgentChatComposerModel = {
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
+  supportsAttachments: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;

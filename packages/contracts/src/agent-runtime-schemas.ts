@@ -6,7 +6,7 @@ import {
 } from "./agent-workflow-schemas";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
-export const knownRuntimeKindValues = ["opencode", "codex"] as const;
+export const knownRuntimeKindValues = ["opencode", "codex", "claude"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
 export type KnownRuntimeKind = z.infer<typeof knownRuntimeKindSchema>;
 
@@ -231,6 +231,7 @@ export type RuntimeStructuredInputCapabilities = z.infer<
 export const runtimePromptInputCapabilitiesSchema = z
   .object({
     supportedParts: runtimePromptInputPartTypesSchema,
+    supportsAttachments: z.boolean(),
     supportsSlashCommands: z.boolean(),
     supportsFileSearch: z.boolean(),
     supportsSkillReferences: z.boolean(),
@@ -544,6 +545,7 @@ export const runtimeCapabilityKeyValues = [
   "approvals.readOnlyAutoRejectSafe",
   "structuredInput.supportsQuestions",
   "promptInput.supportedParts",
+  "promptInput.supportsAttachments",
   "promptInput.supportsSlashCommands",
   "promptInput.supportsFileSearch",
   "promptInput.supportsSkillReferences",
@@ -574,6 +576,7 @@ export const optionalRuntimeCapabilityKeys = [
   "approvals.supportedRequestTypes",
   "approvals.supportedReplyOutcomes",
   "structuredInput.supportsQuestions",
+  "promptInput.supportsAttachments",
   "promptInput.supportsSlashCommands",
   "promptInput.supportsFileSearch",
   "promptInput.supportsSkillReferences",
@@ -630,6 +633,7 @@ export const runtimeCapabilityClasses = {
   "approvals.readOnlyAutoRejectSafe": "workflow",
   "structuredInput.supportsQuestions": "workflow",
   "promptInput.supportedParts": "baseline",
+  "promptInput.supportsAttachments": "optional_enhancement",
   "promptInput.supportsSlashCommands": "optional_enhancement",
   "promptInput.supportsFileSearch": "optional_enhancement",
   "promptInput.supportsSkillReferences": "optional_enhancement",

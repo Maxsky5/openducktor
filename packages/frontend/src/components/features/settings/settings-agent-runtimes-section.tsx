@@ -6,6 +6,7 @@ import {
   type CodexPolicyFields,
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
+  type RuntimeCheck,
   type RuntimeDescriptor,
   type RuntimeKind,
   resolveCodexEffectivePolicy,
@@ -13,17 +14,22 @@ import {
 import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { errorMessage } from "@/lib/errors";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 
 type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
+  runtimeCheck?: RuntimeCheck | null;
   disabled: boolean;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
@@ -87,6 +93,17 @@ const FEATURE_FIELDS: CodexPolicyField[] = [
 ];
 
 const INHERIT_ROLE_OVERRIDE_VALUE = "__inherit__";
+const CLAUDE_INSTALLATION_URL = "https://docs.anthropic.com/en/docs/claude-code/getting-started";
+const CLAUDE_PLAN_POLICY_URL =
+  "https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan";
+
+const openClaudeSetupUrl = (url: string): void => {
+  void openExternalUrl(url).catch((error) => {
+    toast.error("Failed to open Claude setup link", {
+      description: errorMessage(error),
+    });
+  });
+};
 
 const defaultValuesForField = <Field extends CodexPolicyField>(
   field: Field,
@@ -213,6 +230,78 @@ function RuntimeOverview({
         />
       </div>
     </div>
+  );
+}
+
+function ClaudeSetup({ runtimeCheck }: { runtimeCheck: RuntimeCheck | null }): ReactElement {
+  const health = runtimeCheck?.runtimes.find((runtime) => runtime.kind === "claude");
+  let installationStatus = "Not checked";
+  if (runtimeCheck !== null) {
+    if (health?.ok) {
+      installationStatus = health.version ? `Ready (${health.version})` : "Ready";
+    } else {
+      installationStatus = "Needs setup";
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Claude Code setup</CardTitle>
+        <CardDescription>
+          OpenDucktor uses your external Claude Code installation and its existing authentication.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-foreground">Installation</dt>
+            <dd className="text-muted-foreground">{installationStatus}</dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="font-medium text-foreground">Authentication</dt>
+            <dd className="text-muted-foreground">Verified when a Claude session starts</dd>
+          </div>
+        </dl>
+
+        {health?.error ? <p className="text-sm text-destructive">{health.error}</p> : null}
+
+        <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm text-muted-foreground">
+          <li>
+            Install Claude Code, then run <code className="font-mono text-foreground">claude</code>{" "}
+            once to sign in.
+          </li>
+          <li>
+            Use <code className="font-mono text-foreground">/login</code> in Claude Code to choose a
+            subscription or Console account before enabling this runtime.
+          </li>
+          <li>
+            Review billing before starting work: an{" "}
+            <code className="font-mono text-foreground">ANTHROPIC_API_KEY</code> can select
+            pay-as-you-go API billing instead of subscription usage.
+          </li>
+        </ol>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openClaudeSetupUrl(CLAUDE_INSTALLATION_URL)}
+          >
+            Installation and authentication
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openClaudeSetupUrl(CLAUDE_PLAN_POLICY_URL)}
+          >
+            Current Agent SDK plan policy
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -634,6 +723,7 @@ function EffectivePolicyNotes({
 export function AgentRuntimesSection({
   agentRuntimes,
   runtimeDefinitions,
+  runtimeCheck = null,
   disabled,
   requiresCodexDangerAcknowledgement,
   isCodexDangerAcknowledged,
@@ -746,6 +836,9 @@ export function AgentRuntimesSection({
                       )
                     }
                   />
+                ) : null}
+                {selectedDefinition.kind === "claude" ? (
+                  <ClaudeSetup runtimeCheck={runtimeCheck} />
                 ) : null}
               </div>
             );

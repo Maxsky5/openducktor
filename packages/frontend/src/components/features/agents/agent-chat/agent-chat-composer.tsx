@@ -553,6 +553,7 @@ export function AgentChatComposer({
     isModelSelectionPending,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsAttachments,
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
@@ -584,7 +585,7 @@ export function AgentChatComposer({
     isModelSelectionPending ||
     isWaitingInput ||
     Boolean(busySendBlockedReason);
-  const attachmentIntakeDisabled = isComposerInputDisabled || isSubmitting;
+  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
 
   const handleDraftChange = useCallback(
     (nextDraft: AgentChatComposerDraft) => {

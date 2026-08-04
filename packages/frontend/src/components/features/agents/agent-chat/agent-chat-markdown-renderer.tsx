@@ -1,14 +1,9 @@
-import { lazy, memo, type ReactElement, Suspense } from "react";
-import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
+import { memo, type ReactElement } from "react";
+import { MarkdownRenderer, type MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import { closeOpenStreamingCodeFence } from "./agent-chat-code-fence-healing";
 import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
-
-const LazyMarkdownRenderer = lazy(async () => {
-  const module = await import("@/components/ui/markdown-renderer");
-  return { default: module.MarkdownRenderer };
-});
 
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
   compact: "text-[13px] leading-relaxed text-foreground",
@@ -65,20 +60,6 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
   const preparedMarkdown = closeOpenStreamingCodeFence(content, streaming);
   const markdownClassName = cn(MARKDOWN_PROSE_WRAPPING_CLASSES, className);
   return (
-    <Suspense
-      fallback={
-        <PlainTextMarkdownFallback
-          content={content}
-          variant={variant}
-          {...plainTextClassNameProps}
-        />
-      }
-    >
-      <LazyMarkdownRenderer
-        markdown={preparedMarkdown}
-        variant={variant}
-        className={markdownClassName}
-      />
-    </Suspense>
+    <MarkdownRenderer markdown={preparedMarkdown} variant={variant} className={markdownClassName} />
   );
 });

@@ -76,7 +76,7 @@ type BuildDiagnosticsPanelModelInput = {
 
 type RuntimeHealthState = RepoRuntimeHealthMap[string] | undefined;
 
-const CLI_RUNTIME_KINDS = ["opencode", "codex"] as const;
+const CLI_RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
 
 const formatCliRuntimeValue = (cliHealth: RuntimeCheck["runtimes"][number]): string => {
   const value = cliHealth.ok ? (cliHealth.version ?? "detected") : "missing";

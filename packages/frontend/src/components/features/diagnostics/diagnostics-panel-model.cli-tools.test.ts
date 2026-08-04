@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeCheck,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
-import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
+import { buildDiagnosticsPanelModel as buildDiagnosticsPanelModelBase } from "./diagnostics-panel-model";
 import {
   makeBuiltInRuntimeDefinitions,
   makeBuiltInRuntimeDiagnostics,
@@ -15,6 +16,15 @@ import {
   makeTaskStoreCheck,
   makeWorkspace,
 } from "./diagnostics-panel-model-test-fixtures";
+
+const buildDiagnosticsPanelModel = (input: Parameters<typeof buildDiagnosticsPanelModelBase>[0]) =>
+  buildDiagnosticsPanelModelBase({
+    ...input,
+    runtimeHealthByRuntime: {
+      claude: buildDisabledRuntimeHealth(CLAUDE_RUNTIME_DESCRIPTOR),
+      ...input.runtimeHealthByRuntime,
+    },
+  });
 
 const buildCliToolsModel = ({
   runtimeDefinitions = makeBuiltInRuntimeDefinitions(),
@@ -50,14 +60,16 @@ const buildCliToolsModel = ({
   });
 
 describe("buildDiagnosticsPanelModel CLI Tools", () => {
-  test("restores OpenCode and Codex CLI values by runtime kind", () => {
+  test("renders OpenCode, Codex, and Claude CLI paths and versions by runtime kind", () => {
     const opencodeValue = "1.2.9 (/Users/dev/.opencode/bin/opencode)";
     const codexValue =
       "codex-cli 0.42.0 (/Applications/OpenDucktor.app/Contents/Resources/bin/codex)";
+    const claudeValue = "2.1.12 (/Users/dev/.local/bin/claude)";
     const model = buildCliToolsModel({
       runtimes: [
         { kind: "codex", ok: true, version: codexValue },
         { kind: "opencode", ok: true, version: opencodeValue },
+        { kind: "claude", ok: true, version: claudeValue },
       ],
     });
 
@@ -68,6 +80,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       { label: "GitHub CLI", value: "gh version 2.73.0" },
       { label: "OpenCode", value: opencodeValue, breakAll: true },
       { label: "Codex", value: codexValue, breakAll: true },
+      { label: "Claude", value: claudeValue, breakAll: true },
     ]);
   });
 
@@ -77,16 +90,18 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       runtimes: [
         { kind: "opencode" as const, ok: false, version: null },
         { kind: "codex" as const, ok: true, version: "codex-cli 0.42.0 (/bin/codex)" },
+        { kind: "claude" as const, enabled: false, ok: false, version: null },
       ],
-      expectedValues: ["missing", "codex-cli 0.42.0 (/bin/codex)"],
+      expectedValues: ["missing", "codex-cli 0.42.0 (/bin/codex)", "missing (runtime disabled)"],
     },
     {
       name: "detected OpenCode and missing Codex",
       runtimes: [
         { kind: "opencode" as const, ok: true, version: "1.2.9 (/bin/opencode)" },
         { kind: "codex" as const, ok: false, version: null },
+        { kind: "claude" as const, enabled: false, ok: false, version: null },
       ],
-      expectedValues: ["1.2.9 (/bin/opencode)", "missing"],
+      expectedValues: ["1.2.9 (/bin/opencode)", "missing", "missing (runtime disabled)"],
     },
   ])("formats $name independently", ({ runtimes, expectedValues }) => {
     const model = buildCliToolsModel({ runtimes: [...runtimes] });
@@ -100,11 +115,13 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       runtimes: [
         { kind: "opencode", ok: true, version: null },
         { kind: "codex", ok: true, version: null },
+        { kind: "claude", ok: true, version: null },
       ],
     });
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
 
     expect(cliToolsSection?.rows.slice(2).map((row) => row.value)).toEqual([
+      "detected",
       "detected",
       "detected",
     ]);
@@ -125,6 +142,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
         runtimes: [
           { kind: "opencode", ok: true, version: "1.2.9" },
           { kind: "codex", ok: true, version: "codex-cli 0.42.0" },
+          { kind: "claude", ok: true, version: "2.1.12" },
         ],
       }),
     ).toThrow('Missing runtime definition for runtime kind "codex"');
@@ -148,6 +166,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       runtimes: [
         { kind: "opencode", ok: true, version: "1.2.9" },
         { kind: "codex", enabled: false, ok: true, version: codexValue },
+        { kind: "claude", enabled: false, ok: false, version: null },
       ],
     });
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");

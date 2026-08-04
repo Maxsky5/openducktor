@@ -6,7 +6,7 @@ OpenDucktor depends on local command line tools:
 
 - Git and GitHub CLI for repository and pull request workflows
 - Bun for source-mode MCP startup
-- OpenCode and Codex for agent runtimes
+- OpenCode, Codex, and Claude Code for agent runtimes
 
 Discovery for these tools must be host-owned, cross-platform, and shell-neutral.
 Electron and the web runner both use the TypeScript host, so they must get the same discovery behavior.
@@ -151,11 +151,13 @@ It uses `SystemCommandPort.resolveCommandPath`, so platform details stay central
 | --- | --- | --- | --- | --- |
 | `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | none | source-mode and web artifact OpenDucktor MCP command |
 | `codex` | `codex` | `OPENDUCKTOR_CODEX_BINARY` | bundled directory when provided, macOS Codex.app candidates | Codex runtime startup and health |
+| `claude` | `claude` | `OPENDUCKTOR_CLAUDE_BINARY` | none; Claude Code is an external prerequisite | Claude Agent SDK runtime startup and health |
 | `git` | `git` | `OPENDUCKTOR_GIT_PATH` | none | Git adapter, diagnostics |
 | `githubCli` | `gh` | `OPENDUCKTOR_GH_PATH` | none | GitHub auth, PR detection and sync |
 | `opencode` | `opencode` | `OPENDUCKTOR_OPENCODE_BINARY` | bundled directory when provided, `~/.opencode/bin` | OpenCode runtime startup and health |
 
-`OPENDUCKTOR_CODEX_BINARY` and `OPENDUCKTOR_OPENCODE_BINARY` are existing public names.
+`OPENDUCKTOR_CLAUDE_BINARY`, `OPENDUCKTOR_CODEX_BINARY`, and
+`OPENDUCKTOR_OPENCODE_BINARY` are existing public names.
 For new general-purpose tools, prefer `OPENDUCKTOR_<TOOL>_PATH` unless there is already a released compatibility name.
 
 ## Distribution Modes
