@@ -514,7 +514,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-1",
       runtimeKind: input.runtimeKind,
       workingDirectory: input.workingDirectory,
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       startedAt: "2026-03-21T10:00:00.000Z",
       status: "running",
     });

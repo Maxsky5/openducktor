@@ -9,21 +9,31 @@ import { agentSessionRefsEqual, toAgentSessionRuntimeSnapshot } from "@openduckt
 import { HostValidationError } from "../../effect/host-errors";
 import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
 import type { ClaudeSession, ClaudeSessionInput } from "./claude-agent-sdk-types";
-import { claudeSessionRef, claudeWorkflowRole } from "./claude-agent-sdk-utils";
+import { claudeSessionRef, claudeWorkflowScope } from "./claude-agent-sdk-utils";
 
 export const createClaudeSessionSummary = (
   input: ClaudeSessionInput,
   sessionInput: { externalSessionId: string; title?: string },
   startedAt: string,
-): AgentSessionSummary => ({
-  externalSessionId: sessionInput.externalSessionId,
-  runtimeKind: "claude",
-  workingDirectory: input.workingDirectory,
-  ...(sessionInput.title ? { title: sessionInput.title } : {}),
-  role: claudeWorkflowRole(input),
-  startedAt,
-  status: "starting",
-});
+): AgentSessionSummary => {
+  const sessionAssociation = claudeWorkflowScope(input);
+  if (!sessionAssociation) {
+    throw new HostValidationError({
+      field: "sessionScope",
+      message: "Cannot create a Claude session summary without workflow session context.",
+      details: { externalSessionId: sessionInput.externalSessionId },
+    });
+  }
+  return {
+    externalSessionId: sessionInput.externalSessionId,
+    runtimeKind: "claude",
+    workingDirectory: input.workingDirectory,
+    ...(sessionInput.title ? { title: sessionInput.title } : {}),
+    sessionAssociation,
+    startedAt,
+    status: "starting",
+  };
+};
 
 export const toClaudeDisplayParts = (
   parts: SendAgentUserMessageInput["parts"],

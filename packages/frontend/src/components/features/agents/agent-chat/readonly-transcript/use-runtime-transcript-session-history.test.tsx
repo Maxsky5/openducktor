@@ -85,9 +85,11 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const readSessionHistory = mock(async () => []);
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryProvider useIsolatedClient>
-        <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-          {children}
-        </AgentOperationsContext.Provider>
+        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+            {children}
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
       </QueryProvider>
     );
     const harness = createHookHarness(

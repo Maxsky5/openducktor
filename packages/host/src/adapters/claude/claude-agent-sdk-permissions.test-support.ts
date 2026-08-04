@@ -39,7 +39,7 @@ export const createClaudePermissionTestSession = (
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",
-    role,
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role },
     startedAt: "2026-06-25T12:00:00.000Z",
     status: "idle",
   },

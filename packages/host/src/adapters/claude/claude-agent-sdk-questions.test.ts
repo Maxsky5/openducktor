@@ -33,7 +33,7 @@ const createSession = (): ClaudeSessionContext => ({
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",
-    role: "spec",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     startedAt: "2026-06-25T12:00:00.000Z",
     status: "idle",
   },

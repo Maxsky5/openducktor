@@ -22,8 +22,9 @@ export const agentSessionContextQueryKeys = {
       runtimeKind,
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,
-      sessionScope?.taskId ?? null,
-      sessionScope?.role ?? null,
+      sessionScope?.kind ?? null,
+      sessionScope?.kind === "workflow" ? sessionScope.taskId : null,
+      sessionScope?.kind === "workflow" ? sessionScope.role : null,
     ] as const,
 };
 

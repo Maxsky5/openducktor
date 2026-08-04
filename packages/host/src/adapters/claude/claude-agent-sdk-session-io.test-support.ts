@@ -34,7 +34,7 @@ export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): Cla
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     startedAt: "2026-06-25T20:00:00.000Z",
     status: "idle",
   },

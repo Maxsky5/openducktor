@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
+  type AgentSessionWorkflowScope,
   type ForkAgentSessionInput,
   formatWorkflowAgentSessionTitle,
   type ListAgentModelsInput,
@@ -21,6 +22,7 @@ import {
   type UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import { Effect } from "effect";
+import { requireWorkflowAgentSessionScope } from "../../application/agent-sessions/require-workflow-agent-session-scope";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
@@ -56,13 +58,16 @@ import type {
   ClaudeSessionStore,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
-import { claudeWorkflowScope, fromPromise, unsupported } from "./claude-agent-sdk-utils";
+import { fromPromise, unsupported } from "./claude-agent-sdk-utils";
 
 type ClaudeAgentSdkServiceDependencies = {
   loadDetachedSessionContextUsage: (
     input: Omit<Parameters<typeof loadClaudeDetachedSessionContextUsage>[0], "createQuery">,
   ) => ReturnType<typeof loadClaudeDetachedSessionContextUsage>;
 };
+
+type WorkflowScope = AgentSessionWorkflowScope;
+type SendInput = SendAgentUserMessageInput;
 
 const defaultClaudeAgentSdkServiceDependencies: ClaudeAgentSdkServiceDependencies = {
   loadDetachedSessionContextUsage: (input) =>
@@ -89,22 +94,30 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   startSession(input: StartAgentSessionInput, runtimeId: string) {
-    return this.start(input, runtimeId);
+    return requireWorkflowAgentSessionScope(input.sessionScope, "start Claude session").pipe(
+      Effect.flatMap((scope) => this.start(input, runtimeId, scope)),
+    );
   }
 
   resumeSession(input: ResumeAgentSessionInput, runtimeId: string) {
-    const existing = this.sessionStore.get(input.externalSessionId);
-    if (existing) {
-      return fromPromise("claudeRuntime.resumeSession", async () => {
-        assertClaudeSessionRef(existing, input, "resume");
-        return existing.summary;
-      });
-    }
-    return this.resume(input, runtimeId);
+    return requireWorkflowAgentSessionScope(input.sessionScope, "resume Claude session").pipe(
+      Effect.flatMap((scope) => {
+        const existing = this.sessionStore.get(input.externalSessionId);
+        if (existing) {
+          return fromPromise("claudeRuntime.resumeSession", async () => {
+            assertClaudeSessionRef(existing, input, "resume");
+            return existing.summary;
+          });
+        }
+        return this.resume(input, runtimeId, scope);
+      }),
+    );
   }
 
   forkSession(input: ForkAgentSessionInput, runtimeId: string) {
-    return this.fork(input, runtimeId);
+    return requireWorkflowAgentSessionScope(input.sessionScope, "fork Claude session").pipe(
+      Effect.flatMap((scope) => this.fork(input, runtimeId, scope)),
+    );
   }
 
   releaseSession(input: SessionRef) {
@@ -272,7 +285,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   sendUserMessage(input: SendAgentUserMessageInput, runtimeId: string) {
     const service = this;
     return Effect.gen(function* () {
-      const session = yield* service.requireSessionForSend(input, runtimeId);
+      const scope = yield* requireWorkflowAgentSessionScope(
+        input.sessionScope,
+        "send Claude user message",
+      );
+      const session = yield* service.requireSessionForSend(input, runtimeId, scope);
       assertClaudeSessionRef(session, input, "send message");
       return yield* fromPromise("claudeRuntime.sendUserMessage", () =>
         sendClaudeUserMessage({
@@ -340,9 +357,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return this.sessionStore.stopSessionsForRuntime(runtimeId);
   }
 
-  private start(input: StartAgentSessionInput, runtimeId: string) {
+  private start(input: StartAgentSessionInput, runtimeId: string, scope: WorkflowScope) {
     const externalSessionId = this.randomId();
-    const { role, taskId } = input.sessionScope;
+    const { role, taskId } = scope;
     return this.createSession(input, runtimeId, {
       externalSessionId,
       startedMessage: `Started ${role} session`,
@@ -351,25 +368,23 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  private resume(input: ResumeAgentSessionInput, runtimeId: string) {
+  private resume(input: ResumeAgentSessionInput, runtimeId: string, scope: WorkflowScope) {
     const existing = this.sessionStore.get(input.externalSessionId);
     if (existing) {
       assertClaudeSessionRef(existing, input, "resume");
       return Effect.succeed(existing.summary);
     }
-    const title = this.workflowSessionTitle(input);
-    const scope = claudeWorkflowScope(input);
     return this.createSession(input, runtimeId, {
       externalSessionId: input.externalSessionId,
-      startedMessage: `Resumed ${scope?.role ?? "Claude"} session`,
-      ...(title ? { title } : {}),
+      startedMessage: `Resumed ${scope.role} session`,
+      title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
       options: { resume: input.externalSessionId },
     });
   }
 
-  private fork(input: ForkAgentSessionInput, runtimeId: string) {
+  private fork(input: ForkAgentSessionInput, runtimeId: string, scope: WorkflowScope) {
     const externalSessionId = this.randomId();
-    const { role, taskId } = input.sessionScope;
+    const { role, taskId } = scope;
     return this.createSession(input, runtimeId, {
       externalSessionId,
       parentExternalSessionId: input.parentExternalSessionId,
@@ -453,28 +468,21 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return session;
   }
 
-  private requireSessionForSend(input: SendAgentUserMessageInput, runtimeId: string) {
+  private requireSessionForSend(input: SendInput, runtimeId: string, scope: WorkflowScope) {
     const existing = this.sessionStore.get(input.externalSessionId);
     if (existing) {
       return Effect.succeed(existing);
     }
     const service = this;
     return Effect.gen(function* () {
-      const title = service.workflowSessionTitle(input);
-      const scope = claudeWorkflowScope(input);
       yield* service.createSession(input, runtimeId, {
         externalSessionId: input.externalSessionId,
-        startedMessage: `Resumed ${scope?.role ?? "Claude"} session`,
-        ...(title ? { title } : {}),
+        startedMessage: `Resumed ${scope.role} session`,
+        title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
         options: { resume: input.externalSessionId },
       });
       return service.requireSession(input.externalSessionId);
     });
-  }
-
-  private workflowSessionTitle(input: ClaudeSessionInput): string | undefined {
-    const scope = claudeWorkflowScope(input);
-    return scope ? formatWorkflowAgentSessionTitle(scope.role, scope.taskId) : undefined;
   }
 
   private emit(session: ClaudeSessionContext, event: ClaudeAgentSdkEvent): void {
