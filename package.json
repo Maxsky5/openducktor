@@ -57,7 +57,7 @@
     "@types/node": "^26.1.2",
     "husky": "^9.1.7",
     "knip": "^6.29.0",
-    "typescript": "^5.7.3",
+    "typescript": "^7.0.2",
     "yaml": "^2.9.0"
   }
 }
