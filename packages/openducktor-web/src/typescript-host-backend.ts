@@ -28,6 +28,7 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import {
   routeTaskEventHttpRequest,
   TASK_EVENT_STREAM_TOKEN_HEADER,
@@ -93,7 +94,6 @@ const LAST_EVENT_ID_HEADER = "last-event-id";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const HOST_EVENT_STREAM_PATH = "events";
-const TASK_ASSET_PATH_PATTERN = /^\/task-assets\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
 type TerminalUpgradeResult = { handled: false } | { handled: true; response: Response | undefined };
 
@@ -682,30 +682,15 @@ const routeCorsRequest = ({
       return yield* localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
     }
 
-    const taskAssetMatch = TASK_ASSET_PATH_PATTERN.exec(requestUrl.pathname);
-    if (taskAssetMatch && request.method === "GET") {
-      yield* validateAppSessionCookie(request, appToken);
-      const [, workspaceId, taskId, scope, assetId] = taskAssetMatch;
-      const asset = yield* taskAssetReadService.read({ workspaceId, taskId, scope, assetId }).pipe(
-        Effect.mapError(
-          (error) =>
-            new WebHostRequestError({
-              message: error.code === "validation" ? "Task asset was not found." : error.message,
-              status: error.code === "validation" ? 404 : 500,
-              cause: error,
-            }),
-        ),
-      );
-      if (!asset) {
-        return yield* rejectWebHostRequest("Task asset was not found.", 404);
-      }
-      const body = asset.bytes.buffer.slice(
-        asset.bytes.byteOffset,
-        asset.bytes.byteOffset + asset.bytes.byteLength,
-      ) as ArrayBuffer;
-      return new Response(body, {
-        headers: { ...corsHeaders, ...asset.headers },
-      });
+    const taskAssetResponse = yield* routeTaskAssetHttpRequest({
+      appToken,
+      corsHeaders,
+      request,
+      taskAssetReadService,
+      validateAppSessionCookie,
+    });
+    if (taskAssetResponse) {
+      return taskAssetResponse;
     }
 
     const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);

@@ -68,22 +68,23 @@ export function MarkdownMermaid({
   }, [preparedPreview, reactId, renderDelayMs, source]);
 
   const preview = preparedPreview ?? state;
-  if (!preview) {
-    return null;
-  }
 
   return (
-    <section className="my-3 overflow-hidden rounded-md border border-border bg-card">
-      <div className="p-3">
-        {preview.status === "ready" ? (
+    <section
+      aria-busy={!preview}
+      aria-label="Mermaid diagram"
+      className="my-3 h-80 overflow-hidden rounded-md border border-border bg-card sm:h-96"
+    >
+      <div className="flex h-full items-center justify-center overflow-auto p-3">
+        {preview?.status === "ready" ? (
           <div
-            className="overflow-x-auto [&_svg]:mx-auto [&_svg]:max-w-full"
+            className="flex size-full items-center justify-center overflow-auto [&_svg]:max-h-full [&_svg]:max-w-full"
             // The SVG comes from Mermaid strict mode and passes through DOMPurify.
             // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized Mermaid SVG must be inserted as markup to render.
             dangerouslySetInnerHTML={{ __html: preview.svg }}
           />
         ) : null}
-        {preview.status === "error" ? (
+        {preview?.status === "error" ? (
           <div className="flex items-start gap-2 text-sm text-destructive" role="alert">
             <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <div>

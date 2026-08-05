@@ -192,6 +192,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options).toHaveProperty("permissionMode");
     expect(options.allowedTools).toEqual([
       "mcp__openducktor__odt_read_task",
+      "mcp__openducktor__odt_read_task_assets",
       "mcp__openducktor__odt_read_task_documents",
       "mcp__openducktor__odt_build_blocked",
       "mcp__openducktor__odt_build_resumed",
@@ -242,6 +243,7 @@ describe("buildClaudeAgentSdkOptions", () => {
 
     expect(options.allowedTools).toEqual([
       "mcp__openducktor__odt_read_task",
+      "mcp__openducktor__odt_read_task_assets",
       "mcp__openducktor__odt_read_task_documents",
       "mcp__openducktor__odt_set_spec",
     ]);
@@ -250,7 +252,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
     }
     expect(openducktorServer.env?.ODT_ALLOWED_TOOLS).toBe(
-      "odt_read_task,odt_read_task_documents,odt_set_spec",
+      "odt_read_task,odt_read_task_assets,odt_read_task_documents,odt_set_spec",
     );
     session.abortController.abort();
   });

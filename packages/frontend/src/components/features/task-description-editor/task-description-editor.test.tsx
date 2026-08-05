@@ -34,7 +34,7 @@ describe("TaskDescriptionEditor", () => {
     expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
   });
 
-  test("commits the initial Visual editor only after its Mermaid preview is ready", async () => {
+  test("mounts the Visual editor and a stable Mermaid viewport before the preview is ready", async () => {
     const renderModule = await import("@/components/ui/markdown-mermaid-render");
     let resolveRender: ((svg: string) => void) | undefined;
     const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
@@ -54,13 +54,15 @@ describe("TaskDescriptionEditor", () => {
       );
 
       await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1));
-      expect(view.container.querySelector(".tiptap")).toBeNull();
+      expect(view.container.querySelector(".tiptap")).not.toBeNull();
+      const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+      expect(viewport.getAttribute("aria-busy")).toBe("true");
 
       resolveRender?.(
         '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
       );
       await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy());
-      expect(view.container.querySelector(".tiptap")).not.toBeNull();
+      expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
     } finally {
       renderSpy.mockRestore();
     }

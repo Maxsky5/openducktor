@@ -10,7 +10,6 @@ import type { VisualMarkdownCompatibility } from "./task-description-markdown-co
 import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
 
 const loadTaskDescriptionMarkdown = () => import("./task-description-markdown");
-const loadTaskDescriptionMermaidPreviews = () => import("./task-description-mermaid-previews");
 const loadTaskDescriptionVisualEditor = () => import("./task-description-visual-editor");
 const TaskDescriptionVisualEditor = lazy(loadTaskDescriptionVisualEditor);
 
@@ -72,16 +71,13 @@ function TaskDescriptionEditorSession({
           }
           return;
         }
-        const { renderInitialTaskDescriptionMermaidPreviews } =
-          await loadTaskDescriptionMermaidPreviews();
-        const mermaidPreviews = await renderInitialTaskDescriptionMermaidPreviews(markdown);
         if (!active) {
           return;
         }
         setCompatibilityState({
           markdown,
           result,
-          mermaidPreviews,
+          mermaidPreviews: new Map(),
         });
       } catch {
         if (active) {

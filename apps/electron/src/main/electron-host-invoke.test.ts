@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  CodexSessionHistoryError,
-  TaskAssetError,
-  TerminalServiceError,
-} from "@openducktor/host";
+import { CodexSessionHistoryError, TaskAssetError, TerminalServiceError } from "@openducktor/host";
 import { Effect } from "effect";
 import { runElectronHostInvoke } from "./electron-host-invoke";
 

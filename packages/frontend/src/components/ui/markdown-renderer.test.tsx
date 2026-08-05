@@ -456,7 +456,7 @@ describe("rich task description rendering", () => {
     });
   });
 
-  test("does not commit a transient layout before the first Mermaid preview is ready", async () => {
+  test("mounts a stable Mermaid viewport before the first preview is ready", async () => {
     const renderModule = await import("./markdown-mermaid-render");
     let resolveRender: ((svg: string) => void) | undefined;
     const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
@@ -469,7 +469,9 @@ describe("rich task description rendering", () => {
     try {
       const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
 
-      expect(view.container.innerHTML).toBe("");
+      const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+      expect(view.queryByText(/graph TD/)).toBeNull();
+      expect(viewport.getAttribute("aria-busy")).toBe("true");
 
       resolveRender?.(
         '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
@@ -477,12 +479,14 @@ describe("rich task description rendering", () => {
       await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
         timeout: 3000,
       });
+      expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
+      expect(viewport.getAttribute("aria-busy")).toBe("false");
     } finally {
       renderSpy.mockRestore();
     }
   }, 4000);
 
-  test("commits surrounding Markdown and its Mermaid preview together", async () => {
+  test("keeps surrounding Markdown mounted while its Mermaid preview renders", async () => {
     const renderModule = await import("./markdown-mermaid-render");
     let resolveRender: ((svg: string) => void) | undefined;
     const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
@@ -500,8 +504,9 @@ describe("rich task description rendering", () => {
       await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1), {
         timeout: 3000,
       });
-      expect(view.queryByText("Before")).toBeNull();
-      expect(view.queryByText("After")).toBeNull();
+      expect(view.getByText("Before")).toBeTruthy();
+      expect(view.getByText("After")).toBeTruthy();
+      const viewport = view.getByRole("region", { name: "Mermaid diagram" });
       expect(view.container.querySelector("svg")).toBeNull();
 
       resolveRender?.(
@@ -510,8 +515,7 @@ describe("rich task description rendering", () => {
       await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
         timeout: 3000,
       });
-      expect(view.getByText("Before")).toBeTruthy();
-      expect(view.getByText("After")).toBeTruthy();
+      expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
     } finally {
       renderSpy.mockRestore();
     }

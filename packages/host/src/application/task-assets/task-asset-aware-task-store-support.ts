@@ -1,7 +1,23 @@
 import type { TaskAssetOperation, TaskCard } from "@openducktor/contracts";
+import type { Effect } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import type { NewTaskAssetRecord } from "../../ports/task-asset-registry-port";
-import type { StagedTaskAsset } from "./task-asset-staging-service";
+import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
+import type {
+  NewTaskAssetRecord,
+  TaskAssetRegistryPort,
+} from "../../ports/task-asset-registry-port";
+import type { TaskDescriptionAssetPersistencePort } from "../../ports/task-description-asset-persistence-port";
+import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type { StagedTaskAsset, TaskAssetStagingService } from "./task-asset-staging-service";
+
+export type TaskAssetAwareMutationDependencies = {
+  inner: TaskStorePort;
+  registry: TaskAssetRegistryPort;
+  filePort: TaskAssetFilePort;
+  staging: TaskAssetStagingService;
+  persistence: TaskDescriptionAssetPersistencePort | null;
+  resolveWorkspaceIdForRepoPath: (repoPath: string) => Effect.Effect<string, TaskStoreError>;
+};
 
 export const sameTaskAssetIds = (left: Set<string>, right: Set<string>): boolean =>
   left.size === right.size && Array.from(left).every((id) => right.has(id));
