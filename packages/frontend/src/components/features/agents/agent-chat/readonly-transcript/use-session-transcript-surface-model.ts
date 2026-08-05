@@ -1,9 +1,6 @@
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { deriveAgentChatReadiness } from "@/lib/agent-chat-readiness";
-import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
-import { resolveAgentChatTranscriptPresentation } from "@/lib/agent-chat-transcript-presentation";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
@@ -16,6 +13,9 @@ import {
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
+import { deriveAgentChatReadiness } from "../agent-chat-readiness";
+import { resolveAgentChatRuntimePresentation } from "../agent-chat-runtime-presentation";
+import { resolveAgentChatTranscriptPresentation } from "../agent-chat-transcript-presentation";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
 import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";

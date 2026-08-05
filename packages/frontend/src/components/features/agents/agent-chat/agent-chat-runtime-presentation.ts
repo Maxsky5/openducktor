@@ -1,7 +1,7 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { isOdtWorkflowMutationToolName, toOdtWorkflowToolDisplayName } from "@openducktor/core";
-import type { AgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import type { AgentChatRuntimePresentation } from "./agent-chat.types";
 
 export const resolveAgentChatRuntimePresentation = ({
   runtimeDefinitions,

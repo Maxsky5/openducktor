@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentChatTranscriptSession } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { resolveAgentChatTranscriptPresentation } from "./agent-chat-transcript-presentation";
 
 const createSession = (): AgentChatTranscriptSession => ({

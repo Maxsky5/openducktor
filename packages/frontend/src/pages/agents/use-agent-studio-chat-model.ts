@@ -8,13 +8,13 @@ import type {
 } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
+import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
+import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
+import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
 import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat/claude-skill-mentions";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
-import { deriveAgentChatReadiness } from "@/lib/agent-chat-readiness";
-import { resolveAgentChatRuntimePresentation } from "@/lib/agent-chat-runtime-presentation";
-import { resolveAgentChatTranscriptPresentation } from "@/lib/agent-chat-transcript-presentation";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";

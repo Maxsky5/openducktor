@@ -2,7 +2,7 @@ import type { SessionHistoryFailure } from "@openducktor/contracts";
 import type {
   AgentChatTranscriptNotice,
   AgentChatTranscriptNoticeAction,
-} from "@/components/features/agents/agent-chat/agent-chat.types";
+} from "./agent-chat.types";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
@@ -112,4 +112,5 @@ export const deriveAgentChatReadiness = ({
     transcriptNotice,
   };
 };
+
 

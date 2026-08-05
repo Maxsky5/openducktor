@@ -7,6 +7,7 @@ import {
   type AgentChatThreadModelInput,
   buildBaseModel,
   buildSession,
+  buildSessionTranscript,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
@@ -43,7 +44,7 @@ const renderRuntimeStatus = ({
     createElement(AgentChatThread, {
       model: {
         ...buildBaseModel(),
-        session: buildSession({ runtimeStatusMessage }),
+        transcript: buildSessionTranscript(buildSession({ runtimeStatusMessage })),
         isSessionWorking,
       },
     }),

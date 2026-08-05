@@ -3,14 +3,21 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat } from "./agent-chat";
-import { buildModelSelection, buildSession, completeThreadModel } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  buildSession,
+  buildSessionTranscript,
+  completeThreadModel,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   chatSettings: createChatSettingsFixture(),
   thread: completeThreadModel({
-    session: buildSession({
-      status: "running" as const,
-    }),
+    transcript: buildSessionTranscript(
+      buildSession({
+        status: "running" as const,
+      }),
+    ),
     isSessionWorking: true,
     isInteractionEnabled: true,
     emptyState: null,

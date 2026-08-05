@@ -4,8 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat, AgentChatSurface } from "./agent-chat";
 import {
+  buildEmptyTranscript,
   buildModelSelection,
   buildSession,
+  buildSessionTranscript,
   buildTodoItem,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
@@ -13,9 +15,11 @@ import {
 const buildModel = () => ({
   chatSettings: createChatSettingsFixture(),
   thread: completeThreadModel({
-    session: buildSession({
-      status: "running" as const,
-    }),
+    transcript: buildSessionTranscript(
+      buildSession({
+        status: "running" as const,
+      }),
+    ),
     isSessionWorking: true,
     isInteractionEnabled: true,
     emptyState: {
@@ -151,8 +155,7 @@ describe("AgentChat", () => {
           ...model,
           thread: completeThreadModel({
             ...threadFields,
-            session: null,
-            transcriptTarget: transcript.target,
+            transcript: buildEmptyTranscript({ target: transcript.target }),
           }),
         },
       }),
@@ -171,9 +174,11 @@ describe("AgentChat", () => {
           ...model,
           thread: completeThreadModel({
             ...threadFields,
-            session: buildSession({
-              status: "idle",
-            }),
+            transcript: buildSessionTranscript(
+              buildSession({
+                status: "idle",
+              }),
+            ),
             todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             sessionAccentColor: "#123456",
           }),
@@ -196,9 +201,11 @@ describe("AgentChat", () => {
           ...model,
           thread: completeThreadModel({
             ...threadFields,
-            session: buildSession({
-              status: "idle",
-            }),
+            transcript: buildSessionTranscript(
+              buildSession({
+                status: "idle",
+              }),
+            ),
             todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             sessionAuxiliaryError: "todos unavailable",
           }),

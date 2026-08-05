@@ -136,6 +136,43 @@ export const presentRegularToolCall = (
   displayName: displayLabel?.trim() || toolName,
 });
 
+type AgentChatSessionTranscriptOverrides = Partial<
+  Pick<AgentChatTranscriptPresentation, "target" | "displayedSessionKey" | "notice">
+>;
+
+export const buildSessionTranscript = (
+  session: AgentChatTranscriptSession,
+  overrides: AgentChatSessionTranscriptOverrides = {},
+): AgentChatTranscriptPresentation => ({
+  kind: "session",
+  session,
+  target: overrides.target === undefined ? session : overrides.target,
+  displayedSessionKey:
+    overrides.displayedSessionKey === undefined
+      ? agentSessionIdentityKey(session)
+      : overrides.displayedSessionKey,
+  shouldResetWindow: false,
+  notice: overrides.notice ?? null,
+});
+
+type AgentChatEmptyTranscriptOverrides = Partial<
+  Pick<
+    AgentChatTranscriptPresentation,
+    "target" | "displayedSessionKey" | "shouldResetWindow" | "notice"
+  >
+>;
+
+export const buildEmptyTranscript = (
+  overrides: AgentChatEmptyTranscriptOverrides = {},
+): AgentChatTranscriptPresentation => ({
+  kind: "empty",
+  session: null,
+  target: overrides.target ?? null,
+  displayedSessionKey: overrides.displayedSessionKey ?? null,
+  shouldResetWindow: overrides.shouldResetWindow ?? false,
+  notice: overrides.notice ?? null,
+});
+
 type AgentChatThreadFixtureDefaults =
   | "modelCatalog"
   | "pendingApprovalRequests"
@@ -144,18 +181,8 @@ type AgentChatThreadFixtureDefaults =
   | "sessionAccentColor"
   | "runtimePresentation";
 
-export type AgentChatThreadModelInput = Omit<
-  AgentChatThreadModel,
-  "transcript" | AgentChatThreadFixtureDefaults
-> &
-  Partial<Pick<AgentChatThreadModel, AgentChatThreadFixtureDefaults>> & {
-    transcript?: AgentChatTranscriptPresentation;
-    session?: AgentChatTranscriptSession | null;
-    transcriptTarget?: AgentChatTranscriptPresentation["target"];
-    displayedSessionKey?: AgentChatTranscriptPresentation["displayedSessionKey"];
-    shouldResetTranscriptWindow?: boolean;
-    transcriptNotice?: AgentChatTranscriptPresentation["notice"];
-  };
+export type AgentChatThreadModelInput = Omit<AgentChatThreadModel, AgentChatThreadFixtureDefaults> &
+  Partial<Pick<AgentChatThreadModel, AgentChatThreadFixtureDefaults>>;
 
 export const buildBaseModel = () => ({
   isSessionWorking: false,
@@ -187,59 +214,10 @@ export const buildBaseModel = () => ({
 });
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
-  const {
-    transcript: suppliedTranscript,
-    session: suppliedSession,
-    transcriptTarget,
-    displayedSessionKey: suppliedDisplayedSessionKey,
-    shouldResetTranscriptWindow,
-    transcriptNotice,
-    ...threadFields
-  } = model;
-
-  if (suppliedTranscript) {
-    return {
-      ...threadFields,
-      modelCatalog: model.modelCatalog ?? null,
-      transcript: suppliedTranscript,
-      runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
-      pendingApprovalRequests: model.pendingApprovalRequests ?? [],
-      pendingQuestionRequests: model.pendingQuestionRequests ?? [],
-      todos: model.todos ?? [],
-    };
-  }
-
-  const session = suppliedSession ?? null;
-  const target = Object.hasOwn(model, "transcriptTarget") ? (transcriptTarget ?? null) : session;
-  const displayedSessionKey = Object.hasOwn(model, "displayedSessionKey")
-    ? (suppliedDisplayedSessionKey ?? null)
-    : session
-      ? agentSessionIdentityKey(session)
-      : null;
-  const notice = transcriptNotice ?? null;
-  const transcript: AgentChatTranscriptPresentation = session
-    ? {
-        kind: "session",
-        session,
-        target,
-        displayedSessionKey,
-        shouldResetWindow: false,
-        notice,
-      }
-    : {
-        kind: "empty",
-        session: null,
-        target,
-        displayedSessionKey,
-        shouldResetWindow: shouldResetTranscriptWindow ?? false,
-        notice,
-      };
-
   return {
-    ...threadFields,
+    ...model,
     modelCatalog: model.modelCatalog ?? null,
     runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
-    transcript,
     pendingApprovalRequests: model.pendingApprovalRequests ?? [],
     pendingQuestionRequests: model.pendingQuestionRequests ?? [],
     todos: model.todos ?? [],

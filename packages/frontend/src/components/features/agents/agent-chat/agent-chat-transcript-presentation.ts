@@ -1,13 +1,13 @@
-import type {
-  AgentChatTranscriptNotice,
-  AgentChatTranscriptPresentation,
-  AgentChatTranscriptSession,
-} from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentSessionTranscriptTarget } from "@/components/features/agents/agent-chat/agent-session-transcript-target";
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type {
+  AgentChatTranscriptNotice,
+  AgentChatTranscriptPresentation,
+  AgentChatTranscriptSession,
+} from "./agent-chat.types";
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 type ResolveAgentChatTranscriptPresentationArgs = {
   sessionKey: string | null;
