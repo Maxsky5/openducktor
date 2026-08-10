@@ -157,14 +157,14 @@ describe("CodexThreadInventoryReader", () => {
     ]);
   });
 
-  test("rejects malformed summary turn entries instead of returning an incomplete id set", async () => {
+  test("rejects malformed summary turn entries at the pagination boundary", async () => {
     const reader = new CodexThreadInventoryReader();
     const client = {
       threadTurnsList: async () => ({ data: [null], nextCursor: null }),
     } as unknown as CodexAppServerClient;
 
     await expect(reader.readThreadTurnIds(client, "parent-thread")).rejects.toThrow(
-      "returned a summary turn without an id",
+      "Codex thread/turns/list response data[0] must be an object.",
     );
   });
 
@@ -550,6 +550,21 @@ describe("CodexThreadInventoryReader", () => {
         workingDirectory: "/repo",
       }),
     ).rejects.toThrow("Codex thread/turns/list response data must be an array.");
+  });
+
+  test("rejects malformed turns in paginated history", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadRead: async () => threadReadResponse("thread-idle"),
+      threadTurnsList: async () => ({ data: [null], nextCursor: null }),
+    } as unknown as CodexAppServerClient;
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-idle",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toThrow("Codex thread/turns/list response data[0] must be an object.");
   });
 
   test("returns null when read-only history has no stored thread", async () => {
