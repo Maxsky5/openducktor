@@ -59,7 +59,7 @@ describe("asset-aware task store compensation", () => {
     ).toBe("Image removed");
   });
 
-  test("reports promoted and obsolete IDs when update restoration fails", async () => {
+  test("retains update recovery data when promoted-file removal fails", async () => {
     const harness = await createHarness();
     const { staged: obsolete, task, description } = await createTaskWithAsset(harness);
     const added = await Effect.runPromise(
@@ -130,7 +130,7 @@ describe("asset-aware task store compensation", () => {
 
     expect(error.durableState).toBe("unknown");
     expect(new Set(error.assetIds)).toEqual(new Set([obsolete.assetId, added.assetId]));
-    expect(restoreAttempts).toBe(1);
+    expect(restoreAttempts).toBe(0);
     expect(removeAttempts).toBe(1);
     expect(
       (
@@ -539,6 +539,7 @@ describe("asset-aware task store compensation", () => {
       }),
     );
     let removeAttempts = 0;
+    let purgeAttempts = 0;
     const store = createTaskAssetAwareTaskStore({
       inner: harness.innerStore,
       registry: harness.registry,
@@ -563,6 +564,10 @@ describe("asset-aware task store compensation", () => {
       staging: harness.staging,
       filePort: {
         ...harness.filePort,
+        purgeQuarantine: (quarantineId) => {
+          purgeAttempts += 1;
+          return harness.filePort.purgeQuarantine(quarantineId);
+        },
         removeDurable: (input) => {
           removeAttempts += 1;
           return Effect.fail(
@@ -598,6 +603,7 @@ describe("asset-aware task store compensation", () => {
     expect(error.taskId).toBeTruthy();
     expect(error.assetIds).toEqual([staged.assetId]);
     expect(removeAttempts).toBe(1);
+    expect(purgeAttempts).toBe(0);
   });
 
   test("reports deleted asset IDs for purge and restoration failures", async () => {

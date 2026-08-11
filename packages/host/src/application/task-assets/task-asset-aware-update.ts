@@ -220,9 +220,6 @@ export const createTaskAssetAwareUpdate =
           return Effect.fail(error);
         }
         return Effect.gen(function* () {
-          const restoreExit = quarantineId
-            ? yield* Effect.exit(filePort.restoreQuarantine(quarantineId))
-            : Exit.succeed(undefined);
           const removeExit =
             promotedAssetIds.length > 0
               ? yield* Effect.exit(
@@ -233,6 +230,10 @@ export const createTaskAssetAwareUpdate =
                     operation: "update",
                   }),
                 )
+              : Exit.succeed(undefined);
+          const restoreExit =
+            Exit.isSuccess(removeExit) && quarantineId
+              ? yield* Effect.exit(filePort.restoreQuarantine(quarantineId))
               : Exit.succeed(undefined);
           if (Exit.isFailure(restoreExit) || Exit.isFailure(removeExit)) {
             return yield* taskAssetPartialStateError({

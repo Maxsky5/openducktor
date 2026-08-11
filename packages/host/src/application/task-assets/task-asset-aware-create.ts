@@ -213,9 +213,10 @@ export const createTaskAssetAwareCreate =
                 })
               : Effect.void,
           );
-          const recoveryExit = yield* Effect.exit(
-            recoveryId ? filePort.purgeQuarantine(recoveryId) : Effect.void,
-          );
+          const recoveryExit =
+            Exit.isSuccess(removeExit) && recoveryId
+              ? yield* Effect.exit(filePort.purgeQuarantine(recoveryId))
+              : Exit.succeed(undefined);
           if (Exit.isFailure(removeExit) || Exit.isFailure(recoveryExit)) {
             return yield* taskAssetPartialStateError({
               operation: "create",

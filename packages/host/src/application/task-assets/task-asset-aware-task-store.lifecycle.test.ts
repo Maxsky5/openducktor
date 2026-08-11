@@ -71,7 +71,8 @@ describe("asset-aware task store lifecycle", () => {
 
     releaseQuarantine?.();
     await deletion;
-    await expect(creation).resolves.toMatchObject({ parentId: parent.id, title: "Late child" });
+    await expect(creation).rejects.toThrow(`Task not found: ${parent.id}`);
+    expect(await Effect.runPromise(store.listTasks({ repoPath: harness.repoPath }))).toEqual([]);
   });
 
   test("promotes staged assets on create and removes obsolete assets only after update", async () => {
