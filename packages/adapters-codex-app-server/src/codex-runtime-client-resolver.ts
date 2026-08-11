@@ -13,7 +13,7 @@ import {
   type StartAgentSessionInput,
 } from "@openducktor/core";
 import { createCodexAppServerClient } from "./app-server-client";
-import { resolveCodexRuntimeClientInput } from "./runtime-connection";
+import { describeCodexRuntimeSession, resolveCodexRuntimeClientInput } from "./runtime-connection";
 import type { CodexAppServerAdapterOptions, CodexAppServerClient } from "./types";
 
 type RuntimeClientInput =
@@ -57,7 +57,7 @@ export class CodexRuntimeClientResolver {
     const resolver = this.options.repoRuntimeResolver;
     if (!resolver) {
       throw new Error(
-        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime 'codex'.`,
+        `Codex runtime '<unresolved>' is missing required route contract 'stdio' for ${describeCodexRuntimeSession(input)} in repo '${input.repoPath}' while attempting to ${action}; repo runtime resolver is unavailable.`,
       );
     }
 
@@ -77,6 +77,11 @@ export class CodexRuntimeClientResolver {
         repoPath: runtimeRef.repoPath,
         runtimeKind: runtimeRef.runtimeKind,
         ...("workingDirectory" in input ? { workingDirectory: input.workingDirectory } : {}),
+        ...("sessionScope" in input ? { sessionScope: input.sessionScope } : {}),
+        ...("externalSessionId" in input ? { externalSessionId: input.externalSessionId } : {}),
+        ...("parentExternalSessionId" in input
+          ? { parentExternalSessionId: input.parentExternalSessionId }
+          : {}),
       },
       action,
     );

@@ -1023,4 +1023,39 @@ describe("createAgentSessionLiveStateService", () => {
     await expect(Effect.runPromise(service.sendUserMessage(input))).resolves.toEqual(accepted);
     expect(sendInput).toEqual(input);
   });
+
+  test("fails repository bound operations with the missing live-route contract", async () => {
+    const { service } = createHarness();
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "repository-session",
+      sessionScope: { kind: "repository" as const },
+    };
+    const expectMissingRoute = async (effect: Effect.Effect<unknown, HostError>) => {
+      const error = await expectHostFailure(effect);
+      expect(error.message).toContain("repository session 'repository-session'");
+      expect(error.message).toContain("runtime kind 'codex'");
+      expect(error.message).toContain("runtime id '<unresolved>'");
+      expect(error.message).toContain("required route contract 'stdio'");
+      expect(error.message).toContain("repo '/repo'");
+    };
+
+    await expectMissingRoute(service.resumeSession(ref));
+    await expectMissingRoute(
+      service.forkSession({
+        repoPath: ref.repoPath,
+        runtimeKind: ref.runtimeKind,
+        workingDirectory: ref.workingDirectory,
+        parentExternalSessionId: ref.externalSessionId,
+        sessionScope: ref.sessionScope,
+        systemPrompt: "Use the repo rules.",
+      }),
+    );
+    await expectMissingRoute(
+      service.sendUserMessage({ ...ref, parts: [{ kind: "text", text: "Continue" }] }),
+    );
+    await expectMissingRoute(service.loadContext(ref));
+  });
 });

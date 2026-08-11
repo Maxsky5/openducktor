@@ -70,6 +70,7 @@ import {
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import {
+  describeOpencodeSessionScope,
   type OpencodeSessionPolicy,
   opencodeSessionScopeKindsMatch,
   resolveOpencodeSessionPolicy,
@@ -150,7 +151,7 @@ const applyRuntimeContextToSession = (
     const registeredScope = session.input.sessionScope;
     if (registeredScope && !opencodeSessionScopeKindsMatch(registeredScope, sessionScope)) {
       throw new Error(
-        `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${registeredScope.kind} scope does not match the requested ${sessionScope.kind} scope.`,
+        `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeOpencodeSessionScope(registeredScope)} does not match the requested ${describeOpencodeSessionScope(sessionScope)}.`,
       );
     }
     session.input.sessionScope = sessionScope;

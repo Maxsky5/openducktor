@@ -602,6 +602,73 @@ describe("opencode-sdk-adapter", () => {
     expect(mockClient.promptAsyncCalls).toHaveLength(0);
   });
 
+  test("rejects a different workflow task or role for a bound session", async () => {
+    const mockClient = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mockClient.client });
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      workingDirectory: defaultWorkingDirectory,
+      runtimeKind: "opencode",
+      sessionScope: opencodeWorkflowScope("spec"),
+      runtimePolicy: opencodeRuntimePolicy,
+      systemPrompt: "system",
+    });
+    const promptCount = mockClient.promptAsyncCalls.length;
+
+    await expect(
+      adapter.resumeSession({
+        ...sessionRef("external-session-1"),
+        sessionScope: { kind: "workflow", taskId: "task-2", role: "build" },
+        runtimePolicy: opencodeRuntimePolicy,
+        systemPrompt: "system",
+      }),
+    ).rejects.toThrow("registered workflow scope for task 'task-1' and role 'spec'");
+    await expect(
+      adapter.sendUserMessage({
+        ...sessionRuntimeRef("external-session-1", {
+          sessionScope: opencodeWorkflowScope("build"),
+        }),
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    ).rejects.toThrow("requested workflow scope for task 'task-1' and role 'build'");
+    await expect(
+      adapter.loadSessionHistory({
+        ...sessionRuntimeRef("external-session-1", {
+          sessionScope: { kind: "workflow", taskId: "task-2", role: "spec" },
+        }),
+      }),
+    ).rejects.toThrow("requested workflow scope for task 'task-2' and role 'spec'");
+    expect(mockClient.promptAsyncCalls).toHaveLength(promptCount);
+  });
+
+  test("allows an explicit workflow role change only when forking", async () => {
+    const mockClient = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mockClient.client });
+    const started = await adapter.startSession({
+      repoPath: defaultRepoPath,
+      workingDirectory: defaultWorkingDirectory,
+      runtimeKind: "opencode",
+      sessionScope: opencodeWorkflowScope("spec"),
+      runtimePolicy: opencodeRuntimePolicy,
+      systemPrompt: "system",
+    });
+
+    await expect(
+      adapter.forkSession({
+        repoPath: defaultRepoPath,
+        workingDirectory: defaultWorkingDirectory,
+        runtimeKind: "opencode",
+        parentExternalSessionId: started.externalSessionId,
+        sessionScope: opencodeWorkflowScope("build"),
+        runtimePolicy: opencodeRuntimePolicy,
+        systemPrompt: "system",
+      }),
+    ).resolves.toMatchObject({
+      title: "BUILD task-1",
+      sessionAssociation: opencodeWorkflowScope("build"),
+    });
+  });
+
   test("propagates repository session policy update failures", async () => {
     const mockClient = makeMockClient({
       sessionUpdateResult: {
@@ -1138,10 +1205,33 @@ describe("opencode-sdk-adapter", () => {
         workingDirectory: defaultRepoPath,
       }),
     ).rejects.toThrow(
-      "OpenCode runtime route 'stdio' is unsupported for list available slash commands; local_http is required for repo '/repo'.",
+      "OpenCode runtime 'runtime-opencode-1' is missing required route contract 'local_http' for unbound session '<new>'",
     );
 
     expect(createClient).not.toHaveBeenCalled();
+  });
+
+  test("fails repository history restoration on a missing bound OpenCode route", async () => {
+    const requireRepoRuntime = mock(async () => makeRuntimeSummary("stdio"));
+    const createClient = mock(() => {
+      throw new Error("createClient should not be called");
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient,
+      repoRuntimeResolver: { requireRepoRuntime },
+    });
+
+    await expect(
+      adapter.loadSessionHistory({
+        ...sessionRuntimeRef("repository-history", {
+          sessionScope: { kind: "repository" },
+        }),
+      }),
+    ).rejects.toThrow(
+      "runtime 'runtime-opencode-1' is missing required route contract 'local_http' for repository session 'repository-history'",
+    );
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(createClient).toHaveBeenCalledTimes(0);
   });
 
   test("listAvailableSubagents forwards runtime inputs to the catalog loader", async () => {

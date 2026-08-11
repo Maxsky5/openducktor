@@ -1,4 +1,8 @@
-import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
+import type {
+  AgentSessionScope,
+  RepoRuntimeRef,
+  RepoRuntimeRouteResolution,
+} from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import type { RepoRuntimeResolverPort } from "./types";
@@ -14,6 +18,15 @@ export type ResolvedOpencodeRuntimeClientInput = OpencodeRuntimeClientInput & {
 
 export type OpencodeRuntimeResolutionInput = RepoRuntimeRef & {
   workingDirectory?: string | null;
+  sessionScope?: AgentSessionScope;
+  externalSessionId?: string;
+  parentExternalSessionId?: string;
+};
+
+const describeOpencodeRuntimeSession = (input: OpencodeRuntimeResolutionInput): string => {
+  const scopeKind = input.sessionScope?.kind ?? "unbound";
+  const sessionId = input.externalSessionId ?? input.parentExternalSessionId ?? "<new>";
+  return `${scopeKind} session '${sessionId}'`;
 };
 
 export type ResolveOpencodeRuntimeClientInputRequest = {
@@ -24,7 +37,7 @@ export type ResolveOpencodeRuntimeClientInputRequest = {
 
 const requireOpencodeRuntimeEndpoint = (
   runtime: RepoRuntimeRouteResolution,
-  input: Pick<OpencodeRuntimeResolutionInput, "repoPath" | "runtimeKind">,
+  input: OpencodeRuntimeResolutionInput,
   action: string,
 ): string => {
   const ref = requireRepoRuntimeRef(input, action);
@@ -40,14 +53,14 @@ const requireOpencodeRuntimeEndpoint = (
   }
   if (runtime.runtimeRoute.type !== "local_http") {
     throw new Error(
-      `OpenCode runtime route '${runtime.runtimeRoute.type}' is unsupported for ${action}; local_http is required for repo '${ref.repoPath}'.`,
+      `OpenCode runtime '${runtime.runtimeId}' is missing required route contract 'local_http' for ${describeOpencodeRuntimeSession(input)} in repo '${ref.repoPath}' while attempting to ${action}; received route '${runtime.runtimeRoute.type}'.`,
     );
   }
 
   const endpoint = runtime.runtimeRoute.endpoint.trim();
   if (endpoint.length === 0) {
     throw new Error(
-      `OpenCode runtime endpoint is required to ${action} for repo '${ref.repoPath}' and runtime '${ref.runtimeKind}'.`,
+      `OpenCode runtime '${runtime.runtimeId}' is missing required route contract 'local_http' for ${describeOpencodeRuntimeSession(input)} in repo '${ref.repoPath}' while attempting to ${action}; route endpoint is empty.`,
     );
   }
 
@@ -58,7 +71,10 @@ const toOpencodeRuntimeClientInput = (input: {
   runtime: RepoRuntimeRouteResolution;
   repoPath: RepoRuntimeRef["repoPath"];
   runtimeKind: RepoRuntimeRef["runtimeKind"];
-  workingDirectory: string | null | undefined;
+  workingDirectory?: string | null;
+  sessionScope?: AgentSessionScope;
+  externalSessionId?: string;
+  parentExternalSessionId?: string;
   action: string;
 }): OpencodeRuntimeClientInput => ({
   runtimeEndpoint: requireOpencodeRuntimeEndpoint(input.runtime, input, input.action),
@@ -72,7 +88,7 @@ export const resolveOpencodeRuntimeClientInput = async ({
 }: ResolveOpencodeRuntimeClientInputRequest): Promise<ResolvedOpencodeRuntimeClientInput> => {
   if (!repoRuntimeResolver) {
     throw new Error(
-      `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
+      `OpenCode runtime '<unresolved>' is missing required route contract 'local_http' for ${describeOpencodeRuntimeSession(input)} in repo '${input.repoPath}' while attempting to ${action}; repo runtime resolver is unavailable.`,
     );
   }
 
@@ -84,7 +100,12 @@ export const resolveOpencodeRuntimeClientInput = async ({
       runtime,
       repoPath: runtimeRef.repoPath,
       runtimeKind: runtimeRef.runtimeKind,
-      workingDirectory: input.workingDirectory,
+      ...(input.workingDirectory !== undefined ? { workingDirectory: input.workingDirectory } : {}),
+      ...(input.sessionScope ? { sessionScope: input.sessionScope } : {}),
+      ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : {}),
+      ...(input.parentExternalSessionId
+        ? { parentExternalSessionId: input.parentExternalSessionId }
+        : {}),
       action,
     }),
     runtimeId: runtime.runtimeId,

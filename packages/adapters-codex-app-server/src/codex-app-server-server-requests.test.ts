@@ -113,7 +113,7 @@ describe("handleCodexServerRequest", () => {
     };
     const request = mcpToolApprovalRequest({
       id: 28,
-      serverName: "openducktor",
+      serverName: "external",
       toolName: "odt_read_task",
       threadId: session.threadId,
     });
@@ -399,6 +399,35 @@ describe("handleCodexServerRequest", () => {
         message: expect.stringContaining("role 'spec' is not allowed to use odt_set_plan"),
       }),
     );
+  });
+
+  test("automatically approves OpenDucktor workflow MCP tools allowed for the bound role", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        createSession("build"),
+        mcpToolApprovalRequest({
+          id: 36,
+          serverName: "openducktor",
+          toolName: "odt_read_task",
+          threadId: "thread-build",
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-build", 36)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      36,
+      expect.objectContaining({ action: "accept" }),
+      undefined,
+    );
+    expect(events).toEqual([]);
   });
 
   test("rejects OpenDucktor workflow MCP approvals for repository sessions", async () => {

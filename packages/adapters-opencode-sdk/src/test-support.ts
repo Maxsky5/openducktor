@@ -34,17 +34,20 @@ export const sessionRef = (externalSessionId = "session-opencode-1"): SessionRef
 
 export const sessionRuntimeRef = (
   externalSessionId = "session-opencode-1",
-  overrides: Partial<OpencodePolicyBoundSessionRef> = {},
-): OpencodePolicyBoundSessionRef => ({
-  externalSessionId,
-  repoPath: "/repo",
-  runtimeKind: "opencode",
-  workingDirectory: "/repo",
-  sessionScope: workflowAgentSessionScope("task-1", "spec" satisfies AgentRole),
-  runtimePolicy: { kind: "opencode" },
-  systemPrompt: "system prompt",
-  ...overrides,
-});
+  overrides: Partial<OpencodePolicyBoundSessionRef> & { role?: AgentRole } = {},
+): OpencodePolicyBoundSessionRef => {
+  const { role, ...sessionOverrides } = overrides;
+  return {
+    externalSessionId,
+    repoPath: "/repo",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
+    sessionScope: workflowAgentSessionScope("task-1", role ?? "spec"),
+    runtimePolicy: { kind: "opencode" },
+    systemPrompt: "system prompt",
+    ...sessionOverrides,
+  };
+};
 
 const createDefaultRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind) => ({
   kind: runtimeKind,

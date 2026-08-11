@@ -220,8 +220,93 @@ describe("CodexAppServerAdapter lifecycle", () => {
     for (const call of calls.filter((candidate) =>
       ["thread/start", "thread/fork", "thread/resume"].includes(candidate.method),
     )) {
-      expect(call.params).toMatchObject({ cwd: "/repo", ...expectedThreadPolicy });
+      expect(call.params).toMatchObject({
+        cwd: "/repo",
+        ...expectedThreadPolicy,
+        config: { "mcp_servers.openducktor.enabled": false },
+      });
     }
+  });
+
+  test("rejects a different workflow task or role for a bound session", async () => {
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const callCount = transports.get("runtime-live")?.calls.length;
+
+    await expect(
+      adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: started.externalSessionId,
+        sessionScope: { kind: "workflow", taskId: "task-2", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).rejects.toThrow("registered workflow scope for task 'task-1' and role 'spec'");
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: started.externalSessionId,
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          parts: [{ kind: "text", text: "Continue" }],
+        }),
+      ),
+    ).rejects.toThrow("requested workflow scope for task 'task-1' and role 'build'");
+    await expect(
+      adapter.loadSessionHistory(
+        codexSessionRuntimeRef(started.externalSessionId, {
+          sessionScope: { kind: "workflow", taskId: "task-2", role: "spec" },
+        }),
+      ),
+    ).rejects.toThrow("requested workflow scope for task 'task-2' and role 'spec'");
+    await expect(
+      adapter.loadSessionContextUsage(
+        codexSessionRuntimeRef(started.externalSessionId, {
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+        }),
+      ),
+    ).rejects.toThrow("requested workflow scope for task 'task-1' and role 'qa'");
+    expect(transports.get("runtime-live")?.calls).toHaveLength(callCount ?? 0);
+  });
+
+  test("allows an explicit workflow role change only when forking", async () => {
+    const { adapter } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.forkSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        parentExternalSessionId: started.externalSessionId,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).resolves.toMatchObject({
+      title: "BUILD task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
   });
 
   test("rejects a workflow scope for a repository-bound session", async () => {
@@ -301,6 +386,46 @@ describe("CodexAppServerAdapter lifecycle", () => {
       "thread/start",
       "thread/name/set",
     ]);
+  });
+
+  test("keeps resumed and history-restored repository sessions when thread naming fails", async () => {
+    const repositoryScope = { kind: "repository" } as const;
+    const resumedTransport = new NameFailingTransport("runtime-live", false);
+    const resumedAdapter = createAdapterWithTransport(resumedTransport);
+
+    await expect(
+      resumedAdapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+        sessionScope: repositoryScope,
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).rejects.toThrow("name failed");
+    expect(localSessions(resumedAdapter).has("thread-resume")).toBe(true);
+    expect(resumedTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
+      expect.objectContaining({ config: { "mcp_servers.openducktor.enabled": false } }),
+    );
+
+    const restoredTransport = new NameFailingTransport("runtime-live", false);
+    const restoredAdapter = createAdapterWithTransport(restoredTransport);
+    await expect(
+      restoredAdapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread-history",
+          sessionScope: repositoryScope,
+          runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+          parts: [{ kind: "text", text: "Continue" }],
+        }),
+      ),
+    ).rejects.toThrow("name failed");
+    expect(localSessions(restoredAdapter).has("thread-history")).toBe(true);
+    expect(restoredTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
+      expect.objectContaining({ config: { "mcp_servers.openducktor.enabled": false } }),
+    );
   });
 
   test("caches Codex model lists per runtime", async () => {
@@ -918,6 +1043,33 @@ describe("CodexAppServerAdapter lifecycle", () => {
     await expect(
       adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
     ).rejects.toThrow("No live repo runtime found for repo '/repo' and runtime 'codex'.");
+  });
+
+  test("fails repository history restoration on a missing bound Codex route", async () => {
+    const requireRepoRuntime = mock(async () => ({
+      ...makeRuntimeSummary("runtime-wrong-route"),
+      runtimeRoute: { type: "local_http" as const, endpoint: "http://127.0.0.1:43123" },
+    }));
+    const transportFactory = mock(() => {
+      throw new Error("transportFactory should not be called");
+    });
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: { requireRepoRuntime },
+      transportFactory,
+    });
+
+    await expect(
+      adapter.loadSessionHistory(
+        codexSessionRuntimeRef("repository-history", {
+          sessionScope: { kind: "repository" },
+          runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        }),
+      ),
+    ).rejects.toThrow(
+      "runtime 'runtime-wrong-route' is missing required route contract 'stdio' for repository session 'repository-history'",
+    );
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(transportFactory).toHaveBeenCalledTimes(0);
   });
 
   test("starts a session in the requested build worktree through the repo runtime", async () => {

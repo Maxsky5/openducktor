@@ -51,4 +51,17 @@ export const resolveOpencodeSessionPolicy = (
 export const opencodeSessionScopeKindsMatch = (
   left: AgentSessionScope,
   right: AgentSessionScope,
-): boolean => left.kind === right.kind;
+): boolean => {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "repository") {
+    return true;
+  }
+  return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
+};
+
+export const describeOpencodeSessionScope = (scope: AgentSessionScope): string =>
+  scope.kind === "repository"
+    ? "repository scope"
+    : `workflow scope for task '${scope.taskId}' and role '${scope.role}'`;

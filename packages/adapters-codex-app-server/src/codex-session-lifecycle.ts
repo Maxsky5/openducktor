@@ -17,6 +17,7 @@ import {
 } from "./codex-app-server-threads";
 import {
   codexSessionScopeKindsMatch,
+  describeCodexSessionScope,
   resolveCodexSessionScopePolicy,
 } from "./codex-session-scope-policy";
 import type {
@@ -69,7 +70,7 @@ export const applyRuntimeContextToSession = (
       !codexSessionScopeKindsMatch(registeredAssociation, sessionScope)
     ) {
       throw new Error(
-        `Cannot ${action} for Codex session '${session.threadId}' because its registered ${registeredAssociation.kind} scope does not match the requested ${sessionScope.kind} scope.`,
+        `Cannot ${action} for Codex session '${session.threadId}' because its registered ${describeCodexSessionScope(registeredAssociation)} does not match the requested ${describeCodexSessionScope(sessionScope)}.`,
       );
     }
     const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);

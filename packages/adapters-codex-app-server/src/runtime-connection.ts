@@ -1,9 +1,22 @@
-import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
+import type {
+  AgentSessionScope,
+  RepoRuntimeRef,
+  RepoRuntimeRouteResolution,
+} from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 
 export type CodexRuntimeResolutionInput = RepoRuntimeRef & {
   workingDirectory?: string | null;
+  sessionScope?: AgentSessionScope;
+  externalSessionId?: string;
+  parentExternalSessionId?: string;
+};
+
+export const describeCodexRuntimeSession = (input: CodexRuntimeResolutionInput): string => {
+  const scopeKind = input.sessionScope?.kind ?? "unbound";
+  const sessionId = input.externalSessionId ?? input.parentExternalSessionId ?? "<new>";
+  return `${scopeKind} session '${sessionId}'`;
 };
 
 export const resolveCodexRuntimeClientInput = (
@@ -27,7 +40,7 @@ export const resolveCodexRuntimeClientInput = (
   }
   if (runtime.runtimeRoute.type !== "stdio") {
     throw new Error(
-      `Codex runtime route '${runtime.runtimeRoute.type}' is unsupported for ${action}; stdio is required for repo '${ref.repoPath}'.`,
+      `Codex runtime '${runtime.runtimeId}' is missing required route contract 'stdio' for ${describeCodexRuntimeSession(input)} in repo '${ref.repoPath}' while attempting to ${action}; received route '${runtime.runtimeRoute.type}'.`,
     );
   }
 

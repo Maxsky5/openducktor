@@ -28,32 +28,44 @@ import type {
   CodexSessionState,
 } from "./types";
 
-const odtWorkflowToolRoleRejection = (
+type OdtWorkflowToolDecision =
+  | { kind: "unmanaged" }
+  | { kind: "allow" }
+  | { kind: "reject"; reason: string };
+
+const decideOdtWorkflowTool = (
   session: CodexSessionState,
   serverName: unknown,
   toolName: string | undefined,
-): string | null => {
+): OdtWorkflowToolDecision => {
   if (serverName !== "openducktor") {
-    return null;
+    return { kind: "unmanaged" };
   }
 
   if (!toolName) {
-    return null;
+    return { kind: "unmanaged" };
   }
 
   const workflowTool = normalizeOdtWorkflowToolName(toolName);
   if (!workflowTool) {
-    return null;
+    return { kind: "unmanaged" };
   }
 
   const sessionAssociation = session.summary.sessionAssociation;
   if (sessionAssociation.kind !== "workflow") {
-    return `the ${sessionAssociation.kind} session context cannot use workflow tools`;
+    return {
+      kind: "reject",
+      reason: `the ${sessionAssociation.kind} session context cannot use workflow tools`,
+    };
   }
 
-  return AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].includes(workflowTool)
-    ? null
-    : `role '${sessionAssociation.role}' is not allowed to use ${workflowTool}`;
+  if (AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].includes(workflowTool)) {
+    return { kind: "allow" };
+  }
+  return {
+    kind: "reject",
+    reason: `role '${sessionAssociation.role}' is not allowed to use ${workflowTool}`,
+  };
 };
 
 export type CodexServerRequestHandlerContext = {
@@ -214,12 +226,12 @@ export const handleCodexServerRequest = async (
       throw new Error("Codex MCP elicitation request is missing an id.");
     }
 
-    const roleRejection = odtWorkflowToolRoleRejection(
+    const workflowToolDecision = decideOdtWorkflowTool(
       routeContext.policySession,
       mcpElicitationApproval.metadata?.serverName,
       mcpElicitationApproval.tool?.name,
     );
-    if (roleRejection) {
+    if (workflowToolDecision.kind === "reject") {
       markHandled();
       try {
         await context.respondServerRequest(
@@ -228,7 +240,7 @@ export const handleCodexServerRequest = async (
           codexApprovalResponseForRequest({
             outcome: "reject",
             request: rawRequest,
-            message: `Codex MCP request '${mcpElicitationApproval.tool?.name}' was rejected because ${roleRejection}.`,
+            message: `Codex MCP request '${mcpElicitationApproval.tool?.name}' was rejected because ${workflowToolDecision.reason}.`,
           }),
           undefined,
         );
@@ -240,8 +252,23 @@ export const handleCodexServerRequest = async (
         type: "session_error",
         externalSessionId: routeContext.policySession.threadId,
         timestamp: new Date().toISOString(),
-        message: `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${roleRejection}.`,
+        message: `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${workflowToolDecision.reason}.`,
       });
+      return false;
+    }
+    if (workflowToolDecision.kind === "allow") {
+      markHandled();
+      try {
+        await context.respondServerRequest(
+          routeContext.runtimeId,
+          requestId,
+          codexApprovalResponseForRequest({ outcome: "approve_once", request: rawRequest }),
+          undefined,
+        );
+      } catch (error) {
+        forgetHandled();
+        throw error;
+      }
       return false;
     }
 
