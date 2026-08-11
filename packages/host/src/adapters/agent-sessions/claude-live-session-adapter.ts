@@ -7,6 +7,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { requireWorkflowAgentSessionScope } from "../../application/agent-sessions/require-workflow-agent-session-scope";
 import type {
   ClaudeAgentSdkService,
   ClaudePendingInputResolution,
@@ -358,7 +359,8 @@ export const createClaudeLiveSessionAdapterPreparer =
               );
           }),
         startSession: (input) =>
-          requireSessionWorkingDirectory(input, "start-session").pipe(
+          requireWorkflowAgentSessionScope(input.sessionScope, "start Claude session").pipe(
+            Effect.zipRight(requireSessionWorkingDirectory(input, "start-session")),
             Effect.flatMap(() =>
               runSummary("claude-live-session.start-session", () =>
                 service.startSession(toClaudeStartInput(input), runtime.runtimeId),
@@ -366,7 +368,8 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         resumeSession: (input) =>
-          requireSessionWorkingDirectory(input, "resume-session").pipe(
+          requireWorkflowAgentSessionScope(input.sessionScope, "resume Claude session").pipe(
+            Effect.zipRight(requireSessionWorkingDirectory(input, "resume-session")),
             Effect.flatMap(() =>
               runSummary(
                 "claude-live-session.resume-session",
@@ -376,7 +379,8 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         forkSession: (input) =>
-          requireSessionWorkingDirectory(input, "fork-session").pipe(
+          requireWorkflowAgentSessionScope(input.sessionScope, "fork Claude session").pipe(
+            Effect.zipRight(requireSessionWorkingDirectory(input, "fork-session")),
             Effect.flatMap(() =>
               runSummary("claude-live-session.fork-session", () =>
                 service.forkSession(toClaudeForkInput(input), runtime.runtimeId),
@@ -384,7 +388,8 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         sendUserMessage: (input) =>
-          requireSessionWorkingDirectory(input, "send-user-message").pipe(
+          requireWorkflowAgentSessionScope(input.sessionScope, "send Claude user message").pipe(
+            Effect.zipRight(requireSessionWorkingDirectory(input, "send-user-message")),
             Effect.flatMap(() =>
               eventCoordinator.runControlMutation(
                 service.sendUserMessage(toClaudeSendInput(input), runtime.runtimeId).pipe(

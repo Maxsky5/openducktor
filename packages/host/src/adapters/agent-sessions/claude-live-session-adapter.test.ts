@@ -9,6 +9,7 @@ import type {
   ClaudeAgentSdkService,
   ClaudePendingInputResolution,
 } from "../../application/runtimes/claude-agent-sdk-service";
+import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../application/runtimes/claude-workspace-runtime";
 import { HostOperationError } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterChange,
@@ -111,7 +112,9 @@ const deferred = <Value>() => {
   return { promise, resolve };
 };
 
-const createHarness = async () => {
+const createHarness = async (
+  workingDirectoryDependenciesOverride: ClaudeWorkspaceWorkingDirectoryDependencies = workingDirectoryDependencies,
+) => {
   const changes: AgentSessionLiveAdapterChange[] = [];
   const eventHub = createClaudeAgentSdkEventHub();
   let startSessionImpl: ClaudeAgentSdkService["startSession"] = () =>
@@ -223,7 +226,7 @@ const createHarness = async () => {
           ? (session as unknown as ReturnType<ClaudeSessionStore["get"]>)
           : undefined,
     } as ClaudeSessionStore,
-    workingDirectoryDependencies,
+    workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   });
   const prepared = await Effect.runPromise(prepare(runtime));
   await Effect.runPromise(prepared.startForwarding());
@@ -283,6 +286,68 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
+  test("rejects repository controls before workspace validation", async () => {
+    let canonicalizePathCalls = 0;
+    const harness = await createHarness({
+      ...workingDirectoryDependencies,
+      settingsConfig: {
+        ...workingDirectoryDependencies.settingsConfig,
+        canonicalizePath: (path) => {
+          canonicalizePathCalls += 1;
+          return Effect.succeed(path);
+        },
+      },
+    });
+    harness.setStartSession(() => Effect.die("startSession should not be called"));
+    harness.setResumeSession(() => Effect.die("resumeSession should not be called"));
+    harness.setForkSession(() => Effect.die("forkSession should not be called"));
+    harness.setSendUserMessage(() => Effect.die("sendUserMessage should not be called"));
+
+    const repositoryInput = {
+      ...startInput,
+      sessionScope: { kind: "repository" } as const,
+    };
+    const results = await Promise.all([
+      Effect.runPromise(Effect.either(harness.adapter.startSession(repositoryInput))),
+      Effect.runPromise(
+        Effect.either(
+          harness.adapter.resumeSession({
+            ...repositoryInput,
+            externalSessionId: "session-1",
+          }),
+        ),
+      ),
+      Effect.runPromise(
+        Effect.either(
+          harness.adapter.forkSession({
+            ...repositoryInput,
+            parentExternalSessionId: "parent-session",
+          }),
+        ),
+      ),
+      Effect.runPromise(
+        Effect.either(
+          harness.adapter.sendUserMessage({
+            ...repositoryInput,
+            externalSessionId: "session-1",
+            parts: [{ kind: "text", text: "Start" }],
+          }),
+        ),
+      ),
+    ]);
+
+    for (const result of results) {
+      expect(result).toMatchObject({
+        _tag: "Left",
+        left: {
+          _tag: "HostValidationError",
+          field: "sessionScope",
+        },
+      });
+    }
+    expect(canonicalizePathCalls).toBe(0);
+  });
+
   test("rejects session operations outside the selected workspace before calling the SDK", async () => {
     const harness = await createHarness();
     const sdkCalls = { start: 0, resume: 0, fork: 0, loadContext: 0, sendUserMessage: 0 };

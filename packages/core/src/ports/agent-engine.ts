@@ -120,6 +120,10 @@ export type PolicyBoundSessionRef = AgentSessionRef &
     systemPrompt?: string;
   };
 
+export type PolicyBoundSessionControlRef = PolicyBoundSessionRef & {
+  sessionScope: AgentSessionScope;
+};
+
 export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
   AgentRuntimePolicyBinding & {
     sessionScope: AgentSessionScope;
@@ -127,16 +131,14 @@ export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
     model?: AgentModelSelection;
   };
 
-export type ResumeAgentSessionInput = PolicyBoundSessionRef & {
-  sessionScope?: AgentSessionScope;
-};
+export type ResumeAgentSessionInput = PolicyBoundSessionControlRef;
 
 export type ForkAgentSessionInput = StartAgentSessionInput & {
   parentExternalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
-export type SendAgentUserMessageInput = PolicyBoundSessionRef & {
+export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
   parts: AgentUserMessagePart[];
   model?: AgentModelSelection;
 };

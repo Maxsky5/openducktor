@@ -230,9 +230,7 @@ export class OpencodeSdkAdapter
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "resume OpenCode session");
-    const scope = input.sessionScope
-      ? requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session")
-      : null;
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       const registeredSessionRef = opencodeSessionRef(existing);
@@ -242,13 +240,11 @@ export class OpencodeSdkAdapter
         );
       }
       applyRuntimeContextToSession(existing, input);
-      if (scope) {
-        existing.summary = {
-          ...existing.summary,
-          title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
-          sessionAssociation: scope,
-        };
-      }
+      existing.summary = {
+        ...existing.summary,
+        title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
+        sessionAssociation: scope,
+      };
       return existing.summary;
     }
 
@@ -274,7 +270,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: scope ? `Resumed ${scope.role} session` : "Resumed session",
+      startedMessage: `Resumed ${scope.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
