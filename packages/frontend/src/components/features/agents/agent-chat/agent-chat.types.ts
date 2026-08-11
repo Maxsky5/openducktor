@@ -58,10 +58,16 @@ export type AgentChatTranscriptNoticeAction = {
 };
 
 export type AgentChatTranscriptNotice = {
-  kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
+  kind:
+    | "runtime_waiting"
+    | "session_loading"
+    | "session_failed"
+    | "session_history_warning"
+    | "runtime_blocked";
   severity: "loading" | "error";
   title: string;
   description: string;
+  details?: Array<{ label: string; value: string }>;
   action?: AgentChatTranscriptNoticeAction;
 };
 

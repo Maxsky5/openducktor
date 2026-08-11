@@ -139,6 +139,9 @@ export const buildThreadTranscriptState = (
     ? {
         kind: "failed",
         message: transcriptState.message ?? "The selected conversation could not be loaded.",
+        ...("historyFailure" in transcriptState
+          ? { historyFailure: transcriptState.historyFailure }
+          : {}),
       }
     : transcriptState;
 

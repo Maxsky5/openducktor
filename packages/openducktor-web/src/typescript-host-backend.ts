@@ -13,10 +13,9 @@ import {
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
+  hostInvokeFailureFromError,
   type McpBridgeDiscoveryMode,
-  TerminalServiceError,
   type ToolDiscoveryId,
-  terminalServiceErrorToFailure,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
@@ -282,13 +281,7 @@ const extractHostCommandFailureKind = (
 const hostCommandFailureToWebError = (command: string, error: unknown): WebHostRequestError => {
   const failureKind = extractHostCommandFailureKind(error);
   const details = readStructuredDetails(error);
-  const hostInvokeFailure =
-    error instanceof TerminalServiceError
-      ? {
-          kind: "terminal" as const,
-          terminalFailure: terminalServiceErrorToFailure(error),
-        }
-      : undefined;
+  const hostInvokeFailure = hostInvokeFailureFromError(error);
   return new WebHostRequestError({
     message: errorMessage(error),
     status: 500,

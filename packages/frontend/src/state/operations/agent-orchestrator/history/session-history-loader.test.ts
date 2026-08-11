@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { HostInvokeError } from "@openducktor/host-client";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -152,6 +153,37 @@ describe("session history loader", () => {
     expect(harness.session.historyLoadState).toBe("failed");
   });
 
+  test("keeps structured session history diagnostics in transient session state", async () => {
+    const harness = createHistoryLoadHarness();
+    const failure = {
+      code: "invalid_runtime_response" as const,
+      summary: "Codex returned invalid conversation history.",
+      detail: "Codex thread/turns/list response data[0] must be an object",
+      diagnosticId: "diagnostic-1",
+      method: "thread/turns/list",
+      pageCursor: null,
+    };
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new HostInvokeError("history unavailable", {
+            kind: "session_history",
+            sessionHistoryFailure: failure,
+          });
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("failed");
+    expect(harness.session.historyLoadFailure).toEqual(failure);
+  });
+
   test("allows caller-requested history loads to retry failed sessions", async () => {
     const loadSessionHistory = mock(async () => [
       {
@@ -180,6 +212,52 @@ describe("session history loader", () => {
     expect(harness.session.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "Loaded after retry",
+    ]);
+  });
+
+  test("allows caller-requested history loads to retry a failed refresh with visible messages", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-2",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:02.000Z",
+        text: "Complete transcript",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      historyLoadFailure: {
+        code: "invalid_runtime_response",
+        summary: "Codex returned invalid conversation history.",
+        detail: "Codex thread/turns/list response data[0] must be an object",
+      },
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "cached-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          content: "Cached transcript",
+        },
+      ]),
+    });
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadFailure).toBeNull();
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Cached transcript",
+      "Complete transcript",
     ]);
   });
 

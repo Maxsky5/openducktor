@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionHistoryFailureSchema } from "./session-history-failure-schemas";
 
 export const TERMINAL_ID_MAX_LENGTH = 128;
 export const terminalIdSchema = z.string().trim().min(1).max(TERMINAL_ID_MAX_LENGTH);
@@ -103,6 +104,12 @@ export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("terminal"),
       terminalFailure: terminalFailureSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("session_history"),
+      sessionHistoryFailure: sessionHistoryFailureSchema,
     })
     .strict(),
 ]);

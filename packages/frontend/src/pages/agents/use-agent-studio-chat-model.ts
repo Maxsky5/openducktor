@@ -38,6 +38,7 @@ export type AgentStudioChatSessionActionsContext = {
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
+  loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
 };
 
 export type AgentStudioChatModelSelectionContext = {
@@ -197,6 +198,24 @@ export function useAgentStudioChatModel({
     ],
   );
   const failedTranscriptAction = useMemo(() => {
+    const historyLoadFailed =
+      (selectedSessionTranscriptState.kind === "failed" &&
+        selectedSessionTranscriptState.historyFailure != null) ||
+      (selectedSessionTranscriptState.kind === "visible" &&
+        selectedSessionTranscriptState.historyFailure != null);
+    if (
+      historyLoadFailed &&
+      selectedSessionIdentity !== null &&
+      selectedSessionState.loadedSession !== null
+    ) {
+      return {
+        label: "Retry",
+        onAction: () => {
+          void sessionActions.loadAgentSessionHistory(selectedSessionIdentity);
+        },
+      };
+    }
+
     if (
       selectedSessionTranscriptState.kind !== "failed" ||
       selectedSessionState.loadedSession !== null ||
@@ -211,9 +230,11 @@ export function useAgentStudioChatModel({
     };
   }, [
     reloadSessionReadModel,
+    selectedSessionIdentity,
     selectedSessionState.loadedSession,
     selectedSessionAuxiliaryError,
-    selectedSessionTranscriptState.kind,
+    selectedSessionTranscriptState,
+    sessionActions.loadAgentSessionHistory,
     sessionReadModelLoadState.kind,
   ]);
   const draftStateKey = agentStudioChatDraftScopeKey(composer.workspaceId, composer.draftScope);

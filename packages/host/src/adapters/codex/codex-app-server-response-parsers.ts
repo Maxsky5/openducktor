@@ -118,5 +118,25 @@ export const parseThreadTurnsListResponse = (
       details: { context: "Codex thread/turns/list response" },
     });
   }
-  return payload as unknown as CodexAppServerThreadTurnsListResponse;
+  for (const [index, entry] of payload.data.entries()) {
+    const turn = requireRecord(entry, `Codex thread/turns/list response data[${index}]`);
+    const itemsContext = `Codex thread/turns/list response data[${index}].items`;
+    if (!Array.isArray(turn.items)) {
+      throw new HostValidationError({
+        message: `${itemsContext} must be an array`,
+        details: { context: itemsContext },
+      });
+    }
+    for (const [itemIndex, item] of turn.items.entries()) {
+      requireRecord(item, `${itemsContext}[${itemIndex}]`);
+    }
+  }
+  return {
+    data: payload.data,
+    nextCursor: parseCursor(payload.nextCursor, "Codex thread/turns/list nextCursor"),
+    backwardsCursor: parseCursor(
+      payload.backwardsCursor,
+      "Codex thread/turns/list backwardsCursor",
+    ),
+  } as CodexAppServerThreadTurnsListResponse;
 };

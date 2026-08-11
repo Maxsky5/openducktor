@@ -23,6 +23,7 @@ export * from "./prompt-schemas";
 export * from "./pull-request-review-schemas";
 export * from "./run-schemas";
 export * from "./runtime-descriptors";
+export * from "./session-history-failure-schemas";
 export * from "./session-schemas";
 export * from "./session-todo-parsing";
 export * from "./skill-schemas";

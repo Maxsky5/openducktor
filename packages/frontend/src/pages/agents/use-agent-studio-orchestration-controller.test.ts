@@ -73,6 +73,7 @@ const baseSessionActions = {
   approvalReplyErrorByRequestId: {},
   onReplyApproval: async () => {},
   stopAgentSession: async () => {},
+  loadAgentSessionHistory: async () => null,
 };
 const baseDocuments = {
   specDoc: taskDocument,

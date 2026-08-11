@@ -156,6 +156,7 @@ export type CodexAppServerThread = {
   ephemeral: boolean;
   forkedFromId: string | null;
   gitInfo: CodexAppServerJsonValue | null;
+  historyMode: CodexAppServerThreadHistoryMode;
   id: string;
   modelProvider: string;
   name: string | null;
@@ -169,6 +170,7 @@ export type CodexAppServerThread = {
   turns: CodexAppServerTurn[];
   updatedAt: number;
 };
+export type CodexAppServerThreadHistoryMode = "legacy" | "paginated";
 export type CodexAppServerTurn = {
   completedAt: number | null;
   durationMs: number | null;
@@ -188,6 +190,7 @@ export type CodexAppServerThreadStartParams = {
   cwd?: string | null;
   developerInstructions?: string | null;
   ephemeral?: boolean | null;
+  historyMode?: CodexAppServerThreadHistoryMode | null;
   model?: string | null;
   modelProvider?: string | null;
   personality?: CodexAppServerPersonality | null;
@@ -199,8 +202,9 @@ export type CodexAppServerThreadStartParams = {
 };
 export type CodexAppServerThreadResumeParams = Omit<
   CodexAppServerThreadStartParams,
-  "ephemeral" | "serviceName" | "sessionStartSource" | "threadSource"
+  "ephemeral" | "historyMode" | "serviceName" | "sessionStartSource" | "threadSource"
 > & {
+  excludeTurns?: boolean | null;
   threadId: string;
 };
 export type CodexAppServerThreadForkParams = CodexAppServerThreadResumeParams & {

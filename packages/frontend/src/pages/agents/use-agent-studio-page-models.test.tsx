@@ -243,6 +243,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     startLaunchKickoff: async () => {},
     onSend: async () => true,
     stopAgentSession: async () => {},
+    loadAgentSessionHistory: async () => null,
     ...overrides.sessionActions,
   };
   const selectedSessionActions: AgentStudioSelectedSessionContextInput["sessionActions"] = {
@@ -753,6 +754,49 @@ describe("useAgentStudioPageModels", () => {
     );
     expect(html).toContain("Cached transcript");
     expect(html).not.toContain("Loading session");
+
+    await harness.unmount();
+  });
+
+  test("offers a user-triggered retry when visible session history is incomplete", async () => {
+    const loadedSession = createSession("session-history-failed", "external-history-failed", {
+      messages: [
+        {
+          id: "assistant-cached",
+          role: "assistant",
+          content: "Cached transcript",
+          timestamp: "2026-02-22T08:00:05.000Z",
+        },
+      ],
+    });
+    const loadAgentSessionHistory = mock(async () => loadedSession);
+    const sessionActionsWithHistoryRetry = { loadAgentSessionHistory };
+    const historyFailure = {
+      code: "invalid_runtime_response" as const,
+      summary: "Codex returned invalid conversation history.",
+      detail: "Codex thread/turns/list response data[0] must be an object",
+    };
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          loadedSession,
+          sessionsForTask: summarizeSessions([loadedSession]),
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "visible",
+            historyFailure,
+          }),
+        },
+        sessionActions: sessionActionsWithHistoryRetry,
+      }),
+    );
+
+    await harness.mount();
+
+    const notice = harness.getLatest().agentChatModel.thread.transcriptNotice;
+    expect(notice?.title).toBe("History may be incomplete");
+    expect(notice?.action?.label).toBe("Retry");
+    notice?.action?.onAction();
+    expect(loadAgentSessionHistory).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession));
 
     await harness.unmount();
   });

@@ -27,6 +27,7 @@ describe("createCodexAppServerCommandHandlers", () => {
       listThreads() {
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
       },
+      listThreadTurns: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
     };
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service),
@@ -100,6 +101,7 @@ describe("createCodexAppServerCommandHandlers", () => {
       listThreads() {
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
       },
+      listThreadTurns: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
     };
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service, {
@@ -180,6 +182,7 @@ describe("createCodexAppServerCommandHandlers", () => {
       request: () => Effect.succeed(committedResult),
       listLoadedThreads: () => Effect.succeed({ data: [], nextCursor: null }),
       listThreads: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
+      listThreadTurns: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
     };
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service, {
@@ -232,6 +235,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         calls.push({ method: "listThreads", input });
         return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
       },
+      listThreadTurns: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
     };
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service),
@@ -310,6 +314,77 @@ describe("createCodexAppServerCommandHandlers", () => {
       },
     ]);
   });
+
+  test("routes thread turn pages through the validated history operation", async () => {
+    const calls: Array<{ method: string; input: unknown }> = [];
+    const service: CodexAppServerService = {
+      request(input) {
+        calls.push({ method: "request", input });
+        return Effect.succeed({ data: [], nextCursor: null });
+      },
+      listLoadedThreads: () => Effect.succeed({ data: [], nextCursor: null }),
+      listThreads: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
+      listThreadTurns(input) {
+        calls.push({ method: "listThreadTurns", input });
+        return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
+      },
+    };
+    const router = createHostCommandRouter({
+      handlers: createCodexAppServerCommandHandlers(service),
+    });
+
+    await expect(
+      router.invoke("codex_app_server_request", {
+        runtimeId: "runtime-1",
+        method: "thread/turns/list",
+        params: {
+          threadId: "thread-1",
+          cursor: "cursor-1",
+          limit: 100,
+          sortDirection: "asc",
+          itemsView: "full",
+        },
+      }),
+    ).resolves.toEqual({ data: [], nextCursor: null, backwardsCursor: null });
+    await expect(
+      router.invoke("codex_app_server_request", {
+        runtimeId: "runtime-1",
+        method: "thread/turns/list",
+        params: {
+          threadId: "thread-1",
+          cursor: null,
+          limit: null,
+          sortDirection: null,
+          itemsView: null,
+        },
+      }),
+    ).resolves.toEqual({ data: [], nextCursor: null, backwardsCursor: null });
+    expect(calls).toEqual([
+      {
+        method: "listThreadTurns",
+        input: {
+          runtimeId: "runtime-1",
+          threadId: "thread-1",
+          cursor: "cursor-1",
+          limit: 100,
+          sortDirection: "asc",
+          itemsView: "full",
+        },
+      },
+      {
+        method: "listThreadTurns",
+        input: {
+          runtimeId: "runtime-1",
+          threadId: "thread-1",
+          cursor: null,
+          limit: null,
+          sortDirection: null,
+          itemsView: null,
+        },
+      },
+    ]);
+  });
+
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
     const unexpectedCall = (input: unknown) =>
@@ -345,6 +420,7 @@ describe("createCodexAppServerCommandHandlers", () => {
           }),
         );
       },
+      listThreadTurns: () => Effect.dieMessage("unexpected call"),
     };
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service),

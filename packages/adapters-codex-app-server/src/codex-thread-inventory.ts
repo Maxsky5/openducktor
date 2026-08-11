@@ -1,5 +1,4 @@
 import {
-  arrayFromUnknown,
   extractStringField,
   isCodexThreadNotLoadedError,
   isCodexUnmaterializedThreadError,
@@ -248,8 +247,10 @@ export class CodexThreadInventoryReader {
     unmaterializedWorkingDirectory?: string,
   ): Promise<unknown> {
     let response: unknown;
+    let pagedTurns: Record<string, unknown>[];
     try {
-      response = await client.threadRead({ threadId, includeTurns: true });
+      response = await client.threadRead({ threadId, includeTurns: false });
+      pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
     } catch (error) {
       if (isCodexUnmaterializedThreadError(error)) {
         return {
@@ -261,12 +262,6 @@ export class CodexThreadInventoryReader {
         };
       }
       throw error;
-    }
-    const pagedTurns = (await this.fetchThreadTurns(client, threadId, "full")).filter(
-      isPlainObject,
-    );
-    if (pagedTurns.length === 0) {
-      return response;
     }
     if (!isPlainObject(response) || !isPlainObject(response.thread)) {
       return { thread: { id: threadId, turns: pagedTurns } };
@@ -362,8 +357,8 @@ export class CodexThreadInventoryReader {
     client: CodexAppServerClient,
     threadId: string,
     itemsView: "full" | "summary",
-  ): Promise<unknown[]> {
-    const turns: unknown[] = [];
+  ): Promise<Record<string, unknown>[]> {
+    const turns: Record<string, unknown>[] = [];
     let cursor: string | null = null;
     const seenCursors = new Set<string>();
     do {
@@ -377,10 +372,21 @@ export class CodexThreadInventoryReader {
         sortDirection: "asc",
         itemsView,
       });
-      turns.push(...arrayFromUnknown(response));
-      cursor = isPlainObject(response)
-        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
-        : null;
+      if (!isPlainObject(response) || !Array.isArray(response.data)) {
+        throw new Error("Codex thread/turns/list response data must be an array.");
+      }
+      for (const [turnIndex, turn] of response.data.entries()) {
+        if (!isPlainObject(turn)) {
+          throw new Error(`Codex thread/turns/list response data[${turnIndex}] must be an object.`);
+        }
+        if (itemsView === "full" && !Array.isArray(turn.items)) {
+          throw new Error(
+            `Codex thread/turns/list response data[${turnIndex}].items must be an array.`,
+          );
+        }
+        turns.push(turn);
+      }
+      cursor = extractStringField(response, ["nextCursor", "next_cursor"]) ?? null;
       if (cursor && seenCursors.has(cursor)) {
         throw new Error("Codex thread/turns/list returned a repeated pagination cursor.");
       }

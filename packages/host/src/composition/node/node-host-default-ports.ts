@@ -17,6 +17,7 @@ import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery
 import { toHostOperationError } from "../../effect/host-errors";
 import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
+import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import {
   type DevServerProcessPort,
   DevServerProcessPortTag,
@@ -40,7 +41,7 @@ import {
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
 
 export type NodeHostDefaultPorts = {
-  codexAppServer: CodexAppServerPort;
+  codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
   codexTransportRegistry: CodexAppServerTransportRegistry;
   devServerProcesses: DevServerProcessPort;
   filesystem: FilesystemPort;
@@ -61,7 +62,7 @@ export type CreateNodeHostDefaultPortsInput = {
   runtimeDistribution: HostRuntimeDistribution;
   terminalPty: TerminalPtyPort;
 } & Partial<{
-  codexAppServer: CodexAppServerPort;
+  codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
   codexAppServerTransportRegistry: CodexAppServerTransportRegistry;
   devServerProcesses: DevServerProcessPort;
   filesystem: FilesystemPort;

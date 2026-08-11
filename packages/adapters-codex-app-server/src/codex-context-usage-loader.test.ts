@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   codexSessionRef,
+  codexSessionRuntimeRef,
   codexStartSessionInput,
   createDeferred,
   createHarness,
@@ -30,6 +31,22 @@ const blockResume = (transport: RecordingTransport) => {
 };
 
 describe("CodexContextUsageLoader", () => {
+  test("returns zero context for a fresh session without resuming its new thread", async () => {
+    const { adapter, transports } = createHarness();
+    await adapter.startSession(codexStartSessionInput());
+
+    await expect(
+      adapter.loadLiveSessionContextUsage({
+        runtimeId: "runtime-live",
+        externalSessionId: "thread/start-runtime-live",
+      }),
+    ).resolves.toEqual({ totalTokens: 0 });
+
+    expect(transports.get("runtime-live")?.calls).not.toContainEqual(
+      expect.objectContaining({ method: "thread/resume" }),
+    );
+  });
+
   test("cancels cold loads for released sessions and runtimes without late retention", async () => {
     for (const release of ["session", "runtime"] as const) {
       const runtimeStream = createRuntimeStreamSubscription();
@@ -103,7 +120,7 @@ describe("CodexContextUsageLoader", () => {
     const { adapter, transports } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
     });
-    await adapter.startSession(codexStartSessionInput());
+    await adapter.resumeSession(codexSessionRuntimeRef());
     const transport = transports.get("runtime-live");
     if (!transport) {
       throw new Error("Expected Codex transport.");

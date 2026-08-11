@@ -58,6 +58,15 @@ const deriveLoadedTranscriptStateForSession = ({
     repoReadinessState,
   });
 
+const historyFailure = {
+  code: "invalid_runtime_response" as const,
+  summary: "Codex returned invalid conversation history.",
+  detail: "Codex thread/turns/list response data[0] must be an object",
+  diagnosticId: "diagnostic-1",
+  method: "thread/turns/list",
+  pageCursor: null,
+};
+
 describe("deriveLoadedAgentSessionTranscriptState", () => {
   test("shows the history loader instead of a partial live tail before history is requested", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
@@ -85,6 +94,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
       session: createSession({
         historyLoadState: "failed",
+        historyLoadFailure: historyFailure,
         messages: [
           {
             id: "message-1",
@@ -97,13 +107,34 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
       repoReadinessState: "ready",
     });
 
-    expect(transcriptState).toEqual({ kind: "visible" });
+    expect(transcriptState).toEqual({ kind: "visible", historyFailure });
+  });
+
+  test("keeps a loaded transcript visible with its gap recovery failure", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        historyLoadState: "loaded",
+        historyLoadFailure: historyFailure,
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "still visible",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "visible", historyFailure });
   });
 
   test("surfaces cold history failures when there is no transcript to render", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
       session: createSession({
         historyLoadState: "failed",
+        historyLoadFailure: historyFailure,
         messages: [],
       }),
       repoReadinessState: "ready",
@@ -111,7 +142,8 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
 
     expect(transcriptState).toEqual({
       kind: "failed",
-      message: "The selected conversation could not be loaded.",
+      message: historyFailure.summary,
+      historyFailure,
     });
   });
 

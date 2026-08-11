@@ -637,6 +637,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeWorkingDirectoryRefSchema",
   "runtimeWorkflowCapabilitiesSchema",
   "searchTasksResultSchema",
+  "sessionHistoryFailureSchema",
   "SearchTasksInputSchema",
   "setPlanResultSchema",
   "SetPlanInputSchema",

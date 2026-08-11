@@ -83,6 +83,19 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
             {notice.title}
           </p>
           <p className={isLoadingNotice ? "text-muted-foreground" : ""}>{notice.description}</p>
+          {notice.details && notice.details.length > 0 ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer select-none font-medium">Show details</summary>
+              <dl className="mt-2 space-y-1 text-xs">
+                {notice.details.map((detail) => (
+                  <div key={detail.label} className="grid grid-cols-[auto_1fr] gap-2">
+                    <dt className="font-medium">{detail.label}</dt>
+                    <dd className="min-w-0 break-words font-mono">{detail.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          ) : null}
         </div>
         {action ? (
           <Button

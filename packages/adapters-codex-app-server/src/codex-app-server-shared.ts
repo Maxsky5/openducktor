@@ -60,10 +60,13 @@ export const extractText = (value: unknown): string | null => {
 
 export const isCodexUnmaterializedThreadError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
-  return (
+  const inlineTurnsUnavailable =
     message.includes("is not materialized yet") &&
-    message.includes("includeTurns is unavailable before first user message")
+    message.includes("includeTurns is unavailable before first user message");
+  const paginatedTurnsUnavailable = message.includes(
+    "thread/turns/list is unavailable before first user message",
   );
+  return inlineTurnsUnavailable || paginatedTurnsUnavailable;
 };
 
 export const isCodexThreadNotLoadedError = (error: unknown): boolean => {

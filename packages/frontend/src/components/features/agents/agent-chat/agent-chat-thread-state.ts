@@ -1,3 +1,4 @@
+import type { SessionHistoryFailure } from "@openducktor/contracts";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import {
   type AgentSessionTranscriptState,
@@ -23,6 +24,34 @@ type ProjectAgentChatThreadStateArgs = {
   runtimeReadiness: RepoRuntimeReadiness;
   failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
 };
+
+const sessionHistoryFailureDetails = (
+  failure: SessionHistoryFailure,
+): Array<{ label: string; value: string }> => [
+  { label: "Error", value: failure.detail },
+  ...(failure.method ? [{ label: "Method", value: failure.method }] : []),
+  ...(failure.pageCursor !== undefined
+    ? [{ label: "Page cursor", value: failure.pageCursor ?? "First page" }]
+    : []),
+  ...(failure.diagnosticId ? [{ label: "Diagnostic ID", value: failure.diagnosticId }] : []),
+];
+
+const sessionHistoryFailureNotice = ({
+  failure,
+  hasTranscript,
+  action,
+}: {
+  failure: SessionHistoryFailure;
+  hasTranscript: boolean;
+  action?: AgentChatTranscriptNoticeAction | null | undefined;
+}): AgentChatTranscriptNotice => ({
+  kind: hasTranscript ? "session_history_warning" : "session_failed",
+  severity: "error",
+  title: hasTranscript ? "History may be incomplete" : "Couldn't load conversation history",
+  description: failure.summary,
+  details: sessionHistoryFailureDetails(failure),
+  ...(action ? { action } : {}),
+});
 
 const deriveAgentChatTranscriptNotice = ({
   transcriptState,
@@ -69,7 +98,23 @@ const deriveAgentChatTranscriptNotice = ({
     };
   }
 
+  if (transcriptState.kind === "visible" && transcriptState.historyFailure) {
+    return sessionHistoryFailureNotice({
+      failure: transcriptState.historyFailure,
+      hasTranscript: true,
+      action: failedTranscriptAction,
+    });
+  }
+
   if (transcriptState.kind === "failed") {
+    if (transcriptState.historyFailure) {
+      return sessionHistoryFailureNotice({
+        failure: transcriptState.historyFailure,
+        hasTranscript: false,
+        action: failedTranscriptAction,
+      });
+    }
+
     return {
       kind: "session_failed",
       severity: "error",

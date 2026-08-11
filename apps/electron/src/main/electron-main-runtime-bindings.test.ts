@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { CodexSessionHistoryError } from "@openducktor/host";
 import { Effect } from "effect";
 import { createElectronMainLogger, type ElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
@@ -46,8 +47,20 @@ describe("createElectronMainRuntimeBindings", () => {
 
   test("persists rejected host commands before returning the original failure", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-host-command-log-"));
-    const command = "runtime.session.context-usage";
-    const failure = new Error("Codex session was released while context usage was loading");
+    const command = "agent.session.history";
+    const failure = new CodexSessionHistoryError({
+      message: "Codex returned invalid conversation history.",
+      failure: {
+        code: "invalid_runtime_response",
+        summary: "Codex returned invalid conversation history.",
+        detail: "Codex thread/turns/list response data[0] must be an object",
+        diagnosticId: "diagnostic-1",
+        method: "thread/turns/list",
+        pageCursor: null,
+      },
+      runtimeId: "runtime-1",
+      threadId: "thread-1",
+    });
     const expectedLogMessage = `ERROR Electron host command '${command}' failed`;
     let consoleOutput = "";
 
@@ -73,8 +86,10 @@ describe("createElectronMainRuntimeBindings", () => {
       );
       expect(consoleOutput).toContain(expectedLogMessage);
       expect(consoleOutput).toContain(failure.message);
+      expect(consoleOutput).toContain("diagnostic-1");
       expect(persisted).toContain(expectedLogMessage);
       expect(persisted).toContain(failure.message);
+      expect(persisted).toContain("diagnostic-1");
     } finally {
       await rm(configDirectory, { force: true, recursive: true });
     }

@@ -378,19 +378,34 @@ describe("AgentChatThread", () => {
   });
 
   test("renders failed session loading state instead of a blank transcript", () => {
+    const failure = {
+      code: "invalid_runtime_response" as const,
+      summary: "Codex returned invalid conversation history.",
+      detail: "Codex thread/turns/list response data[0] must be an object",
+      diagnosticId: "diagnostic-1",
+      method: "thread/turns/list",
+      pageCursor: null,
+    };
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({ kind: "failed" }),
+          transcriptState: buildThreadTranscriptState({
+            kind: "failed",
+            message: failure.summary,
+            historyFailure: failure,
+          }),
           isInteractionEnabled: false,
           session: null,
         },
       }),
     );
 
-    expect(html).toContain("Failed to load session");
-    expect(html).toContain("The selected conversation could not be loaded.");
+    expect(html).toContain("Couldn&#x27;t load conversation history");
+    expect(html).toContain("Codex returned invalid conversation history.");
+    expect(html).toContain("Show details");
+    expect(html).toContain("Codex thread/turns/list response data[0] must be an object");
+    expect(html).toContain("diagnostic-1");
     expect(html).not.toContain("Send a message to start a new session automatically.");
   });
 

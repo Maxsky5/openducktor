@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   codexSessionRef,
+  codexSessionRuntimeRef,
   codexStartSessionInput,
   createDeferred,
   createHarness,
@@ -85,7 +86,7 @@ describe("CodexAppServerAdapter context loading", () => {
     const { adapter, transports } = createHarness({
       subscribeEvents: runtimeStream.subscribeEvents,
     });
-    await adapter.startSession(codexStartSessionInput());
+    await adapter.resumeSession(codexSessionRuntimeRef());
     const transport = transports.get("runtime-live");
     const request = transport?.request.bind(transport);
     const resumeStarted = createDeferred<void>();
@@ -112,7 +113,7 @@ describe("CodexAppServerAdapter context loading", () => {
   test("projects usage that arrives after a successful null resume", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter } = createHarness({ subscribeEvents: runtimeStream.subscribeEvents });
-    await adapter.startSession(codexStartSessionInput());
+    await adapter.resumeSession(codexSessionRuntimeRef());
 
     await expect(adapter.loadSessionContextUsage(codexSessionRef())).resolves.toBeNull();
     runtimeStream.emitNotification(tokenUsageNotification(2_100));

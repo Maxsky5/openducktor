@@ -9,8 +9,14 @@ import type {
   CodexAppServerThreadListInput,
   CodexAppServerThreadListResponse,
 } from "../../ports/codex-app-server-port";
+import type { CodexAppServerThreadTurnsListResponse } from "../../ports/codex-app-server-protocol";
+import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
+import type {
+  CodexSessionHistoryPageInput,
+  CodexSessionHistoryPort,
+} from "../../ports/codex-session-history-port";
 
-export type CodexAppServerServiceError = CodexAppServerError;
+export type CodexAppServerServiceError = CodexAppServerError | CodexSessionHistoryError;
 
 export type CodexAppServerService = {
   request(
@@ -22,11 +28,15 @@ export type CodexAppServerService = {
   listThreads(
     input: CodexAppServerThreadListInput,
   ): Effect.Effect<CodexAppServerThreadListResponse, CodexAppServerServiceError>;
+  listThreadTurns(
+    input: CodexSessionHistoryPageInput,
+  ): Effect.Effect<CodexAppServerThreadTurnsListResponse, CodexAppServerServiceError>;
 };
 export const createCodexAppServerService = (
-  codexAppServerPort: CodexAppServerPort,
+  codexAppServerPort: CodexAppServerPort & CodexSessionHistoryPort,
 ): CodexAppServerService => ({
   request: (input) => codexAppServerPort.request(input),
   listLoadedThreads: (input) => codexAppServerPort.listLoadedThreads(input),
   listThreads: (input) => codexAppServerPort.listThreads(input),
+  listThreadTurns: (input) => codexAppServerPort.listThreadTurns(input),
 });
