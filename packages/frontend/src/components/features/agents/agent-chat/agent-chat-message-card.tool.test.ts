@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   createDefaultTestChatSettings,
   createMessageCardElement,
-  LONG_TRANSCRIPT_TOKEN,
+  LONG_TRANSCRIPT_SAMPLE,
 } from "./agent-chat-message-card-test-harness";
 import { formatTime } from "./message-formatting";
 
@@ -250,7 +250,7 @@ describe("AgentChatMessageCard tool presentation", () => {
             tool: "ask_question",
             toolType: "question",
             status: "completed",
-            input: { questions: [{ prompt: LONG_TRANSCRIPT_TOKEN }] },
+            input: { questions: [{ prompt: LONG_TRANSCRIPT_SAMPLE }] },
             output: '{"answers":[["yes"]]}',
           },
         },
@@ -259,7 +259,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     );
 
     expect(html).toContain("Questions and answers");
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("break-words font-medium text-foreground");
   });
 
@@ -279,7 +279,7 @@ describe("AgentChatMessageCard tool presentation", () => {
             toolType: "question",
             status: "completed",
             input: { questions: [{ prompt: "Confirm deployment?" }] },
-            output: JSON.stringify({ answers: [[LONG_TRANSCRIPT_TOKEN]] }),
+            output: JSON.stringify({ answers: [[LONG_TRANSCRIPT_SAMPLE]] }),
           },
         },
         sessionAgentColors: {},
@@ -287,7 +287,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     );
 
     expect(html).toContain("Questions and answers");
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("whitespace-pre-wrap break-words text-foreground");
   });
 

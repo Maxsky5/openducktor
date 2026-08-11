@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createMessageCardElement,
-  LONG_TRANSCRIPT_TOKEN,
+  LONG_TRANSCRIPT_SAMPLE,
   renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
 import { buildMessage } from "./agent-chat-test-fixtures";
@@ -41,7 +41,7 @@ describe("AgentChatMessageCard system messages", () => {
         message: {
           id: "session-notice-long-token",
           role: "system",
-          content: LONG_TRANSCRIPT_TOKEN,
+          content: LONG_TRANSCRIPT_SAMPLE,
           timestamp: "2026-02-22T10:21:46.000Z",
           meta: {
             kind: "session_notice",
@@ -54,7 +54,7 @@ describe("AgentChatMessageCard system messages", () => {
       }),
     );
 
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-inherit");
   });
 
@@ -164,14 +164,14 @@ describe("AgentChatMessageCard system messages", () => {
         message: {
           id: "system-long-token",
           role: "system",
-          content: LONG_TRANSCRIPT_TOKEN,
+          content: LONG_TRANSCRIPT_SAMPLE,
           timestamp: "2026-02-22T10:22:01.000Z",
         },
         sessionAgentColors: {},
       }),
     );
 
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-foreground");
   });
 
@@ -215,7 +215,7 @@ describe("AgentChatMessageCard system messages", () => {
             correlationKey: "part:assistant-task-tool-completed:subtask-long-summary",
             status: "completed",
             agent: "build",
-            description: LONG_TRANSCRIPT_TOKEN,
+            description: LONG_TRANSCRIPT_SAMPLE,
             externalSessionId: "session-child-long-summary",
             startedAtMs: 1_000,
             endedAtMs: 120_000,
@@ -225,7 +225,7 @@ describe("AgentChatMessageCard system messages", () => {
       }),
     );
 
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("whitespace-pre-wrap break-words text-sm text-muted-foreground");
   });
 
@@ -440,7 +440,7 @@ describe("AgentChatMessageCard system messages", () => {
             status: "error",
             agent: "explorer",
             description: "Read a file",
-            error: LONG_TRANSCRIPT_TOKEN,
+            error: LONG_TRANSCRIPT_SAMPLE,
             externalSessionId: "session-child-long-error",
             startedAtMs: 1_000,
             endedAtMs: 301_000,
@@ -450,7 +450,7 @@ describe("AgentChatMessageCard system messages", () => {
       }),
     );
 
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("whitespace-pre-wrap break-words text-sm font-medium text-destructive");
   });
 

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   createDefaultTestSessionIdentity,
   createMessageCardElement,
-  LONG_TRANSCRIPT_TOKEN,
+  LONG_TRANSCRIPT_SAMPLE,
   renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
 import { presentRegularToolCall } from "./agent-chat-test-fixtures";
@@ -329,7 +329,7 @@ describe("AgentChatMessageCard messages", () => {
         message: {
           id: "user-long-token",
           role: "user",
-          content: LONG_TRANSCRIPT_TOKEN,
+          content: LONG_TRANSCRIPT_SAMPLE,
           timestamp: "2026-02-22T10:25:30.000Z",
           meta: {
             kind: "user",
@@ -340,7 +340,7 @@ describe("AgentChatMessageCard messages", () => {
       }),
     );
 
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("whitespace-pre-wrap break-words leading-6");
   });
 
@@ -350,14 +350,14 @@ describe("AgentChatMessageCard messages", () => {
         message: {
           id: "assistant-long-token",
           role: "assistant",
-          content: LONG_TRANSCRIPT_TOKEN,
+          content: LONG_TRANSCRIPT_SAMPLE,
           timestamp: "2026-02-22T10:25:45.000Z",
         },
         sessionAgentColors: {},
       }),
     );
 
-    expect(html).toContain(LONG_TRANSCRIPT_TOKEN);
+    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
     expect(html).toContain("whitespace-pre-wrap break-words leading-6");
   });
 

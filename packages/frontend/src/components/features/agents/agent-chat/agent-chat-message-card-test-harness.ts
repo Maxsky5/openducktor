@@ -11,7 +11,7 @@ import {
 } from "./agent-session-transcript-dialog-context";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 
-export const LONG_TRANSCRIPT_TOKEN =
+export const LONG_TRANSCRIPT_SAMPLE =
   "supercalifragilisticexpialidocioussupercalifragilisticexpialidocious";
 
 export const createDefaultTestChatSettings = () => createChatSettingsFixture();
