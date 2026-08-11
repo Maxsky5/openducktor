@@ -354,6 +354,7 @@ export const applyLoadedSessionHistory = (
   return {
     ...session,
     historyLoadState: "loaded",
+    historyLoadFailure: null,
     messages: mergeHistoryMessages(session.externalSessionId, loadedMessages, session.messages),
   };
 };

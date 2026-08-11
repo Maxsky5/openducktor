@@ -3,6 +3,7 @@ import type {
   FileContent,
   FileDiff,
   RuntimeKind,
+  SessionHistoryFailure,
 } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
@@ -188,6 +189,7 @@ export type AgentSessionState = {
   /** Live-only parent link used to project descendant pending input to active ancestors. */
   liveParentExternalSessionId?: string | undefined;
   historyLoadState: AgentSessionHistoryLoadState;
+  historyLoadFailure?: SessionHistoryFailure | null;
   messages: AgentSessionMessages;
   contextUsage?: AgentSessionContextUsage | null;
   contextUsageError?: string | null;

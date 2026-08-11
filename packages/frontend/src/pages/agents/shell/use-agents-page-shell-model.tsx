@@ -77,6 +77,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     startAgentSession,
     sendAgentMessage,
     stopAgentSession,
+    loadAgentSessionHistory,
     updateAgentSessionModel,
     replyAgentApproval,
     answerAgentQuestion,
@@ -145,6 +146,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     agentOperations: {
       sendAgentMessage,
       stopAgentSession,
+      loadAgentSessionHistory,
       updateAgentSessionModel,
       replyAgentApproval,
       answerAgentQuestion,

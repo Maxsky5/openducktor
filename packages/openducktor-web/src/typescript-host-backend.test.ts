@@ -9,6 +9,7 @@ import {
   TERMINAL_PROTOCOL_VERSION,
 } from "@openducktor/contracts";
 import {
+  CodexSessionHistoryError,
   createLocalAttachmentAdapter,
   createSourceRuntimeDistribution,
   type EffectHostCommandRouter,
@@ -524,6 +525,59 @@ describe("TypeScript web host backend", () => {
           code: "unsupported_runtime",
           message: "Interactive terminals are unavailable in this runtime.",
           workingDir: "/repo/worktree",
+        },
+      },
+    });
+  });
+
+  test("preserves structured session history failures in invoke error responses", async () => {
+    const hostCommandRouter = createTestHostCommandRouter(() =>
+      Effect.fail(
+        new CodexSessionHistoryError({
+          message: "Codex thread/turns/list response data[0] must be an object",
+          runtimeId: "runtime-1",
+          threadId: "thread-1",
+          failure: {
+            code: "invalid_runtime_response",
+            summary: "Codex returned invalid conversation history.",
+            detail: "Codex thread/turns/list response data[0] must be an object",
+            diagnosticId: "diagnostic-1",
+            method: "thread/turns/list",
+            pageCursor: null,
+          },
+        }),
+      ),
+    );
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/codex_app_server_request", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({
+          runtimeId: "runtime-1",
+          method: "thread/turns/list",
+          params: { threadId: "thread-1" },
+        }),
+      }),
+      { hostCommandRouter },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "Codex thread/turns/list response data[0] must be an object",
+      message: "Codex thread/turns/list response data[0] must be an object",
+      failure: {
+        kind: "session_history",
+        sessionHistoryFailure: {
+          code: "invalid_runtime_response",
+          summary: "Codex returned invalid conversation history.",
+          detail: "Codex thread/turns/list response data[0] must be an object",
+          diagnosticId: "diagnostic-1",
+          method: "thread/turns/list",
+          pageCursor: null,
         },
       },
     });

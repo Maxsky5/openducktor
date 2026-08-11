@@ -41,6 +41,7 @@ type AgentStudioOrchestrationActionsContext = {
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
+  loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
   updateAgentSessionModel: AgentOperationsContextValue["updateAgentSessionModel"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -453,6 +454,7 @@ export function useAgentStudioOrchestrationController({
       handlePrepareMessageFirstSession,
       handleQuickAction,
       stopAgentSession,
+      loadAgentSessionHistory: actions.loadAgentSessionHistory,
     },
     modelSelection: {
       selectedModelSelection,

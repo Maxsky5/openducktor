@@ -28,6 +28,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     ReturnType<typeof useAgentOperations>,
     | "sendAgentMessage"
     | "stopAgentSession"
+    | "loadAgentSessionHistory"
     | "updateAgentSessionModel"
     | "replyAgentApproval"
     | "answerAgentQuestion"
@@ -109,6 +110,7 @@ export function useAgentsPageOrchestrationShellModel({
       runSessionStartWorkflow,
       sendAgentMessage: agentOperations.sendAgentMessage,
       stopAgentSession: agentOperations.stopAgentSession,
+      loadAgentSessionHistory: agentOperations.loadAgentSessionHistory,
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,
       humanRequestChangesTask,
       setTaskTargetBranch,

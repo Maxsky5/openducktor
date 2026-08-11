@@ -18,6 +18,15 @@ const readyRuntimeReadiness = {
   refreshChecks: async () => {},
 };
 
+const historyFailure = {
+  code: "invalid_runtime_response" as const,
+  summary: "Codex returned invalid conversation history.",
+  detail: "Codex thread/turns/list response data[0] must be an object",
+  diagnosticId: "diagnostic-1",
+  method: "thread/turns/list",
+  pageCursor: null,
+};
+
 describe("projectAgentChatThreadState", () => {
   test("keeps the session renderable when the transcript is visible", () => {
     const session = buildSession({
@@ -128,15 +137,49 @@ describe("projectAgentChatThreadState", () => {
     const state = projectAgentChatThreadState({
       sessionKey: null,
       session: null,
-      transcriptState: buildThreadTranscriptState({ kind: "failed" }),
+      transcriptState: buildThreadTranscriptState({
+        kind: "failed",
+        message: historyFailure.summary,
+        historyFailure,
+      }),
       runtimeReadiness: readyRuntimeReadiness,
     });
 
     expect(state.transcriptNotice).toEqual({
       kind: "session_failed",
       severity: "error",
-      title: "Failed to load session",
-      description: "The selected conversation could not be loaded.",
+      title: "Couldn't load conversation history",
+      description: "Codex returned invalid conversation history.",
+      details: [
+        { label: "Error", value: historyFailure.detail },
+        { label: "Method", value: "thread/turns/list" },
+        { label: "Page cursor", value: "First page" },
+        { label: "Diagnostic ID", value: "diagnostic-1" },
+      ],
+    });
+  });
+
+  test("keeps an existing transcript visible with an incomplete-history warning", () => {
+    const session = buildSession();
+    const state = projectAgentChatThreadState({
+      sessionKey: agentSessionIdentityKey(session),
+      session,
+      transcriptState: buildThreadTranscriptState({ kind: "visible", historyFailure }),
+      runtimeReadiness: readyRuntimeReadiness,
+    });
+
+    expect(state.threadSession).toBe(session);
+    expect(state.transcriptNotice).toEqual({
+      kind: "session_history_warning",
+      severity: "error",
+      title: "History may be incomplete",
+      description: "Codex returned invalid conversation history.",
+      details: [
+        { label: "Error", value: historyFailure.detail },
+        { label: "Method", value: "thread/turns/list" },
+        { label: "Page cursor", value: "First page" },
+        { label: "Diagnostic ID", value: "diagnostic-1" },
+      ],
     });
   });
 

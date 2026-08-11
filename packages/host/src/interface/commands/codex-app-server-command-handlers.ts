@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
+import type {
+  CodexAppServerService,
+  CodexAppServerServiceError,
+} from "../../application/runtimes/codex-app-server-service";
 import { type HostLifecycleLogger, writeHostLifecycleLog } from "../../composition/host-lifecycle";
 import { type HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
@@ -191,24 +194,94 @@ const parseRequestInput = (
   };
 };
 
+const optionalNullableString = (value: unknown, field: string): string | null | undefined => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return requireString(value, field);
+};
+
+const optionalNullablePositiveInteger = (
+  value: unknown,
+  field: string,
+): number | null | undefined => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new HostValidationError({
+      message: `${field} must be a positive integer.`,
+      field,
+    });
+  }
+  return value;
+};
+
+const optionalNullableLiteral = <Value extends string>(
+  value: unknown,
+  field: string,
+  allowed: readonly Value[],
+): Value | null | undefined => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const parsed = requireString(value, field);
+  const match = allowed.find((candidate) => candidate === parsed);
+  if (!match) {
+    throw new HostValidationError({
+      message: `${field} must be one of: ${allowed.join(", ")}.`,
+      field,
+    });
+  }
+  return match;
+};
+
+const requestCodexAppServer = (
+  service: CodexAppServerService,
+  input: CodexAppServerRequestInput,
+): Effect.Effect<CodexAppServerRequestResult, CodexAppServerServiceError> => {
+  if (input.method !== "thread/turns/list") {
+    return service.request(input);
+  }
+
+  const params = recordFromValue(input.params);
+  const cursor = optionalNullableString(params.cursor, "cursor");
+  const limit = optionalNullablePositiveInteger(params.limit, "limit");
+  const sortDirection = optionalNullableLiteral(params.sortDirection, "sortDirection", [
+    "asc",
+    "desc",
+  ]);
+  const itemsView = optionalNullableLiteral(params.itemsView, "itemsView", [
+    "notLoaded",
+    "summary",
+    "full",
+  ]);
+  return service.listThreadTurns({
+    runtimeId: input.runtimeId,
+    threadId: requireString(params.threadId, "threadId"),
+    ...(cursor !== undefined ? { cursor } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+    ...(sortDirection !== undefined ? { sortDirection } : {}),
+    ...(itemsView !== undefined ? { itemsView } : {}),
+  });
+};
+
 export const createCodexAppServerCommandHandlers = (
   codexAppServerService: CodexAppServerService,
   options: CodexAppServerCommandHandlerOptions = defaultCodexAppServerCommandHandlerOptions,
 ): HostCommandHandlers => ({
   codex_app_server_request: (args) => {
     const input = parseRequestInput(args);
-    return codexAppServerService
-      .request(input)
-      .pipe(
-        Effect.tap((result) =>
-          Effect.either(logCodexPolicyRequest(options.logger, input, result)).pipe(
-            Effect.flatMap((loggingResult) =>
-              loggingResult._tag === "Left"
-                ? options.onBackgroundFailure(loggingResult.left)
-                : Effect.void,
-            ),
+    return requestCodexAppServer(codexAppServerService, input).pipe(
+      Effect.tap((result) =>
+        Effect.either(logCodexPolicyRequest(options.logger, input, result)).pipe(
+          Effect.flatMap((loggingResult) =>
+            loggingResult._tag === "Left"
+              ? options.onBackgroundFailure(loggingResult.left)
+              : Effect.void,
           ),
         ),
-      );
+      ),
+    );
   },
 });

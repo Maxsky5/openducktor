@@ -9,6 +9,7 @@ import {
   HostResourceError,
   isHostError,
 } from "../../effect/host-errors";
+import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
 export type HostCommandArgs = Record<string, unknown> | undefined;
@@ -17,6 +18,7 @@ export type HostCommandContext = {
   args: HostCommandArgs;
 };
 export type HostCommandHandlerError =
+  | CodexSessionHistoryError
   | DevServerProcessStartExitError
   | FilesystemListDirectoryError
   | HostError

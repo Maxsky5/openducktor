@@ -86,6 +86,7 @@ export type {
   EffectHostCommandRouter,
   HostCommandRouter,
 } from "./interface/router/host-command-router";
+export { hostInvokeFailureFromError } from "./interface/router/host-invoke-failure";
 export type {
   AgentSessionLiveAdapterBinding,
   AgentSessionLiveAdapterChange,
@@ -95,6 +96,7 @@ export type {
   AgentSessionRuntimeAdapterPort,
 } from "./ports/agent-session-live-adapter-port";
 export type { CodexAppServerPort } from "./ports/codex-app-server-port";
+export { CodexSessionHistoryError } from "./ports/codex-session-history-error";
 export type { DevServerProcessPort } from "./ports/dev-server-process-port";
 export type { FilesystemPort } from "./ports/filesystem-port";
 export type { GitPort } from "./ports/git-port";

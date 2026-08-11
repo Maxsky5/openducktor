@@ -1,3 +1,4 @@
+import type { SessionHistoryFailure } from "@openducktor/contracts";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
@@ -9,14 +10,14 @@ export type AgentSessionTranscriptLoadingReason = "preparing" | "history";
 type AgentSessionTranscriptNonEmptyState =
   | { kind: "runtime_waiting" }
   | { kind: "session_loading"; reason: AgentSessionTranscriptLoadingReason }
-  | { kind: "visible" }
-  | { kind: "failed"; message: string };
+  | { kind: "visible"; historyFailure?: SessionHistoryFailure }
+  | { kind: "failed"; message: string; historyFailure?: SessionHistoryFailure };
 
 export type AgentSessionTranscriptState =
   | { kind: "empty"; reason: AgentSessionTranscriptEmptyReason }
   | AgentSessionTranscriptNonEmptyState;
 
-const DEFAULT_TRANSCRIPT_FAILURE_MESSAGE = "The selected conversation could not be loaded.";
+const DEFAULT_TRANSCRIPT_FAILURE = "The selected conversation could not be loaded.";
 
 export const isAgentSessionTranscriptLoading = (
   transcriptState: AgentSessionTranscriptState,
@@ -55,11 +56,15 @@ export const deriveLoadedAgentSessionTranscriptState = ({
   repoReadinessState: RepoRuntimeReadinessState;
 }): AgentSessionTranscriptState => {
   if (session.historyLoadState === "failed") {
+    const historyFailure = session.historyLoadFailure;
+    const message = historyFailure?.summary ?? DEFAULT_TRANSCRIPT_FAILURE;
     if (hasRenderableSessionTranscript(session)) {
-      return { kind: "visible" };
+      return historyFailure ? { kind: "visible", historyFailure } : { kind: "visible" };
     }
 
-    return { kind: "failed", message: DEFAULT_TRANSCRIPT_FAILURE_MESSAGE };
+    return historyFailure
+      ? { kind: "failed", message, historyFailure }
+      : { kind: "failed", message };
   }
 
   if (session.historyLoadState === "loaded") {

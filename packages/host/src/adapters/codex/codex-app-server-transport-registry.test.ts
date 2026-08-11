@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { parseCodexAppServerRequestResult } from "../../ports/codex-app-server-protocol";
 import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 
 describe("createCodexAppServerTransportRegistry", () => {
@@ -133,5 +134,48 @@ describe("createCodexAppServerTransportRegistry", () => {
     await expect(
       Effect.runPromise(port.request({ runtimeId: "runtime-1", method: "model/list", params: {} })),
     ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
+  });
+
+  test("rejects malformed thread turns with a structured session history failure", async () => {
+    const port = createCodexAppServerTransportRegistry();
+    port.registerTransport("runtime-1", {
+      request() {
+        return Effect.succeed(
+          parseCodexAppServerRequestResult("thread/turns/list", {
+            data: [null],
+            nextCursor: null,
+            backwardsCursor: null,
+          }),
+        );
+      },
+      respond() {
+        return Effect.void;
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          port.listThreadTurns({
+            runtimeId: "runtime-1",
+            threadId: "thread-1",
+            cursor: null,
+            limit: 100,
+            sortDirection: "asc",
+            itemsView: "full",
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({
+      _tag: "CodexSessionHistoryError",
+      message: "Codex thread/turns/list response data[0] must be an object",
+      failure: {
+        code: "invalid_runtime_response",
+        summary: "Codex returned invalid conversation history.",
+        detail: "Codex thread/turns/list response data[0] must be an object",
+        diagnosticId: expect.any(String),
+        method: "thread/turns/list",
+      },
+    });
   });
 });

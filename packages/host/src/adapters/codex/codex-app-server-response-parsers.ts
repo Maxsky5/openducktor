@@ -118,5 +118,15 @@ export const parseThreadTurnsListResponse = (
       details: { context: "Codex thread/turns/list response" },
     });
   }
-  return payload as unknown as CodexAppServerThreadTurnsListResponse;
+  for (const [index, entry] of payload.data.entries()) {
+    requireRecord(entry, `Codex thread/turns/list response data[${index}]`);
+  }
+  return {
+    data: payload.data,
+    nextCursor: parseCursor(payload.nextCursor, "Codex thread/turns/list nextCursor"),
+    backwardsCursor: parseCursor(
+      payload.backwardsCursor,
+      "Codex thread/turns/list backwardsCursor",
+    ),
+  } as CodexAppServerThreadTurnsListResponse;
 };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import {
   HostInvariantError,
@@ -11,9 +12,12 @@ import type {
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 import type { CodexAppServerClientRequest } from "../../ports/codex-app-server-protocol";
+import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
+import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import {
   parseLoadedThreadListResponse,
   parseThreadListResponse,
+  parseThreadTurnsListResponse,
 } from "./codex-app-server-response-parsers";
 import type { CodexAppServerTransportError } from "./codex-app-server-transport-types";
 
@@ -28,10 +32,11 @@ export type CodexAppServerTransport = {
   ): Effect.Effect<void, CodexAppServerTransportError>;
 };
 
-export type CodexAppServerTransportRegistry = CodexAppServerPort & {
-  registerTransport(runtimeId: string, transport: CodexAppServerTransport): void;
-  unregisterTransport(runtimeId: string): void;
-};
+export type CodexAppServerTransportRegistry = CodexAppServerPort &
+  CodexSessionHistoryPort & {
+    registerTransport(runtimeId: string, transport: CodexAppServerTransport): void;
+    unregisterTransport(runtimeId: string): void;
+  };
 export const createCodexAppServerTransportRegistry = (): CodexAppServerTransportRegistry => {
   const transports = new Map<string, CodexAppServerTransport>();
   const requireTransport = (runtimeId: string) =>
@@ -117,6 +122,46 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
             }),
         });
       });
+    },
+    listThreadTurns({ runtimeId, threadId, cursor, limit, sortDirection, itemsView }) {
+      const method = "thread/turns/list";
+      const toFailure = (
+        code: "invalid_runtime_response" | "request_failed",
+        cause: unknown,
+      ): CodexSessionHistoryError => {
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        return new CodexSessionHistoryError({
+          message: detail,
+          runtimeId,
+          threadId,
+          cause,
+          failure: {
+            code,
+            summary:
+              code === "invalid_runtime_response"
+                ? "Codex returned invalid conversation history."
+                : "Codex conversation history could not be loaded.",
+            detail,
+            diagnosticId: randomUUID(),
+            method,
+            pageCursor: cursor ?? null,
+          },
+        });
+      };
+
+      return requestJson({
+        runtimeId,
+        method,
+        params: { threadId, cursor, limit, sortDirection, itemsView },
+      }).pipe(
+        Effect.mapError((cause) => toFailure("request_failed", cause)),
+        Effect.flatMap((payload) =>
+          Effect.try({
+            try: () => parseThreadTurnsListResponse(payload),
+            catch: (cause) => toFailure("invalid_runtime_response", cause),
+          }),
+        ),
+      );
     },
     respond({ runtimeId, requestId, result, error }) {
       return Effect.gen(function* () {

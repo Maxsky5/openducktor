@@ -1,5 +1,6 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, SessionHistoryFailure, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
+import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
@@ -78,7 +79,7 @@ const markSessionHistoryLoading = ({
     }
 
     claimedLoad = true;
-    return { ...current, historyLoadState: "loading" };
+    return { ...current, historyLoadState: "loading", historyLoadFailure: null };
   });
 
   return { session: loadingSession, claimedLoad: loadingSession !== null && claimedLoad };
@@ -94,7 +95,20 @@ const failSessionHistoryLoad = (
   identity: AgentSessionIdentity,
   updateSession: UpdateSession,
   policy: SessionHistoryLoadPolicy,
-): AgentSessionState | null => updateSession(identity, policy.failLoad);
+  failure: SessionHistoryFailure,
+): AgentSessionState | null =>
+  updateSession(identity, (session) => policy.failLoad(session, failure));
+
+const sessionHistoryFailureFromError = (error: unknown): SessionHistoryFailure => {
+  if (error instanceof HostInvokeError && error.failure?.kind === "session_history") {
+    return error.failure.sessionHistoryFailure;
+  }
+  return {
+    code: "request_failed",
+    summary: "Conversation history could not be loaded.",
+    detail: error instanceof Error ? error.message : String(error),
+  };
+};
 
 const buildSessionHistorySystemPromptContext = async ({
   workspaceId,
@@ -221,7 +235,12 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
-    const failedSession = failSessionHistoryLoad(identity, updateSession, policy);
+    const failedSession = failSessionHistoryLoad(
+      identity,
+      updateSession,
+      policy,
+      sessionHistoryFailureFromError(error),
+    );
     if (policy.propagateFailure) {
       throw error;
     }

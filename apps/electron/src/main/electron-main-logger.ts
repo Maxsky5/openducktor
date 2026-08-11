@@ -3,7 +3,7 @@ import {
   type OpenDucktorDailyLogWriter,
   type OpenDucktorLogPersistenceError,
 } from "@openducktor/host";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Inspectable } from "effect";
 import { causeToElectronBoundaryError } from "../effect/electron-errors";
 
 const ANSI_RESET = "\u001b[0m";
@@ -112,9 +112,12 @@ const colorMessage = (useAnsi: boolean, level: LogLevel, message: string): strin
 
 const formatError = (error: unknown): string => {
   if (error instanceof Error) {
-    return error.stack ?? error.message;
+    const stack = error.stack ?? error.message;
+    return Object.keys(error).length > 0
+      ? `${stack}\n${Inspectable.toStringUnknown(error)}`
+      : stack;
   }
-  return String(error);
+  return Inspectable.toStringUnknown(error);
 };
 
 export const createElectronMainLogger = ({
