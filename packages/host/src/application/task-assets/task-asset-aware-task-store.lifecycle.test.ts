@@ -1,8 +1,79 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
+import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
 import { createHarness, PNG_BASE64 } from "./test-support/task-asset-aware-task-store";
 
 describe("asset-aware task store lifecycle", () => {
+  test("serializes descendant creation with recursive deletion", async () => {
+    const harness = await createHarness();
+    const parent = await Effect.runPromise(
+      harness.store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Parent",
+          issueType: "epic",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: "",
+        },
+      }),
+    );
+    let releaseQuarantine: (() => void) | undefined;
+    let reportQuarantineStarted: (() => void) | undefined;
+    const quarantineStarted = new Promise<void>((resolve) => {
+      reportQuarantineStarted = resolve;
+    });
+    const quarantineRelease = new Promise<void>((resolve) => {
+      releaseQuarantine = resolve;
+    });
+    const filePort = {
+      ...harness.filePort,
+      quarantineTaskDirectory: (
+        input: Parameters<typeof harness.filePort.quarantineTaskDirectory>[0],
+      ) =>
+        Effect.gen(function* () {
+          reportQuarantineStarted?.();
+          yield* Effect.promise(() => quarantineRelease);
+          return yield* harness.filePort.quarantineTaskDirectory(input);
+        }),
+    };
+    const store = createTaskAssetAwareTaskStore({
+      inner: harness.innerStore,
+      filePort,
+      registry: harness.registry,
+      persistence: harness.registry,
+      staging: harness.staging,
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+
+    const deletion = Effect.runPromise(
+      store.deleteTask({ repoPath: harness.repoPath, taskId: parent.id, deleteSubtasks: true }),
+    );
+    await quarantineStarted;
+    let creationSettled = false;
+    const creation = Effect.runPromise(
+      store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Late child",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: "",
+          parentId: parent.id,
+        },
+      }),
+    ).finally(() => {
+      creationSettled = true;
+    });
+    await Promise.resolve();
+    expect(creationSettled).toBe(false);
+
+    releaseQuarantine?.();
+    await deletion;
+    await expect(creation).resolves.toMatchObject({ parentId: parent.id, title: "Late child" });
+  });
+
   test("promotes staged assets on create and removes obsolete assets only after update", async () => {
     const { filePort, registry, repoPath, staging, store } = await createHarness();
     const staged = await Effect.runPromise(

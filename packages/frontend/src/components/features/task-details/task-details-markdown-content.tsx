@@ -39,6 +39,7 @@ const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
       markdown={markdown}
       variant="document"
       premiumCodeBlocks={hasLabeledCodeFence}
+      stripTaskDescriptionFrontMatter
       fallback={
         <p className="text-xs text-muted-foreground">
           Rendering markdown with syntax highlighting…

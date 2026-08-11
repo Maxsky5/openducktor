@@ -268,6 +268,35 @@ describe("TaskDescriptionEditor", () => {
     expect(view.getByRole("textbox")).toBeTruthy();
   });
 
+  test("stages and inserts an image while compatibility keeps the editor in Markdown mode", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440012";
+    const file = new File([new Uint8Array([1])], "source.png", { type: "image/png" });
+    const onChange = mock((_value: string) => {});
+    const onUpload = mock(async () => ({
+      assetId,
+      scope: "description" as const,
+      originalName: file.name,
+      verifiedMediaType: "image/png" as const,
+      byteSize: file.size,
+    }));
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
+    );
+
+    const input = await waitFor(() => view.getByLabelText("Task description images"));
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledWith(file));
+    await waitFor(() =>
+      expect(String(onChange.mock.lastCall?.[0])).toContain(`odt-asset:${assetId}`),
+    );
+  });
+
   test("keeps escaped-pipe GFM tables in Markdown mode before TipTap can serialize them", async () => {
     const onChange = mock((_value: string) => {});
     const markdown = "| Value | Meaning |\n| :---- | ------: |\n| a\\|b | literal pipe |";

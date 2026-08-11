@@ -1,5 +1,5 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
-import { AlertCircle, Code2, Eye, Info } from "lucide-react";
+import { AlertCircle, Code2, Eye, ImagePlus, Info } from "lucide-react";
 import { lazy, type ReactElement, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
@@ -39,6 +39,9 @@ function TaskDescriptionEditorSession({
     mermaidPreviews: MermaidPreviews;
   }>({ markdown, result: null, mermaidPreviews: new Map() });
   const lastVisualChange = useRef<string | null>(null);
+  const sourceFileInputRef = useRef<HTMLInputElement>(null);
+  const sourceInsertionOffset = useRef(0);
+  const sourceTextareaRef = useRef<HTMLTextAreaElement>(null);
   const frontMatter = splitTaskDescriptionFrontMatter(markdown);
   const compatibilityIsCurrent =
     compatibilityState.markdown === markdown && compatibilityState.result !== null;
@@ -132,6 +135,35 @@ function TaskDescriptionEditorSession({
     return onUpload(file);
   };
 
+  const uploading = uploads.some((upload) => upload.status === "uploading");
+  const uploadSourceFiles = (files: File[]): void => {
+    if (uploading || files.length === 0) {
+      return;
+    }
+    const insertAt = sourceInsertionOffset.current;
+    void Promise.allSettled(files.map(stageImage)).then((results) => {
+      const images = results.flatMap((result, index) => {
+        const file = files[index];
+        if (result.status === "rejected" || !file) {
+          return [];
+        }
+        const alt = file.name.replace(/\.[^.]+$/, "").replace(/([\\[\]])/g, "\\$1");
+        const title = file.name.replace(/([\\"])/g, "\\$1");
+        return [`![${alt}](odt-asset:${result.value.assetId} "${title}")`];
+      });
+      if (images.length === 0) {
+        return;
+      }
+      const currentMarkdown = sourceTextareaRef.current?.value ?? markdown;
+      const offset = Math.min(insertAt, currentMarkdown.length);
+      const before = currentMarkdown.slice(0, offset);
+      const after = currentMarkdown.slice(offset);
+      const leadingBreak = before && !before.endsWith("\n") ? "\n\n" : "";
+      const trailingBreak = after && !after.startsWith("\n") ? "\n\n" : "";
+      onChange(`${before}${leadingBreak}${images.join("\n")}${trailingBreak}${after}`);
+    });
+  };
+
   const hasPreservedFrontMatter = frontMatter.kind === "valid";
   const visualBody = frontMatter.kind === "valid" ? frontMatter.body : markdown;
   const preservedPrefix = frontMatter.kind === "valid" ? frontMatter.raw : "";
@@ -158,17 +190,48 @@ function TaskDescriptionEditorSession({
     );
   } else {
     editorContent = (
-      <Textarea
-        id="task-description"
-        rows={12}
-        value={markdown}
-        placeholder="Problem context, scope, and expected output."
-        className="min-h-64 resize-y font-sans text-sm"
-        onChange={(event) => {
-          setMode("markdown");
-          onChange(event.currentTarget.value);
-        }}
-      />
+      <div className="overflow-hidden rounded-md border border-input bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
+        <div className="flex items-center border-b border-border bg-muted/30 p-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5"
+            disabled={uploading}
+            onClick={() => {
+              sourceInsertionOffset.current =
+                sourceTextareaRef.current?.selectionStart ?? markdown.length;
+              sourceFileInputRef.current?.click();
+            }}
+          >
+            <ImagePlus className="size-4" /> {uploading ? "Uploading image" : "Insert image"}
+          </Button>
+          <input
+            ref={sourceFileInputRef}
+            aria-label="Task description images"
+            type="file"
+            className="sr-only"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={(event) => {
+              uploadSourceFiles(Array.from(event.currentTarget.files ?? []));
+              event.currentTarget.value = "";
+            }}
+          />
+        </div>
+        <Textarea
+          ref={sourceTextareaRef}
+          id="task-description"
+          rows={12}
+          value={markdown}
+          placeholder="Problem context, scope, and expected output."
+          className="min-h-64 resize-y rounded-none border-0 font-sans text-sm shadow-none focus-visible:ring-0"
+          onChange={(event) => {
+            setMode("markdown");
+            onChange(event.currentTarget.value);
+          }}
+        />
+      </div>
     );
   }
 

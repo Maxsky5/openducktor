@@ -127,6 +127,7 @@ describe("rich task description rendering", () => {
           taskId: "task-1",
           scope: "description",
         }}
+        stripTaskDescriptionFrontMatter
       />,
     );
 
@@ -228,21 +229,21 @@ describe("rich task description rendering", () => {
     expect(view.container.querySelector(".katex")).toBeNull();
   });
 
-  test("omits valid front matter consistently with and without math or task context", async () => {
-    const plain = render(
-      <MarkdownRenderer markdown={"---\ntitle: Hidden plain\n---\nVisible plain"} />,
-    );
-    const math = render(
-      <MarkdownRenderer markdown={"---\ntitle: Hidden math\n---\nVisible math $x$"} />,
-    );
+  test("preserves thematic breaks in generic Markdown", () => {
+    const plain = render(<MarkdownRenderer markdown={"---\n\nImportant text\n\n---"} />);
 
-    expect(plain.getByText("Visible plain")).toBeTruthy();
-    expect(plain.queryByText("title: Hidden plain", { exact: false })).toBeNull();
-    await waitFor(() => expect(math.container.querySelector(".katex")).not.toBeNull(), {
-      timeout: 3000,
-    });
-    expect(math.queryByText("title: Hidden math", { exact: false })).toBeNull();
-  }, 4000);
+    expect(plain.getByText("Important text")).toBeTruthy();
+    expect(plain.container.querySelectorAll("hr")).toHaveLength(2);
+  });
+
+  test.each(["ordinary mermaid text", "Price is $5"])(
+    "keeps generic Markdown visible while detector chunks load for %s",
+    (markdown) => {
+      const view = render(<MarkdownRenderer markdown={markdown} />);
+
+      expect(view.getByText(markdown)).toBeTruthy();
+    },
+  );
 
   test("renders a plain contextual description without KaTeX output", async () => {
     const view = render(

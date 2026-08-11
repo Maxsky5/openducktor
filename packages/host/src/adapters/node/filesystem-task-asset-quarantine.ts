@@ -1,9 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema, taskAssetRenderContextSchema } from "@openducktor/contracts";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 
 export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
+
+const ACTIVE_PUBLICATIONS = new Set<string>();
+const PUBLICATION_PREFIX = ".publishing-";
 
 const isMissing = (cause: unknown): boolean =>
   typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
@@ -85,11 +89,25 @@ export const createTaskAssetQuarantineFiles = ({
   return {
     root,
     async write(manifest: QuarantineManifest): Promise<void> {
-      await mkdir(root(manifest.id), { recursive: true });
-      await writeFile(manifestPath(manifest.id), JSON.stringify(manifest), {
-        flag: "wx",
-        mode: 0o600,
-      });
+      await mkdir(quarantineRoot, { recursive: true });
+      const publicationRoot = path.join(
+        quarantineRoot,
+        `${PUBLICATION_PREFIX}${manifest.id}-${randomUUID()}`,
+      );
+      ACTIVE_PUBLICATIONS.add(publicationRoot);
+      try {
+        await mkdir(publicationRoot);
+        await writeFile(path.join(publicationRoot, "manifest.json"), JSON.stringify(manifest), {
+          flag: "wx",
+          mode: 0o600,
+        });
+        await rename(publicationRoot, root(manifest.id));
+      } catch (cause) {
+        await rm(publicationRoot, { force: true, recursive: true });
+        throw cause;
+      } finally {
+        ACTIVE_PUBLICATIONS.delete(publicationRoot);
+      }
     },
     async list(): Promise<TaskAssetQuarantine[]> {
       if (!(await existingStat(quarantineRoot))) {
@@ -98,6 +116,11 @@ export const createTaskAssetQuarantineFiles = ({
       const entries = await readdir(quarantineRoot, { withFileTypes: true });
       const quarantineIds: string[] = [];
       for (const entry of entries) {
+        const entryPath = path.join(quarantineRoot, entry.name);
+        if (entry.name.startsWith(PUBLICATION_PREFIX) && !ACTIVE_PUBLICATIONS.has(entryPath)) {
+          await rm(entryPath, { force: true, recursive: true });
+          continue;
+        }
         if (reservedDirectoryNames.includes(entry.name)) {
           continue;
         }

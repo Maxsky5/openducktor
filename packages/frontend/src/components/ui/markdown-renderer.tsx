@@ -30,6 +30,7 @@ type MarkdownRendererProps = {
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
+  stripTaskDescriptionFrontMatter?: boolean;
 };
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -88,8 +89,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   premiumCodeBlocks = false,
   fallback,
   taskAssetContext,
+  stripTaskDescriptionFrontMatter = false,
 }: MarkdownRendererProps): ReactElement | null {
-  const content = prepareMarkdownRenderContent(markdown);
+  const content = prepareMarkdownRenderContent(markdown, stripTaskDescriptionFrontMatter);
   if (!content) {
     return null;
   }
@@ -129,7 +131,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 
   if (hasMermaidCandidate) {
     renderedContent = (
-      <Suspense fallback={null}>
+      <Suspense fallback={renderedContent}>
         <MarkdownRendererMermaidCandidate
           markdown={content}
           components={components}
@@ -145,7 +147,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 
   if (hasMathCandidate && !hasMermaidCandidate) {
     renderedContent = (
-      <Suspense fallback={fallback ?? null}>
+      <Suspense fallback={renderedContent}>
         <MarkdownRendererMathCandidate
           markdown={content}
           components={components}

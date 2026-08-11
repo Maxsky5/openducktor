@@ -61,6 +61,10 @@ export function TaskDescriptionImageNode({ node, selected, updateAttributes }: R
             alt={typeof node.attrs.alt === "string" ? node.attrs.alt : ""}
             title={typeof node.attrs.title === "string" ? node.attrs.title : undefined}
             className="mx-auto max-h-96 max-w-full rounded object-contain"
+            onError={() => {
+              setResolvedSource(null);
+              setLoadError("The task asset response failed to load.");
+            }}
           />
         ) : (
           <div className="flex min-h-24 items-center justify-center rounded bg-muted/40 px-3 text-sm text-muted-foreground">
