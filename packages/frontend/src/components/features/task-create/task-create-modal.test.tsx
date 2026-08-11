@@ -4,8 +4,11 @@ import { render, screen } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import * as taskCreateModalControllerModule from "./use-task-create-modal-controller";
 
 enableReactActEnvironment();
+
+const realTaskCreateModalControllerModule = { ...taskCreateModalControllerModule };
 
 const controllerMock = {
   mode: "edit" as const,
@@ -83,7 +86,7 @@ describe("TaskCreateModal", () => {
       ],
       [
         "@/components/features/task-create/use-task-create-modal-controller",
-        () => import("./use-task-create-modal-controller"),
+        async () => realTaskCreateModalControllerModule,
       ],
       [
         "@/components/features/task-composer/task-document-editor",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import {
@@ -149,16 +149,11 @@ describe("useTaskCreateModalController", () => {
       harness.replaceTask(replacement);
     });
 
-    await waitFor(
-      () => {
-        expect(harness.getController().state.title).toBe("Updated");
-        expect(harness.getController().state.description).toBe("Updated description");
-        expect(harness.getController().footerError).toBeNull();
-      },
-      { timeout: 1_500 },
-    );
+    expect(harness.getController().state.title).toBe("Updated");
+    expect(harness.getController().state.description).toBe("Updated description");
+    expect(harness.getController().footerError).toBeNull();
     harness.unmount();
-  }, 3_000);
+  });
 
   test("keeps a dirty draft and blocks saving after a same-task external change", async () => {
     const updateCalls: string[] = [];
@@ -178,26 +173,18 @@ describe("useTaskCreateModalController", () => {
     act(() => {
       harness.getController().updateState({ description: "Local draft" });
     });
-    await waitFor(() => expect(harness.getController().state.description).toBe("Local draft"), {
-      timeout: 1_500,
-    });
     await act(async () => {
       harness.replaceTask(replacement);
     });
 
-    await waitFor(
-      () => {
-        expect(harness.getController().state.description).toBe("Local draft");
-        expect(harness.getController().footerError).toBe(
-          "This task changed while you were editing. Close and reopen it to load the latest version before saving.",
-        );
-      },
-      { timeout: 1_500 },
+    expect(harness.getController().state.description).toBe("Local draft");
+    expect(harness.getController().footerError).toBe(
+      "This task changed while you were editing. Close and reopen it to load the latest version before saving.",
     );
     await act(async () => {
       await harness.getController().submit();
     });
     expect(updateCalls).toEqual([]);
     harness.unmount();
-  }, 3_000);
+  });
 });
