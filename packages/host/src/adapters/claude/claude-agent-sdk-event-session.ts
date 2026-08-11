@@ -98,7 +98,7 @@ export const claudeSubagentEventSession = (
   return childSession;
 };
 
-export const findClaudeToolOwnerSession = (
+const findClaudeToolOwnerSession = (
   session: ClaudeEventSession,
   toolUseId: string,
 ): ClaudeEventSession | null => {

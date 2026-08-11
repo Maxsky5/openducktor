@@ -36,13 +36,6 @@ const readClaudeResultTerminalReason = (message: ClaudeResultLike): string | und
 const readClaudeResultStopReason = (message: ClaudeResultLike): string | undefined =>
   typeof message.stop_reason === "string" ? message.stop_reason : undefined;
 
-export const readClaudeResultDurationMs = (message: ClaudeResultLike): number | undefined => {
-  const durationMs = message.duration_ms;
-  return typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0
-    ? durationMs
-    : undefined;
-};
-
 export const isFailedClaudeResult = (message: ClaudeResultLike): boolean => {
   if (message.subtype !== "success" || message.is_error === true) {
     return true;

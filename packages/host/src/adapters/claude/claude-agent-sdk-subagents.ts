@@ -280,49 +280,6 @@ export const emitClaudeTaskStopSubagentPart = ({
   session.subagentEventSessionsByToolUseId?.delete(toolUseId);
 };
 
-export const emitClaudeSubagentLifecyclePart = ({
-  agentId,
-  agentType,
-  emit,
-  session,
-  status,
-  timestamp,
-  toolUseId,
-}: {
-  agentId: string;
-  agentType: string;
-  emit: (event: AgentEvent) => void;
-  session: ClaudeSubagentSession;
-  status: "running" | "completed";
-  timestamp: string;
-  toolUseId: string;
-}): void => {
-  session.subagentAgentIdsByToolUseId ??= new Map();
-  session.subagentAgentIdsByToolUseId.set(toolUseId, agentId);
-  const messageId = session.toolMessageIdsByCallId.get(toolUseId);
-  if (messageId) {
-    session.subagentMessageIdsByTaskId.set(agentId, messageId);
-  }
-  const input = session.toolInputsByCallId.get(toolUseId);
-  const description = readStringProp(input, "description");
-  const prompt = readStringProp(input, "prompt");
-  emitSubagentPart(emit, session, agentId, toolUseId, status, timestamp, {
-    agent: agentType,
-    executionMode: input?.run_in_background === true ? "background" : "foreground",
-    ...(status === "running" ? { startedAtMs: timestampMs(timestamp) } : {}),
-    ...(status === "completed" ? { endedAtMs: timestampMs(timestamp) } : {}),
-    ...(description ? { description } : {}),
-    ...(prompt ? { prompt } : {}),
-    metadata: {
-      agentId,
-      sourceToolUseId: toolUseId,
-    },
-  });
-  if (status === "completed") {
-    emitCompletedSubagentAssistantMessage(emit, session, toolUseId, timestamp);
-  }
-};
-
 export const handleClaudeSubagentSystemMessage = ({
   emit,
   message,
