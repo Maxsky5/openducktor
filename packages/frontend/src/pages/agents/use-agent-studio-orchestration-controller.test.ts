@@ -226,7 +226,6 @@ describe("task execution file preview state", () => {
     expect(closedState).toBe(initialState);
   });
 });
-
 describe("buildAgentStudioPageModelsArgs", () => {
   test("maps grouped orchestration context into page-model contracts", () => {
     const baseArgs = createBaseArgs();
@@ -319,4 +318,3 @@ describe("buildAgentStudioPageModelsArgs", () => {
     });
   });
 });
-

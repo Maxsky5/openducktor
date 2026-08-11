@@ -795,7 +795,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    const notice = harness.getLatest().agentChatModel.thread.transcriptNotice;
+    const notice = harness.getLatest().agentChatModel.thread.transcript.notice;
     expect(notice?.title).toBe("History may be incomplete");
     expect(notice?.action?.label).toBe("Retry");
     notice?.action?.onAction();

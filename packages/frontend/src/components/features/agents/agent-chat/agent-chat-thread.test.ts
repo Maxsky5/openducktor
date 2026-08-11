@@ -33,6 +33,7 @@ import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
 const RUNTIME_STARTING_NOTICE = {
+  kind: "runtime_waiting" as const,
   severity: "loading" as const,
   title: "Runtime is starting",
   description: "Waiting for runtime and MCP health before loading this session.",

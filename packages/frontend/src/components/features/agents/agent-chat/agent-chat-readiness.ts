@@ -1,10 +1,10 @@
 import type { SessionHistoryFailure } from "@openducktor/contracts";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentChatTranscriptNotice,
   AgentChatTranscriptNoticeAction,
 } from "./agent-chat.types";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 type DeriveAgentChatReadinessInput = {
   transcriptState: AgentSessionTranscriptState;
@@ -112,5 +112,3 @@ export const deriveAgentChatReadiness = ({
     transcriptNotice,
   };
 };
-
-
