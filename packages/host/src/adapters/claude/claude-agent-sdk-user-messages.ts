@@ -7,11 +7,6 @@ export const readClaudeTurnOriginKind = (message: unknown): string | undefined =
   return isRecord(message.origin) ? readStringProp(message.origin, "kind") : undefined;
 };
 
-export const isClaudeNonHumanTurnMessage = (message: unknown): boolean => {
-  const originKind = readClaudeTurnOriginKind(message);
-  return originKind !== undefined && originKind !== "human";
-};
-
 export const shouldFinalizeClaudeTurn = (
   originKind: string | undefined,
   activeBackgroundSubagentTaskCount: number,

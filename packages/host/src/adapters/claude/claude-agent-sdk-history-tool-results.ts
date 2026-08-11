@@ -43,7 +43,7 @@ const historySessionId = (
   entry: ClaudeHistoryMessage,
 ): string => state.transcriptExternalSessionId ?? readHistorySessionId(entry);
 
-export const appendOrMergeClaudeHistorySubagentPart = (
+const appendOrMergeClaudeHistorySubagentPart = (
   history: AgentSessionHistoryMessage[],
   part: SubagentPart,
   timestamp: string,
