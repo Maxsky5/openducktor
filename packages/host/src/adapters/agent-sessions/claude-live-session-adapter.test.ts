@@ -307,37 +307,31 @@ describe("Claude host live-session adapter", () => {
       ...startInput,
       sessionScope: { kind: "repository" } as const,
     };
-    const results = await Promise.all([
-      Effect.runPromise(Effect.either(harness.adapter.startSession(repositoryInput))),
-      Effect.runPromise(
-        Effect.either(
-          harness.adapter.resumeSession({
-            ...repositoryInput,
-            externalSessionId: "session-1",
-          }),
-        ),
-      ),
-      Effect.runPromise(
-        Effect.either(
-          harness.adapter.forkSession({
-            ...repositoryInput,
-            parentExternalSessionId: "parent-session",
-          }),
-        ),
-      ),
-      Effect.runPromise(
-        Effect.either(
-          harness.adapter.sendUserMessage({
-            ...repositoryInput,
-            externalSessionId: "session-1",
-            parts: [{ kind: "text", text: "Start" }],
-          }),
-        ),
-      ),
-    ]);
+    const attempts = [
+      harness.adapter.startSession(repositoryInput).pipe(Effect.asVoid),
+      harness.adapter
+        .resumeSession({
+          ...repositoryInput,
+          externalSessionId: "session-1",
+        })
+        .pipe(Effect.asVoid),
+      harness.adapter
+        .forkSession({
+          ...repositoryInput,
+          parentExternalSessionId: "parent-session",
+        })
+        .pipe(Effect.asVoid),
+      harness.adapter
+        .sendUserMessage({
+          ...repositoryInput,
+          externalSessionId: "session-1",
+          parts: [{ kind: "text", text: "Start" }],
+        })
+        .pipe(Effect.asVoid),
+    ];
 
-    for (const result of results) {
-      expect(result).toMatchObject({
+    for (const attempt of attempts) {
+      expect(await Effect.runPromise(Effect.either(attempt))).toMatchObject({
         _tag: "Left",
         left: {
           _tag: "HostValidationError",
