@@ -131,20 +131,27 @@ export default function TaskDescriptionVisualEditor({
   const uploadFiles = useCallback(
     (files: File[]): void => {
       if (!editor || uploading) return;
-      void Promise.allSettled(
-        files.map(async (file) => {
-          const staged = await onUpload(file);
-          editor
-            .chain()
-            .focus()
-            .setImage({
-              src: `odt-asset:${staged.assetId}`,
-              alt: file.name.replace(/\.[^.]+$/, ""),
-              title: file.name,
-            })
-            .run();
-        }),
-      );
+      const insertAt = editor.state.selection.from;
+      void Promise.allSettled(files.map((file) => onUpload(file))).then((results) => {
+        if (editor.isDestroyed) return;
+        const images = results.flatMap((result, index) => {
+          const file = files[index];
+          if (result.status === "rejected" || !file) return [];
+          return [
+            {
+              type: "image",
+              attrs: {
+                src: `odt-asset:${result.value.assetId}`,
+                alt: file.name.replace(/\.[^.]+$/, ""),
+                title: file.name,
+              },
+            },
+          ];
+        });
+        if (images.length > 0) {
+          editor.chain().focus().insertContentAt(insertAt, images).run();
+        }
+      });
     },
     [editor, onUpload, uploading],
   );

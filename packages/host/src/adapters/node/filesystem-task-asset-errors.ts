@@ -7,7 +7,14 @@ type TaskAssetFileOperation = TaskAssetMutationOperation | "delete" | "serve" | 
 
 const createFileError = (input: {
   operation: "stage" | "create" | "update" | "delete" | "discard" | "startup_sweep" | "serve";
-  code: "validation" | "promotion" | "quarantine" | "restore" | "purge" | "partial_state";
+  code:
+    | "validation"
+    | "filesystem"
+    | "promotion"
+    | "quarantine"
+    | "restore"
+    | "purge"
+    | "partial_state";
   phase: string;
   message: string;
   assetIds?: string[];

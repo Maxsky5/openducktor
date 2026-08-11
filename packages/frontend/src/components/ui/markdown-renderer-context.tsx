@@ -88,7 +88,17 @@ function TaskAssetImage({
       </span>
     );
   }
-  return <img src={state.src} alt={alt ?? ""} title={title} className={className} />;
+  return (
+    <img
+      src={state.src}
+      alt={alt ?? ""}
+      title={title}
+      className={className}
+      onError={() =>
+        setState({ status: "error", message: "The task asset response failed to load." })
+      }
+    />
+  );
 }
 
 export const prepareMarkdownRenderContent = (markdown: string): string => {

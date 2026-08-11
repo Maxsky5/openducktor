@@ -153,7 +153,7 @@ export const createNodeTaskAssetFilePort = (
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
           yield* validateStageContext(input.workspaceId, assetId);
-          yield* tryPromise(() => unlink(stagedPath(input.workspaceId, assetId)), {
+          yield* tryPromise(() => rm(stagedPath(input.workspaceId, assetId), { force: true }), {
             operation: "discard",
             code: "purge",
             phase: "remove_staging_file",
@@ -212,7 +212,7 @@ export const createNodeTaskAssetFilePort = (
             null,
           {
             operation: input.operation,
-            code: "validation",
+            code: "filesystem",
             phase: "check_destination",
             message: `Failed to check task asset ${input.assetId}.`,
             assetIds: [input.assetId],
@@ -439,7 +439,7 @@ export const createNodeTaskAssetFilePort = (
           },
           {
             operation: "serve",
-            code: "validation",
+            code: "filesystem",
             phase: "read_durable_file",
             message: "Failed to read the requested task asset.",
             assetIds: [input.assetId],

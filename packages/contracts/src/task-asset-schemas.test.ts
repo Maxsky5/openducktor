@@ -7,6 +7,7 @@ import {
   TASK_ASSET_URI_PREFIX,
   taskAssetDescriptionMutationSchema,
   taskAssetDiscardStagedInputSchema,
+  taskAssetFailureCodeSchema,
   taskAssetIdSchema,
   taskAssetMediaTypeSchema,
   taskAssetRenderContextSchema,
@@ -29,6 +30,10 @@ describe("task asset contracts", () => {
     ]);
     expect(TASK_ASSET_MAX_FILE_BYTES).toBe(10 * 1024 * 1024);
     expect(TASK_ASSET_MAX_DESCRIPTION_ASSETS).toBe(50);
+  });
+
+  test("distinguishes filesystem failures from invalid asset requests", () => {
+    expect(taskAssetFailureCodeSchema.parse("filesystem")).toBe("filesystem");
   });
 
   test("accepts only UUID asset IDs that are safe as one path segment", () => {

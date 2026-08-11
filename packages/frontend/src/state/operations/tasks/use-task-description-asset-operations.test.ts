@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskAssetStageResult } from "@openducktor/contracts";
+import { TASK_ASSET_MAX_FILE_BYTES, type TaskAssetStageResult } from "@openducktor/contracts";
 import { createTaskDescriptionAssetOperations } from "./use-task-description-asset-operations";
 
 const stagedAsset: TaskAssetStageResult = {
@@ -57,6 +57,20 @@ describe("task description asset operations", () => {
     await expect(operations.stageImage("workspace-1", file)).rejects.toThrow(
       "PNG, JPEG, WebP, or GIF",
     );
+    expect(taskAssetStage).not.toHaveBeenCalled();
+  });
+
+  test("rejects oversized images before reading or staging them", async () => {
+    const taskAssetStage = mock(async () => stagedAsset);
+    const operations = createTaskDescriptionAssetOperations({
+      taskAssetStage,
+      taskAssetDiscardStaged: async () => {},
+    });
+    const file = new File([new Uint8Array(TASK_ASSET_MAX_FILE_BYTES + 1)], "oversized.png", {
+      type: "image/png",
+    });
+
+    await expect(operations.stageImage("workspace-1", file)).rejects.toThrow("10 MiB or smaller");
     expect(taskAssetStage).not.toHaveBeenCalled();
   });
 });

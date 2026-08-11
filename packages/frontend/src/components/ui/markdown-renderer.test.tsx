@@ -351,6 +351,31 @@ describe("rich task description rendering", () => {
     });
   }, 4000);
 
+  test("shows an actionable error when a resolved task asset response cannot load", async () => {
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc: async () => "openducktor-task-asset://asset/missing",
+    });
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const view = render(
+      <MarkdownRenderer
+        markdown={`![Architecture](odt-asset:${assetId})`}
+        taskAssetContext={{
+          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+          taskId: "task-1",
+          scope: "description",
+        }}
+      />,
+    );
+    const image = await view.findByRole("img", { name: "Architecture" });
+
+    fireEvent.error(image);
+
+    expect((await view.findByRole("alert")).textContent).toBe(
+      "Image could not be loaded: The task asset response failed to load.",
+    );
+  });
+
   test("resolves the first definition when an image reference identifier is duplicated", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
     configureShellBridge({

@@ -22,6 +22,19 @@ const createProps = () => ({
   previews: new Map<string, string>(),
 });
 
+const createDeferred = <T,>() => {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      resolve?.(value);
+    },
+  };
+};
+
 describe("TaskDescriptionEditor", () => {
   test("shows one stable Visual editor surface while the first rich bundle loads", () => {
     const view = render(
@@ -66,7 +79,7 @@ describe("TaskDescriptionEditor", () => {
     } finally {
       renderSpy.mockRestore();
     }
-  });
+  }, 4_000);
 
   test("keeps Markdown typing stable and uses the normal interface font", async () => {
     const ControlledEditor = () => {
@@ -482,6 +495,54 @@ describe("TaskDescriptionEditor", () => {
       URL.createObjectURL = originalCreateObjectUrl;
       URL.revokeObjectURL = originalRevokeObjectUrl;
     }
+  });
+
+  test("inserts concurrent image uploads at their original location in file order", async () => {
+    const firstAssetId = "550e8400-e29b-41d4-a716-446655440010";
+    const secondAssetId = "550e8400-e29b-41d4-a716-446655440011";
+    const firstUpload =
+      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+    const secondUpload =
+      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+    const firstFile = new File([new Uint8Array([1])], "first.png", { type: "image/png" });
+    const secondFile = new File([new Uint8Array([2])], "second.png", { type: "image/png" });
+    const onChange = mock((_value: string) => {});
+    const onUpload = mock((file: File) =>
+      file === firstFile ? firstUpload.promise : secondUpload.promise,
+    );
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Before"
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
+    );
+    await waitFor(() => expect(view.getByRole("button", { name: "Insert image" })).toBeTruthy());
+    const input = view.getByLabelText("Task description images");
+
+    fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    secondUpload.resolve({
+      assetId: secondAssetId,
+      scope: "description",
+      originalName: secondFile.name,
+      verifiedMediaType: "image/png",
+      byteSize: secondFile.size,
+    });
+    firstUpload.resolve({
+      assetId: firstAssetId,
+      scope: "description",
+      originalName: firstFile.name,
+      verifiedMediaType: "image/png",
+      byteSize: firstFile.size,
+    });
+
+    await waitFor(() => {
+      const markdown = String(onChange.mock.lastCall?.[0] ?? "");
+      expect(markdown.indexOf(firstAssetId)).toBeGreaterThan(-1);
+      expect(markdown.indexOf(secondAssetId)).toBeGreaterThan(markdown.indexOf(firstAssetId));
+    });
   });
 
   test("stages an image pasted into Visual mode", async () => {

@@ -27,6 +27,7 @@ import {
   HostOperationError as HostOperationErrorValue,
   isHostError,
 } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
@@ -104,6 +105,7 @@ export type TaskServiceError =
   | HostValidationError
   | RuntimeRegistryError
   | SettingsConfigError
+  | TaskAssetError
   | TaskPolicyError
   | TaskStoreError
   | ToolDiscoveryError
@@ -251,7 +253,7 @@ export type CreateTaskServiceInput = {
   taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
-  cause instanceof TaskPolicyError || isHostError(cause);
+  cause instanceof TaskAssetError || cause instanceof TaskPolicyError || isHostError(cause);
 
 const toTaskServiceError = (cause: unknown): TaskServiceError => {
   if (isTaskServiceError(cause)) {

@@ -104,6 +104,7 @@ export type TaskAssetOperation = z.infer<typeof taskAssetOperationSchema>;
 
 export const taskAssetFailureCodeSchema = z.enum([
   "validation",
+  "filesystem",
   "promotion",
   "database",
   "quarantine",

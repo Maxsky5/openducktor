@@ -18,6 +18,18 @@ type UseTaskDescriptionAssetDraftInput = {
   onDiscardError(cause: unknown): void;
 };
 
+type TaskDescriptionAssetDraftState = {
+  contextKey: string | null;
+  uploads: TaskDescriptionAssetUpload[];
+  previews: ReadonlyMap<string, string>;
+};
+
+const emptyDraftState = (contextKey: string | null): TaskDescriptionAssetDraftState => ({
+  contextKey,
+  uploads: [],
+  previews: new Map(),
+});
+
 export const useTaskDescriptionAssetDraft = ({
   active,
   draftKey,
@@ -26,21 +38,34 @@ export const useTaskDescriptionAssetDraft = ({
   discardStaged,
   onDiscardError,
 }: UseTaskDescriptionAssetDraftInput) => {
-  const [uploads, setUploads] = useState<TaskDescriptionAssetUpload[]>([]);
-  const [previews, setPreviews] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const stateContextKey = active && workspaceId ? `${workspaceId}:${draftKey}` : null;
+  const [draftState, setDraftState] = useState<TaskDescriptionAssetDraftState>(() =>
+    emptyDraftState(stateContextKey),
+  );
+  if (draftState.contextKey !== stateContextKey) {
+    setDraftState(emptyDraftState(stateContextKey));
+  }
   const assets = useRef(new Map<string, { previewUrl: string; workspaceId: string }>());
-  const context = useRef<{ generation: number; key: string; workspaceId: string } | null>(null);
+  const context = useRef<{
+    generation: number;
+    key: string;
+    stateKey: string;
+    workspaceId: string;
+  } | null>(null);
   const generation = useRef(0);
   const uploadSequence = useRef(0);
 
-  const clearLocalAssets = useCallback((): void => {
+  const clearAssetRefs = useCallback((): void => {
     for (const asset of assets.current.values()) {
       URL.revokeObjectURL(asset.previewUrl);
     }
     assets.current.clear();
-    setPreviews(new Map());
-    setUploads([]);
   }, []);
+
+  const clearLocalAssets = useCallback((): void => {
+    clearAssetRefs();
+    setDraftState((current) => emptyDraftState(current.contextKey));
+  }, [clearAssetRefs]);
 
   const discardAssetSnapshot = useCallback(
     async (
@@ -64,7 +89,14 @@ export const useTaskDescriptionAssetDraft = ({
   useEffect(() => {
     generation.current += 1;
     const nextContext =
-      active && workspaceId ? { generation: generation.current, key: draftKey, workspaceId } : null;
+      active && workspaceId && stateContextKey
+        ? {
+            generation: generation.current,
+            key: draftKey,
+            stateKey: stateContextKey,
+            workspaceId,
+          }
+        : null;
     const previousContext = context.current;
     context.current = nextContext;
     if (
@@ -74,23 +106,28 @@ export const useTaskDescriptionAssetDraft = ({
         previousContext.workspaceId !== nextContext.workspaceId)
     ) {
       const snapshot = Array.from(assets.current.entries());
-      clearLocalAssets();
+      clearAssetRefs();
       void discardAssetSnapshot(snapshot).catch(onDiscardError);
     }
-  }, [active, clearLocalAssets, discardAssetSnapshot, draftKey, onDiscardError, workspaceId]);
+  }, [
+    active,
+    clearAssetRefs,
+    discardAssetSnapshot,
+    draftKey,
+    onDiscardError,
+    stateContextKey,
+    workspaceId,
+  ]);
 
   useEffect(
     () => () => {
       generation.current += 1;
       context.current = null;
       const snapshot = Array.from(assets.current.entries());
-      for (const asset of assets.current.values()) {
-        URL.revokeObjectURL(asset.previewUrl);
-      }
-      assets.current.clear();
+      clearAssetRefs();
       void discardAssetSnapshot(snapshot).catch(onDiscardError);
     },
-    [discardAssetSnapshot, onDiscardError],
+    [clearAssetRefs, discardAssetSnapshot, onDiscardError],
   );
 
   const stage = useCallback(
@@ -101,10 +138,16 @@ export const useTaskDescriptionAssetDraft = ({
       }
       uploadSequence.current += 1;
       const uploadId = `${uploadContext.generation}:${uploadSequence.current}`;
-      setUploads((current) => [
-        ...current,
-        { id: uploadId, fileName: file.name, status: "uploading" },
-      ]);
+      setDraftState((current) => {
+        const next =
+          current.contextKey === uploadContext.stateKey
+            ? current
+            : emptyDraftState(uploadContext.stateKey);
+        return {
+          ...next,
+          uploads: [...next.uploads, { id: uploadId, fileName: file.name, status: "uploading" }],
+        };
+      });
 
       try {
         const staged = await stageImage(file);
@@ -124,19 +167,31 @@ export const useTaskDescriptionAssetDraft = ({
           previewUrl,
           workspaceId: uploadContext.workspaceId,
         });
-        setPreviews(
-          new Map(Array.from(assets.current, ([assetId, asset]) => [assetId, asset.previewUrl])),
+        setDraftState((current) =>
+          current.contextKey === uploadContext.stateKey
+            ? {
+                ...current,
+                previews: new Map(
+                  Array.from(assets.current, ([assetId, asset]) => [assetId, asset.previewUrl]),
+                ),
+                uploads: current.uploads.filter((upload) => upload.id !== uploadId),
+              }
+            : current,
         );
-        setUploads((current) => current.filter((upload) => upload.id !== uploadId));
         return staged;
       } catch (cause) {
         if (context.current?.generation === uploadContext.generation) {
-          setUploads((current) =>
-            current.map((upload) =>
-              upload.id === uploadId
-                ? { ...upload, status: "error", error: errorMessage(cause) }
-                : upload,
-            ),
+          setDraftState((current) =>
+            current.contextKey === uploadContext.stateKey
+              ? {
+                  ...current,
+                  uploads: current.uploads.map((upload) =>
+                    upload.id === uploadId
+                      ? { ...upload, status: "error", error: errorMessage(cause) }
+                      : upload,
+                  ),
+                }
+              : current,
           );
         }
         throw cause;
@@ -168,9 +223,9 @@ export const useTaskDescriptionAssetDraft = ({
   );
 
   return {
-    uploads,
-    previews,
-    isUploading: uploads.some((upload) => upload.status === "uploading"),
+    uploads: draftState.uploads,
+    previews: draftState.previews,
+    isUploading: draftState.uploads.some((upload) => upload.status === "uploading"),
     stage,
     stagedAssetIds,
     discardAll,

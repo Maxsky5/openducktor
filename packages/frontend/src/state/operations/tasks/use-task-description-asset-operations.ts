@@ -1,4 +1,8 @@
-import { type TaskAssetStageResult, taskAssetMediaTypeSchema } from "@openducktor/contracts";
+import {
+  TASK_ASSET_MAX_FILE_BYTES,
+  type TaskAssetStageResult,
+  taskAssetMediaTypeSchema,
+} from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { useCallback, useMemo } from "react";
 import { host } from "../shared/host";
@@ -36,6 +40,9 @@ export const createTaskDescriptionAssetOperations = (
     const mediaType = taskAssetMediaTypeSchema.safeParse(file.type);
     if (!mediaType.success) {
       throw new Error("Task images must be PNG, JPEG, WebP, or GIF files.");
+    }
+    if (file.size > TASK_ASSET_MAX_FILE_BYTES) {
+      throw new Error("Task description images must be 10 MiB or smaller.");
     }
     return hostPort.taskAssetStage({
       workspaceId,

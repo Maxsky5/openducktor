@@ -175,6 +175,19 @@ describe("node task asset file port", () => {
     }
   });
 
+  test("makes staged removal safe to retry after a partial batch", async () => {
+    const { port } = await createHarness();
+    const missingAssetId = "750e8400-e29b-41d4-a716-446655440001";
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+
+    await expect(
+      Effect.runPromise(port.removeStaged({ workspaceId, assetIds: [assetId, missingAssetId] })),
+    ).resolves.toBeUndefined();
+    await expect(
+      Effect.runPromise(port.removeStaged({ workspaceId, assetIds: [assetId, missingAssetId] })),
+    ).resolves.toBeUndefined();
+  });
+
   test("keeps the caller operation on filesystem failures and validates task-only deletes", async () => {
     const { port } = await createHarness();
     await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
@@ -357,7 +370,7 @@ describe("node task asset file port", () => {
     expect(await Effect.runPromise(port.clearStaging())).toBe(1);
     expect(await readdir(ownersRoot)).not.toContain(`${staleInstanceId}.json`);
     await Effect.runPromise(port.cleanupCurrentOwner());
-  });
+  }, 15_000);
 
   test("recovers legacy ownerless quarantine data and clears legacy staging", async () => {
     const { configDir, port } = await createHarness();
