@@ -1,4 +1,7 @@
-import type { TaskAssetStageResult } from "@openducktor/contracts";
+import {
+  TASK_ASSET_MAX_DESCRIPTION_ASSETS,
+  type TaskAssetStageResult,
+} from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 
@@ -13,6 +16,7 @@ type UseTaskDescriptionAssetDraftInput = {
   active: boolean;
   draftKey: string;
   workspaceId: string | null;
+  referencedAssetIds: ReadonlySet<string>;
   stageImage(file: File): Promise<TaskAssetStageResult>;
   discardStaged(workspaceId: string, assetIds: string[]): Promise<void>;
   onDiscardError(cause: unknown): void;
@@ -34,6 +38,7 @@ export const useTaskDescriptionAssetDraft = ({
   active,
   draftKey,
   workspaceId,
+  referencedAssetIds,
   stageImage,
   discardStaged,
   onDiscardError,
@@ -54,6 +59,7 @@ export const useTaskDescriptionAssetDraft = ({
   } | null>(null);
   const generation = useRef(0);
   const uploadSequence = useRef(0);
+  const pendingUploads = useRef(new Map<number, number>());
 
   const clearAssetRefs = useCallback((): void => {
     for (const asset of assets.current.values()) {
@@ -138,6 +144,31 @@ export const useTaskDescriptionAssetDraft = ({
       }
       uploadSequence.current += 1;
       const uploadId = `${uploadContext.generation}:${uploadSequence.current}`;
+      let knownAssetCount = referencedAssetIds.size;
+      for (const assetId of assets.current.keys()) {
+        if (!referencedAssetIds.has(assetId)) {
+          knownAssetCount += 1;
+        }
+      }
+      const pendingUploadCount = pendingUploads.current.get(uploadContext.generation) ?? 0;
+      if (knownAssetCount + pendingUploadCount >= TASK_ASSET_MAX_DESCRIPTION_ASSETS) {
+        const message = `A task description may reference at most ${TASK_ASSET_MAX_DESCRIPTION_ASSETS} distinct task assets.`;
+        setDraftState((current) => {
+          const next =
+            current.contextKey === uploadContext.stateKey
+              ? current
+              : emptyDraftState(uploadContext.stateKey);
+          return {
+            ...next,
+            uploads: [
+              ...next.uploads,
+              { id: uploadId, fileName: file.name, status: "error", error: message },
+            ],
+          };
+        });
+        throw new Error(message);
+      }
+      pendingUploads.current.set(uploadContext.generation, pendingUploadCount + 1);
       setDraftState((current) => {
         const next =
           current.contextKey === uploadContext.stateKey
@@ -195,9 +226,16 @@ export const useTaskDescriptionAssetDraft = ({
           );
         }
         throw cause;
+      } finally {
+        const remaining = (pendingUploads.current.get(uploadContext.generation) ?? 1) - 1;
+        if (remaining === 0) {
+          pendingUploads.current.delete(uploadContext.generation);
+        } else {
+          pendingUploads.current.set(uploadContext.generation, remaining);
+        }
       }
     },
-    [discardStaged, stageImage],
+    [discardStaged, referencedAssetIds, stageImage],
   );
 
   const stagedAssetIds = useCallback((): string[] => Array.from(assets.current.keys()), []);

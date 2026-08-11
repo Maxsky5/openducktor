@@ -58,7 +58,10 @@ export const createTaskAssetAwareDelete =
           quarantineIds.push(quarantineId);
         }
       }
-      const deleted = yield* inner.deleteTask(input);
+      const deleted = yield* inner.deleteTask({
+        ...input,
+        expectedTaskIds: Array.from(targetIds),
+      });
       committed = true;
       for (const quarantineId of quarantineIds) {
         yield* filePort.purgeQuarantine(quarantineId);

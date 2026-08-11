@@ -63,6 +63,7 @@ export type TaskWriter = {
     repoPath: string;
     taskId: string;
     deleteSubtasks: boolean;
+    expectedTaskIds?: readonly string[];
   }): Effect.Effect<boolean, TaskStoreError>;
   transitionTask(input: {
     repoPath: string;

@@ -86,6 +86,14 @@ export const createTaskAssetQuarantineFiles = ({
       if (!entry.isDirectory() || !taskAssetIdSchema.safeParse(entry.name).success) {
         throw new Error(`Unexpected task asset quarantine entry '${entry.name}'.`);
       }
+      const childNames = await readdir(entryPath);
+      if (!childNames.includes("manifest.json")) {
+        if (childNames.length === 0) {
+          await rm(entryPath, { force: true, recursive: true });
+          continue;
+        }
+        throw new Error(`Task asset quarantine '${entry.name}' has no manifest.`);
+      }
       quarantineIds.push(entry.name);
     }
     return quarantineIds.sort();
@@ -174,7 +182,19 @@ export const createTaskAssetQuarantineFiles = ({
       await rm(root(manifest.id), { force: true, recursive: true });
     },
     async purge(quarantineId: string): Promise<void> {
-      await rm(root(quarantineId), { force: true, recursive: true });
+      const quarantinePath = root(quarantineId);
+      if (!(await existingStat(quarantinePath))) {
+        return;
+      }
+      const entries = await readdir(quarantinePath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.name === "manifest.json") {
+          continue;
+        }
+        await rm(path.join(quarantinePath, entry.name), { force: true, recursive: true });
+      }
+      await rm(manifestPath(quarantineId), { force: true });
+      await rm(quarantinePath, { force: true, recursive: true });
     },
   };
 };

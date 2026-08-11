@@ -9,7 +9,10 @@ import {
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
-import { collectTaskDescriptionAssetsForSubmit } from "@/components/features/task-description-editor/task-description-assets";
+import {
+  collectTaskDescriptionAssetIds,
+  collectTaskDescriptionAssetsForSubmit,
+} from "@/components/features/task-description-editor/task-description-assets";
 import { useTaskDescriptionAssetDraft } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { errorMessage } from "@/lib/errors";
 import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
@@ -275,10 +278,16 @@ export function useTaskCreateModalController({
     });
   }, []);
 
+  const referencedDescriptionAssetIds = useMemo(
+    () => collectTaskDescriptionAssetIds(composer.description),
+    [composer.description],
+  );
+
   const descriptionAssetDraft = useTaskDescriptionAssetDraft({
     active: open,
     draftKey: taskId ?? "new-task",
     workspaceId,
+    referencedAssetIds: referencedDescriptionAssetIds,
     stageImage: descriptionAssetOperations.stageImage,
     discardStaged: descriptionAssetOperations.discardStaged,
     onDiscardError: reportDescriptionAssetDiscardError,

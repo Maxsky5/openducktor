@@ -1,5 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskAssetStageResult } from "@openducktor/contracts";
+import {
+  TASK_ASSET_MAX_DESCRIPTION_ASSETS,
+  type TaskAssetStageResult,
+} from "@openducktor/contracts";
 import { act } from "@testing-library/react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { useTaskDescriptionAssetDraft } from "./use-task-description-asset-draft";
@@ -13,6 +16,7 @@ const staged: TaskAssetStageResult = {
   byteSize: 3,
 };
 const ignoreDiscardError = (_cause: unknown): void => {};
+const noReferencedAssets = new Set<string>();
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T) => void) | undefined;
@@ -38,6 +42,7 @@ describe("useTaskDescriptionAssetDraft", () => {
           active: true,
           draftKey,
           workspaceId,
+          referencedAssetIds: noReferencedAssets,
           stageImage,
           discardStaged,
           onDiscardError: ignoreDiscardError,
@@ -76,6 +81,7 @@ describe("useTaskDescriptionAssetDraft", () => {
           active: true,
           draftKey,
           workspaceId,
+          referencedAssetIds: noReferencedAssets,
           stageImage,
           discardStaged,
           onDiscardError: ignoreDiscardError,
@@ -112,6 +118,7 @@ describe("useTaskDescriptionAssetDraft", () => {
           active: true,
           draftKey: "task-1",
           workspaceId,
+          referencedAssetIds: noReferencedAssets,
           stageImage,
           discardStaged,
           onDiscardError: ignoreDiscardError,
@@ -151,6 +158,7 @@ describe("useTaskDescriptionAssetDraft", () => {
           active: true,
           draftKey: "task-1",
           workspaceId,
+          referencedAssetIds: noReferencedAssets,
           stageImage,
           discardStaged: async () => {},
           onDiscardError: ignoreDiscardError,
@@ -171,6 +179,82 @@ describe("useTaskDescriptionAssetDraft", () => {
         error: "The image content does not match its media type.",
       }),
     ]);
+    await harness.unmount();
+  });
+
+  test("rejects an upload before staging when the description is at its asset limit", async () => {
+    const stageImage = mock(async () => staged);
+    const referencedAssetIds = new Set(
+      Array.from({ length: TASK_ASSET_MAX_DESCRIPTION_ASSETS }, (_, index) => `asset-${index}`),
+    );
+    const harness = createHookHarness(
+      () =>
+        useTaskDescriptionAssetDraft({
+          active: true,
+          draftKey: "task-1",
+          workspaceId,
+          referencedAssetIds,
+          stageImage,
+          discardStaged: async () => {},
+          onDiscardError: ignoreDiscardError,
+        }),
+      {},
+    );
+
+    await harness.mount();
+    await harness.run(async (value) => {
+      await expect(
+        value.stage(new File([new Uint8Array([1])], "excess.png", { type: "image/png" })),
+      ).rejects.toThrow(`at most ${TASK_ASSET_MAX_DESCRIPTION_ASSETS}`);
+    });
+    expect(stageImage).not.toHaveBeenCalled();
+    await harness.unmount();
+  });
+
+  test("reserves the last asset slot across concurrent uploads", async () => {
+    const deferred = createDeferred<TaskAssetStageResult>();
+    const discardStaged = mock(async () => {});
+    const stageImage = mock(() => {
+      if (stageImage.mock.calls.length > 1) {
+        return Promise.reject(new Error("stageImage was called after the upload limit was full."));
+      }
+      return deferred.promise;
+    });
+    const referencedAssetIds = new Set(
+      Array.from({ length: TASK_ASSET_MAX_DESCRIPTION_ASSETS - 1 }, (_, index) => `asset-${index}`),
+    );
+    const harness = createHookHarness(
+      () =>
+        useTaskDescriptionAssetDraft({
+          active: true,
+          draftKey: "task-1",
+          workspaceId,
+          referencedAssetIds,
+          stageImage,
+          discardStaged,
+          onDiscardError: ignoreDiscardError,
+        }),
+      {},
+    );
+
+    await harness.mount();
+    let firstUpload: Promise<TaskAssetStageResult> | undefined;
+    await harness.run((value) => {
+      firstUpload = value.stage(
+        new File([new Uint8Array([1])], "last-slot.png", { type: "image/png" }),
+      );
+    });
+    await harness.run(async (value) => {
+      await expect(
+        value.stage(new File([new Uint8Array([2])], "excess.png", { type: "image/png" })),
+      ).rejects.toThrow(`at most ${TASK_ASSET_MAX_DESCRIPTION_ASSETS}`);
+    });
+    expect(stageImage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      deferred.resolve(staged);
+      await firstUpload;
+    });
     await harness.unmount();
   });
 });

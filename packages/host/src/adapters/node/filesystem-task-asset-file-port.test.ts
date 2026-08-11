@@ -139,6 +139,16 @@ describe("node task asset file port", () => {
     expect(await Effect.runPromise(restartedPort.listQuarantines())).toEqual([]);
   });
 
+  test("cleans an empty quarantine directory left after its manifest was removed", async () => {
+    const { configDir, port } = await createHarness();
+    const quarantineId = "50000000-0000-4000-8000-000000000002";
+    const quarantineRoot = path.join(configDir, "task-asset-quarantine", quarantineId);
+    await mkdir(quarantineRoot, { recursive: true });
+
+    expect(await Effect.runPromise(port.listQuarantines())).toEqual([]);
+    expect(await readdir(path.dirname(quarantineRoot))).not.toContain(quarantineId);
+  });
+
   test("lets only one concurrent host claim a dead-owner quarantine", async () => {
     const { aliveProcessIds, createPort, port } = await createHarness();
     await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1, 2, 3]) }));

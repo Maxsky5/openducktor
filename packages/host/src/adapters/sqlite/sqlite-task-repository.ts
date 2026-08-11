@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { errorMessage } from "../../effect/host-errors";
+import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
   clearAgentSessionsByRoles,
@@ -134,6 +134,24 @@ export const createSqliteTaskRepository = ({
             const targetIds = input.deleteSubtasks
               ? yield* descendantTaskIds(transaction, root.id)
               : new Set<string>([root.id]);
+            if (input.expectedTaskIds) {
+              const expectedTaskIds = new Set(input.expectedTaskIds);
+              const targetsMatch =
+                expectedTaskIds.size === targetIds.size &&
+                Array.from(expectedTaskIds).every((taskId) => targetIds.has(taskId));
+              if (!targetsMatch) {
+                return yield* new HostOperationError({
+                  operation: "sqliteTaskRepository.deleteTask",
+                  message:
+                    "The task hierarchy changed while its assets were prepared. Retry deletion.",
+                  details: {
+                    taskId: input.taskId,
+                    expectedTaskIds: Array.from(expectedTaskIds),
+                    actualTaskIds: Array.from(targetIds),
+                  },
+                });
+              }
+            }
             yield* deleteTasks(transaction, targetIds);
             return true;
           }),
