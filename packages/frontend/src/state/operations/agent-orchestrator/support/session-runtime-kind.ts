@@ -3,7 +3,7 @@ import {
   type RuntimeKind,
   runtimeKindSchema,
 } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelSelection } from "@openducktor/core";
 
 const readRuntimeKind = (
   runtimeKind: RuntimeKind | string | null | undefined,
@@ -40,12 +40,11 @@ export const readPersistedSessionRuntimeKind = ({
   readRuntimeKind(runtimeKind, `Persisted session '${externalSessionId}' is missing runtime kind.`);
 
 export const readFreshSessionRuntimeKind = (
-  role: AgentRole,
   selectedModel: Pick<AgentModelSelection, "runtimeKind">,
 ): RuntimeKind =>
   readRuntimeKind(
     selectedModel.runtimeKind,
-    `Runtime kind is required to start ${role} sessions. Select an explicit runtime before starting a session.`,
+    "Runtime kind is required to start a session. Select an explicit runtime before starting.",
   );
 
 export const readSelectedModelRuntimeKind = (

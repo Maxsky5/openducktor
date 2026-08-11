@@ -17,12 +17,11 @@ import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/c
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import {
   type ChatComposerModelSelectionSource,
-  resolveAvailableRoleDefaultModelSelection,
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
 import { reportModelUpdateError } from "@/features/agent-chat-composer/model-selection/model-update-error";
-import { useAgentStudioDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
+import { useDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import {
   type ChatComposerPromptInputRuntimeSource,
@@ -33,6 +32,7 @@ import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
+import { availableRoleDefaultSelectionFor } from "@/features/session-start/session-start-selection";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -150,30 +150,26 @@ export function useAgentStudioChatComposer({
   const hasSessionTarget = selectedSessionIdentity !== null;
   const roleDefaultSelection = useMemo(
     () =>
-      resolveAvailableRoleDefaultModelSelection({
+      availableRoleDefaultSelectionFor({
         repoSettings,
         role,
         runtimeDefinitions: availableRuntimeDefinitions,
       }),
     [availableRuntimeDefinitions, repoSettings, role],
   );
-  const {
-    draftSelection,
-    isAwaitingRepoSettingsForWorkspaceRepoPath,
-    applyDraftSelection,
-    syncDraftSelection,
-  } = useAgentStudioDraftModelSelectionState({
-    workspaceRepoPath,
-    repoSettings,
-    role,
-  });
+  const { draftSelection, isAwaitingDefaultSelection, applyDraftSelection, syncDraftSelection } =
+    useDraftModelSelectionState({
+      contextKey: workspaceRepoPath,
+      isDefaultSelectionReady: repoSettings !== null,
+      selectionKey: role,
+    });
   const selectedRuntimeKind = useMemo(
     () =>
       resolveChatComposerSelectedRuntimeKind({
         selectedSessionModel,
         draftSelection,
-        roleDefaultSelection,
-        repoDefaultRuntimeKind: repoSettings?.defaultRuntimeKind,
+        defaultSelection: roleDefaultSelection,
+        defaultRuntimeKind: repoSettings?.defaultRuntimeKind,
         runtimeDefinitions: availableRuntimeDefinitions,
       }),
     [
@@ -275,8 +271,8 @@ export function useAgentStudioChatComposer({
     });
   useEffect(() => {
     syncDraftSelection({
-      composerCatalog,
-      roleDefaultSelection,
+      catalog: composerCatalog,
+      defaultSelection: roleDefaultSelection,
     });
   }, [composerCatalog, roleDefaultSelection, syncDraftSelection]);
 
@@ -300,17 +296,17 @@ export function useAgentStudioChatComposer({
           kind: "new_session",
           composerCatalog,
           draftSelection,
-          isAwaitingRepoSettingsForWorkspaceRepoPath,
+          isAwaitingDefaultSelection,
         };
 
     return resolveChatComposerModelSelections({
       source,
-      roleDefaultSelection,
+      defaultSelection: roleDefaultSelection,
     });
   }, [
     composerCatalog,
     draftSelection,
-    isAwaitingRepoSettingsForWorkspaceRepoPath,
+    isAwaitingDefaultSelection,
     roleDefaultSelection,
     selectedSessionIdentity,
     selectedSessionModel,

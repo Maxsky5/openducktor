@@ -1,12 +1,13 @@
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import {
-  findCatalogModel,
-  normalizeCatalogVariant,
-  normalizeVisibleCatalogProfileId,
-  pickCatalogDefaultModel,
-  pickVisibleCatalogDefaultProfileId,
-} from "@/lib/model-catalog-selection";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RepoSettingsInput } from "@/types/state-slices";
+
+export {
+  coerceVisibleSelectionToCatalog,
+  isSameSelection,
+  pickDefaultVisibleSelectionForCatalog,
+} from "@/features/agent-chat-composer/model-selection/model-selection-state";
 
 export const roleDefaultSelectionFor = (
   repoSettings: RepoSettingsInput | null,
@@ -31,84 +32,20 @@ export const roleDefaultSelectionFor = (
   };
 };
 
-export const pickDefaultVisibleSelectionForCatalog = (
-  catalog: AgentModelCatalog | null,
-): AgentModelSelection | null => {
-  if (!catalog) {
+export const availableRoleDefaultSelectionFor = ({
+  repoSettings,
+  role,
+  runtimeDefinitions,
+}: {
+  repoSettings: RepoSettingsInput | null;
+  role: AgentRole;
+  runtimeDefinitions: RuntimeDescriptor[];
+}): AgentModelSelection | null => {
+  const selection = roleDefaultSelectionFor(repoSettings, role);
+  const runtimeKind = selection?.runtimeKind;
+  if (!selection || !runtimeKind) {
     return null;
   }
 
-  const defaultModel = pickCatalogDefaultModel(catalog);
-  if (!defaultModel) {
-    return null;
-  }
-  const profileId = pickVisibleCatalogDefaultProfileId(catalog);
-  const variant = normalizeCatalogVariant(defaultModel, undefined);
-  const runtimeKind = catalog.runtime?.kind;
-  if (!runtimeKind) {
-    return null;
-  }
-
-  return {
-    runtimeKind,
-    providerId: defaultModel.providerId,
-    modelId: defaultModel.modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
-  };
-};
-
-export const coerceVisibleSelectionToCatalog = (
-  catalog: AgentModelCatalog | null,
-  selection: AgentModelSelection | null,
-): AgentModelSelection | null => {
-  if (!catalog || !selection) {
-    return selection;
-  }
-  if (
-    catalog.runtime?.kind &&
-    selection.runtimeKind &&
-    catalog.runtime.kind !== selection.runtimeKind
-  ) {
-    return null;
-  }
-
-  const model = findCatalogModel(catalog, selection);
-  if (!model) {
-    return null;
-  }
-
-  const variant = normalizeCatalogVariant(model, selection.variant);
-  const profileId = normalizeVisibleCatalogProfileId(catalog, selection.profileId);
-  const runtimeKind = selection.runtimeKind ?? catalog.runtime?.kind;
-  if (!runtimeKind) {
-    return null;
-  }
-
-  return {
-    runtimeKind,
-    providerId: model.providerId,
-    modelId: model.modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
-  };
-};
-
-export const isSameSelection = (
-  a: AgentModelSelection | null | undefined,
-  b: AgentModelSelection | null | undefined,
-): boolean => {
-  if (!a && !b) {
-    return true;
-  }
-  if (!a || !b) {
-    return false;
-  }
-  return (
-    a.providerId === b.providerId &&
-    a.modelId === b.modelId &&
-    a.runtimeKind === b.runtimeKind &&
-    (a.variant ?? "") === (b.variant ?? "") &&
-    (a.profileId ?? "") === (b.profileId ?? "")
-  );
+  return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? selection : null;
 };

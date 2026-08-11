@@ -1,203 +1,75 @@
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useMemo, useReducer } from "react";
-import { isSameSelection } from "@/features/session-start";
-import type { RepoSettingsInput } from "@/types/state-slices";
-import { resolvePreferredModelSelection } from "./model-selection-preferences";
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import { useCallback, useReducer } from "react";
+import {
+  createDraftModelSelectionState,
+  draftModelSelectionReducer,
+  getDraftModelSelectionStateForContext,
+} from "./model-selection-state";
 
-const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | null> => ({
-  spec: null,
-  planner: null,
-  build: null,
-  qa: null,
-});
-
-const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
-  spec: false,
-  planner: false,
-  build: false,
-  qa: false,
-});
-
-type DraftModelSelectionContext = {
-  workspaceRepoPath: string | null;
-};
-
-type DraftModelSelectionInit = {
-  context: DraftModelSelectionContext;
-  repoSettingsReady: boolean;
-};
-
-type DraftModelSelectionState = {
-  context: DraftModelSelectionContext;
-  isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
-  draftSelectionByRole: Record<AgentRole, AgentModelSelection | null>;
-  draftSelectionTouchedByRole: Record<AgentRole, boolean>;
-};
-
-type DraftModelSelectionAction =
-  | {
-      type: "draftSelectionApplied";
-      context: DraftModelSelectionContext;
-      repoSettingsReady: boolean;
-      role: AgentRole;
-      selection: AgentModelSelection | null;
-    }
-  | {
-      type: "draftSelectionSynced";
-      composerCatalog: AgentModelCatalog | null;
-      context: DraftModelSelectionContext;
-      repoSettingsReady: boolean;
-      role: AgentRole;
-      roleDefaultSelection: AgentModelSelection | null;
-    };
-
-const createDraftModelSelectionState = ({
-  context,
-  repoSettingsReady,
-}: DraftModelSelectionInit): DraftModelSelectionState => ({
-  context,
-  isAwaitingRepoSettingsForWorkspaceRepoPath:
-    Boolean(context.workspaceRepoPath) && !repoSettingsReady,
-  draftSelectionByRole: emptyDraftSelections(),
-  draftSelectionTouchedByRole: emptyDraftSelectionTouchedByRole(),
-});
-
-const getDraftModelSelectionStateForContext = (
-  state: DraftModelSelectionState,
-  context: DraftModelSelectionContext,
-  repoSettingsReady: boolean,
-): DraftModelSelectionState => {
-  if (state.context !== context) {
-    return createDraftModelSelectionState({ context, repoSettingsReady });
-  }
-
-  if (state.isAwaitingRepoSettingsForWorkspaceRepoPath && repoSettingsReady) {
-    return {
-      ...state,
-      isAwaitingRepoSettingsForWorkspaceRepoPath: false,
-    };
-  }
-
-  return state;
-};
-
-const draftModelSelectionReducer = (
-  state: DraftModelSelectionState,
-  action: DraftModelSelectionAction,
-): DraftModelSelectionState => {
-  const currentState = getDraftModelSelectionStateForContext(
-    state,
-    action.context,
-    action.repoSettingsReady,
-  );
-
-  switch (action.type) {
-    case "draftSelectionApplied":
-      return {
-        ...currentState,
-        draftSelectionByRole: {
-          ...currentState.draftSelectionByRole,
-          [action.role]: action.selection,
-        },
-        draftSelectionTouchedByRole: {
-          ...currentState.draftSelectionTouchedByRole,
-          [action.role]: true,
-        },
-      };
-    case "draftSelectionSynced": {
-      if (!action.composerCatalog) {
-        return currentState;
-      }
-
-      const existing = currentState.draftSelectionByRole[action.role];
-      const normalized = resolvePreferredModelSelection({
-        catalog: action.composerCatalog,
-        preferredSelection: currentState.draftSelectionTouchedByRole[action.role] ? existing : null,
-        fallbackSelection: action.roleDefaultSelection,
-      });
-      return isSameSelection(existing, normalized)
-        ? currentState
-        : {
-            ...currentState,
-            draftSelectionByRole: {
-              ...currentState.draftSelectionByRole,
-              [action.role]: normalized,
-            },
-          };
-    }
-  }
-};
-
-export const useAgentStudioDraftModelSelectionState = ({
-  workspaceRepoPath,
-  repoSettings,
-  role,
+export const useDraftModelSelectionState = ({
+  contextKey,
+  isDefaultSelectionReady,
+  selectionKey,
 }: {
-  workspaceRepoPath: string | null;
-  repoSettings: RepoSettingsInput | null;
-  role: AgentRole;
+  contextKey: string | null;
+  isDefaultSelectionReady: boolean;
+  selectionKey: string;
 }): {
   draftSelection: AgentModelSelection | null;
-  isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
+  isAwaitingDefaultSelection: boolean;
   applyDraftSelection: (selection: AgentModelSelection | null) => void;
   syncDraftSelection: (input: {
-    composerCatalog: AgentModelCatalog | null;
-    roleDefaultSelection: AgentModelSelection | null;
+    catalog: AgentModelCatalog | null;
+    defaultSelection: AgentModelSelection | null;
   }) => void;
 } => {
-  const repoSettingsReady = repoSettings != null;
-  const draftContext = useMemo<DraftModelSelectionContext>(
-    () => ({ workspaceRepoPath }),
-    [workspaceRepoPath],
-  );
   const [draftState, dispatchDraftState] = useReducer(
     draftModelSelectionReducer,
-    { context: draftContext, repoSettingsReady },
+    { contextKey, isDefaultSelectionReady },
     createDraftModelSelectionState,
   );
   const currentDraftState = getDraftModelSelectionStateForContext(
     draftState,
-    draftContext,
-    repoSettingsReady,
+    contextKey,
+    isDefaultSelectionReady,
   );
 
   const applyDraftSelection = useCallback(
     (selection: AgentModelSelection | null): void => {
       dispatchDraftState({
         type: "draftSelectionApplied",
-        context: draftContext,
-        repoSettingsReady,
-        role,
+        contextKey,
+        isDefaultSelectionReady,
         selection,
+        selectionKey,
       });
     },
-    [draftContext, repoSettingsReady, role],
+    [contextKey, isDefaultSelectionReady, selectionKey],
   );
 
   const syncDraftSelection = useCallback(
     ({
-      composerCatalog,
-      roleDefaultSelection,
+      catalog,
+      defaultSelection,
     }: {
-      composerCatalog: AgentModelCatalog | null;
-      roleDefaultSelection: AgentModelSelection | null;
+      catalog: AgentModelCatalog | null;
+      defaultSelection: AgentModelSelection | null;
     }): void => {
       dispatchDraftState({
         type: "draftSelectionSynced",
-        composerCatalog,
-        context: draftContext,
-        repoSettingsReady,
-        role,
-        roleDefaultSelection,
+        catalog,
+        contextKey,
+        defaultSelection,
+        isDefaultSelectionReady,
+        selectionKey,
       });
     },
-    [draftContext, repoSettingsReady, role],
+    [contextKey, isDefaultSelectionReady, selectionKey],
   );
 
   return {
-    draftSelection: currentDraftState.draftSelectionByRole[role],
-    isAwaitingRepoSettingsForWorkspaceRepoPath:
-      currentDraftState.isAwaitingRepoSettingsForWorkspaceRepoPath,
+    draftSelection: currentDraftState.draftSelections[selectionKey] ?? null,
+    isAwaitingDefaultSelection: currentDraftState.isAwaitingDefaultSelection,
     applyDraftSelection,
     syncDraftSelection,
   };

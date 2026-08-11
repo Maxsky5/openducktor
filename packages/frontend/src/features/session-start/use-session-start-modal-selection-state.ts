@@ -1,21 +1,20 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { type Dispatch, type SetStateAction, useCallback, useMemo } from "react";
-import type { RepoSettingsInput } from "@/types/state-slices";
 import {
-  resolveInitialModalSelection,
-  resolveSelectionForAgentChange,
-  resolveSelectionForModelChange,
-  resolveSelectionForRuntimeChange,
-  resolveSelectionForVariantChange,
-} from "./session-start-modal-selection";
-import { coerceVisibleSelectionToCatalog } from "./session-start-selection";
+  coerceVisibleSelectionToCatalog,
+  resolveInitialModelSelection,
+  resolveModelSelectionForModelChange,
+  resolveModelSelectionForProfileChange,
+  resolveModelSelectionForRuntimeChange,
+  resolveModelSelectionForVariantChange,
+} from "@/features/agent-chat-composer/model-selection/model-selection-state";
 
 type UseSessionStartModalSelectionStateArgs = {
-  activeRole: AgentRole | null;
   catalog: AgentModelCatalog | null;
+  defaultSelection: AgentModelSelection | null;
   intentSelectedModel: AgentModelSelection | null;
-  repoSettings: RepoSettingsInput | null;
+  isSelectionActive: boolean;
   selection: AgentModelSelection | null;
   selectedRuntimeKind: RuntimeKind | null;
   selectedStartMode: "fresh" | "reuse" | "fork";
@@ -26,7 +25,7 @@ type UseSessionStartModalSelectionStateResult = {
   resolvedSelection: AgentModelSelection | null;
   resetSelection: () => void;
   initializeSelection: (
-    role: AgentRole,
+    defaultSelection: AgentModelSelection | null,
     runtimeKind: RuntimeKind | null,
     selectedModel: AgentModelSelection | null,
   ) => void;
@@ -37,23 +36,15 @@ type UseSessionStartModalSelectionStateResult = {
 };
 
 const resolveVisibleSelection = ({
-  activeRole,
   catalog,
+  defaultSelection,
   intentSelectedModel,
-  repoSettings,
+  isSelectionActive,
   selection,
   selectedRuntimeKind,
   selectedStartMode,
-}: {
-  activeRole: AgentRole | null;
-  catalog: AgentModelCatalog | null;
-  intentSelectedModel: AgentModelSelection | null;
-  repoSettings: RepoSettingsInput | null;
-  selection: AgentModelSelection | null;
-  selectedRuntimeKind: RuntimeKind | null;
-  selectedStartMode: "fresh" | "reuse" | "fork";
-}): AgentModelSelection | null => {
-  if (!activeRole || selectedStartMode === "reuse" || !selectedRuntimeKind) {
+}: Omit<UseSessionStartModalSelectionStateArgs, "setSelection">): AgentModelSelection | null => {
+  if (!isSelectionActive || selectedStartMode === "reuse" || !selectedRuntimeKind) {
     return null;
   }
 
@@ -62,10 +53,9 @@ const resolveVisibleSelection = ({
   }
 
   const normalizedCurrent = coerceVisibleSelectionToCatalog(catalog, selection);
-  const fallback = resolveInitialModalSelection({
+  const fallback = resolveInitialModelSelection({
     catalog,
-    repoSettings,
-    role: activeRole,
+    defaultSelection,
     runtimeKind: selectedRuntimeKind,
     selectedModel: intentSelectedModel,
   });
@@ -73,10 +63,10 @@ const resolveVisibleSelection = ({
 };
 
 export function useSessionStartModalSelectionState({
-  activeRole,
   catalog,
+  defaultSelection,
   intentSelectedModel,
-  repoSettings,
+  isSelectionActive,
   selection,
   selectedRuntimeKind,
   selectedStartMode,
@@ -85,19 +75,19 @@ export function useSessionStartModalSelectionState({
   const resolvedSelection = useMemo(
     () =>
       resolveVisibleSelection({
-        activeRole,
         catalog,
+        defaultSelection,
         intentSelectedModel,
-        repoSettings,
+        isSelectionActive,
         selection,
         selectedRuntimeKind,
         selectedStartMode,
       }),
     [
-      activeRole,
       catalog,
+      defaultSelection,
       intentSelectedModel,
-      repoSettings,
+      isSelectionActive,
       selection,
       selectedRuntimeKind,
       selectedStartMode,
@@ -110,36 +100,34 @@ export function useSessionStartModalSelectionState({
 
   const initializeSelection = useCallback(
     (
-      role: AgentRole,
+      nextDefaultSelection: AgentModelSelection | null,
       runtimeKind: RuntimeKind | null,
       selectedModel: AgentModelSelection | null,
     ): void => {
       setSelection(
-        resolveInitialModalSelection({
+        resolveInitialModelSelection({
           catalog,
-          repoSettings,
-          role,
+          defaultSelection: nextDefaultSelection,
           runtimeKind,
           selectedModel,
         }),
       );
     },
-    [catalog, repoSettings, setSelection],
+    [catalog, setSelection],
   );
 
   const handleSelectRuntime = useCallback(
     (runtimeKind: RuntimeKind): void => {
       setSelection(
-        resolveSelectionForRuntimeChange({
-          activeRole,
+        resolveModelSelectionForRuntimeChange({
           currentSelection: resolvedSelection,
-          intentSelectedModel,
-          repoSettings,
+          defaultSelection,
+          selectedModel: intentSelectedModel,
           runtimeKind,
         }),
       );
     },
-    [activeRole, intentSelectedModel, repoSettings, resolvedSelection, setSelection],
+    [defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
   );
 
   const handleSelectAgent = useCallback(
@@ -148,26 +136,15 @@ export function useSessionStartModalSelectionState({
         return;
       }
       setSelection(
-        resolveSelectionForAgentChange({
-          activeRole,
+        resolveModelSelectionForProfileChange({
           catalog,
           currentSelection: resolvedSelection,
-          intentSelectedModel,
           profileId,
-          repoSettings,
           runtimeKind: selectedRuntimeKind,
         }),
       );
     },
-    [
-      activeRole,
-      catalog,
-      intentSelectedModel,
-      repoSettings,
-      resolvedSelection,
-      selectedRuntimeKind,
-      setSelection,
-    ],
+    [catalog, resolvedSelection, selectedRuntimeKind, setSelection],
   );
 
   const handleSelectModel = useCallback(
@@ -176,7 +153,7 @@ export function useSessionStartModalSelectionState({
         return;
       }
       setSelection(
-        resolveSelectionForModelChange({
+        resolveModelSelectionForModelChange({
           catalog,
           currentSelection: resolvedSelection,
           modelKey,
@@ -190,10 +167,14 @@ export function useSessionStartModalSelectionState({
   const handleSelectVariant = useCallback(
     (variant: string): void => {
       setSelection(
-        resolveSelectionForVariantChange({ currentSelection: resolvedSelection, variant }),
+        resolveModelSelectionForVariantChange({
+          catalog,
+          currentSelection: resolvedSelection,
+          variant,
+        }),
       );
     },
-    [resolvedSelection, setSelection],
+    [catalog, resolvedSelection, setSelection],
   );
 
   return {

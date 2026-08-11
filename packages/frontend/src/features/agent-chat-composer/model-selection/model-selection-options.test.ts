@@ -42,7 +42,7 @@ describe("model-selection-options", () => {
       expect.objectContaining({
         value: "build-agent",
         label: "build-agent",
-        description: "Current session agent",
+        description: "Current session profile",
       }),
     ]);
     expect(options.modelOptions).toEqual([

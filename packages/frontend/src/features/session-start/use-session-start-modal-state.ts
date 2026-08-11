@@ -101,6 +101,10 @@ export function useSessionStartModalState({
   const [selectedStartModeForRuntime, setSelectedStartModeForRuntime] =
     useState<AgentSessionStartMode>("fresh");
   const activeRole = intent?.role ?? null;
+  const activeRoleDefaultSelection = useMemo(
+    () => (activeRole ? roleDefaultSelectionFor(repoSettings, activeRole) : null),
+    [activeRole, repoSettings],
+  );
   const {
     catalog,
     catalogError,
@@ -145,10 +149,10 @@ export function useSessionStartModalState({
     handleSelectRuntime: handleSelectionRuntimeChange,
     handleSelectVariant,
   } = useSessionStartModalSelectionState({
-    activeRole,
     catalog,
+    defaultSelection: activeRoleDefaultSelection,
     intentSelectedModel: intent?.selectedModel ?? null,
-    repoSettings,
+    isSelectionActive: activeRole !== null,
     selection,
     selectedRuntimeKind,
     selectedStartMode,
@@ -196,7 +200,11 @@ export function useSessionStartModalState({
         ),
       );
       if (initialStartMode === "fresh") {
-        initializeSelection(nextIntent.role, initialRuntimeKind, nextIntent.selectedModel ?? null);
+        initializeSelection(
+          roleDefaultSelectionFor(repoSettings, nextIntent.role),
+          initialRuntimeKind,
+          nextIntent.selectedModel ?? null,
+        );
       }
     },
     [
@@ -265,7 +273,7 @@ export function useSessionStartModalState({
       {
         value: fallbackAgent,
         label: fallbackAgent,
-        description: "Current default agent",
+        description: "Current default runtime profile",
         ...(accentColor ? { accentColor } : {}),
       },
     ];

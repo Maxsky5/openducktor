@@ -1445,7 +1445,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       try {
         const expectedError = runtimeKind
           ? `Unsupported runtime kind '${runtimeKind}'.`
-          : "Runtime kind is required to start build sessions. Select an explicit runtime before starting a session.";
+          : "Runtime kind is required to start a session. Select an explicit runtime before starting.";
 
         await expect(
           start({

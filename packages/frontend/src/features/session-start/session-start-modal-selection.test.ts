@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { RepoSettingsInput } from "@/types/state-slices";
 import {
-  resolveInitialModalSelection,
-  resolveSelectionForAgentChange,
-  resolveSelectionForModelChange,
-  resolveSelectionForRuntimeChange,
-  resolveSelectionForVariantChange,
-} from "./session-start-modal-selection";
+  resolveInitialModelSelection,
+  resolveModelSelectionForModelChange,
+  resolveModelSelectionForRuntimeChange,
+  resolveModelSelectionForVariantChange,
+} from "@/features/agent-chat-composer/model-selection/model-selection-state";
+import type { RepoSettingsInput } from "@/types/state-slices";
+import { roleDefaultSelectionFor } from "./session-start-selection";
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -20,8 +20,6 @@ const CATALOG: AgentModelCatalog = {
       modelId: "gpt-5",
       modelName: "GPT-5",
       variants: ["default", "high"],
-      contextWindow: 200_000,
-      outputLimit: 8_192,
     },
     {
       id: "anthropic/claude-sonnet",
@@ -32,20 +30,10 @@ const CATALOG: AgentModelCatalog = {
       variants: ["default"],
     },
   ],
-  defaultModelsByProvider: {
-    openai: "gpt-5",
-  },
+  defaultModelsByProvider: { openai: "gpt-5" },
   profiles: [
-    {
-      name: "spec-agent",
-      mode: "primary",
-      hidden: false,
-    },
-    {
-      name: "build-agent",
-      mode: "primary",
-      hidden: false,
-    },
+    { name: "spec-agent", mode: "primary", hidden: false },
+    { name: "build-agent", mode: "primary", hidden: false },
   ],
 };
 
@@ -67,84 +55,17 @@ const REPO_SETTINGS: RepoSettingsInput = {
       profileId: "spec-agent",
     },
     planner: null,
-    build: {
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-      variant: "default",
-      profileId: "build-agent",
-    },
+    build: null,
     qa: null,
   },
 };
 
 describe("session-start-modal-selection", () => {
-  test("resolveInitialModalSelection prefers a valid requested selection", () => {
+  test("passes a workflow role default into the generic initial selection", () => {
     expect(
-      resolveInitialModalSelection({
+      resolveInitialModelSelection({
         catalog: CATALOG,
-        repoSettings: REPO_SETTINGS,
-        role: "spec",
-        runtimeKind: "opencode",
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "anthropic",
-          modelId: "claude-sonnet",
-          variant: "default",
-          profileId: "build-agent",
-        },
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-      variant: "default",
-      profileId: "build-agent",
-    });
-  });
-
-  test("resolveInitialModalSelection preserves requested selection when it is missing from the catalog", () => {
-    expect(
-      resolveInitialModalSelection({
-        catalog: CATALOG,
-        repoSettings: REPO_SETTINGS,
-        role: "spec",
-        runtimeKind: "opencode",
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "anthropic",
-          modelId: "stale-claude",
-          variant: "legacy",
-          profileId: "custom-agent",
-        },
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "stale-claude",
-      variant: "legacy",
-      profileId: "custom-agent",
-    });
-  });
-
-  test("resolveInitialModalSelection falls back to normalized role defaults", () => {
-    expect(
-      resolveInitialModalSelection({
-        catalog: CATALOG,
-        repoSettings: {
-          ...REPO_SETTINGS,
-          agentDefaults: {
-            ...REPO_SETTINGS.agentDefaults,
-            spec: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "legacy",
-              profileId: "spec-agent",
-            },
-          },
-        },
-        role: "spec",
+        defaultSelection: roleDefaultSelectionFor(REPO_SETTINGS, "spec"),
         runtimeKind: "opencode",
         selectedModel: null,
       }),
@@ -152,83 +73,38 @@ describe("session-start-modal-selection", () => {
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
-      variant: "default",
+      variant: "high",
       profileId: "spec-agent",
     });
   });
 
-  test("resolveSelectionForRuntimeChange preserves only same-runtime drafts for missing role", () => {
-    const currentSelection = {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-    } as const;
-
+  test("falls back from a missing requested model to the validated workflow default", () => {
     expect(
-      resolveSelectionForRuntimeChange({
-        activeRole: null,
-        currentSelection,
-        intentSelectedModel: null,
-        repoSettings: REPO_SETTINGS,
+      resolveInitialModelSelection({
+        catalog: CATALOG,
+        defaultSelection: roleDefaultSelectionFor(REPO_SETTINGS, "spec"),
         runtimeKind: "opencode",
-      }),
-    ).toEqual(currentSelection);
-
-    expect(
-      resolveSelectionForRuntimeChange({
-        activeRole: null,
-        currentSelection,
-        intentSelectedModel: null,
-        repoSettings: REPO_SETTINGS,
-        runtimeKind: "claude",
-      }),
-    ).toBeNull();
-  });
-
-  test("resolveSelectionForRuntimeChange preserves the draft when role is provided", () => {
-    expect(
-      resolveSelectionForRuntimeChange({
-        activeRole: "spec",
-        currentSelection: {
+        selectedModel: {
           runtimeKind: "opencode",
           providerId: "anthropic",
-          modelId: "claude-sonnet",
+          modelId: "missing",
         },
-        intentSelectedModel: null,
-        repoSettings: REPO_SETTINGS,
-        runtimeKind: "opencode",
       }),
     ).toEqual({
       runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
     });
   });
 
-  test("resolveSelectionForRuntimeChange clears a model from another runtime", () => {
+  test("uses the workflow default after a runtime change", () => {
     expect(
-      resolveSelectionForRuntimeChange({
-        activeRole: "spec",
-        currentSelection: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
-        },
-        intentSelectedModel: null,
-        repoSettings: REPO_SETTINGS,
-        runtimeKind: "claude",
-      }),
-    ).toBeNull();
-  });
-
-  test("resolveSelectionForRuntimeChange falls back to role defaults when no draft exists", () => {
-    expect(
-      resolveSelectionForRuntimeChange({
-        activeRole: "spec",
+      resolveModelSelectionForRuntimeChange({
         currentSelection: null,
-        intentSelectedModel: null,
-        repoSettings: REPO_SETTINGS,
+        defaultSelection: roleDefaultSelectionFor(REPO_SETTINGS, "spec"),
+        selectedModel: null,
         runtimeKind: "opencode",
       }),
     ).toEqual({
@@ -240,29 +116,9 @@ describe("session-start-modal-selection", () => {
     });
   });
 
-  test("resolveSelectionForAgentChange derives a base selection when no draft exists", () => {
+  test("changes model and keeps the selected runtime profile", () => {
     expect(
-      resolveSelectionForAgentChange({
-        activeRole: "spec",
-        catalog: CATALOG,
-        currentSelection: null,
-        intentSelectedModel: null,
-        profileId: "build-agent",
-        repoSettings: REPO_SETTINGS,
-        runtimeKind: "opencode",
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "build-agent",
-    });
-  });
-
-  test("resolveSelectionForModelChange preserves the current profile", () => {
-    expect(
-      resolveSelectionForModelChange({
+      resolveModelSelectionForModelChange({
         catalog: CATALOG,
         currentSelection: {
           runtimeKind: "opencode",
@@ -282,37 +138,10 @@ describe("session-start-modal-selection", () => {
     });
   });
 
-  test("resolveSelectionForModelChange accepts provider/model option keys when catalog ids differ", () => {
+  test("does not create a variant-only selection", () => {
     expect(
-      resolveSelectionForModelChange({
-        catalog: {
-          ...CATALOG,
-          models: [
-            {
-              id: "codex-model-o3",
-              providerId: "openai",
-              providerName: "OpenAI",
-              modelId: "o3",
-              modelName: "o3",
-              variants: ["low", "high"],
-            },
-          ],
-        },
-        currentSelection: null,
-        modelKey: "openai/o3",
-        runtimeKind: "codex",
-      }),
-    ).toEqual({
-      runtimeKind: "codex",
-      providerId: "openai",
-      modelId: "o3",
-      variant: "low",
-    });
-  });
-
-  test("resolveSelectionForVariantChange is a no-op without a selection", () => {
-    expect(
-      resolveSelectionForVariantChange({
+      resolveModelSelectionForVariantChange({
+        catalog: CATALOG,
         currentSelection: null,
         variant: "high",
       }),
