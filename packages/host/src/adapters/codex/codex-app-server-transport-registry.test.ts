@@ -178,4 +178,47 @@ describe("createCodexAppServerTransportRegistry", () => {
       },
     });
   });
+
+  test("rejects malformed hydrated turn items with a structured session history failure", async () => {
+    const port = createCodexAppServerTransportRegistry();
+    port.registerTransport("runtime-1", {
+      request() {
+        return Effect.succeed(
+          parseCodexAppServerRequestResult("thread/turns/list", {
+            data: [{ items: [null] }],
+            nextCursor: null,
+            backwardsCursor: null,
+          }),
+        );
+      },
+      respond() {
+        return Effect.void;
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          port.listThreadTurns({
+            runtimeId: "runtime-1",
+            threadId: "thread-1",
+            cursor: null,
+            limit: 100,
+            sortDirection: "asc",
+            itemsView: "full",
+          }),
+        ),
+      ),
+    ).resolves.toMatchObject({
+      _tag: "CodexSessionHistoryError",
+      message: "Codex thread/turns/list response data[0].items[0] must be an object",
+      failure: {
+        code: "invalid_runtime_response",
+        summary: "Codex returned invalid conversation history.",
+        detail: "Codex thread/turns/list response data[0].items[0] must be an object",
+        diagnosticId: expect.any(String),
+        method: "thread/turns/list",
+      },
+    });
+  });
 });

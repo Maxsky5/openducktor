@@ -119,7 +119,17 @@ export const parseThreadTurnsListResponse = (
     });
   }
   for (const [index, entry] of payload.data.entries()) {
-    requireRecord(entry, `Codex thread/turns/list response data[${index}]`);
+    const turn = requireRecord(entry, `Codex thread/turns/list response data[${index}]`);
+    const itemsContext = `Codex thread/turns/list response data[${index}].items`;
+    if (!Array.isArray(turn.items)) {
+      throw new HostValidationError({
+        message: `${itemsContext} must be an array`,
+        details: { context: itemsContext },
+      });
+    }
+    for (const [itemIndex, item] of turn.items.entries()) {
+      requireRecord(item, `${itemsContext}[${itemIndex}]`);
+    }
   }
   return {
     data: payload.data,
