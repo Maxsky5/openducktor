@@ -63,7 +63,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
     adapter.stopSession = async () => {
@@ -113,7 +113,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -207,7 +207,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -257,7 +257,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };

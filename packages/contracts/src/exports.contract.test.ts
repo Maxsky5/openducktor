@@ -9,6 +9,7 @@ import type {
   AgentRuntimeEvent,
   AgentRuntimes,
   AgentSessionActivity,
+  AgentSessionAssociation,
   AgentSessionContextUsage,
   AgentSessionControlForkInput,
   AgentSessionControlReleaseInput,
@@ -34,11 +35,14 @@ import type {
   AgentSessionLiveSnapshot,
   AgentSessionModelSelection,
   AgentSessionRecord,
+  AgentSessionRepositoryScope,
   AgentSessionRole,
+  AgentSessionScope,
   AgentSessionStatus,
   AgentSessionStopTarget,
   AgentSessionTodoPayloadRecord,
   AgentSessionTranscriptEvent,
+  AgentSessionUnboundAssociation,
   AgentSessionUserMessagePart,
   AgentSessionWorkflowScope,
   AgentToolName,
@@ -279,6 +283,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentPromptTemplateIdSchema",
   "agentPromptTemplateIdValues",
   "agentSessionActivitySchema",
+  "agentSessionAssociationSchema",
   "agentSessionApprovalMutationSchema",
   "agentSessionApprovalRequestSchema",
   "agentSessionContextUsageSchema",
@@ -311,7 +316,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionQuestionOptionSchema",
   "agentSessionQuestionRequestSchema",
   "agentSessionRecordSchema",
+  "agentSessionRepositoryScopeSchema",
   "agentSessionRoleSchema",
+  "agentSessionScopeSchema",
   "agentSessionStartModeSchema",
   "agentSessionStartModeValues",
   "agentSessionStatusSchema",
@@ -320,6 +327,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionTodosSchema",
   "agentSessionTranscriptEventSchema",
   "agentSessionUserMessagePartSchema",
+  "agentSessionUnboundAssociationSchema",
   "agentSessionWorkflowScopeSchema",
   "agentStreamPartSchema",
   "agentUserMessageDisplayPartSchema",
@@ -750,6 +758,7 @@ type ExportedTypeContract = {
   AgentRuntimeEvent: AgentRuntimeEvent;
   AgentRuntimes: AgentRuntimes;
   AgentSessionActivity: AgentSessionActivity;
+  AgentSessionAssociation: AgentSessionAssociation;
   AgentSessionContextUsage: AgentSessionContextUsage;
   AgentSessionControlForkInput: AgentSessionControlForkInput;
   AgentSessionControlReleaseInput: AgentSessionControlReleaseInput;
@@ -773,8 +782,11 @@ type ExportedTypeContract = {
   AgentSessionLiveReplyQuestionInput: AgentSessionLiveReplyQuestionInput;
   AgentSessionLiveScope: AgentSessionLiveScope;
   AgentSessionLiveSnapshot: AgentSessionLiveSnapshot;
+  AgentSessionRepositoryScope: AgentSessionRepositoryScope;
+  AgentSessionScope: AgentSessionScope;
   AgentSessionTranscriptEvent: AgentSessionTranscriptEvent;
   AgentSessionUserMessagePart: AgentSessionUserMessagePart;
+  AgentSessionUnboundAssociation: AgentSessionUnboundAssociation;
   AgentSessionWorkflowScope: AgentSessionWorkflowScope;
   AgentTranscriptPendingApprovalRequest: AgentTranscriptPendingApprovalRequest;
   AgentTranscriptPendingQuestionRequest: AgentTranscriptPendingQuestionRequest;

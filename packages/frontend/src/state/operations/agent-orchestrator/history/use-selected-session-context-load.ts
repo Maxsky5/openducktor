@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
+import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useAgentOperations } from "@/state/app-state-provider";
 import type { AgentSessionContextLoadTarget, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -36,19 +37,16 @@ export const useSelectedSessionContextLoad = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const target = missingContextTarget({ session, repoReadinessState });
   const stableIdentity = useStableAgentSessionIdentity(target);
-  const scopeTaskId = target?.sessionScope?.taskId ?? null;
-  const scopeRole = target?.sessionScope?.role ?? null;
+  const stableSessionScope = useStableAgentSessionScope(target?.sessionScope);
   const stableTarget = useMemo<AgentSessionContextLoadTarget | null>(() => {
     if (stableIdentity === null) {
       return null;
     }
-    return scopeTaskId === null || scopeRole === null
-      ? stableIdentity
-      : {
-          ...stableIdentity,
-          sessionScope: { kind: "workflow", taskId: scopeTaskId, role: scopeRole },
-        };
-  }, [scopeRole, scopeTaskId, stableIdentity]);
+    return {
+      ...stableIdentity,
+      ...(stableSessionScope ? { sessionScope: stableSessionScope } : {}),
+    };
+  }, [stableIdentity, stableSessionScope]);
 
   useEffect(() => {
     let isCurrentTarget = true;

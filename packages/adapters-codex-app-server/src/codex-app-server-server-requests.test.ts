@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
+import { type AgentRole, CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
@@ -9,12 +9,12 @@ import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type { CodexServerRequestRecord, CodexSessionState } from "./types";
 
 const createSession = (
-  role: CodexSessionState["role"],
+  role: AgentRole | null,
   threadId = role ? `thread-${role}` : "thread-unknown-role",
 ): CodexSessionState => ({
   summary: {
     externalSessionId: threadId,
-    role,
+    sessionAssociation: role ? { kind: "workflow", taskId: "task-1", role } : { kind: "unbound" },
     startedAt: "2026-05-07T00:00:00.000Z",
     status: "running",
   },

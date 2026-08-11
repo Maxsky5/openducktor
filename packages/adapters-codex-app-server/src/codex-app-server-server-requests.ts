@@ -46,13 +46,14 @@ const odtWorkflowToolRoleRejection = (
     return null;
   }
 
-  if (!session.role) {
-    return `the session role is unknown`;
+  const sessionAssociation = session.summary.sessionAssociation;
+  if (sessionAssociation.kind !== "workflow") {
+    return `the ${sessionAssociation.kind} session context cannot use workflow tools`;
   }
 
-  return AGENT_ROLE_TOOL_POLICY[session.role].includes(workflowTool)
+  return AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].includes(workflowTool)
     ? null
-    : `role '${session.role}' is not allowed to use ${workflowTool}`;
+    : `role '${sessionAssociation.role}' is not allowed to use ${workflowTool}`;
 };
 
 export type CodexServerRequestHandlerContext = {
@@ -366,9 +367,10 @@ export const handleCodexServerRequest = async (
       throw new Error(`Codex app-server server request '${rawRequest.method}' is missing an id.`);
     }
     const requestMutation = classifyCodexRequestMutation(rawRequest);
+    const policyAssociation = routeContext.policySession.summary.sessionAssociation;
     if (
-      routeContext.policySession.role &&
-      READ_ONLY_ROLES.has(routeContext.policySession.role) &&
+      policyAssociation.kind === "workflow" &&
+      READ_ONLY_ROLES.has(policyAssociation.role) &&
       requestMutation === "read_only"
     ) {
       markHandled();

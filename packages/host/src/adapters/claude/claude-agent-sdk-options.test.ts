@@ -41,7 +41,7 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: process.cwd(),
-    role,
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role },
     startedAt: "2026-06-25T20:00:00.000Z",
     status: "starting",
   },

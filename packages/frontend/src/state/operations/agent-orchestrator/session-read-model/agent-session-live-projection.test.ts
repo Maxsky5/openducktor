@@ -51,6 +51,7 @@ const snapshot = (
     workingDirectory,
     externalSessionId,
   },
+  sessionAssociation: { kind: "unbound" },
   activity: "idle",
   title: `Session ${externalSessionId}`,
   startedAt: "2026-07-16T08:00:00.000Z",

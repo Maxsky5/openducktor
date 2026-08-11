@@ -149,6 +149,7 @@ export const createClaudeLiveSessionState = ({
     const isRoot = ref.externalSessionId === session.externalSessionId;
     return {
       ref,
+      sessionAssociation: session.summary.sessionAssociation,
       activity: session.activity === "idle" ? "idle" : "running",
       title: isRoot ? (session.summary.title ?? "Claude session") : "Claude subagent",
       startedAt: isRoot ? session.startedAt : timestamp,
@@ -458,6 +459,7 @@ export const createClaudeLiveSessionState = ({
       }
       return commitSnapshot({
         ref,
+        sessionAssociation: summary.sessionAssociation,
         activity,
         title: summary.title ?? current?.title ?? "Claude session",
         startedAt: summary.startedAt,

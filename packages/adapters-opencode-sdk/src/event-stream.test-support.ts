@@ -186,7 +186,7 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
     externalSessionId: "external-session-1",
     runtimeKind: "opencode",
     workingDirectory: "/repo",
-    role: "spec",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     startedAt: "2026-02-22T12:00:00.000Z",
     status: "running",
   },

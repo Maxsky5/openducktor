@@ -77,7 +77,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "session-normalized",
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: input.sessionScope.role,
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -164,6 +164,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => {
+      if (input.sessionScope.kind !== "workflow") {
+        throw new Error("Expected workflow session scope.");
+      }
       startedRoles.push(input.sessionScope.role);
       if (input.sessionScope.role === "build") {
         buildStarted.resolve();
@@ -176,7 +179,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: `${input.sessionScope.role}-external`,
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: input.sessionScope.role,
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -343,7 +346,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "planner-external",
       startedAt: "2026-02-22T08:00:10.000Z",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
 
@@ -402,7 +405,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "planner-external",
       startedAt: "2026-02-22T08:00:10.000Z",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
 
@@ -453,7 +456,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       workingDirectory: input.workingDirectory,
       externalSessionId: "message-first-session",
       startedAt: "2026-02-22T08:00:10.000Z",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "idle",
     });
 
@@ -511,7 +514,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-1",
       runtimeKind: input.runtimeKind,
       workingDirectory: input.workingDirectory,
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       startedAt: "2026-03-21T10:00:00.000Z",
       status: "running",
     });
@@ -565,7 +568,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-session-persist-fail",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -623,7 +626,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-bootstrap-fail",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -673,7 +676,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-stop-fail",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -729,7 +732,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeKind: "opencode",
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-stale-stop-fail",
-        role: "planner",
+        sessionAssociation: input.sessionScope,
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
       };
@@ -777,7 +780,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-falsy-rollback-errors",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -833,7 +836,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-stale-bootstrap",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -894,7 +897,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-committed-builder",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -949,7 +952,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-bootstrap-fail",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -994,7 +997,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "external-bootstrap-delete-fail",
-      role: "planner",
+      sessionAssociation: input.sessionScope,
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -1205,7 +1208,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async (input) => ({
       externalSessionId: "external-qa",
       workingDirectory: input.workingDirectory,
-      role: input.sessionScope.role,
+      sessionAssociation: input.sessionScope,
       startedAt: "2026-02-22T08:00:00.000Z",
       status: "idle",
       runtimeKind: input.runtimeKind,
@@ -1292,7 +1295,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -1480,7 +1483,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };

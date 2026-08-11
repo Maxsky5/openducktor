@@ -54,12 +54,22 @@ export const areAgentSessionTranscriptTargetsEqual = (
     return false;
   }
 
+  const leftScope = left.sessionScope ?? null;
+  const rightScope = right.sessionScope ?? null;
+  let scopesEqual = leftScope === rightScope;
+  if (leftScope !== null && rightScope !== null && leftScope.kind === rightScope.kind) {
+    scopesEqual =
+      leftScope.kind === "repository" ||
+      (rightScope.kind === "workflow" &&
+        leftScope.taskId === rightScope.taskId &&
+        leftScope.role === rightScope.role);
+  }
+
   return (
     left.externalSessionId === right.externalSessionId &&
     left.runtimeKind === right.runtimeKind &&
     left.workingDirectory === right.workingDirectory &&
-    (left.sessionScope?.taskId ?? null) === (right.sessionScope?.taskId ?? null) &&
-    (left.sessionScope?.role ?? null) === (right.sessionScope?.role ?? null)
+    scopesEqual
   );
 };
 

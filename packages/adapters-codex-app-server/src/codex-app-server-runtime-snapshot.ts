@@ -63,6 +63,7 @@ const toRuntimeSnapshot = (
   pendingQuestions: AgentPendingQuestionRequest[],
   parentExternalSessionId?: string,
 ): AgentSessionRuntimeSnapshot => {
+  const sessionAssociation = session.summary.sessionAssociation;
   const classification = classifyAgentSessionActivity({
     runtimeActivity: session.liveStatus?.classification ?? "idle",
     pendingApprovals,
@@ -78,7 +79,9 @@ const toRuntimeSnapshot = (
       workingDirectory: session.workingDirectory,
     },
     ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
-    title: session.summary.title ?? (session.role ? `Codex ${session.role}` : "Codex"),
+    title:
+      session.summary.title ??
+      (sessionAssociation.kind === "workflow" ? `Codex ${sessionAssociation.role}` : "Codex"),
     startedAt: session.summary.startedAt,
     pendingApprovals,
     pendingQuestions,

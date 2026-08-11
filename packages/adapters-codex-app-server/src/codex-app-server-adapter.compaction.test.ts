@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import {
   codexSessionRuntimeRef,
@@ -119,6 +119,36 @@ describe("CodexAppServerAdapter manual compaction", () => {
         }),
       ),
     ).rejects.toThrow("must be sent without arguments or references");
+    expect(calls).toEqual([]);
+  });
+
+  test("rejects repository scope before manual compaction side effects", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const requireRepoRuntime = mock(async () => {
+      throw new Error("Runtime resolution should not run.");
+    });
+    const adapter = createAdapterWithTransport(
+      {
+        async request(request) {
+          calls.push(request);
+          return {};
+        },
+      },
+      { repoRuntimeResolver: { requireRepoRuntime } },
+    );
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread-1",
+          sessionScope: { kind: "repository" },
+          parts: [compactPart()],
+        }),
+      ),
+    ).rejects.toThrow(
+      "Cannot send Codex user message with repository session context; workflow session context is required.",
+    );
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
     expect(calls).toEqual([]);
   });
 

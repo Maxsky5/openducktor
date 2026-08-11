@@ -27,6 +27,33 @@ export const agentSessionWorkflowScopeSchema = z
   .strict();
 export type AgentSessionWorkflowScope = z.infer<typeof agentSessionWorkflowScopeSchema>;
 
+export const agentSessionRepositoryScopeSchema = z
+  .object({
+    kind: z.literal("repository"),
+  })
+  .strict();
+export type AgentSessionRepositoryScope = z.infer<typeof agentSessionRepositoryScopeSchema>;
+
+export const agentSessionScopeSchema = z.discriminatedUnion("kind", [
+  agentSessionWorkflowScopeSchema,
+  agentSessionRepositoryScopeSchema,
+]);
+export type AgentSessionScope = z.infer<typeof agentSessionScopeSchema>;
+
+export const agentSessionUnboundAssociationSchema = z
+  .object({
+    kind: z.literal("unbound"),
+  })
+  .strict();
+export type AgentSessionUnboundAssociation = z.infer<typeof agentSessionUnboundAssociationSchema>;
+
+export const agentSessionAssociationSchema = z.discriminatedUnion("kind", [
+  agentSessionWorkflowScopeSchema,
+  agentSessionRepositoryScopeSchema,
+  agentSessionUnboundAssociationSchema,
+]);
+export type AgentSessionAssociation = z.infer<typeof agentSessionAssociationSchema>;
+
 export type AgentTranscriptModelSelection = {
   runtimeKind?: RuntimeKind;
   providerId: string;

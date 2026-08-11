@@ -7,8 +7,9 @@ import {
 import { agentSessionTranscriptEventSchema } from "./agent-session-event-schemas";
 import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
 import {
+  agentSessionAssociationSchema,
   agentSessionLiveRefSchema,
-  agentSessionWorkflowScopeSchema,
+  agentSessionScopeSchema,
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 
@@ -91,6 +92,7 @@ export type AgentSessionLivePendingQuestionRequest = z.infer<
 export const agentSessionLiveSnapshotSchema = z
   .object({
     ref: agentSessionLiveRefSchema,
+    sessionAssociation: agentSessionAssociationSchema,
     activity: agentSessionActivitySchema,
     title: nonEmptyStringSchema,
     startedAt: isoTimestampSchema,
@@ -202,7 +204,7 @@ export type AgentSessionLiveReadInput = z.infer<typeof agentSessionLiveReadInput
 
 export const agentSessionLiveLoadContextInputSchema = agentSessionLiveRefSchema
   .extend({
-    sessionScope: agentSessionWorkflowScopeSchema.optional(),
+    sessionScope: agentSessionScopeSchema.optional(),
   })
   .strict();
 export type AgentSessionLiveLoadContextInput = z.infer<

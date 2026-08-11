@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
+import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
 import {
@@ -84,8 +85,7 @@ export function useRuntimeTranscriptSessionHistory({
   const targetExternalSessionId = target?.externalSessionId ?? null;
   const targetRuntimeKind = target?.runtimeKind ?? null;
   const targetWorkingDirectory = target?.workingDirectory ?? null;
-  const targetSessionScopeTaskId = target?.sessionScope?.taskId ?? null;
-  const targetSessionScopeRole = target?.sessionScope?.role ?? null;
+  const targetSessionScope = useStableAgentSessionScope(target?.sessionScope);
   const stableTarget = useMemo<AgentSessionTranscriptTarget | null>(() => {
     if (
       targetExternalSessionId === null ||
@@ -98,22 +98,9 @@ export function useRuntimeTranscriptSessionHistory({
       externalSessionId: targetExternalSessionId,
       runtimeKind: targetRuntimeKind,
       workingDirectory: targetWorkingDirectory,
-      ...(targetSessionScopeTaskId !== null && targetSessionScopeRole !== null
-        ? {
-            sessionScope: workflowAgentSessionScope(
-              targetSessionScopeTaskId,
-              targetSessionScopeRole,
-            ),
-          }
-        : {}),
+      ...(targetSessionScope ? { sessionScope: targetSessionScope } : {}),
     };
-  }, [
-    targetExternalSessionId,
-    targetRuntimeKind,
-    targetSessionScopeRole,
-    targetSessionScopeTaskId,
-    targetWorkingDirectory,
-  ]);
+  }, [targetExternalSessionId, targetRuntimeKind, targetSessionScope, targetWorkingDirectory]);
   let emptyReason: AgentSessionTranscriptEmptyReason | null = null;
   if (!isOpen) {
     emptyReason = "inactive";
@@ -127,16 +114,13 @@ export function useRuntimeTranscriptSessionHistory({
     matchesAgentSessionIdentity(liveSession, stableTarget)
       ? liveSession
       : null;
-  const sessionScopeTaskId = matchingSession?.role
-    ? matchingSession.taskId
-    : (stableTarget?.sessionScope?.taskId ?? null);
-  const sessionScopeRole = matchingSession?.role ?? stableTarget?.sessionScope?.role ?? null;
+  const inheritedSessionScope = stableTarget?.sessionScope ?? null;
   const sessionScope = useMemo(
     () =>
-      sessionScopeTaskId !== null && sessionScopeRole !== null
-        ? workflowAgentSessionScope(sessionScopeTaskId, sessionScopeRole)
-        : null,
-    [sessionScopeRole, sessionScopeTaskId],
+      matchingSession?.role
+        ? workflowAgentSessionScope(matchingSession.taskId, matchingSession.role)
+        : inheritedSessionScope,
+    [inheritedSessionScope, matchingSession?.role, matchingSession?.taskId],
   );
   const runtimeSessionRefInput = useMemo(() => {
     if (repoPath === null || stableTarget === null) {

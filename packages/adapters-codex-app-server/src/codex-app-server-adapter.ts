@@ -315,6 +315,7 @@ export class CodexAppServerAdapter
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "start Codex session");
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start Codex session");
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -339,7 +340,6 @@ export class CodexAppServerAdapter
       effort: transportModel.effort,
     });
     this.clearThreadInventory(runtimeId);
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start Codex session");
     const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
@@ -355,6 +355,7 @@ export class CodexAppServerAdapter
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "resume Codex session");
+    requireWorkflowAgentSessionScope(input.sessionScope, "resume Codex session");
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -389,6 +390,7 @@ export class CodexAppServerAdapter
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "fork Codex session");
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork Codex session");
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
@@ -414,7 +416,6 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork Codex session");
     const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
@@ -429,6 +430,7 @@ export class CodexAppServerAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
+    requireWorkflowAgentSessionScope(input.sessionScope, "send Codex user message");
     const systemInvocation = classifySystemSlashCommandInvocation(input.parts);
     if (systemInvocation.kind === "not_system") {
       assertCodexUserMessagePartsSupported(input.parts);
@@ -828,6 +830,7 @@ export class CodexAppServerAdapter
     const route = this.subagents.routeForChild(session.threadId, session.runtimeId);
     return agentSessionLiveSnapshotSchema.parse({
       ref: codexSessionRef(session),
+      sessionAssociation: session.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
         runtimeActivity,
         pendingApprovals,
@@ -866,6 +869,7 @@ export class CodexAppServerAdapter
         ...codexSessionRef(parentSession),
         externalSessionId: route.childExternalSessionId,
       },
+      sessionAssociation: parentSession.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
         runtimeActivity: isRunning ? "running" : "idle",
         pendingApprovals,

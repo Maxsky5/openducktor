@@ -230,6 +230,7 @@ export class OpencodeSdkAdapter
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "resume OpenCode session");
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       const registeredSessionRef = opencodeSessionRef(existing);
@@ -239,16 +240,11 @@ export class OpencodeSdkAdapter
         );
       }
       applyRuntimeContextToSession(existing, input);
-      if (input.sessionScope) {
-        existing.summary = {
-          ...existing.summary,
-          title: formatWorkflowAgentSessionTitle(
-            input.sessionScope.role,
-            input.sessionScope.taskId,
-          ),
-          role: input.sessionScope.role,
-        };
-      }
+      existing.summary = {
+        ...existing.summary,
+        title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
+        sessionAssociation: scope,
+      };
       return existing.summary;
     }
 
@@ -264,10 +260,6 @@ export class OpencodeSdkAdapter
       this.now,
     );
     const sessionInput = toSessionInput(input);
-    const scope = input.sessionScope
-      ? requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session")
-      : null;
-
     return registerSession({
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
@@ -278,7 +270,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: scope ? `Resumed ${scope.role} session` : "Resumed session",
+      startedMessage: `Resumed ${scope.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -365,6 +357,7 @@ export class OpencodeSdkAdapter
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "fork OpenCode session");
+    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork OpenCode session");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
     const forked = await client.session.fork({
@@ -375,7 +368,6 @@ export class OpencodeSdkAdapter
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
     const sessionInput = toSessionInput(input);
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork OpenCode session");
 
     return registerSession({
       sessions: this.sessions,
@@ -583,6 +575,7 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
+    requireWorkflowAgentSessionScope(input.sessionScope, "send OpenCode user message");
     let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
     try {
       systemInvocation = classifySystemSlashCommandInvocation(input.parts);

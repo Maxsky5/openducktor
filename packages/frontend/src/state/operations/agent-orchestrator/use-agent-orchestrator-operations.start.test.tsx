@@ -335,7 +335,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-in-memory",
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       } as const;
     };
@@ -424,7 +424,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: string;
       externalSessionId: string;
       startedAt: string;
-      role: "build";
+      sessionAssociation: { kind: "workflow"; taskId: string; role: "build" };
       status: "idle";
     }>();
 
@@ -522,7 +522,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
           workingDirectory: "/tmp/repo/worktree",
           externalSessionId: "external-concurrent",
           startedAt: "2026-02-22T08:00:00.000Z",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           status: "idle",
         });
 
@@ -604,7 +604,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-unexpected",
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: "spec",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -708,7 +708,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-should-not-start",
         startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       } as const;
     };

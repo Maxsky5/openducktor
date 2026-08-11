@@ -5,9 +5,11 @@ import {
   agentSessionControlResumeInputSchema,
   agentSessionControlSendInputSchema,
   agentSessionControlStartInputSchema,
+  agentSessionControlSummarySchema,
 } from "./agent-session-control-schemas";
 
 const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+const repositoryScope = { kind: "repository" as const };
 
 describe("agent session control contracts", () => {
   test("parses a strict normalized start command", () => {
@@ -160,6 +162,74 @@ describe("agent session control contracts", () => {
       agentSessionControlSendInputSchema.safeParse({
         ...ref,
         parts: [slashCommand, attachment],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("accepts repository scope for every normalized scoped control", () => {
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: repositoryScope,
+    };
+
+    expect(
+      agentSessionControlStartInputSchema.parse({
+        repoPath: ref.repoPath,
+        runtimeKind: ref.runtimeKind,
+        workingDirectory: ref.workingDirectory,
+        sessionScope: repositoryScope,
+        systemPrompt: "Repository chat",
+      }),
+    ).toMatchObject({ sessionScope: repositoryScope });
+    expect(agentSessionControlResumeInputSchema.parse(ref)).toEqual(ref);
+    expect(
+      agentSessionControlForkInputSchema.parse({
+        repoPath: ref.repoPath,
+        runtimeKind: ref.runtimeKind,
+        workingDirectory: ref.workingDirectory,
+        sessionScope: repositoryScope,
+        systemPrompt: "Repository chat",
+        parentExternalSessionId: "parent-1",
+      }),
+    ).toMatchObject({ sessionScope: repositoryScope });
+    expect(
+      agentSessionControlSendInputSchema.parse({
+        ...ref,
+        parts: [{ kind: "text", text: "hello" }],
+      }),
+    ).toMatchObject({ sessionScope: repositoryScope });
+  });
+
+  test("rejects unbound scope from startable controls", () => {
+    expect(
+      agentSessionControlStartInputSchema.safeParse({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        sessionScope: { kind: "unbound" },
+        systemPrompt: "Repository chat",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("carries explicit association instead of a nullable role in control summaries", () => {
+    const summary = {
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionAssociation: workflowScope,
+      startedAt: "2026-07-16T10:00:00.000Z",
+      status: "idle",
+    } as const;
+
+    expect(agentSessionControlSummarySchema.parse(summary)).toEqual(summary);
+    expect(
+      agentSessionControlSummarySchema.safeParse({
+        ...summary,
+        role: "build",
       }).success,
     ).toBe(false);
   });

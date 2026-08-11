@@ -47,6 +47,7 @@ const nativeSource = (
   overrides: Partial<OpencodeRuntimeSnapshotSource> = {},
 ): OpencodeRuntimeSnapshotSource => ({
   externalSessionId: "session-1",
+  sessionAssociation: { kind: "unbound" },
   title: "Live OpenCode session",
   workingDirectory: "/repo/worktree",
   startedAt: "2026-07-16T10:01:00.000Z",
@@ -81,7 +82,7 @@ const controlSummary = {
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo/worktree",
   title: "Controlled session",
-  role: "build" as const,
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
   startedAt: "2026-07-16T10:02:00.000Z",
   status: "running" as const,
 };
@@ -230,6 +231,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     expect(snapshots).toEqual([
       {
         ref,
+        sessionAssociation: { kind: "unbound" },
         activity: "waiting_for_question",
         title: "Live OpenCode session",
         startedAt: "2026-07-16T10:01:00.000Z",
@@ -617,6 +619,96 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     expect(harness.releaseCalls).toEqual(["runtime-1"]);
   });
 
+  for (const operation of ["start", "resume", "fork"] as const) {
+    test(`keeps the workflow association after ${operation} invalidation and refresh`, async () => {
+      const harness = createRuntimeHarness();
+      const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+      const prepared = await Effect.runPromise(
+        createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: createLifecycle(publishedChanges),
+          prepareRuntime: harness.prepareRuntime,
+        })(runtime),
+      );
+      await Effect.runPromise(prepared.startForwarding());
+      const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+      const controlRef = { ...ref, externalSessionId: "controlled-session" };
+      const sessionScope = {
+        kind: "workflow" as const,
+        taskId: "task-1",
+        role: "build" as const,
+      };
+      const startInput = {
+        repoPath: "/repo",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo/worktree",
+        sessionScope,
+        systemPrompt: "Build it",
+      };
+
+      if (operation === "start") {
+        await Effect.runPromise(adapter.startSession(startInput));
+      } else if (operation === "resume") {
+        await Effect.runPromise(
+          adapter.resumeSession({
+            ...controlRef,
+            sessionScope,
+          }),
+        );
+      } else {
+        await Effect.runPromise(
+          adapter.forkSession({
+            ...startInput,
+            parentExternalSessionId: "parent-1",
+          }),
+        );
+      }
+
+      publishedChanges.length = 0;
+      harness.setSources([
+        nativeSource({
+          externalSessionId: "controlled-session",
+          sessionAssociation: { kind: "unbound" },
+          title: "Refreshed runtime session",
+          runtimeActivity: "idle",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        }),
+      ]);
+      await harness.emit({ type: "sessions_invalidated" });
+
+      await expect(Effect.runPromise(adapter.listRetainedSnapshots("/repo"))).resolves.toEqual([
+        expect.objectContaining({
+          ref: controlRef,
+          sessionAssociation: controlSummary.sessionAssociation,
+        }),
+      ]);
+      await expect(
+        Effect.runPromise(adapter.readRetainedSnapshot(controlRef)),
+      ).resolves.toMatchObject({
+        type: "live",
+        session: {
+          ref: controlRef,
+          sessionAssociation: controlSummary.sessionAssociation,
+        },
+      });
+      expect(
+        publishedChanges.filter(
+          (change) =>
+            change.type === "session_upsert" &&
+            change.snapshot.ref.externalSessionId === "controlled-session",
+        ),
+      ).toEqual([
+        {
+          type: "session_upsert",
+          snapshot: expect.objectContaining({
+            ref: controlRef,
+            sessionAssociation: controlSummary.sessionAssociation,
+          }),
+        },
+      ]);
+    });
+  }
+
   test("commits an authoritative refresh only inside the host lifecycle mutation", async () => {
     const harness = createRuntimeHarness();
     let enterMutation: () => void = () => undefined;
@@ -692,6 +784,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const otherRef = { ...ref, externalSessionId: "session-2" };
     const otherSnapshot: AgentSessionLiveSnapshot = {
       ref: otherRef,
+      sessionAssociation: { kind: "unbound" },
       activity: "idle",
       title: "Other runtime session",
       startedAt: "2026-07-16T10:02:00.000Z",

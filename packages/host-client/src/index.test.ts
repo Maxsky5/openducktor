@@ -315,6 +315,7 @@ describe("HostClient", () => {
         workingDirectory: "/repo/worktree",
         externalSessionId: "session-1",
       },
+      sessionAssociation: { kind: "repository" as const },
       activity: "idle" as const,
       title: "Build session",
       startedAt: "2026-07-16T10:00:00.000Z",
@@ -329,17 +330,25 @@ describe("HostClient", () => {
       if (command === "agent_session_live_list") {
         return [session];
       }
+      if (command === "agent_session_live_read") {
+        return { type: "live", session };
+      }
       throw new Error(`Unexpected command: ${command}`);
     });
 
     await client.agentSessionLiveRefresh({ repoPath: "/repo" });
     await expect(client.agentSessionLiveList({ repoPath: "/repo" })).resolves.toEqual([session]);
+    await expect(client.agentSessionLiveRead(session.ref)).resolves.toEqual({
+      type: "live",
+      session,
+    });
     expect(calls).toEqual([
       {
         command: "agent_session_live_refresh",
         args: { repoPath: "/repo" },
       },
       { command: "agent_session_live_list", args: { repoPath: "/repo" } },
+      { command: "agent_session_live_read", args: session.ref },
     ]);
   });
 
@@ -349,12 +358,16 @@ describe("HostClient", () => {
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/worktree",
       title: "Build session",
-      role: "build" as const,
+      sessionAssociation: { kind: "repository" as const },
       startedAt: "2026-07-16T10:00:00.000Z",
       status: "idle" as const,
     };
     const { client, calls } = createClient((command) => {
-      if (command === "agent_session_control_start") {
+      if (
+        command === "agent_session_control_start" ||
+        command === "agent_session_control_resume" ||
+        command === "agent_session_control_fork"
+      ) {
         return summary;
       }
       if (command === "agent_session_control_stop") {
@@ -368,8 +381,27 @@ describe("HostClient", () => {
         repoPath: "/repo",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "repository" },
         systemPrompt: "Build the feature",
+      }),
+    ).resolves.toEqual(summary);
+    await expect(
+      client.agentSessionControlResume({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+        sessionScope: { kind: "repository" },
+      }),
+    ).resolves.toEqual(summary);
+    await expect(
+      client.agentSessionControlFork({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        parentExternalSessionId: "session-1",
+        sessionScope: { kind: "repository" },
+        systemPrompt: "Fork the session",
       }),
     ).resolves.toEqual(summary);
     await client.agentSessionControlStop({
@@ -386,8 +418,29 @@ describe("HostClient", () => {
           repoPath: "/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "repository" },
           systemPrompt: "Build the feature",
+        },
+      },
+      {
+        command: "agent_session_control_resume",
+        args: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "repository" },
+        },
+      },
+      {
+        command: "agent_session_control_fork",
+        args: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          parentExternalSessionId: "session-1",
+          sessionScope: { kind: "repository" },
+          systemPrompt: "Fork the session",
         },
       },
       {

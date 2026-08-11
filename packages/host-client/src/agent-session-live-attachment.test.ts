@@ -88,6 +88,7 @@ describe("agent session live attachment", () => {
         workingDirectory: "/repo/worktree",
         externalSessionId: "stale-thread",
       },
+      sessionAssociation: { kind: "unbound" },
       activity: "waiting_for_permission",
       title: "Stale session",
       startedAt: "2026-07-17T08:00:00.000Z",
@@ -130,5 +131,33 @@ describe("agent session live attachment", () => {
     attachment.accept(snapshot);
 
     expect(received).toEqual([snapshot, snapshot, first, second]);
+  });
+
+  test("preserves repository association in live session events", () => {
+    const received: AgentSessionLiveEnvelope[] = [];
+    const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
+      received.push(envelope);
+    });
+    const session = {
+      ref: {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "repository-thread",
+      },
+      sessionAssociation: { kind: "repository" },
+      activity: "idle",
+      title: "Repository session",
+      startedAt: "2026-07-17T08:00:00.000Z",
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    } as const;
+    const event = { type: "session_upsert", session } as const;
+
+    attachment.accept(snapshot);
+    attachment.accept(event);
+
+    expect(received).toEqual([snapshot, event]);
   });
 });

@@ -158,7 +158,7 @@ const createSession = (threadId: string): CodexSessionState => ({
     externalSessionId: threadId,
     title: threadId,
     status: "running",
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     runtimeKind: "codex",
     startedAt: "2026-06-13T00:00:00.000Z",
   },

@@ -57,7 +57,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       runtimeKind: "opencode",
       workingDirectory: input.workingDirectory,
       externalSessionId: "forked-session",
-      role: "build",
+      sessionAssociation: input.sessionScope,
       status: "idle",
       startedAt: "2026-02-22T08:20:00.000Z",
     });

@@ -139,7 +139,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-fresh-build-session",
         startedAt: "2026-02-22T08:20:00.000Z",
-        role: input.sessionScope.role,
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -304,7 +304,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:30:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -376,7 +376,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-profile-external",
         startedAt: "2026-02-22T08:35:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -442,7 +442,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-ext",
         startedAt: "2026-02-22T09:00:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -510,7 +510,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "planner-ext",
         startedAt: "2026-02-22T08:30:00.000Z",
-        role: "planner",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -643,7 +643,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };
@@ -727,7 +727,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
-        role: "build",
+        sessionAssociation: input.sessionScope,
         status: "idle",
       };
     };

@@ -9,7 +9,7 @@ const createSession = (threadId: string, runtimeId = "runtime-1"): CodexSessionS
     externalSessionId: threadId,
     title: threadId,
     status: "running",
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     startedAt: "2026-07-10T12:00:00.000Z",
   },
   systemPrompt: "",

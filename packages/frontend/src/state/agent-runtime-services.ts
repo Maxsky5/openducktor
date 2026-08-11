@@ -27,7 +27,7 @@ const toAgentSessionSummary = (
   externalSessionId: summary.externalSessionId,
   runtimeKind: summary.runtimeKind,
   workingDirectory: summary.workingDirectory,
-  role: summary.role,
+  sessionAssociation: summary.sessionAssociation,
   startedAt: summary.startedAt,
   status: summary.status,
   ...(summary.title !== undefined ? { title: summary.title } : {}),
