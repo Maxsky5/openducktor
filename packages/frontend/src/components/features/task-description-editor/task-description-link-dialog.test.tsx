@@ -34,6 +34,29 @@ describe("TaskDescriptionLinkDialog", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  test.each(["mailto:user@example.com", "/docs", "#details"])(
+    "rejects a destination that the renderer cannot open: %s",
+    async (destination) => {
+      const onSubmit = mock((_href: string) => true);
+      const view = render(
+        <TaskDescriptionLinkDialog
+          href=""
+          onCancel={() => {}}
+          onRemove={() => {}}
+          onSubmit={onSubmit}
+        />,
+      );
+
+      fireEvent.change(view.getByRole("textbox", { name: "Link destination" }), {
+        target: { value: destination },
+      });
+      fireEvent.click(view.getByRole("button", { name: "Insert link" }));
+
+      expect((await view.findByRole("alert")).textContent).toContain("absolute http or https");
+      expect(onSubmit).not.toHaveBeenCalled();
+    },
+  );
+
   test("saves a valid destination with Enter", () => {
     const onSubmit = mock((_href: string) => true);
     const view = render(

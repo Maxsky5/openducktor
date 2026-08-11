@@ -28,7 +28,7 @@ export default function MarkdownRendererMathCandidate({
   }
 
   return (
-    <Suspense fallback={fallback ?? null}>
+    <Suspense fallback={fallback ?? fallbackContent}>
       <MarkdownRendererMath
         markdown={markdown}
         components={components}

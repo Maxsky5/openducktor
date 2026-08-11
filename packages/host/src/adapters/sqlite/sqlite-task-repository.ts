@@ -116,6 +116,7 @@ export const createSqliteTaskRepository = ({
               const createdAt = now();
               const taskId = yield* insertTaskFromCreateInput({
                 createdAt,
+                repoPath: input.repoPath,
                 session: transaction,
                 task: input.task,
                 workspaceId,

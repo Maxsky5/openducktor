@@ -208,6 +208,26 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(second.id).not.toBe(first.id);
   });
 
+  test("rejects a missing parent inside the create transaction", async () => {
+    const { repoPath, store } = await createRepositoryHarness();
+
+    await expect(
+      Effect.runPromise(
+        store.createTask({
+          repoPath,
+          task: {
+            title: "Orphan",
+            issueType: "task",
+            priority: 2,
+            aiReviewEnabled: true,
+            parentId: "missing-parent",
+          },
+        }),
+      ),
+    ).rejects.toThrow("Task not found: missing-parent");
+    expect(await Effect.runPromise(store.listTasks({ repoPath }))).toEqual([]);
+  });
+
   test("caps generated task id prefixes at ten characters", async () => {
     const { repoPath, store } = await createRepositoryHarness({
       workspaceId: "openducktor-workspace",

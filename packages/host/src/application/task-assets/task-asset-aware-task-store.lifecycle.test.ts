@@ -4,6 +4,87 @@ import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
 import { createHarness, PNG_BASE64 } from "./test-support/task-asset-aware-task-store";
 
 describe("asset-aware task store lifecycle", () => {
+  test("rejects child creation when another task store deletes its validated parent", async () => {
+    const harness = await createHarness();
+    const parent = await Effect.runPromise(
+      harness.store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Parent",
+          issueType: "epic",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: "",
+        },
+      }),
+    );
+    let releaseParentSnapshot: (() => void) | undefined;
+    let reportParentSnapshotRead: (() => void) | undefined;
+    const parentSnapshotRead = new Promise<void>((resolve) => {
+      reportParentSnapshotRead = resolve;
+    });
+    const parentSnapshotRelease = new Promise<void>((resolve) => {
+      releaseParentSnapshot = resolve;
+    });
+    const staged = await Effect.runPromise(
+      harness.staging.stage({
+        workspaceId: "fairnest",
+        scope: "description",
+        originalName: "late-child.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG_BASE64,
+      }),
+    );
+    const childStore = createTaskAssetAwareTaskStore({
+      inner: {
+        ...harness.innerStore,
+        listTasks: (input) =>
+          Effect.gen(function* () {
+            const tasks = yield* harness.innerStore.listTasks(input);
+            reportParentSnapshotRead?.();
+            yield* Effect.promise(() => parentSnapshotRelease);
+            return tasks;
+          }),
+      },
+      filePort: harness.filePort,
+      registry: harness.registry,
+      persistence: harness.registry,
+      staging: harness.staging,
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+
+    const creation = Effect.runPromise(
+      childStore.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Late child",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: `![Late child](odt-asset:${staged.assetId})`,
+          parentId: parent.id,
+        },
+        descriptionAssets: { stagedAssetIds: [staged.assetId] },
+      }),
+    );
+    await parentSnapshotRead;
+    await Effect.runPromise(
+      harness.store.deleteTask({
+        repoPath: harness.repoPath,
+        taskId: parent.id,
+        deleteSubtasks: true,
+      }),
+    );
+    releaseParentSnapshot?.();
+
+    await expect(creation).rejects.toThrow(
+      "Failed to create the task with its description assets.",
+    );
+    expect(
+      await Effect.runPromise(harness.store.listTasks({ repoPath: harness.repoPath })),
+    ).toEqual([]);
+  });
+
   test("serializes descendant creation with recursive deletion", async () => {
     const harness = await createHarness();
     const parent = await Effect.runPromise(

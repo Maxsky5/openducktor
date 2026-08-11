@@ -112,6 +112,7 @@ describe("rich Markdown lazy module boundaries", () => {
     expect(candidateGraph.packages).toContain("remark-math");
     expect(candidateGraph.packages).not.toContain("rehype-katex");
     expect(candidateGraph.packages).not.toContain("katex/dist/katex.min.css");
+    expect(candidateRenderer).toContain("fallback={fallback ?? fallbackContent}");
     expect(mathRenderer).toContain('import "katex/dist/katex.min.css"');
     expect(mathRenderer).toContain('from "remark-math"');
     expect(mathRenderer).toContain('from "rehype-katex"');

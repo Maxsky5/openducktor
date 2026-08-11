@@ -188,6 +188,7 @@ export const createSqliteTaskAssetRegistry = ({
               Effect.gen(function* () {
                 const taskId = yield* insertTaskFromCreateInput({
                   createdAt: now(),
+                  repoPath: input.repoPath,
                   session: transaction,
                   task: input.task,
                   workspaceId,

@@ -7,6 +7,7 @@ import {
   taskIdExhaustedError,
   taskIdPrefixForWorkspaceId,
 } from "./sqlite-task-ids";
+import { requireTaskRow } from "./sqlite-task-queries";
 import type { TaskInsert, TaskStoreSession } from "./sqlite-task-store-schema";
 import { insertTaskIfAbsent } from "./sqlite-task-writes";
 
@@ -34,16 +35,22 @@ const taskInsertFromCreateInput = (
 
 export const insertTaskFromCreateInput = ({
   createdAt,
+  repoPath,
   session,
   task,
   workspaceId,
 }: {
   createdAt: Date;
+  repoPath: string;
   session: TaskStoreSession;
   task: TaskCreateInput;
   workspaceId: string;
 }) =>
   Effect.gen(function* () {
+    const parentId = task.parentId?.trim();
+    if (parentId) {
+      yield* requireTaskRow(session, parentId, repoPath);
+    }
     const prefix = taskIdPrefixForWorkspaceId(workspaceId);
     const firstLength = yield* firstTaskIdHashLength(session, prefix);
     const candidates = taskIdCandidates({

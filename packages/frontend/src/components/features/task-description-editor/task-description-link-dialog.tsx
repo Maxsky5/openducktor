@@ -1,5 +1,4 @@
 import { type ChangeEvent, useState } from "react";
-import { defaultUrlTransform } from "react-markdown";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,18 +19,13 @@ const validateLinkDestination = (href: string): string | null => {
   if (/\s/.test(href)) {
     return "Link destinations cannot contain spaces. Encode the destination or use Markdown mode.";
   }
-  if (!defaultUrlTransform(href)) {
-    return "Enter a safe web, email, relative, or anchor destination.";
-  }
-  if (href.startsWith("https://") || href.startsWith("http://")) {
-    try {
-      const url = new URL(href);
-      if (!url.hostname) {
-        return "Enter a complete web destination.";
-      }
-    } catch {
-      return "Enter a complete web destination.";
+  try {
+    const url = new URL(href);
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || !url.hostname) {
+      return "Enter an absolute http or https destination.";
     }
+  } catch {
+    return "Enter an absolute http or https destination.";
   }
   return null;
 };
@@ -74,9 +68,7 @@ export function TaskDescriptionLinkDialog({
         >
           <DialogHeader>
             <DialogTitle>{editing ? "Edit link" : "Insert link"}</DialogTitle>
-            <DialogDescription>
-              Enter a safe web, email, relative, or anchor destination.
-            </DialogDescription>
+            <DialogDescription>Enter an absolute http or https destination.</DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4 flex flex-col gap-2 overflow-visible">
             <Label htmlFor="task-description-link-destination">Link destination</Label>
