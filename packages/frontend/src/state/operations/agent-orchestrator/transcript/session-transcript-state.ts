@@ -68,7 +68,8 @@ export const deriveLoadedAgentSessionTranscriptState = ({
   }
 
   if (session.historyLoadState === "loaded") {
-    return { kind: "visible" };
+    const historyFailure = session.historyLoadFailure;
+    return historyFailure ? { kind: "visible", historyFailure } : { kind: "visible" };
   }
 
   return deriveRuntimeBoundTranscriptLoadingState({

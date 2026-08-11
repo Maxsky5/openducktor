@@ -110,6 +110,26 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
     expect(transcriptState).toEqual({ kind: "visible", historyFailure });
   });
 
+  test("keeps a loaded transcript visible with its gap recovery failure", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        historyLoadState: "loaded",
+        historyLoadFailure: historyFailure,
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "still visible",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "visible", historyFailure });
+  });
+
   test("surfaces cold history failures when there is no transcript to render", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
       session: createSession({

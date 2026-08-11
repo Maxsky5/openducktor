@@ -379,6 +379,11 @@ export class CodexThreadInventoryReader {
         if (!isPlainObject(turn)) {
           throw new Error(`Codex thread/turns/list response data[${turnIndex}] must be an object.`);
         }
+        if (itemsView === "full" && !Array.isArray(turn.items)) {
+          throw new Error(
+            `Codex thread/turns/list response data[${turnIndex}].items must be an array.`,
+          );
+        }
         turns.push(turn);
       }
       cursor = extractStringField(response, ["nextCursor", "next_cursor"]) ?? null;

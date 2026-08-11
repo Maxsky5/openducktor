@@ -567,6 +567,24 @@ describe("CodexThreadInventoryReader", () => {
     ).rejects.toThrow("Codex thread/turns/list response data[0] must be an object.");
   });
 
+  test("rejects paginated history turns without full items", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadRead: async () => threadReadResponse("thread-idle"),
+      threadTurnsList: async () => ({
+        data: [{ id: "turn-1", items: null }],
+        nextCursor: null,
+      }),
+    } as unknown as CodexAppServerClient;
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-idle",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toThrow("Codex thread/turns/list response data[0].items must be an array.");
+  });
+
   test("returns null when read-only history has no stored thread", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
