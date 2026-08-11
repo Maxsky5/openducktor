@@ -21,6 +21,7 @@ type TaskDetailsDocumentSectionProps = {
   defaultExpanded?: boolean;
   /** Task ID used to enrich the fullscreen modal title. */
   taskId?: string;
+  stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
@@ -33,6 +34,7 @@ export const TaskDetailsDocumentSection = memo(
     empty,
     defaultExpanded = false,
     taskId,
+    stripTaskDescriptionFrontMatter = false,
     taskAssetContext,
   }: TaskDetailsDocumentSectionProps): ReactElement {
     const [modalSnapshot, setModalSnapshot] = useState<{
@@ -87,6 +89,7 @@ export const TaskDetailsDocumentSection = memo(
                   markdown={markdown}
                   empty={empty}
                   copyableMarkdown={markdown}
+                  stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
                   {...(taskAssetContext ? { taskAssetContext } : {})}
                 />
               </Suspense>
@@ -114,6 +117,7 @@ export const TaskDetailsDocumentSection = memo(
             }}
             markdown={modalSnapshot.markdown}
             title={modalSnapshot.title}
+            stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
             {...(taskAssetContext ? { taskAssetContext } : {})}
           />
         ) : null}
@@ -127,6 +131,7 @@ export const TaskDetailsDocumentSection = memo(
     previous.empty === next.empty &&
     previous.defaultExpanded === next.defaultExpanded &&
     previous.taskId === next.taskId &&
+    previous.stripTaskDescriptionFrontMatter === next.stripTaskDescriptionFrontMatter &&
     previous.taskAssetContext?.workspaceId === next.taskAssetContext?.workspaceId &&
     previous.taskAssetContext?.taskId === next.taskAssetContext?.taskId &&
     previous.taskAssetContext?.scope === next.taskAssetContext?.scope,

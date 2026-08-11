@@ -365,6 +365,18 @@ describe("node task asset file port", () => {
     expect(await readdir(path.join(configDir, "task-asset-staging", "instances"))).toEqual([]);
   });
 
+  test("removes an incomplete owner publication left by a dead process", async () => {
+    const { configDir, port } = await createHarness();
+    const deadInstanceId = "20000000-0000-4000-8000-000000000001";
+    const publicationName = `.publishing-${deadInstanceId}-20001-20001-30000000-0000-4000-8000-000000000001.json`;
+    const ownersRoot = path.join(configDir, "task-asset-owners");
+    await mkdir(ownersRoot, { recursive: true });
+    await writeFile(path.join(ownersRoot, publicationName), '{"version":1');
+
+    expect(await Effect.runPromise(port.clearStaging())).toBe(0);
+    expect(await readdir(ownersRoot)).not.toContain(publicationName);
+  });
+
   test("clears staging when a live process has reused a dead owner's PID", async () => {
     const { aliveProcessIds, configDir, createPort, port, processStartedAtMs } =
       await createHarness();

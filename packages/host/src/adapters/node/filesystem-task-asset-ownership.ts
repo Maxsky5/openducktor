@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { taskAssetIdSchema } from "@openducktor/contracts";
@@ -101,17 +101,51 @@ export const createTaskAssetFileOwnership = (
   const ownedStagingRoot = path.join(stagingRoot, "instances", dependencies.owner.instanceId);
   const ownedQuarantineRoot = path.join(quarantineRoot, "instances", dependencies.owner.instanceId);
   const ownerMarkerPath = (instanceId: string) => path.join(ownersRoot, `${instanceId}.json`);
+  const ownerPublicationName = (owner: TaskAssetFileOwner) =>
+    `.publishing-${owner.instanceId}-${owner.processId}-${owner.startedAtMs}-${randomUUID()}.json`;
   const quarantineRootFor = (instanceId: string) =>
     path.join(quarantineRoot, "instances", instanceId);
+
+  const parseOwnerPublication = (name: string): TaskAssetFileOwner | null => {
+    const match =
+      /^\.publishing-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-([1-9]\d*)-(\d+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/.exec(
+        name,
+      );
+    if (!match) {
+      return null;
+    }
+    return validateOwner({
+      version: 1,
+      instanceId: match[1],
+      processId: Number(match[2]),
+      startedAtMs: Number(match[3]),
+    });
+  };
+
+  const ownerIsDead = async (owner: TaskAssetFileOwner): Promise<boolean> => {
+    if (!dependencies.processIsAlive(owner.processId)) {
+      return true;
+    }
+    try {
+      return (await dependencies.processStartedAtMs(owner.processId)) > owner.startedAtMs;
+    } catch (cause) {
+      if (!dependencies.processIsAlive(owner.processId)) {
+        return true;
+      }
+      throw cause;
+    }
+  };
 
   const ensureCurrent = async (): Promise<void> => {
     await mkdir(ownersRoot, { recursive: true });
     const marker = ownerMarkerPath(dependencies.owner.instanceId);
+    const publication = path.join(ownersRoot, ownerPublicationName(dependencies.owner));
     try {
-      await writeFile(marker, JSON.stringify(dependencies.owner), {
+      await writeFile(publication, JSON.stringify(dependencies.owner), {
         flag: "wx",
         mode: 0o600,
       });
+      await link(publication, marker);
     } catch (cause) {
       if (
         typeof cause !== "object" ||
@@ -129,6 +163,8 @@ export const createTaskAssetFileOwnership = (
       ) {
         throw new Error("Task asset owner record conflicts with the current host instance.");
       }
+    } finally {
+      await rm(publication, { force: true });
     }
   };
 
@@ -139,6 +175,16 @@ export const createTaskAssetFileOwnership = (
     const entries = await readdir(ownersRoot, { withFileTypes: true });
     const owners: TaskAssetFileOwner[] = [];
     for (const entry of entries) {
+      const publicationOwner = parseOwnerPublication(entry.name);
+      if (publicationOwner) {
+        if (!entry.isFile()) {
+          throw new Error(`Unexpected task asset owner entry '${entry.name}'.`);
+        }
+        if (await ownerIsDead(publicationOwner)) {
+          await rm(path.join(ownersRoot, entry.name), { force: true });
+        }
+        continue;
+      }
       const instanceId = entry.name.endsWith(".json") ? entry.name.slice(0, -5) : "";
       if (!entry.isFile() || !taskAssetIdSchema.safeParse(instanceId).success) {
         throw new Error(`Unexpected task asset owner entry '${entry.name}'.`);
@@ -189,21 +235,8 @@ export const createTaskAssetFileOwnership = (
       if (owner.instanceId === dependencies.owner.instanceId) {
         continue;
       }
-      if (!dependencies.processIsAlive(owner.processId)) {
+      if (await ownerIsDead(owner)) {
         deadOwners.push(owner);
-        continue;
-      }
-      try {
-        const processStartedAtMs = await dependencies.processStartedAtMs(owner.processId);
-        if (processStartedAtMs > owner.startedAtMs) {
-          deadOwners.push(owner);
-        }
-      } catch (cause) {
-        if (!dependencies.processIsAlive(owner.processId)) {
-          deadOwners.push(owner);
-          continue;
-        }
-        throw cause;
       }
     }
     return deadOwners;

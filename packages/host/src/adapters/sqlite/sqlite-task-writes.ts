@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { decodeWithSchema, encodeJson, normalizeLabels } from "./sqlite-json-codecs";
 import { getTaskCard } from "./sqlite-task-card-read-model";
+import { requireTaskRow } from "./sqlite-task-queries";
 import {
   SqliteTaskStoreDataError,
   type SqliteTaskStoreWriteError,
@@ -162,6 +163,9 @@ export const applyTaskPatch = (
     }
     if (input.patch.parentId !== undefined) {
       const parentId = input.patch.parentId.trim();
+      if (parentId.length > 0) {
+        yield* requireTaskRow(session, parentId, input.repoPath);
+      }
       updates.parentId = parentId.length > 0 ? parentId : null;
     }
     if (input.patch.targetBranch !== undefined) {

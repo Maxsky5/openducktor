@@ -18,6 +18,7 @@ type TaskDetailsMarkdownContentProps = {
   empty: string;
   active: boolean;
   copyableMarkdown?: string;
+  stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
@@ -26,12 +27,14 @@ const LABELED_CODE_FENCE_PATTERN = /^[ \t]{0,3}(?:```|~~~)[ \t]*[^\s`~]/im;
 type TaskDetailsRenderedMarkdownProps = {
   markdown: string;
   hasLabeledCodeFence: boolean;
+  stripTaskDescriptionFrontMatter: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
 const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
   markdown,
   hasLabeledCodeFence,
+  stripTaskDescriptionFrontMatter,
   taskAssetContext,
 }: TaskDetailsRenderedMarkdownProps): ReactElement {
   return (
@@ -39,7 +42,7 @@ const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
       markdown={markdown}
       variant="document"
       premiumCodeBlocks={hasLabeledCodeFence}
-      stripTaskDescriptionFrontMatter
+      stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
       fallback={
         <p className="text-xs text-muted-foreground">
           Rendering markdown with syntax highlighting…
@@ -62,6 +65,7 @@ function DeferredTaskDetailsMarkdown({
   active,
   markdown,
   hasLabeledCodeFence,
+  stripTaskDescriptionFrontMatter,
   copyableMarkdown,
   copied,
   onCopy,
@@ -104,6 +108,7 @@ function DeferredTaskDetailsMarkdown({
         <TaskDetailsRenderedMarkdown
           markdown={markdown}
           hasLabeledCodeFence={hasLabeledCodeFence}
+          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
           {...(taskAssetContext ? { taskAssetContext } : {})}
         />
       </div>
@@ -125,6 +130,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   empty,
   active,
   copyableMarkdown,
+  stripTaskDescriptionFrontMatter = false,
   taskAssetContext,
 }: TaskDetailsMarkdownContentProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
@@ -162,6 +168,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
         active={active}
         markdown={markdown}
         hasLabeledCodeFence={hasLabeledCodeFence}
+        stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
         copyableMarkdown={copyableMarkdown}
         copied={copied}
         onCopy={handleCopy}
@@ -176,6 +183,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
         <TaskDetailsRenderedMarkdown
           markdown={markdown}
           hasLabeledCodeFence={hasLabeledCodeFence}
+          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
           {...(taskAssetContext ? { taskAssetContext } : {})}
         />
       </div>

@@ -56,6 +56,7 @@ export function TaskDetailsSheetBody({
         empty="No description yet."
         defaultExpanded
         taskId={task.id}
+        stripTaskDescriptionFrontMatter
         {...(workspaceId
           ? {
               taskAssetContext: {

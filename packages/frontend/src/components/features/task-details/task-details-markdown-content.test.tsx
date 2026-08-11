@@ -55,6 +55,35 @@ describe("TaskDetailsMarkdownContent", () => {
     rendered.unmount();
   });
 
+  test("keeps leading front matter in non-description documents", () => {
+    const rendered = render(
+      createElement(TaskDetailsMarkdownContent, {
+        markdown: "---\ntitle: Keep this specification title\n---\nSpecification body",
+        empty: "No spec",
+        active: true,
+      }),
+    );
+
+    expect(rendered.getByText("title: Keep this specification title")).toBeDefined();
+    expect(rendered.getByText("Specification body")).toBeDefined();
+    rendered.unmount();
+  });
+
+  test("strips preserved front matter from task descriptions", () => {
+    const rendered = render(
+      createElement(TaskDetailsMarkdownContent, {
+        markdown: "---\ntitle: Hidden description title\n---\nDescription body",
+        empty: "No description",
+        active: true,
+        stripTaskDescriptionFrontMatter: true,
+      }),
+    );
+
+    expect(rendered.queryByText("title: Hidden description title")).toBeNull();
+    expect(rendered.getByText("Description body")).toBeDefined();
+    rendered.unmount();
+  });
+
   test("copies markdown and shows success toast", async () => {
     await withMockedToast(async ({ toastSuccessMock }) => {
       const markdown = "12345678901234567890123456789012345678901234567890tail";

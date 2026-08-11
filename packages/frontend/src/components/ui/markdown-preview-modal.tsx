@@ -18,6 +18,7 @@ export type MarkdownPreviewModalProps = {
   onOpenChange: (open: boolean) => void;
   /** Display title shown in the modal header. Enrichted with task context by callers. */
   title?: string;
+  stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
@@ -26,6 +27,7 @@ export function MarkdownPreviewModal({
   open,
   onOpenChange,
   title,
+  stripTaskDescriptionFrontMatter = false,
   taskAssetContext,
 }: MarkdownPreviewModalProps): ReactElement {
   return (
@@ -45,6 +47,7 @@ export function MarkdownPreviewModal({
               markdown={markdown}
               variant="document"
               premiumCodeBlocks={hasLabeledCodeFence(markdown)}
+              stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
               {...(taskAssetContext ? { taskAssetContext } : {})}
             />
             <DocumentCopyButton
