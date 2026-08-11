@@ -49,8 +49,6 @@ import {
   agentSessionRefsEqual,
   classifyAgentSessionActivity,
   classifySystemSlashCommandInvocation,
-  formatWorkflowAgentSessionTitle,
-  requireWorkflowAgentSessionScope,
   withAgentSessionRef,
 } from "@openducktor/core";
 import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
@@ -88,6 +86,10 @@ import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
 } from "./codex-session-runtime-snapshot-reader";
+import {
+  CODEX_REPOSITORY_SESSION_TITLE,
+  resolveCodexSessionScopePolicy,
+} from "./codex-session-scope-policy";
 import {
   CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -315,13 +317,17 @@ export class CodexAppServerAdapter
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "start Codex session");
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start Codex session");
+    const sessionPolicy = resolveCodexSessionScopePolicy(
+      input.sessionScope,
+      input.runtimePolicy,
+      "start Codex session",
+    );
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
     const transportModel = toTransportModelSelection(model);
-    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "start Codex session");
+    const policy = sessionPolicy.runtimePolicy;
 
     this.options.logSessionPolicy?.(
       codexPolicyLogEntry({
@@ -340,7 +346,7 @@ export class CodexAppServerAdapter
       effort: transportModel.effort,
     });
     this.clearThreadInventory(runtimeId);
-    const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
+    const title = sessionPolicy.title;
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
@@ -355,12 +361,26 @@ export class CodexAppServerAdapter
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "resume Codex session");
-    requireWorkflowAgentSessionScope(input.sessionScope, "resume Codex session");
+    const sessionPolicy = resolveCodexSessionScopePolicy(
+      input.sessionScope,
+      input.runtimePolicy,
+      "resume Codex session",
+    );
+    const current = this.localSessions.get(input.externalSessionId);
+    if (current) {
+      const currentRef = codexSessionRef(current);
+      if (!agentSessionRefsEqual(currentRef, input)) {
+        throw new Error(
+          `Cannot resume Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${currentRef.repoPath}' and working directory '${currentRef.workingDirectory}'.`,
+        );
+      }
+      applyRuntimeContextToSession(current, input, "resume session");
+    }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
-    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "resume Codex session");
+    const policy = sessionPolicy.runtimePolicy;
 
     this.options.logSessionPolicy?.(
       codexPolicyLogEntry({
@@ -382,6 +402,13 @@ export class CodexAppServerAdapter
     });
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
+    if (sessionPolicy.sessionScope.kind === "repository") {
+      session.summary = { ...session.summary, title: sessionPolicy.title };
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: sessionPolicy.title,
+      });
+    }
     const { summary } = session;
     this.localSessions.remember(session);
 
@@ -390,12 +417,16 @@ export class CodexAppServerAdapter
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "fork Codex session");
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork Codex session");
+    const sessionPolicy = resolveCodexSessionScopePolicy(
+      input.sessionScope,
+      input.runtimePolicy,
+      "fork Codex session",
+    );
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
-    const policy = requireCodexRuntimePolicy(input.runtimePolicy, "fork Codex session");
+    const policy = sessionPolicy.runtimePolicy;
 
     this.options.logSessionPolicy?.(
       codexPolicyLogEntry({
@@ -416,7 +447,7 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const title = formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
+    const title = sessionPolicy.title;
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
@@ -430,7 +461,11 @@ export class CodexAppServerAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
-    requireWorkflowAgentSessionScope(input.sessionScope, "send Codex user message");
+    resolveCodexSessionScopePolicy(
+      input.sessionScope,
+      input.runtimePolicy,
+      "send Codex user message",
+    );
     const systemInvocation = classifySystemSlashCommandInvocation(input.parts);
     if (systemInvocation.kind === "not_system") {
       assertCodexUserMessagePartsSupported(input.parts);
@@ -448,7 +483,7 @@ export class CodexAppServerAdapter
         `Cannot send Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
       );
     }
-    applyRuntimeContextToSession(session, input);
+    applyRuntimeContextToSession(session, input, "send user message");
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
@@ -511,6 +546,9 @@ export class CodexAppServerAdapter
   ): Promise<AgentSessionHistoryMessage[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session history");
     const session = this.localSessions.get(input.externalSessionId);
+    if (session) {
+      applyRuntimeContextToSession(session, input, "load session history");
+    }
     const runtime = session
       ? {
           client: this.runtimeClients.clientForRuntime(session.runtimeId),
@@ -529,6 +567,10 @@ export class CodexAppServerAdapter
     input: PolicyBoundSessionRef,
   ): Promise<CodexSessionContextUsage | null> {
     assertCodexRuntimePolicyBinding(input, "load Codex session context usage");
+    const session = this.localSessions.get(input.externalSessionId);
+    if (session) {
+      applyRuntimeContextToSession(session, input, "load session context usage");
+    }
     return this.contextUsageLoader.loadSession(input);
   }
 
@@ -631,6 +673,13 @@ export class CodexAppServerAdapter
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
+    if (input.sessionScope?.kind === "repository") {
+      session.summary = { ...session.summary, title: CODEX_REPOSITORY_SESSION_TITLE };
+      await client.threadSetName({
+        threadId: session.threadId,
+        name: CODEX_REPOSITORY_SESSION_TITLE,
+      });
+    }
     const { summary } = session;
     const existingThreadSession = preserveRuntimeContextForExistingThread(
       session,
@@ -678,7 +727,7 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
-    applyRuntimeContextToSession(session, input);
+    applyRuntimeContextToSession(session, input, "reply to approval");
     await this.replyLiveApproval({
       runtimeId: session.runtimeId,
       externalSessionId: input.externalSessionId,
@@ -741,7 +790,7 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
-    applyRuntimeContextToSession(session, input);
+    applyRuntimeContextToSession(session, input, "reply to question");
     await this.replyLiveQuestion({
       runtimeId: session.runtimeId,
       externalSessionId: input.externalSessionId,
@@ -900,6 +949,9 @@ export class CodexAppServerAdapter
       throw new Error(
         `Cannot subscribe Codex session events for '${externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
       );
+    }
+    if (session) {
+      applyRuntimeContextToSession(session, input, "subscribe session events");
     }
 
     const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);

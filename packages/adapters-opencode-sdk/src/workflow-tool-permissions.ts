@@ -41,15 +41,15 @@ const buildOdtToolDenyPermissions = (runtimeDescriptor: RuntimeDescriptor): Set<
   return permissions;
 };
 
-export const buildRoleScopedPermissionRules = (input: {
-  role: AgentRole;
+const buildScopePermissionRules = (input: {
+  role: AgentRole | null;
   runtimeDescriptor: RuntimeDescriptor;
 }): OpencodePermissionRule[] => {
   const { role, runtimeDescriptor } = input;
-  const allowedTools = new Set(AGENT_ROLE_TOOL_POLICY[role]);
+  const allowedTools = new Set(role ? AGENT_ROLE_TOOL_POLICY[role] : []);
   const rules: OpencodePermissionRule[] = [];
 
-  if (isReadOnlyAgentRole(role)) {
+  if (role && isReadOnlyAgentRole(role)) {
     for (const toolId of new Set(runtimeDescriptor.readOnlyRoleBlockedTools)) {
       rules.push({
         permission: toolId,
@@ -107,3 +107,16 @@ export const buildRoleScopedPermissionRules = (input: {
 
   return rules;
 };
+
+export const buildRoleScopedPermissionRules = (input: {
+  role: AgentRole;
+  runtimeDescriptor: RuntimeDescriptor;
+}): OpencodePermissionRule[] => buildScopePermissionRules(input);
+
+export const buildRepositoryScopedPermissionRules = (
+  runtimeDescriptor: RuntimeDescriptor,
+): OpencodePermissionRule[] =>
+  buildScopePermissionRules({
+    role: null,
+    runtimeDescriptor,
+  });

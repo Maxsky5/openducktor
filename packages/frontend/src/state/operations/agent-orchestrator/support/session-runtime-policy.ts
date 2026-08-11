@@ -14,6 +14,7 @@ type RuntimeSessionContextSource = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 > & {
+  sessionScope?: AgentSessionScope;
   taskId?: string;
   role?: AgentSessionState["role"];
   selectedModel?: AgentSessionState["selectedModel"];
@@ -69,12 +70,10 @@ export const resolveAgentSessionRuntimePolicyFromSnapshot = ({
   if (runtimeKind !== "codex") {
     throw new Error(`Unsupported runtime kind '${runtimeKind}' for session runtime policy.`);
   }
-  if (sessionScope && sessionScope.kind !== "workflow") {
-    throw new Error("Codex runtime policy requires workflow session scope.");
-  }
+  const role = sessionScope?.kind === "workflow" ? sessionScope.role : null;
   return {
     kind: "codex",
-    policy: resolveCodexEffectivePolicy(snapshot.agentRuntimes.codex, sessionScope?.role ?? null),
+    policy: resolveCodexEffectivePolicy(snapshot.agentRuntimes.codex, role),
   };
 };
 
@@ -84,7 +83,10 @@ export const resolveRuntimeSessionContextRef = async (
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy,
 ): Promise<PolicyBoundSessionRef> => {
   const sessionScope =
-    session.role && session.taskId ? workflowAgentSessionScope(session.taskId, session.role) : null;
+    session.sessionScope ??
+    (session.role && session.taskId
+      ? workflowAgentSessionScope(session.taskId, session.role)
+      : null);
   const runtimePolicy = await resolveAgentSessionRuntimePolicy({
     runtimeKind: session.runtimeKind,
     sessionScope,

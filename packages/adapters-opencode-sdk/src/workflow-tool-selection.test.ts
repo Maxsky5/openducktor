@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
+import {
+  resolveRepositoryToolSelection,
+  resolveWorkflowToolSelection,
+} from "./workflow-tool-selection";
 
 const makeClient = (input: {
   toolIds?: unknown;
@@ -73,6 +76,22 @@ const makeClient = (input: {
 };
 
 describe("workflow-tool-selection", () => {
+  test("builds repository selection without an OpenCode or MCP request", () => {
+    const selection = resolveRepositoryToolSelection(OPENCODE_RUNTIME_DESCRIPTOR);
+
+    expect(selection["openducktor_*"]).toBe(false);
+    expect(selection["functions.openducktor_*"]).toBe(false);
+    expect(selection.odt_read_task).toBe(false);
+    expect(selection.odt_build_completed).toBe(false);
+    expect(selection.openducktor_odt_read_task).toBe(false);
+    expect(selection["functions.openducktor_odt_read_task"]).toBe(false);
+    expect(selection.task).toBe(true);
+    expect(selection.subtask).toBe(false);
+    expect(
+      Object.entries(selection).every(([toolId, enabled]) => !toolId.includes("odt_") || !enabled),
+    ).toBe(true);
+  });
+
   test("uses runtime tool aliases when available", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({

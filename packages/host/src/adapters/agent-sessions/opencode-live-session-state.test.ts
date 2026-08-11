@@ -113,15 +113,15 @@ describe("OpenCode host live-session state", () => {
     });
   });
 
-  test("keeps a retained workflow association across runtime discovery refreshes", () => {
+  test("keeps a retained repository association across runtime discovery refreshes", () => {
     const state = createState();
     state.initialize([source("session-1", "request-1")], new Map());
     state.retainControlSummary({
       externalSessionId: "session-1",
       runtimeKind: "opencode",
       workingDirectory: "/repo/session-1",
-      title: "BUILD task-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      title: "Repository session",
+      sessionAssociation: { kind: "repository" },
       startedAt: "2026-07-16T10:01:00.000Z",
       status: "running",
     });
@@ -138,7 +138,7 @@ describe("OpenCode host live-session state", () => {
       expect.arrayContaining([
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "session-1" }),
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: { kind: "repository" },
         }),
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "session-2" }),
@@ -152,7 +152,7 @@ describe("OpenCode host live-session state", () => {
           type: "session_upsert",
           snapshot: expect.objectContaining({
             ref: expect.objectContaining({ externalSessionId: "session-1" }),
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionAssociation: { kind: "repository" },
           }),
         },
       ]),

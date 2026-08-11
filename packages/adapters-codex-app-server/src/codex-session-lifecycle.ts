@@ -15,6 +15,10 @@ import {
   requireThreadSnapshotFromReadResponse,
   toSessionSummary,
 } from "./codex-app-server-threads";
+import {
+  codexSessionScopeKindsMatch,
+  resolveCodexSessionScopePolicy,
+} from "./codex-session-scope-policy";
 import type {
   CodexSessionState,
   CodexThreadForkResult,
@@ -54,12 +58,24 @@ const buildSessionState = (
 export const applyRuntimeContextToSession = (
   session: CodexSessionState,
   input: PolicyBoundSessionRef,
+  action = "apply runtime context",
 ): void => {
   const sessionScope = (input as { sessionScope?: StartAgentSessionInput["sessionScope"] })
     .sessionScope;
   if (sessionScope) {
+    const registeredAssociation = session.summary.sessionAssociation;
+    if (
+      registeredAssociation.kind !== "unbound" &&
+      !codexSessionScopeKindsMatch(registeredAssociation, sessionScope)
+    ) {
+      throw new Error(
+        `Cannot ${action} for Codex session '${session.threadId}' because its registered ${registeredAssociation.kind} scope does not match the requested ${sessionScope.kind} scope.`,
+      );
+    }
+    const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
     session.summary = {
       ...session.summary,
+      title: policy.title,
       sessionAssociation: sessionScope,
     };
   }

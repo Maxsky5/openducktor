@@ -142,78 +142,141 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
   });
 
-  test("rejects repository-scoped controls before runtime, state, or transport side effects", async () => {
+  test("applies repository policy across start, send, fork, resume, and history", async () => {
     const sessionScope = { kind: "repository" } as const;
-    const controls = [
-      {
-        name: "start",
-        externalSessionId: "thread/start-runtime-live",
-        invoke: (adapter: CodexAppServerAdapter) =>
-          adapter.startSession({
-            repoPath: "/repo",
-            runtimeKind: "codex",
-            workingDirectory: "/repo",
-            sessionScope,
-            runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-            systemPrompt: "Use the repo rules.",
-            model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-          }),
-      },
-      {
-        name: "resume",
-        externalSessionId: "thread-resume",
-        invoke: (adapter: CodexAppServerAdapter) =>
-          adapter.resumeSession({
-            repoPath: "/repo",
-            runtimeKind: "codex",
-            workingDirectory: "/repo",
-            externalSessionId: "thread-resume",
-            sessionScope,
-            runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-            systemPrompt: "Use the repo rules.",
-            model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-          }),
-      },
-      {
-        name: "fork",
-        externalSessionId: "thread/fork-runtime-live",
-        invoke: (adapter: CodexAppServerAdapter) =>
-          adapter.forkSession({
-            repoPath: "/repo",
-            runtimeKind: "codex",
-            workingDirectory: "/repo",
-            parentExternalSessionId: "thread-parent",
-            sessionScope,
-            runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-            systemPrompt: "Use the repo rules.",
-            model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-          }),
-      },
-      {
-        name: "send",
-        externalSessionId: "thread-send",
-        invoke: (adapter: CodexAppServerAdapter) =>
-          adapter.sendUserMessage(
-            codexUserMessageInput({
-              externalSessionId: "thread-send",
-              sessionScope,
-              parts: [{ kind: "text", text: "Continue" }],
-            }),
-          ),
-      },
-    ];
+    const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
+    const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
+    const { adapter, transports } = createHarness();
 
-    for (const control of controls) {
-      const { adapter, requireRepoRuntime, transportFactory, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope,
+      runtimePolicy,
+      systemPrompt: "Use the repo rules.",
+      model,
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: started.externalSessionId,
+        sessionScope,
+        runtimePolicy,
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+    await adapter.loadSessionHistory(
+      codexSessionRuntimeRef(started.externalSessionId, { sessionScope, runtimePolicy }),
+    );
+    const forked = await adapter.forkSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      parentExternalSessionId: started.externalSessionId,
+      sessionScope,
+      runtimePolicy,
+      systemPrompt: "Use the repo rules.",
+      model,
+    });
+    const resumed = await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-resume",
+      sessionScope,
+      runtimePolicy,
+      systemPrompt: "Use the repo rules.",
+      model,
+    });
 
-      await expect(control.invoke(adapter)).rejects.toThrow(
-        "repository session context; workflow session context is required",
-      );
-      expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
-      expect(transportFactory).toHaveBeenCalledTimes(0);
-      expect(transports.size).toBe(0);
-      expect(localSessions(adapter).has(control.externalSessionId)).toBe(false);
+    expect(started).toMatchObject({
+      title: "Repository session",
+      sessionAssociation: sessionScope,
+      workingDirectory: "/repo",
+    });
+    expect(forked).toMatchObject({
+      title: "Repository session",
+      sessionAssociation: sessionScope,
+    });
+    expect(resumed).toMatchObject({
+      title: "Repository session",
+      sessionAssociation: sessionScope,
+    });
+    const calls = transports.get("runtime-live")?.calls ?? [];
+    expect(calls.filter((call) => call.method === "thread/name/set")).toEqual([
+      {
+        method: "thread/name/set",
+        params: { threadId: started.externalSessionId, name: "Repository session" },
+      },
+      {
+        method: "thread/name/set",
+        params: { threadId: forked.externalSessionId, name: "Repository session" },
+      },
+      {
+        method: "thread/name/set",
+        params: { threadId: resumed.externalSessionId, name: "Repository session" },
+      },
+    ]);
+    for (const call of calls.filter((candidate) =>
+      ["thread/start", "thread/fork", "thread/resume"].includes(candidate.method),
+    )) {
+      expect(call.params).toMatchObject({ cwd: "/repo", ...expectedThreadPolicy });
     }
+  });
+
+  test("rejects a workflow scope for a repository-bound session", async () => {
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "repository" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const callCount = transports.get("runtime-live")?.calls.length;
+
+    await expect(
+      adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: started.externalSessionId,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).rejects.toThrow("registered repository scope does not match the requested workflow scope");
+
+    await expect(
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: started.externalSessionId,
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          parts: [{ kind: "text", text: "Continue" }],
+        }),
+      ),
+    ).rejects.toThrow("registered repository scope does not match the requested workflow scope");
+    expect(transports.get("runtime-live")?.calls).toHaveLength(callCount ?? 0);
+  });
+
+  test("rejects a start without session scope before runtime side effects", async () => {
+    const { adapter, requireRepoRuntime, transportFactory } = createHarness();
+
+    await expect(
+      adapter.startSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      } as never),
+    ).rejects.toThrow("Cannot start Codex session without session context.");
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
+    expect(transportFactory).toHaveBeenCalledTimes(0);
   });
 
   test("keeps started sessions addressable when thread naming fails", async () => {

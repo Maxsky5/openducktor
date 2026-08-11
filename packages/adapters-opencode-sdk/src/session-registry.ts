@@ -13,6 +13,7 @@ import {
   readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
+import { OPENCODE_REPOSITORY_SESSION_TITLE } from "./opencode-session-policy";
 import type {
   ClientFactory,
   OpencodeEventLogger,
@@ -20,6 +21,17 @@ import type {
   SessionInput,
   SessionRecord,
 } from "./types";
+
+const resolveSessionTitle = (sessionInput: SessionInput): string | undefined => {
+  const sessionScope = sessionInput.sessionScope;
+  if (!sessionScope) {
+    return undefined;
+  }
+  if (sessionScope.kind === "repository") {
+    return OPENCODE_REPOSITORY_SESSION_TITLE;
+  }
+  return formatWorkflowAgentSessionTitle(sessionScope.role, sessionScope.taskId);
+};
 
 export const requireSession = (
   sessions: Map<string, SessionRecord>,
@@ -373,18 +385,12 @@ export const registerSession = (
 ): AgentSessionSummary => {
   const startsActive = input.emitStartedEvent !== false;
   const sessionAssociation = input.sessionInput.sessionScope ?? { kind: "unbound" };
+  const title = resolveSessionTitle(input.sessionInput);
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(sessionAssociation.kind === "workflow"
-      ? {
-          title: formatWorkflowAgentSessionTitle(
-            sessionAssociation.role,
-            sessionAssociation.taskId,
-          ),
-        }
-      : {}),
+    ...(title ? { title } : {}),
     sessionAssociation,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",

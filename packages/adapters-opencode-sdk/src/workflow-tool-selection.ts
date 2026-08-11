@@ -1,7 +1,9 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import {
   isOpencodeExposedOdtToolAlias,
+  ODT_MCP_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
+  OPENCODE_ODT_TOOL_ID_PREFIXES,
   type RuntimeDescriptor,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
@@ -9,6 +11,7 @@ import {
   type AgentRole,
   buildRoleScopedOdtToolSelection,
   isReadOnlyAgentRole,
+  ODT_WORKFLOW_TOOL_NAMES,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
@@ -26,6 +29,36 @@ const OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES = ["subtask"] as const;
 const isToolIdControlledByOdtWorkflowSelection = (toolId: string): boolean =>
   isOpencodeExposedOdtToolAlias(toolId) ||
   OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS.has(toolId);
+
+export const resolveRepositoryToolSelection = (
+  runtimeDescriptor: RuntimeDescriptor,
+): Record<string, boolean> => {
+  const selection: Record<string, boolean> = {};
+
+  for (const prefix of OPENCODE_ODT_TOOL_ID_PREFIXES) {
+    selection[`${prefix}*`] = false;
+  }
+  for (const toolName of ODT_MCP_TOOL_NAMES) {
+    for (const toolId of toOpencodeExposedOdtToolIds(toolName)) {
+      selection[toolId] = false;
+    }
+  }
+  for (const toolName of ODT_WORKFLOW_TOOL_NAMES) {
+    selection[toolName] = false;
+    for (const alias of runtimeDescriptor.workflowToolAliasesByCanonical[toolName] ?? []) {
+      selection[alias] = false;
+    }
+  }
+
+  if (runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents) {
+    selection[OPENCODE_SUBAGENT_TOOL_NAME] = true;
+    for (const toolId of OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES) {
+      selection[toolId] = false;
+    }
+  }
+
+  return selection;
+};
 
 type McpApi = {
   status?: (args: { directory: string }) => Promise<unknown>;

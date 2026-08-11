@@ -8,7 +8,6 @@ import {
   type AgentSessionControlSummary,
   type AgentSessionLiveRef,
   type AgentSessionScope,
-  type AgentSessionWorkflowScope,
   acceptedAgentUserMessageSchema,
   agentSessionControlSummarySchema,
   agentSessionLiveLoadContextResultSchema,
@@ -16,7 +15,6 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { requireWorkflowAgentSessionScope } from "../../application/agent-sessions/require-workflow-agent-session-scope";
 import {
   type HostError,
   type HostOperationError,
@@ -71,7 +69,7 @@ export type CreateCodexLiveSessionAdapterPreparerInput = {
   readonly codexAppServer: CodexAppServerPort;
   readonly onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
   readonly resolveRuntimePolicy: (
-    scope: AgentSessionWorkflowScope,
+    scope: AgentSessionScope,
   ) => Effect.Effect<CodexEffectivePolicy, HostError>;
   readonly createController?: (options: CodexAppServerAdapterOptions) => CodexSessionController;
 };
@@ -287,19 +285,22 @@ export const createCodexLiveSessionAdapterPreparer =
             }),
           );
         }
-        return requireWorkflowAgentSessionScope(
-          input.sessionScope,
-          `run Codex live-session control '${operation}'`,
-        ).pipe(
-          Effect.flatMap((sessionScope) =>
-            resolveRuntimePolicy(sessionScope).pipe(
-              Effect.map((policy) => ({
-                ...input,
-                sessionScope,
-                runtimePolicy: { kind: "codex" as const, policy },
-              })),
-            ),
-          ),
+        const sessionScope = input.sessionScope;
+        if (!sessionScope) {
+          return Effect.fail(
+            new HostValidationError({
+              field: "sessionScope",
+              message: `Codex live-session control '${operation}' requires session scope.`,
+              details: { operation, runtimeId: runtime.runtimeId },
+            }),
+          );
+        }
+        return resolveRuntimePolicy(sessionScope).pipe(
+          Effect.map((policy) => ({
+            ...input,
+            sessionScope,
+            runtimePolicy: { kind: "codex" as const, policy },
+          })),
         );
       };
 
@@ -337,7 +338,7 @@ export const createCodexLiveSessionAdapterPreparer =
                       new HostValidationError({
                         field: "sessionScope",
                         message:
-                          "Loading an unloaded Codex session context requires workflow session scope.",
+                          "Loading an unloaded Codex session context requires session scope.",
                         details: {
                           runtimeId: runtime.runtimeId,
                           externalSessionId: input.externalSessionId,
@@ -345,11 +346,7 @@ export const createCodexLiveSessionAdapterPreparer =
                       }),
                     );
                   }
-                  const workflowScope = yield* requireWorkflowAgentSessionScope(
-                    sessionScope,
-                    "load unloaded Codex session context",
-                  );
-                  const policy = yield* resolveRuntimePolicy(workflowScope);
+                  const policy = yield* resolveRuntimePolicy(sessionScope);
                   return yield* Effect.tryPromise({
                     try: () =>
                       controller.loadSessionContextUsage({
@@ -357,7 +354,7 @@ export const createCodexLiveSessionAdapterPreparer =
                         runtimeKind: "codex",
                         workingDirectory: input.workingDirectory,
                         externalSessionId: input.externalSessionId,
-                        sessionScope: workflowScope,
+                        sessionScope,
                         runtimePolicy: { kind: "codex", policy },
                       }),
                     catch: sessionError(

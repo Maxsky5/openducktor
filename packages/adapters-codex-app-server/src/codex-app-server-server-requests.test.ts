@@ -401,6 +401,42 @@ describe("handleCodexServerRequest", () => {
     );
   });
 
+  test("rejects OpenDucktor workflow MCP approvals for repository sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const repositorySession = createSession(null, "thread-repository");
+    repositorySession.summary.sessionAssociation = { kind: "repository" };
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        repositorySession,
+        mcpToolApprovalRequest({
+          id: 35,
+          serverName: "openducktor",
+          toolName: "odt_read_task",
+          threadId: "thread-repository",
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 35)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      35,
+      expect.objectContaining({ action: "decline" }),
+      undefined,
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        message: expect.stringContaining("repository session context cannot use workflow tools"),
+      }),
+    );
+  });
+
   test("mirrors child MCP approvals to the linked parent while keeping the child as owner", async () => {
     const parentSession = createSession("build", "parent-thread");
     const childSession = createSession("build", "child-thread");
