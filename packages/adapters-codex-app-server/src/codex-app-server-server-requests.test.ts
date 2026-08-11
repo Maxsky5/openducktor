@@ -70,11 +70,13 @@ const mcpToolApprovalRequest = ({
   serverName,
   toolName,
   threadId = "thread-spec",
+  includeToolTitle = true,
 }: {
   id: number;
   serverName: string;
   toolName: string;
   threadId?: string;
+  includeToolTitle?: boolean;
 }): CodexServerRequestRecord => ({
   id,
   method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
@@ -87,7 +89,7 @@ const mcpToolApprovalRequest = ({
     requestedSchema: { type: "object", properties: {} },
     _meta: {
       codex_approval_kind: "mcp_tool_call",
-      tool_name: toolName,
+      ...(includeToolTitle ? { tool_title: toolName } : {}),
       persist: ["session"],
     },
   },
@@ -463,6 +465,67 @@ describe("handleCodexServerRequest", () => {
         type: "session_error",
         message: expect.stringContaining("repository session context cannot use workflow tools"),
       }),
+    );
+  });
+
+  test("rejects producer-shaped OpenDucktor MCP approvals without titles for retained repository sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const repositorySession = createSession(null, "thread-repository");
+    repositorySession.summary.sessionAssociation = { kind: "repository" };
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        repositorySession,
+        mcpToolApprovalRequest({
+          id: 37,
+          serverName: "openducktor",
+          toolName: "odt_read_task",
+          threadId: "thread-repository",
+          includeToolTitle: false,
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 37)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      37,
+      expect.objectContaining({ action: "decline" }),
+      undefined,
+    );
+  });
+
+  test("rejects producer-shaped OpenDucktor MCP approvals without titles for workflow sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const session = createSession("build");
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        session,
+        mcpToolApprovalRequest({
+          id: 38,
+          serverName: "openducktor",
+          toolName: "odt_read_task",
+          threadId: session.threadId,
+          includeToolTitle: false,
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", session.threadId, 38)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      38,
+      expect.objectContaining({ action: "decline" }),
+      undefined,
     );
   });
 

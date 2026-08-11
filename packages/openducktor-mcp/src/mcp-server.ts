@@ -53,8 +53,8 @@ type ToolResultContract =
     };
 
 type RegisterContractToolConfig =
-  | { description: string; inputSchema: unknown; outputSchema: unknown }
-  | { description: string; inputSchema: unknown };
+  | { title: string; description: string; inputSchema: unknown; outputSchema: unknown }
+  | { title: string; description: string; inputSchema: unknown };
 
 type RegisterContractTool = (
   name: string,
@@ -152,11 +152,13 @@ const registerOdtTool = <Name extends RegisteredToolName>(
   const config =
     tool.result.kind === "structured"
       ? {
+          title: tool.name,
           description: tool.description,
           inputSchema: schema,
           outputSchema: tool.result.outputSchema,
         }
       : {
+          title: tool.name,
           description: tool.description,
           inputSchema: schema,
         };
@@ -185,6 +187,7 @@ const toListedToolDefinition = (
 ) => {
   const definition = {
     name: tool.name,
+    title: tool.name,
     description: tool.description,
     inputSchema: getListedToolInputSchema(tool.name, {
       hideWorkspaceId: options.forbidWorkspaceIdInput,

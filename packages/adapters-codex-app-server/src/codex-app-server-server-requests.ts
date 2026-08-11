@@ -42,20 +42,19 @@ const decideOdtWorkflowTool = (
     return { kind: "unmanaged" };
   }
 
-  if (!toolName) {
-    return { kind: "unmanaged" };
-  }
-
-  const workflowTool = normalizeOdtWorkflowToolName(toolName);
-  if (!workflowTool) {
-    return { kind: "unmanaged" };
-  }
-
   const sessionAssociation = session.summary.sessionAssociation;
   if (sessionAssociation.kind !== "workflow") {
     return {
       kind: "reject",
       reason: `the ${sessionAssociation.kind} session context cannot use workflow tools`,
+    };
+  }
+
+  const workflowTool = toolName ? normalizeOdtWorkflowToolName(toolName) : null;
+  if (!workflowTool) {
+    return {
+      kind: "reject",
+      reason: "the trusted OpenDucktor MCP request did not identify a supported workflow tool",
     };
   }
 

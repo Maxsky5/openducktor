@@ -22,7 +22,6 @@ const MCP_APPROVAL_PERSIST_KEY = "persist";
 const MCP_APPROVAL_PERSIST_ALWAYS = "always";
 const MCP_APPROVAL_PERSIST_SESSION = "session";
 const MCP_APPROVAL_TOOL_DESCRIPTION_KEY = "tool_description";
-const MCP_APPROVAL_TOOL_NAME_KEY = "tool_name";
 const MCP_APPROVAL_TOOL_PARAMS_KEY = "tool_params";
 const MCP_APPROVAL_TOOL_TITLE_KEY = "tool_title";
 
@@ -349,7 +348,6 @@ export const toMcpElicitationApprovalRequest = (
   }
 
   const toolName =
-    extractStringField(meta, [MCP_APPROVAL_TOOL_NAME_KEY]) ??
     extractStringField(meta, [MCP_APPROVAL_TOOL_TITLE_KEY]) ??
     `${request.params.serverName} MCP tool`;
   const toolTitle = extractStringField(meta, [MCP_APPROVAL_TOOL_TITLE_KEY]) ?? toolName;

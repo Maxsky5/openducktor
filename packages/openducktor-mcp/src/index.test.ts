@@ -548,6 +548,28 @@ describe("MCP server tool results", () => {
     }
   });
 
+  test("advertises canonical tool names as stable approval titles", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, {
+      workspaceId: "repo",
+      allowedTools: "odt_read_task,odt_set_plan,odt_build_completed",
+    });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+
+      expect(tools.tools.map(({ name, title }) => ({ name, title }))).toEqual([
+        { name: "odt_read_task", title: "odt_read_task" },
+        { name: "odt_set_plan", title: "odt_set_plan" },
+        { name: "odt_build_completed", title: "odt_build_completed" },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
   test("odt_get_workspaces keeps structuredContent for workspace discovery payloads", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url);
