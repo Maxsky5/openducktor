@@ -8,7 +8,6 @@ import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { createRef } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -19,14 +18,15 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
+import type { AgentRoleOption } from "../agent-studio-header.types";
 import type {
   AgentChatThreadModel,
-  AgentChatThreadSession,
-  AgentRoleOption,
+  AgentChatToolCallPresentation,
+  AgentChatTranscriptPresentation,
+  AgentChatTranscriptSession,
 } from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
-import { toAgentChatThreadSession } from "./agent-chat-thread-session";
-import { projectAgentChatThreadState } from "./agent-chat-thread-state";
+import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -107,13 +107,13 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-type AgentChatThreadSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+type AgentChatTranscriptSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: SessionMessagesState | AgentChatMessage[];
 };
 
 export const buildSession = (
-  overrides: AgentChatThreadSessionOverrides = {},
-): AgentChatThreadSession => {
+  overrides: AgentChatTranscriptSessionOverrides = {},
+): AgentChatTranscriptSession => {
   const { messages: overrideMessages, ...overrideSessionFields } = overrides;
   const session = {
     ...baseSession,
@@ -122,58 +122,76 @@ export const buildSession = (
   const sourceMessages = overrideMessages ?? baseSession.messages;
   const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
 
-  return toAgentChatThreadSession({
+  return toAgentChatTranscriptSession({
     ...session,
     messages,
   });
 };
 
-type TranscriptStateFixtureInput =
-  | AgentSessionTranscriptState
-  | { kind: "failed"; message?: string };
+export const presentRegularToolCall = (
+  toolName: string,
+  displayLabel?: string,
+): AgentChatToolCallPresentation => ({
+  kind: "regular",
+  displayName: displayLabel?.trim() || toolName,
+});
 
-export const buildThreadTranscriptState = (
-  transcriptState: TranscriptStateFixtureInput = { kind: "visible" },
-): AgentSessionTranscriptState =>
-  transcriptState.kind === "failed"
-    ? {
-        kind: "failed",
-        message: transcriptState.message ?? "The selected conversation could not be loaded.",
-        ...("historyFailure" in transcriptState
-          ? { historyFailure: transcriptState.historyFailure }
-          : {}),
-      }
-    : transcriptState;
+type AgentChatSessionTranscriptOverrides = Partial<
+  Pick<AgentChatTranscriptPresentation, "target" | "displayedSessionKey" | "notice">
+>;
 
-type AgentChatThreadProjectionFields =
-  | "displayedSessionKey"
-  | "shouldResetTranscriptWindow"
-  | "transcriptNotice";
+export const buildSessionTranscript = (
+  session: AgentChatTranscriptSession,
+  overrides: AgentChatSessionTranscriptOverrides = {},
+): AgentChatTranscriptPresentation => ({
+  kind: "session",
+  session,
+  target: overrides.target === undefined ? session : overrides.target,
+  displayedSessionKey:
+    overrides.displayedSessionKey === undefined
+      ? agentSessionIdentityKey(session)
+      : overrides.displayedSessionKey,
+  shouldResetWindow: false,
+  notice: overrides.notice ?? null,
+});
+
+type AgentChatEmptyTranscriptOverrides = Partial<
+  Pick<
+    AgentChatTranscriptPresentation,
+    "target" | "displayedSessionKey" | "shouldResetWindow" | "notice"
+  >
+>;
+
+export const buildEmptyTranscript = (
+  overrides: AgentChatEmptyTranscriptOverrides = {},
+): AgentChatTranscriptPresentation => ({
+  kind: "empty",
+  session: null,
+  target: overrides.target ?? null,
+  displayedSessionKey: overrides.displayedSessionKey ?? null,
+  shouldResetWindow: overrides.shouldResetWindow ?? false,
+  notice: overrides.notice ?? null,
+});
+
 type AgentChatThreadFixtureDefaults =
   | "modelCatalog"
   | "pendingApprovalRequests"
   | "pendingQuestionRequests"
   | "todos"
-  | "sessionAccentColor";
+  | "sessionAccentColor"
+  | "runtimePresentation";
 
-export type AgentChatThreadModelInput = Omit<
-  AgentChatThreadModel,
-  AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults
-> &
-  Partial<
-    Pick<AgentChatThreadModel, AgentChatThreadProjectionFields | AgentChatThreadFixtureDefaults>
-  >;
+export type AgentChatThreadModelInput = Omit<AgentChatThreadModel, AgentChatThreadFixtureDefaults> &
+  Partial<Pick<AgentChatThreadModel, AgentChatThreadFixtureDefaults>>;
 
 export const buildBaseModel = () => ({
   isSessionWorking: false,
-  transcriptState: buildThreadTranscriptState(),
-  runtimeReadiness: {
-    state: "ready" as const,
-    message: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  },
   isInteractionEnabled: true,
+  runtimePresentation: {
+    runtimeKind: "opencode" as const,
+    presentToolCall: presentRegularToolCall,
+    supportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
+  },
   emptyState: {
     title: "Send a message to start a new session automatically.",
   },
@@ -183,7 +201,6 @@ export const buildBaseModel = () => ({
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
   canReplyToApprovals: true,
-  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
@@ -197,21 +214,10 @@ export const buildBaseModel = () => ({
 });
 
 export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChatThreadModel => {
-  const threadState = projectAgentChatThreadState({
-    sessionKey:
-      model.displayedSessionKey ?? (model.session ? agentSessionIdentityKey(model.session) : null),
-    session: model.session,
-    transcriptState: model.transcriptState,
-    runtimeReadiness: model.runtimeReadiness,
-  });
-
   return {
     ...model,
     modelCatalog: model.modelCatalog ?? null,
-    session: threadState.threadSession,
-    displayedSessionKey: threadState.displayedSessionKey,
-    shouldResetTranscriptWindow: threadState.shouldResetTranscriptWindow,
-    transcriptNotice: threadState.transcriptNotice,
+    runtimePresentation: model.runtimePresentation ?? buildBaseModel().runtimePresentation,
     pendingApprovalRequests: model.pendingApprovalRequests ?? [],
     pendingQuestionRequests: model.pendingQuestionRequests ?? [],
     todos: model.todos ?? [],

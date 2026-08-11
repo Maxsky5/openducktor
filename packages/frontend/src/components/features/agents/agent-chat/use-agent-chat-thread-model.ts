@@ -1,12 +1,13 @@
-import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useCallback, useMemo, useState } from "react";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
-import type { AgentChatEmptyStateModel, AgentChatThreadModel } from "./agent-chat.types";
-import type { AgentChatThreadState } from "./agent-chat-thread-state";
+import type {
+  AgentChatEmptyStateModel,
+  AgentChatRuntimePresentation,
+  AgentChatThreadModel,
+  AgentChatTranscriptPresentation,
+} from "./agent-chat.types";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -30,14 +31,12 @@ type AgentChatThreadComposerActivity = {
 } | null;
 
 type UseAgentChatThreadModelArgs = {
-  threadState: AgentChatThreadState;
   modelCatalog: AgentModelCatalog | null;
-  transcriptState: AgentSessionTranscriptState;
-  runtimeReadiness: RepoRuntimeReadiness;
+  transcript: AgentChatTranscriptPresentation;
+  interactionEnabled: boolean;
+  runtimePresentation: AgentChatRuntimePresentation;
   isSessionWorking: boolean;
-  hasComposer: boolean;
   composerActivity: AgentChatThreadComposerActivity;
-  runtimeDefinitions: RuntimeDescriptor[];
   sessionAuxiliaryError: string | null;
   emptyState: AgentChatEmptyStateModel | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
@@ -55,14 +54,12 @@ type UseAgentChatThreadModelArgs = {
 };
 
 export function useAgentChatThreadModel({
-  threadState,
   modelCatalog,
-  transcriptState,
-  runtimeReadiness,
+  transcript,
+  interactionEnabled,
+  runtimePresentation,
   isSessionWorking,
-  hasComposer,
   composerActivity,
-  runtimeDefinitions,
   sessionAuxiliaryError,
   emptyState,
   pendingApprovalRequests,
@@ -78,8 +75,7 @@ export function useAgentChatThreadModel({
   scrollToBottomOnSendRef,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatThreadModelArgs): AgentChatThreadModel {
-  const { threadSession, displayedSessionKey, shouldResetTranscriptWindow, transcriptNotice } =
-    threadState;
+  const { displayedSessionKey } = transcript;
   const [todoPanelCollapsedBySessionKey, setTodoPanelCollapsedBySessionKey] = useState<
     Record<string, boolean>
   >({});
@@ -97,29 +93,16 @@ export function useAgentChatThreadModel({
     }));
   }, [displayedSessionKey]);
 
-  const isRuntimeReady = runtimeReadiness.state === "ready";
-  const canSubmitQuestionAnswers = isRuntimeReady && pendingQuestions.canSubmit;
-  const canReplyToApprovalRequests = isRuntimeReady && approvals.canReply;
-  const runtimeSupportedApprovalReplyOutcomes = useMemo(() => {
-    const runtimeKind = threadSession?.runtimeKind;
-    if (!runtimeKind) {
-      return null;
-    }
-    return (
-      findRuntimeDefinition(runtimeDefinitions, runtimeKind)?.capabilities.approvals
-        .supportedReplyOutcomes ?? null
-    );
-  }, [runtimeDefinitions, threadSession?.runtimeKind]);
+  const canSubmitQuestionAnswers = interactionEnabled && pendingQuestions.canSubmit;
+  const canReplyToApprovalRequests = interactionEnabled && approvals.canReply;
 
   return useMemo(
     () => ({
-      session: threadSession,
       modelCatalog,
-      displayedSessionKey,
-      transcriptState,
-      runtimeReadiness,
+      transcript,
+      runtimePresentation,
       isSessionWorking,
-      isInteractionEnabled: hasComposer && isRuntimeReady,
+      isInteractionEnabled: interactionEnabled,
       emptyState,
       isStarting: composerActivity?.isStarting ?? false,
       isSending: composerActivity?.isSending ?? false,
@@ -136,13 +119,10 @@ export function useAgentChatThreadModel({
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
       canReplyToApprovals: canReplyToApprovalRequests,
-      runtimeSupportedApprovalReplyOutcomes,
       isSubmittingApprovalByRequestId: approvals.isSubmittingByRequestId,
       approvalReplyErrorByRequestId: approvals.errorByRequestId,
       onReplyApproval: approvals.onReply,
       sessionAuxiliaryError,
-      shouldResetTranscriptWindow,
-      transcriptNotice,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
       messagesContainerRef,
@@ -151,35 +131,29 @@ export function useAgentChatThreadModel({
     }),
     [
       activeTodoPanelCollapsed,
-      displayedSessionKey,
       approvals,
       canReplyToApprovalRequests,
       canSubmitQuestionAnswers,
       composerActivity,
       emptyState,
       handleToggleTodoPanel,
-      hasComposer,
-      isRuntimeReady,
+      interactionEnabled,
       isSessionWorking,
       messagesContainerRef,
       modelCatalog,
       pendingApprovalRequests,
       pendingQuestionRequests,
       pendingQuestions,
-      runtimeReadiness,
-      runtimeSupportedApprovalReplyOutcomes,
+      runtimePresentation,
       scrollToBottomOnSendRef,
       sessionAccentColor,
       sessionAgentColors,
-      transcriptState,
       todos,
       sessionAuxiliaryError,
-      shouldResetTranscriptWindow,
       subagentPendingApprovalCountBySessionKey,
       subagentPendingQuestionCountBySessionKey,
       syncBottomAfterComposerLayoutRef,
-      threadSession,
-      transcriptNotice,
+      transcript,
     ],
   );
 }

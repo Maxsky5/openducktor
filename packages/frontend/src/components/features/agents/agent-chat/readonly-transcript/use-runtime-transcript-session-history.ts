@@ -29,8 +29,8 @@ import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
-import type { AgentChatThreadSession } from "../agent-chat.types";
-import { toAgentChatThreadSession } from "../agent-chat-thread-session";
+import type { AgentChatTranscriptSession } from "../agent-chat.types";
+import { toAgentChatTranscriptSession } from "../agent-chat-transcript-session";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { withClaudeSkillMentions } from "../claude-skill-mentions";
 import {
@@ -48,9 +48,11 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
 };
 
 type RuntimeTranscriptSessionHistory = {
-  session: AgentChatThreadSession | null;
+  session: AgentChatTranscriptSession | null;
   interactionSession: AgentSessionState | null;
   transcriptState: AgentSessionTranscriptState;
+  retryHistory: (() => void) | null;
+  isRetryingHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
@@ -163,21 +165,21 @@ export function useRuntimeTranscriptSessionHistory({
       : skippedTranscriptSkillsQueryOptions,
   );
   const session = useMemo(() => {
-    let threadSession: AgentChatThreadSession | null = null;
+    let transcriptSession: AgentChatTranscriptSession | null = null;
     if (matchingSession !== null) {
-      threadSession = toAgentChatThreadSession(
+      transcriptSession = toAgentChatTranscriptSession(
         historyQuery.data
           ? mergeReadonlyRuntimeHistory(matchingSession, historyQuery.data)
           : matchingSession,
       );
     } else if (shouldLoadHistory && historyQuery.data && stableTarget !== null) {
-      threadSession = createReadonlyTranscriptSession({
+      transcriptSession = createReadonlyTranscriptSession({
         ...stableTarget,
         history: historyQuery.data,
       });
     }
-    return threadSession
-      ? withClaudeSkillMentions(threadSession, skillsQuery.data?.skills ?? [])
+    return transcriptSession
+      ? withClaudeSkillMentions(transcriptSession, skillsQuery.data?.skills ?? [])
       : null;
   }, [historyQuery.data, matchingSession, shouldLoadHistory, skillsQuery.data, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
@@ -201,11 +203,16 @@ export function useRuntimeTranscriptSessionHistory({
       repoReadinessState,
     });
   }, [emptyReason, historyQuery.error, repoReadinessState, runtimePolicyError, session]);
+  const retryHistory = useCallback(() => {
+    void historyQuery.refetch();
+  }, [historyQuery.refetch]);
 
   return {
     session,
     interactionSession: matchingSession,
     transcriptState,
+    retryHistory: historyQuery.error ? retryHistory : null,
+    isRetryingHistory: historyQuery.isFetching,
     replyAgentApproval,
     answerAgentQuestion,
   };

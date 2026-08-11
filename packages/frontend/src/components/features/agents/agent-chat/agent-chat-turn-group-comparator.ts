@@ -11,6 +11,7 @@ export type AgentChatThreadMotionRowProps = {
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionIdentity: AgentSessionTranscriptTarget | null;
+  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
   subagentPendingApprovalCount: number;
   subagentPendingQuestionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -20,7 +21,8 @@ export type AgentChatTurnGroupProps = {
   turn: AgentChatRenderedTurn;
   modelCatalog?: AgentChatThreadModel["modelCatalog"];
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionTranscriptTarget | null;
+  transcriptTarget: AgentSessionTranscriptTarget | null;
+  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -202,6 +204,7 @@ export const areAgentChatThreadMotionRowPropsEqual = (
     ) &&
     previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
     previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
+    previousProps.runtimePresentation === nextProps.runtimePresentation &&
     previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
     previousProps.modelCatalog === nextProps.modelCatalog &&
     areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
@@ -224,9 +227,10 @@ export const areAgentChatTurnGroupPropsEqual = (
     previousProps.modelCatalog === nextProps.modelCatalog &&
     areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
     areAgentSessionTranscriptTargetsEqual(
-      previousProps.sessionIdentity,
-      nextProps.sessionIdentity,
+      previousProps.transcriptTarget,
+      nextProps.transcriptTarget,
     ) &&
+    previousProps.runtimePresentation === nextProps.runtimePresentation &&
     previousProps.resolveRowRef === nextProps.resolveRowRef &&
     areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
     areTurnSubagentPendingCountsEquivalent({
@@ -235,7 +239,7 @@ export const areAgentChatTurnGroupPropsEqual = (
       nextApprovalCounts: nextProps.subagentPendingApprovalCountBySessionKey,
       previousQuestionCounts: previousProps.subagentPendingQuestionCountBySessionKey,
       nextQuestionCounts: nextProps.subagentPendingQuestionCountBySessionKey,
-      sessionIdentity: nextProps.sessionIdentity,
+      sessionIdentity: nextProps.transcriptTarget,
     })
   );
 };

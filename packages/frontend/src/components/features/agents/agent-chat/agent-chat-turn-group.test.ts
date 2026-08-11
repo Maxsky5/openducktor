@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import {
   type AgentChatThreadMotionRowProps,
   type AgentChatTurnGroupProps,
@@ -42,7 +42,12 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
     activeStreamingAssistantMessageId: null,
   },
   sessionAgentColors: {},
-  sessionIdentity: createSessionIdentity(),
+  transcriptTarget: createSessionIdentity(),
+  runtimePresentation: {
+    runtimeKind: "opencode",
+    presentToolCall: presentRegularToolCall,
+    supportedApprovalReplyOutcomes: null,
+  },
   subagentPendingApprovalCountBySessionKey: {},
   subagentPendingQuestionCountBySessionKey: {},
   resolveRowRef,
@@ -56,6 +61,11 @@ const baseMotionRowProps = (
   isStreamingAssistantMessage: false,
   sessionAgentColors: { build: "text-sky-700" },
   sessionIdentity: createSessionIdentity(),
+  runtimePresentation: {
+    runtimeKind: "opencode",
+    presentToolCall: presentRegularToolCall,
+    supportedApprovalReplyOutcomes: null,
+  },
   subagentPendingApprovalCount: 0,
   subagentPendingQuestionCount: 0,
   resolveRowRef,
@@ -87,11 +97,13 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
 
   test("skips rerender for unchanged row identities and equivalent rows", () => {
     const previousProps = baseProps();
+    const runtimePresentation = previousProps.runtimePresentation;
 
     expect(areAgentChatTurnGroupPropsEqual(previousProps, { ...previousProps })).toBe(true);
     expect(
       areAgentChatTurnGroupPropsEqual(
         baseProps({
+          runtimePresentation,
           turn: {
             key: "turn-duration",
             rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
@@ -100,6 +112,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
           },
         }),
         baseProps({
+          runtimePresentation,
           turn: {
             key: "turn-duration",
             rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
@@ -111,9 +124,29 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(true);
   });
 
+  test("runtime presentation changes invalidate turn groups", () => {
+    const props = baseProps();
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          runtimePresentation: {
+            ...props.runtimePresentation,
+            presentToolCall: (toolName) => ({
+              kind: "workflow",
+              displayName: toolName,
+            }),
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   test("scope changes invalidate turn groups", () => {
     const previousProps = baseProps({
-      sessionIdentity: {
+      transcriptTarget: {
         ...createSessionIdentity(),
         sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
       },
@@ -122,12 +155,31 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     expect(
       areAgentChatTurnGroupPropsEqual(previousProps, {
         ...previousProps,
-        sessionIdentity: {
+        transcriptTarget: {
           ...createSessionIdentity(),
           sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
         },
       }),
     ).toBe(false);
+  });
+
+  test("recreated equivalent workflow scopes keep turn groups stable", () => {
+    const previousProps = baseProps({
+      transcriptTarget: {
+        ...createSessionIdentity(),
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      },
+    });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(previousProps, {
+        ...previousProps,
+        transcriptTarget: {
+          ...createSessionIdentity(),
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        },
+      }),
+    ).toBe(true);
   });
 
   test("changed message row identity invalidates turn groups", () => {
@@ -300,7 +352,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         baseProps({
           ...props,
           sessionAgentColors: { build: "text-sky-700" },
-          sessionIdentity: createSessionIdentity(),
+          transcriptTarget: createSessionIdentity(),
         }),
       ),
     ).toBe(true);

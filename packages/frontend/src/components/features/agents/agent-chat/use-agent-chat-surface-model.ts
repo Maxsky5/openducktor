@@ -2,17 +2,13 @@ import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
+  AgentChatRuntimePresentation,
   AgentChatSurfaceModel,
-  AgentChatThreadSession,
-  AgentChatTranscriptNoticeAction,
+  AgentChatTranscriptPresentation,
 } from "./agent-chat.types";
-import { projectAgentChatThreadState } from "./agent-chat-thread-state";
 import {
   type AgentChatComposerConfig,
   invokeStopAgentSession,
@@ -30,13 +26,12 @@ export { invokeStopAgentSession };
 const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
 
 type UseAgentChatSurfaceModelArgs = {
-  sessionKey: string | null;
   modelCatalog?: AgentModelCatalog | null;
-  session: AgentChatThreadSession | null;
-  transcriptState: AgentSessionTranscriptState;
+  transcript: AgentChatTranscriptPresentation;
   chatSettings: ChatSettings;
   sessionAuxiliaryError: string | null;
-  runtimeReadiness: RepoRuntimeReadiness;
+  interactionEnabled: boolean;
+  runtimePresentation: AgentChatRuntimePresentation;
   emptyState: AgentChatEmptyStateModel | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
@@ -48,17 +43,15 @@ type UseAgentChatSurfaceModelArgs = {
   sessionAgentColors?: Record<string, string>;
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCountBySessionKey?: Record<string, number>;
-  failedTranscriptAction?: AgentChatTranscriptNoticeAction | null | undefined;
 };
 
 export function useAgentChatSurfaceModel({
-  sessionKey,
   modelCatalog,
-  session,
-  transcriptState,
+  transcript,
   chatSettings,
   sessionAuxiliaryError,
-  runtimeReadiness,
+  interactionEnabled,
+  runtimePresentation,
   emptyState,
   pendingApprovalRequests,
   pendingQuestionRequests,
@@ -70,21 +63,12 @@ export function useAgentChatSurfaceModel({
   sessionAgentColors,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
-  failedTranscriptAction,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
-  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
-  const threadState = projectAgentChatThreadState({
-    sessionKey,
-    session,
-    transcriptState,
-    runtimeReadiness,
-    failedTranscriptAction,
-  });
-  const isSessionWorking = isAgentSessionActivityWorking(threadState.threadSession?.activityState);
+  const isSessionWorking = isAgentSessionActivityWorking(transcript.session?.activityState);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
-      displayedSessionKey: threadState.displayedSessionKey,
+      displayedSessionKey: transcript.displayedSessionKey,
       syncBottomAfterComposerLayoutRef,
     });
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
@@ -105,7 +89,7 @@ export function useAgentChatSurfaceModel({
 
   const composerModel = useAgentChatComposerModel({
     composer,
-    runtimeReadiness,
+    interactionEnabled,
     sessionAgentColors: resolvedSessionAgentColors,
     composerFormRef,
     composerEditorRef,
@@ -114,14 +98,12 @@ export function useAgentChatSurfaceModel({
     syncBottomAfterComposerLayoutRef,
   });
   const threadModel = useAgentChatThreadModel({
-    threadState,
     modelCatalog: modelCatalog ?? null,
-    transcriptState,
-    runtimeReadiness,
+    transcript,
+    interactionEnabled,
+    runtimePresentation,
     isSessionWorking,
-    hasComposer,
     composerActivity,
-    runtimeDefinitions,
     sessionAuxiliaryError,
     emptyState,
     pendingApprovalRequests,

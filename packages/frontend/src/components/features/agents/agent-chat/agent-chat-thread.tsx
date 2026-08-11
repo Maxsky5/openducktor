@@ -1,17 +1,7 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import {
-  memo,
-  type ReactElement,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { memo, type ReactElement, type RefObject, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
-import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
@@ -35,26 +25,23 @@ type AgentChatTranscriptProps = {
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionTranscriptTarget | null;
+  transcriptTarget: AgentSessionTranscriptTarget | null;
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  transcriptNotice: AgentChatThreadModel["transcriptNotice"];
-  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
+  transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
+  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
 };
 
 const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
   notice,
-  runtimeReadiness,
 }: {
-  notice: NonNullable<AgentChatThreadModel["transcriptNotice"]>;
-  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
+  notice: NonNullable<AgentChatThreadModel["transcript"]["notice"]>;
 }): ReactElement {
   const isLoadingNotice = notice.severity === "loading";
-  const isRuntimeBlocked = notice.kind === "runtime_blocked";
   const action = notice.action;
 
   return (
@@ -110,22 +97,6 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
             <RefreshCcw className={cn("size-3.5", action.isPending ? "animate-spin" : "")} />
             {action.label}
           </Button>
-        ) : isRuntimeBlocked ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
-            disabled={runtimeReadiness.isLoadingChecks}
-            onClick={() => {
-              void runtimeReadiness.refreshChecks();
-            }}
-          >
-            <RefreshCcw
-              className={cn("size-3.5", runtimeReadiness.isLoadingChecks ? "animate-spin" : "")}
-            />
-            Recheck
-          </Button>
         ) : null}
       </div>
     </div>
@@ -143,7 +114,7 @@ type AgentChatBottomStackProps = {
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
   canReplyToApprovals: boolean;
-  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimeSupportedApprovalReplyOutcomes"];
+  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimePresentation"]["supportedApprovalReplyOutcomes"];
   isSubmittingApprovalByRequestId: AgentChatThreadModel["isSubmittingApprovalByRequestId"];
   approvalReplyErrorByRequestId: AgentChatThreadModel["approvalReplyErrorByRequestId"];
   onReplyApproval: AgentChatThreadModel["onReplyApproval"];
@@ -160,7 +131,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   isSending,
   isInteractionEnabled,
   sessionAgentColors,
-  sessionIdentity,
+  transcriptTarget,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
   messagesContainerRef,
@@ -168,21 +139,17 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   renderedTurns,
   resolveRowRef,
   transcriptNotice,
-  runtimeReadiness,
+  runtimePresentation,
 }: AgentChatTranscriptProps): ReactElement {
-  const hasSession = sessionIdentity !== null;
-
   return (
     <div
       ref={messagesContainerRef}
       className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
     >
-      {transcriptNotice ? (
-        <AgentChatTranscriptNotice notice={transcriptNotice} runtimeReadiness={runtimeReadiness} />
-      ) : null}
+      {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
 
       <div ref={messagesContentRef}>
-        {!hasSession && !transcriptNotice && emptyState ? (
+        {!transcriptNotice && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
             <p>{emptyState.title}</p>
             {emptyState.actionLabel && emptyState.onAction ? (
@@ -217,7 +184,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
               turn={turn}
               modelCatalog={modelCatalog}
               sessionAgentColors={sessionAgentColors}
-              sessionIdentity={sessionIdentity}
+              transcriptTarget={transcriptTarget}
+              runtimePresentation={runtimePresentation}
               subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
               subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
               resolveRowRef={resolveRowRef}
@@ -311,9 +279,8 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
-    session,
-    displayedSessionKey,
-    runtimeReadiness,
+    transcript,
+    runtimePresentation,
     isInteractionEnabled,
     emptyState,
     modelCatalog,
@@ -330,31 +297,18 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
     canReplyToApprovals,
-    runtimeSupportedApprovalReplyOutcomes,
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     onReplyApproval,
     sessionAuxiliaryError,
     isSessionWorking,
-    shouldResetTranscriptWindow,
-    transcriptNotice,
     todoPanelCollapsed,
     onToggleTodoPanel,
     messagesContainerRef,
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const stableSessionIdentity = useStableAgentSessionIdentity(session);
-  const sessionScope = useStableAgentSessionScope(session?.sessionScope);
-  const sessionIdentity = useMemo<AgentSessionTranscriptTarget | null>(() => {
-    if (stableSessionIdentity === null) {
-      return null;
-    }
-    return {
-      ...stableSessionIdentity,
-      ...(sessionScope ? { sessionScope } : {}),
-    };
-  }, [sessionScope, stableSessionIdentity]);
+  const { session, target: transcriptTarget } = transcript;
   const {
     messagesContentRef,
     renderedTurns,
@@ -364,11 +318,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottom,
     scrollToTop,
   } = useAgentChatRenderedTranscript({
-    session,
-    displayedSessionKey,
+    transcript,
     isSessionWorking,
-    shouldResetTranscriptWindow,
-    transcriptNotice,
     messagesContainerRef,
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
@@ -383,6 +334,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
+  const transcriptEmptyState = session === null ? emptyState : null;
   const hasBottomStack = Boolean(
     session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError || runtimeStatusMessage),
   );
@@ -448,7 +400,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
-        emptyState={emptyState}
+        emptyState={transcriptEmptyState}
         modelCatalog={modelCatalog}
         isStarting={isStarting}
         isSending={isSending}
@@ -456,13 +408,13 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionAgentColors={sessionAgentColors}
         subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
         subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-        sessionIdentity={sessionIdentity}
+        transcriptTarget={transcriptTarget}
+        runtimePresentation={runtimePresentation}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={renderedTurns}
         resolveRowRef={resolveRowRef}
         transcriptNotice={renderedTranscriptNotice}
-        runtimeReadiness={runtimeReadiness}
       />
 
       {hasBottomStack && session ? (
@@ -476,7 +428,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
             onSubmitQuestionAnswers={onSubmitQuestionAnswers}
             canReplyToApprovals={canReplyToApprovals}
-            runtimeSupportedApprovalReplyOutcomes={runtimeSupportedApprovalReplyOutcomes}
+            runtimeSupportedApprovalReplyOutcomes={
+              runtimePresentation.supportedApprovalReplyOutcomes
+            }
             isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
             approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
             onReplyApproval={onReplyApproval}

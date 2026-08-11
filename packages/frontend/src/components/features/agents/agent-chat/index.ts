@@ -2,7 +2,10 @@ export type {
   AgentChatComposerModel,
   AgentChatEmptyStateModel,
   AgentChatModel,
+  AgentChatRuntimePresentation,
   AgentChatSurfaceModel,
   AgentChatThreadModel,
-  AgentRoleOption,
+  AgentChatToolCallPresentation,
+  AgentChatTranscriptPresentation,
+  AgentChatTranscriptSession,
 } from "./agent-chat.types";

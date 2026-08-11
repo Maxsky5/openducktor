@@ -5,7 +5,6 @@ import type {
 } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useMemo } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
@@ -82,7 +81,7 @@ export type AgentChatComposerConfig = {
 
 type UseAgentChatComposerModelArgs = {
   composer: AgentChatComposerConfig | undefined;
-  runtimeReadiness: RepoRuntimeReadiness;
+  interactionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerEditorRef: RefObject<HTMLDivElement | null>;
@@ -93,7 +92,7 @@ type UseAgentChatComposerModelArgs = {
 
 export function useAgentChatComposerModel({
   composer,
-  runtimeReadiness,
+  interactionEnabled,
   sessionAgentColors,
   composerFormRef,
   composerEditorRef,
@@ -101,7 +100,6 @@ export function useAgentChatComposerModel({
   scrollToBottomOnSendRef,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatComposerModelArgs): AgentChatComposerModel | undefined {
-  const isRuntimeReady = runtimeReadiness.state === "ready";
   const composerState = useMemo(
     () =>
       composer
@@ -109,11 +107,11 @@ export function useAgentChatComposerModel({
             selectedSession: composer.selectedSession,
             selectedModelSelection: composer.selectedModelSelection,
             isSessionModelCatalogLoading: composer.isSessionModelCatalogLoading,
-            isRuntimeReady,
+            isInteractionEnabled: interactionEnabled,
             sessionAgentColors,
           })
         : null,
-    [composer, isRuntimeReady, sessionAgentColors],
+    [composer, interactionEnabled, sessionAgentColors],
   );
 
   return useMemo(() => {

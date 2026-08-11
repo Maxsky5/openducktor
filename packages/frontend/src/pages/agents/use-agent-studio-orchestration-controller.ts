@@ -179,6 +179,7 @@ type BuildAgentStudioPageModelsArgsInput = {
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
   chatSettings: ChatSettings;
+  runtimeDefinitions: RuntimeDescriptor[];
   composer: AgentStudioOrchestrationComposerContext;
 };
 
@@ -189,6 +190,7 @@ export const buildAgentStudioPageModelsArgs = ({
   sessionActions,
   modelSelection,
   chatSettings,
+  runtimeDefinitions,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
   const {
@@ -220,6 +222,7 @@ export const buildAgentStudioPageModelsArgs = ({
     },
     sessionActions,
     chatSettings,
+    runtimeDefinitions,
     modelSelection: {
       ...restOfModelSelection,
       agentOptions: agentProfileOptions,
@@ -490,6 +493,7 @@ export function useAgentStudioOrchestrationController({
       handleSelectVariant,
     },
     chatSettings,
+    runtimeDefinitions,
     composer,
   });
 

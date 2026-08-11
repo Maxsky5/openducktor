@@ -6,24 +6,19 @@ import { AgentChat } from "./agent-chat";
 import {
   buildModelSelection,
   buildSession,
-  buildThreadTranscriptState,
+  buildSessionTranscript,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   chatSettings: createChatSettingsFixture(),
   thread: completeThreadModel({
-    session: buildSession({
-      status: "running" as const,
-    }),
+    transcript: buildSessionTranscript(
+      buildSession({
+        status: "running" as const,
+      }),
+    ),
     isSessionWorking: true,
-    transcriptState: buildThreadTranscriptState(),
-    runtimeReadiness: {
-      state: "ready" as const,
-      message: null,
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
-    },
     isInteractionEnabled: true,
     emptyState: null,
     isStarting: false,

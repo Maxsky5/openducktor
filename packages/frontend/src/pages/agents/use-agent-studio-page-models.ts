@@ -1,4 +1,4 @@
-import type { ChatSettings, TaskCard } from "@openducktor/contracts";
+import type { ChatSettings, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
@@ -42,6 +42,7 @@ type UseAgentStudioPageModelsArgs = {
   sessionActions: AgentStudioSessionActionsContext;
   modelSelection: AgentStudioChatModelSelectionContext;
   chatSettings: ChatSettings;
+  runtimeDefinitions: RuntimeDescriptor[];
   composer: AgentStudioChatComposerContext;
 };
 
@@ -52,6 +53,7 @@ export function useAgentStudioPageModels({
   sessionActions,
   modelSelection,
   chatSettings,
+  runtimeDefinitions,
   composer,
 }: UseAgentStudioPageModelsArgs): {
   activeTabValue: string;
@@ -133,6 +135,7 @@ export function useAgentStudioPageModels({
     sessionActions,
     modelSelection,
     chatSettings,
+    runtimeDefinitions,
     composer,
   });
 

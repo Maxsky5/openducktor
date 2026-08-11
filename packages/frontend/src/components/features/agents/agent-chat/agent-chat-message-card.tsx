@@ -1,8 +1,7 @@
 import type { AgentModelCatalog } from "@openducktor/core";
-import { memo, type ReactElement, use } from "react";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { memo, type ReactElement } from "react";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatRuntimePresentation } from "./agent-chat.types";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
@@ -13,6 +12,7 @@ type AgentChatMessageCardProps = {
   isStreamingAssistantMessage?: boolean;
   sessionAgentColors?: Record<string, string>;
   sessionIdentity: ParentSessionRuntimeContext | null;
+  runtimePresentation: AgentChatRuntimePresentation;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
 };
@@ -23,21 +23,21 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   isStreamingAssistantMessage = false,
   sessionAgentColors,
   sessionIdentity,
+  runtimePresentation,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
 }: AgentChatMessageCardProps): ReactElement | null {
-  const runtimeDefinitionsContext = use(RuntimeDefinitionsContext);
-  const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
-  const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
+  const sessionRuntimeKind = runtimePresentation.runtimeKind;
   const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
-  const workflowToolAliasesByCanonical = sessionRuntimeKind
-    ? findRuntimeDefinition(runtimeDefinitions, sessionRuntimeKind)?.workflowToolAliasesByCanonical
-    : undefined;
+  const toolCallPresentation =
+    message.meta?.kind === "tool"
+      ? runtimePresentation.presentToolCall(message.meta.tool, message.meta.displayLabel)
+      : null;
   const vm = buildAgentChatMessageCardViewModel({
     message,
     sessionAgentColors,
     sessionRuntimeKind: sessionRuntimeKind ?? null,
-    workflowToolAliasesByCanonical,
+    toolCallPresentation,
   });
   return (
     <article className={vm.articleClassName} style={vm.articleStyle}>
@@ -57,7 +57,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
-        workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+        toolCallPresentation={toolCallPresentation}
         subagentPendingApprovalCount={subagentPendingApprovalCount}
         subagentPendingQuestionCount={subagentPendingQuestionCount}
       />

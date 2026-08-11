@@ -15,10 +15,11 @@ import {
   type AgentChatThreadModelInput,
   buildApprovalRequest,
   buildBaseModel,
+  buildEmptyTranscript,
   buildMessage,
   buildQuestionRequest,
   buildSession,
-  buildThreadTranscriptState,
+  buildSessionTranscript,
   buildTodoItem,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
@@ -31,6 +32,12 @@ import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+const RUNTIME_STARTING_NOTICE = {
+  kind: "runtime_waiting" as const,
+  severity: "loading" as const,
+  title: "Runtime is starting",
+  description: "Waiting for runtime and MCP health before loading this session.",
+};
 
 const AgentChatThread = ({ model }: { model: AgentChatThreadModelInput }) =>
   createElement(
@@ -190,12 +197,27 @@ describe("AgentChatThread", () => {
     globalThis.ResizeObserver = originalResizeObserver;
   });
 
+  test("preserves an explicitly absent transcript target for a rendered session", () => {
+    const session = buildSession({ externalSessionId: "session-without-transcript-target" });
+    const model = completeThreadModel({
+      ...buildBaseModel(),
+      transcript: buildSessionTranscript(session, {
+        target: null,
+        displayedSessionKey: null,
+      }),
+    });
+
+    expect(model.transcript.session).toBe(session);
+    expect(model.transcript.target).toBeNull();
+    expect(model.transcript.displayedSessionKey).toBeNull();
+  });
+
   test("renders empty state when no session is active", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: null,
+          transcript: buildEmptyTranscript(),
           emptyState: {
             title: "Select a task to begin.",
             actionLabel: "Start Spec",
@@ -214,9 +236,11 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            status: "running",
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              status: "running",
+            }),
+          ),
         },
       }),
     );
@@ -229,10 +253,12 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            status: "stopped",
-            messages: [],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              status: "stopped",
+              messages: [],
+            }),
+          ),
         },
       }),
     );
@@ -246,17 +272,19 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            status: "stopped",
-            messages: [
-              buildMessage("thinking", "Reasoning trace 1", {
-                id: "thinking-1",
-              }),
-              buildMessage("thinking", "Reasoning trace 2", {
-                id: "thinking-2",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              status: "stopped",
+              messages: [
+                buildMessage("thinking", "Reasoning trace 1", {
+                  id: "thinking-1",
+                }),
+                buildMessage("thinking", "Reasoning trace 2", {
+                  id: "thinking-2",
+                }),
+              ],
+            }),
+          ),
         },
       }),
     );
@@ -269,10 +297,12 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            status: "stopped",
-            messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              status: "stopped",
+              messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],
+            }),
+          ),
           pendingQuestionRequests: [buildQuestionRequest()],
           pendingApprovalRequests: [buildApprovalRequest()],
         },
@@ -289,7 +319,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: null,
+          transcript: buildEmptyTranscript(),
           isStarting: true,
           emptyState: {
             title: "Initializing session...",
@@ -310,16 +340,19 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "runtime_waiting",
+          transcript: buildEmptyTranscript({
+            notice: {
+              kind: "runtime_blocked",
+              severity: "error",
+              title: "Runtime unavailable",
+              description: "OpenCode runtime is unavailable",
+              action: {
+                label: "Recheck",
+                onAction: () => {},
+              },
+            },
           }),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "blocked",
-            message: "OpenCode runtime is unavailable",
-          },
           isInteractionEnabled: false,
-          session: null,
         },
       }),
     );
@@ -335,19 +368,16 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "blocked",
-            message: "OpenCode runtime is unavailable",
-          },
           isInteractionEnabled: false,
-          session: buildSession({
-            messages: [
-              buildMessage("assistant", "Already loaded transcript", {
-                id: "loaded-1",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              messages: [
+                buildMessage("assistant", "Already loaded transcript", {
+                  id: "loaded-1",
+                }),
+              ],
+            }),
+          ),
         },
       }),
     );
@@ -362,9 +392,11 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            messages: [buildMessage("assistant", "Measured transcript row", { id: "loaded-1" })],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              messages: [buildMessage("assistant", "Measured transcript row", { id: "loaded-1" })],
+            }),
+          ),
         },
       }),
     );
@@ -390,13 +422,21 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "failed",
-            message: failure.summary,
-            historyFailure: failure,
+          transcript: buildEmptyTranscript({
+            notice: {
+              kind: "session_failed",
+              severity: "error",
+              title: "Couldn't load conversation history",
+              description: failure.summary,
+              details: [
+                { label: "Error", value: failure.detail },
+                { label: "Method", value: failure.method },
+                { label: "Page cursor", value: "First page" },
+                { label: "Diagnostic ID", value: failure.diagnosticId },
+              ],
+            },
           }),
           isInteractionEnabled: false,
-          session: null,
         },
       }),
     );
@@ -414,21 +454,17 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "runtime_waiting",
-          }),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "checking",
-          },
           isInteractionEnabled: false,
-          session: buildSession({
-            messages: [
-              buildMessage("assistant", "Cached transcript", {
-                id: "assistant-1",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              messages: [
+                buildMessage("assistant", "Cached transcript", {
+                  id: "assistant-1",
+                }),
+              ],
+            }),
+            { notice: RUNTIME_STARTING_NOTICE },
+          ),
         },
       }),
     );
@@ -443,16 +479,16 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "runtime_waiting",
-          }),
-          session: buildSession({
-            messages: [
-              buildMessage("assistant", "Cached transcript", {
-                id: "assistant-1",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              messages: [
+                buildMessage("assistant", "Cached transcript", {
+                  id: "assistant-1",
+                }),
+              ],
+            }),
+            { notice: RUNTIME_STARTING_NOTICE },
+          ),
         },
       }),
     );
@@ -467,18 +503,16 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          runtimeReadiness: {
-            ...buildBaseModel().runtimeReadiness,
-            state: "checking",
-          },
           isInteractionEnabled: false,
-          session: buildSession({
-            messages: [
-              buildMessage("assistant", "Cached transcript", {
-                id: "assistant-1",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              messages: [
+                buildMessage("assistant", "Cached transcript", {
+                  id: "assistant-1",
+                }),
+              ],
+            }),
+          ),
         },
       }),
     );
@@ -492,22 +526,24 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            messages: [
-              buildMessage("assistant", "Done", {
-                id: "assistant-1",
-                meta: {
-                  kind: "assistant",
-                  agentRole: "spec",
-                  profileId: "Hephaestus (Deep Agent)",
-                  durationMs: 1_500,
-                },
-              }),
-              buildMessage("assistant", "Streaming message", {
-                id: "assistant-2",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              messages: [
+                buildMessage("assistant", "Done", {
+                  id: "assistant-1",
+                  meta: {
+                    kind: "assistant",
+                    agentRole: "spec",
+                    profileId: "Hephaestus (Deep Agent)",
+                    durationMs: 1_500,
+                  },
+                }),
+                buildMessage("assistant", "Streaming message", {
+                  id: "assistant-2",
+                }),
+              ],
+            }),
+          ),
           pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
@@ -523,14 +559,16 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            status: "idle",
-            messages: [
-              buildMessage("assistant", "Need your input", {
-                id: "assistant-idle-1",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              status: "idle",
+              messages: [
+                buildMessage("assistant", "Need your input", {
+                  id: "assistant-idle-1",
+                }),
+              ],
+            }),
+          ),
           pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
@@ -545,7 +583,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession(),
+          transcript: buildSessionTranscript(buildSession()),
           pendingApprovalRequests: [
             buildApprovalRequest({
               requestId: "perm-1",
@@ -587,9 +625,11 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            messages: longMessages,
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              messages: longMessages,
+            }),
+          ),
           pendingQuestionRequests: [buildQuestionRequest()],
           pendingApprovalRequests: [buildApprovalRequest()],
         },
@@ -607,7 +647,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession(),
+          transcript: buildSessionTranscript(buildSession()),
           pendingQuestionRequests: [buildQuestionRequest()],
           pendingApprovalRequests: [buildApprovalRequest()],
           todos: [
@@ -652,10 +692,12 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            runtimeKind: "codex",
-            status: "idle",
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              runtimeKind: "codex",
+              status: "idle",
+            }),
+          ),
           todos: [
             buildTodoItem({
               id: "todo-1",
@@ -677,10 +719,12 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            runtimeKind: "claude",
-            status: "idle",
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              runtimeKind: "claude",
+              status: "idle",
+            }),
+          ),
           todos: [
             buildTodoItem({
               id: "todo-1",
@@ -702,10 +746,12 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession({
-            runtimeKind: "opencode",
-            status: "idle",
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              runtimeKind: "opencode",
+              status: "idle",
+            }),
+          ),
           todos: [
             buildTodoItem({
               id: "todo-1",
@@ -757,14 +803,16 @@ describe("AgentChatThread", () => {
         createElement(AgentChatThread, {
           model: {
             ...buildBaseModel(),
-            session: buildSession({
-              externalSessionId: "session-normal",
-              messages: [
-                buildMessage("assistant", "Baseline transcript", {
-                  id: "assistant-1",
-                }),
-              ],
-            }),
+            transcript: buildSessionTranscript(
+              buildSession({
+                externalSessionId: "session-normal",
+                messages: [
+                  buildMessage("assistant", "Baseline transcript", {
+                    id: "assistant-1",
+                  }),
+                ],
+              }),
+            ),
           },
         }),
       );
@@ -773,10 +821,12 @@ describe("AgentChatThread", () => {
         createElement(AgentChatThread, {
           model: {
             ...buildBaseModel(),
-            session: buildSession({
-              externalSessionId: "session-attachments",
-              messages: attachmentMessages,
-            }),
+            transcript: buildSessionTranscript(
+              buildSession({
+                externalSessionId: "session-attachments",
+                messages: attachmentMessages,
+              }),
+            ),
           },
         }),
       );
@@ -828,7 +878,7 @@ describe("AgentChatThread", () => {
         createElement(AgentChatThread, {
           model: {
             ...buildBaseModel(),
-            session: largeSession,
+            transcript: buildSessionTranscript(largeSession),
           },
         }),
       );
@@ -843,7 +893,7 @@ describe("AgentChatThread", () => {
         createElement(AgentChatThread, {
           model: {
             ...buildBaseModel(),
-            session: smallSession,
+            transcript: buildSessionTranscript(smallSession),
           },
         }),
       );
@@ -857,10 +907,12 @@ describe("AgentChatThread", () => {
         createElement(AgentChatThread, {
           model: {
             ...buildBaseModel(),
-            session: buildSession({
-              ...largeSession,
-              messages: createSessionMessagesState("session-cached-large", largeMessages, 1),
-            }),
+            transcript: buildSessionTranscript(
+              buildSession({
+                ...largeSession,
+                messages: createSessionMessagesState("session-cached-large", largeMessages, 1),
+              }),
+            ),
           },
         }),
       );
@@ -895,7 +947,7 @@ describe("AgentChatThread", () => {
         createElement(AgentChatThread, {
           model: {
             ...buildBaseModel(),
-            session,
+            transcript: buildSessionTranscript(session),
           },
         }),
       );
@@ -904,7 +956,7 @@ describe("AgentChatThread", () => {
         createElement(AgentChatThread, {
           model: {
             ...buildBaseModel(),
-            session: {
+            transcript: buildSessionTranscript({
               ...session,
               activityState: "running",
               messages: createSessionMessagesState("session-streaming", [
@@ -913,7 +965,7 @@ describe("AgentChatThread", () => {
                   id: "assistant-2",
                 }),
               ]),
-            },
+            }),
           },
         }),
       );
@@ -945,7 +997,7 @@ describe("AgentChatThread", () => {
     const model = {
       ...buildBaseModel(),
       isSessionWorking: true,
-      session: runningSession,
+      transcript: buildSessionTranscript(runningSession),
     };
     const rendered = render(
       createElement(AgentChatThread, {
@@ -973,11 +1025,13 @@ describe("AgentChatThread", () => {
         model: {
           ...model,
           isSessionWorking: false,
-          session: buildSession({
-            externalSessionId,
-            messages,
-            status: "idle",
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              externalSessionId,
+              messages,
+              status: "idle",
+            }),
+          ),
         },
       }),
     );
@@ -1003,7 +1057,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession(),
+          transcript: buildSessionTranscript(buildSession()),
           pendingQuestionRequests: [buildQuestionRequest()],
         },
       }),
@@ -1021,7 +1075,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession(),
+          transcript: buildSessionTranscript(buildSession()),
           pendingApprovalRequests: [buildApprovalRequest()],
         },
       }),
@@ -1039,7 +1093,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession(),
+          transcript: buildSessionTranscript(buildSession()),
           sessionAuxiliaryError: "todos unavailable",
         },
       }),
@@ -1063,7 +1117,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          session: buildSession(),
+          transcript: buildSessionTranscript(buildSession()),
           pendingQuestionRequests: [buildQuestionRequest()],
           todos: [
             buildTodoItem({
@@ -1093,7 +1147,7 @@ describe("AgentChatThread", () => {
     const model = {
       ...buildBaseModel(),
       messagesContainerRef: { current: createContainer() },
-      session,
+      transcript: buildSessionTranscript(session),
     };
 
     const rendered = render(
@@ -1119,7 +1173,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...model,
-          session: nextSession,
+          transcript: buildSessionTranscript(nextSession),
         },
       }),
     );
@@ -1134,13 +1188,14 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "session_loading",
-            reason: "preparing",
-          }),
-          session: buildSession({
-            externalSessionId: "session-loading",
-            messages: [buildMessage("assistant", "Loading", { id: "assistant-1" })],
+          transcript: buildEmptyTranscript({
+            shouldResetWindow: true,
+            notice: {
+              kind: "session_loading",
+              severity: "loading",
+              title: "Loading session",
+              description: "Preparing the selected session view.",
+            },
           }),
         },
       }),
@@ -1155,17 +1210,14 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          transcriptState: buildThreadTranscriptState({
-            kind: "session_loading",
-            reason: "history",
-          }),
-          session: buildSession({
-            externalSessionId: "session-history-loading",
-            messages: [
-              buildMessage("assistant", "Old cached message", {
-                id: "assistant-old-1",
-              }),
-            ],
+          transcript: buildEmptyTranscript({
+            shouldResetWindow: true,
+            notice: {
+              kind: "session_loading",
+              severity: "loading",
+              title: "Loading session",
+              description: "Loading the selected conversation.",
+            },
           }),
         },
       }),
@@ -1198,8 +1250,7 @@ describe("AgentChatThread", () => {
     });
     const model = {
       ...buildBaseModel(),
-      transcriptState: buildThreadTranscriptState({ kind: "visible" }),
-      session,
+      transcript: buildSessionTranscript(session),
     };
 
     const rendered = render(
@@ -1221,15 +1272,17 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...model,
-          session: buildSession({
-            ...session,
-            messages: [
-              ...messages,
-              buildMessage("assistant", "Next streamed response", {
-                id: "assistant-2",
-              }),
-            ],
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              ...session,
+              messages: [
+                ...messages,
+                buildMessage("assistant", "Next streamed response", {
+                  id: "assistant-2",
+                }),
+              ],
+            }),
+          ),
         },
       }),
     );
@@ -1248,7 +1301,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           messagesContainerRef: createRef<HTMLDivElement>(),
-          session: buildLongSession("session-scroll", 80),
+          transcript: buildSessionTranscript(buildLongSession("session-scroll", 80)),
         },
       }),
     );
@@ -1299,10 +1352,11 @@ describe("AgentChatThread", () => {
     const syncBottomAfterComposerLayoutRef = {
       current: null,
     } as { current: (() => void) | null };
+    const session = buildSession();
     const model = {
       ...buildBaseModel(),
       syncBottomAfterComposerLayoutRef,
-      session: buildSession(),
+      transcript: buildSessionTranscript(session),
     };
 
     const rendered = render(
@@ -1317,9 +1371,11 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...model,
-          session: buildSession({
-            externalSessionId: model.session?.externalSessionId,
-          }),
+          transcript: buildSessionTranscript(
+            buildSession({
+              externalSessionId: session.externalSessionId,
+            }),
+          ),
           todos: [
             buildTodoItem({
               content: "Keep transcript pinned",
@@ -1359,7 +1415,7 @@ describe("AgentChatThread", () => {
     const model = {
       ...buildBaseModel(),
       syncBottomAfterComposerLayoutRef,
-      session,
+      transcript: buildSessionTranscript(session),
       todos: [
         buildTodoItem({
           content: "Keep transcript pinned",

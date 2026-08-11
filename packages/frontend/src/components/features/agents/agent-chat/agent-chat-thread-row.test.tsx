@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 
-const baseProps = {
+const createBaseProps = () => ({
   isStreamingAssistantMessage: false,
   sessionAgentColors: {},
   sessionIdentity: {
@@ -15,13 +15,18 @@ const baseProps = {
     taskId: "task-1",
     role: "spec" as const,
   },
-};
+  runtimePresentation: {
+    runtimeKind: "opencode" as const,
+    presentToolCall: presentRegularToolCall,
+    supportedApprovalReplyOutcomes: null,
+  },
+});
 
 describe("AgentChatThreadRow", () => {
   test("renders turn duration rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThreadRow, {
-        ...baseProps,
+        ...createBaseProps(),
         row: { kind: "turn_duration", key: "duration-1", durationMs: 1200 },
       }),
     );
@@ -32,7 +37,7 @@ describe("AgentChatThreadRow", () => {
   test("renders fork boundary rows with the transcript separator treatment", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThreadRow, {
-        ...baseProps,
+        ...createBaseProps(),
         row: {
           kind: "fork_boundary",
           key: "fork-1",
@@ -49,7 +54,7 @@ describe("AgentChatThreadRow", () => {
   test("renders message rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThreadRow, {
-        ...baseProps,
+        ...createBaseProps(),
         row: {
           kind: "message",
           key: "message-1",
@@ -65,11 +70,8 @@ describe("AgentChatThreadRow", () => {
     const render = () =>
       renderToStaticMarkup(
         createElement(AgentChatThreadRow, {
-          ...baseProps,
-          row: {
-            kind: "unexpected",
-            key: "broken",
-          } as unknown as AgentChatTranscriptRow,
+          ...createBaseProps(),
+          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatTranscriptRow,
         }),
       );
 

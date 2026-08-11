@@ -1,10 +1,12 @@
-import type { ChatSettings, RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type {
+  ChatSettings,
+  RuntimeApprovalReplyOutcome,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
-  AgentRole,
-  AgentSessionScope,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSkillReference,
@@ -13,11 +15,8 @@ import type {
   AgentSubagentCatalog,
   AgentSubagentReference,
 } from "@openducktor/core";
-import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -26,13 +25,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
-
-export type AgentRoleOption = {
-  role: AgentRole;
-  label: string;
-  icon: LucideIcon;
-  disabled?: boolean;
-};
+import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 export type AgentChatEmptyStateModel = {
   title: string;
@@ -42,9 +35,8 @@ export type AgentChatEmptyStateModel = {
   isActionPending?: boolean;
 };
 
-export type AgentChatThreadSession = AgentSessionIdentity & {
+export type AgentChatTranscriptSession = AgentSessionIdentity & {
   title?: string;
-  sessionScope?: AgentSessionScope | null;
   activityState: AgentSessionActivityState | null;
   runtimeStatusMessage: string | null;
   messages: SessionMessagesState;
@@ -71,12 +63,41 @@ export type AgentChatTranscriptNotice = {
   action?: AgentChatTranscriptNoticeAction;
 };
 
-export type AgentChatThreadModel = {
-  session: AgentChatThreadSession | null;
-  modelCatalog: AgentModelCatalog | null;
+type AgentChatTranscriptPresentationBase = {
+  target: AgentSessionTranscriptTarget | null;
   displayedSessionKey: string | null;
-  transcriptState: AgentSessionTranscriptState;
-  runtimeReadiness: RepoRuntimeReadiness;
+  notice: AgentChatTranscriptNotice | null;
+};
+
+export type AgentChatTranscriptPresentation = AgentChatTranscriptPresentationBase &
+  (
+    | {
+        kind: "session";
+        session: AgentChatTranscriptSession;
+        shouldResetWindow: false;
+      }
+    | {
+        kind: "empty";
+        session: null;
+        shouldResetWindow: boolean;
+      }
+  );
+
+export type AgentChatToolCallPresentation = {
+  kind: "regular" | "workflow";
+  displayName: string;
+};
+
+export type AgentChatRuntimePresentation = {
+  runtimeKind: RuntimeKind | null;
+  presentToolCall: (toolName: string, displayLabel?: string) => AgentChatToolCallPresentation;
+  supportedApprovalReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
+};
+
+export type AgentChatThreadModel = {
+  modelCatalog: AgentModelCatalog | null;
+  transcript: AgentChatTranscriptPresentation;
+  runtimePresentation: AgentChatRuntimePresentation;
   isSessionWorking: boolean;
   isInteractionEnabled: boolean;
   emptyState: AgentChatEmptyStateModel | null;
@@ -93,13 +114,10 @@ export type AgentChatThreadModel = {
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   canReplyToApprovals: boolean;
-  runtimeSupportedApprovalReplyOutcomes?: readonly RuntimeApprovalReplyOutcome[] | null;
   isSubmittingApprovalByRequestId: Record<string, boolean>;
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   sessionAuxiliaryError: string | null;
-  shouldResetTranscriptWindow: boolean;
-  transcriptNotice: AgentChatTranscriptNotice | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;

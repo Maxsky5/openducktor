@@ -7,15 +7,28 @@ import { withCapturedConsole } from "@/test-utils/console-capture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
+import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 
 enableReactActEnvironment();
 
 const createElement = (
   type: typeof AgentChatMessageCard,
-  props: Omit<React.ComponentProps<typeof AgentChatMessageCard>, "sessionIdentity"> & {
+  props: Omit<
+    React.ComponentProps<typeof AgentChatMessageCard>,
+    "runtimePresentation" | "sessionIdentity"
+  > & {
     sessionIdentity?: React.ComponentProps<typeof AgentChatMessageCard>["sessionIdentity"];
   },
-) => createReactElement(type, { sessionIdentity: null, ...props });
+) =>
+  createReactElement(type, {
+    sessionIdentity: null,
+    runtimePresentation: {
+      runtimeKind: null,
+      presentToolCall: presentRegularToolCall,
+      supportedApprovalReplyOutcomes: null,
+    },
+    ...props,
+  });
 
 const writeClipboardMock = mock(async (_value: string) => {});
 let restoreClipboard: (() => void) | null = null;

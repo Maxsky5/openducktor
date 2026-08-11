@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -331,6 +332,10 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     sessionActions,
     modelSelection,
     chatSettings,
+    runtimeDefinitions: [
+      structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
+      structuredClone(CODEX_RUNTIME_DESCRIPTOR),
+    ],
     composer,
   };
 };
@@ -416,15 +421,13 @@ describe("useAgentStudioPageModels", () => {
       contextWindow: 100,
     });
     expect(state.agentChatModel.composer.draftScope.persistence).not.toBeNull();
-    expect(state.agentChatModel.thread.runtimeReadiness.state).toBe("ready");
+    expect(state.agentChatModel.thread.isInteractionEnabled).toBe(true);
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
 
-    await state.agentChatModel.thread.runtimeReadiness.refreshChecks();
     await state.agentChatModel.composer.onSend(createComposerDraft("message"));
     state.agentChatModel.composer.onStopSession();
 
-    expect(onRefreshChecks).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
 
@@ -484,7 +487,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const chatModel = harness.getLatest().agentChatModel;
-    expect(chatModel.thread.session).toBeNull();
+    expect(chatModel.thread.transcript.session).toBeNull();
     expect(chatModel.thread.isSessionWorking).toBe(false);
     expect(chatModel.thread.sessionAccentColor).toBe("#0ea5e9");
     expect(chatModel.composer.accentColor).toBe("#0ea5e9");
@@ -624,11 +627,11 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.transcriptState).toEqual({ kind: "visible" });
-    expect(thread.runtimeReadiness.state).toBe("checking");
-    expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
-      "Cached transcript",
-    );
+    expect(thread.isInteractionEnabled).toBe(false);
+    expect(thread.transcript.notice).toBeNull();
+    expect(
+      thread.transcript.session ? sessionMessageAt(thread.transcript.session, 0)?.content : null,
+    ).toBe("Cached transcript");
 
     await harness.unmount();
   });
@@ -748,7 +751,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.transcriptState).toEqual({ kind: "visible" });
+    expect(thread.transcript.notice).toBeNull();
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
     );
@@ -792,7 +795,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    const notice = harness.getLatest().agentChatModel.thread.transcriptNotice;
+    const notice = harness.getLatest().agentChatModel.thread.transcript.notice;
     expect(notice?.title).toBe("History may be incomplete");
     expect(notice?.action?.label).toBe("Retry");
     notice?.action?.onAction();
@@ -874,9 +877,9 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.transcriptState).toEqual({
-      kind: "session_loading",
-      reason: "history",
+    expect(harness.getLatest().agentChatModel.thread.transcript.notice).toMatchObject({
+      severity: "loading",
+      title: "Loading session",
     });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),

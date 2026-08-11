@@ -108,11 +108,15 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     const harness = createHookHarness(
       () =>
         useAgentChatRenderedTranscript({
-          session,
-          displayedSessionKey,
+          transcript: {
+            kind: "session",
+            session,
+            target: session,
+            displayedSessionKey,
+            shouldResetWindow: false,
+            notice: null,
+          },
           isSessionWorking: true,
-          shouldResetTranscriptWindow: false,
-          transcriptNotice: null,
           messagesContainerRef: createRef<HTMLDivElement>(),
           scrollToBottomOnSendRef,
           syncBottomAfterComposerLayoutRef,
@@ -156,11 +160,15 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     const harness = createHookHarness(
       () =>
         useAgentChatRenderedTranscript({
-          session,
-          displayedSessionKey,
+          transcript: {
+            kind: "session",
+            session,
+            target: session,
+            displayedSessionKey,
+            shouldResetWindow: false,
+            notice: null,
+          },
           isSessionWorking: true,
-          shouldResetTranscriptWindow: false,
-          transcriptNotice: null,
           messagesContainerRef: createRef<HTMLDivElement>(),
           scrollToBottomOnSendRef,
           syncBottomAfterComposerLayoutRef,
@@ -208,11 +216,15 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     const harness = createHookHarness(
       (_props: { tick: number }) =>
         useAgentChatRenderedTranscript({
-          session,
-          displayedSessionKey,
+          transcript: {
+            kind: "session",
+            session,
+            target: session,
+            displayedSessionKey,
+            shouldResetWindow: false,
+            notice: null,
+          },
           isSessionWorking: true,
-          shouldResetTranscriptWindow: false,
-          transcriptNotice: null,
           messagesContainerRef,
           scrollToBottomOnSendRef,
           syncBottomAfterComposerLayoutRef,

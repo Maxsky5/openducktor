@@ -98,12 +98,7 @@ describe("useAgentChatComposerModel", () => {
           sentDraft.text = draftToSerializedText(draft);
           return true;
         }),
-        runtimeReadiness: {
-          state: "ready",
-          message: null,
-          isLoadingChecks: false,
-          refreshChecks: async () => {},
-        },
+        interactionEnabled: true,
         sessionAgentColors: {},
         composerFormRef,
         composerEditorRef,

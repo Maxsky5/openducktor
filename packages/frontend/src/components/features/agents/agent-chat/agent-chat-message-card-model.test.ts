@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
@@ -21,7 +20,6 @@ import {
   roleLabel,
   SYSTEM_PROMPT_PREFIX,
   stripToolPrefix,
-  toolDisplayName,
   toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
 
@@ -75,18 +73,6 @@ describe("agent-chat-message-card-model", () => {
 
     test("converts markdown blocks to single line", () => {
       expect(toSingleLineMarkdown("line 1\n\n line 2   \nline 3")).toBe("line 1 line 2 line 3");
-    });
-
-    test("maps odt tool names to display names", () => {
-      expect(toolDisplayName("odt_set_plan")).toBe("set_plan");
-      expect(toolDisplayName("openducktor_odt_set_plan")).toBe("openducktor_odt_set_plan");
-      expect(
-        toolDisplayName(
-          "openducktor_odt_set_plan",
-          OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-        ),
-      ).toBe("set_plan");
-      expect(toolDisplayName("bash")).toBe("bash");
     });
   });
 

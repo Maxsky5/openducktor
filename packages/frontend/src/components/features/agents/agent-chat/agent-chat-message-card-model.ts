@@ -6,7 +6,6 @@ export {
   roleLabel,
   SYSTEM_PROMPT_PREFIX,
   stripToolPrefix,
-  toolDisplayName,
   toSingleLineMarkdown,
 } from "./message-formatting";
 export type { QuestionToolDetail } from "./question-tool-parser";

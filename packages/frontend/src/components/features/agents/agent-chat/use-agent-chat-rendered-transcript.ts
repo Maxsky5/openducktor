@@ -7,14 +7,14 @@ import {
   useRef,
   useState,
 } from "react";
-import type { AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatThreadModel, AgentChatTranscriptPresentation } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { isAssistantMessageStreaming } from "./agent-chat-streaming";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
-const TRANSCRIPT_MODEL_PENDING_NOTICE: NonNullable<AgentChatThreadModel["transcriptNotice"]> =
+const TRANSCRIPT_MODEL_PENDING_NOTICE: NonNullable<AgentChatTranscriptPresentation["notice"]> =
   Object.freeze({
     kind: "session_loading",
     severity: "loading",
@@ -50,11 +50,8 @@ export const getTurnActiveStreamingAssistantMessageId = (
 };
 
 type UseAgentChatRenderedTranscriptArgs = {
-  session: AgentChatThreadModel["session"];
-  displayedSessionKey: AgentChatThreadModel["displayedSessionKey"];
+  transcript: AgentChatThreadModel["transcript"];
   isSessionWorking: AgentChatThreadModel["isSessionWorking"];
-  shouldResetTranscriptWindow: AgentChatThreadModel["shouldResetTranscriptWindow"];
-  transcriptNotice: AgentChatThreadModel["transcriptNotice"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   scrollToBottomOnSendRef: AgentChatThreadModel["scrollToBottomOnSendRef"];
   syncBottomAfterComposerLayoutRef: AgentChatThreadModel["syncBottomAfterComposerLayoutRef"];
@@ -63,7 +60,7 @@ type UseAgentChatRenderedTranscriptArgs = {
 type UseAgentChatRenderedTranscriptResult = {
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
-  transcriptNotice: AgentChatThreadModel["transcriptNotice"];
+  transcriptNotice: AgentChatTranscriptPresentation["notice"];
   isNearBottom: boolean;
   isNearTop: boolean;
   scrollToBottom: () => void;
@@ -71,15 +68,13 @@ type UseAgentChatRenderedTranscriptResult = {
 };
 
 export function useAgentChatRenderedTranscript({
-  session,
-  displayedSessionKey,
+  transcript,
   isSessionWorking,
-  shouldResetTranscriptWindow,
-  transcriptNotice,
   messagesContainerRef,
   scrollToBottomOnSendRef,
   syncBottomAfterComposerLayoutRef,
 }: UseAgentChatRenderedTranscriptArgs): UseAgentChatRenderedTranscriptResult {
+  const { session, displayedSessionKey, shouldResetWindow, notice } = transcript;
   const { showThinkingMessages } = useAgentChatSettings();
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const renderableFrameRef = useRef<number | null>(null);
@@ -119,9 +114,9 @@ export function useAgentChatRenderedTranscript({
     };
   }, [displayedSessionKey, renderableSessionKey]);
   const effectiveShouldResetTranscriptWindow =
-    shouldResetTranscriptWindow || isTranscriptModelMissing || isSessionSwitchPending;
+    shouldResetWindow || isTranscriptModelMissing || isSessionSwitchPending;
   const effectiveTranscriptNotice =
-    transcriptNotice ??
+    notice ??
     (isTranscriptModelMissing || isSessionSwitchPending ? TRANSCRIPT_MODEL_PENDING_NOTICE : null);
   const windowRows = isSessionSwitchPending ? [] : transcriptModelState.rows;
   const windowTurnAnchors = isSessionSwitchPending ? [] : transcriptModelState.turnAnchors;

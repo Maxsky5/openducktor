@@ -4,9 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat, AgentChatSurface } from "./agent-chat";
 import {
+  buildEmptyTranscript,
   buildModelSelection,
   buildSession,
-  buildThreadTranscriptState,
+  buildSessionTranscript,
   buildTodoItem,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
@@ -14,17 +15,12 @@ import {
 const buildModel = () => ({
   chatSettings: createChatSettingsFixture(),
   thread: completeThreadModel({
-    session: buildSession({
-      status: "running" as const,
-    }),
+    transcript: buildSessionTranscript(
+      buildSession({
+        status: "running" as const,
+      }),
+    ),
     isSessionWorking: true,
-    transcriptState: buildThreadTranscriptState(),
-    runtimeReadiness: {
-      state: "ready" as const,
-      message: null,
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
-    },
     isInteractionEnabled: true,
     emptyState: {
       title: "Send a message to start a new session automatically.",
@@ -148,18 +144,19 @@ describe("AgentChat", () => {
     expect(html).not.toContain("Send message");
   });
 
-  test("keeps composer visible when no session is selected", () => {
+  test("renders the caller empty state when only transcript routing metadata remains", () => {
+    const model = buildModel();
+    const { transcript, ...threadFields } = model.thread;
+    expect(transcript.target).not.toBeNull();
+
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
-          ...buildModel(),
-          thread: {
-            ...buildModel().thread,
-            session: null,
-          },
-          composer: {
-            ...buildModel().composer,
-          },
+          ...model,
+          thread: completeThreadModel({
+            ...threadFields,
+            transcript: buildEmptyTranscript({ target: transcript.target }),
+          }),
         },
       }),
     );
@@ -169,18 +166,21 @@ describe("AgentChat", () => {
   });
 
   test("renders the todo stack immediately above the composer", () => {
+    const model = buildModel();
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
-          ...buildModel(),
-          thread: {
-            ...buildModel().thread,
-            session: buildSession({
-              status: "idle",
-            }),
+          ...model,
+          thread: completeThreadModel({
+            ...model.thread,
+            transcript: buildSessionTranscript(
+              buildSession({
+                status: "idle",
+              }),
+            ),
             todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             sessionAccentColor: "#123456",
-          },
+          }),
         },
       }),
     );
@@ -192,18 +192,21 @@ describe("AgentChat", () => {
   });
 
   test("renders session auxiliary errors in the bottom stack above the composer", () => {
+    const model = buildModel();
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
-          ...buildModel(),
-          thread: {
-            ...buildModel().thread,
-            session: buildSession({
-              status: "idle",
-            }),
+          ...model,
+          thread: completeThreadModel({
+            ...model.thread,
+            transcript: buildSessionTranscript(
+              buildSession({
+                status: "idle",
+              }),
+            ),
             todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             sessionAuxiliaryError: "todos unavailable",
-          },
+          }),
         },
       }),
     );

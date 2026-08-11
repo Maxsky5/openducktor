@@ -1,7 +1,7 @@
 import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
-import type { AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatRuntimePresentation, AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { AgentTranscriptSeparator } from "./agent-transcript-separator";
@@ -14,6 +14,7 @@ type AgentChatTranscriptRowProps = {
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionIdentity: ParentSessionRuntimeContext | null;
+  runtimePresentation: AgentChatRuntimePresentation;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
 };
@@ -24,6 +25,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   isStreamingAssistantMessage,
   sessionAgentColors,
   sessionIdentity,
+  runtimePresentation,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
 }: AgentChatTranscriptRowProps): ReactElement {
@@ -44,6 +46,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             isStreamingAssistantMessage={isStreamingAssistantMessage}
             sessionAgentColors={sessionAgentColors}
             sessionIdentity={sessionIdentity}
+            runtimePresentation={runtimePresentation}
             subagentPendingApprovalCount={subagentPendingApprovalCount}
             subagentPendingQuestionCount={subagentPendingQuestionCount}
           />

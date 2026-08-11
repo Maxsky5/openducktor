@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createSubagentMessage } from "@/state/operations/agent-orchestrator/support/subagent-messages";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import {
-  createEmptyReadonlyRuntimeSessionState,
   createReadonlyTranscriptSession,
   mergeReadonlyRuntimeHistory,
 } from "./readonly-transcript-session";
@@ -21,18 +21,18 @@ const createHistoryMessage = (): AgentSessionHistoryMessage => ({
 });
 
 describe("createReadonlyTranscriptSession", () => {
-  test("preserves transcript target session scope", () => {
+  test("keeps transcript routing out of rendered session data", () => {
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "spec" as const };
 
-    expect(
-      createReadonlyTranscriptSession({
-        externalSessionId: "session-1",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        sessionScope,
-        history: [createHistoryMessage()],
-      }).sessionScope,
-    ).toEqual(sessionScope);
+    const session = createReadonlyTranscriptSession({
+      externalSessionId: "session-1",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      sessionScope,
+      history: [createHistoryMessage()],
+    });
+
+    expect("sessionScope" in session).toBe(false);
   });
 
   test("versions readonly transcripts when a system notice changes to a fork boundary", () => {
@@ -115,10 +115,14 @@ describe("createReadonlyTranscriptSession", () => {
   });
 
   test("reconciles runtime and history subagent rows by child session identity", () => {
-    const emptySession = createEmptyReadonlyRuntimeSessionState({
+    const emptySession = createAgentSessionFixture({
       externalSessionId: "parent-thread",
       runtimeKind: "codex",
       workingDirectory: "/repo",
+      taskId: "",
+      role: null,
+      historyLoadState: "loading",
+      messages: createSessionMessagesState("parent-thread"),
     });
     const liveSubagent = createSubagentMessage({
       timestamp: "2026-07-10T12:00:01.000Z",

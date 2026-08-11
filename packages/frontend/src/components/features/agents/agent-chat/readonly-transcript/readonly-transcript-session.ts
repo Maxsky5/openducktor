@@ -5,14 +5,12 @@ import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "../agent-chat.types";
+import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 
 type ReadonlyTranscriptSessionInput = AgentSessionTranscriptTarget & {
   history: AgentSessionHistoryMessage[];
 };
-
-const EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT = "1970-01-01T00:00:00.000Z";
 
 const updateHash = (hash: number, value: string): number => {
   let nextHash = hash;
@@ -42,12 +40,10 @@ const transcriptHistoryVersion = (history: AgentSessionHistoryMessage[]): number
 export const createReadonlyTranscriptSession = ({
   externalSessionId,
   runtimeKind,
-  sessionScope,
   workingDirectory,
   history,
-}: ReadonlyTranscriptSessionInput): AgentChatThreadSession => ({
+}: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => ({
   ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  ...(sessionScope ? { sessionScope } : {}),
   activityState: null,
   runtimeStatusMessage: null,
   messages: createSessionMessagesState(
@@ -57,51 +53,6 @@ export const createReadonlyTranscriptSession = ({
     }),
     transcriptHistoryVersion(history),
   ),
-});
-
-export const createReadonlyRuntimeSessionState = ({
-  externalSessionId,
-  runtimeKind,
-  workingDirectory,
-  history,
-}: ReadonlyTranscriptSessionInput): AgentSessionState => ({
-  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  taskId: "",
-  role: null,
-  status: "idle",
-  runtimeStatusMessage: null,
-  startedAt: history[0]?.timestamp ?? EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
-  historyLoadState: "loaded",
-  messages: createSessionMessagesState(
-    externalSessionId,
-    historyToChatMessages(history, {
-      role: null,
-    }),
-    transcriptHistoryVersion(history),
-  ),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-});
-
-export const createEmptyReadonlyRuntimeSessionState = ({
-  externalSessionId,
-  runtimeKind,
-  workingDirectory,
-}: AgentSessionTranscriptTarget): AgentSessionState => ({
-  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  taskId: "",
-  role: null,
-  status: "idle",
-  runtimeStatusMessage: null,
-  startedAt: EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
-  historyLoadState: "loading",
-  messages: createSessionMessagesState(externalSessionId),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
 });
 
 const areMessagesEquivalent = (left: AgentChatMessage, right: AgentChatMessage): boolean =>

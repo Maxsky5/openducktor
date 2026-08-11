@@ -1,9 +1,10 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import { type AgentRole, isOdtWorkflowMutationToolName } from "@openducktor/core";
+import type { RuntimeKind } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
+import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import {
   assistantRoleFromMessage,
   formatTime,
@@ -23,7 +24,7 @@ type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
   sessionAgentColors: Record<string, string> | undefined;
   sessionRuntimeKind: RuntimeKind | null;
-  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
+  toolCallPresentation: AgentChatToolCallPresentation | null;
 };
 
 type AgentChatMessageCardViewModel = {
@@ -117,7 +118,7 @@ export const buildAgentChatMessageCardViewModel = ({
   message,
   sessionAgentColors,
   sessionRuntimeKind,
-  workflowToolAliasesByCanonical,
+  toolCallPresentation,
 }: AgentChatMessageCardViewModelInput): AgentChatMessageCardViewModel => {
   const timeLabel = message.timestampIsApproximate ? "" : formatTime(message.timestamp);
   const meta = message.meta;
@@ -126,9 +127,7 @@ export const buildAgentChatMessageCardViewModel = ({
   const isUserMessage = message.role === "user";
   const isQueuedUserMessage = isUserMessage && meta?.kind === "user" && meta.state === "queued";
   const isToolMessage = meta?.kind === "tool";
-  const isWorkflowToolMessage =
-    meta?.kind === "tool" &&
-    isOdtWorkflowMutationToolName(meta.tool, workflowToolAliasesByCanonical);
+  const isWorkflowToolMessage = isToolMessage && toolCallPresentation?.kind === "workflow";
   const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
   const isSubagentMessage = meta?.kind === "subagent";
   const isSessionNoticeMessage = meta?.kind === "session_notice";

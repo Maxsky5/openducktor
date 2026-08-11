@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSkillReference, AgentUserMessageDisplayPart } from "@openducktor/core";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "./agent-chat.types";
+import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { withClaudeSkillMentions } from "./claude-skill-mentions";
 
 const GRILL_SKILL: AgentSkillReference = {
@@ -37,8 +37,8 @@ const userMessage = (
 
 const threadSession = (
   message: AgentChatMessage,
-  runtimeKind: AgentChatThreadSession["runtimeKind"] = "claude",
-): AgentChatThreadSession => ({
+  runtimeKind: AgentChatTranscriptSession["runtimeKind"] = "claude",
+): AgentChatTranscriptSession => ({
   externalSessionId: "session-1",
   runtimeKind,
   workingDirectory: "/repo",
