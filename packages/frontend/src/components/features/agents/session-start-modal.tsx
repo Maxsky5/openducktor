@@ -234,12 +234,12 @@ function AgentField({
   return (
     <div className="grid gap-1.5" data-testid="session-start-agent-field">
       <label className="text-sm font-medium text-foreground" htmlFor="session-start-agent">
-        Agent
+        Runtime profile
       </label>
       <Combobox
         value={selectedAgent}
         options={agentOptions}
-        placeholder={supportsProfiles ? "Select agent" : "Agent handled by runtime"}
+        placeholder={supportsProfiles ? "Select runtime profile" : "Profile handled by runtime"}
         disabled={disabled}
         className="sm:min-w-[20rem]"
         onValueChange={onSelectAgent}
@@ -399,16 +399,16 @@ const agentHelperTextFor = ({
   supportsProfiles: boolean;
 }): string | null => {
   if (isReuseMode) {
-    return "Reuse mode keeps the previous session agent/model/variant.";
+    return "Reuse mode keeps the previous session runtime profile, model, and variant.";
   }
   if (isSelectionCatalogLoading) {
-    return "Loading agents for the selected runtime.";
+    return "Loading profiles for the selected runtime.";
   }
   if (!supportsProfiles) {
-    return "This runtime manages agent selection automatically.";
+    return "This runtime manages profile selection automatically.";
   }
   if (agentOptions.length === 0) {
-    return "No agent profiles are available for this runtime.";
+    return "No profiles are available for this runtime.";
   }
   return null;
 };

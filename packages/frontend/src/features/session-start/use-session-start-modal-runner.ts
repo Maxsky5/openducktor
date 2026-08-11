@@ -379,7 +379,7 @@ export function useSessionStartModalRunner({
       title: intent.title,
       description:
         intent.description ??
-        "Choose how to start the session, then pick the agent, model, and variant.",
+        "Choose how to start the session, then pick the runtime profile, model, and variant.",
       confirmLabel: "Start session",
       selectedModelSelection: selection,
       selectedRuntimeKind,

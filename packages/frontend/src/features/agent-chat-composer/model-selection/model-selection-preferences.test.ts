@@ -108,6 +108,68 @@ describe("model-selection-preferences", () => {
     ).toBeNull();
   });
 
+  test("ignores unavailable new-session runtimes but preserves the loaded-session runtime", () => {
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        draftSelection: null,
+        defaultSelection: null,
+        defaultRuntimeKind: "opencode",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBe("codex");
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        defaultSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        defaultRuntimeKind: "codex",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBe("opencode");
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: null,
+        defaultSelection: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        defaultRuntimeKind: "opencode",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBe("opencode");
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        defaultSelection: null,
+        defaultRuntimeKind: "codex",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBeNull();
+  });
+
   test("resolves draft selection by normalizing existing selection then falling back", () => {
     expect(
       resolvePreferredModelSelection({
@@ -482,5 +544,100 @@ describe("model-selection-preferences", () => {
       sessionModelRepairCommand: null,
       isSelectedSessionModelSendable: true,
     });
+  });
+
+  test("coerces a new-session draft after its catalog loads", () => {
+    const defaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "new_session",
+          composerCatalog: CATALOG,
+          draftSelection: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+          isAwaitingDefaultSelection: false,
+        },
+        defaultSelection,
+      }).selectionForNewSession,
+    ).toEqual(defaultSelection);
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "new_session",
+          composerCatalog: CATALOG,
+          draftSelection: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "missing-variant",
+            profileId: "hidden-subagent",
+          },
+          isAwaitingDefaultSelection: false,
+        },
+        defaultSelection,
+      }).selectionForNewSession,
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+    });
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "new_session",
+          composerCatalog: CATALOG,
+          draftSelection: {
+            runtimeKind: "codex",
+            providerId: "missing",
+            modelId: "missing",
+          },
+          isAwaitingDefaultSelection: false,
+        },
+        defaultSelection: {
+          runtimeKind: "codex",
+          providerId: "missing",
+          modelId: "missing",
+        },
+      }).selectionForNewSession,
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "spec-agent",
+    });
+  });
+
+  test("preserves an unvalidated new-session draft until its catalog loads", () => {
+    const draftSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "missing",
+      modelId: "missing",
+      variant: "stale",
+      profileId: "stale-profile",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "new_session",
+          composerCatalog: null,
+          draftSelection,
+          isAwaitingDefaultSelection: false,
+        },
+        defaultSelection: null,
+      }).selectionForNewSession,
+    ).toEqual(draftSelection);
   });
 });

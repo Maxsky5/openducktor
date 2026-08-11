@@ -186,9 +186,12 @@ describe("SessionStartModal", () => {
     );
 
     expect(
-      screen.getByText("Reuse mode keeps the previous session agent/model/variant."),
+      screen.getByText(
+        "Reuse mode keeps the previous session runtime profile, model, and variant.",
+      ),
     ).toBeTruthy();
-    expect(screen.queryByText("Loading agents for the selected runtime.")).toBeNull();
+    expect(screen.getByText("Runtime profile")).toBeTruthy();
+    expect(screen.queryByText("Loading profiles for the selected runtime.")).toBeNull();
 
     unmount();
   });

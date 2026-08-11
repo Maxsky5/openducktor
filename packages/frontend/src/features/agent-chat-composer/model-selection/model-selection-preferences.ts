@@ -22,14 +22,24 @@ export const resolveChatComposerSelectedRuntimeKind = ({
   defaultRuntimeKind: RuntimeKind | null | undefined;
   runtimeDefinitions: RuntimeDescriptor[];
 }): RuntimeKind | null => {
+  const availableDraftRuntimeKind =
+    draftSelection?.runtimeKind &&
+    findRuntimeDefinition(runtimeDefinitions, draftSelection.runtimeKind)
+      ? draftSelection.runtimeKind
+      : null;
+  const availableDefaultSelectionRuntimeKind =
+    defaultSelection?.runtimeKind &&
+    findRuntimeDefinition(runtimeDefinitions, defaultSelection.runtimeKind)
+      ? defaultSelection.runtimeKind
+      : null;
   const availableDefaultRuntimeKind =
     defaultRuntimeKind && findRuntimeDefinition(runtimeDefinitions, defaultRuntimeKind)
       ? defaultRuntimeKind
       : null;
   return (
     selectedSessionModel?.runtimeKind ??
-    draftSelection?.runtimeKind ??
-    defaultSelection?.runtimeKind ??
+    availableDraftRuntimeKind ??
+    availableDefaultSelectionRuntimeKind ??
     availableDefaultRuntimeKind ??
     null
   );
@@ -103,14 +113,17 @@ export const resolveChatComposerModelSelections = ({
     isAwaitingDefaultSelection: source.isAwaitingDefaultSelection,
   });
   const selectionCatalog = source.composerCatalog;
+  const draftSelectionForComposer = selectionCatalog
+    ? coerceVisibleSelectionToCatalog(selectionCatalog, source.draftSelection)
+    : source.draftSelection;
   const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
+  const selectionForNewSession =
+    draftSelectionForComposer ?? defaultSelectionForComposer ?? fallbackCatalogSelection;
 
   return {
     selectionCatalog,
-    selectedModelSelection:
-      source.draftSelection ?? defaultSelectionForComposer ?? fallbackCatalogSelection,
-    selectionForNewSession:
-      source.draftSelection ?? defaultSelectionForComposer ?? fallbackCatalogSelection,
+    selectedModelSelection: selectionForNewSession,
+    selectionForNewSession,
     sessionModelRepairCommand: null,
     isSelectedSessionModelSendable: true,
   };
